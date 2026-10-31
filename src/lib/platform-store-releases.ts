@@ -16,6 +16,12 @@ export const AMO_FILE_STATUS_LABEL = "AMO's file status";
 
 export type StoreReleaseState = (typeof STORE_RELEASE_STATES)[number] | "unknown";
 
+export interface ReleaseWordTakenFrom {
+  was: StoreReleaseState;
+  submission?: string;
+  channel?: string;
+}
+
 const KNOWN_STORE_WORD_SOURCES: ReadonlySet<string> = new Set(["publish-answer", "poll", "run", "inferred", "hand"]);
 
 export interface StoreReleaseView {
@@ -41,9 +47,11 @@ export interface StoreReleaseView {
   supersededBy?: string;
   releaseType?: string;
   releaseTypeReadAt?: string;
+  wordTakenFrom?: ReleaseWordTakenFrom;
 }
 
 export interface StoreReleasesSummary {
+
   activeReleases?: number;
   liveChannels?: number;
   channels?: number;

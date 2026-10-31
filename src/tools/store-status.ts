@@ -60,6 +60,7 @@ import {
   storeReleaseSentence,
   type StoreReleaseView,
 } from "../lib/platform-store-releases";
+import { releaseBesideSubmission } from "../lib/release-beside-submission";
 
 export {
   REFRESHABLE_STORES,
@@ -320,9 +321,9 @@ export function latestSubmissionsByStore(
   return flat;
 }
 
-export function firefoxReleasesByChannel(rows: StoreReleaseView[]): Record<string, StoreReleaseView> | null {
+export function firefoxReleasesByChannel(rows: StoreReleaseView[], beside?: SubmissionView): Record<string, StoreReleaseView> | null {
   const lanes = newestStoreReleaseByLane(rows.filter((row) => row.store === "firefox" && row.amoChannel));
-  const byChannel = Object.fromEntries(Object.values(lanes).map((row) => [row.amoChannel as string, row]));
+  const byChannel = Object.fromEntries(Object.values(lanes).map((row) => [row.amoChannel as string, releaseBesideSubmission(row, beside)]));
 
   return Object.keys(byChannel).length ? byChannel : null;
 }
@@ -763,12 +764,13 @@ async function answerStores(
     }
 
     if (runsByStore[store]) row.submissionRun = runsByStore[store];
-    if (releaseByStore[store]) row.release = releaseByStore[store];
+    if (releaseByStore[store]) row.release = releaseBesideSubmission(releaseByStore[store], submission);
 
     const liveRelease = releases.ok ? liveStoreReleaseOf(releases.rows, store) : undefined;
     if (liveRelease && liveRelease !== releaseByStore[store]) row.liveRelease = liveRelease;
 
-    const amoChannels = store === "firefox" && releases.ok ? firefoxReleasesByChannel(releases.rows) : null;
+    const amoChannels = store === "firefox" && releases.ok ? firefoxReleasesByChannel(releases.rows, submission) : null;
+
     if (amoChannels) row.amoChannels = amoChannels;
 
     const earlier = (records.ok
