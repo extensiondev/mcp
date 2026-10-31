@@ -55,6 +55,7 @@ import {
   type DigestMismatch,
 } from "../lib/store-listing-digest";
 import { pushAnswer, pushSentence, readPushState, sendListing } from "../lib/store-listing-push";
+import { firefoxCategoryCover } from "../lib/firefox-category-cover";
 import { STORE_MD_FILENAME } from "../lib/store-md";
 import { reconcileChromeCheck } from "../lib/store-md-chrome-reconcile";
 import { requirementsView, type RequirementsView } from "../lib/store-requirements";
@@ -392,6 +393,13 @@ function coverageOf(local: LocalListing, id: string): Coverage {
     if (shots?.length) return { covered: `screenshots: ${shots.length} passed to sync-listing, not yet in the listing` };
 
     return { missing: `screenshots: ${STORE_MD_FILENAME} carries no screenshot; ${SCREENSHOTS_DOOR}` };
+  }
+
+  if (/categories_present$/.test(id) && local.store === "firefox") {
+    const cover = firefoxCategoryCover(local);
+
+    if (cover && "unread" in cover) return { unread: cover.unread };
+    if (cover) return { covered: `category ${cover.names.join(", ")} (${cover.origin}) found in ${STORE_MD_FILENAME}, not yet in the console listing` };
   }
 
   const rule = CHECK_COVERAGE.find((entry) => entry.test.test(id));

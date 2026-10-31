@@ -116,6 +116,10 @@ export function storeHasCategory(store: ListingStore, name: string): boolean {
   return !names || names.some((own) => categoryKey(own) === categoryKey(name));
 }
 
+export function amoCategoriesOf(names: readonly string[]): string[] {
+  return names.filter((name) => storeHasCategory("firefox", name));
+}
+
 export function mapCategory(store: ListingStore, name: string): string | null {
   if (storeHasCategory(store, name)) return null;
 
@@ -156,7 +160,7 @@ const sectionName = (store: ListingStore): string => STORE_SECTIONS[store].repla
 const listNames = (names: string[]): string =>
   names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0] ?? "";
 
-function origin(store: ListingStore, read: CategoryRead): string {
+export function categoryOrigin(store: ListingStore, read: CategoryRead): string {
   if (read.from === "section") return `from the ${sectionName(store)} section`;
   if (read.from === "note") return `from the ${STORE_LABELS[store]} note on the ${LISTING_SECTION.replace(/^## /, "")} line`;
   if (read.from === "mapping") return `mapped from ${listNames(read.mapped!.map((entry) => entry.from))} in ${LISTING_SECTION.replace(/^## /, "")}`;
@@ -175,7 +179,7 @@ export function categoriesSentences(rows: StoreCategoryRow[]): string[] {
   const ordered = [...rows].sort((a, b) => Number(a.read.from === "listing") - Number(b.read.from === "listing"));
 
   for (const { store, read } of ordered) {
-    const key = `${read.categories.join("|")}\n${origin(store, read)}`;
+    const key = `${read.categories.join("|")}\n${categoryOrigin(store, read)}`;
     const group = groups.get(key);
 
     if (group) group.stores.push(store);
@@ -188,7 +192,7 @@ export function categoriesSentences(rows: StoreCategoryRow[]): string[] {
       const label = listNames(group.stores.map((store) => STORE_LABELS[store]));
       const noun = index === 0 ? ` ${group.read.categories.length > 1 ? "categories" : "category"}` : "";
 
-      return `${label}${noun}: ${group.read.categories.join(", ")} (${origin(first, group.read)})`;
+      return `${label}${noun}: ${group.read.categories.join(", ")} (${categoryOrigin(first, group.read)})`;
     });
 
     sentences.push(`${parts.join("; ")}.`);

@@ -34,6 +34,7 @@ import {
   type PlatformSubmission,
 } from "../lib/platform-submissions";
 import { compactPreflightStores, PREFLIGHT_DETAIL_SENTENCE, preflightDetail } from "../lib/preflight-detail";
+import { summaryAgreeingWithRows } from "../lib/preflight-summary";
 import { consoleProjectUrl } from "../lib/registry";
 import { projectApiReadFailure, projectApiSend } from "../lib/project-api";
 import { actLinks, judgePublish, publishFailureReason, trackOf } from "../lib/store-act-outcome";
@@ -743,7 +744,7 @@ function readinessView(
         (c) => NAMED_BY_SUBMIT.has(text(c.id)) && text(c.status) === "fail",
       );
   const checks = all.filter((c) => !deferred.includes(c));
-  const summary = summaryWithout(
+  const recounted = summaryWithout(
     isRow(json.summary) ? json.summary : {},
     deferred,
     checks,
@@ -782,6 +783,7 @@ function readinessView(
   const read = requirementsView(json.requirements, local);
   const sha = text(scope.sha) || text(json.buildId) || buildsReadByPackageChecks(json, store)[0] || "";
   const requirements = read ? { ...read, items: withHandUploadRows(read.items, { ...scope, sha }, nextVersionOf(json, store)?.nextVersion) } : null;
+  const summary = summaryAgreeingWithRows({ summary: recounted, platform: isRow(json.summary) ? json.summary : {}, recounted: deferred.length > 0, rows: read?.items ?? null, checks, json, store });
   const review = isRow(summary.review) ? summary.review : null;
   const bringList = bringListOf(store, requirements, review?.canSubmitForReview !== false);
 

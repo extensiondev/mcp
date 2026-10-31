@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { firefoxCategoryCover } from "./firefox-category-cover";
 import { isRow, text } from "./ship-act";
 import { STORE_MD_FILENAME } from "./store-md";
 import { reconcileChromeRow } from "./store-md-chrome-reconcile";
@@ -92,6 +93,21 @@ function withStoreMd(row: RequirementRow, local: LocalListingRead): RequirementR
   if (row.status !== "missing") return row;
 
   const listing = local.patch.listing as Record<string, unknown>;
+
+  if (field === "categories" && local.store === "firefox") {
+    const cover = firefoxCategoryCover(local);
+
+    if (cover && "unread" in cover) return { ...row, actual: cover.unread };
+
+    if (cover) {
+      return {
+        ...row,
+        status: "have",
+        satisfiedBy: `store-md: ${lineOf(local, field)}`,
+        actual: `${cover.names.join(", ")} (${cover.origin}) in ${STORE_MD_FILENAME}; sync-listing writes it`,
+      };
+    }
+  }
 
   if (listing[field] !== undefined) {
     return {
