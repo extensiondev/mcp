@@ -869,7 +869,7 @@ async function answerStores(
     const queuedAct = platform.ok ? platform.queued[store] : undefined;
     if (queuedAct) row.queuedAct = queuedAct;
 
-    const step = store === "safari" ? safariNextStep(submission, consoleStoresUrl) : null;
+    const step = store === "safari" ? safariNextStep(submission, consoleProjectUrl(ref, ConsoleProjectPage.submissionsStore(store), args.api)) : null;
     if (step) row.nextStep = step;
 
     return row;

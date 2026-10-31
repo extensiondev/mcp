@@ -6,7 +6,10 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { ConsoleProjectPage } from "@extension.dev/urls/paths";
+
 import { envelope, isEnvelope } from "../lib/envelope";
+import { consoleProjectUrl } from "../lib/registry";
 import { isRow, text } from "../lib/ship-act";
 import { readStores } from "./store-status";
 
@@ -156,6 +159,8 @@ export async function storeVersionStatus(args: {
       ? `The store check this call asked for landed within ${String(wait.waitedSeconds)} s, so these are the states it read. `
       : `The store check this call asked for had not landed after ${String(wait.waitedSeconds)} s, so these are the states before it. `
     : "";
+  const ref = text(value.workspace) && text(value.project) ? { workspace: text(value.workspace), project: text(value.project) } : null;
+  const trackUrl = stores.length === 1 && ref ? consoleProjectUrl(ref, ConsoleProjectPage.submissionsStore(stores[0].store), args.api) : text(value.consoleStoresUrl);
 
   return envelope({
     ok: true,
@@ -169,7 +174,7 @@ export async function storeVersionStatus(args: {
       ...(refresh ? { refresh } : {}),
       ...(wait ? { refreshWait: wait } : {}),
       nextStep: step,
-      trackUrl: text(value.consoleStoresUrl) || undefined,
+      trackUrl: trackUrl || undefined,
     },
     hint: `${waitSentence}${stores.length ? stores.map((entry) => storeSentence(entry, refresh, wait)).join(". ") : "No store has a submission recorded"}. This reads the same store records as ${STORES_READ_CALL}, which answers the full store picture; only a state a store check or the publish answer read grounds a next step.`,
     warnings: Array.isArray(parsed.warnings) ? parsed.warnings.map(String) : [],

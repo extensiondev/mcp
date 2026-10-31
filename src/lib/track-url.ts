@@ -177,7 +177,8 @@ function submitPlan(call: TrackCall): TrackPlan {
   if (action === "preflight" && STORE_CONNECT_STATUSES.has(call.status)) return { track: { page: "store-settings" } };
 
   if (action === "preflight" || action === "sync-listing" || action === "status") {
-    const store = firstBrowser(call.args);
+    const answered = action === "status" && Array.isArray(call.value.stores) ? call.value.stores.filter(isRow).map((row) => text(row.store)) : [];
+    const store = firstBrowser(call.args) || (answered.length === 1 ? answered[0] : "");
 
     return { track: { page: store ? "store" : "submissions", target: { store } } };
   }
