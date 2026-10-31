@@ -74,6 +74,18 @@ describe("the Firefox update manifest address is built beside the package addres
     expect(manifestUpdateUrlOf("")).toBeNull();
     fs.rmSync(dir, { recursive: true, force: true });
   });
+
+  it("reads the update_url under the firefox: and gecko: prefixed key shapes of an unfolded manifest", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-update-url-prefixed-"));
+    fs.mkdirSync(path.join(dir, "dist", "firefox"), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "dist", "firefox", "manifest.json"),
+      JSON.stringify({ name: "Widget", version: "0.1.0", manifest_version: 3, "gecko:browser_specific_settings": { "firefox:gecko": { id: "widget@acme.example", "gecko:update_url": UPDATES } } }),
+    );
+
+    expect(manifestUpdateUrlOf(dir)).toBe(UPDATES);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 });
 
 describe("extension_submit preflight: the firefox.update_url check names the platform's update manifest", () => {
@@ -150,7 +162,32 @@ describe("extension_submit preflight: the firefox.update_url check names the pla
     const out = JSON.parse(await submit({ action: "preflight", browsers: ["firefox"], api: PROD }));
 
     expect(out.value.stores.firefox.updateManifest.say).toBe(hosted);
+    expect(out.value.stores.firefox.updateManifest.manifestUpdateUrl).toBeNull();
     expect(out.hint).toContain(hosted);
+  });
+
+  it("echoes the manifest's update_url from the platform's passing check when no projectPath is given", async () => {
+    const read = `Firefox will look for updates of this self-distributed version at ${UPDATES}.`;
+    routes[`POST /api/projects/${PROJECT_ID}/stores/firefox/submissions/preflight`] = () => ({ body: firefoxReport([updateCheck(read, "pass")], []) });
+
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["firefox"], api: PROD }));
+    const firefox = out.value.stores.firefox;
+
+    expect(firefox.updateManifest).toMatchObject({ manifestUpdateUrl: UPDATES, updateManifestUrl: UPDATES, say: read });
+    expect(firefox.warnings.map((row: Row) => row.id)).not.toContain("firefox.update_url");
+    expect(out.value.storePreflight.firefox.warnings).toEqual([]);
+  });
+
+  it("warns with both addresses when the platform's passing check names another update_url and no projectPath is given", async () => {
+    const read = `Firefox will look for updates of this self-distributed version at ${OTHER}.`;
+    routes[`POST /api/projects/${PROJECT_ID}/stores/firefox/submissions/preflight`] = () => ({ body: firefoxReport([updateCheck(read, "pass")], []) });
+
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["firefox"], api: PROD }));
+    const warning = out.value.stores.firefox.warnings.find((row: Row) => row.id === "firefox.update_url");
+
+    expect(out.value.stores.firefox.updateManifest).toMatchObject({ manifestUpdateUrl: OTHER, updateManifestUrl: UPDATES });
+    expect(warning).toMatchObject({ expected: UPDATES, actual: OTHER });
+    expect(out.value.storePreflight.firefox.warnings).toEqual(["firefox.update_url"]);
   });
 
   it("keeps a warning naming both addresses when the manifest names a different update_url", async () => {
@@ -181,6 +218,7 @@ describe("extension_submit preflight: the firefox.update_url check names the pla
 
     const matched = JSON.parse(await submit({ action: "preflight", browsers: ["firefox"], projectPath: project, api: PROD }));
     expect(matched.value.stores.firefox.warnings).toEqual([]);
+    expect(matched.value.stores.firefox.updateManifest).toMatchObject({ manifestUpdateUrl: UPDATES, updateManifestUrl: UPDATES });
     expect(matched.value.stores.firefox.updateManifest.say).toBe(`The manifest names the platform's update_url ${UPDATES}; the platform rewrites updates.json after every signing.`);
   });
 });

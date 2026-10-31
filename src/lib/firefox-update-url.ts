@@ -20,6 +20,8 @@ export const UPDATE_URL_CHECK = "firefox.update_url";
 export const DEFAULT_FIREFOX_CHANNEL = "stable";
 
 const HOSTED_MANIFEST = /\/channels\/[^/\s"']+\/updates\.json/;
+const UPDATES_READ_AT = /look for updates\b[^.]*?\bat (https:\/\/[^\s"']+?)\.?(?=\s|$)/i;
+const PREFIXES = ["", "firefox:", "gecko:"];
 const RELEASE_CHANNEL_KEYS = ["releaseChannel", "targetChannel"];
 
 export interface FirefoxUpdateManifest {
@@ -56,12 +58,26 @@ export function firefoxReleaseChannelOf(json: Row): string {
 export function manifestUpdateUrlOf(projectPath: string): string | null {
   if (!text(projectPath)) return null;
 
-  const manifest = readBuiltManifest(projectPath, "firefox")?.manifest as Record<string, any> | undefined;
-  const settings =
-    manifest?.browser_specific_settings ?? manifest?.["firefox:browser_specific_settings"] ?? manifest?.["gecko:browser_specific_settings"] ?? manifest?.applications;
-  const url = settings?.gecko?.update_url;
+  const manifest = readBuiltManifest(projectPath, "firefox")?.manifest;
+  const settings = prefixed(manifest, "browser_specific_settings") ?? prefixed(manifest, "applications");
+  const url = prefixed(prefixed(settings, "gecko"), "update_url");
 
   return typeof url === "string" && url.trim() ? url.trim() : null;
+}
+
+function prefixed(row: unknown, key: string): unknown {
+  if (!isRow(row)) return undefined;
+
+  return PREFIXES.map((prefix) => row[`${prefix}${key}`]).find((value) => value !== undefined);
+}
+
+export function updateUrlOfCheck(check: Row | null): string | null {
+  const actual = text(check?.actual);
+  if (/^https?:\/\//i.test(actual)) return actual;
+
+  const said = UPDATES_READ_AT.exec(text(check?.message));
+
+  return said ? said[1] : null;
 }
 
 function updateUrlCheckOf(json: Row): Row | null {
@@ -72,12 +88,7 @@ function updateUrlCheckOf(json: Row): Row | null {
 }
 
 function foundUpdateUrl(json: Row, projectPath: string): string | null {
-  const local = manifestUpdateUrlOf(projectPath);
-  if (local) return local;
-
-  const actual = text(updateUrlCheckOf(json)?.actual);
-
-  return /^https?:\/\//i.test(actual) ? actual : null;
+  return manifestUpdateUrlOf(projectPath) ?? updateUrlOfCheck(updateUrlCheckOf(json));
 }
 
 export function firefoxUpdateManifestOf(json: Row, ref: ProjectRef | null, projectPath: string, api?: string): FirefoxUpdateManifest | null {
@@ -90,10 +101,10 @@ export function firefoxUpdateManifestOf(json: Row, ref: ProjectRef | null, proje
   const platform = text(updateUrlCheckOf(json)?.message);
   const say = mismatch
     ? updateUrlMismatchSentence(found, updateManifestUrl)
-    : found
-      ? `The manifest names the platform's update_url ${updateManifestUrl}; the platform rewrites updates.json after every signing.`
-      : namesHostedManifest(platform)
-        ? platform
+    : namesHostedManifest(platform)
+      ? platform
+      : found
+        ? `The manifest names the platform's update_url ${updateManifestUrl}; the platform rewrites updates.json after every signing.`
         : updateManifestSentence(updateManifestUrl);
 
   return { channel, updateManifestUrl, channelXpiUrl: channelXpiAddress(ref, channel, api), manifestUpdateUrl: found, say };
