@@ -65,10 +65,20 @@ export function localPackageHold(projectPath: string, builds: string[], head: st
   return null;
 }
 
-export function packageHoldSentence(hold: PackageHold, subject: string): string {
+export const HELD_MISSES: ReadonlySet<string> = new Set(["no-record", "unreadable", "not-dispatched"]);
+
+function changedOnly(hold: PackageHold, subject: string): string {
   const named = hold.changed.slice(0, NAMED_FILES).join(", ");
   const more = hold.changed.length - NAMED_FILES;
   const list = more > 0 ? `${named} and ${more} more file${more === 1 ? "" : "s"}` : named;
 
-  return `${subject} changes only ${list}, which the build does not read, so the package checks still hold for build ${hold.build} and no push is needed`;
+  return `${subject} changes only ${list}, which the build does not read`;
+}
+
+export function packageHoldSentence(hold: PackageHold, subject: string): string {
+  return `${changedOnly(hold, subject)}, so the package checks still hold for build ${hold.build} and no push is needed`;
+}
+
+export function iconHoldSentence(hold: PackageHold, subject: string): string {
+  return `${changedOnly(hold, subject)}, so the icon of build ${hold.build}, the newest build, stands for it and no push is needed`;
 }

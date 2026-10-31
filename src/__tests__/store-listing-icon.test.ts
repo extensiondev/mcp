@@ -122,6 +122,20 @@ function headSha(root: string): string {
   return execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
 }
 
+function commitFiles(root: string, files: Record<string, string>, message: string): string {
+  for (const [file, body] of Object.entries(files)) {
+    fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+    fs.writeFileSync(path.join(root, file), body);
+  }
+
+  const git = (...args: string[]) =>
+    execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", ...args], { cwd: root, stdio: "ignore" });
+  git("add", ".");
+  git("commit", "-q", "-m", message);
+
+  return headSha(root);
+}
+
 describe("the zip entry read", () => {
   it("reads one named entry out of a stored archive and names an absent one", () => {
     const limits = { maxEntries: 10, maxBytes: 1024 };
@@ -360,5 +374,32 @@ describe("extension_submit sync-listing reads each store's icon from the build t
     const unpushed = JSON.parse(await submit({ action: "sync-listing", browsers: ["edge"], projectPath: root, api: API }));
 
     expect(unpushed.value.iconSource).toEqual({ from: "local", reason: `the checked out commit ${short} has no platform build; push it, or pass useBuild with a completed build` });
+  });
+
+  it("takes the newest build's icon when the local repository proves the checked out commit changed nothing the build reads, and asks for a push once it did", async () => {
+    if (process.platform === "win32") return;
+
+    const root = project({ dist: NEW_ICON });
+    const built = headSha(root);
+    const builtShort = built.slice(0, 7);
+    const head = commitFiles(root, { "STORE.md": `${STORE_MD}- Category: Productivity\n` }, "store line");
+    const short = head.slice(0, 7);
+
+    platform.routes[`GET ${BUILDS}`] = () => ({ body: { items: [{ buildId: builtShort, commit: built, status: "success" }] } });
+    platform.routes[`GET ${PACKAGE(builtShort, "chrome.zip")}`] = () => ({ body: null, bytes: BUILD_PACKAGE });
+
+    const held = JSON.parse(await submit({ action: "sync-listing", browsers: ["edge"], projectPath: root, api: API }));
+    const reason = `the checked out commit ${short} changes only STORE.md, which the build does not read, so the icon of build ${builtShort}, the newest build, stands for it and no push is needed`;
+
+    expect(held.status).toBe("listing-synced");
+    expect(held.value.stores.edge.icon).toEqual({ from: "build", build: builtShort, file: "chrome.zip:images/icon-128.png" });
+    expect(held.value.iconSource).toEqual({ from: "build", build: builtShort, reason });
+    expect(JSON.stringify(held)).not.toMatch(/push it|came from the local project/);
+
+    const code = commitFiles(root, { "src/index.ts": "export {};\n" }, "code").slice(0, 7);
+    const pushed = JSON.parse(await submit({ action: "sync-listing", browsers: ["edge"], projectPath: root, api: API }));
+
+    expect(pushed.value.stores.edge.icon).toEqual({ from: "dist", file: "dist/edge/images/icon-128.png" });
+    expect(pushed.value.iconSource).toEqual({ from: "local", reason: `the checked out commit ${code} has no platform build; push it, or pass useBuild with a completed build` });
   });
 });

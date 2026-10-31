@@ -9,6 +9,7 @@
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 
+import { HELD_MISSES, iconHoldSentence, localPackageHold, type PackageHold } from "./build-inputs";
 import { dispatchedPushSentence, docsOnlySentence, headPushOf, isDocsOnly, skippedPushSentence, type HeadPush } from "./head-push";
 import { projectApiBytes } from "./project-api-bytes";
 import { projectApiGet, type ProjectApi } from "./project-api";
@@ -173,6 +174,7 @@ export interface BuildIcons {
   newest: string | null;
   unreadable: string | null;
   headPush: HeadPush | null;
+  hold: PackageHold | null;
   why: BuildMiss | "docs-only" | null;
   reason: string | null;
   take(store: ListingStore): Promise<IconPick | { problem: string }>;
@@ -194,6 +196,12 @@ function packageFiles(store: ListingStore): string[] {
  * the platform classified HEAD's push docs only (ledger 305): that commit
  * will never build and carries the newest build's package, so the newest
  * completed build is read and the reason says so, and no push is asked for.
+ * The same holds when the platform has no word on HEAD (no push record, an
+ * unreadable list, a skipped push) but the local repository proves it: the
+ * newest completed build is an ancestor of HEAD and the diff between them
+ * touches only files the build does not read (ledger 171's rule, one rule
+ * for the preflight and the icon); then the newest build's icon stands for
+ * HEAD, the reason says so, and no push is asked for (ledger 319).
  */
 export async function platformBuildIcons(api: ProjectApi, projectPath: string, useBuild: string): Promise<BuildIcons> {
   const read = await projectApiGet<{ items?: unknown[]; lastPush?: unknown }>(api, "builds", { limit: BUILD_LIST_LIMIT });
@@ -204,11 +212,13 @@ export async function platformBuildIcons(api: ProjectApi, projectPath: string, u
   const headPush = asked || !target || !read.ok ? null : headPushOf(read.json?.lastPush, target);
   const wanted = target ? await wantedBuild(api, rows, target, headPush) : { row: null, seen: null };
   const fallback = !wanted.row && isDocsOnly(headPush) ? newest : null;
-  const build = wanted.row?.id ?? fallback;
-  const miss = build ? null : missedSentence(target, Boolean(asked), wanted.seen, read.ok ? null : read.message, headPush);
+  const subject = `the checked out commit ${target.slice(0, SHA_PREFIX)}`;
+  const miss = wanted.row || fallback ? null : missedSentence(target, Boolean(asked), wanted.seen, read.ok ? null : read.message, headPush);
+  const hold = miss && !asked && HELD_MISSES.has(miss.why) ? localPackageHold(projectPath, newest ? [newest] : [], target) : null;
+  const build = wanted.row?.id ?? fallback ?? hold?.build ?? null;
   const missed = miss?.missed ?? null;
   const why = miss?.why ?? (fallback ? "docs-only" : null);
-  const reason = fallback ? docsOnlySentence(`the checked out commit ${target.slice(0, SHA_PREFIX)}`, "the icon is read from", fallback) : null;
+  const reason = fallback ? docsOnlySentence(subject, "the icon is read from", fallback) : hold ? iconHoldSentence(hold, subject) : null;
   const packages = new Map<string, Promise<{ bytes: Buffer } | { absent: true } | { problem: string }>>();
 
   const fetchPackage = (file: string) => {
@@ -235,6 +245,7 @@ export async function platformBuildIcons(api: ProjectApi, projectPath: string, u
     newest,
     unreadable: read.ok ? null : read.message,
     headPush,
+    hold,
     why,
     reason,
     async take(store) {
