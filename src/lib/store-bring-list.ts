@@ -24,6 +24,8 @@ export interface BringRow {
   docs?: string;
   decideOnce?: true;
   neverPrefilled?: true;
+  dashboardTab?: string;
+  dashboardUrl?: string;
 }
 
 export interface BringList {
@@ -38,6 +40,13 @@ const STORE_NAMES: Record<string, string> = {
   edge: "Edge Add-ons",
   firefox: "Firefox AMO",
   safari: "the App Store",
+};
+
+const DASHBOARD_NAMES: Record<string, string> = {
+  chrome: "the item's dashboard",
+  edge: "Partner Center",
+  firefox: "the AMO developer hub",
+  safari: "App Store Connect",
 };
 
 const DERIVED_SUFFIXES = ["screenshots", "store_icon", "icon", "app_icon", "store_logo", "source_archive", "package_contents"];
@@ -85,6 +94,7 @@ function clearedBy(row: RequirementRow, store: string): string {
   if (/^file:/i.test(satisfied)) return `${satisfied.replace(/^file:\s*/i, "")} in the build`;
   if (satisfied === "listing") return "the extension.dev listing record, written by sync-listing";
   if (satisfied === "console-only") return "the console store settings";
+  if (satisfied === "store-dashboard" && store === "edge") return `${row.dashboardTab ? `the ${row.dashboardTab} page of the product in ` : ""}Partner Center${row.dashboardUrl ? ` at ${row.dashboardUrl}` : ""}`;
   if (satisfied === "store-dashboard") return `${row.dashboardTab ? `the ${row.dashboardTab} tab of ` : ""}the store's own dashboard${row.dashboardUrl ? ` at ${row.dashboardUrl}` : ""}`;
 
   return row.how || "the console store settings";
@@ -103,8 +113,12 @@ function supplyOf(row: RequirementRow): Supply {
  * ids, the App Store name, the item, the product, the app record), names the
  * exact door that clears each row, and says that a privacy or data answer is
  * the owner's alone. Nothing here invents a row, derives a value, or counts
- * differently from the platform; readyForReview is true only when the
- * platform's own list has no required row missing.
+ * differently from the platform: the bring count is the missing rows, the
+ * same rows missingRequired counts, and a row the platform reads unknown
+ * (a field only the store's dashboard holds, which the platform cannot read
+ * from here) is said as not readable, with its page and the dashboard
+ * address, never as an input to bring (ledger 316); readyForReview is true
+ * only when the platform's own list has no required row missing.
  */
 export function bringListOf(store: string, view: RequirementsView | null, canSubmitForReview = true): BringList | null {
   if (!view) return null;
@@ -120,6 +134,8 @@ export function bringListOf(store: string, view: RequirementsView | null, canSub
     ...(row.docs ? { docs: row.docs } : {}),
     ...(DECIDE_ONCE.has(row.id) ? { decideOnce: true as const } : {}),
     ...(NEVER_PREFILLED.has(row.id) ? { neverPrefilled: true as const } : {}),
+    ...(row.dashboardTab ? { dashboardTab: row.dashboardTab } : {}),
+    ...(row.dashboardUrl ? { dashboardUrl: row.dashboardUrl } : {}),
   }));
   const readyForReview = view.missingRequired === 0 && canSubmitForReview;
 
@@ -132,22 +148,40 @@ function rowPhrase(row: BringRow): string {
   return `${row.label} (${row.format}${marks.length ? `; ${marks.join(", ")}` : ""})`;
 }
 
+function unknownPhrase(row: BringRow, store: string): string {
+  const page = row.dashboardTab ? ` (${row.dashboardTab} ${store === "edge" ? "page" : "tab"})` : "";
+
+  return `${row.label}${page}`;
+}
+
+export function notReadableSentence(store: string, rows: BringRow[]): string {
+  const unknown = rows.filter((row) => row.required && row.status === "unknown");
+  if (!unknown.length) return "";
+
+  const url = unknown.find((row) => row.dashboardUrl)?.dashboardUrl;
+  const where = `${DASHBOARD_NAMES[store] ?? "the store's own dashboard"}${url ? ` at ${url}` : ""}`;
+
+  return `Not readable from here: ${unknown.map((row) => unknownPhrase(row, store)).join("; ")}; the platform cannot read ${store === "edge" ? "Partner Center's listing" : "the store's listing"}, so check each in ${where}.`;
+}
+
 export function bringListSentence(store: string, rows: BringRow[], readyForReview: boolean): string {
   const name = STORE_NAMES[store] ?? store;
-  const open = rows.filter((row) => row.required && row.status !== "have");
+  const open = rows.filter((row) => row.required && row.status === "missing");
   const build = open.filter((row) => row.supply === "from your build");
   const owner = open.filter((row) => row.supply === "you supply");
-  const optional = rows.filter((row) => !row.required && row.status !== "have");
+  const optional = rows.filter((row) => !row.required && row.status === "missing");
   const parts: string[] = [];
 
   if (readyForReview) parts.push(`${name[0]!.toUpperCase()}${name.slice(1)} has every required input on file.`);
-  else parts.push(`Before ${name} reviews it, bring ${open.length} required input${open.length === 1 ? "" : "s"}.`);
+  else if (open.length) parts.push(`Before ${name} reviews it, bring ${open.length} required input${open.length === 1 ? "" : "s"}.`);
+  else parts.push(`${name[0]!.toUpperCase()}${name.slice(1)} has every required input this platform can read on file.`);
 
   if (build.length) parts.push(`From your build: ${build.map(rowPhrase).join("; ")}.`);
   if (owner.length) parts.push(`You supply: ${owner.map(rowPhrase).join("; ")}.`);
+  if (store !== "chrome") parts.push(notReadableSentence(store, rows));
   if (optional.length) parts.push(`Optional: ${optional.map((row) => row.label.toLowerCase()).join(", ")}.`);
 
-  return parts.join(" ");
+  return parts.filter(Boolean).join(" ");
 }
 
 export function bringListSentences(stores: Record<string, unknown>): string {

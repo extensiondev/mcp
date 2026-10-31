@@ -53,6 +53,39 @@ describe("the bring list reads the platform's rows with the supply word, the dec
     expect(screenshotDoor("chrome")).toContain("1280x800 or 640x400 px as a 24-bit PNG");
   });
 
+  it("counts only the missing rows and says an unknown row as not readable from here, with its Partner Center page (ledger 316)", () => {
+    const product = "https://partner.microsoft.com/dashboard/microsoftedge/903d21e4-0e5b-4507-95f2-4620fcf06f1c/packages/dashboard";
+    const view = requirementsView({
+      store: "edge",
+      items: [
+        row({ id: "edge.name", label: "Extension name" }),
+        row({ id: "edge.first_submission", label: "First submission through Partner Center", format: "Submitted once in Partner Center.", satisfiedBy: "console-only", status: "missing" }),
+        row({ id: "edge.store_logo", label: "Store logo", format: "300x300 px PNG.", satisfiedBy: "store-dashboard", status: "unknown", dashboardTab: "Store listings", dashboardUrl: product }),
+        row({ id: "edge.privacy_policy_requirements", label: "Privacy policy requirements and mature content", format: "Both answers on the Properties page.", satisfiedBy: "store-dashboard", status: "unknown", dashboardTab: "Properties", dashboardUrl: product }),
+        row({ id: "edge.promo_video", label: "YouTube video URL", required: false, format: "A YouTube video URL.", satisfiedBy: "store-dashboard", status: "unknown", dashboardTab: "Store listings", dashboardUrl: product }),
+      ],
+      missingRequired: 1,
+      missingOptional: 0,
+    });
+    const list = bringListOf("edge", view, false);
+    if (!list) throw new Error("no list");
+
+    expect(view?.missingRequired).toBe(1);
+    expect(list.rows.find((r) => r.id === "edge.store_logo")).toMatchObject({ status: "unknown", dashboardTab: "Store listings", dashboardUrl: product });
+    expect(list.rows.find((r) => r.id === "edge.promo_video")).toMatchObject({ clearedBy: `the Store listings page of the product in Partner Center at ${product}` });
+    expect(list.say).toBe(
+      `Before Edge Add-ons reviews it, bring 1 required input. You supply: First submission through Partner Center (Submitted once in Partner Center.). Not readable from here: Store logo (Store listings page); Privacy policy requirements and mature content (Properties page); the platform cannot read Partner Center's listing, so check each in Partner Center at ${product}.`,
+    );
+
+    expect(list.say).not.toContain("bring 3");
+    expect(list.say).not.toContain("From your build: Store logo");
+    expect(list.say).not.toContain("Optional");
+
+    const read = requirementsView({ store: "edge", items: [row({ id: "edge.name" }), row({ id: "edge.store_logo", label: "Store logo", format: "300x300 px PNG.", satisfiedBy: "store-dashboard", status: "unknown" })], missingRequired: 0, missingOptional: 0 });
+
+    expect(bringListOf("edge", read, false)?.say).toBe("Edge Add-ons has every required input this platform can read on file. Not readable from here: Store logo; the platform cannot read Partner Center's listing, so check each in Partner Center.");
+  });
+
   it("reads ready when no required row is missing and the review stage can go, and never when the review stage refuses", () => {
     const ready = requirementsView({ store: "edge", items: [row({ id: "edge.name" }), row({ id: "edge.promo_video", label: "Promo video", required: false, status: "missing", satisfiedBy: "store-dashboard" })] });
 
