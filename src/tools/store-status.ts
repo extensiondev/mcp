@@ -246,8 +246,15 @@ export function safariReleaseStepSentence(latest: SubmissionView | undefined): s
 
 const APPLE_REVIEW_STATES = new Set(["WAITING_FOR_REVIEW", "IN_REVIEW", "READY_FOR_REVIEW"]);
 
-export const SAFARI_FRESH_READ_CALL =
-  'extension_release_status {include: ["stores"], refresh: ["safari"], waitSeconds: 180}';
+export type StatusCaller = "extension_release_status" | "extension_submit";
+
+export function safariFreshReadCall(caller: StatusCaller): string {
+  return caller === "extension_submit"
+    ? 'extension_submit {action: "status", browsers: ["safari"], waitSeconds: 180}'
+    : 'extension_release_status {include: ["stores"], refresh: ["safari"], waitSeconds: 180}';
+}
+
+export const SAFARI_FRESH_READ_CALL = safariFreshReadCall("extension_release_status");
 
 function groundedAppleState(latest: SubmissionView): string {
   const read = latest.statusRead;
@@ -256,7 +263,7 @@ function groundedAppleState(latest: SubmissionView): string {
   return (read.storeWord || latest.storeReview?.state || "").toUpperCase();
 }
 
-export function safariNextStep(latest: SubmissionView | undefined, url: string): NextStep | null {
+export function safariNextStep(latest: SubmissionView | undefined, url: string, caller: StatusCaller = "extension_release_status"): NextStep | null {
   const state = latest ? groundedAppleState(latest) : "";
   if (!latest || !state) return null;
 
@@ -271,7 +278,7 @@ export function safariNextStep(latest: SubmissionView | undefined, url: string):
   if (APPLE_REVIEW_STATES.has(state)) {
     return nextStep(
       "watch",
-      `Apple holds ${version}${build} as ${state}${readAt}: wait for Apple's review, there is nothing to send meanwhile. To read Apple's state again in one call, call ${SAFARI_FRESH_READ_CALL}; once it reads ${APPLE_PENDING_DEVELOPER_RELEASE}, call ${SAFARI_RELEASE_CALL}.`,
+      `Apple holds ${version}${build} as ${state}${readAt}: wait for Apple's review, there is nothing to send meanwhile. To read Apple's state again in one call, call ${safariFreshReadCall(caller)}; once it reads ${APPLE_PENDING_DEVELOPER_RELEASE}, call ${SAFARI_RELEASE_CALL}.`,
       url,
     );
   }
@@ -635,6 +642,7 @@ export async function readStores(args: {
   refresh?: string[];
   submissionId?: string;
   waitSeconds?: unknown;
+  caller?: StatusCaller;
 }): Promise<string> {
   const ref = resolveProjectRef(args);
 
@@ -648,6 +656,7 @@ export async function readStores(args: {
     );
   }
 
+  const caller = args.caller ?? "extension_release_status";
   const named = Boolean(args.workspace || args.project);
   const askedAt = outcomeClock.now();
   const refresh =
@@ -662,7 +671,7 @@ export async function readStores(args: {
   const boundMs = polled ? waitBound(args.waitSeconds) * 1000 : 0;
 
   for (;;) {
-    const read = await answerStores(args, ref, named, refresh);
+    const read = await answerStores(args, ref, named, refresh, caller);
     if (typeof read === "string" || !polled) return typeof read === "string" ? read : read.render(null);
 
     const elapsed = outcomeClock.now() - askedAt;
@@ -687,6 +696,7 @@ async function answerStores(
   ref: ProjectRef,
   named: boolean,
   refresh: Record<string, StoreRefreshView> | null,
+  caller: StatusCaller,
 ): Promise<string | StoresRead> {
   const healthUrl = registryFileUrl(ref, "stores/health.json", args.api);
   const statusUrl = registryFileUrl(ref, "stores/status.json", args.api);
@@ -859,7 +869,7 @@ async function answerStores(
     const queuedAct = platform.ok ? platform.queued[store] : undefined;
     if (queuedAct) row.queuedAct = queuedAct;
 
-    const step = store === "safari" ? safariNextStep(submission, consoleProjectUrl(ref, ConsoleProjectPage.submissionsStore(store), args.api)) : null;
+    const step = store === "safari" ? safariNextStep(submission, consoleProjectUrl(ref, ConsoleProjectPage.submissionsStore(store), args.api), caller) : null;
     if (step) row.nextStep = step;
 
     return row;

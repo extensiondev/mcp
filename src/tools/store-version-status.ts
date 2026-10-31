@@ -122,6 +122,7 @@ export async function storeVersionStatus(args: {
   const raw = await readStores({
     project: args.project,
     api: args.api,
+    caller: COMMAND,
     ...(args.waitSeconds !== undefined && wanted.length ? { refresh: wanted, waitSeconds: args.waitSeconds } : {}),
   });
   let parsed: unknown;
