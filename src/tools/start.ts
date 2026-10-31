@@ -20,12 +20,14 @@ import {
   profileReusedAt,
   reusedProfileNote,
 } from "../lib/profile-carryover";
+import { isGeckoFamily } from "../lib/browser-family";
 import { removeCarrier } from "../lib/carrier";
 import { envelope } from "../lib/envelope";
 import { productionLaunchEvidence, readFreshContract, readLoadOverDebugPort } from "../lib/production-launch";
 import { awaitStartLanding, startAnswer } from "../lib/start-answer";
-import { controlledIdentity, identityWarnings, resolveLoadedId } from "../lib/controlled-identity";
+import { controlledIdentity, resolveLoadedId, sessionIdentityWarnings } from "../lib/controlled-identity";
 import { spawnExtensionCli, spawnFailedEnvelope } from "../lib/exec";
+import { geckoAddonId } from "../lib/gecko-addon";
 import {
   registerSession,
   removeSession,
@@ -410,7 +412,9 @@ export async function handler(
       controlPort !== null && typeof freshContract?.distPath === "string"
         ? freshContract.distPath
         : `dist/extension-js/${browser}/controlled`,
-    identity: identity.copyId
+    identity: identity.copyId && isGeckoFamily(browser)
+      ? { addonId: geckoAddonId(args.projectPath, browser) }
+      : identity.copyId
       ? { buildExtensionId: identity.plainId, controlledCopyId: loaded.extensionId ?? identity.copyId, extensionIdSource: loaded.source }
       : {},
     launch,
@@ -419,9 +423,9 @@ export async function handler(
     landing,
     warnings: [
       profileReused && !args.noBrowser
-        ? `${reusedProfileNote(freshContract?.profilePath ?? carryover.profilePath)}${identity.copyId ? ` That carry-over does not reach this controlled copy: its id ${loaded.extensionId ?? identity.copyId} is its own, so its chrome.storage starts empty and it holds no grants from the plain build's runs.` : ""}`
+        ? `${reusedProfileNote(freshContract?.profilePath ?? carryover.profilePath)}${identity.copyId && !isGeckoFamily(browser) ? ` That carry-over does not reach this controlled copy: its id ${loaded.extensionId ?? identity.copyId} is its own, so its chrome.storage starts empty and it holds no grants from the plain build's runs.` : ""}`
         : null,
-      ...identityWarnings(identity, loaded),
+      ...sessionIdentityWarnings(identity, loaded, args.projectPath, browser),
       ...boot.warnings,
       markerWarning,
       stale.removed &&

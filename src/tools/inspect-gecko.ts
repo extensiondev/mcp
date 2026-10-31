@@ -17,6 +17,7 @@ import {
   domSnapshotScript,
 } from "../lib/cdp-page-scripts";
 import { normalizeDomSnapshot } from "../lib/cdp";
+import { lacksScriptingOnMv3, readGeckoTabWithoutScripting } from "../lib/gecko-no-scripting";
 import {
   restoredTabWarning,
   sessionProfileReused,
@@ -414,6 +415,16 @@ export async function inspectViaBridge(
   }
 
   let value = parsed?.ok === true ? (parsed.value ?? {}) : null;
+  let transport = byTargetId ? "rdp" : "bridge";
+
+  if (value === null && !surface && lacksScriptingOnMv3(args.projectPath, browser, parsed)) {
+    const read = await readGeckoTabWithoutScripting(args, browser, expression, TOOL);
+    if ("error" in read) return read.error;
+
+    value = read.value && typeof read.value === "object" ? read.value : {};
+    transport = "rdp";
+    notes.push(read.note);
+  }
 
   if (
     value === null &&
@@ -468,7 +479,7 @@ export async function inspectViaBridge(
 
   const result: Record<string, unknown> = {
     browser,
-    transport: byTargetId ? "rdp" : "bridge",
+    transport,
     ...(surface ? { surface: surface.context, document: surface.document } : {}),
   };
 
@@ -542,7 +553,9 @@ export async function inspectViaBridge(
     await collectGeckoConsole(args, browser, urlFilter, result, notes);
   }
 
-  if (args.deepDom) {
+  if (args.deepDom && transport === "rdp" && !byTargetId) {
+    notes.push(`deepDom was not read on ${browser}: the closed shadow root walk needs a content-script injection, which this session has no route for. Closed roots are absent here, not empty.`);
+  } else if (args.deepDom) {
     const cap = maxBytes > 0 ? maxBytes : 65536;
     await collectGeckoDeepDom(args, browser, urlFilter, cap, result, notes);
   }

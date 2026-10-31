@@ -9,7 +9,9 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { isGeckoFamily } from "./browser-family";
 import { unpackedExtensionId } from "./extension-identity";
+import { geckoAddonId } from "./gecko-addon";
 import { browserArtifactsDir } from "./session-paths";
 
 import type { ReadyContract } from "./types";
@@ -133,6 +135,23 @@ export function resolveLoadedId(
   }
 
   return { extensionId: identity.copyId, source: "copy-folder", replacedPlainId: valid !== undefined };
+}
+
+export function geckoIdentityWarning(projectPath: string, browser: string): string {
+  const id = geckoAddonId(projectPath, browser);
+
+  return `allowControl runs a copy of the build from dist/extension-js/${browser}/controlled, which ${browser} loads as a temporary add-on ${id ? `under the manifest's gecko id ${id}` : "under an id Firefox generates, since the manifest sets no browser_specific_settings.gecko.id"}, at a moz-extension://<uuid> address Firefox assigns in this run's profile (extension_dom_snapshot with listTabs: true shows it on open pages). Its storage and grants live in that profile under that id, apart from the plain build's runs in other profiles.`;
+}
+
+export function sessionIdentityWarnings(
+  identity: ControlledIdentity,
+  loaded: LoadedId,
+  projectPath: string,
+  browser: string,
+): Array<string | null> {
+  if (!identity.copyId) return [];
+
+  return isGeckoFamily(browser) ? [geckoIdentityWarning(projectPath, browser)] : identityWarnings(identity, loaded);
 }
 
 export function identityWarnings(identity: ControlledIdentity, loaded: LoadedId): Array<string | null> {

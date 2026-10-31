@@ -61,6 +61,7 @@ import {
 } from "../lib/extension-surfaces";
 import { surfaceDocument } from "./open";
 import { listBridgeTabs, matchTabsByUrl } from "../lib/bridge-tabs";
+import { lacksScriptingOnMv3, readGeckoTabWithoutScripting } from "../lib/gecko-no-scripting";
 
 const RDP_ACTOR_NOTE =
   "actor is an RDP tab descriptor actor id, NOT a chrome.tabs id: do not pass it as `tab`. " +
@@ -252,6 +253,44 @@ async function snapshotExtensionPageOverProtocol(
   } catch {
     return null;
   }
+}
+
+async function snapshotWithoutScripting(
+  args: ActArgs & { include?: string[]; maxBytes?: number; tab?: number },
+  browser: string,
+  raw: string,
+  consoleAsked: boolean,
+): Promise<string | null> {
+  if (args.context && args.context !== "page" && args.context !== "content") return null;
+
+  let refused: Record<string, any> | null;
+
+  try {
+    refused = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+
+  if (!lacksScriptingOnMv3(args.projectPath, browser, refused, true)) return null;
+
+  const read = await readGeckoTabWithoutScripting(
+    args,
+    browser,
+    protocolSnapshotExpression(args.include?.includes("html") === true, args.maxBytes ?? 262144),
+    schema.name,
+  );
+  if ("error" in read) return read.error;
+
+  return envelope({
+    ok: true,
+    command: schema.name,
+    status: "ok",
+    value: read.value,
+    warnings: [
+      `${read.note}${args.context === "content" ? ' The DOM is the same document the content scripts see, but context: "content" globals are not in this read.' : ""}`,
+      consoleAsked ? "Console lines are not collected on this path; read them with extension_logs." : null,
+    ],
+  });
 }
 
 type SnapshotArgs = ActArgs & { include?: string[]; maxBytes?: number; targetId?: string };
@@ -673,7 +712,15 @@ export async function handler(
     asked,
     withConsole != null,
   );
-  const raw = overProtocol ?? asked;
+  const withoutScripting = overProtocol
+    ? null
+    : await snapshotWithoutScripting(
+        { ...args, url: targetUrl, tab: targetTab },
+        sessionBrowser,
+        asked,
+        withConsole != null,
+      );
+  const raw = overProtocol ?? withoutScripting ?? asked;
   if (!resolvedTarget) return raw;
 
   try {

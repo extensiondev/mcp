@@ -31,6 +31,7 @@ const UNKNOWN_VERB = /unknown command/i;
 export interface NavigateTarget {
   tab?: number;
   newTab?: boolean;
+  background?: boolean;
 }
 
 export async function navigateToUrlViaBridge(
@@ -47,7 +48,7 @@ export async function navigateToUrlViaBridge(
       url,
       projectPath,
       ...(target.tab != null ? ["--tab", String(target.tab)] : []),
-      ...(target.tab == null && target.newTab ? ["--new-tab"] : []),
+      ...(target.tab == null && target.newTab ? ["--new-tab", ...(target.background ? ["--background"] : [])] : []),
       "--browser",
       browser,
       ...(timeout != null ? ["--timeout", String(timeout)] : []),

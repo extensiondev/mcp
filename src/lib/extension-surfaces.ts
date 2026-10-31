@@ -7,9 +7,12 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import fs from "node:fs";
+import path from "node:path";
 
 import { surfaceDocument } from "../tools/open";
+import { controlledCopyPath } from "./controlled-identity";
 import { envelope } from "./envelope";
+import { manifestCandidates } from "./project-manifest";
 import { readyContractPath } from "./session-paths";
 import { geckoRecency } from "./target-pick";
 
@@ -151,4 +154,20 @@ export function namesExtensionDocument(
 
 export function mayNameExtensionTab(url: string): boolean {
   return isExtensionUrl(url) || !/^[a-z][a-z0-9+.-]*:/i.test(url);
+}
+
+export function bareExtensionDocument(projectPath: string, browser: string, url: string): string | null {
+  if (!url || /^[a-z][a-z0-9+.-]*:/i.test(url)) return null;
+
+  const doc = url.replace(/^\.?\//, "");
+  const file = doc.replace(/[?#].*$/, "");
+  if (!file || file.endsWith("/")) return null;
+  if (namesExtensionDocument(projectPath, browser, url)) return doc;
+
+  const roots = [
+    ...manifestCandidates(projectPath, browser).slice(0, 2).map((manifest) => path.dirname(manifest)),
+    controlledCopyPath(projectPath, browser),
+  ];
+
+  return roots.some((root) => fs.existsSync(path.join(root, file)) && fs.existsSync(path.join(root, "manifest.json"))) ? doc : null;
 }

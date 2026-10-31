@@ -88,6 +88,7 @@ import {
   SURFACE_MANIFEST_KEYS,
 } from "./open";
 import {
+  bareExtensionDocument,
   EXTENSION_PAGE_CONTEXTS,
   extensionPageUnreachable,
   distinctUrls,
@@ -102,6 +103,17 @@ import {
   urlKey,
 } from "../lib/extension-surfaces";
 import { executeScriptExpression } from "./inspect-gecko";
+import { resolveBridgeBaseUrl } from "../lib/bridge-tabs";
+import {
+  contentWorldUnreachable,
+  geckoManifestVersion,
+  geckoTabPick,
+  lacksScriptingOnMv3,
+  NO_SCRIPTING_API,
+  noDebuggerForTab,
+  noScriptingReason,
+  overProtocolNote,
+} from "../lib/gecko-no-scripting";
 import { SAFARI_EVAL_LIMIT, safariContextRefusal } from "../lib/safari-eval";
 
 const pageRef = (t: { targetId: string; url: string }): TargetRef => ({ targetId: t.targetId, url: t.url });
@@ -166,29 +178,7 @@ export function declaredBackgroundTargetType(
   return version === 3 ? "service_worker" : version === 2 ? "background_page" : null;
 }
 
-export function geckoManifestVersion(
-  projectPath: string,
-  browser: string,
-): 2 | 3 | null {
-  for (const file of manifestCandidates(projectPath, browser)) {
-    let manifest: Record<string, any>;
-
-    try {
-      manifest = JSON.parse(fs.readFileSync(file, "utf8"));
-    } catch {
-      continue;
-    }
-
-    const version =
-      manifest["firefox:manifest_version"] ??
-      manifest["gecko:manifest_version"] ??
-      manifest.manifest_version;
-    if (version === 3) return 3;
-    if (version === 2) return 2;
-  }
-
-  return null;
-}
+export { geckoManifestVersion };
 
 export function resolveDefaultEvalContext(
   projectPath: string,
@@ -897,8 +887,6 @@ function explainCspRefusal(raw: string, context: string | undefined, browser: st
   return actFrameJson(parsed);
 }
 
-const NO_SCRIPTING_API = /scripting is not available/i;
-
 function pageEvalRefusedByCsp(parsed: Record<string, any>): boolean {
   return cspRefusedFrame(parsed);
 }
@@ -913,7 +901,9 @@ function isSingleExpression(source: string): boolean {
   }
 }
 
-function notOneExpression(): string {
+function notOneExpression(
+  why = "This document's content security policy forbids eval, so Firefox evaluates it over the debugger protocol",
+): string {
   return envelope({
     ok: false,
     command: schema.name,
@@ -921,8 +911,7 @@ function notOneExpression(): string {
     error: {
       code: "E_BAD_REQUEST",
       name: "NotOneExpression",
-      message:
-        "This document's content security policy forbids eval, so Firefox evaluates it over the debugger protocol, which takes one expression, and this input is a statement list.",
+      message: `${why}, which takes one expression, and this input is a statement list.`,
     },
     hint: "Pass one expression. Wrap statements in a function that returns the value, for example (() => { const a = 20; return a + 1; })().",
   });
@@ -1264,6 +1253,8 @@ async function evaluateThroughExecuteScript(
   const parsed = parseFrameObject(raw);
   if (!parsed || parsed.ok !== false) return null;
 
+  if (lacksScriptingOnMv3(args.projectPath, browser, parsed)) return evaluateWithoutScripting(args, browser, context);
+
   const noScriptingApi = NO_SCRIPTING_API.test(String(parsed.error?.message ?? ""));
   const cspRefused =
     !noScriptingApi &&
@@ -1336,6 +1327,37 @@ async function evaluateThroughExecuteScript(
     ],
     hint: "Pass url to pick the tab; the extension needs host permissions for it.",
   });
+}
+
+async function evaluateWithoutScripting(
+  args: ActArgs & { expression: string },
+  browser: string,
+  context: string,
+): Promise<string> {
+  if (context === "content") return contentWorldUnreachable(schema.name, args.projectPath, browser);
+
+  if (!isSingleExpression(args.expression)) {
+    return notOneExpression(`Because ${noScriptingReason(args.projectPath, browser)}, Firefox evaluates the tab over the debugger protocol`);
+  }
+
+  const pick = await geckoTabPick(
+    args.projectPath,
+    browser,
+    { url: args.url, tab: typeof args.tab === "number" ? args.tab : undefined },
+    args.timeout,
+    schema.name,
+  );
+  if ("error" in pick) return pick.error;
+
+  const answer = await evaluateInGeckoTab(args, browser, pick.select, `No open tab matches ${pick.label}.`);
+  if (answer === null) return noDebuggerForTab(schema.name, args.projectPath, browser, `The expression for ${pick.label}`);
+
+  const parsed = parseFrameObject(answer);
+  if (!parsed) return answer;
+
+  addWarning(parsed, overProtocolNote(args.projectPath, browser, pick.label));
+
+  return actFrameJson(parsed);
 }
 
 function evalDisabled(): string {
@@ -1651,6 +1673,10 @@ async function evaluateRouted(
         (tabs) => geckoExtensionTabsByUrl(tabs, url),
       );
       if (overProtocol !== raw) return overProtocol;
+
+      const bareDocument = bareExtensionDocument(args.projectPath, browser, url);
+      const base = bareDocument && isGeckoFamily(browser) ? await resolveBridgeBaseUrl(args.projectPath, browser, args.timeout) : null;
+      if (base) return evaluateRouted({ ...args, context, url: `${base}${bareDocument}` }, browser);
     }
   }
 

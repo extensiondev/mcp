@@ -296,6 +296,7 @@ export async function navigateToUrl(
     return withSessionHeadless(
       await navigateToUrlViaBridge(projectPath, browser, url, timeout, schema.name, {
         newTab: true,
+        background: options.foreground !== true,
       }),
       projectPath,
       browser,
@@ -1199,7 +1200,10 @@ function withForegroundRefusal(raw: string, projectPath: string, browser: string
   const frame = parseFrameObject(raw);
   if (!frame?.ok || (frame.value && typeof frame.value === "object" && "foreground" in frame.value)) return raw;
 
-  const foreground = foregroundUnsupported(
+  const openedActive = !isChromiumFamily(browser) && tab == null && frame.value?.tab?.active === true;
+  const foreground: Foreground = openedActive
+    ? { requested: true, activated: true, windowRaised: false, reason: `raising the window rides the Chromium debug port, and this session runs ${browser}` }
+    : foregroundUnsupported(
     !isChromiumFamily(browser)
       ? `foreground rides the Chromium debug port, and this session runs ${browser}`
       : tab != null
