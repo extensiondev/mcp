@@ -15,7 +15,7 @@ import { safariReleaseSentence } from "../tools/store-status";
 import { handler as submit } from "../tools/submit";
 
 const AT_ONCE = "approval publishes it on the App Store at once, and an approval cannot be taken back from here";
-const HOLD = "to hold it, set Version Release to Manually release this version in App Store Connect before review, or state `- Release: after approval` under `## Safari` in STORE.md to publish at once by choice";
+const HOLD = "the review act sets it to manual release before sending it to App Review unless STORE.md states `- Release: after approval` under `## Safari`, and the record names the change in publish.releaseTypeChanged";
 const HOLDS = "approval holds it until you release it";
 const READ_AT = "2026-10-31T11:35:00.000Z";
 

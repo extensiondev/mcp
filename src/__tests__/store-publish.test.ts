@@ -562,7 +562,7 @@ describe("extension_submit publish sends a Chrome draft to review after one appr
 
     expect(out.status).toBe("approval-required");
     expect(out.value.nextStep.say).toBe(
-      `Approve it at ${API}/approve/apr_s before 2026-10-27T06:15:00.000Z. This sends the App Store version holding the TestFlight build to Apple's App Review; the release mode set in App Store Connect stays as it is, and a version the act creates is set to manual release, so Apple's approval does not put it on sale.`,
+      `Approve it at ${API}/approve/apr_s before 2026-10-27T06:15:00.000Z. This sends the App Store version holding the TestFlight build to Apple's App Review; a version the act creates is set to manual release, and a version App Store Connect holds for release after approval is set to manual release before it is sent unless STORE.md states \`- Release: after approval\` under \`## Safari\`, so Apple's approval does not put it on sale; the record names the change.`,
     );
 
     expect(platform.sent("POST", APPROVALS)[0].body).toMatchObject({ action: "extension_store.publish", scope: SAFARI_SCOPE, description: "Send the App Store TestFlight build to review." });

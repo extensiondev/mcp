@@ -7,7 +7,10 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { isNewerOrSame, type PlatformSubmission, type StoreReview, type StoreStatusRead } from "./platform-submissions";
+import { releaseChangeOfRow, type ReleaseTypeChange, type ReleaseTypeChangeRefused } from "./release-type-change";
 import { AMO_SIGNED_STATUS, amoUnlistedSigning } from "./review-beside-submission";
+
+export { releaseChangeOfRow, releaseChangeSentence, type ReleaseTypeChange, type ReleaseTypeChangeRefused } from "./release-type-change";
 
 export interface SubmissionView {
   id?: string;
@@ -26,7 +29,10 @@ export interface SubmissionView {
   statusRead?: StoreStatusRead;
   releaseType?: string;
   releaseTypeReadAt?: string;
+  releaseTypeChanged?: ReleaseTypeChange;
+  releaseTypeChangeRefused?: ReleaseTypeChangeRefused;
 }
+
 
 export const RELEASE_TYPE_MEANING: Record<string, string> = {
   AFTER_APPROVAL: "approval publishes it on the App Store at once, and an approval cannot be taken back from here",
@@ -35,7 +41,7 @@ export const RELEASE_TYPE_MEANING: Record<string, string> = {
 };
 
 export const SAFARI_MANUAL_HOLD =
-  "to hold it, set Version Release to Manually release this version in App Store Connect before review, or state `- Release: after approval` under `## Safari` in STORE.md to publish at once by choice";
+  "the review act sets it to manual release before sending it to App Review unless STORE.md states `- Release: after approval` under `## Safari`, and the record names the change in publish.releaseTypeChanged";
 
 export function releaseTypeMeaning(type: string | undefined): string {
   const upper = String(type ?? "").toUpperCase();
@@ -116,8 +122,9 @@ export function platformSubmissionView(
   if (!same && !isNewerOrSame(latest.submittedAt, registry?.submittedAt)) return null;
 
   const { run: _run, store: _store, appStoreRelease, ...rest } = latest;
-  const mode = releaseModeOfRow(appStoreRelease, (rest.publish as Record<string, unknown> | undefined) ?? null);
-  const typed = { ...rest, ...(same ? newerMode(modeOf(registry), mode) : mode) };
+  const publish = (rest.publish as Record<string, unknown> | undefined) ?? null;
+  const mode = releaseModeOfRow(appStoreRelease, publish);
+  const typed = { ...rest, ...(same ? newerMode(modeOf(registry), mode) : mode), ...releaseChangeOfRow(publish) };
   const fields = amoUnlistedSigning(store, typed.storeReview) ? { ...typed, status: AMO_SIGNED_STATUS } : typed;
   const own: SubmissionView = fields.storeVersion ? { ...fields, version: fields.storeVersion.packaged } : fields;
 

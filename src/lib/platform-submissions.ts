@@ -11,6 +11,7 @@ import { resolveApiBase, safeApiBase } from "./login-flow";
 import { missedRead, type RecordRead } from "./act-outcome";
 import { platformFetch } from "./platform-fetch";
 import { platformApiGet, type ProjectApi } from "./project-api";
+import { releaseChangeOfRow, type ReleaseTypeChange, type ReleaseTypeChangeRefused } from "./release-type-change";
 import { identityHeaders } from "./session-identity";
 
 export const RETRIED_SENTENCE = "GitHub canceled the run before upload; the platform started it again.";
@@ -83,6 +84,8 @@ export interface StoreAct {
   storeMessage?: string;
   at?: string;
   releaseType?: string;
+  releaseTypeChanged?: ReleaseTypeChange;
+  releaseTypeChangeRefused?: ReleaseTypeChangeRefused;
 }
 
 export interface AppStoreRelease {
@@ -334,7 +337,7 @@ function storeActOf(raw: unknown): StoreAct | undefined {
   const releaseType = str(row.releaseType)?.toUpperCase();
   if (releaseType && /^(MANUAL|AFTER_APPROVAL|SCHEDULED)$/.test(releaseType)) out.releaseType = releaseType;
 
-  return out;
+  return { ...out, ...releaseChangeOfRow(row) };
 }
 
 /* @invariant THE DISPATCH IS ANSWERED AS A STATE, NEVER AS A RUN. The

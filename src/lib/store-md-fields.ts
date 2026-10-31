@@ -95,7 +95,7 @@ function limitOf(field: StoreMdField, store: ListingStore): string {
 
   if (field === "visibility") return `public, unlisted or private (trusted testers), ${STORE_OWN_LINES_PLACE}; unlisted, the least public, when the line is absent`;
 
-  if (field === "releaseMode") return "manual or after approval, under `## Safari`: whether Apple's approval may publish the App Store version at once; manual, the least public, when the line is absent, and the preflight warns on a version set to release automatically after approval unless the line says after approval";
+  if (field === "releaseMode") return "manual or after approval, under `## Safari`: whether Apple's approval may publish the App Store version at once; manual, the least public, when the line is absent: the review act sets a version App Store Connect holds for release after approval to manual release before sending it unless the line says after approval, and the preflight warns on what App Store Connect holds now";
 
   const chars = `up to ${count(LISTING_TEXT_LIMITS[field as ListingTextField])} characters`;
 

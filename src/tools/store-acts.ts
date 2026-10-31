@@ -403,7 +403,7 @@ function publishApprovalSentence(store: PublishStore): string {
   if (store === "edge") return "This sends the product to Edge's certification review.";
 
   if (store === "safari") {
-    return "This sends the App Store version holding the TestFlight build to Apple's App Review; the release mode set in App Store Connect stays as it is, and a version the act creates is set to manual release, so Apple's approval does not put it on sale.";
+    return "This sends the App Store version holding the TestFlight build to Apple's App Review; a version the act creates is set to manual release, and a version App Store Connect holds for release after approval is set to manual release before it is sent unless STORE.md states `- Release: after approval` under `## Safari`, so Apple's approval does not put it on sale; the record names the change.";
   }
 
   return PUBLISH_APPROVAL_SENTENCE;

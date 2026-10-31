@@ -14,7 +14,7 @@ import { AMO_SIGNED_STATUS } from "../lib/review-beside-submission";
 import { consoleProjectUrl } from "../lib/registry";
 import { readsBeforeDispatch } from "../lib/store-read-landed";
 import { isRow, text } from "../lib/ship-act";
-import { releaseTypeMeaning } from "../lib/store-row-sources";
+import { releaseChangeOfRow, releaseChangeSentence, releaseTypeMeaning, type ReleaseTypeChange, type ReleaseTypeChangeRefused } from "../lib/store-row-sources";
 import { readStores } from "./store-status";
 
 import type { NextStep } from "../lib/store-connection";
@@ -35,6 +35,8 @@ export interface StoreVersionStatus {
   readAt: string | null;
   source: string | null;
   releaseType: string | null;
+  releaseTypeChanged?: ReleaseTypeChange;
+  releaseTypeChangeRefused?: ReleaseTypeChangeRefused;
   nextStep: NextStep | null;
 }
 
@@ -69,6 +71,7 @@ function statusOfRow(row: Row): StoreVersionStatus {
     readAt: text(read.readAt) || text(review.checkedAt) || null,
     source: text(read.source) || null,
     releaseType: text(submission.releaseType) || null,
+    ...releaseChangeOfRow(submission),
     nextStep: isRow(row.nextStep) ? (row.nextStep as unknown as NextStep) : null,
   };
 }
@@ -93,7 +96,8 @@ export function storeVersionSentence(entry: StoreVersionStatus, refresh: Row | n
     ? ` (${entry.source}${entry.readAt ? ` at ${entry.readAt}` : ""})`
     : landedUnsourced(entry, refresh, wait) || " (no store read behind it)";
   const meaning = releaseTypeMeaning(entry.releaseType ?? undefined);
-  const release = entry.releaseType ? `, release type ${entry.releaseType}${meaning ? ` (${meaning})` : ""}` : "";
+  const change = releaseChangeSentence(entry);
+  const release = entry.releaseType ? `, release type ${entry.releaseType}${meaning ? ` (${meaning})` : ""}${change ? `, ${change}` : ""}` : "";
   const next = entry.nextStep ? `. Next: ${entry.nextStep.say}` : "";
 
   return `${entry.store} ${entry.version ?? ""}${build}: ${status}${state}${read}${release}${next}`;

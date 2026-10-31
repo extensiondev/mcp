@@ -44,7 +44,7 @@ import {
   type SubmissionLookup,
 } from "../lib/platform-store-records";
 import { repairEdgeStoreUrl } from "../lib/edge-listing";
-import { platformSubmissionView, releaseModeOfRow, RELEASE_MODE_WORDS, type SubmissionView } from "../lib/store-row-sources";
+import { platformSubmissionView, releaseChangeOfRow, releaseChangeSentence, releaseModeOfRow, RELEASE_MODE_WORDS, type SubmissionView } from "../lib/store-row-sources";
 import { storeRecordUnread } from "../lib/store-readiness";
 import { openProjectApi, projectApiSend } from "../lib/project-api";
 import { outcomeClock, waitBound } from "../lib/act-outcome";
@@ -225,7 +225,9 @@ export function safariReleaseSentence(latest: SubmissionView | undefined): strin
   const words = type ? RELEASE_MODE_WORDS[type] : undefined;
   if (!latest || !words) return "";
 
-  return `${latest.storeVersion?.packaged || latest.version || "the version"} ${words}`;
+  const change = releaseChangeSentence(latest);
+
+  return `${latest.storeVersion?.packaged || latest.version || "the version"} ${words}${change ? `; ${change}` : ""}`;
 }
 
 const APPLE_PENDING_DEVELOPER_RELEASE = "PENDING_DEVELOPER_RELEASE";
@@ -360,6 +362,8 @@ function submissionView(row: Record<string, unknown>): SubmissionView {
   const signed = amoUnlistedSigning(str(row.store), storeReview);
   const mode = releaseModeOfRow(row.appStoreRelease, publish);
   if (mode) Object.assign(view, mode);
+
+  Object.assign(view, releaseChangeOfRow(publish));
   if (version) view.version = version;
   if (statusRead) view.statusRead = statusRead;
   if (status) view.status = signed ? AMO_SIGNED_STATUS : status;
