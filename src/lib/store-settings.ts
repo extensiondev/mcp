@@ -24,8 +24,13 @@ export const SUBMISSION_MODE_IDS: Record<StoreSettingsStore, readonly string[]> 
   chrome: ["draft-until-public", "draft", "public", "staged", "dry-run"],
   edge: ["draft", "review", "dry-run"],
   firefox: ["unlisted", "listed", "dry-run"],
-  safari: ["draft", "dry-run"],
+  safari: ["draft", "review", "dry-run"],
 };
+
+export const SAFARI_RELEASE_LINE_SENTENCE =
+  "The Safari release mode is not a store setting: it is the `- Release:` line under `## Safari` in STORE.md (manual by default; `- Release: after approval` keeps a version the owner set to release on approval as it is), which sync-listing carries to App Store Connect, and the review act sets any other version to manual release.";
+
+const SAFARI_RELEASE_KEYS = new Set(["releasetype", "release", "releasemode"]);
 
 export const STORE_SETTING_KEYS = ["enabled", "submissionMode", "sourceArchive", "releaseChannel", "chromeItemId", "edgeProductId", "firefoxAddonGuid", "appStoreId", "bundleId", "firstSubmitted", "storeUrl", "publisherId"] as const;
 
@@ -76,11 +81,14 @@ export function isStoreSettingsStore(value: string): value is StoreSettingsStore
 
 /* @invariant A MODE ID IS WRITTEN AS THE FIELDS THE PLATFORM READS IT FROM.
  * The platform derives a store's submission mode from saved booleans (Chrome
- * dryRun, skipPublish and stagedPublish; Edge publishAfter; Firefox
- * releaseChannel), in a fixed order of precedence, and never stores the mode
- * id itself. Each id here writes every field that order consults, so the id
- * the preflight answers afterwards is the id that was asked for and no
- * leftover boolean from an earlier mode changes the reading.
+ * dryRun, skipPublish and stagedPublish; Edge and Safari publishAfter;
+ * Firefox releaseChannel), in a fixed order of precedence, and never stores
+ * the mode id itself. Each id here writes every field that order consults, so
+ * the id the preflight answers afterwards is the id that was asked for and no
+ * leftover boolean from an earlier mode changes the reading. Safari review
+ * (ledger 324) is the saved publishAfter: the version approval of a submit
+ * then also carries the line that sends the TestFlight build to App Review,
+ * which is why the platform keeps that write on the approve page.
  */
 export function modeToPatch(store: StoreSettingsStore, mode: string): StoreSettingsPatch {
   if (mode === "dry-run") return { dryRun: true };
@@ -93,10 +101,9 @@ export function modeToPatch(store: StoreSettingsStore, mode: string): StoreSetti
     return { dryRun: false, skipPublish: null, stagedPublish: false };
   }
 
-  if (store === "edge") return { dryRun: false, publishAfter: mode === "review" };
-  if (store === "firefox") return { dryRun: false, releaseChannel: mode };
+  if (store === "edge" || store === "safari") return { dryRun: false, publishAfter: mode === "review" };
 
-  return { dryRun: false };
+  return { dryRun: false, releaseChannel: mode };
 }
 
 export type StoreSettingsRead =
@@ -121,6 +128,11 @@ export function readStoreSettingsChange(store: StoreSettingsStore, raw: unknown)
   }
 
   const unknown = Object.keys(raw).filter((key) => !(STORE_SETTING_KEYS as readonly string[]).includes(key));
+  const releaseKey = store === "safari" ? unknown.find((key) => SAFARI_RELEASE_KEYS.has(key.toLowerCase())) : undefined;
+
+  if (releaseKey) {
+    return { problem: `storeSettings has "${releaseKey}", which is not a store setting. ${SAFARI_RELEASE_LINE_SENTENCE} Use ${STORE_SETTING_KEYS.join(", ")}.` };
+  }
 
   if (unknown.length) {
     return { problem: `storeSettings has ${unknown.map((k) => `"${k}"`).join(", ")}, which is not a store setting; use ${STORE_SETTING_KEYS.join(", ")}.` };

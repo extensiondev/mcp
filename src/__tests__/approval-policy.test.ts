@@ -54,7 +54,7 @@ describe("the approval policy table holds Cezar's ruling of 2026-10-23 (ledger 1
   it("keeps every submission mode that sends the next upload to a review that publishes it on the approve page, per store, while the other modes are plain (ledger 328)", () => {
     const store = (name: string, submissionMode?: string) => approvalVerdict("extension_settings.store", { store: name, submissionMode });
 
-    expect(PUBLIC_SUBMISSION_MODES).toEqual({ chrome: ["public", "staged"], edge: ["review"], firefox: ["listed"], safari: [] });
+    expect(PUBLIC_SUBMISSION_MODES).toEqual({ chrome: ["public", "staged"], edge: ["review"], firefox: ["listed"], safari: ["review"] });
 
     for (const name of ["chrome", "edge", "firefox", "safari"]) {
       expect(store(name), name).toBe("plain");
@@ -69,15 +69,16 @@ describe("the approval policy table holds Cezar's ruling of 2026-10-23 (ledger 1
     expect(store("edge", "public")).toBe("plain");
     expect(store("firefox", "unlisted")).toBe("plain");
     expect(store("firefox", "listed")).toBe("approval");
-    expect(store("safari", "review")).toBe("plain");
     expect(approvalVerdict("extension_settings.store", { store: "firefox", releaseChannel: "unlisted" })).toBe("plain");
     expect(approvalVerdict("extension_settings.store", { store: "firefox", releaseChannel: "listed" })).toBe("approval");
     expect(approvalVerdict("extension_settings.store", { submissionMode: "listed" })).toBe("approval");
     expect(approvalVerdict("extension_settings.store", { submissionMode: "public" })).toBe("approval");
     expect(publicSubmissionMode({ submissionMode: "Public" })).toBe(true);
     expect(publicSubmissionMode({ submissionMode: "Review" })).toBe(true);
-    expect(publicSubmissionMode({ store: "safari", submissionMode: "review" })).toBe(false);
     expect(publicSubmissionMode({})).toBe(false);
+    expect(publicSubmissionMode({ store: "safari", submissionMode: "review" })).toBe(true);
+    expect(publicSubmissionMode({ store: "safari", submissionMode: "draft" })).toBe(false);
+    expect(approvalVerdict("extension_settings.store", { store: "safari", submissionMode: "review" })).toBe("approval");
   });
 
   it("names what each kept mode does to the next upload, and nothing for a plain mode", () => {
@@ -90,6 +91,9 @@ describe("the approval policy table holds Cezar's ruling of 2026-10-23 (ledger 1
 
     expect(publicSubmissionModeConsequence({ store: "edge", submissionMode: "draft" })).toBe("");
     expect(publicSubmissionModeConsequence({ store: "safari", submissionMode: "draft" })).toBe("");
+    expect(publicSubmissionModeConsequence({ store: "safari", submissionMode: "review" })).toMatch(
+      /TestFlight build and lets the version approval of that submit also cover the publish act .* App Review; Apple's approval does not put it on sale, which stays its own approval\./,
+    );
   });
 
   it("keeps a public channel audience on the approve page while a private channel is plain, at creation and on an existing channel", () => {

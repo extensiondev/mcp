@@ -23,7 +23,10 @@ export type ApprovalVerdict = "plain" | "approval" | "console";
  * 328, the same gate for the same consequence: chrome public or staged, edge
  * review and firefox listed, read per store from PUBLIC_SUBMISSION_MODES,
  * while edge draft, chrome draft-until-public and draft, firefox unlisted
- * and safari draft stay plain), a public
+ * and safari draft stay plain; safari review sits in that table under
+ * ledger 324, because one version approval then also covers the publish act
+ * that sends the TestFlight build to Apple's App Review, which an owner
+ * cannot take back once Apple approves), a public
  * channel audience (asked at creation or set on an existing channel) and a
  * public project visibility, which opens every build the project ever made,
  * all keep the page; a channel delete is a person's act in the console, like
@@ -34,8 +37,12 @@ export type ApprovalVerdict = "plain" | "approval" | "console";
  * the owner's own copy from STORE.md; a sync whose changes carry a value the
  * platform did not copy verbatim (the App Store subtitle the push takes from
  * the Summary when STORE.md has no `- Subtitle:` line) keeps the page through
- * the listing-derived row, because the owner never wrote that text. The
- * platform holds the same table in www src/services/registry/approval-policy.ts;
+ * the listing-derived row, because the owner never wrote that text. A Safari
+ * submission mode of review (ledger 324) is the fourth audience exception:
+ * under it one version approval also covers the publish act that sends the
+ * TestFlight build to Apple's App Review, which cannot be taken back once
+ * Apple approves, so the write is judged with its store and keeps the page.
+ * The platform holds the same table in www src/services/registry/approval-policy.ts;
  * a row changed on one side is changed on both.
  */
 export const APPROVAL_POLICY = {
@@ -77,13 +84,14 @@ export const PUBLIC_SUBMISSION_MODES: Record<string, readonly string[]> = {
   chrome: ["public", "staged"],
   edge: ["review"],
   firefox: ["listed"],
-  safari: [],
+  safari: ["review"],
 };
 
 export const PUBLIC_SUBMISSION_MODE_CONSEQUENCES: Record<string, string> = {
   "chrome.public": "Chrome public sends the next upload to Chrome's review, which publishes it to everyone the item's dashboard visibility allows when it passes.",
   "chrome.staged": "Chrome staged sends the next upload to Chrome's review, which publishes it to a share of the item's users when it passes; raising that share is its own approval.",
   "edge.review": "Edge review sends the next upload to certification, which publishes the extension to everyone when it passes.",
+  "safari.review": "Safari review sends the next upload to App Store Connect as a TestFlight build and lets the version approval of that submit also cover the publish act that sends it to Apple's App Review; Apple's approval does not put it on sale, which stays its own approval.",
   "firefox.listed": "Firefox listed sends the next upload to AMO's listed review, which publishes the add-on on addons.mozilla.org to everyone when it passes.",
 };
 

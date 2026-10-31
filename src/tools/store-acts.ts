@@ -15,6 +15,7 @@ import {
   madeSentence,
   stampNow,
 } from "../lib/act-outcome";
+import { lineId, readLines } from "../lib/approval-lines";
 import { approvalSubjectPhrase, subjectOf } from "../lib/approval-subject";
 import { envelope, isEnvelope } from "../lib/envelope";
 import {
@@ -487,10 +488,15 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
   const itemUrl = text(json.itemUrl);
   const sentId = text(json.submissionId) || submissionId;
   const acceptedAt = text(json.dispatchedAt) || stampNow();
+  const lines = readLines(json.lines);
+  const coveredBy = lines.some((line) => line.store === store && line.act === "publish") ? text(json.approvalId) || text(args.approvalId) : "";
+  const coveredLine = coveredBy ? ` The publish line of version approval ${coveredBy} covered this send, so no second approval was asked.` : "";
   const base: Row = {
     action: "publish",
     store,
     submissionId: sentId,
+    ...(lines.length ? { lines } : {}),
+    ...(coveredBy ? { approvalCovered: { approvalId: coveredBy, line: lineId(store, "publish") } } : {}),
     ...(text(json.version) ? { version: text(json.version) } : {}),
     ...(text(json.buildId) ? { buildId: text(json.buildId) } : {}),
     ...(itemUrl ? { itemUrl } : {}),
@@ -561,7 +567,7 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
         sayToPerson: say,
         nextStep: nextStep("done", say, trackUrl),
       },
-      hint: `The platform's record of submission ${sentId} carries ${words.reviewer}'s own state for the draft, ${waited.outcome.storeState}, so the draft is in ${words.reviewer}'s ${words.reviewWord}${waited.outcome.liveState ? `; the item already live stays ${waited.outcome.liveState} until ${words.reviewer} approves the draft` : ""}. ${say} ${made}`,
+      hint: `The platform's record of submission ${sentId} carries ${words.reviewer}'s own state for the draft, ${waited.outcome.storeState}, so the draft is in ${words.reviewer}'s ${words.reviewWord}${waited.outcome.liveState ? `; the item already live stays ${waited.outcome.liveState} until ${words.reviewer} approves the draft` : ""}.${coveredLine} ${say} ${made}`,
     });
   }
 
@@ -574,7 +580,7 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
       sayToPerson: accepted,
       nextStep: nextStep("done", accepted, trackUrl),
     },
-    hint: `${dispatchedHint({ acceptedAt, trackUrl, readCall: storesRead(args) })} ${made}`,
+    hint: `${dispatchedHint({ acceptedAt, trackUrl, readCall: storesRead(args) })}${coveredLine} ${made}`,
   });
 }
 

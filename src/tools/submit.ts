@@ -41,7 +41,7 @@ import {
   readLines,
   retryStores,
   storesInState,
-  versionScope,
+  versionScopeFor,
 } from "../lib/approval-lines";
 import { approvalRoundTrip } from "../lib/approval-outcome";
 import {
@@ -303,7 +303,7 @@ export const schema = {
           },
         },
         description:
-          "With configure-store, only the settings that change for store: enabled (boolean: whether the platform submits to this store at all), submissionMode (the store's own mode id: chrome draft-until-public, draft, public or staged; edge draft or review; firefox unlisted or listed; safari draft; dry-run on any store rehearses without uploading; chrome public or staged, edge review and firefox listed send the next upload to a review that publishes it, so they answer approval-required first, and every other mode is a plain owner write), the store's listing id (chromeItemId, edgeProductId, firefoxAddonGuid or appStoreId, a plain write checked in the store's own terms), for Safari bundleId (the project's reverse-DNS bundle identifier, a plain write), for Chrome publisherId (the token after /devconsole/ in the item's dashboard address, a plain owner write) or storeUrl (that dashboard address, which saves the publisher id and the item id together), for Edge firstSubmitted (true once the product was submitted once in Partner Center, a plain owner write) and storeUrl (the Edge Add-ons listing URL carrying the crx id, a plain owner write), and for Firefox sourceArchive (repository attaches the source repository at the built commit, which Mozilla requires for a bundled build; none sends nothing) and releaseChannel (listed or unlisted, the same write as submissionMode). Never a credential or another store's URL: those stay in the console.",
+          "With configure-store, only the settings that change for store: enabled (boolean: whether the platform submits to this store at all), submissionMode (the store's own mode id: chrome draft-until-public, draft, public or staged; edge draft or review; firefox unlisted or listed; safari draft or review; dry-run on any store rehearses without uploading; chrome public or staged, edge review and firefox listed send the next upload to a review that publishes it, and safari review lets the submit's one version approval also cover the publish act that sends the TestFlight build to App Review while putting it on sale stays its own approval, so these answer approval-required first, and every other mode is a plain owner write), the store's listing id (chromeItemId, edgeProductId, firefoxAddonGuid or appStoreId, a plain write checked in the store's own terms), for Safari bundleId (the project's reverse-DNS bundle identifier, a plain write), for Chrome publisherId (the token after /devconsole/ in the item's dashboard address, a plain owner write) or storeUrl (that dashboard address, which saves the publisher id and the item id together), for Edge firstSubmitted (true once the product was submitted once in Partner Center, a plain owner write) and storeUrl (the Edge Add-ons listing URL carrying the crx id, a plain owner write), and for Firefox sourceArchive (repository attaches the source repository at the built commit, which Mozilla requires for a bundled build; none sends nothing) and releaseChannel (listed or unlisted, the same write as submissionMode). Never a credential or another store's URL: those stay in the console. The Safari release mode (manual, or after approval) is no store setting either: it is the `- Release:` line under `## Safari` in STORE.md, which sync-listing carries to App Store Connect.",
       },
       submissionId: {
         type: "string",
@@ -346,6 +346,24 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
 }
 
 const DRAFT_STORES = new Set(["chrome", "edge"]);
+
+const SAFARI_REVIEW_LINE_CLAUSE =
+  "; the saved safari mode \"review\" adds the line that sends the TestFlight build on to Apple's App Review, so the publish asks no second approval and putting the version on sale stays its own";
+
+/* @invariant THE SAVED SAFARI REVIEW MODE PUTS THE PUBLISH LINE ON THE
+ * SUBMIT'S OWN APPROVAL (ledger 324). The Safari upload always stops at the
+ * TestFlight draft, so the send to App Review is a second act and cost a
+ * second approval where Chrome public costs one. When the preflight reads the
+ * Safari mode as review (the owner approved that setting once), the submit
+ * asks for the version act even for Safari alone, with "safari:publish"
+ * beside "safari:upload", and the answer tells the agent to call publish
+ * with the same approvalId once TestFlight holds the build; the release stays
+ * its own approval. A mode the preflight did not answer is a draft.
+ */
+export function safariReviewCovers(browsers: string[], modes: ModeIds): boolean {
+  return browsers.includes("safari") && modes.safari === "review";
+}
+
 const STORE_WORDS: Record<string, string> = {
   chrome: "The Chrome Web Store",
   edge: "Edge Add-ons",
@@ -666,24 +684,30 @@ async function answer(args: SubmitToolArgs): Promise<string> {
   const gateInputFor = (known: ModeIds) => {
     const drafts = browsers.every((browser) => uploadStopsAtDraft(browser, known[browser]));
     const broad = browsers.filter((browser) => DRAFT_STORES.has(browser) && !uploadStopsAtDraft(browser, known[browser]));
-    const perVersion = browsers.length > 1;
+    const safariReview = safariReviewCovers(browsers, known);
+    const perVersion = browsers.length > 1 || safariReview;
+    const lines = [
+      ...browsers.map((store) => ({ store, act: "upload" })),
+      ...(safariReview ? [{ store: "safari", act: "publish" }] : []),
+    ];
     const modeClause = drafts
       ? ": each upload stops at the store's draft under the saved submission mode"
       : broad.length > 0
         ? `: the saved ${broad.map((store) => `${store} mode "${known[store]}"`).join(" and ")} sends the upload on to review`
         : "";
+    const reviewClause = safariReview ? SAFARI_REVIEW_LINE_CLAUSE : "";
 
     return {
       command: "extension_submit",
       action: perVersion ? VERSION_ACTION : "extension_submit",
       scope: perVersion
-        ? versionScope(browsers, buildSha, version)
+        ? versionScopeFor(lines, buildSha, version)
         : {
             browsers: [...browsers].sort(),
             buildSha: buildSha.toLowerCase(),
           },
       description: perVersion
-        ? `Send build ${buildSha}${version ? ` (version ${version})` : ""} to ${browsers.join(", ")} under one approval, one line per store that the owner can leave out${modeClause}. A store keeps an uploaded package, so an upload cannot be undone.`
+        ? `Send build ${buildSha}${version ? ` (version ${version})` : ""} to ${browsers.join(", ")} under one approval, one line per store that the owner can leave out${modeClause}${reviewClause}. A store keeps an uploaded package, so an upload cannot be undone.`
         : drafts
           ? `Upload build ${buildSha} to ${browsers.join(", ")} as a store draft: not published and not sent to review under the saved submission mode. The store keeps the uploaded package, so the upload itself cannot be undone.`
           : broad.length > 0
@@ -1163,6 +1187,12 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       ? browsers.filter((store) => lines.some((line) => line.store === store && line.state === "spent"))
       : browsers;
     const outcome = readSubmitOutcome(data, ran);
+    const coveredApproval = safariReviewCovers(browsers, modes) && ran.includes("safari") ? String(body.approvalId ?? "") : "";
+    const coveredLine = coveredApproval
+      ? ` The safari publish line of approval ${coveredApproval} still stands: once TestFlight holds the build (${statusRead} shows it), call extension_submit action "publish" with browsers ["safari"] and approvalId ${coveredApproval}; it spends that line and asks no second approval, and putting the version on sale stays its own approval.`
+      : "";
+
+    if (coveredApproval) result.approvalCovers = { approvalId: coveredApproval, lines: ["safari:publish"], say: coveredLine.trim() };
 
     if (lines.length) {
       result.lines = lines;
@@ -1494,7 +1524,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
         command: "extension_submit",
         status: "submit-dispatched",
         value: result,
-        hint: `${dispatchedHint({ acceptedAt, trackUrl: firstPage, readCall: statusRead })} A Chrome or Edge upload under the default modes (Chrome draft-until-public, Edge draft) stops at the draft and does not enter review; a saved public, staged or review mode sends it on.${queuedLine}${sourcesLine} ${made}`,
+        hint: `${dispatchedHint({ acceptedAt, trackUrl: firstPage, readCall: statusRead })} A Chrome or Edge upload under the default modes (Chrome draft-until-public, Edge draft) stops at the draft and does not enter review; a saved public, staged or review mode sends it on.${queuedLine}${coveredLine}${sourcesLine} ${made}`,
         warnings: [...warnings, statusNote, credential.note],
       });
     }
@@ -1518,7 +1548,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       hint: `${
         message ||
         `The platform's record confirms the submission for ${outcome.stores.join(", ")} (${waited.outcome.status}${waited.outcome.storeState ? `, store state ${waited.outcome.storeState}` : ""}). A Chrome or Edge upload under the default modes (Chrome draft-until-public, Edge draft) stops at the draft, does not enter review and is recorded as "Uploaded, not public"; a saved public, staged or review mode sends it on, and a store's own review, where it happens, comes after this answer.`
-      }${queuedLine}${sourcesLine} ${made}`,
+      }${queuedLine}${coveredLine}${sourcesLine} ${made}`,
       warnings: [...warnings, statusNote, credential.note],
     });
   }

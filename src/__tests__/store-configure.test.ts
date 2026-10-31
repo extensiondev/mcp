@@ -424,7 +424,8 @@ describe("extension_submit configure-store changes a store's settings as a plain
     expect(modeToPatch("edge", "review")).toEqual({ dryRun: false, publishAfter: true });
     expect(modeToPatch("edge", "draft")).toEqual({ dryRun: false, publishAfter: false });
     expect(modeToPatch("firefox", "listed")).toEqual({ dryRun: false, releaseChannel: "listed" });
-    expect(modeToPatch("safari", "draft")).toEqual({ dryRun: false });
+    expect(modeToPatch("safari", "draft")).toEqual({ dryRun: false, publishAfter: false });
+    expect(modeToPatch("safari", "review")).toEqual({ dryRun: false, publishAfter: true });
     expect(modeToPatch("safari", "dry-run")).toEqual({ dryRun: true });
 
     const read = readStoreSettingsChange("firefox", { enabled: true, submissionMode: "listed", sourceArchive: "repository" });
@@ -436,6 +437,48 @@ describe("extension_submit configure-store changes a store's settings as a plain
 
     expect(storeSettingsDigest("firefox", { sourceArchive: "repository", enabled: true })).toBe(storeSettingsDigest("firefox", { enabled: true, sourceArchive: "repository" }));
     expect(storeSettingsDigest("firefox", { enabled: true })).not.toBe(storeSettingsDigest("chrome", { enabled: true }));
+  });
+
+  it("points a Safari release type key at the STORE.md Release line, never at a store setting (ledger 166, 324)", () => {
+    for (const key of ["releaseType", "release", "releaseMode"]) {
+      const read = readStoreSettingsChange("safari", { [key]: "after-approval" });
+
+      expect(read).toHaveProperty("problem");
+      expect((read as { problem: string }).problem).toContain(`storeSettings has "${key}", which is not a store setting. The Safari release mode is not a store setting: it is the \`- Release:\` line under \`## Safari\` in STORE.md`);
+      expect((read as { problem: string }).problem).toContain("which sync-listing carries to App Store Connect, and the review act sets any other version to manual release.");
+    }
+
+    expect(readStoreSettingsChange("chrome", { releaseType: "manual" })).toEqual({ problem: expect.stringMatching(/^storeSettings has "releaseType", which is not a store setting; use /) });
+    expect(readStoreSettingsChange("safari", { submissionMode: "review" })).toEqual({ patch: { dryRun: false, publishAfter: true }, requested: { submissionMode: "review" } });
+    expect(readStoreSettingsChange("safari", { submissionMode: "listed" })).toMatchObject({ problem: expect.stringContaining("must be one of draft, review, dry-run") });
+
+    const description = (schema.inputSchema.properties as Record<string, any>).storeSettings.description as string;
+
+    expect(description).toContain("safari draft or review; dry-run");
+    expect(description).toContain("and safari review lets the submit's one version approval also cover the publish act that sends the TestFlight build to App Review while putting it on sale stays its own approval, so these answer approval-required first");
+    expect(description).toContain("The Safari release mode (manual, or after approval) is no store setting either: it is the `- Release:` line under `## Safari` in STORE.md");
+  });
+
+  it("keeps the Safari review mode on the approve page as an audience change, the way a public Chrome mode is (ledger 324)", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    const patch = { dryRun: false, publishAfter: true };
+    const scope = scopeFor("safari", patch);
+    platform.routes[`PUT ${CONFIG}`] = () => approvalRequired(scope);
+    platform.routes[`POST ${APPROVALS}`] = () => ({
+      status: 201,
+      body: { approvalId: "apr_safari_review", approvalUrl: `${API}/device/approve/apr_safari_review`, changes: ['safari.submissionMode: "draft" -> "review"'] },
+    });
+
+    const out = JSON.parse(await submit({ action: "configure-store", store: "safari", storeSettings: { submissionMode: "review" }, api: API }));
+    const [post] = platform.sent("POST", APPROVALS);
+
+    expect(post.body).toMatchObject({ action: STORE_SETTINGS_ACTION, scope, storeSettings: { safari: patch } });
+    expect(out.status).toBe("approval-required");
+    expect(out.value).toMatchObject({ approvalId: "apr_safari_review", changes: ['safari.submissionMode: "draft" -> "review"'] });
+    expect(out.error.message).toContain("Safari review sends the next upload to App Store Connect as a TestFlight build and lets the version approval of that submit also cover the publish act");
+    expect(out.error.message).toContain("changes who can find the extension");
   });
 
   it("honors the platform asking for an approval of a plain change, with the change the platform computed, and writes nothing", async () => {

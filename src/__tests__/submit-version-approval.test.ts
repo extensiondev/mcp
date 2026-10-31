@@ -69,6 +69,50 @@ describe("a real submit naming several stores asks for one approval per version"
     expect(platform.sent("POST", "/api/cli/stores/submit")).toHaveLength(0);
   });
 
+  it("asks the version act for Safari alone under the saved review mode, with the publish line beside the upload, and names it when the upload lands (ledger 324)", async () => {
+    platform.login();
+    platform.routes[`POST /api/projects/prj_probe/stores/safari/submissions/preflight`] = () => ({
+      body: { submissionMode: { id: "review", label: "Send to App Review", description: "One approval reaches review." } },
+    });
+
+    platform.routes["POST /api/cli/approvals"] = () => minted([line("safari"), { id: "safari:publish", store: "safari", act: "publish", state: "pending" }]);
+
+    const asked = JSON.parse(await submit({ browsers: ["safari"], buildSha: SHA, dryRun: false, version: "1.4.0", api: API }));
+    const sent = platform.sent("POST", "/api/cli/approvals")[0];
+
+    expect(sent.body.action).toBe("extension_submit.version");
+    expect(sent.body.scope).toEqual({ acts: ["safari:publish", "safari:upload"], buildSha: SHA, version: "1.4.0" });
+    expect(sent.body.description).toContain('the saved safari mode "review" adds the line that sends the TestFlight build on to Apple\'s App Review, so the publish asks no second approval');
+    expect(asked.status).toBe("approval-required");
+
+    const scope = { acts: ["safari:publish", "safari:upload"], buildSha: SHA, version: "1.4.0" };
+    platform.routes[`GET ${READ}`] = () => approved([line("safari"), { id: "safari:publish", store: "safari", act: "publish", state: "pending" }], scope);
+    platform.routes["POST /api/cli/stores/submit"] = () => ({
+      body: { ok: true, projectId: "prj_probe", buildId: SHA, submissions: [{ id: "sub_s", store: "safari", status: "pending" }], approvalId: ID, lines: [line("safari", "spent")] },
+    });
+
+    const out = JSON.parse(await submit({ browsers: ["safari"], buildSha: SHA, dryRun: false, version: "1.4.0", approvalId: ID, waitSeconds: 0, api: API }));
+
+    expect(out.status).toBe("submit-dispatched");
+    expect(out.value.approvalCovers).toEqual({ approvalId: ID, lines: ["safari:publish"], say: expect.stringContaining(`call extension_submit action "publish" with browsers ["safari"] and approvalId ${ID}`) });
+    expect(out.hint).toContain(`The safari publish line of approval ${ID} still stands`);
+    expect(out.hint).toContain("asks no second approval, and putting the version on sale stays its own approval");
+  });
+
+  it("keeps the single act for a single store, and for Safari alone while its saved mode stops at the draft", async () => {
+    platform.login();
+    platform.routes[`POST /api/projects/prj_probe/stores/safari/submissions/preflight`] = () => ({
+      body: { submissionMode: { id: "draft", label: "TestFlight draft", description: "Stays on TestFlight." } },
+    });
+
+    platform.routes["POST /api/cli/approvals"] = () => minted([]);
+
+    const out = JSON.parse(await submit({ browsers: ["safari"], buildSha: SHA, dryRun: false, api: API }));
+
+    expect(platform.sent("POST", "/api/cli/approvals")[0].body.action).toBe("extension_submit");
+    expect(JSON.stringify(out)).not.toContain("publish line");
+  });
+
   it("keeps the single act for a single store", async () => {
     platform.login();
     platform.routes["POST /api/cli/approvals"] = () => minted([]);
