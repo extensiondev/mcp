@@ -216,11 +216,11 @@ describe("the Chrome Web Store goal walks from not connected to submitted with a
               message: "Choose a build before queueing this submission.",
             },
             {
-              id: "submission.release_selected",
-              label: "Release selected",
+              id: "store.enabled",
+              label: "Store publishing is enabled",
               status: "pass",
               severity: "blocking",
-              message: "Release context detected.",
+              message: "Store publishing is enabled.",
             },
           ],
           connection: {

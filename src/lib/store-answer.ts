@@ -115,3 +115,20 @@ export function shapeStoreAnswer(command: string, args: Row, result: string): st
     ...(hint ? { hint } : {}),
   });
 }
+
+export function rowsWithSentVersion(rows: unknown, recorded: Record<string, { packaged?: unknown }>): unknown {
+  if (!Array.isArray(rows)) return rows;
+
+  return rows.map((row) => {
+    if (!isRow(row)) return row;
+
+    const own = isRow(row.storeVersion) ? row.storeVersion : recorded[text(row.store)];
+    const packaged = own ? text(own.packaged) : "";
+
+    return {
+      ...row,
+      ...(own && !isRow(row.storeVersion) ? { storeVersion: own } : {}),
+      ...(packaged ? { version: packaged } : {}),
+    };
+  });
+}

@@ -347,7 +347,30 @@ describe("store acts and builds answer the recorded outcome", () => {
 
     expect(out.value.outcome).toMatchObject({ recorded: true, storeVersions: { firefox: "0.2.0.8" } });
     expect(out.value.submissions[0].storeVersion).toEqual(received);
+    expect(out.value.submissions[0].version).toBe("0.2.0.8");
     expect(out.value.outcomes.firefox).toMatchObject({ recorded: true, status: "submitted", storeVersion: "0.2.0.8", submissionId: "sub_ff8" });
+  });
+
+  it("a real submit answers each row's version as the store version it sent, never the sha", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
+    const sent = { packaged: "0.1.0.3", displayed: "0.1.0", source: "platform", buildNumber: 3 };
+    platform.routes["POST /api/cli/stores/submit"] = () => ({
+      body: { ok: true, submissions: [{ id: "sub_c3", store: "chrome", status: "pending", version: "63f0d41", storeVersion: sent }] },
+    });
+
+    platform.routes["GET /api/cli/stores/submissions"] = () => ({
+      body: { submissions: [{ id: "sub_c3", store: "chrome", status: "submitted", version: "0.1.0", storeVersion: sent }] },
+    });
+
+    const out = JSON.parse(await submit({ browsers: ["chrome"], buildSha: "63f0d41", dryRun: false, api: API }));
+
+    expect(out.value.submissions[0].version).toBe("0.1.0.3");
+    expect(out.value.submissions[0].storeVersion).toEqual(sent);
+    expect(out.value.outcomes.chrome.storeVersion).toBe("0.1.0.3");
+    expect(JSON.stringify(out.value.submissions)).not.toContain("63f0d41");
   });
 
   it("rebuild answers built when the build record shows this run finished, and build-failed when it failed", async () => {

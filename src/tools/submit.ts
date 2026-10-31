@@ -75,6 +75,7 @@ import {
 import { CONFIGURE_STORE, configureStore } from "./store-configure";
 import { releaseVersion } from "./store-release";
 import { cancelSubmission, raiseRollout } from "./store-rollout";
+import { rowsWithSentVersion } from "../lib/store-answer";
 import { STORES_READ_CALL, storeVersionStatus } from "./store-version-status";
 import {
   ITEM_NOT_LINKED_CODE,
@@ -224,7 +225,8 @@ export const schema = {
       },
       version: {
         type: "string",
-        description: "Version label for the submission record (optional).",
+        description:
+          "Version label for the submission record (optional). Left out, the platform reads the built manifest's version from the build's own record, and each submissions[] row answers version as the store version it sent (<manifest version>.<build number>, the same number extension_release_status reads) beside storeVersion; the sha appears as the version only when the build record cannot be read. A submit takes no channel: a submission is the stable release of its build for that store (Cezar, 2026-10-28), and the channel a row carries is the channel that pins the build on the registry, when one does.",
       },
       dryRun: {
         type: "boolean",
@@ -1405,13 +1407,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       trackUrl: (store) => consoleTrackUrl("submission", { ...refTarget, store, submissionId: ids[store] }, args.api),
     });
 
-    if (Array.isArray(result.submissions)) {
-      result.submissions = (result.submissions as unknown[]).map((row) =>
-        isRow(row) && storeVersions[String(row.store)] && !isRow(row.storeVersion)
-          ? { ...row, storeVersion: storeVersions[String(row.store)] }
-          : row,
-      );
-    }
+    result.submissions = rowsWithSentVersion(result.submissions, storeVersions);
 
     result.links = actLinks;
     result.nextStep = step;
