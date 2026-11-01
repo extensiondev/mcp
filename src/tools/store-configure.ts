@@ -18,6 +18,7 @@ import {
   type ProjectApiRefusal,
 } from "../lib/project-api";
 import { approvalVerdict, publicSubmissionModeConsequence, type PolicyWrite } from "../lib/approval-policy";
+import { readSafariReleaseIntent, safariApprovalReleaseSentence } from "../lib/safari-release-intent";
 import { approvedSettingsWrite } from "../lib/settings-write";
 import { badShipRequest, isRow, openShipApi, text } from "../lib/ship-act";
 import {
@@ -97,12 +98,12 @@ function credentialsConsoleOnly(args: ConfigureStoreArgs, store: StoreSettingsSt
   });
 }
 
-function audienceReason(write: PolicyWrite): string {
+function audienceReason(write: PolicyWrite, releaseSentence: string): string {
   const consequence =
     publicSubmissionModeConsequence(write) ||
     `A ${text(write.submissionMode) || text(write.releaseChannel)} submission mode on ${text(write.store)} sends the next upload to the store's review, which publishes it when it passes.`;
 
-  return `${consequence} That changes who can find the extension once a build leaves for the store, so a workspace owner approves this exact change on the approve page first; the page shows the change as the platform computed it.`;
+  return `${consequence}${releaseSentence ? ` ${releaseSentence}` : ""} That changes who can find the extension once a build leaves for the store, so a workspace owner approves this exact change on the approve page first; the page shows the change as the platform computed it.`;
 }
 
 function refusal(sent: ProjectApiRefusal, api: ProjectApi, args: ConfigureStoreArgs, store: string, settingsPage: string): string {
@@ -161,6 +162,7 @@ export async function configureStore(args: ConfigureStoreArgs): Promise<string> 
   const preflightRead = `extension_submit_check (action: "preflight", browsers: ["${store}"])`;
   const policyWrite: PolicyWrite = { store, submissionMode: text(read.requested.submissionMode), releaseChannel: text(read.requested.releaseChannel) };
   const audienceChange = approvalVerdict(STORE_SETTINGS_ACTION, policyWrite) === "approval";
+  const releaseSentence = audienceChange && store === "safari" ? safariApprovalReleaseSentence(await readSafariReleaseIntent(api)) : "";
   const gate: ApprovalGateInput = {
     command: COMMAND,
     action: STORE_SETTINGS_ACTION,
@@ -170,7 +172,7 @@ export async function configureStore(args: ConfigureStoreArgs): Promise<string> 
     api: args.api,
     refusedStatus: "configure-store-refused",
     body: { storeSettings: { [store]: read.patch } },
-    reason: audienceChange ? audienceReason(policyWrite) : PLATFORM_ASKED_REASON,
+    reason: audienceChange ? audienceReason(policyWrite, releaseSentence) : PLATFORM_ASKED_REASON,
     stateRead: preflightRead,
     write: policyWrite,
     refusalHint: (code) => (code === "NO_CHANGE" ? "The store settings already read this way; nothing needs changing." : undefined),

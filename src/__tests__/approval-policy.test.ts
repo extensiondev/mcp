@@ -91,9 +91,11 @@ describe("the approval policy table holds Cezar's ruling of 2026-10-23 (ledger 1
 
     expect(publicSubmissionModeConsequence({ store: "edge", submissionMode: "draft" })).toBe("");
     expect(publicSubmissionModeConsequence({ store: "safari", submissionMode: "draft" })).toBe("");
-    expect(publicSubmissionModeConsequence({ store: "safari", submissionMode: "review" })).toMatch(
-      /TestFlight build and lets the version approval of that submit also cover the publish act .* App Review; Apple's approval puts it on sale only when STORE\.md states `- Release: after approval` under `## Safari`, otherwise releasing it stays its own approval\./,
+    expect(publicSubmissionModeConsequence({ store: "safari", submissionMode: "review" })).toBe(
+      "Safari review sends the next upload to App Store Connect as a TestFlight build and lets the version approval of that submit also cover the publish act that sends it to Apple's App Review.",
     );
+
+    expect(publicSubmissionModeConsequence({ store: "safari", submissionMode: "review" })).not.toMatch(/on sale|Release:/);
   });
 
   it("keeps a public channel audience on the approve page while a private channel is plain, at creation and on an existing channel", () => {

@@ -96,7 +96,7 @@ describe("a real submit naming several stores asks for one approval per version"
     expect(out.status).toBe("submit-dispatched");
     expect(out.value.approvalCovers).toEqual({ approvalId: ID, lines: ["safari:publish"], say: expect.stringContaining(`call extension_submit action "publish" with browsers ["safari"] and approvalId ${ID}`) });
     expect(out.hint).toContain(`The safari publish line of approval ${ID} still stands`);
-    expect(out.hint).toContain("asks no second approval, and putting the version on sale stays its own approval");
+    expect(out.hint).toContain("asks no second approval. Whether Apple's approval puts the version on sale follows the `- Release:` line under `## Safari` in STORE.md, which could not be read now");
   });
 
   it("keeps the single act for a single store, and for Safari alone while its saved mode stops at the draft", async () => {

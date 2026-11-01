@@ -91,7 +91,7 @@ export const PUBLIC_SUBMISSION_MODE_CONSEQUENCES: Record<string, string> = {
   "chrome.public": "Chrome public sends the next upload to Chrome's review, which publishes it to everyone the item's dashboard visibility allows when it passes.",
   "chrome.staged": "Chrome staged sends the next upload to Chrome's review, which publishes it to a share of the item's users when it passes; raising that share is its own approval.",
   "edge.review": "Edge review sends the next upload to certification, which publishes the extension to everyone when it passes.",
-  "safari.review": "Safari review sends the next upload to App Store Connect as a TestFlight build and lets the version approval of that submit also cover the publish act that sends it to Apple's App Review; Apple's approval puts it on sale only when STORE.md states `- Release: after approval` under `## Safari`, otherwise releasing it stays its own approval.",
+  "safari.review": "Safari review sends the next upload to App Store Connect as a TestFlight build and lets the version approval of that submit also cover the publish act that sends it to Apple's App Review.",
   "firefox.listed": "Firefox listed sends the next upload to AMO's listed review, which publishes the add-on on addons.mozilla.org to everyone when it passes.",
 };
 

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Ledger 374. Every Safari review approval (configure-store review, the publish to App Review, and the submit under the saved review mode) says what Apple's approval does from the project's synced STORE.md `- Release:` line, on sale at once with `after approval` and held for a release act otherwise, and when the platform's approval already says it, its sentence is the only one in the answer.
 - Store onboarding: Edge single purpose and permission justifications are listing text drafted from the same STORE.md lines as Chrome's; Edge remote code and data usage stay owner-answered.
 - Every shell command the MCP prints with a project path in it single-quotes that path when it holds a space, a `$`, a single quote or another shell character, so `(cd <path> && ...)` in `extension_doctor`'s engine remediations and `extension_create`'s `manualAlternative` and engine warning lands in the project under sh, bash and zsh instead of breaking on the first space (`shellPath` in `src/lib/publish-link.ts`).
 - Ledger 366. `extension_project_create` gives the create request 90 s once the call blocks on waitSeconds or has already spent the 45 s answer window, instead of the 1 s left of that window, so an approval given late in a long wait keeps the login the create mints; when even that gets no answer, it reads the outcome back once by sending the same grant, which the platform answers with the first request's outcome and never creates twice, before it answers create-unconfirmed (`src/lib/call-budget.ts`).

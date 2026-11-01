@@ -38,6 +38,7 @@ import { summaryAgreeingWithRows } from "../lib/preflight-summary";
 import { readinessAnswer, readinessLead, storeReadinessOf } from "../lib/store-onboarding";
 import { submissionModeSentence, submissionModeView } from "../lib/submission-mode-view";
 import { consoleProjectUrl } from "../lib/registry";
+import { platformReleaseSentence, readSafariReleaseIntent, safariApprovalReleaseSentence } from "../lib/safari-release-intent";
 import { projectApiGet, projectApiReadFailure, projectApiSend } from "../lib/project-api";
 import { listingRecordOf, type ListingRecordRead } from "../lib/listing-record-compare";
 import { actLinks, judgePublish, publishFailureReason, trackOf } from "../lib/store-act-outcome";
@@ -161,6 +162,7 @@ function reworded(
   api: { ref: { workspace: string; project: string } },
   apiHint: string | undefined,
   store: PublishStore = "chrome",
+  releaseSentence = "",
 ): string {
   let parsed: unknown;
 
@@ -183,7 +185,7 @@ function reworded(
       approvalUrl
         ? `Approve ${phrase ? `sending ${phrase} to ${words.reviewer}'s ${words.reviewWord}` : "it"} at ${approvalUrl}${expiresAt ? ` before ${expiresAt}` : ""}.`
         : "",
-      publishApprovalSentence(store),
+      publishApprovalSentence(store, platformReleaseSentence(text(value.description), releaseSentence)),
     ]
       .filter(Boolean)
       .join(" ");
@@ -404,11 +406,11 @@ function storeWords(store: PublishStore): (typeof PUBLISH_WORDS)[PublishStore] {
   return PUBLISH_WORDS[store];
 }
 
-function publishApprovalSentence(store: PublishStore): string {
+function publishApprovalSentence(store: PublishStore, releaseSentence = ""): string {
   if (store === "edge") return "This sends the product to Edge's certification review.";
 
   if (store === "safari") {
-    return "This sends the App Store version holding the TestFlight build to Apple's App Review; the act sets the version to manual release before it is sent, so Apple's approval does not put it on sale, unless STORE.md states `- Release: after approval` under `## Safari`, which sets it to release automatically after approval instead; the record names the change.";
+    return `This sends the App Store version holding the TestFlight build to Apple's App Review. ${releaseSentence || safariApprovalReleaseSentence(null)} The record names any change of the release type.`;
   }
 
   return PUBLISH_APPROVAL_SENTENCE;
@@ -460,6 +462,7 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
   const opened = await openShipApi(COMMAND, args, { action: "publish", store });
   if ("refused" in opened) return opened.refused;
 
+  const releaseSentence = store === "safari" && !text(args.approvalId) ? safariApprovalReleaseSentence(await readSafariReleaseIntent(opened.api)) : "";
   const named = {
     ...(submissionId ? { submissionId } : {}),
     ...(buildNumber ? { buildNumber } : {}),
@@ -473,7 +476,7 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
       body: named,
       approvalId: args.approvalId,
       description: `Send the ${words.name.replace(/^the /, "")} ${store === "safari" ? "TestFlight build" : "draft"} to review.`,
-      reason: `${publishApprovalSentence(store)} Nothing changes for current users until ${words.reviewer} approves it, so a workspace owner approves this exact draft first.`,
+      reason: `${publishApprovalSentence(store, releaseSentence)} Nothing changes for current users until ${words.reviewer} approves it, so a workspace owner approves this exact draft first.`,
       stateRead: storesRead(args),
       scopeFits: (scope) =>
         text(scope.store) === store &&
@@ -486,7 +489,7 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
     opened.api,
   );
 
-  if (!ran.ok) return reworded(ran.out, opened.api, args.api, store);
+  if (!ran.ok) return reworded(ran.out, opened.api, args.api, store, releaseSentence);
 
   const json = ran.json;
   const itemUrl = text(json.itemUrl);

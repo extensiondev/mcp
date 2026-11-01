@@ -114,6 +114,7 @@ import {
 } from "../lib/store-readiness";
 import { syncListing } from "./store-listing";
 import { screenshotDoor } from "../lib/store-bring-list";
+import { readSafariReleaseIntentFor, safariApprovalReleaseSentence } from "../lib/safari-release-intent";
 import { LISTING_INCOMPLETE_CODE, listingIncompleteOf, listingIncompleteSentence } from "../lib/store-listing-incomplete";
 
 import type { InputIssue } from "../lib/validate-input";
@@ -350,8 +351,9 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
 
 const DRAFT_STORES = new Set(["chrome", "edge"]);
 
-const SAFARI_REVIEW_LINE_CLAUSE =
-  "; the saved safari mode \"review\" adds the line that sends the TestFlight build on to Apple's App Review, so the publish asks no second approval and putting the version on sale stays its own";
+function safariReviewLineClause(releaseSentence: string): string {
+  return `; the saved safari mode "review" adds the line that sends the TestFlight build on to Apple's App Review, so the publish asks no second approval. ${(releaseSentence || safariApprovalReleaseSentence(null)).replace(/\.$/, "")}`;
+}
 
 /* @invariant THE SAVED SAFARI REVIEW MODE PUTS THE PUBLISH LINE ON THE
  * SUBMIT'S OWN APPROVAL (ledger 324). The Safari upload always stops at the
@@ -681,6 +683,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
   if (args.version) body.version = String(args.version).trim();
 
   let modes: ModeIds = {};
+  let safariRelease = "";
   let firefoxSetting: string | undefined;
 
   const version = String(args.version || "").trim();
@@ -699,7 +702,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       : broad.length > 0
         ? `: the saved ${broad.map((store) => `${store} mode "${known[store]}"`).join(" and ")} sends the upload on to review`
         : "";
-    const reviewClause = safariReview ? SAFARI_REVIEW_LINE_CLAUSE : "";
+    const reviewClause = safariReview ? safariReviewLineClause(safariRelease) : "";
 
     return {
       command: "extension_submit",
@@ -738,6 +741,8 @@ async function answer(args: SubmitToolArgs): Promise<string> {
     if (precheck.refused) return precheck.refused;
 
     modes = precheck.modes;
+    if (safariReviewCovers(browsers, modes)) safariRelease = safariApprovalReleaseSentence(await readSafariReleaseIntentFor({ command: "extension_submit", project: args.project, api: args.api }));
+
     firefoxSetting = sourceArchiveOf(precheck.reports.firefox ?? {})?.setting;
 
     const gate = await evaluateApproval({
@@ -1193,7 +1198,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
     const outcome = readSubmitOutcome(data, ran);
     const coveredApproval = safariReviewCovers(browsers, modes) && ran.includes("safari") ? String(body.approvalId ?? "") : "";
     const coveredLine = coveredApproval
-      ? ` The safari publish line of approval ${coveredApproval} still stands: once TestFlight holds the build (${statusRead} shows it), call extension_submit action "publish" with browsers ["safari"] and approvalId ${coveredApproval}; it spends that line and asks no second approval, and putting the version on sale stays its own approval.`
+      ? ` The safari publish line of approval ${coveredApproval} still stands: once TestFlight holds the build (${statusRead} shows it), call extension_submit action "publish" with browsers ["safari"] and approvalId ${coveredApproval}; it spends that line and asks no second approval. ${safariRelease || safariApprovalReleaseSentence(null)}`
       : "";
 
     if (coveredApproval) result.approvalCovers = { approvalId: coveredApproval, lines: ["safari:publish"], say: coveredLine.trim() };

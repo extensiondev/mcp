@@ -31,10 +31,12 @@ import {
   type ApprovalGateResult,
   type ApprovalScope,
 } from "./approval-verify";
+import { SAFARI_RELEASE_ON_SALE } from "./safari-release-intent";
 
 function unsaid(described: string, reason: string): string {
   const sentences = reason.split(/(?<=\.)\s+/);
-  const kept = sentences.filter((sentence) => !described.includes(sentence.trim()));
+  const onSaleSaid = SAFARI_RELEASE_ON_SALE.test(described);
+  const kept = sentences.filter((sentence) => !described.includes(sentence.trim()) && !(onSaleSaid && SAFARI_RELEASE_ON_SALE.test(sentence)));
 
   return kept.join(" ");
 }
