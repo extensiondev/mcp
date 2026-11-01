@@ -35,6 +35,7 @@ import {
 } from "../lib/platform-submissions";
 import { compactPreflightStores, PREFLIGHT_DETAIL_SENTENCE, preflightDetail } from "../lib/preflight-detail";
 import { summaryAgreeingWithRows } from "../lib/preflight-summary";
+import { submissionModeSentence, submissionModeView } from "../lib/submission-mode-view";
 import { consoleProjectUrl } from "../lib/registry";
 import { projectApiGet, projectApiReadFailure, projectApiSend } from "../lib/project-api";
 import { listingRecordOf, type ListingRecordRead } from "../lib/listing-record-compare";
@@ -406,7 +407,7 @@ function publishApprovalSentence(store: PublishStore): string {
   if (store === "edge") return "This sends the product to Edge's certification review.";
 
   if (store === "safari") {
-    return "This sends the App Store version holding the TestFlight build to Apple's App Review; a version the act creates is set to manual release, and a version App Store Connect holds for release after approval is set to manual release before it is sent unless STORE.md states `- Release: after approval` under `## Safari`, so Apple's approval does not put it on sale; the record names the change.";
+    return "This sends the App Store version holding the TestFlight build to Apple's App Review; the act sets the version to manual release before it is sent, so Apple's approval does not put it on sale, unless STORE.md states `- Release: after approval` under `## Safari`, which sets it to release automatically after approval instead; the record names the change.";
   }
 
   return PUBLISH_APPROVAL_SENTENCE;
@@ -728,8 +729,6 @@ function summaryWithout(summary: Row, deferred: Row[], checks: Row[]): Row {
   };
 }
 
-const DRAFT_ONLY_STORES = new Set(["chrome", "edge"]);
-
 function readinessView(
   json: Row,
   store: string,
@@ -760,22 +759,7 @@ function readinessView(
     : null;
   const connection = connectionOf(json, apiHint);
   const connectionSource = reportConnectionSource(json);
-  const mode = isRow(json.submissionMode) ? json.submissionMode : null;
-  const submissionMode =
-    mode && text(mode.id)
-      ? {
-          id: text(mode.id),
-          label: text(mode.label),
-          description: text(mode.description),
-          ...(DRAFT_ONLY_STORES.has(store)
-            ? {
-                fromHere: uploadStopsAtDraft(store, text(mode.id))
-                  ? "An upload from here stops at the draft under this mode."
-                  : "An upload from here goes on to review under this mode; set the mode to its draft option in the console store settings to stop at a draft.",
-              }
-            : {}),
-        }
-      : null;
+  const submissionMode = submissionModeView(store, json.submissionMode);
   const failing = checks
     .filter((c) => text(c.status) === "fail")
     .map((c) => checkView(reconciledWithStoreMd(c, local), true));
@@ -965,9 +949,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
         ? ((view as Row).submissionMode as Row)
         : null;
 
-      return mode && text(mode.label)
-        ? ` ${store} submission mode: ${text(mode.label)} (${text(mode.id)}): ${text(mode.description)}${text(mode.fromHere) ? ` ${text(mode.fromHere)}` : ""}`
-        : "";
+      return mode ? submissionModeSentence(store, mode) : "";
     })
     .join("");
   const firefoxView = isRow(stores.firefox) ? stores.firefox : null;

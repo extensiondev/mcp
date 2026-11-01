@@ -92,7 +92,7 @@ describe("the approval policy table holds Cezar's ruling of 2026-10-23 (ledger 1
     expect(publicSubmissionModeConsequence({ store: "edge", submissionMode: "draft" })).toBe("");
     expect(publicSubmissionModeConsequence({ store: "safari", submissionMode: "draft" })).toBe("");
     expect(publicSubmissionModeConsequence({ store: "safari", submissionMode: "review" })).toMatch(
-      /TestFlight build and lets the version approval of that submit also cover the publish act .* App Review; Apple's approval does not put it on sale, which stays its own approval\./,
+      /TestFlight build and lets the version approval of that submit also cover the publish act .* App Review; Apple's approval puts it on sale only when STORE\.md states `- Release: after approval` under `## Safari`, otherwise releasing it stays its own approval\./,
     );
   });
 

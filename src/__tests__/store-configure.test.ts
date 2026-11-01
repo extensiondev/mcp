@@ -445,7 +445,8 @@ describe("extension_submit configure-store changes a store's settings as a plain
 
       expect(read).toHaveProperty("problem");
       expect((read as { problem: string }).problem).toContain(`storeSettings has "${key}", which is not a store setting. The Safari release mode is not a store setting: it is the \`- Release:\` line under \`## Safari\` in STORE.md`);
-      expect((read as { problem: string }).problem).toContain("which sync-listing carries to App Store Connect, and the review act sets any other version to manual release.");
+      expect((read as { problem: string }).problem).toContain("which sync-listing carries to App Store Connect. Manual is the default");
+      expect((read as { problem: string }).problem).toContain("`- Release: after approval` lets Apple's approval put it on sale at once, and the review act sets the App Store version to release automatically after approval before sending it.");
     }
 
     expect(readStoreSettingsChange("chrome", { releaseType: "manual" })).toEqual({ problem: expect.stringMatching(/^storeSettings has "releaseType", which is not a store setting; use /) });
@@ -455,7 +456,7 @@ describe("extension_submit configure-store changes a store's settings as a plain
     const description = (schema.inputSchema.properties as Record<string, any>).storeSettings.description as string;
 
     expect(description).toContain("safari draft or review; dry-run");
-    expect(description).toContain("and safari review lets the submit's one version approval also cover the publish act that sends the TestFlight build to App Review while putting it on sale stays its own approval, so these answer approval-required first");
+    expect(description).toContain("and safari review lets the submit's one version approval also cover the publish act that sends the TestFlight build to App Review while putting it on sale stays its own approval unless STORE.md states `- Release: after approval` under `## Safari`, so these answer approval-required first");
     expect(description).toContain("The Safari release mode (manual, or after approval) is no store setting either: it is the `- Release:` line under `## Safari` in STORE.md");
   });
 

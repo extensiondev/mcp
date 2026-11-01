@@ -28,7 +28,7 @@ export const SUBMISSION_MODE_IDS: Record<StoreSettingsStore, readonly string[]> 
 };
 
 export const SAFARI_RELEASE_LINE_SENTENCE =
-  "The Safari release mode is not a store setting: it is the `- Release:` line under `## Safari` in STORE.md (manual by default; `- Release: after approval` keeps a version the owner set to release on approval as it is), which sync-listing carries to App Store Connect, and the review act sets any other version to manual release.";
+  "The Safari release mode is not a store setting: it is the `- Release:` line under `## Safari` in STORE.md, which sync-listing carries to App Store Connect. Manual is the default, so Apple's approval holds the version until extension_submit {action: \"release\"} puts it on sale; `- Release: after approval` lets Apple's approval put it on sale at once, and the review act sets the App Store version to release automatically after approval before sending it.";
 
 const SAFARI_RELEASE_KEYS = new Set(["releasetype", "release", "releasemode"]);
 
