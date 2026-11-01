@@ -392,7 +392,7 @@ describe("extension_publish envelope compatibility", () => {
 
       expect(out.value).not.toHaveProperty("token");
       expect(out.value.shareUrl).toContain("share=tok_share");
-      expect(out.value.previewCommands.chrome).toBe("npx -y extension@latest preview https://acme.extension.dev/widget/builds/abc1234/chrome.zip?share=tok_share");
+      expect(out.value.previewCommands.chrome).toBe('npx -y extension@latest preview "https://acme.extension.dev/widget/builds/abc1234/chrome.zip?share=tok_share"');
       const { registryUrl, ...printed } = out.value;
       expect(registryUrl).toContain("/builds/index.json");
       expect(JSON.stringify({ ...out, value: printed })).not.toMatch(/registry\.extension\.land|[?&]t=/);

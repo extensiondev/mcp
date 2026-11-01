@@ -24,7 +24,7 @@ const CHROME =
 const FIREFOX =
   "npx -y extension@latest preview https://registry.extension.land/open-source-demo/web-scrobbler/builds/7258a6f/firefox.zip?t=share.tok --browser=firefox";
 const PACKAGE = (browser: string) =>
-  `npx -y extension@latest preview https://open-source-demo.extension.dev/web-scrobbler/builds/7258a6f/${browser}.zip?share=share.tok --browser=${browser}`;
+  `npx -y extension@latest preview "https://open-source-demo.extension.dev/web-scrobbler/builds/7258a6f/${browser}.zip?share=share.tok" --browser=${browser}`;
 
 describe("extension_publish surfaces the platform's preview commands", () => {
   let tmp: string;

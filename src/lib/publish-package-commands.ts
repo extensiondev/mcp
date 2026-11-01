@@ -13,6 +13,7 @@ import {
   packageFileOf,
   shareGrantOf,
 } from "./package-address";
+import { shellUrl, unshellUrl } from "./publish-link";
 
 import type { ProjectRef } from "./registry";
 
@@ -28,24 +29,34 @@ export function packageCommand(command: string, ref: ProjectRef | null, grant: s
   const match = PREVIEW_COMMAND.exec(command);
   if (!match) return command;
 
-  const raw = match[2].replace(/^["']|["']$/g, "");
+  const raw = unshellUrl(match[2]);
   const parsed = packageFileOf(raw);
   if (!parsed) return command;
 
   const share = shareGrantOf(raw) || (REGISTRY_TOKEN_QUERY.test(raw) ? grant : "");
   const address = packageAddress(ref, parsed.sha, parsed.file, { api, share });
 
-  return address ? `${match[1]}${address}${match[3]}` : command;
+  return address ? `${match[1]}${shellUrl(address)}${match[3]}` : command;
+}
+
+export function quotedPreviewCommand(command: string): string {
+  const match = PREVIEW_COMMAND.exec(command);
+  if (!match) return command;
+
+  return `${match[1]}${shellUrl(unshellUrl(match[2]))}${match[3]}`;
 }
 
 export function withPackageAddresses(data: Row, ref: ProjectRef | null, shareId: unknown, api?: string): void {
   const commands = data.previewCommands;
   if (!commands || typeof commands !== "object" || Array.isArray(commands)) return;
-  if (packageAddressMode(api) === "path") return;
 
+  const rewrite = packageAddressMode(api) !== "path";
   const grant = text(shareId) || shareGrantOf(data.shareUrl);
 
   data.previewCommands = Object.fromEntries(
-    Object.entries(commands as Row).map(([browser, command]) => [browser, typeof command === "string" ? packageCommand(command, ref, grant, api) : command]),
+    Object.entries(commands as Row).map(([browser, command]) => [
+      browser,
+      typeof command === "string" ? quotedPreviewCommand(rewrite ? packageCommand(command, ref, grant, api) : command) : command,
+    ]),
   );
 }

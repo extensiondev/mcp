@@ -20,7 +20,7 @@ const SHORT_PAGE = "https://cezaraugusto.extension.dev/pii-shield/builds/b418732
 const SHORT_ZIP = (browser: string) => `https://cezaraugusto.extension.dev/pii-shield/builds/b4187328/${browser}.zip?share=k3x9q`;
 const SHORT_RUN = (browser: string) => `npx -y extension@latest preview ${SHORT_ZIP(browser)} --browser=${browser}`;
 const PACKAGE = (browser: string, grant: string) => `https://cezaraugusto.extension.dev/pii-shield/builds/b4187328/${browser}.zip?share=${grant}`;
-const PACKAGE_RUN = (browser: string, grant: string) => `npx -y extension@latest preview ${PACKAGE(browser, grant)} --browser=${browser}`;
+const PACKAGE_RUN = (browser: string, grant: string) => `npx -y extension@latest preview "${PACKAGE(browser, grant)}" --browser=${browser}`;
 
 type PageAnswer = { status: number; headers?: Record<string, string> };
 

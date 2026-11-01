@@ -132,8 +132,18 @@ export function pageLine(
 
 const SHELL_SPECIAL = /[\s&;|<>()$`'"\\*?[\]{}!]/;
 
+const EXPANDS_IN_DOUBLE_QUOTES = /[$`"\\!]/;
+
 export function shellUrl(url: string): string {
-  return SHELL_SPECIAL.test(url) ? `"${url}"` : url;
+  if (!SHELL_SPECIAL.test(url)) return url;
+
+  return EXPANDS_IN_DOUBLE_QUOTES.test(url) ? `'${url.replace(/'/g, "'\\''")}'` : `"${url}"`;
+}
+
+export function unshellUrl(word: string): string {
+  if (word.length > 1 && word.startsWith("'") && word.endsWith("'")) return word.slice(1, -1).replace(/'\\''/g, "'");
+
+  return word.replace(/^["']|["']$/g, "");
 }
 
 export interface RunCommand {
@@ -147,7 +157,7 @@ export function runCommandsOf(commands: Array<[string, string]>): RunCommand[] {
       const raw =
         /^npx -y extension@latest preview\s+(\S+)/.exec(command)?.[1] ?? "";
 
-      return { browser, url: raw.replace(/^["']|["']$/g, "") };
+      return { browser, url: unshellUrl(raw) };
     })
     .filter((row) => row.url !== "");
 }
@@ -361,7 +371,7 @@ export function publishNotes(input: {
       ? "For another browser, replace chrome with its name in both the URL and --browser; value.previewCommands holds each one."
       : null,
     runs.length
-      ? "A URL with ?, & or another shell character is wrapped in double quotes so zsh, bash, PowerShell and cmd pass it whole."
+      ? "A URL with ?, & or another shell character is wrapped in double quotes so zsh, bash, PowerShell and cmd pass it whole, in value.previewCommands as in the message; one that holds $, `, \\, \" or ! is wrapped in single quotes instead, which zsh and bash pass whole."
       : null,
     shareLinksUrl
       ? `Every share link of this project is listed, and can be revoked, on the console Share links page: ${shareLinksUrl}.`
