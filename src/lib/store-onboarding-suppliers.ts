@@ -94,6 +94,7 @@ const PERSON_DECIDES = [
   "safari.review_contact_phone",
   "safari.pricing_availability",
   "safari.marketing_url",
+  "safari.copyright",
 ];
 
 const BY_ID: Record<string, Supplier> = Object.fromEntries([
@@ -110,11 +111,9 @@ export function supplierOf(row: Row): Supplier {
   const known = BY_ID[id];
   if (known) return known;
 
-  const satisfiedBy = text(row.satisfiedBy);
-  if (satisfiedBy.startsWith("file:")) return "build";
-  if (satisfiedBy === "console-only" || satisfiedBy.startsWith("store-config:")) return "person-decides";
+  if (text(row.satisfiedBy).startsWith("file:")) return "build";
 
-  return "agent-drafts";
+  return "person-decides";
 }
 
 export interface SupplierGroup {
