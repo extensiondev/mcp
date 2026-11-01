@@ -48,6 +48,7 @@ import {
   isGeckoFamily,
   WEBKIT_FAMILY,
 } from "../lib/browser-family";
+import { safariNoBaseUrlRefusal } from "../lib/safari-base-url";
 import { readWebDriverSession, WebDriverClient } from "../lib/webdriver";
 import { verifyGuestLoaded } from "../lib/guest-load-oracle";
 import { manifestCandidates } from "../lib/project-manifest";
@@ -871,6 +872,10 @@ async function openSurfaceAsTab(
   } else {
     const base = await resolveBridgeBaseUrl(projectPath, browser);
 
+    if (!base && WEBKIT_FAMILY.has(browser)) {
+      return safariNoBaseUrlRefusal(schema.name, doc, `Could not resolve the extension's safari-web-extension:// base URL to open the ${surface} document as a tab.`);
+    }
+
     if (!base) {
       return envelope({
         ok: false,
@@ -1245,6 +1250,10 @@ async function resolveExtensionDocumentUrl(
 
   const base = await resolveBridgeBaseUrl(projectPath, browser);
   if (base) return `${base}${doc}`;
+
+  if (WEBKIT_FAMILY.has(browser)) {
+    return { refusal: safariNoBaseUrlRefusal(schema.name, doc, `"${relative}" has no scheme, so it was read as a document inside the extension, but the extension's safari-web-extension:// base could not be resolved from the live session.`) };
+  }
 
   return {
     refusal: envelope({

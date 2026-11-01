@@ -19,6 +19,7 @@ import {
 import { WEBKIT_FAMILY } from "./browser-family";
 import { envelope } from "./envelope";
 import { readGeckoBaseUrlFromProfile } from "./gecko-addon";
+import { readSafariBaseUrlFromLogs } from "./safari-base-url";
 import { tabViewFields, tabViewSentence } from "./tab-view";
 
 import type { TabViewFields } from "./tab-view";
@@ -252,6 +253,10 @@ export async function resolveBridgeBaseUrl(
   browser: string,
   timeout?: number,
 ): Promise<string | null> {
+  if (WEBKIT_FAMILY.has(browser)) {
+    return readSafariBaseUrlFromLogs(projectPath, browser) ?? (await resolveBridgeBaseUrlThroughRelay(projectPath, browser, timeout));
+  }
+
   const fromRelay = await resolveBridgeBaseUrlThroughRelay(projectPath, browser, timeout);
 
   return fromRelay ?? readGeckoBaseUrlFromProfile(projectPath, browser);

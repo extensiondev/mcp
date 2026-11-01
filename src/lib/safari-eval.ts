@@ -29,6 +29,7 @@ export function safariContextRefusal(
   raw: string,
   browser: string,
   context: string | undefined,
+  hasWindow = true,
 ): string | null {
   if (!WEBKIT_FAMILY.has(browser)) return null;
   if (context === "page" || context === "content") return null;
@@ -49,6 +50,6 @@ export function safariContextRefusal(
       engine: "webkit",
     },
     value: { browser, context: where },
-    hint: `Read the ${where} with extension_logs, which reads what the extension writes through the bridge. To drive a web page, call extension_open url (the automation window navigates there), then extension_eval context: "page" with that url, which evaluates in the page's main world; extension_screenshot captures that window. A page opened in a regular Safari window is outside the session and cannot be read from here. The popup, options and sidebar documents are not reachable on Safari: run the same project on chrome or firefox to evaluate in them.`,
+    hint: `${where === "background" ? "For storage, call extension_storage (action get or set), which reads and writes the extension's storage on Safari through code the bridge ships, with no eval. " : ""}Read the ${where} with extension_logs, which reads what the extension writes through the bridge. ${hasWindow ? 'To drive a web page, call extension_open url (the automation window navigates there), then extension_eval context: "page" with that url, which evaluates in the page\'s main world; extension_screenshot captures that window.' : 'This run has no WebDriver window, so extension_open url, extension_eval context: "page" and extension_screenshot cannot drive a page either; extension_dev with replace: true opens a new one.'} A page opened in a regular Safari window is outside the session and cannot be read from here. The popup, options and sidebar documents are not reachable on Safari: run the same project on chrome or firefox to evaluate in them.`,
   });
 }

@@ -1503,7 +1503,7 @@ async function evaluateOnce(
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
   const raw = await evaluateRouted(args, browser);
 
-  return safariContextRefusal(schema.name, raw, browser, args.context) ?? raw;
+  return safariContextRefusal(schema.name, raw, browser, args.context, readWebDriverSession(args.projectPath, browser) !== null) ?? raw;
 }
 
 async function evaluateRouted(
