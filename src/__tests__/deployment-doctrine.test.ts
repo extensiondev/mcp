@@ -99,7 +99,7 @@ describe("the deployment doctrine sits in the server instructions, in order, bes
     const resume = lines.find((line) => line.startsWith(ORDER[3])) ?? "";
 
     expect(version).toMatch(/never tell the person to edit the manifest and rebuild locally/);
-    expect(resume).toMatch(/the next message re-runs extension_submit action:'preflight' without being told/);
+    expect(resume).toMatch(/the next message re-runs extension_submit_check action:'preflight' without being told/);
   });
 
   it("is absent when the platform tools are off", () => {
@@ -133,7 +133,7 @@ describe("a connect or link stop hands the agent the call to make next", () => {
 
     expect(out.status).toBe(status);
     expect(out.value.nextStep.kind).toBe(kind);
-    expect(out.value.nextStep.thenCall).toEqual({ tool: "extension_submit", args: { action: "preflight", browsers: ["chrome"] } });
+    expect(out.value.nextStep.thenCall).toEqual({ tool: "extension_submit_check", args: { action: "preflight", browsers: ["chrome"] } });
   });
 
   it("a real submission refused as not connected carries the same thenCall", async () => {
@@ -146,7 +146,7 @@ describe("a connect or link stop hands the agent the call to make next", () => {
     const out = await world.call("extension_submit", { ...SUBMIT_ARGS, approvalId: "apr_conn" });
 
     expect(out.status).toBe("store-not-connected");
-    expect(out.value.nextStep.thenCall).toEqual({ tool: "extension_submit", args: { action: "preflight", browsers: ["chrome"] } });
+    expect(out.value.nextStep.thenCall).toEqual({ tool: "extension_submit_check", args: { action: "preflight", browsers: ["chrome"] } });
   });
 });
 

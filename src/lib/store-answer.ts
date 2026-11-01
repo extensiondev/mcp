@@ -89,7 +89,7 @@ export function shapeStoreAnswer(command: string, args: Row, result: string): st
   if (command === "extension_submit" && step && RESUME_KINDS.has(text(step.kind))) {
     value.nextStep = {
       ...step,
-      thenCall: { tool: "extension_submit", args: { action: "preflight", browsers: requestedBrowsers(args) } },
+      thenCall: { tool: "extension_submit_check", args: { action: "preflight", browsers: requestedBrowsers(args) } },
     };
 
     changed = true;

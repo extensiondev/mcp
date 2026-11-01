@@ -8,7 +8,7 @@
 
 import { PROJECT_PIN_ENV, isProjectRef, pinnedProject, sameProject } from "./credentials";
 import { envelope } from "./envelope";
-import { submitShips } from "./submit-action-safety";
+import { submitCheckRefused, submitShips } from "./submit-action-safety";
 
 export type FeatureGroup = "local" | "platform";
 
@@ -31,6 +31,7 @@ export interface ToolPolicy {
   annotations: ToolAnnotations;
   ships?: "always" | ((args: Args) => boolean);
   untrusted?: true;
+  actsAs?: { tool: string; refuse: (args: Args) => string | null };
 }
 
 const reads = (openWorld = false): ToolAnnotations => ({
@@ -92,6 +93,7 @@ export const TOOL_TITLES: Record<string, string> = {
   extension_workspace: "Read or change the workspace",
   extension_release_promote: "Promote a release",
   extension_submit: "Submit to a store",
+  extension_submit_check: "Check a store submission",
 };
 
 export function toolTitle(name: string): string {
@@ -222,6 +224,11 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
     group: "platform",
     annotations: acts({ destructiveHint: true, openWorldHint: true }),
     ships: submitShips,
+  },
+  extension_submit_check: {
+    group: "platform",
+    annotations: reads(true),
+    actsAs: { tool: "extension_submit", refuse: submitCheckRefused },
   },
 };
 

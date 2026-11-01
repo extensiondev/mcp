@@ -158,7 +158,7 @@ export async function configureStore(args: ConfigureStoreArgs): Promise<string> 
   const lines = requestedLines(store, read.requested);
   const scope = { store, settingsDigest: storeSettingsDigest(store, read.patch) };
   const settingsPage = storeSettingsUrl(api.ref, args.api);
-  const preflightRead = `extension_submit (action: "preflight", browsers: ["${store}"])`;
+  const preflightRead = `extension_submit_check (action: "preflight", browsers: ["${store}"])`;
   const policyWrite: PolicyWrite = { store, submissionMode: text(read.requested.submissionMode), releaseChannel: text(read.requested.releaseChannel) };
   const audienceChange = approvalVerdict(STORE_SETTINGS_ACTION, policyWrite) === "approval";
   const gate: ApprovalGateInput = {

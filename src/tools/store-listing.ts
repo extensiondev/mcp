@@ -757,7 +757,7 @@ async function syncOne(
         reason: derivedAct
           ? `The listing carries a value the platform derives rather than copies from ${STORE_MD_FILENAME} (${expected.map((field) => `the App Store ${field.field} from the ${field.line} line`).join(", ")}), and the platform asks a workspace owner to approve that text before it is written; the approval page shows it marked derived.`
           : "A listing sync is a plain act under the owner's own token, and the platform asked a workspace owner to approve this exact change before it is written; the approval page shows it as the platform computed it.",
-        stateRead: 'extension_submit (action: "preflight")',
+        stateRead: 'extension_submit_check (action: "preflight")',
       }),
     ) as Row;
     const value = isRow(asking.value) ? asking.value : {};
@@ -855,7 +855,7 @@ async function mintListingVersion(
       refusedStatus: `${ACT}-refused`,
       body: { listings: Object.fromEntries(patches.map(([store, patch]) => [store, approvalBody(store, patch)])) },
       reason: "The platform asked a workspace owner to approve these listing changes before they are written; the approval page lists each store's change as the platform computed it, and the owner can leave a store out.",
-      stateRead: 'extension_submit (action: "preflight")',
+      stateRead: 'extension_submit_check (action: "preflight")',
     }),
   ) as Row;
   const value = isRow(asking.value) ? asking.value : {};
@@ -1205,7 +1205,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       command: COMMAND,
       status: `${ACT}-dispatched`,
       value: { ...value, outcome, links },
-      hint: `The platform accepted the listing change for ${synced.join(", ") || asked.join(", ")}, and its record could not be read back yet (${outcome.readProblem}); extension_submit action:"preflight" reads what each store carries and still needs.${say ? ` ${say}` : ""} ${made}`,
+      hint: `The platform accepted the listing change for ${synced.join(", ") || asked.join(", ")}, and its record could not be read back yet (${outcome.readProblem}); extension_submit_check action:"preflight" reads what each store carries and still needs.${say ? ` ${say}` : ""} ${made}`,
     });
   }
 
@@ -1214,6 +1214,6 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     command: COMMAND,
     status: recordedStatus,
     value: { ...value, outcome, links },
-    hint: `${blockingLine ? `${blockingLine}. ` : ""}The listing on extension.dev now carries what ${STORE_MD_FILENAME} and the build cover, read back from the platform's record; extension_submit action:"preflight" reads what each store still needs.${say ? ` ${say}` : ""} ${made}`,
+    hint: `${blockingLine ? `${blockingLine}. ` : ""}The listing on extension.dev now carries what ${STORE_MD_FILENAME} and the build cover, read back from the platform's record; extension_submit_check action:"preflight" reads what each store still needs.${say ? ` ${say}` : ""} ${made}`,
   });
 }

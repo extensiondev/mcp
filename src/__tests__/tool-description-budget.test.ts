@@ -46,6 +46,7 @@ const CEILINGS: Record<string, number> = {
   extension_stop: 600,
   extension_storage: 500,
   extension_submit: 1600,
+  extension_submit_check: 600,
   extension_templates: 600,
   extension_theme_verify: 800,
   extension_wait: 2000,

@@ -575,7 +575,7 @@ describe("extension_submit configure-store changes a store's settings as a plain
 
     expect(out.value.trackUrl).toMatch(SETTINGS_PAGE);
     expect(out.value.nextStep.kind).toBe("preflight");
-    expect(out.hint).toContain('extension_submit (action: "preflight", browsers: ["firefox"])');
+    expect(out.hint).toContain('extension_submit_check (action: "preflight", browsers: ["firefox"])');
     expect(out.hint).toContain(out.value.trackUrl);
     expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
   });
@@ -622,7 +622,7 @@ describe("extension_submit configure-store changes a store's settings as a plain
     const out = JSON.parse(await submit({ action: "configure-store", store: "firefox", storeSettings: FIREFOX_PATCH, approvalId: "apr_u", api: API }));
 
     expect(out.error.name).toBe("ApprovalConsumed");
-    expect(out.error.message).toContain('extension_submit (action: "preflight", browsers: ["firefox"])');
+    expect(out.error.message).toContain('extension_submit_check (action: "preflight", browsers: ["firefox"])');
     expect(platform.sent("PUT", CONFIG)).toHaveLength(0);
   });
 

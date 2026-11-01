@@ -195,7 +195,7 @@ export const SUBMIT_ACTIONS = [
 export function invalidArgumentsHint(issues: InputIssue[]): string | undefined {
   if (!issues.some((issue) => issue.path === "action")) return undefined;
 
-  return `The store's own state for the newest version is extension_submit {action: "status", browsers: [<store>]}, and the full store picture is ${STORES_READ_CALL}.`;
+  return `The store's own state for the newest version is extension_submit_check {action: "status", browsers: [<store>]}, and the full store picture is ${STORES_READ_CALL}.`;
 }
 
 export const schema = {

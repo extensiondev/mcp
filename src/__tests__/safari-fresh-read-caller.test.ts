@@ -21,7 +21,7 @@ import type { SubmissionView } from "../lib/store-row-sources";
 const API = "https://www.extension.dev";
 const ENV_KEYS = ["XDG_CONFIG_HOME", "EXTENSION_DEV_API_URL", "EXTENSION_DEV_TOKEN", "EXTENSION_DEV_PROJECT"];
 const READ_AT = "2026-10-31T11:15:45.000Z";
-const STATUS_CALL = 'extension_submit {action: "status", browsers: ["safari"], waitSeconds: 180}';
+const STATUS_CALL = 'extension_submit_check {action: "status", browsers: ["safari"], waitSeconds: 180}';
 
 const IN_REVIEW = {
   id: "sub_safari_14",
@@ -106,7 +106,7 @@ describe("the Safari re-read sentence names the tool that answered (ledger 315)"
     const row = out.value.stores.find((entry: { store: string }) => entry.store === "safari");
 
     expect(row.nextStep.say).toContain(`call ${SAFARI_FRESH_READ_CALL}; once it reads`);
-    expect(row.nextStep.say).not.toContain('extension_submit {action: "status"');
+    expect(row.nextStep.say).not.toContain('extension_submit_check {action: "status"');
   });
 
   it("the sentence builder takes the caller and the shared step passes it through", () => {

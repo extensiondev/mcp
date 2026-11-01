@@ -87,7 +87,7 @@ export async function readListing(scope: Scope & { store?: string }): Promise<st
       listings: views,
       consoleUrl: consoleProjectUrl(api.ref, ConsoleProjectPage.submissions, scope.api),
     },
-    hint: `${views.map(listingSentence).join(". ")}. This is the listing saved on extension.dev, which the platform sends to a store only on publish; extension_submit (action: "sync-listing") fills it from STORE.md and the built icon under an owner's approval, and extension_submit (action: "preflight") says which listing checks still fail.`,
+    hint: `${views.map(listingSentence).join(". ")}. This is the listing saved on extension.dev, which the platform sends to a store only on publish; extension_submit (action: "sync-listing") fills it from STORE.md and the built icon under an owner's approval, and extension_submit_check (action: "preflight") says which listing checks still fail.`,
     warnings: [unread.length ? `Listings not read for ${unread.join("; ")}.` : null],
   });
 }

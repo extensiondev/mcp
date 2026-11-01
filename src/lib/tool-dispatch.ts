@@ -243,6 +243,14 @@ export function createToolSurface(setup: ToolHandlerOptions): {
 
     if (disabled) return refused(disabled);
 
+    const actsAs = TOOL_POLICY[name]?.actsAs;
+
+    if (actsAs) {
+      const refusal = actsAs.refuse(aliasedArgs);
+
+      return refusal ? refused(refusal) : dispatch({ name: actsAs.tool, arguments: aliasedArgs });
+    }
+
     const untrusted = TOOL_POLICY[name]?.untrusted === true;
     const platform = TOOL_POLICY[name]?.group === "platform";
     const refusedAct = (text: string, callArgs: Record<string, unknown>): ToolFrame => refused(platform ? attachTrack(name, callArgs, text) : text);

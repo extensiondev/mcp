@@ -110,7 +110,7 @@ describe("the Chrome Web Store goal walks from not connected to submitted with a
       say: out.hint,
       url: CONNECT,
       thenCall: {
-        tool: "extension_submit",
+        tool: "extension_submit_check",
         args: { action: "preflight", browsers: ["chrome"] },
       },
     });
@@ -162,7 +162,7 @@ describe("the Chrome Web Store goal walks from not connected to submitted with a
       say: LINK_ITEM_POINTER,
       url: LINK_ITEM,
       thenCall: {
-        tool: "extension_submit",
+        tool: "extension_submit_check",
         args: { action: "preflight", browsers: ["chrome"] },
       },
     });
@@ -390,11 +390,11 @@ describe("the server instructions carry the Chrome Web Store goal playbook in or
     );
     const playbook = lines.slice(start, start + 8);
     const steps = [
-      "1. Call extension_submit {action:'preflight', browsers:['chrome']} first, every time, even on a retry.",
+      "1. Call extension_submit_check {action:'preflight', browsers:['chrome']} first, every time, even on a retry.",
       "2. On store-not-connected or store-connection-failed",
       "3. On store-item-not-linked",
       "4. On preflight-read whose value.stores.chrome.storeMd says the privacy policy URL is not in STORE.md, say that line as it is and stop",
-      "5. On preflight-read with every check green, call extension_submit {action:'submit', browsers:['chrome']",
+      "5. On preflight-read with every check green, call extension_submit_check {action:'submit', browsers:['chrome']",
       "6. On submitted, or submit-dispatched while the record has not confirmed the upload yet, report the status line and value.trackUrl (value.itemUrl, the store's own page, is information, never a next step), and say value.nextStep.say: To send it to review, say publish; that is one more approval. When the person says publish or send it to review, call extension_submit {action:'publish', browsers:['chrome']}",
       "7. Never recommend a release on a code host, an unlisted AMO version, a TestFlight upload or any other do-it-yourself route first, and never name a secret.",
     ];

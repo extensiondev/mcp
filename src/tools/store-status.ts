@@ -171,7 +171,7 @@ export type StatusCaller = "extension_release_status" | "extension_submit";
 
 export function safariFreshReadCall(caller: StatusCaller): string {
   return caller === "extension_submit"
-    ? 'extension_submit {action: "status", browsers: ["safari"], waitSeconds: 180}'
+    ? 'extension_submit_check {action: "status", browsers: ["safari"], waitSeconds: 180}'
     : 'extension_release_status {include: ["stores"], refresh: ["safari"], waitSeconds: 180}';
 }
 

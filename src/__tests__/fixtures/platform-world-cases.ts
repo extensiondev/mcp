@@ -164,6 +164,11 @@ export const WORLD_CASES: Record<string, WorldCase[]> = {
     },
     { name: "dry run", args: { browsers: ["chrome"], buildSha: "603fc8a", ...api } },
   ],
+  extension_submit_check: [
+    { name: "preflight", args: { action: "preflight", browsers: ["chrome"], ...api } },
+    { name: "status", args: { action: "status", browsers: ["chrome"], ...api } },
+    { name: "dry run", args: { browsers: ["chrome"], buildSha: "603fc8a", ...api } },
+  ],
   extension_publish: [{ name: "publish", args: { ...api } }],
   extension_approvals: [
     {

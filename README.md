@@ -7,7 +7,7 @@
 
 # @extension.dev/mcp [![Version][npm-version-image]][npm-version-url] [![Downloads][npm-downloads-image]][npm-downloads-url] [![Discord][discord-image]][discord-url]
 
-> Give your AI agent hands for browser extension development. 36 MCP tools that scaffold, run, inspect, debug, test, and build cross-browser extensions on your machine, plus a platform lane (private alpha) to share and publish them.
+> Give your AI agent hands for browser extension development. 37 MCP tools that scaffold, run, inspect, debug, test, and build cross-browser extensions on your machine, plus a platform lane (private alpha) to share and publish them.
 
 <img alt="Logo" align="right" src="https://media.extension.land/brand/extension-dev/logo-dock.png" width="20.7%" />
 
@@ -121,7 +121,7 @@ Or write it into `~/.codex/config.toml` as a `[mcp_servers.extension-dev]` table
 
 ### Flags
 
-- By default the server exposes the 24 of its 36 tools that work on this machine (the 12 platform tools are off). `--features=local,platform` adds the platform group. Env: `EXTENSION_DEV_FEATURES`.
+- By default the server exposes the 24 of its 37 tools that work on this machine (the 13 platform tools are off). `--features=local,platform` adds the platform group. Env: `EXTENSION_DEV_FEATURES`.
 - `--no-ship` refuses every call that puts something in front of other people (publish, promote, a real submit, a shared preview, a revoke). Env: `EXTENSION_DEV_NO_SHIP=1`.
 - `--project <workspace>/<project>` pins the server to one project. Env: `EXTENSION_DEV_PROJECT`.
 - When a platform act answers `approval-required` on a desktop (not headless, not CI, and on Linux with a display), the server opens the approval page once in the default browser. `--no-ship` or `EXTENSION_DEV_NO_AUTO_OPEN=1` turns that off.
@@ -184,6 +184,7 @@ On with `--features=local,platform`, the 12 that reach the extension.dev platfor
 | platform | `extension_publish` | Mint a shareable link for a build extension.dev already holds (nothing is uploaded) |
 | platform | `extension_release_promote` | Promote a build to a release channel, headless |
 | platform | `extension_submit` | Submit for store review: Chrome, Firefox, Edge and Safari, through extension.dev |
+| platform | `extension_submit_check` | Read a store submission's readiness and status, rehearse it, and ask for its approval, under a read-only hint |
 | platform | `extension_release_status` | Read release channels, release history, recent builds, and store configuration, submission and review state |
 | platform | `extension_approvals` | Read one approval, or revoke a pending or approved and unused one so it never runs |
 | platform | `extension_builds` | Read the platform's builds (recent builds, one build's artifacts and integrity, its CI logs), save a build's package to disk verified against its integrity report, start a rebuild, change build settings as a plain call under the owner's token, and add a release channel |
@@ -219,7 +220,7 @@ A Safari dev session runs on the same bridge as every other engine: on Extension
 
 ## Platform (private alpha)
 
-The eleven platform tools connect agents to [extension.dev](https://extension.dev). They stay off until the server is started with `--features=local,platform`, and sharing, publishing, promoting and submitting need a login:
+The thirteen platform tools connect agents to [extension.dev](https://extension.dev). They stay off until the server is started with `--features=local,platform`, and sharing, publishing, promoting and submitting need a login:
 
 ```bash
 npx @extension.dev/mcp login --project <workspace>/<project>
@@ -227,10 +228,10 @@ npx @extension.dev/mcp login --project <workspace>/<project>
 
 You approve a code at [extension.dev/device](https://extension.dev/device); no GitHub token reaches your machine, and the project-scoped token is stored locally, never returned to the agent, and lives at most 7 days. `extension_preview_web` with `share: true` uploads the build it just made and returns a link that renders those bytes in the web emulator, with its `expiresAt` and a `revokeUrl`. `extension_publish` returns the shareable URL of a build extension.dev already holds; `extension_submit` sends a built extension into store review through extension.dev, which holds your store credentials, and defaults to a dry run.
 
-`extension_submit` serves its reads (preflight, status and the default dry run) and its store acts as one tool, and MCP annotations are per tool, so it carries the destructive hint and a client's permission layer may stop even the call that only asks for approval. That call executes nothing: every store act waits for a workspace owner's approval on extension.dev. If you accept that approval page as the only gate, allow the tool by name, in Claude Code's `.claude/settings.json`:
+`extension_submit_check` takes the calls that only read or ask (preflight, status, the default dry run, and a submit with `dryRun: false` and no `approvalId`, which executes nothing and only asks a workspace owner to approve the exact submission on extension.dev) under `readOnlyHint: true`, so a client's permission layer can tell them from a store act. `extension_submit` takes the call that spends the approval and every other store act, so it carries the destructive hint; it still accepts the read calls too. If you accept the approval page as the only gate for those acts as well, allow both tools by name, in Claude Code's `.claude/settings.json`:
 
 ```json
-{ "permissions": { "allow": ["mcp__extension-dev__extension_submit"] } }
+{ "permissions": { "allow": ["mcp__extension-dev__extension_submit_check", "mcp__extension-dev__extension_submit"] } }
 ```
 
 <div align="center">

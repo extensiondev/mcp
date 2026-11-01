@@ -147,6 +147,6 @@ describe("extension_submit action status reads the store's own state for the new
     expect(out.status).toBe("invalid-arguments");
     expect(out.error.message).toContain(`must be one of: ${SUBMIT_ACTIONS.join(", ")}`);
     expect(out.error.message).toContain('extension_release_status {include: ["stores"]}');
-    expect(out.hint).toContain('extension_submit {action: "status", browsers: [<store>]}');
+    expect(out.hint).toContain('extension_submit_check {action: "status", browsers: [<store>]}');
   });
 });
