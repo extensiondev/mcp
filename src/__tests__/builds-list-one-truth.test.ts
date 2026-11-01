@@ -313,4 +313,53 @@ describe("extension_builds answers one truth per build", () => {
 
     expect(out.hint).not.toContain("The last push");
   });
+
+  it("ledger 357: a build newer than the push record marks lastPush stale and names that build", async () => {
+    if (process.platform === "win32") return;
+
+    const pending = { id: "6b393ca", buildId: "6b393ca", commit: "6b393ca0e1f2a3b4c5d6e7f8091a2b3c4d5e6f70", status: "pending", startedAt: "2026-11-01T00:17:35Z", timestamp: "2026-11-01T00:17:35Z", runId: 7010 };
+    const previous = { id: "982a348", buildId: "982a348", commit: "982a348e1f0c2b3a4d5e6f708192a3b4c5d6e7f8", status: "success", summaryStatus: "success", timestamp: "2026-10-31T23:16:00Z", duration: "4m 57s" };
+    body = {
+      items: [pending, previous],
+      lastPush: { commit: "982a348", ref: "main", receivedAt: "2026-10-31T23:12:02.120Z", outcome: "DISPATCHED", dispatched: true },
+    };
+
+    const out = await list();
+
+    expect(out.value.lastPush).toMatchObject({
+      commit: "982a348",
+      stale: true,
+      newerBuild: { buildId: "6b393ca", status: "pending", startedAt: "2026-11-01T00:17:35Z" },
+      build: { buildId: "982a348", status: "success" },
+    });
+
+    expect(out.hint).toContain(
+      "lastPush is stale: it still names 982a348 (received 2026-10-31T23:12:02Z), while build 6b393ca (pending) started at 2026-11-01T00:17:35Z, after that record; the platform has not recorded the push behind 6b393ca yet, so builds[0] is the newest build.",
+    );
+  });
+
+  it("ledger 357: the platform's own newerBuild mark is answered as stale, and a push newer than every row is not", async () => {
+    if (process.platform === "win32") return;
+
+    body = {
+      items: [TWO_STAMPS],
+      lastPush: { commit: "982a348", ref: "main", receivedAt: "2026-10-31T23:12:02Z", outcome: "DISPATCHED", dispatched: true, stale: true, newerBuild: { buildId: "6b393ca", status: "building", startedAt: "2026-11-01T00:17:35.000Z" } },
+    };
+
+    const marked = await list();
+
+    expect(marked.value.lastPush).toMatchObject({ stale: true, newerBuild: { buildId: "6b393ca", startedAt: "2026-11-01T00:17:35Z" } });
+    expect(marked.hint).toContain("lastPush is stale: it still names 982a348");
+
+    body = {
+      items: [TWO_STAMPS],
+      lastPush: { commit: "4478aff", ref: "main", receivedAt: "2026-10-24T23:50:33Z", outcome: "DISPATCHED", dispatched: true },
+    };
+
+    const fresh = await list();
+
+    expect(fresh.value.lastPush.stale).toBeUndefined();
+    expect(fresh.value.lastPush.newerBuild).toBeUndefined();
+    expect(fresh.hint).not.toContain("stale");
+  });
 });

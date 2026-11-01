@@ -170,6 +170,32 @@ export function browsersPendingSentence(rows: Row[]): string | null {
   return `${named.join(" and ")} ${waiting.length === 1 ? "has" : "have"} no browser reported by the platform yet; browsers land with the build record when the run finishes.`;
 }
 
+function stampOf(row: Row): number {
+  const stamps = [row.startedAt, row.timestamp].map((value) => Date.parse(text(value))).filter((value) => Number.isFinite(value));
+
+  return stamps.length ? Math.max(...stamps) : Number.NaN;
+}
+
+function newerBuildThanPush(lastPush: Row, commit: string, rows: Row[]): Row | null {
+  if (isRow(lastPush.newerBuild) && text(lastPush.newerBuild.buildId)) {
+    const given = lastPush.newerBuild;
+
+    return { buildId: text(given.buildId), status: text(given.status), startedAt: isoSeconds(given.startedAt) };
+  }
+
+  const newest = rows[0];
+  if (!newest || !commit) return null;
+
+  const buildId = text(newest.buildId);
+  if (!buildId || buildId.startsWith(commit.slice(0, 7)) || commit.startsWith(buildId.slice(0, 7))) return null;
+
+  const pushedAt = Date.parse(text(lastPush.recordedAt) || text(lastPush.receivedAt));
+  const startedAt = stampOf(newest);
+  if (!Number.isFinite(pushedAt) || !Number.isFinite(startedAt) || startedAt <= pushedAt) return null;
+
+  return { buildId, status: text(newest.status), startedAt: new Date(startedAt).toISOString().replace(/\.\d{3}Z$/, "Z") };
+}
+
 export function lastPushView(lastPush: Row | null, rows: Row[]): { lastPush: Row | null; sentence: string | null } {
   if (!lastPush) return { lastPush: null, sentence: null };
 
@@ -180,6 +206,19 @@ export function lastPushView(lastPush: Row | null, rows: Row[]): { lastPush: Row
   const built = commit ? rows.find((row) => text(row.buildId).startsWith(commit.slice(0, 7))) : undefined;
 
   if (built) view.build = { buildId: text(built.buildId), status: text(built.status) };
+
+  const newer = newerBuildThanPush(lastPush, commit, rows);
+
+  if (newer) {
+    view.stale = true;
+    view.newerBuild = newer;
+
+    return {
+      lastPush: view,
+      sentence: `lastPush is stale: it still names ${commit || "an earlier commit"}${receivedAt ? ` (received ${receivedAt})` : ""}, while build ${text(newer.buildId)} (${text(newer.status) || "status unknown"}) started at ${text(newer.startedAt)}, after that record; the platform has not recorded the push behind ${text(newer.buildId)} yet, so builds[0] is the newest build.`,
+    };
+  }
+
   if (lastPush.dispatched !== false || !QUEUED_PUSH_OUTCOMES.has(outcome)) return { lastPush: view, sentence: null };
 
   const arrived = `The last push${commit ? ` ${commit}` : ""}${receivedAt ? ` (received ${receivedAt})` : ""} was ${outcome.toLowerCase()}`;
