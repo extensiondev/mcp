@@ -216,7 +216,12 @@ export async function watchNetwork(
       flatten: true,
     });
 
-    await sleep(Math.max(0, options.durationMs));
+    const deadline = started + Math.max(0, options.durationMs);
+
+    for (let left = deadline - Date.now(); left > 0; left = deadline - Date.now()) {
+      await sleep(left);
+    }
+
     await Promise.allSettled(pending);
   } finally {
     unsubscribe();

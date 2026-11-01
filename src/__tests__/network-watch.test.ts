@@ -1,6 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   classifyRequests,
@@ -217,6 +217,26 @@ describe("watchNetwork attaches to every target of the browser and what runs und
     expect(detached).not.toContain("s-offw");
     expect(reading.attached.find((target) => target.sessionId === "s-offw")?.detached).toBe(true);
     expect(reading.durationMs).toBeGreaterThanOrEqual(40);
+  });
+
+  it("keeps watching until the clock it reports with says the whole window passed", async () => {
+    const realNow = Date.now.bind(Date);
+    let first = true;
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => {
+      const now = realNow();
+      if (!first) return now;
+
+      first = false;
+
+      return now + 15;
+    });
+
+    try {
+      const reading = await watchNetwork(browser(), { durationMs: 40 });
+      expect(reading.durationMs).toBeGreaterThanOrEqual(40);
+    } finally {
+      clock.mockRestore();
+    }
   });
 });
 
