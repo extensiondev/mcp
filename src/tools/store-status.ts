@@ -15,6 +15,7 @@ import {
   resolveProjectRef,
   type ProjectRef,
 } from "../lib/registry";
+import { listingPushOpen, readSafariListingPush, type ListingPushView } from "../lib/safari-listing-push-read";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { expiredLoginFor, loginExpiredRefusal } from "../lib/login-expired";
 import { platformHoldEnvelope } from "../lib/platform-hold";
@@ -649,13 +650,14 @@ async function answerStores(
     args.api,
   );
 
-  const [healthRes, statusRes, submissionsRes, platform, records, releases] = await Promise.all([
+  const [healthRes, statusRes, submissionsRes, platform, records, releases, listingPush] = await Promise.all([
     fetchRegistryJson(healthUrl, fetch, { ref, api: args.api }),
     fetchRegistryJson(statusUrl, fetch, { ref, api: args.api }),
     fetchRegistryJson(submissionsUrl, fetch, { ref, api: args.api }),
     readPlatformSubmissions({ ref, named, api: args.api }),
     readPlatformStoreRecords({ ref, named, api: args.api, stores: KNOWN_STORES }),
     readPlatformStoreReleases({ ref, named, api: args.api }),
+    readSafariListingPush({ ref, named, api: args.api, command: "extension_release_status" }),
   ]);
   const wantedId = String(args.submissionId ?? "").trim();
   const lookup: SubmissionLookup | null = wantedId
@@ -812,6 +814,8 @@ async function answerStores(
     const queuedAct = platform.ok ? platform.queued[store] : undefined;
     if (queuedAct) row.queuedAct = queuedAct;
 
+    if (store === "safari" && listingPush.ok && listingPush.push) row.listingPush = listingPush.push;
+
     const step = store === "safari" ? safariNextStep(submission, consoleProjectUrl(ref, ConsoleProjectPage.submissionsStore(store), args.api), caller) : null;
     if (step) row.nextStep = step;
 
@@ -900,6 +904,9 @@ async function answerStores(
 
       const releaseStep = safariReleaseStepSentence(submission);
       if (releaseStep) tail.push(releaseStep);
+
+      const push = row.listingPush as ListingPushView | undefined;
+      if (push) tail.push(`${push.say.charAt(0).toLowerCase()}${push.say.slice(1)}`);
     }
 
     const release = row.release as StoreReleaseView | undefined;
@@ -945,6 +952,9 @@ async function answerStores(
       ? null
       : `the store releases could not be read from the platform: ${releases.message}`;
 
+  const pushOpen = listingPush.ok && listingPushOpen(listingPush.push) ? `${listingPush.push?.say}.` : null;
+  const pushUnread = !listingPush.ok && !listingPush.skipped ? `the Safari listing push could not be read from the platform, so whether it landed is unknown: ${listingPush.message}` : null;
+
   const render = (wait: RefreshWaitView | null): string => envelope({
     ok: true,
     command: "extension_release_status",
@@ -971,6 +981,8 @@ async function answerStores(
       platform.ok ? ", with the platform's own submission records and their runs" : ""
     }; the store dashboards are authoritative and may be ahead of it.`,
     warnings: [
+      pushOpen,
+      pushUnread,
       healthUnavailable,
       statusUnavailable,
       submissionsUnavailable,

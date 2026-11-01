@@ -31,6 +31,8 @@ export interface PushState {
   status: PushStatus;
   runState?: RunState;
   failedStep?: string;
+  failedReason?: string;
+  dispatchedAt?: string;
   retryHint?: string;
   reason?: string;
   fieldsWritten?: number;
@@ -82,6 +84,8 @@ export function readPushState(raw: unknown): PushState | null {
 
   if (runState) state.runState = runState;
   if (text(raw.failedStep)) state.failedStep = text(raw.failedStep);
+  if (text(raw.failedReason)) state.failedReason = text(raw.failedReason);
+  if (text(raw.dispatchedAt)) state.dispatchedAt = text(raw.dispatchedAt);
   if (text(raw.retryHint)) state.retryHint = text(raw.retryHint);
   if (reason) state.reason = reason;
   if (fields !== undefined) state.fieldsWritten = fields;

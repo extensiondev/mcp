@@ -15,6 +15,7 @@ import { AMO_SIGNED_STATUS } from "../lib/review-beside-submission";
 import { consoleProjectUrl } from "../lib/registry";
 import { readsBeforeDispatch } from "../lib/store-read-landed";
 import { isRow, text } from "../lib/ship-act";
+import { type ListingPushView } from "../lib/safari-listing-push-read";
 import { releaseChangeOfRow, releaseChangeSentence, releaseTypeMeaning, type ReleaseTypeChange, type ReleaseTypeChangeRefused } from "../lib/store-row-sources";
 import { packageRefusedSentence, uploadRefused } from "../lib/store-upload-words";
 import { readStores } from "./store-status";
@@ -40,6 +41,7 @@ export interface StoreVersionStatus {
   releaseType: string | null;
   releaseTypeChanged?: ReleaseTypeChange;
   releaseTypeChangeRefused?: ReleaseTypeChangeRefused;
+  listingPush?: ListingPushView;
   nextStep: NextStep | null;
 }
 
@@ -77,6 +79,7 @@ function statusOfRow(row: Row): StoreVersionStatus {
     source: text(read.source) || upload?.source || null,
     releaseType: text(submission.releaseType) || null,
     ...releaseChangeOfRow(submission),
+    ...(isRow(row.listingPush) ? { listingPush: row.listingPush as unknown as ListingPushView } : {}),
     nextStep: !uploadRefused(upload) && isRow(row.nextStep) ? (row.nextStep as unknown as NextStep) : null,
   };
 }
@@ -91,6 +94,12 @@ function landedUnsourced(entry: StoreVersionStatus, refresh: Row | null, wait: R
 }
 
 export function storeVersionSentence(entry: StoreVersionStatus, refresh: Row | null, wait: Row | null): string {
+  const push = entry.listingPush ? `; ${entry.listingPush.say.charAt(0).toLowerCase()}${entry.listingPush.say.slice(1)}` : "";
+
+  return `${submissionSentence(entry, refresh, wait)}${push}`;
+}
+
+function submissionSentence(entry: StoreVersionStatus, refresh: Row | null, wait: Row | null): string {
   if (!entry.version && !entry.status) return `${entry.store}: no submission recorded`;
 
   const build = entry.buildNumber ? ` build ${entry.buildNumber}` : "";
