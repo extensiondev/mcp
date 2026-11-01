@@ -8,10 +8,9 @@
 
 import fs from "node:fs";
 
-import { resolveBridgeBaseUrl } from "./bridge-tabs";
-import { geckoAddonId } from "./gecko-addon";
 import { resolveRdpPort } from "./cdp-port";
 import { envelope } from "./envelope";
+import { ADDON_UNNAMED, addonPolicyExpression, geckoAddonIdentity, type GeckoAddonIdentity } from "./gecko-sidebar";
 import { manifestCandidates } from "./project-manifest";
 import { rdpEvaluateInParentProcess } from "./rdp";
 
@@ -53,17 +52,11 @@ function buttonLabel(button: ToolbarButton): string {
     : `toolbar button (${button.key})`;
 }
 
-function toolbarClickExpression(
-  button: ToolbarButton,
-  identity: { addonId: string | null; host: string | null },
-): string {
+function toolbarClickExpression(button: ToolbarButton, identity: GeckoAddonIdentity): string {
   const lookup = button.key === "page_action" ? "pageActionFor" : "browserActionFor";
-  const policy = identity.addonId
-    ? `WebExtensionPolicy.getByID(${JSON.stringify(identity.addonId)})`
-    : `WebExtensionPolicy.getByHostname(${JSON.stringify(identity.host)})`;
 
   return `(() => {
-  const policy = ${policy};
+  const policy = ${addonPolicyExpression(identity)};
   const extension = policy && policy.extension;
   if (!extension) return { outcome: "no-extension" };
   const { ExtensionParent } = ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs");
@@ -83,7 +76,7 @@ const OUTCOME_REASONS: Record<string, string> = {
   "no-window": "the browser has no window for the button to sit in",
 };
 
-async function replayToolbarClick(
+export async function replayToolbarClick(
   projectPath: string,
   browser: string,
   button: ToolbarButton,
@@ -92,17 +85,12 @@ async function replayToolbarClick(
   const resolved = await resolveRdpPort(projectPath, browser, { waitMs: 3_000, graceMs: 1_000 });
   if (!resolved) return "the session's ready contract records no debugger (RDP) port";
 
-  const addonId = geckoAddonId(projectPath, browser);
-  const base = addonId ? null : await resolveBridgeBaseUrl(projectPath, browser, timeout);
-  const host = base ? base.replace(/^[a-z-]+:\/\//, "").replace(/\/.*$/, "") : null;
-
-  if (!addonId && !host) {
-    return "the add-on could not be named to the browser: the built manifest sets no gecko id and its moz-extension:// host could not be read";
-  }
+  const identity = await geckoAddonIdentity(projectPath, browser, timeout);
+  if (!identity) return ADDON_UNNAMED;
 
   try {
     const outcome = await rdpEvaluateInParentProcess(resolved.port, {
-      expression: toolbarClickExpression(button, { addonId, host }),
+      expression: toolbarClickExpression(button, identity),
       timeoutMs: timeout ?? 10_000,
     });
 
@@ -126,10 +114,11 @@ export async function clickGeckoToolbarButton(
   engineFrame: Record<string, any>,
   declared: string[],
   timeout?: number,
+  knownFailure: string | null = null,
 ): Promise<string> {
   const said = String(engineFrame.error?.message ?? "no answer").replace(/\s+/g, " ").trim();
   const label = buttonLabel(button);
-  const why = await replayToolbarClick(projectPath, browser, button, timeout);
+  const why = knownFailure ?? (await replayToolbarClick(projectPath, browser, button, timeout));
 
   if (why === null) {
     const shortcut = button.key === "page_action" ? "_execute_page_action" : `_execute_${button.key}`;

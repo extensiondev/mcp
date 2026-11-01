@@ -15,6 +15,7 @@ import { CDP_PORT_MISSING_HINT, RDP_PORT_MISSING_HINT, resolveCdpPort, resolveRd
 import { listDocumentTargets, listPageTargets, matchTargetsByUrl, type PageTarget } from "../lib/cdp-targets";
 import { readExtensionPageTargets } from "../lib/cdp-extension-page";
 import { rdpListTabs, type RdpTab } from "../lib/rdp";
+import { captureGeckoSidebarPanel } from "../lib/gecko-sidebar-capture";
 import { geckoDocumentTab, geckoExtensionTabsByUrl, isExtensionUrl } from "../lib/extension-surfaces";
 import {
   AMBIGUOUS_TARGET_HINT,
@@ -343,13 +344,16 @@ async function onGecko(args: Args, browser: string, context: string, timeoutMs: 
     const doc = surfaceDocumentOrRefusal(args, browser, context);
     if ("refusal" in doc) return doc.refusal;
 
+    const panel = context === "sidebar" ? await captureGeckoSidebarPanel(args.projectPath, browser, resolved.port, args, timeoutMs) : null;
+    if (panel && "outcome" in panel) return captured(args, browser, context, panel.outcome, panel.url, "rdp", [panel.note]);
+
     tab =
       geckoDocumentTab(tabs, doc.document) ??
       refuse(
         "no-target",
         "E_NO_TARGET",
-        `No ${browser} tab shows ${doc.document}. The debugger protocol captures pages shown in tabs; a popup in its own window or a sidebar panel is not a tab.`,
-        `Open the page in a tab with extension_open (url: "${doc.document}"), then retry.`,
+        `No ${browser} tab shows ${doc.document}${panel ? `, and ${panel.closed}` : ""}. The debugger protocol captures pages shown in tabs${panel ? " and the open sidebar panel" : ""}; a popup in its own window is not a tab.`,
+        context === "sidebar" ? 'Open the real panel with extension_open surface: "sidebar", then retry.' : `Open the page in a tab with extension_open (url: "${doc.document}"), then retry.`,
       );
   } else if (args.url && /^moz-extension:\/\//.test(args.url)) {
     tab = choose(geckoExtensionTabsByUrl(tabs, args.url), args.url);

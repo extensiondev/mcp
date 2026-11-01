@@ -62,6 +62,8 @@ import { openDevToolsPanel } from "../lib/cdp-devtools";
 import { listPageTargets, matchTargetsByUrl } from "../lib/cdp-targets";
 import { sessionGuestIdentity, unpackedExtensionId } from "../lib/extension-identity";
 import { clickGeckoToolbarButton, declaredToolbarButton } from "../lib/gecko-toolbar-click";
+import { geckoSidebarPanel, sidebarOpenedAnswer } from "../lib/gecko-sidebar";
+import { clickToolbarWithUserInput, declaresSidebarAction, noteReplayWithoutGesture } from "../lib/gecko-action-gesture";
 import {
   extensionIdOf,
   extensionTargetsListed,
@@ -1110,7 +1112,7 @@ export const schema = {
         type: "string",
         enum: ["popup", "options", "sidebar", "devtools", "newtab", "history", "bookmarks", "action", "command"],
         description:
-          "Which surface to open or event to replay. popup, options or sidebar open a UI surface; newtab, history or bookmarks open the matching chrome_url_overrides page in a tab (always a tab, resolved by the server, never sent to the engine). On Chromium, when Chrome refuses the sidebar for lack of a user gesture, the server opens the real panel through a synthetic click on the extension's own page and says so in warnings; if that fails too it renders the sidebar document as a tab. devtools opens the browser's DevTools on a tab (the one `url` matches, else the first web page) and shows the extension's panel there, picked by `panel` title when there are several: Chromium only, over CDP Target.openDevTools, headed or headless; the result names the panel document's url, which extension_eval reads with context 'page' and that url (the panel is no tab, so the tab-based readers do not reach it). action triggers the toolbar action, which opens its popup or replays chrome.action.onClicked when there is none; on Firefox a popup-less browser_action or page_action is clicked through the browser's own toolbar action over the debugger protocol. command with `name` replays a chrome.commands.onCommand shortcut; the engine's own frame is returned as is.",
+          "Which surface to open or event to replay. popup, options or sidebar open a UI surface; newtab, history or bookmarks open the matching chrome_url_overrides page in a tab (always a tab, resolved by the server, never sent to the engine). On Chromium, when Chrome refuses the sidebar for lack of a user gesture, the server opens the real panel through a synthetic click on the extension's own page and says so in warnings; if that fails too it renders the sidebar document as a tab. devtools opens the browser's DevTools on a tab (the one `url` matches, else the first web page) and shows the extension's panel there, picked by `panel` title when there are several: Chromium only, over CDP Target.openDevTools, headed or headless; the result names the panel document's url, which extension_eval reads with context 'page' and that url (the panel is no tab, so the tab-based readers do not reach it). action triggers the toolbar action, which opens its popup or replays chrome.action.onClicked when there is none; on Firefox a popup-less browser_action or page_action is clicked through the browser's own toolbar action over the debugger protocol, first and with user input when the build declares a sidebar_action (the engine's replay carries none, so sidebarAction.open or toggle would do nothing). On Firefox, sidebar opens the real panel through the browser's sidebar controller over the debugger protocol. command with `name` replays a chrome.commands.onCommand shortcut; the engine's own frame is returned as is.",
       },
       name: {
         type: "string",
@@ -1369,6 +1371,7 @@ export async function handler(
 
   if (
     ["popup", "options", "sidebar"].includes(args.surface) &&
+    !(args.surface === "sidebar" && isGeckoFamily(browser)) &&
     !sessionIsHeadless(args.projectPath, browser) &&
     (await browserRunsHeadless(args.projectPath, browser))
   ) {
@@ -1388,6 +1391,17 @@ export async function handler(
       }
     } catch {
     }
+  }
+
+  const geckoSidebarAction = args.surface === "action" && isGeckoFamily(browser) && declaresSidebarAction(args.projectPath, browser);
+  const toolbarButton = geckoSidebarAction ? declaredToolbarButton(args.projectPath, browser) : null;
+  let clickFailure: string | null = null;
+
+  if (toolbarButton && !toolbarButton.popup) {
+    const clicked = await clickToolbarWithUserInput(schema.name, args.projectPath, browser, toolbarButton, args.timeout);
+    if ("answer" in clicked) return clicked.answer;
+
+    clickFailure = clicked.failed;
   }
 
   const cli = ["open", args.surface, args.projectPath];
@@ -1427,6 +1441,7 @@ export async function handler(
           refusal.frame,
           declaredSurfaces(args.projectPath, browser) ?? [],
           args.timeout,
+          clickFailure,
         );
       }
     }
@@ -1456,6 +1471,8 @@ export async function handler(
 
     return actFrameJson(refusal.frame);
   }
+
+  if (args.surface === "action" && isGeckoFamily(browser)) return noteReplayWithoutGesture(raw, geckoSidebarAction, clickFailure);
 
   if (!AS_TAB_SURFACES.includes(args.surface)) return raw;
 
@@ -1875,6 +1892,10 @@ async function openGeckoSidebar(
     });
   }
 
+  const opened = await geckoSidebarPanel(projectPath, browser, { open: true, timeout });
+  if ("panel" in opened && opened.panel.open) return sidebarOpenedAnswer(schema.name, doc, opened.panel);
+
+  const controllerFailure = `opening it through the browser's sidebar controller over the debugger protocol did not work either (${"reason" in opened ? opened.reason : "the panel still read closed afterwards"})`;
   const fallback = await openSurfaceAsTab(projectPath, browser, "sidebar");
 
   try {
@@ -1884,8 +1905,8 @@ async function openGeckoSidebar(
       addWarning(
         parsedFallback,
         probeFailure
-          ? `${GECKO_SIDEBAR_GESTURE}, and whether the panel is open could not be read (${probeFailure}), so the sidebar document was rendered as a tab instead. The DOM is the same document the panel would show; the panel hosting stays unverified. A person opens the real panel from the toolbar button or View > Sidebar.`
-          : `${GECKO_SIDEBAR_GESTURE}, and the panel is not open now, so the sidebar document was rendered as a tab instead. The DOM is the same document the panel would show; the panel hosting stays unverified. A person opens the real panel from the toolbar button or View > Sidebar.`,
+          ? `${GECKO_SIDEBAR_GESTURE}, whether the panel is open could not be read (${probeFailure}), and ${controllerFailure}, so the sidebar document was rendered as a tab instead. The DOM is the same document the panel would show; the panel hosting stays unverified. A person opens the real panel from the toolbar button or View > Sidebar.`
+          : `${GECKO_SIDEBAR_GESTURE}, the panel is not open now, and ${controllerFailure}, so the sidebar document was rendered as a tab instead. The DOM is the same document the panel would show; the panel hosting stays unverified. A person opens the real panel from the toolbar button or View > Sidebar.`,
       );
 
       return actFrameJson(parsedFallback);
