@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Ledger 348. On a Safari run whose WebDriver window never opened, an unloaded background's refusal no longer sends `extension_eval` context page and `extension_open` url to each other: the hint names the engine's reason, the hand wake (the toolbar button, or a matching page opened in Safari) and `extension_dev` with `replace: true`, and every ready answer carries `webdriver` (`connected`, `none` or `pending`) with a `webdriverNote` up front.
 - Ledger 341. An approval message says a consequence sentence the platform's description already ends with once: the gate drops from its reason any sentence the description already holds, so a `configure-store` Chrome public approval no longer repeats "Chrome public sends the next upload to Chrome's review..." twice in a row.
 - Ledger 342. An `E_PROJECT_AMBIGUOUS` refusal never links a project's console page: `value.trackUrl` and the hint name the workspace's project list when every stored login shares one workspace, and no console link otherwise, instead of the newest login's builds page, the project the refusal declined to pick.
 - Ledger 343. `extension_builds` list never answers a finished row's one recorded stamp as its `startedAt`: a finished row with no start and end answers `timestamp` beside the duration, as the description promises, so a build that read `startedAt` 23:12:06Z while building no longer reads `startedAt` 23:16:00Z (the registry record's stamp) once done.

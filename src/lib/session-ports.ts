@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { WEBKIT_FAMILY } from "./browser-family";
 import { PRODUCTION_DEBUG_PORT_FLOOR, productionDebugPortOutlook } from "./production-launch";
 
 import type { ReadyContract } from "./types";
@@ -16,6 +17,8 @@ export interface SessionPorts {
   cdpPort: number | null;
   rdpPort?: number;
   debugPortNote?: string;
+  webdriver?: "connected" | "none" | "pending";
+  webdriverNote?: string;
 }
 
 function portOrNull(value: unknown): number | null {
@@ -35,6 +38,28 @@ function productionDebugPortNote(contract: ReadyContract): string {
   }
 }
 
+function webdriverState(contract: ReadyContract): Pick<SessionPorts, "webdriver" | "webdriverNote"> {
+  if (!WEBKIT_FAMILY.has(contract.browser)) return {};
+
+  if (portOrNull(contract.webdriverPort) !== null && typeof contract.webdriverSessionId === "string" && contract.webdriverSessionId) {
+    return { webdriver: "connected" };
+  }
+
+  const reason = String(contract.webdriverUnavailableReason ?? "").trim();
+
+  if (reason) {
+    return {
+      webdriver: "none",
+      webdriverNote: `This run has no WebDriver window: ${reason}. extension_open url, extension_eval context "page" and extension_screenshot drive that window, so they refuse on this run, and an unloaded background can be woken only by hand (its toolbar button, or a page its content script matches opened in Safari). extension_dev with replace: true asks for a new window.`,
+    };
+  }
+
+  return {
+    webdriver: "pending",
+    webdriverNote: "ready.json names no safaridriver session yet: the Safari launcher stamps it, or why it opened none, once its WebDriver step ends, and the session request alone waits up to 30 s. extension_wait reads it again.",
+  };
+}
+
 export function sessionPorts(contract: ReadyContract): SessionPorts {
   const cdpPort = portOrNull(contract.cdpPort);
   const rdpPort = portOrNull(contract.rdpPort);
@@ -52,5 +77,6 @@ export function sessionPorts(contract: ReadyContract): SessionPorts {
             : "The session opened no browser debug port: the contract carries neither cdpPort (Chromium) nor rdpPort (Gecko), so nothing can connect a debugger to this browser; a Chromium dev session normally stamps cdpPort once the browser binds it.",
         }
       : {}),
+    ...webdriverState(contract),
   };
 }

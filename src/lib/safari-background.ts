@@ -15,6 +15,7 @@ import { declaredContentScripts, readBuiltManifest } from "./project-manifest";
 import { readyContractPath } from "./session-paths";
 import {
   readWebDriverSession,
+  readWebDriverUnavailableReason,
   WebDriverClient,
   webdriverSessionEnded,
 } from "./webdriver";
@@ -191,6 +192,14 @@ export function safariBackgroundUnavailableMessage(
   return `No executor connected: the extension's background page is unloaded${when}. ${SAFARI_BACKGROUND_UNLOAD}. ${tried}`;
 }
 
+export function safariNoWindowWakeHint(reason: string | null): string {
+  const why = reason
+    ? `This run has no WebDriver window (${reason})`
+    : "ready.json names no safaridriver session for this run";
+
+  return `${why}, so no tool can send the automation window anywhere: extension_open url and extension_eval context "page" drive that same window and refuse the same way. Wake the extension by hand and read within 30 s of it: click its toolbar button, or open a page its content script matches in Safari yourself; extension_wait answers ready once it connects. Restart with extension_dev and replace: true to get a WebDriver window back, since the session asks for one only at launch.`;
+}
+
 export function safariBackgroundWakeHint(): string {
   return 'Wake the extension with an event it listens to and read within 30 s of it: extension_open url with a page its content script matches (the automation window navigates there and the content script\'s first message brings the background back), a page you open in Safari yourself, or a click on its toolbar button. When it connects, ready.json stamps executorAttachedAt again and extension_wait answers ready. extension_eval context "page" with a url needs no background on Safari: it runs over the automation window\'s WebDriver session.';
 }
@@ -231,7 +240,9 @@ export async function answerAfterSafariWake(
 
   answer.error = { ...answer.error, message: safariBackgroundUnavailableMessage(readContract(projectPath, browser), wake) };
   answer.value = { ...value, browser, woke: wake.woke, wake: wake.how };
-  answer.hint = safariBackgroundWakeHint();
+  answer.hint = readWebDriverSession(projectPath, browser)
+    ? safariBackgroundWakeHint()
+    : safariNoWindowWakeHint(readWebDriverUnavailableReason(projectPath, browser));
 
   return answer;
 }
