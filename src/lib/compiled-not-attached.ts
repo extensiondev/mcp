@@ -12,8 +12,8 @@ import { envelope, sessionCommandSinceEnvelopeOwnsCommand } from "./envelope";
 import { verifyGuestLoaded } from "./guest-load-oracle";
 import { pidState } from "./process-identity";
 import { findSessionInfo } from "./process-manager";
-import { isSafariTarget, notAttachedHint } from "./safari-dev-options";
-import { buildingAppAnswer, safariAppBuilding } from "./safari-app-stage";
+import { isSafariTarget } from "./safari-dev-options";
+import { buildingAppAnswer, safariAppBuilding, safariNotAttachedHint } from "./safari-app-stage";
 import { safariSigningFrame } from "./safari-signing";
 import { browserProfileRootDir } from "./session-paths";
 import { sessionPorts } from "./session-ports";
@@ -310,7 +310,8 @@ export async function compiledNotAttachedAnswer(
     hint: [
       observed.failedLegSays && wayOut
         ? `${observed.failedLegSays} ${wayOut}`
-        : notAttachedHint(
+        : safariNotAttachedHint(
+            ctx.projectPath,
             ctx.browser,
             findSessionInfo(ctx.projectPath, ctx.browser)?.enableExtension === true,
           ),

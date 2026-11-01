@@ -13,6 +13,7 @@ import { WEBKIT_FAMILY } from "./browser-family";
 import { matchPatternCovers } from "./match-patterns";
 import { declaredContentScripts, readBuiltManifest } from "./project-manifest";
 import { readyContractPath } from "./session-paths";
+import { requestSafariWebDriverSession, SAFARI_SESSION_REQUEST_WAIT_MS } from "./safari-webdriver-request";
 import {
   readWebDriverSession,
   readWebDriverUnavailableReason,
@@ -96,36 +97,56 @@ function contentScriptPatterns(projectPath: string, browser: string): string[] {
   return built ? declaredContentScripts(built.manifest).flatMap((script) => script.matches) : [];
 }
 
+async function liveSession(
+  projectPath: string,
+  browser: string,
+  sessionWaitMs: number,
+): Promise<{ client: WebDriverClient; current: string | null; renewed: string | null } | { client: null; how: string }> {
+  let info = readWebDriverSession(projectPath, browser);
+  let renewed: string | null = null;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (info) {
+      const client = new WebDriverClient(info);
+
+      try {
+        return { client, current: await client.currentUrl(), renewed };
+      } catch (error) {
+        if (!webdriverSessionEnded(error)) return { client, current: null, renewed };
+      }
+    }
+
+    if (attempt === 1) break;
+
+    const gone = info
+      ? `the dev session's WebDriver session ${info.sessionId} has ended`
+      : "ready.json records no safaridriver session for this run";
+    const asked = await requestSafariWebDriverSession(projectPath, browser, info, sessionWaitMs);
+
+    if (!asked.info) return { client: null, how: `${gone}, so this server has no window to send the extension an event through; it ${asked.how}` };
+
+    info = asked.info;
+    renewed = asked.how;
+  }
+
+  return { client: null, how: "the new WebDriver session ended as soon as it opened, so the automation window cannot be driven" };
+}
+
 export async function wakeSafariBackground(
   projectPath: string,
   browser: string,
   waitMs: number,
+  sessionWaitMs: number = SAFARI_SESSION_REQUEST_WAIT_MS,
 ): Promise<SafariWakeOutcome> {
-  const info = readWebDriverSession(projectPath, browser);
-
-  if (!info) {
-    return {
-      woke: false,
-      attempted: false,
-      how: "ready.json records no safaridriver session for this run, so this server has no window to send the extension an event through",
-      waitedMs: 0,
-    };
-  }
-
   if (executorAttached(readContract(projectPath, browser))) {
     return { woke: true, attempted: false, how: "the executor attached again on its own before this server sent an event", waitedMs: 0 };
   }
 
-  const client = new WebDriverClient(info);
-  let current: string | null = null;
+  const session = await liveSession(projectPath, browser, sessionWaitMs);
 
-  try {
-    current = await client.currentUrl();
-  } catch (error) {
-    if (webdriverSessionEnded(error)) {
-      return { woke: false, attempted: false, how: `the dev session's WebDriver session ${info.sessionId} has ended, so the automation window cannot be driven`, waitedMs: 0 };
-    }
-  }
+  if (!session.client) return { woke: false, attempted: false, how: session.how, waitedMs: 0 };
+
+  const { client, current } = session;
 
   const plan = wakePlan(contentScriptPatterns(projectPath, browser), current);
 
@@ -138,9 +159,9 @@ export async function wakeSafariBackground(
     };
   }
 
-  const did = plan.action === "refresh"
+  const did = (session.renewed ? `${session.renewed}, then ` : "") + (plan.action === "refresh"
     ? `reloaded ${plan.url} in the automation window so its content script runs again`
-    : `sent the automation window to ${plan.url}, a page its content script matches`;
+    : `sent the automation window to ${plan.url}, a page its content script matches`);
 
   try {
     if (plan.action === "refresh") await client.refresh();

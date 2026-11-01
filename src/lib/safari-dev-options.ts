@@ -132,9 +132,24 @@ export function safariDevOptionRefusal(
 const MANUAL_STEPS =
   "the one-time setup in a regular Safari window (a trip to Settings from the automation window ends the WebDriver session): Safari > Settings > Developer > Allow unsigned extensions when the app is ad-hoc signed, Safari > Settings > Extensions > turn the extension on, Safari > Settings > Websites > the extension > For other websites > Allow";
 
-export function notAttachedHint(browser: string, enableExtension: boolean): string {
+export function notAttachedHint(
+  browser: string,
+  enableExtension: boolean,
+  engineSays: { lines: string[]; accessibility: boolean } = { lines: [], accessibility: false },
+): string {
   if (!isSafariTarget(browser)) {
     return "This is usually transient: call extension_wait again. If it persists, stop and restart the session with extension_dev (a restart reliably reattaches); extension_doctor reports the executor leg.";
+  }
+
+  if (enableExtension && engineSays.lines.length > 0) {
+    const grant = engineSays.accessibility
+      ? "Grant Accessibility to the terminal app that runs this server (System Settings > Privacy & Security > Accessibility), then"
+      : "Fix what it names, then";
+
+    return (
+      `The extension is not enabled in Safari yet. The engine logged why: ${engineSays.lines.join(" ")} ` +
+      `${grant} call extension_dev again with replace: true, or do ${MANUAL_STEPS}; then call extension_wait again. This is not a transient attach failure.`
+    );
   }
 
   if (enableExtension) {

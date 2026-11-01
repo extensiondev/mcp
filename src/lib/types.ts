@@ -88,6 +88,7 @@ export interface ReadyContract {
   webdriverPort?: number;
   webdriverSessionId?: string;
   webdriverUnavailableReason?: string;
+  webdriverRequestPath?: string;
   pid?: number;
   ts?: string;
   compiledAt?: string | null;

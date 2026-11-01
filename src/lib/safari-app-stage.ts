@@ -13,6 +13,7 @@ import { envelope } from "./envelope";
 import { pidState } from "./process-identity";
 import { findSessionInfo } from "./process-manager";
 import { isSafariTarget, notAttachedHint } from "./safari-dev-options";
+import { parseSafariEngineSays } from "./safari-enable-log";
 
 export type SafariAppStage = "converting" | "building" | "built" | "failed";
 
@@ -148,8 +149,22 @@ export function buildingAppAnswer(
   });
 }
 
+function readSessionLog(projectPath: string, browser: string): string {
+  const session = findSessionInfo(projectPath, browser);
+  if (!session?.logPath) return "";
+
+  try {
+    return fs.readFileSync(session.logPath, "utf8");
+  } catch {
+    return "";
+  }
+}
+
 export function safariNotAttachedHint(projectPath: string, browser: string, enableExtension: boolean): string {
   const building = safariAppBuilding(projectPath, browser);
+  if (building) return buildingAppSentence(building);
 
-  return building ? buildingAppSentence(building) : notAttachedHint(browser, enableExtension);
+  const engineSays = isSafariTarget(browser) && enableExtension ? parseSafariEngineSays(readSessionLog(projectPath, browser)) : undefined;
+
+  return notAttachedHint(browser, enableExtension, engineSays);
 }
