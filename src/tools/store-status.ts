@@ -261,6 +261,7 @@ function str(value: unknown): string | undefined {
 
 function submissionView(row: Record<string, unknown>): SubmissionView {
   const view: SubmissionView = {};
+  const id = str(row.id) || str(row.submissionId);
   const storeVersion = storeVersionOf(row.storeVersion);
   const version = storeVersion?.packaged || storeVersion?.displayed || str(row.version);
   const status = str(row.status);
@@ -282,6 +283,7 @@ function submissionView(row: Record<string, unknown>): SubmissionView {
   if (mode) Object.assign(view, mode);
 
   Object.assign(view, releaseChangeOfRow(publish));
+  if (id) view.id = id;
   if (version) view.version = version;
   if (statusRead) view.statusRead = statusRead;
   if (status) view.status = signed ? AMO_SIGNED_STATUS : status;

@@ -251,7 +251,7 @@ describe("extension_submit status names the platform's record and its source onc
 
     const out = JSON.parse(await submit({ action: "status", browsers: ["safari"], project: "cezaraugusto/rebeccat", api: API }));
 
-    expect(out.value.stores[0]).toMatchObject({ submissionId: null, status: "uploaded", state: null, source: null, nextStep: null });
+    expect(out.value.stores[0]).toMatchObject({ submissionId: "sub-20261030180000", status: "uploaded", state: null, source: null, nextStep: null });
     expect(out.hint).toContain("(no store read behind it)");
   });
 
