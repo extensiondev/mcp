@@ -91,7 +91,6 @@ import {
   fallbackConnectUrl,
   itemLinkUrls,
   nextStep,
-  reviewSentenceFor,
   storeSettingsUrl,
   uploadedStepFailedStep,
   uploadStopsAtDraft,
@@ -100,6 +99,7 @@ import {
   withoutSecretNames,
   type ModeIds,
 } from "../lib/store-connection";
+import { reviewPromiseFromApproval } from "../lib/review-promise";
 import { failureLineOf, uploadRefused, uploadTaken } from "../lib/store-upload-words";
 import {
   connectionStep,
@@ -724,7 +724,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
   };
 
   const asked = (out: string) => {
-    const sentence = reviewSentenceFor(browsers, modes);
+    const sentence = reviewPromiseFromApproval(out, browsers, modes);
 
     return withApproveStep(sentence ? withReviewPromise(out, sentence) : out, sentence);
   };

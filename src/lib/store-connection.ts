@@ -123,16 +123,6 @@ export function broadModeSentence(store: string, modeId: string): string {
   return `Under ${name}'s saved mode "${modeId}" this upload goes on to review after it lands; to stop at a draft instead, set that mode to "${DRAFT_MODE_LABELS[store] ?? "draft"}" in the console store settings before approving.`;
 }
 
-export function reviewSentenceFor(stores: string[], modes: ModeIds = {}): string {
-  const draftStores = stores.filter((store) => DRAFT_STORES.has(store));
-  if (draftStores.length === 0) return "";
-
-  const broad = draftStores.filter((store) => !uploadStopsAtDraft(store, modes[store]));
-  if (broad.length === 0) return REVIEW_PROMISE;
-
-  return broad.map((store) => broadModeSentence(store, String(modes[store]))).join(" ");
-}
-
 export function submitStep(stores: string[], modes: ModeIds = {}): NextStep {
   const drafts = stores.length > 0 && stores.every((store) => uploadStopsAtDraft(store, modes[store]));
   const broad = stores.filter((store) => DRAFT_STORES.has(store) && !uploadStopsAtDraft(store, modes[store]));
