@@ -123,7 +123,7 @@ describe("extension_submit publish for Safari with the TestFlight build named", 
   });
 
   it("names the withdrawal that clears a version Apple holds in review", () => {
-    expect(shipRefusalHint("SAFARI_VERSION_IN_REVIEW", undefined, "safari")).toContain('extension_submit {action: "cancel", store: "safari", submissionId: value.heldSubmissionId}');
+    expect(shipRefusalHint("SAFARI_VERSION_IN_REVIEW", undefined, "safari")).toContain('extension_submit_check {action: "cancel", store: "safari", submissionId: value.heldSubmissionId}');
   });
 });
 

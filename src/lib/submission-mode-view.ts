@@ -15,7 +15,7 @@ type Row = Record<string, unknown>;
 const DRAFT_ONLY_STORES = new Set(["chrome", "edge"]);
 
 export const SAFARI_DRAFT_FROM_HERE =
-  "An upload from here stops at the TestFlight draft under this mode, and sending it to App Review is a publish act with its own approval. To let the submit's one version approval also send the build to App Review, save the review mode: extension_submit {action: \"configure-store\", store: \"safari\", storeSettings: {submissionMode: \"review\"}}, which a workspace owner approves once.";
+  "An upload from here stops at the TestFlight draft under this mode, and sending it to App Review is a publish act with its own approval. To let the submit's one version approval also send the build to App Review, save the review mode: extension_submit_check {action: \"configure-store\", store: \"safari\", storeSettings: {submissionMode: \"review\"}} asks for the approval a workspace owner gives once, and extension_submit with the same arguments and that approvalId saves it.";
 
 export const SAFARI_REVIEW_FROM_HERE =
   "An upload from here goes on to App Review under this mode: the submit's version approval also covers the publish act that sends the TestFlight build to Apple.";

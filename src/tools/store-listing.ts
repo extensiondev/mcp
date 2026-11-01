@@ -32,7 +32,10 @@ import {
 import {
   actionFingerprint,
   requestApprovalAfterRefusal,
+  type ApprovalScope,
 } from "../lib/approval-gate";
+import { askingOnly } from "../lib/ask-only";
+import { checkRefused, plainListingAsk } from "../lib/submit-action-safety";
 import {
   VERSION_ACTION,
   linesSentence,
@@ -645,6 +648,50 @@ const LINE_REFUSALS = new Set([
   "APPROVAL_SCOPE_MISMATCH",
 ]);
 
+async function askListing(api: ProjectApi, args: ListingArgs, store: ListingStore, patch: ListingPatch, scope: ApprovalScope): Promise<Row> {
+  const expected = derivedListingFields(store, patch.listing);
+  const derivedAct =
+    approvalVerdict(STORE_LISTING_ACTION, { derived: expected.length > 0 }) === "approval";
+  const asking = JSON.parse(
+    await requestApprovalAfterRefusal({
+      command: COMMAND,
+      action: STORE_LISTING_ACTION,
+      scope,
+      description: `Fill the ${store} store listing from ${STORE_MD_FILENAME} and the built icons.`,
+      token: api.token,
+      api: args.api,
+      refusedStatus: `${ACT}-refused`,
+      body: approvalBody(store, patch),
+      reason: derivedAct
+        ? `The listing carries a value the platform derives rather than copies from ${STORE_MD_FILENAME} (${expected.map((field) => `the App Store ${field.field} from the ${field.line} line`).join(", ")}), and the platform asks a workspace owner to approve that text before it is written; the approval page shows it marked derived.`
+        : "A listing sync is a plain act under the owner's own token, and the platform asked a workspace owner to approve this exact change before it is written; the approval page shows it as the platform computed it.",
+      stateRead: 'extension_submit_check (action: "preflight")',
+    }),
+  ) as Row;
+  const value = isRow(asking.value) ? asking.value : {};
+  const error = isRow(asking.error) ? asking.error : {};
+  const derived = derivedMarks(value.changes);
+
+  return text(value.approvalId)
+    ? {
+        store,
+        status: "approval-required",
+        approvalId: text(value.approvalId),
+        approvalUrl: text(value.approvalUrl),
+        ...(text(value.expiresAt)
+          ? { expiresAt: text(value.expiresAt) }
+          : {}),
+        changes: Array.isArray(value.changes) ? value.changes : [],
+        ...(derived.length ? { derived } : {}),
+      }
+    : {
+        store,
+        status: "refused",
+        code: text(error.platformCode) || text(error.name),
+        message: text(error.message),
+      };
+}
+
 async function syncOne(
   api: ProjectApi,
   args: ListingArgs,
@@ -654,6 +701,14 @@ async function syncOne(
   versioned = false,
 ): Promise<Row | { out: string }> {
   const approvalId = text(args.approvalId);
+
+  if (!approvalId && askingOnly()) {
+    if (!derivedListingFields(store, patch.listing).length) return { out: checkRefused(ACT, plainListingAsk(store)) };
+    if (versioned) return { store, status: "approval-wanted" };
+
+    return askListing(api, args, store, patch, { store, listingDigest: listingDigest(patch) });
+  }
+
   const { sent, resend } = await sendListing(api, store, {
     ...writeBody(patch),
     ...(approvalId ? { approvalId } : {}),
@@ -741,47 +796,7 @@ async function syncOne(
 
     if (versioned) return { store, status: "approval-wanted" };
 
-    const expected = derivedListingFields(store, patch.listing);
-    const derivedAct =
-      approvalVerdict(STORE_LISTING_ACTION, { derived: expected.length > 0 }) === "approval";
-    const asking = JSON.parse(
-      await requestApprovalAfterRefusal({
-        command: COMMAND,
-        action: STORE_LISTING_ACTION,
-        scope,
-        description: `Fill the ${store} store listing from ${STORE_MD_FILENAME} and the built icons.`,
-        token: api.token,
-        api: args.api,
-        refusedStatus: `${ACT}-refused`,
-        body: approvalBody(store, patch),
-        reason: derivedAct
-          ? `The listing carries a value the platform derives rather than copies from ${STORE_MD_FILENAME} (${expected.map((field) => `the App Store ${field.field} from the ${field.line} line`).join(", ")}), and the platform asks a workspace owner to approve that text before it is written; the approval page shows it marked derived.`
-          : "A listing sync is a plain act under the owner's own token, and the platform asked a workspace owner to approve this exact change before it is written; the approval page shows it as the platform computed it.",
-        stateRead: 'extension_submit_check (action: "preflight")',
-      }),
-    ) as Row;
-    const value = isRow(asking.value) ? asking.value : {};
-    const error = isRow(asking.error) ? asking.error : {};
-    const derived = derivedMarks(value.changes);
-
-    return text(value.approvalId)
-      ? {
-          store,
-          status: "approval-required",
-          approvalId: text(value.approvalId),
-          approvalUrl: text(value.approvalUrl),
-          ...(text(value.expiresAt)
-            ? { expiresAt: text(value.expiresAt) }
-            : {}),
-          changes: Array.isArray(value.changes) ? value.changes : [],
-          ...(derived.length ? { derived } : {}),
-        }
-      : {
-          store,
-          status: "refused",
-          code: text(error.platformCode) || text(error.name),
-          message: text(error.message),
-        };
+    return askListing(api, args, store, patch, scope);
   }
 
   const lines = readLines(isRow(sent.body) ? sent.body.lines : null);

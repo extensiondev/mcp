@@ -63,8 +63,8 @@ describe("extension_submit_check takes the calls that only read or ask, under a 
   it("refuses a store act, the call spending an approval and a server with its gate off, before anything leaves the machine", async () => {
     world.login();
     const refusedCalls = [
-      { action: "publish", browsers: ["chrome"], ...api },
-      { action: "sync-listing", browsers: ["safari"], projectPath: "/tmp/x", ...api },
+      { action: "publish", browsers: ["chrome"], approvalId: "apr_world", ...api },
+      { action: "sync-listing", browsers: ["safari"], projectPath: "/tmp/x", approvalId: "apr_world", ...api },
       { action: "configure-store", store: "chrome", storeSettings: { enabled: true }, ...api },
       { browsers: ["chrome"], buildSha: "603fc8a", dryRun: false, approvalId: "apr_world", ...api },
     ];
@@ -85,7 +85,7 @@ describe("extension_submit_check takes the calls that only read or ask, under a 
   });
 
   it("refuses the same calls when its handler is reached directly", async () => {
-    const out = JSON.parse(await checkHandler({ action: "cancel", ...api }));
+    const out = JSON.parse(await checkHandler({ action: "cancel", approvalId: "apr_world", ...api }));
 
     expect(out.status).toBe("check-refused");
     expect(sent()).toEqual([]);

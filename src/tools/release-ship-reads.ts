@@ -63,7 +63,7 @@ export async function readRollout(scope: Scope): Promise<string> {
       : rollout.stagedPublish !== true
         ? "Chrome publishes this project to everyone at once; there is no staged rollout to raise."
         : rollout.canRaise === true
-          ? `Chrome's staged rollout serves ${percentage}% of users; extension_submit (action: "rollout", deployPercentage) raises it, with an owner's approval.`
+          ? `Chrome's staged rollout serves ${percentage}% of users; extension_submit_check (action: "rollout", deployPercentage) asks for the owner's approval to raise it, and extension_submit with that approvalId raises it.`
           : `Chrome's staged rollout serves ${percentage === null ? "an unknown share" : `${percentage}%`} of users and cannot be raised from here.`,
   });
 }

@@ -12,6 +12,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { bindApprovalLogin } from "./approval-login";
+import { runAskingOnly } from "./ask-only";
 import { openApprovalOnce } from "./approval-open";
 import { answerOnceDecided } from "./approval-wait";
 import { bindApprovalProject } from "./approval-record";
@@ -248,7 +249,7 @@ export function createToolSurface(setup: ToolHandlerOptions): {
     if (actsAs) {
       const refusal = actsAs.refuse(aliasedArgs);
 
-      return refusal ? refused(refusal) : dispatch({ name: actsAs.tool, arguments: aliasedArgs });
+      return refusal ? refused(refusal) : runAskingOnly(() => dispatch({ name: actsAs.tool, arguments: aliasedArgs }));
     }
 
     const untrusted = TOOL_POLICY[name]?.untrusted === true;

@@ -8,6 +8,7 @@
 
 import { createHash } from "node:crypto";
 
+import { ASK_ONLY_CODE, askOnlyBlocks } from "./ask-only";
 import { resolveCredential, type CredentialRef } from "./credential-source";
 import { envelope, type ErrorCode } from "./envelope";
 import { resolveApiBase, safeApiBase } from "./login-flow";
@@ -311,6 +312,11 @@ export async function platformApiGet<T = unknown>(
 
   const qs = search.toString();
   const url = `${api.base}${path}${qs ? `?${qs}` : ""}`;
+
+  if (send && askOnlyBlocks(send.method, send.body)) {
+    return { ok: false, status: 0, code: ASK_ONLY_CODE, message: `extension_submit_check only reads and asks for approvals, so the ${send.method} to ${url.split("?")[0]} was not sent. Nothing was executed.`, held: false, body: null };
+  }
+
   const { res, body, error } = await getJson(url, api.token, api.command, send);
 
   if (!res) {

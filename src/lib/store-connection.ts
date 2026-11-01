@@ -203,7 +203,7 @@ export function doneStep(stores: string[], itemUrl: string, taken: string[] = []
   return nextStep(
     "done",
     drafts
-      ? `${uploaded} To send the next upload on to review, set the store's submission mode with extension_submit action:"configure-store" (one owner approval) or in the project's store settings on extension.dev.`
+      ? `${uploaded} To send the next upload on to review, set the store's submission mode: extension_submit_check action:"configure-store" asks for the one owner approval and extension_submit with that approvalId saves it; or save it in the project's store settings on extension.dev.`
       : `The platform recorded the submission for ${storeNames(stores)}; each store's own review comes after this.`,
     drafts ? undefined : itemUrl || undefined,
   );

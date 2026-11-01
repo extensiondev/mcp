@@ -8,6 +8,7 @@
 
 import { actionFingerprint, evaluateApproval, requestApprovalAfterRefusal, type ApprovalGateInput } from "./approval-gate";
 import { approvalRoundTrip } from "./approval-outcome";
+import { askingOnly } from "./ask-only";
 import { verdictOfAction, type ApprovalVerdict } from "./approval-policy";
 import { projectApiSend, type ProjectApi, type ProjectApiRefusal } from "./project-api";
 import { isRow, text } from "./ship-act";
@@ -53,6 +54,10 @@ export async function approvedSettingsWrite(write: SettingsWrite): Promise<Setti
   if (approvalId) {
     const gate = await evaluateApproval({ ...write.gate, approvalId, enabled: true });
     if (gate.blocked) return { ok: false, out: gate.envelope, sent: refusedByGate() };
+  }
+
+  if (!approvalId && askingOnly() && settingsWriteVerdict(write) === "approval") {
+    return { ok: false, out: await requestApprovalAfterRefusal(write.gate), sent: refusedByGate() };
   }
 
   const sent = await projectApiSend<Row>(write.api, write.method ?? "PUT", write.route, { ...write.body, ...(approvalId ? { approvalId } : {}) });
