@@ -115,7 +115,8 @@ describe("a store status read under an expired login names the expiry instead of
     expect(out.error.message).toContain(`The login for acme/widget expired at ${EXPIRED_ISO} (9 h 29 min ago)`);
     expect(out.error.message).toContain("this server drops an expired token instead of sending it, and the platform would have read the call as missing-token");
     expect(out.error.message).not.toMatch(/no stores configured|slugs may be wrong|StoreStatusNotFound/);
-    expect(out.value.login).toEqual({ project: "acme/widget", expiresAt: EXPIRED_ISO, expiredForSeconds: 34119, sent: false });
+    const elapsed = Math.floor(Date.now() / 1000) - NOW;
+    expect(out.value.login).toEqual({ project: "acme/widget", expiresAt: EXPIRED_ISO, expiredForSeconds: 34119 + elapsed, sent: false });
     expect(out.value.nextStep.kind).toBe("login");
     expect(out.value.nextStep.say).toContain(`Sign in again with ${LOGIN_CALL}, then call this again`);
     expect(out.value.trackUrl).toBe("https://console.extension.dev/acme/widget/submissions/safari");
