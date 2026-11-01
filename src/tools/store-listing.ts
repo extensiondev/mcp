@@ -59,6 +59,7 @@ import {
 } from "../lib/store-listing-digest";
 import { pushAnswer, pushSentence, readPushState, sendListing } from "../lib/store-listing-push";
 import { firefoxCategoryCover } from "../lib/firefox-category-cover";
+import { iconPaddingView } from "../lib/chrome-icon-padding";
 import { STORE_MD_FILENAME } from "../lib/store-md";
 import { reconcileChromeCheck } from "../lib/store-md-chrome-reconcile";
 import { requirementsView, type RequirementsView } from "../lib/store-requirements";
@@ -975,6 +976,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
   const readProblems: string[] = [];
   const said: string[] = [];
   const categoryRows: StoreCategoryRow[] = [];
+  const iconAdvice: string[] = [];
 
   let plain = false;
 
@@ -982,6 +984,9 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     if (store === "safari") await adoptAppRecordName(api, local);
 
     await adoptBuildIcon(builds, store, local);
+
+    const padding = iconPaddingView(store, local.patch.icons);
+    if (padding.iconPadding) iconAdvice.push(padding.iconPadding.say);
 
     const notFound = linesNotFound(local);
     const unread = notFound.length ? { unread: notFound } : {};
@@ -1061,7 +1066,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     };
   }
 
-  said.push(...categoriesSentences(categoryRows));
+  said.push(...categoriesSentences(categoryRows), ...iconAdvice);
 
   const wanted = (Object.values(stores) as Row[]).filter((row) => row.status === "approval-wanted");
 

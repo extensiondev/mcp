@@ -102,6 +102,7 @@ import {
   storeMdAdvisory,
 } from "./store-listing";
 import { publishVersion } from "./store-publish-version";
+import { iconPaddingSentences, iconPaddingView } from "../lib/chrome-icon-padding";
 
 import type { PackageScope } from "../lib/package-address";
 import type { ListingStore } from "../lib/store-md-listing";
@@ -809,6 +810,7 @@ function readinessView(
             "problem" in local
               ? { missing: local.problem }
               : storeMdAdvisory(local, open, settled, requirements, record),
+          ...iconPaddingView(store, "problem" in local ? undefined : local.patch.icons),
         }
       : {}),
   };
@@ -987,7 +989,8 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     .map(([store]) => store);
   const lockLine = lockSentences(storePreflight);
   const versionLine = nextVersionSentences(storePreflight);
-  const packageSay = packageLine ? ` ${packageLine}` : "";
+  const iconSay = iconPaddingSentences(stores);
+  const packageSay = `${packageLine ? ` ${packageLine}` : ""}${iconSay ? ` ${iconSay}` : ""}`;
   const readinessHint = blocked.length
     ? `${blocked.join(", ")} cannot be submitted yet; each failing check says what to fix.${syncLine}${sourceLine}${lockLine ? ` ${lockLine}` : ""}${versionLine ? ` ${versionLine}` : ""}${packageSay} This read wrote nothing.`
     : `${notReady.length ? "Every store read here can take an upload." : "Every store read here is ready to submit."}${buildLine}${modeLine}${sourceLine}${workspaceLine}${lockLine ? ` ${lockLine}` : ""}${versionLine ? ` ${versionLine}` : ""}${packageSay} This read wrote nothing; extension_submit with dryRun:false submits.`;

@@ -14,6 +14,7 @@ import { CHROMIUM_FAMILY, GECKO_FAMILY, WEBKIT_FAMILY, isChromiumFamily, isGecko
 import { listTemplates } from "../lib/templates-cache";
 import { envelope } from "../lib/envelope";
 import { apiUsesIn, type ApiUse } from "../lib/guarded-api-uses";
+import { chromeIconPaddingOfFile } from "../lib/chrome-icon-padding";
 
 const COMMAND = "extension_manifest_validate";
 
@@ -506,6 +507,12 @@ export async function handler(args: {
     result.warnings.push(
       'No 128x128 icon declared ("128" key in icons). The Chrome Web Store requires one for a store listing, and Edge Add-ons expects it too.',
     );
+  } else if (browsers.some(isChromiumFamily)) {
+    const ref = iconMap["128"].replace(/^\.?\/+/, "");
+    const file = roots.map((root) => path.resolve(root, ref)).find((candidate) => fs.existsSync(candidate));
+    const padding = file ? chromeIconPaddingOfFile(file, path.relative(projectRoot, file) || ref) : null;
+
+    if (padding) result.warnings.push(padding.say);
   }
 
   const declaredPermSet = new Set<string>();

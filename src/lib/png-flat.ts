@@ -242,3 +242,51 @@ export function flattenPngAlpha(png: Buffer): Flattened {
 
   return { png: encodeRgb(width, height, toRgb(chunks, pixels)), hadAlpha: true, width, height };
 }
+
+export type AlphaPlane = { width: number; height: number; alpha: Uint8Array } | { problem: string };
+
+function alphaAt(chunks: Chunks, pixels: Buffer, i: number): number {
+  const { colorType } = chunks.header;
+  const key = chunks.transparency;
+
+  if (colorType === 6) return pixels[i * 4 + 3]!;
+  if (colorType === 4) return pixels[i * 2 + 1]!;
+  if (colorType === 3) return key && pixels[i]! < key.length ? key[pixels[i]!]! : 255;
+
+  if (colorType === 2) {
+    const hit = key && key.length >= 6 && pixels[i * 3] === key.readUInt16BE(0) && pixels[i * 3 + 1] === key.readUInt16BE(2) && pixels[i * 3 + 2] === key.readUInt16BE(4);
+
+    return hit ? 0 : 255;
+  }
+
+  return key && key.length >= 2 && pixels[i] === key.readUInt16BE(0) ? 0 : 255;
+}
+
+export function pngAlphaPlane(png: Buffer): AlphaPlane {
+  const chunks = readChunks(png);
+  if (typeof chunks === "string") return { problem: chunks };
+
+  const { width, height, bitDepth, interlace, colorType, alpha } = chunks.header;
+  if (alpha === "none") return { width, height, alpha: new Uint8Array(width * height).fill(255) };
+  if (bitDepth !== 8) return { problem: `a ${bitDepth}-bit PNG; this reader measures 8-bit images` };
+  if (interlace !== 0) return { problem: "an interlaced PNG; this reader measures non-interlaced images" };
+
+  const channels = CHANNELS[colorType];
+  if (!channels) return { problem: `PNG color type ${colorType} is not one this reader takes` };
+
+  let raw: Buffer;
+
+  try {
+    raw = zlib.inflateSync(chunks.data);
+  } catch (error) {
+    return { problem: `PNG image data could not be inflated: ${error instanceof Error ? error.message : String(error)}` };
+  }
+
+  const pixels = unfilter(raw, width, height, channels);
+  if (typeof pixels === "string") return { problem: pixels };
+
+  const plane = new Uint8Array(width * height);
+  for (let i = 0; i < width * height; i++) plane[i] = alphaAt(chunks, pixels, i);
+
+  return { width, height, alpha: plane };
+}
