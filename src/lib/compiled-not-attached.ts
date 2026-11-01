@@ -13,6 +13,7 @@ import { verifyGuestLoaded } from "./guest-load-oracle";
 import { pidState } from "./process-identity";
 import { findSessionInfo } from "./process-manager";
 import { isSafariTarget, notAttachedHint } from "./safari-dev-options";
+import { buildingAppAnswer, safariAppBuilding } from "./safari-app-stage";
 import { safariSigningFrame } from "./safari-signing";
 import { browserProfileRootDir } from "./session-paths";
 import { sessionPorts } from "./session-ports";
@@ -266,6 +267,9 @@ export function observedNotAttachedRelay(
 export async function compiledNotAttachedAnswer(
   ctx: NotAttachedContext,
 ): Promise<string> {
+  const building = safariAppBuilding(ctx.projectPath, ctx.browser);
+  if (building) return buildingAppAnswer(building, ctx);
+
   const signingFrame = await safariSigningFrame(ctx.projectPath, ctx.browser);
   const undiagnosed = isSafariTarget(ctx.browser) ? "" : `, and ${NO_ATTACH_DIAGNOSIS_NOTE}`;
   const observed = await observeAttachLegs(ctx.contract, ctx);
