@@ -7,7 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { linksOf, madeSentence, recordedOutcome } from "../lib/act-outcome";
-import { answerDeadline, RESUME_POLL_MS } from "../lib/call-budget";
+import { createRequestDeadline, readBackOnce, RESUME_POLL_MS } from "../lib/call-budget";
 import { API_BASE } from "../lib/common-schema";
 import { pollDeviceGrant, requestDeviceCode } from "../lib/device-flow";
 import { laneClosedByServer } from "../lib/credential-source";
@@ -317,6 +317,7 @@ export async function handler(args: {
       callStartedAt,
       held,
       resumed: true,
+      callBlocks: deviceWait({ waitSeconds: args.waitSeconds, fallbackMs: RESUME_POLL_MS }).waiting,
     });
   }
 
@@ -564,6 +565,7 @@ async function finishFromPoll(
     callStartedAt: ctx.callStartedAt,
     held: { grant: token, grantExpiresAt: grantExpiresAt(grant as Record<string, unknown>) },
     resumed: false,
+    callBlocks: ctx.wait.waiting,
   });
 }
 
@@ -588,6 +590,7 @@ async function createWithGrant(ctx: {
   callStartedAt: number;
   held: HeldCreateGrant;
   resumed: boolean;
+  callBlocks: boolean;
 }): Promise<string> {
   const [wantWorkspace = ""] = ctx.project.split("/");
   const kept =
@@ -612,6 +615,7 @@ async function sendCreate(
     callStartedAt: number;
     held: HeldCreateGrant;
     resumed: boolean;
+    callBlocks: boolean;
   },
   kept: boolean,
   keepGrant: () => void,
@@ -661,26 +665,29 @@ async function sendCreate(
 
   const allowanceBefore = await readWorkspaceBuildAllowance({ apiBase: ctx.apiBase, workspace: wantWorkspace, command: COMMAND });
   let res: Response;
-  const deadline = answerDeadline(ctx.callStartedAt);
+  const deadline = createRequestDeadline(ctx.callStartedAt, ctx.callBlocks);
+  const send = (signal: AbortSignal) =>
+    fetch(url, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json", ...identityHeaders(COMMAND) },
+      body: JSON.stringify(body),
+      signal,
+    });
 
   try {
-    res = await fetch(url, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${token}`,
-        "content-type": "application/json",
-        ...identityHeaders(COMMAND),
-      },
-      body: JSON.stringify(body),
-      signal: deadline.signal,
-    });
+    res = await send(deadline.signal);
   } catch (err: any) {
     deadline.release();
+    const readBack = ctx.callBlocks ? await readBackOnce(send) : null;
 
-    return unconfirmed(
-      `The create request for ${ctx.project} left this machine and no answer came back (${err?.message || err})`,
-      "E_NETWORK",
-    );
+    if (!readBack) {
+      return unconfirmed(
+        `The create request for ${ctx.project} left this machine and no answer came back (${err?.message || err})`,
+        "E_NETWORK",
+      );
+    }
+
+    res = readBack;
   }
 
   let text: string;
