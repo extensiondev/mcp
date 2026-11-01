@@ -15,6 +15,7 @@ import { API_BASE } from "../lib/common-schema";
 import { resolveCredential } from "../lib/credential-source";
 import { chromeItemLeftOf } from "../lib/chrome-item-left";
 import { linkItemAnswer } from "../lib/link-item-answer";
+import { approvalRefundOf, approvalRefundSentence } from "../lib/approval-refund-words";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
 import {
@@ -436,6 +437,7 @@ export function storeOutcomes(args: {
           status: status || null,
           storeState: own?.storeUpload?.state ?? own?.storeReview?.state ?? null,
           ...(own?.storeUpload?.message ? { storeMessage: own.storeUpload.message } : {}),
+          ...approvalRefundOf(own),
           storeVersion: own?.storeVersion?.packaged ?? null,
           checkedAt: args.checkedAt,
           source: "platform-record",
@@ -1430,9 +1432,15 @@ async function answer(args: SubmitToolArgs): Promise<string> {
               itemUrl,
               outcome.stores.filter((store) => uploadTaken(waited.record?.[store]?.storeUpload)),
             );
-    const step = retryLine
-      ? { ...judgedStep, say: `${retryLine} ${judgedStep.say}` }
-      : judgedStep;
+    const refundLine = failedStores
+      .map((store) => ({ store, sentence: approvalRefundSentence(waited.record?.[store]) }))
+      .filter((row) => row.sentence)
+      .map((row) => `${row.store}: ${row.sentence}.`)
+      .join(" ");
+    const step = {
+      ...judgedStep,
+      say: [retryLine, judgedStep.say, refundLine].filter(Boolean).join(" "),
+    };
 
     const storeVersions = Object.fromEntries(
       outcome.stores

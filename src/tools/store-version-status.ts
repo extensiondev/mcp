@@ -8,6 +8,7 @@
 
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
+import { approvalRefundOf, approvalRefundSentence, type ApprovalRefund } from "../lib/approval-refund-words";
 import { envelope, isEnvelope } from "../lib/envelope";
 import { AMO_FILE_STATUS_LABEL, SIGNED_STATE_SENTENCE } from "../lib/platform-store-releases";
 import { storeUploadOf } from "../lib/platform-submissions";
@@ -28,7 +29,7 @@ const STATUS_STORES = ["chrome", "firefox", "edge", "safari"] as const;
 
 export const STORES_READ_CALL = 'extension_release_status {include: ["stores"]}';
 
-export interface StoreVersionStatus {
+export interface StoreVersionStatus extends ApprovalRefund {
   store: string;
   submissionId: string | null;
   version: string | null;
@@ -79,6 +80,7 @@ function statusOfRow(row: Row): StoreVersionStatus {
     source: text(read.source) || upload?.source || null,
     releaseType: text(submission.releaseType) || null,
     ...releaseChangeOfRow(submission),
+    ...approvalRefundOf(submission),
     ...(isRow(row.listingPush) ? { listingPush: row.listingPush as unknown as ListingPushView } : {}),
     nextStep: !uploadRefused(upload) && isRow(row.nextStep) ? (row.nextStep as unknown as NextStep) : null,
   };
@@ -113,9 +115,10 @@ function submissionSentence(entry: StoreVersionStatus, refresh: Row | null, wait
   const meaning = releaseTypeMeaning(entry.releaseType ?? undefined);
   const change = releaseChangeSentence(entry);
   const release = entry.releaseType ? `, release type ${entry.releaseType}${meaning ? ` (${meaning})` : ""}${change ? `, ${change}` : ""}` : "";
+  const refund = approvalRefundSentence(entry);
   const next = entry.nextStep ? `. Next: ${entry.nextStep.say}` : "";
 
-  return `${entry.store} ${entry.version ?? ""}${build}: ${status}${state}${read}${release}${next}`;
+  return `${entry.store} ${entry.version ?? ""}${build}: ${status}${state}${read}${release}${refund ? `; ${refund}` : ""}${next}`;
 }
 
 const STEP_ORDER = ["release", "watch"];

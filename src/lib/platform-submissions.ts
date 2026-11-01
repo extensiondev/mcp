@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { approvalRefundOf, type ApprovalRefund } from "./approval-refund-words";
 import { updateManifestOf, type UpdateManifestView } from "./firefox-update-url";
 import { resolveCredential } from "./credential-source";
 import { resolveApiBase, safeApiBase } from "./login-flow";
@@ -153,7 +154,7 @@ export function recordedStoreVersionOf(raw: unknown): RecordedStoreVersion | und
   };
 }
 
-export interface PlatformSubmission {
+export interface PlatformSubmission extends ApprovalRefund {
   id?: string;
   store: string;
   updateManifest?: UpdateManifestView;
@@ -460,7 +461,7 @@ export function toSubmission(raw: Record<string, unknown>): PlatformSubmission |
     if (text) (out as unknown as Record<string, string>)[key] = text;
   }
 
-  return out;
+  return { ...out, ...approvalRefundOf(raw) };
 }
 
 /* @invariant THE PLATFORM IS ASKED ONLY WITH A TOKEN FOR THE PROJECT BEING

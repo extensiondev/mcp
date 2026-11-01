@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { type ApprovalRefund } from "./approval-refund-words";
 import { isNewerOrSame, type PlatformSubmission, type StoreReview, type StoreStatusRead, type StoreUpload } from "./platform-submissions";
 import { releaseChangeOfRow, type ReleaseTypeChange, type ReleaseTypeChangeRefused } from "./release-type-change";
 import { AMO_SIGNED_STATUS, amoUnlistedSigning } from "./review-beside-submission";
@@ -14,7 +15,7 @@ import type { UpdateManifestView } from "./firefox-update-url";
 
 export { releaseChangeOfRow, releaseChangeSentence, type ReleaseTypeChange, type ReleaseTypeChangeRefused } from "./release-type-change";
 
-export interface SubmissionView {
+export interface SubmissionView extends ApprovalRefund {
   id?: string;
   version?: string;
   status?: string;

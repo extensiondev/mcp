@@ -45,6 +45,7 @@ import {
   type StoreHistoryEntry,
   type SubmissionLookup,
 } from "../lib/platform-store-records";
+import { approvalRefundOf, approvalRefundSentence } from "../lib/approval-refund-words";
 import { repairEdgeStoreUrl } from "../lib/edge-listing";
 import { packageRefusedSentence } from "../lib/store-upload-words";
 import { platformSubmissionView, releaseChangeOfRow, releaseChangeSentence, releaseModeOfRow, RELEASE_MODE_WORDS, type SubmissionView } from "../lib/store-row-sources";
@@ -299,7 +300,7 @@ function submissionView(row: Record<string, unknown>): SubmissionView {
   if (storeReview) view.storeReview = storeReview;
   if (storeUpload) view.storeUpload = storeUpload;
 
-  return view;
+  return Object.assign(view, approvalRefundOf(row));
 }
 
 export function latestSubmissionsByStore(
@@ -878,6 +879,9 @@ async function answerStores(
 
       const retry = retryNote(submission, runNote);
       if (retry) tail.push(retry);
+
+      const refund = approvalRefundSentence(submission, runNote);
+      if (refund) tail.push(refund);
     } else if (row.configured === true) {
       tail.push(
         submissionsKnown || (records.ok && records.history[store])
