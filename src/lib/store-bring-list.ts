@@ -49,11 +49,11 @@ const DASHBOARD_NAMES: Record<string, string> = {
   safari: "App Store Connect",
 };
 
-const DERIVED_SUFFIXES = ["screenshots", "store_icon", "icon", "app_icon", "store_logo", "source_archive", "package_contents"];
+export const DERIVED_SUFFIXES = ["screenshots", "store_icon", "icon", "app_icon", "store_logo", "source_archive", "package_contents"];
 
 const DECIDE_ONCE = new Set(["firefox.add_on_id", "safari.bundle_identifiers", "safari.name", "safari.app_record", "chrome.item", "edge.product"]);
 
-const NEVER_PREFILLED = new Set([
+export const NEVER_PREFILLED: ReadonlySet<string> = new Set([
   "chrome.data_usage",
   "chrome.remote_code",
   "firefox.data_collection_permissions",
@@ -100,7 +100,7 @@ function clearedBy(row: RequirementRow, store: string): string {
   return row.how || "the console store settings";
 }
 
-function supplyOf(row: RequirementRow): Supply {
+export function supplyOf(row: Pick<RequirementRow, "id">): Supply {
   return DERIVED_SUFFIXES.includes(suffixOf(row.id)) ? "from your build" : "you supply";
 }
 

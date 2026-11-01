@@ -243,7 +243,9 @@ describe("extension_submit preflight carries what each store asks for and says w
     expect(byId(safari, "safari.api_key")).not.toHaveProperty("push");
     expect(safari.missingRequired).toBe(1);
 
-    expect(out.value.sayToPerson.startsWith("The Chrome Web Store asks for 2 required inputs the project does not have yet: Screenshots (Screenshots as the store asks.); Chrome Web Store developer account connected (")).toBe(true);
+    expect(out.value.readiness.noStoreConnected).toBe(true);
+    expect(out.value.sayToPerson.split("\n").slice(0, 4)).toEqual(out.value.readiness.summary);
+    expect(out.value.sayToPerson.split("\n").slice(4).join("\n").startsWith("The Chrome Web Store asks for 2 required inputs the project does not have yet: Screenshots (Screenshots as the store asks.); Chrome Web Store developer account connected (")).toBe(true);
     expect(out.value.sayToPerson).toContain("From your build: Screenshots (Screenshots as the store asks.)");
     expect(out.value.sayToPerson).toContain("You supply: Chrome Web Store developer account connected (");
     expect(out.value.sayToPerson).toContain("The App Store asks for 1 required input the project does not have yet: App Store Connect API key (");

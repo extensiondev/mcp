@@ -35,6 +35,7 @@ import {
 } from "../lib/platform-submissions";
 import { compactPreflightStores, PREFLIGHT_DETAIL_SENTENCE, preflightDetail } from "../lib/preflight-detail";
 import { summaryAgreeingWithRows } from "../lib/preflight-summary";
+import { readinessAnswer, readinessLead, storeReadinessOf } from "../lib/store-onboarding";
 import { submissionModeSentence, submissionModeView } from "../lib/submission-mode-view";
 import { consoleProjectUrl } from "../lib/registry";
 import { projectApiGet, projectApiReadFailure, projectApiSend } from "../lib/project-api";
@@ -868,8 +869,10 @@ export async function preflight(args: StoreActArgs): Promise<string> {
 
   const shown = (): Row => {
     const compact = compactPreflightStores(stores, detail);
+    const readiness = readinessAnswer(storeReadinessOf({ stores, asked, projectPath: text(args.projectPath) }));
 
     return {
+      ...(readiness ? { readiness } : {}),
       ...(compact.trimmed ? { stores: compact.stores, detail: PREFLIGHT_DETAIL_SENTENCE } : { stores: compact.stores }),
       ...(Object.keys(storePreflight).length ? { storePreflight } : {}),
     };
@@ -993,6 +996,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     const say = connected
       ? `${failedCheckSentence(text(connection.reason), "chrome", connectionSourceOf(connection.source))} ${connectSentences(connectUrl)}`
       : connectSentences(connectUrl);
+    const told = readinessLead(storeReadinessOf({ stores, asked, projectPath: text(args.projectPath) }), say);
     const others = blocked.filter((store) => store !== "chrome");
 
     return envelope({
@@ -1005,7 +1009,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
         storesPageUrl,
         connectUrl,
         trackUrl: settingsUrl,
-        sayToPerson: say,
+        sayToPerson: told,
         nextStep: nextStep("connect", say, connectUrl),
       },
       hint: say,
@@ -1189,7 +1193,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
         storesPageUrl,
         connectUrl,
         trackUrl: settingsUrl,
-        sayToPerson: full,
+        sayToPerson: readinessLead(storeReadinessOf({ stores, asked, projectPath: text(args.projectPath) }), full),
         nextStep: nextStep(step, full, step === "configure" ? settingsUrl : connectUrl),
       },
       hint: full,
@@ -1314,9 +1318,10 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       ...(itemUrl ? { itemUrl } : {}),
       ...(reviewing ? { chromeReview: reviewing } : {}),
       trackUrl: reviewing ? reviewUrl : storesPageUrl,
-      sayToPerson: [inputsSay, edgeFirstLine, reviewLine, notReadyLine(notReady, green), readinessHint]
-        .filter(Boolean)
-        .join(" "),
+      sayToPerson: readinessLead(
+        storeReadinessOf({ stores, asked, projectPath: text(args.projectPath) }),
+        [inputsSay, edgeFirstLine, reviewLine, notReadyLine(notReady, green), readinessHint].filter(Boolean).join(" "),
+      ),
       nextStep: reviewBlocks
         ? nextStep("done", reviewSay, reviewUrl)
         : green
