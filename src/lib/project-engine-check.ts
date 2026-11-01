@@ -21,6 +21,7 @@ import {
 import { driftRemediation, readDeclaredDrift, readDeclaredEngine, type DeclaredRead } from "./engine-declared";
 import { engineDrift } from "./engine-version";
 import { pinnedCliVersion } from "./exec";
+import { shellPath } from "./publish-link";
 
 export interface ProjectEngineCheck {
   check: "project-engine";
@@ -131,7 +132,7 @@ function pinnedCheck(projectPath: string, engineVersion: string): ProjectEngineC
     detail: `project-local extension@${engineVersion}${drift === "newer" ? `, newer than the extension@${pin} the MCP pins; the dev loop uses the project bin, not the pin, so keep it` : older ? `, but the MCP pins extension@${pin}; the dev loop uses the project bin, not the pin` : ""}`,
     ...(older
       ? {
-          remediation: `Run \`(cd ${projectPath} && npm i -D extension@${pin})\` to match the pinned engine.`,
+          remediation: `Run \`(cd ${shellPath(projectPath)} && npm i -D extension@${pin})\` to match the pinned engine.`,
         }
       : {}),
   };

@@ -17,6 +17,7 @@ import { mcpOrigins } from "../lib/registry";
 import { captureTemplateSeed } from "../lib/funnel-telemetry";
 import { templateCatalogUrl } from "../lib/template-artifact-source";
 import { envelope } from "../lib/envelope";
+import { shellPath } from "../lib/publish-link";
 import { scaffoldScripts } from "../lib/scaffold-scripts";
 
 const COMMAND = "extension_create";
@@ -273,7 +274,7 @@ export async function handler(args: {
     exactVersion(scaffoldPin) === exactVersion(pin);
   const engineWarning =
     pin && pin !== "latest" && !pinMatches
-      ? `The scaffold pins "extension": "${scaffoldPin ?? "unknown"}"; the project-local engine wins over EXTENSION_MCP_CLI_VERSION=${pin}. Run \`(cd ${result.projectPath} && ${addDev(`extension@${pin}`)})\` to match the pinned engine.`
+      ? `The scaffold pins "extension": "${scaffoldPin ?? "unknown"}"; the project-local engine wins over EXTENSION_MCP_CLI_VERSION=${pin}. Run \`(cd ${shellPath(result.projectPath)} && ${addDev(`extension@${pin}`)})\` to match the pinned engine.`
       : undefined;
 
   const resolvedParent = args.parentDir
@@ -315,7 +316,7 @@ export async function handler(args: {
         gitInit,
       },
       scripts,
-      manualAlternative: `Outside an agent only: cd ${result.projectPath} && ${runDev}`,
+      manualAlternative: `Outside an agent only: cd ${shellPath(result.projectPath)} && ${runDev}`,
       duration: Date.now() - start,
       nextSteps: [
         `The scaffold is complete and verified (manifest read at ${manifestPath}${result.depsInstalled ? ", dependencies installed" : ""}): it needs no build to check, so do not run a build to verify it.`,

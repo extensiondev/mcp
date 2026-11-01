@@ -134,10 +134,20 @@ const SHELL_SPECIAL = /[\s&;|<>()$`'"\\*?[\]{}!]/;
 
 const EXPANDS_IN_DOUBLE_QUOTES = /[$`"\\!]/;
 
+const SHELL_PLAIN_WORD = /^[A-Za-z0-9_@%+=:,./-]+$/;
+
+function singleQuoted(word: string): string {
+  return `'${word.replace(/'/g, "'\\''")}'`;
+}
+
+export function shellPath(filePath: string): string {
+  return SHELL_PLAIN_WORD.test(filePath) ? filePath : singleQuoted(filePath);
+}
+
 export function shellUrl(url: string): string {
   if (!SHELL_SPECIAL.test(url)) return url;
 
-  return EXPANDS_IN_DOUBLE_QUOTES.test(url) ? `'${url.replace(/'/g, "'\\''")}'` : `"${url}"`;
+  return EXPANDS_IN_DOUBLE_QUOTES.test(url) ? singleQuoted(url) : `"${url}"`;
 }
 
 export function unshellUrl(word: string): string {

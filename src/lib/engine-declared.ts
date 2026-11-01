@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { compareVersions, decompose } from "./engine-version";
+import { shellPath } from "./publish-link";
 
 export type DeclaredEngine = { kind: "declared"; spec: string } | { kind: "none" } | { kind: "unreadable" };
 
@@ -127,5 +128,5 @@ export function readDeclaredDrift(projectPath: string, installed: string): Decla
 }
 
 export function driftRemediation(projectPath: string, declared: string): string {
-  return `Run \`(cd ${projectPath} && ${installCommand(projectPath)})\` so node_modules/extension matches the package.json pin extension@${declared}.`;
+  return `Run \`(cd ${shellPath(projectPath)} && ${installCommand(projectPath)})\` so node_modules/extension matches the package.json pin extension@${declared}.`;
 }
