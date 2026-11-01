@@ -32,6 +32,7 @@ import { envelope } from "../lib/envelope";
 import { noSessionEnvelope } from "../lib/production-receipt";
 import { EVAL_UNTIL_PROPERTY, evalUntilTruthy, pollTimeoutWithin, type EvalUntil } from "../lib/eval-until";
 import { parseFrameObject } from "../lib/frame-json";
+import { awaitsAtTopLevel, isOneExpression, isSingleExpression, protocolExpression } from "../lib/one-expression";
 import {
   ambiguousSessionRefusal,
   resolveSessionBrowser,
@@ -731,7 +732,7 @@ async function settleThroughEngine(
   const token = crypto.randomUUID();
   const budgetMs = args.timeout ?? RELAY_DEFAULT_BUDGET_MS;
   const deadline = Date.now() + budgetMs;
-  let raw = await run(relaySafeExpression(args.expression, token));
+  let raw = await run(relaySafeExpression(protocolExpression(args.expression), token));
   let parsed = parseFrameObject(raw);
 
   if (!parsed || parsed.ok !== true) return { settled: false, answer: raw };
@@ -891,19 +892,24 @@ function pageEvalRefusedByCsp(parsed: Record<string, any>): boolean {
   return cspRefusedFrame(parsed);
 }
 
-function isSingleExpression(source: string): boolean {
-  try {
-    new Function(`return (${source}\n)`);
-
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function notOneExpression(
   why = "This document's content security policy forbids eval, so Firefox evaluates it over the debugger protocol",
+  source = "",
 ): string {
+  if (awaitsAtTopLevel(source)) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "bad-request",
+      error: {
+        code: "E_BAD_REQUEST",
+        name: "TopLevelAwait",
+        message: `${why}, which runs the input as plain script, and this expression uses await outside an async function.`,
+      },
+      hint: "Wrap it in an async function, for example (async () => (await fetch(location.href)).status)(); a returned promise is awaited.",
+    });
+  }
+
   return envelope({
     ok: false,
     command: schema.name,
@@ -923,9 +929,9 @@ async function evaluatePastSurfaceCsp(
   run: (expression: string) => Promise<string>,
   browser: string,
 ): Promise<string> {
-  if (!isSingleExpression(args.expression)) return notOneExpression();
+  if (!isOneExpression(args.expression)) return notOneExpression();
 
-  const direct = await run(args.expression);
+  const direct = await run(protocolExpression(args.expression));
   const frame = parseFrameObject(direct);
   if (!frame) return direct;
   if (cspRefusedFrame(frame)) return explainCspRefusal(direct, context, browser) ?? direct;
@@ -1007,7 +1013,7 @@ async function evaluateInGeckoTab(
   try {
     outcome = await rdpEvaluateInTab(resolved.port, {
       select,
-      expression: args.expression,
+      expression: protocolExpression(args.expression),
       timeoutMs: args.timeout ?? 10_000,
     });
   } catch (err) {
@@ -1121,7 +1127,7 @@ async function evaluateExtensionPageOverProtocol(
     return production ? extensionPageUnreachable(schema.name, browser, production, target, "no-tab") : raw;
   }
 
-  if (!isSingleExpression(args.expression)) return notOneExpression();
+  if (!isOneExpression(args.expression)) return notOneExpression();
 
   return (
     (await evaluateInGeckoTab(args, browser, select, `No open tab shows ${target}.`, sameTabsSeen(matching))) ?? raw
@@ -1153,7 +1159,7 @@ async function evaluatePagePastSiteCsp(
   if (context !== "page" || !isGeckoFamily(browser)) return null;
   if (!cspRefusedFrame(parseFrameObject(raw))) return null;
   if (!args.url && args.tab != null) return null;
-  if (!isSingleExpression(args.expression)) return notOneExpression();
+  if (!isOneExpression(args.expression)) return notOneExpression();
 
   const url = args.url;
   const seen: TabsSeen = { matched: 0 };
@@ -1223,7 +1229,7 @@ async function evaluateExtensionTabBeforeInjection(
   const tab = select(tabs);
   if (!tab) return null;
 
-  if (!isSingleExpression(args.expression)) return notOneExpression();
+  if (!isOneExpression(args.expression)) return notOneExpression();
 
   const answer = await evaluateInGeckoTab(args, browser, select, `No open tab shows ${url ?? String(tab.url)}.`, sameTabsSeen(matching));
   if (answer === null || url) return answer;
@@ -1336,7 +1342,7 @@ async function evaluateWithoutScripting(
 ): Promise<string> {
   if (context === "content") return contentWorldUnreachable(schema.name, args.projectPath, browser);
 
-  if (!isSingleExpression(args.expression)) {
+  if (!isOneExpression(args.expression)) {
     return notOneExpression(`Because ${noScriptingReason(args.projectPath, browser)}, Firefox evaluates the tab over the debugger protocol`);
   }
 
@@ -1410,7 +1416,7 @@ async function evaluateByTargetId(
   if (!evalTokenPresent(args.projectPath, browser)) return evalDisabled();
 
   if (isGeckoFamily(browser)) {
-    if (!isSingleExpression(args.expression)) return notOneExpression();
+    if (!isOneExpression(args.expression)) return notOneExpression();
 
     const resolved = await resolveRdpPort(args.projectPath, browser, { waitMs: 3_000, graceMs: 1_000 });
     if (!resolved) return noDebugPort(args.projectPath, browser, "RDP");
@@ -1574,7 +1580,7 @@ async function evaluateRouted(
     }
 
     if (isGeckoFamily(browser)) {
-      if (!isSingleExpression(args.expression)) return notOneExpression();
+      if (!isOneExpression(args.expression)) return notOneExpression();
 
       const url = args.url as string;
       const overProtocol = await evaluateInGeckoTab(
@@ -1626,7 +1632,7 @@ async function evaluateRouted(
         context === "page" ? "the tab's page world" : "the tab's content-script world",
         run,
       )
-    : { settled: false, answer: await run(args.expression) };
+    : { settled: false, answer: await run(protocolExpression(args.expression)) };
   const raw = engine.answer;
 
   if (!engine.settled) {
@@ -1640,7 +1646,7 @@ async function evaluateRouted(
     if (pastSiteCsp !== null) return pastSiteCsp;
 
     if (backgroundRouteRefusedStatements(args, browser, context, raw)) {
-      return notOneExpression();
+      return notOneExpression(undefined, args.expression);
     }
 
     const cspRefusal = explainCspRefusal(raw, context, browser);

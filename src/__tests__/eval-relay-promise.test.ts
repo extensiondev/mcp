@@ -81,7 +81,7 @@ describe("extension_eval on a relay surface never hands the relay a promise", ()
     respond = (call, index) => {
       if (index === 0) {
         expect(call.expression).toContain(relay.RELAY_MARK);
-        expect(call.expression).toContain(JSON.stringify("await go()"));
+        expect(call.expression).toContain(JSON.stringify("(async () => (await go()\n))()"));
         token = tokenOf(call.expression);
         expect(token).toMatch(/^[0-9a-f-]{36}$/);
 
@@ -90,7 +90,7 @@ describe("extension_eval on a relay surface never hands the relay a promise", ()
 
       if (index === 1) {
         expect(call.expression).toContain(JSON.stringify(token));
-        expect(call.expression).not.toContain(JSON.stringify("await go()"));
+        expect(call.expression).not.toContain(JSON.stringify("(async () => (await go()\n))()"));
 
         return okFrame({ [relay.RELAY_MARK]: 1, done: false, token });
       }
