@@ -65,5 +65,5 @@ export function failureLineOf(store: string, upload: StoreUpload | undefined, fa
   const refused = packageRefusedSentence(store, upload);
   if (refused) return `${store}: ${refused}`;
 
-  return `${store}: ${failureReason.trim() || "the store run failed"}`;
+  return `${store}: ${failureReason.trim().replace(/[.\s]+$/, "") || "the store run failed"}`;
 }
