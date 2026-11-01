@@ -61,6 +61,10 @@ export function setApprovalOpener(next: UrlOpener): () => void {
   };
 }
 
+export function openUrl(url: string): boolean {
+  return opener(url);
+}
+
 const opened = new Set<string>();
 
 export function forgetOpenedApprovals(): void {

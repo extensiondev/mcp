@@ -22,9 +22,11 @@ export const SUBMIT_SHIP_ACTIONS = ["publish", "review", "cancel", "rollout", "r
 
 export const SUBMIT_SETTING_ACTIONS = ["configure-store"] as const;
 
+export const SUBMIT_CONNECT_ACTIONS = ["connect"] as const;
+
 const SHIPS = new Set<string>(SUBMIT_SHIP_ACTIONS);
 
-const READS = new Set<string>(SUBMIT_READ_ACTIONS);
+const READS = new Set<string>([...SUBMIT_READ_ACTIONS, ...SUBMIT_CONNECT_ACTIONS]);
 
 const actionOf = (args: Args): string => (typeof args.action === "string" && args.action ? args.action : "submit");
 
@@ -45,9 +47,9 @@ const quoted = (actions: readonly string[]): string => actions.map((action) => `
 
 const ASKING_ACTS = SUBMIT_SHIP_ACTIONS.filter((action) => action !== "sync-listing");
 
-export const SUBMIT_ACTION_SAFETY = `Per action: ${quoted(SUBMIT_READ_ACTIONS)} and submit with dryRun true (the default) are read-only and dispatch nothing; submit with dryRun:false and no approvalId executes nothing either, it only asks for the owner's approval on extension.dev and answers approval-required, so that page is the gate; the first call of ${quoted(ASKING_ACTS)} with no approvalId only asks the same way, and so does a 'sync-listing' carrying a value the platform derives and a ${quoted(SUBMIT_SETTING_ACTIONS)} to a submission mode that sends the next upload to a review that publishes it; the call carrying the approved approvalId and ${quoted(SUBMIT_SHIP_ACTIONS)} change what a store holds, ${quoted(SUBMIT_SETTING_ACTIONS)} changes the project's store settings, and a plain sync-listing or configure-store writes at once under the owner's own token. MCP annotations are per tool, so this one tool carries the destructive hint of its acts, and ${SUBMIT_CHECK_TOOL} takes the read-only calls and every approval request under a read-only hint; a client that accepts the approval page as its only gate allows this tool by name.`;
+export const SUBMIT_ACTION_SAFETY = `Per action: ${quoted(SUBMIT_READ_ACTIONS)} and submit with dryRun true (the default) are read-only and dispatch nothing; submit with dryRun:false and no approvalId executes nothing either, it only asks for the owner's approval on extension.dev and answers approval-required, so that page is the gate; the first call of ${quoted(ASKING_ACTS)} with no approvalId only asks the same way, and so does a 'sync-listing' carrying a value the platform derives and a ${quoted(SUBMIT_SETTING_ACTIONS)} to a submission mode that sends the next upload to a review that publishes it; the call carrying the approved approvalId and ${quoted(SUBMIT_SHIP_ACTIONS)} change what a store holds, ${quoted(SUBMIT_SETTING_ACTIONS)} changes the project's store settings, and a plain sync-listing or configure-store writes at once under the owner's own token; 'connect' changes nothing a store holds and takes no key: it opens a connect page where the person hands the key straight to the platform, and waits on the platform's record. MCP annotations are per tool, so this one tool carries the destructive hint of its acts, and ${SUBMIT_CHECK_TOOL} takes the read-only calls and every approval request under a read-only hint; a client that accepts the approval page as its only gate allows this tool by name.`;
 
-export const SUBMIT_CHECK_ACTIONS = [...SUBMIT_READ_ACTIONS, "submit", ...SUBMIT_SHIP_ACTIONS, ...SUBMIT_SETTING_ACTIONS] as const;
+export const SUBMIT_CHECK_ACTIONS = [...SUBMIT_READ_ACTIONS, "submit", ...SUBMIT_SHIP_ACTIONS, ...SUBMIT_SETTING_ACTIONS, ...SUBMIT_CONNECT_ACTIONS] as const;
 
 const CHECKS = new Set<string>(SUBMIT_CHECK_ACTIONS);
 

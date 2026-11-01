@@ -8,7 +8,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SUBMIT_ACTION_SAFETY, SUBMIT_READ_ACTIONS, SUBMIT_SETTING_ACTIONS, SUBMIT_SHIP_ACTIONS } from "../lib/submit-action-safety";
+import { SUBMIT_ACTION_SAFETY, SUBMIT_CONNECT_ACTIONS, SUBMIT_READ_ACTIONS, SUBMIT_SETTING_ACTIONS, SUBMIT_SHIP_ACTIONS } from "../lib/submit-action-safety";
 import { TOOL_POLICY } from "../lib/tool-policy";
 import { schema, SUBMIT_ACTIONS } from "../tools/submit";
 
@@ -28,8 +28,8 @@ afterEach(() => {
 describe("extension_submit says per action which calls only read (ledger 360)", () => {
   const ships = TOOL_POLICY.extension_submit.ships as (args: Record<string, unknown>) => boolean;
 
-  it("names every action once, as a read, a store act, a setting or the submit itself", () => {
-    const named = [...SUBMIT_READ_ACTIONS, ...SUBMIT_SHIP_ACTIONS, ...SUBMIT_SETTING_ACTIONS, "submit"].sort();
+  it("names every action once, as a read, a store act, a setting, the connect or the submit itself", () => {
+    const named = [...SUBMIT_READ_ACTIONS, ...SUBMIT_SHIP_ACTIONS, ...SUBMIT_SETTING_ACTIONS, ...SUBMIT_CONNECT_ACTIONS, "submit"].sort();
 
     expect(named).toEqual([...SUBMIT_ACTIONS].sort());
   });

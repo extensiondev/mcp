@@ -32,6 +32,7 @@ import { withCallApi } from "./origins";
 import { bindCallProject, stampAnsweredFor } from "./project-binding";
 import { followProjectMove, followSentence, movedAnswer } from "./project-move";
 import { scrubRunAnswer } from "./run-privacy";
+import { secretArgumentRefusal } from "./secret-arguments";
 import { createReloader, handoverState, type ActiveBuild, type BuildImporter, type ListedTool, type RebuiltCall, type ToolFrame } from "./server-reload";
 import { markListStale, reloadedWarning, serverStamp, staleEnvelope, type ServerStampReader } from "./server-stamp";
 import { markStaleLocal, noLocalCarryReason, predatedChecks, predatesCheckEnvelope, type HeldLocal } from "./stale-local";
@@ -243,6 +244,10 @@ export function createToolSurface(setup: ToolHandlerOptions): {
       disabledToolEnvelope(name, aliasedArgs, options) ?? setup.refuse?.(name, aliasedArgs) ?? null;
 
     if (disabled) return refused(disabled);
+
+    const secret = secretArgumentRefusal(name, aliasedArgs);
+
+    if (secret) return refused(secret);
 
     const actsAs = TOOL_POLICY[name]?.actsAs;
 

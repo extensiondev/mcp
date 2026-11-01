@@ -16,7 +16,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { actionFingerprint } from "../lib/approval-gate";
 import { runAskingOnly } from "../lib/ask-only";
 import { projectApiSend, type ProjectApi } from "../lib/project-api";
-import { SUBMIT_CHECK_ACTIONS, SUBMIT_READ_ACTIONS, SUBMIT_SETTING_ACTIONS, SUBMIT_SHIP_ACTIONS } from "../lib/submit-action-safety";
+import { SUBMIT_CHECK_ACTIONS, SUBMIT_CONNECT_ACTIONS, SUBMIT_READ_ACTIONS, SUBMIT_SETTING_ACTIONS, SUBMIT_SHIP_ACTIONS } from "../lib/submit-action-safety";
 import { schema as checkSchema } from "../tools/submit-check";
 import { SUBMIT_ACTIONS, schema as submitSchema } from "../tools/submit";
 import { usePlatformWorld, WORLD_API, WORLD_PROJECT_ID } from "./fixtures/platform-world";
@@ -81,7 +81,7 @@ function storeMdProject(summary: string): string {
 
 describe("extension_submit_check asks for the approval of every store act and executes none (ledger 373)", () => {
   it("takes every action of extension_submit, derived from the safety lists, and every input but approvalId", () => {
-    expect([...SUBMIT_CHECK_ACTIONS].sort()).toEqual([...SUBMIT_READ_ACTIONS, "submit", ...SUBMIT_SHIP_ACTIONS, ...SUBMIT_SETTING_ACTIONS].sort());
+    expect([...SUBMIT_CHECK_ACTIONS].sort()).toEqual([...SUBMIT_READ_ACTIONS, "submit", ...SUBMIT_SHIP_ACTIONS, ...SUBMIT_SETTING_ACTIONS, ...SUBMIT_CONNECT_ACTIONS].sort());
     expect([...SUBMIT_CHECK_ACTIONS].sort()).toEqual([...SUBMIT_ACTIONS].sort());
     expect(checkSchema.inputSchema.properties.action.enum).toEqual([...SUBMIT_CHECK_ACTIONS]);
 
