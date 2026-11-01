@@ -6,7 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { WEBKIT_FAMILY } from "./browser-family";
+import { isGeckoFamily, WEBKIT_FAMILY } from "./browser-family";
+import { resolveRdpPort } from "./cdp-port";
 import { PRODUCTION_DEBUG_PORT_FLOOR, productionDebugPortOutlook } from "./production-launch";
 
 import type { ReadyContract } from "./types";
@@ -60,6 +61,16 @@ function webdriverState(contract: ReadyContract): Pick<SessionPorts, "webdriver"
   };
 }
 
+const RDP_STAMP_WAIT_MS = 3_000;
+
+function noDebugPortNote(contract: ReadyContract): string {
+  if (isGeckoFamily(contract.browser)) {
+    return `This ${contract.browser} session names no rdpPort yet: Firefox serves the Remote Debugging Protocol (RDP), not CDP, and the engine stamps rdpPort into ready.json once Firefox binds it, which can land after this answer. The debugger tools (extension_eval over the protocol, extension_screenshot, page reads) wait for it on their own, and extension_wait reads it again; only an engine older than Extension.js 4.0.15 never stamps one.`;
+  }
+
+  return "The session opened no browser debug port: the contract carries neither cdpPort (Chromium) nor rdpPort (Gecko), so nothing can connect a debugger to this browser; a Chromium dev session normally stamps cdpPort once the browser binds it.";
+}
+
 export function sessionPorts(contract: ReadyContract): SessionPorts {
   const cdpPort = portOrNull(contract.cdpPort);
   const rdpPort = portOrNull(contract.rdpPort);
@@ -74,9 +85,19 @@ export function sessionPorts(contract: ReadyContract): SessionPorts {
       ? {
           debugPortNote: production
             ? productionDebugPortNote(contract)
-            : "The session opened no browser debug port: the contract carries neither cdpPort (Chromium) nor rdpPort (Gecko), so nothing can connect a debugger to this browser; a Chromium dev session normally stamps cdpPort once the browser binds it.",
+            : noDebugPortNote(contract),
         }
       : {}),
     ...webdriverState(contract),
   };
+}
+
+export async function settledSessionPorts(projectPath: string, contract: ReadyContract): Promise<SessionPorts> {
+  const ports = sessionPorts(contract);
+  const production = contract.command === "start" || contract.command === "preview";
+  if (production || ports.cdpPort !== null || ports.rdpPort !== undefined || !isGeckoFamily(contract.browser)) return ports;
+
+  const stamped = await resolveRdpPort(projectPath, contract.browser, { waitMs: RDP_STAMP_WAIT_MS, graceMs: RDP_STAMP_WAIT_MS });
+
+  return stamped ? sessionPorts({ ...contract, rdpPort: stamped.port }) : ports;
 }

@@ -61,6 +61,34 @@ describe("extension_wait names every port the session bound, so 'tell me the por
     expect(out.value.debugPortNote).toBeUndefined();
   }, 10_000);
 
+  it("reads a gecko session's rdpPort stamped after the ready contract instead of saying no port was opened", async () => {
+    const dir = project();
+    contract(dir, "firefox", attachedDevContract("firefox", { cdpPort: undefined }));
+    const stamp = setTimeout(() => contract(dir, "firefox", attachedDevContract("firefox", { cdpPort: undefined, rdpPort: 9533 })), 700);
+
+    try {
+      const out = JSON.parse(await wait({ projectPath: dir, browser: "firefox", timeoutMs: 1500 }));
+
+      expect(out.status).toBe("ready");
+      expect(out.value.rdpPort).toBe(9533);
+      expect(out.value.debugPortNote).toBeUndefined();
+    } finally {
+      clearTimeout(stamp);
+    }
+  }, 10_000);
+
+  it("says a gecko session's rdpPort is not stamped yet, naming RDP, when it never lands", async () => {
+    const dir = project();
+    contract(dir, "firefox", attachedDevContract("firefox", { cdpPort: undefined }));
+
+    const out = JSON.parse(await wait({ projectPath: dir, browser: "firefox", timeoutMs: 1500 }));
+
+    expect(out.status).toBe("ready");
+    expect(out.value.debugPortNote).toMatch(/names no rdpPort yet/);
+    expect(out.value.debugPortNote).toMatch(/Remote Debugging Protocol/);
+    expect(out.value.debugPortNote).not.toMatch(/opened no browser debug port/i);
+  }, 10_000);
+
   it("says a production start session on an engine older than 4.1.34 opened no debug port, naming the floor", async () => {
     const dir = project();
     contract(dir, "chrome", readyContract("start", "chrome", { toolchainVersion: "4.1.33", compiledAt: new Date().toISOString() }));
