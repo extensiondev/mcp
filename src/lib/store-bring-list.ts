@@ -58,8 +58,6 @@ export const NEVER_PREFILLED: ReadonlySet<string> = new Set([
   "chrome.remote_code",
   "firefox.data_collection_permissions",
   "edge.privacy_policy_requirements",
-  "edge.single_purpose",
-  "edge.permission_justifications",
   "edge.remote_code",
   "edge.data_usage",
   "safari.app_privacy",

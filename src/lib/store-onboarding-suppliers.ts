@@ -43,6 +43,8 @@ const AGENT_DRAFTS = [
   "chrome.language",
   "chrome.single_purpose",
   "chrome.permission_justifications",
+  "edge.single_purpose",
+  "edge.permission_justifications",
   "chrome.test_instructions",
   "chrome.promo_tile_small",
   "chrome.promo_tile_marquee",

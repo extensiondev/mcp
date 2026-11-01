@@ -11,7 +11,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NEVER_PREFILLED } from "../lib/store-bring-list";
 import { readinessRowsOf, supplierOf } from "../lib/store-onboarding-suppliers";
 
-const EDGE_PRIVACY = ["edge.single_purpose", "edge.permission_justifications", "edge.remote_code", "edge.data_usage"];
+const EDGE_PRIVACY = ["edge.remote_code", "edge.data_usage"];
+const EDGE_LISTING_TEXT = ["edge.single_purpose", "edge.permission_justifications"];
 
 describe("the readiness list leaves every owner-certified declaration and every unknown row to the owner", () => {
   beforeEach(() => {
@@ -25,6 +26,12 @@ describe("the readiness list leaves every owner-certified declaration and every 
   it.each(EDGE_PRIVACY)("tags the Edge Privacy page row %s as only you can decide, never drafted", (id) => {
     expect(supplierOf({ id, satisfiedBy: "store-dashboard" })).toBe("person-decides");
     expect(NEVER_PREFILLED.has(id)).toBe(true);
+  });
+
+  it.each(EDGE_LISTING_TEXT)("keeps the Edge listing text row %s draftable from STORE.md, like its Chrome twin", (id) => {
+    expect(supplierOf({ id, satisfiedBy: "store-dashboard" })).toBe("agent-drafts");
+    expect(supplierOf({ id: id.replace("edge.", "chrome."), satisfiedBy: "store-md: x" })).toBe("agent-drafts");
+    expect(NEVER_PREFILLED.has(id)).toBe(false);
   });
 
   it("tags the App Store copyright as only you can decide and keeps the keywords draftable", () => {
