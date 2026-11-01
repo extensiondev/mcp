@@ -27,6 +27,7 @@ import {
 import { makeFilter, type LogsArgs } from "./logs-filter";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { WEBKIT_FAMILY } from "../lib/browser-family";
+import { safariSilentLogReason } from "../lib/safari-session-notes";
 import {
   ambiguousSessionRefusal,
   resolveSessionBrowser,
@@ -123,7 +124,7 @@ function summarize(
         ? `${extra.total} event(s) are in this run's file and none matched the filter; the session itself is not the reason.`
         : (emptyReason(projectPath, browser) ??
           (typeof extra.total === "number" && extra.total === 0 && source === "file"
-            ? "The log file holds no events yet: the session is live and nothing in the extension has logged. Drive it (open a surface, load a page) and read again."
+            ? safariSilentLogReason(projectPath, browser) ?? "The log file holds no events yet: the session is live and nothing in the extension has logged. Drive it (open a surface, load a page) and read again."
             : undefined))
       : undefined;
   const stale = Boolean(staleNote) && matched > 0;

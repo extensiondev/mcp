@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Ledger 349. `extension_dev` on Safari says when `startingUrl` did not open: the warning carries the engine's ready.json reason (`startingUrlOpened` false with `startingUrlUnopenedReason`, from Extension.js PR 960), or says the run recorded no outcome, and points to `extension_open` url. An empty `extension_logs` on Safari names a background that has not connected to the bridge, or one Safari unloaded, instead of "nothing in the extension has logged" (`src/lib/safari-session-notes.ts`).
 - Ledger 348. On a Safari run whose WebDriver window never opened, an unloaded background's refusal no longer sends `extension_eval` context page and `extension_open` url to each other: the hint names the engine's reason, the hand wake (the toolbar button, or a matching page opened in Safari) and `extension_dev` with `replace: true`, and every ready answer carries `webdriver` (`connected`, `none` or `pending`) with a `webdriverNote` up front.
 - Ledger 350. `extension_eval` refused on Safari's background (`E_SAFARI_CONTEXT_UNREACHABLE`) names `extension_storage` for storage reads and writes, and offers the automation window route only when the run has that window.
 - Ledger 353. `extension_open` with `asTab` or a bare document url on Safari opens at the `safari-web-extension://<uuid>/` base a log line of the run names (`src/lib/safari-base-url.ts`), and when nothing names it refuses in Safari words instead of the Gecko `moz-extension://`, `extensions.webextensions.uuids` and `gecko.id` text.

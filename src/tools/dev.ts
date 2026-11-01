@@ -59,6 +59,7 @@ import {
 import { safariSigningFrame } from "../lib/safari-signing";
 import { safariNotAttachedHint } from "../lib/safari-app-stage";
 import { teamUnknownToXcodeRefusal } from "../lib/xcode-teams";
+import { safariStartingUrlWarning } from "../lib/safari-session-notes";
 import {
   CONTROL_PORT_KEPT_NOTE,
   NO_ATTACH_DIAGNOSIS_NOTE,
@@ -507,6 +508,7 @@ export async function handler(
       portKeptNote,
       ...boot.warnings,
       ...(signingFrame?.warnings ?? []),
+      readiness ? safariStartingUrlWarning(args.projectPath, browser, args.startingUrl) : null,
       markerWarning,
     ],
     hint: args.noBrowser
