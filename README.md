@@ -227,6 +227,12 @@ npx @extension.dev/mcp login --project <workspace>/<project>
 
 You approve a code at [extension.dev/device](https://extension.dev/device); no GitHub token reaches your machine, and the project-scoped token is stored locally, never returned to the agent, and lives at most 7 days. `extension_preview_web` with `share: true` uploads the build it just made and returns a link that renders those bytes in the web emulator, with its `expiresAt` and a `revokeUrl`. `extension_publish` returns the shareable URL of a build extension.dev already holds; `extension_submit` sends a built extension into store review through extension.dev, which holds your store credentials, and defaults to a dry run.
 
+`extension_submit` serves its reads (preflight, status and the default dry run) and its store acts as one tool, and MCP annotations are per tool, so it carries the destructive hint and a client's permission layer may stop even the call that only asks for approval. That call executes nothing: every store act waits for a workspace owner's approval on extension.dev. If you accept that approval page as the only gate, allow the tool by name, in Claude Code's `.claude/settings.json`:
+
+```json
+{ "permissions": { "allow": ["mcp__extension-dev__extension_submit"] } }
+```
+
 <div align="center">
 
 | <img alt="Chrome Web Store" src="https://media.extension.land/logos/stores/chrome-web-store.png" width="70"> | <img alt="Firefox Add-ons" src="https://media.extension.land/logos/stores/firefox-addons.png" width="70"> | <img alt="Edge Add-ons" src="https://media.extension.land/logos/stores/microsoft-edge-addons.svg" width="70"> | <img alt="App Store" src="https://media.extension.land/logos/stores/app-store.svg" width="70"> |
