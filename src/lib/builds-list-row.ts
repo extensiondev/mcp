@@ -170,12 +170,6 @@ export function browsersPendingSentence(rows: Row[]): string | null {
   return `${named.join(" and ")} ${waiting.length === 1 ? "has" : "have"} no browser reported by the platform yet; browsers land with the build record when the run finishes.`;
 }
 
-function stampOf(row: Row): number {
-  const stamps = [row.startedAt, row.timestamp].map((value) => Date.parse(text(value))).filter((value) => Number.isFinite(value));
-
-  return stamps.length ? Math.max(...stamps) : Number.NaN;
-}
-
 function newerBuildThanPush(lastPush: Row, commit: string, rows: Row[]): Row | null {
   if (isRow(lastPush.newerBuild) && text(lastPush.newerBuild.buildId)) {
     const given = lastPush.newerBuild;
@@ -190,7 +184,7 @@ function newerBuildThanPush(lastPush: Row, commit: string, rows: Row[]): Row | n
   if (!buildId || buildId.startsWith(commit.slice(0, 7)) || commit.startsWith(buildId.slice(0, 7))) return null;
 
   const pushedAt = Date.parse(text(lastPush.recordedAt) || text(lastPush.receivedAt));
-  const startedAt = stampOf(newest);
+  const startedAt = Date.parse(text(newest.startedAt));
   if (!Number.isFinite(pushedAt) || !Number.isFinite(startedAt) || startedAt <= pushedAt) return null;
 
   return { buildId, status: text(newest.status), startedAt: new Date(startedAt).toISOString().replace(/\.\d{3}Z$/, "Z") };

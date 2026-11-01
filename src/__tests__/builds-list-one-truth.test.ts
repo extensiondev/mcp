@@ -358,6 +358,14 @@ describe("extension_builds answers one truth per build", () => {
 
     const fresh = await list();
 
+    body = {
+      items: [{ ...TWO_STAMPS, startedAt: undefined, completedAt: undefined, timestamp: "2026-10-25T00:10:00Z" }],
+      lastPush: { commit: "4478aff", ref: "main", receivedAt: "2026-10-24T23:50:33Z", outcome: "DISPATCHED", dispatched: true },
+    };
+
+    const endedAfter = await list();
+
+    expect(endedAfter.value.lastPush.stale).toBeUndefined();
     expect(fresh.value.lastPush.stale).toBeUndefined();
     expect(fresh.value.lastPush.newerBuild).toBeUndefined();
     expect(fresh.hint).not.toContain("stale");
