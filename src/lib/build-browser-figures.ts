@@ -17,11 +17,21 @@ function rowName(row: Row): string {
   return text(row.name) || text(row.browser);
 }
 
+function sharedCommandNote(row: Row, duration: string): string {
+  const from = text(row.buildCommandSharedFrom) || text(row.durationSharedFrom);
+  const name = rowName(row);
+
+  return from
+    ? `${name}'s ${duration} is the time of the one build command that built ${from} and ${name} together.`
+    : `${name}'s ${duration} is the time of one build command it shared with another browser.`;
+}
+
 export function browserFigures(build: Row, buildId: string): BrowserFigures {
   if (!Array.isArray(build.browsers)) return { browsers: null, notes: [] };
 
   const buildDuration = text(build.duration);
   const shared: string[] = [];
+  const commandShared: string[] = [];
   const browsers = build.browsers.map((entry) => {
     if (!isRow(entry)) return entry;
 
@@ -29,7 +39,13 @@ export function browserFigures(build: Row, buildId: string): BrowserFigures {
     if (!duration || duration === "-") return entry;
 
     const scope = text(entry.durationScope);
-    if (scope === "browser") return entry;
+
+    if (scope === "browser") {
+      if (entry.durationShared === true) commandShared.push(sharedCommandNote(entry, duration));
+
+      return entry;
+    }
+
     if (scope !== "build" && duration !== buildDuration) return entry;
 
     shared.push(rowName(entry));
@@ -46,6 +62,8 @@ export function browserFigures(build: Row, buildId: string): BrowserFigures {
       `Per-browser build time is not recorded for build ${buildId}: the duration on ${shared.join(", ")} (${shown}) is the whole build's, marked durationScope "build".`,
     );
   }
+
+  notes.push(...commandShared);
 
   const sized = rows.filter((row) => text(row.size) && text(row.size) !== "-");
   const exact = sized.every((row) => typeof row.bytes === "number");
