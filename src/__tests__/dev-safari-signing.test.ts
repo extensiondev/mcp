@@ -146,6 +146,7 @@ describe("extension_dev for Safari says how the built app was signed", () => {
     expect(result.value.signing).toEqual({
       requested: "62ZL6K4MM4",
       identity: "ad-hoc",
+      status: "fell-back-to-ad-hoc",
       appPath: path.join(project, "dist", "safari-xcode", ".derived", "Build", "Products", "Release", "Leon.app"),
     });
 
@@ -167,7 +168,7 @@ describe("extension_dev for Safari says how the built app was signed", () => {
 
     const result = JSON.parse(await dev.handler({ projectPath: project, browser: "safari" }));
 
-    expect(result.value.signing).toEqual({ requested: null, identity: "ad-hoc", appPath: expect.stringMatching(/Leon\.app$/) });
+    expect(result.value.signing).toEqual({ requested: null, identity: "ad-hoc", status: "ad-hoc", appPath: expect.stringMatching(/Leon\.app$/) });
     expect(result.warnings.some((line: string) => line.startsWith("developmentTeam"))).toBe(false);
     expect(result.hint).toContain("The app's signing identity changed since the previous run (team:JU3XAJJQ2G before, ad-hoc now). Safari treats the newly signed app as a new extension, so it must be enabled again");
     expect(result.hint).toContain("enableExtension: true does that without a Settings trip");
@@ -188,7 +189,7 @@ describe("extension_dev for Safari says how the built app was signed", () => {
 
     expect(result.value.ready.status).toBe("compiled-not-attached");
     expect(result.value.ready.signing).toBeUndefined();
-    expect(result.value.signing).toEqual({ requested: "JU3XAJJQ2G", identity: "team:JU3XAJJQ2G", appPath: expect.stringMatching(/Leon\.app$/) });
+    expect(result.value.signing).toEqual({ requested: "JU3XAJJQ2G", identity: "team:JU3XAJJQ2G", status: "team-signed", appPath: expect.stringMatching(/Leon\.app$/) });
     expect(result.warnings.some((line: string) => line.startsWith("developmentTeam"))).toBe(false);
     expect(result.hint).toContain("The extension is not enabled in Safari yet");
   }, 15_000);

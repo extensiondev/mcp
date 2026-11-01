@@ -126,7 +126,7 @@ describe("the signing frame", () => {
   it("answers unknown, calls no codesign and makes no claim when the app is not on disk", async () => {
     const frame = await safariSigningFrame(dir, "safari", { requested: "62ZL6K4MM4", appName: "Leon" });
 
-    expect(frame?.signing).toEqual({ requested: "62ZL6K4MM4", identity: "unknown", appPath: expect.stringMatching(/Leon\.app$/) });
+    expect(frame?.signing).toEqual({ requested: "62ZL6K4MM4", identity: "unknown", status: "unknown", appPath: expect.stringMatching(/Leon\.app$/) });
     expect(frame?.warnings).toEqual([]);
     expect(frame?.hints).toEqual([]);
     expect(codesignCalls).toHaveLength(0);
@@ -155,6 +155,7 @@ describe("the signing frame", () => {
     expect(frame?.signing).toEqual({
       requested: "62ZL6K4MM4",
       identity: "ad-hoc",
+      status: "fell-back-to-ad-hoc",
       appPath: app,
     });
 

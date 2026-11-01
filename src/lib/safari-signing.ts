@@ -16,10 +16,20 @@ import { engineProjectRoot, readyContractPath } from "./session-paths";
 
 export type SigningIdentity = `team:${string}` | "ad-hoc" | "unknown";
 
+export type SigningStatus = "team-signed" | "ad-hoc" | "fell-back-to-ad-hoc" | "other-team" | "unknown";
+
 export interface SafariSigning {
   requested: string | null;
   identity: SigningIdentity;
+  status: SigningStatus;
   appPath?: string;
+}
+
+export function signingStatus(requested: string | null, identity: SigningIdentity): SigningStatus {
+  if (identity === "unknown") return "unknown";
+  if (identity === "ad-hoc") return requested ? "fell-back-to-ad-hoc" : "ad-hoc";
+
+  return requested && identity !== `team:${requested}` ? "other-team" : "team-signed";
 }
 
 export interface SafariSigningFrame {
@@ -128,6 +138,10 @@ function readRecord(file: string): SigningRecord | null {
   }
 }
 
+export function lastRecordedSigningIdentity(projectPath: string, browser: string): SigningIdentity | null {
+  return readRecord(sessionSidecarPath(projectPath, browser, SIDECAR))?.identity ?? null;
+}
+
 export function recordSigningIdentity(
   projectPath: string,
   browser: string,
@@ -172,6 +186,7 @@ export function adHocDespiteTeamWarning(requested: string, sessionOutput: string
 
   return (
     `developmentTeam ${requested} was requested, but the built app is ad-hoc signed (codesign reads Signature=adhoc): ${cause} ` +
+    "signing.status is fell-back-to-ad-hoc: Safari runs this app only while Settings > Developer > Allow unsigned extensions is on, Safari turns that off at every quit, so the enable step needs that toggle again after each Safari launch (by hand when enableExtension cannot switch it). " +
     "Fix: sign in to Xcode with that team's Apple ID (Xcode > Settings > Accounts), set developmentTeam to a team Xcode already knows, or drop developmentTeam for an ad-hoc build."
   );
 }
@@ -190,7 +205,7 @@ export function identityChangedHint(previous: SigningIdentity, identity: Signing
 export async function safariSigningFrame(
   projectPath: string,
   browser: string,
-  options: { requested?: string; appName?: string; logPath?: string; sessionPid?: number | null } = {},
+  options: { requested?: string; appName?: string; appPath?: string; logPath?: string; sessionPid?: number | null } = {},
 ): Promise<SafariSigningFrame | null> {
   if (!isSafariTarget(browser)) return null;
 
@@ -198,15 +213,17 @@ export async function safariSigningFrame(
   const requested = (options.requested ?? session?.developmentTeam ?? "").trim() || null;
   const appName = options.appName ?? session?.appName;
   const sessionOutput = readSessionOutput(options.logPath ?? session?.logPath);
-  const sessionPid = options.sessionPid ?? session?.pid ?? null;
-  const appPath = safariAppPath(projectPath, browser, { appName, sessionOutput });
+  const sessionPid = options.sessionPid !== undefined ? options.sessionPid : (session?.pid ?? null);
+  const appPath = options.appPath ?? safariAppPath(projectPath, browser, { appName, sessionOutput });
   const description = fs.existsSync(appPath) ? await describeCodeSignature(appPath) : null;
   const identity = parseCodesignIdentity(description);
   const warnings: string[] = [];
   const hints: string[] = [];
 
+  const status = signingStatus(requested, identity);
+
   if (identity === "unknown") {
-    return { signing: { requested, identity, appPath }, warnings, hints };
+    return { signing: { requested, identity, status, appPath }, warnings, hints };
   }
 
   if (requested && identity === "ad-hoc") warnings.push(adHocDespiteTeamWarning(requested, sessionOutput));
@@ -215,5 +232,5 @@ export async function safariSigningFrame(
   const previous = recordSigningIdentity(projectPath, browser, identity, sessionPid);
   if (previous) hints.push(identityChangedHint(previous, identity));
 
-  return { signing: { requested, identity, appPath }, warnings, hints };
+  return { signing: { requested, identity, status, appPath }, warnings, hints };
 }

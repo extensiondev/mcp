@@ -52,12 +52,13 @@ import {
 import {
   SAFARI_DEV_OPTION_SCHEMA,
   isSafariTarget,
-  notAttachedHint,
   safariDevOptionArgs,
   safariDevOptionRefusal,
   type SafariDevOptionArgs,
 } from "../lib/safari-dev-options";
 import { safariSigningFrame } from "../lib/safari-signing";
+import { safariNotAttachedHint } from "../lib/safari-app-stage";
+import { teamUnknownToXcodeRefusal } from "../lib/xcode-teams";
 import {
   CONTROL_PORT_KEPT_NOTE,
   NO_ATTACH_DIAGNOSIS_NOTE,
@@ -138,6 +139,9 @@ export async function handler(
 
   const safariRefusal = safariDevOptionRefusal(schema.name, browser, args);
   if (safariRefusal) return safariRefusal;
+
+  const teamRefusal = await teamUnknownToXcodeRefusal(schema.name, browser, args.developmentTeam);
+  if (teamRefusal) return teamRefusal;
 
   const guard = await guardSameBrowserSession({
     tool: schema.name,
@@ -470,7 +474,7 @@ export async function handler(
     : readiness
       ? `ready.status is ${readiness.ready.status}, not ready: ${
           readiness.ready.status === "compiled-not-attached" && isSafariTarget(browser)
-            ? notAttachedHint(browser, Boolean(args.enableExtension))
+            ? safariNotAttachedHint(args.projectPath, browser, Boolean(args.enableExtension))
             : readiness.ready.status === "compiled-not-attached"
               ? typeof (readiness.ready as Record<string, unknown>).failedLegSays === "string"
                 ? `${String((readiness.ready as Record<string, unknown>).failedLegSays)} Call extension_wait to keep waiting on the same contract; ${NO_ATTACH_DIAGNOSIS_NOTE}, so this server read the legs itself.`

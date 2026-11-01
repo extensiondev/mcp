@@ -26,7 +26,19 @@ import { type Envelope, envelope, isEnvelope } from "../lib/envelope";
 import { platformListed } from "../lib/tool-policy";
 import { manifestDivergence } from "../lib/manifest-by-browser";
 import { engineBrowserName } from "../lib/browser-family";
-import { BUNDLE_ID_PATTERN } from "../lib/safari-dev-options";
+import { BUNDLE_ID_PATTERN, isSafariTarget } from "../lib/safari-dev-options";
+import {
+  SAFARI_BUILD_OPTION_SCHEMA,
+  buildBudgetMs,
+  buildTimeoutWords,
+  keptTeamNote,
+  safariBuildCliArgs,
+  safariBuildRefusal,
+  safariBuildTeam,
+  type SafariBuildArgs,
+} from "../lib/safari-build-options";
+import { safariSigningFrame } from "../lib/safari-signing";
+import { teamUnknownToXcodeRefusal } from "../lib/xcode-teams";
 import { reviewCoverageNotes, reviewDistReport, reviewRiskWarnings } from "../lib/store-review";
 
 const COMMAND = "extension_build";
@@ -417,34 +429,11 @@ export const schema = {
         description:
           "Build even when extension_manifest_validate reports build-blocking errors. The build normally refuses: the engine itself stops only on missing scripts, icons, DNR rule files, default_locale and manifest_version, and ships a bundle over the rest.",
       },
-      appName: {
-        type: "string",
-        description:
-          "Safari targets only: name of the generated macOS app, which also names the Xcode scheme and the .app on disk. Defaults to the manifest name.",
-      },
-      bundleId: {
-        type: "string",
-        description:
-          "Safari targets only: a reverse-DNS bundle identifier you own, such as com.acme.readinglist. Without one the app is packaged under a generated dev.extensionjs.* identifier derived from the app name, which two projects with the same name share, and the first team to register it takes it.",
-      },
-      macOsOnly: {
-        type: "boolean",
-        default: true,
-        description:
-          "Safari targets only: generate a macOS-only Xcode project. Pass false for a universal project that also targets iOS and iPadOS, which is what you want if the extension ships on iPhone or iPad.",
-      },
-      forceRegenerate: {
-        type: "boolean",
-        default: false,
-        description:
-          "Safari targets only: regenerate the Xcode project even when the engine considers it up to date. Use it when an earlier packaging run left the project broken.",
-      },
+      ...SAFARI_BUILD_OPTION_SCHEMA,
     },
     required: ["projectPath"],
   },
 };
-
-const SAFARI_VENDORS = new Set(["safari", "webkit-based"]);
 
 export { BUNDLE_ID_PATTERN };
 
@@ -569,59 +558,16 @@ export async function handler(args: {
   silent?: boolean;
   mode?: "development" | "production" | "none";
   skipValidation?: boolean;
-  appName?: string;
-  bundleId?: string;
-  macOsOnly?: boolean;
-  forceRegenerate?: boolean;
-}): Promise<string> {
+} & SafariBuildArgs): Promise<string> {
   const start = Date.now();
   const browser = args.browser ?? "chrome";
-  const safari = SAFARI_VENDORS.has(browser);
+  const safari = isSafariTarget(browser);
+  const safariRefusal = safariBuildRefusal(COMMAND, browser, args, start);
+  if (safariRefusal) return safariRefusal;
 
-  const safariOnly = (
-    [
-      ["appName", args.appName],
-      ["bundleId", args.bundleId],
-      ["macOsOnly", args.macOsOnly],
-      ["forceRegenerate", args.forceRegenerate === true ? true : undefined],
-    ] as Array<[string, unknown]>
-  )
-    .filter(([, value]) => value !== undefined)
-    .map(([name]) => name);
-
-  if (safariOnly.length > 0 && !safari) {
-    return envelope({
-      ok: false,
-      command: COMMAND,
-      status: "safari-only-option",
-      error: {
-        code: "E_SAFARI_ONLY_OPTION",
-        message:
-          `${safariOnly.join(", ")} configure the Safari web-extension conversion and mean nothing for a ${browser} build. ` +
-          "Nothing was built, so the options were not silently ignored.",
-      },
-      value: { browser, options: safariOnly, duration: Date.now() - start },
-      hint:
-        'Pass browser: "safari" to package a Safari app, or drop these options to build for ' +
-        `${browser}.`,
-    });
-  }
-
-  if (args.bundleId !== undefined && !BUNDLE_ID_PATTERN.test(args.bundleId)) {
-    return envelope({
-      ok: false,
-      command: COMMAND,
-      status: "invalid-bundle-id",
-      error: {
-        code: "E_INVALID_BUNDLE_ID",
-        message:
-          `bundleId ${JSON.stringify(args.bundleId)} is not an identifier the engine accepts. ` +
-          "Expected dot-separated segments of letters, digits and hyphens (the engine's own rule); a reverse-DNS name under a domain you own is what Apple expects at submission.",
-      },
-      value: { browser, bundleId: args.bundleId, duration: Date.now() - start },
-      hint: 'Use an identifier under a domain you own, for example "com.acme.readinglist".',
-    });
-  }
+  const signingTeam = safariBuildTeam(args.projectPath, browser, args.developmentTeam);
+  const teamRefusal = await teamUnknownToXcodeRefusal(COMMAND, browser, signingTeam.team, start);
+  if (teamRefusal) return teamRefusal;
 
   const carrierCleanup = removeCarrier(args.projectPath);
   const carrierNotes: string[] = [];
@@ -684,15 +630,10 @@ export async function handler(args: {
   if (args.polyfill) cliArgs.push("--polyfill");
   if (args.silent) cliArgs.push("--silent");
   if (args.mode) cliArgs.push("--mode", args.mode);
-  if (args.appName) cliArgs.push("--app-name", args.appName);
-  if (args.bundleId) cliArgs.push("--bundle-id", args.bundleId);
+  if (safari) cliArgs.push(...safariBuildCliArgs(args, signingTeam.team));
+  if (signingTeam.kept) warnings.push(keptTeamNote(signingTeam.team));
 
-  if (args.macOsOnly !== undefined)
-    {cliArgs.push("--macos-only", String(args.macOsOnly));}
-
-  if (args.forceRegenerate) cliArgs.push("--force-regenerate");
-
-  const spawn = { cwd: args.projectPath, timeoutMs: 180_000 };
+  const spawn = { cwd: args.projectPath, timeoutMs: buildBudgetMs(browser) };
   const verdict = await outputJsonVerdict("build", args.projectPath);
   const engineKnownTooOld = verdict.supported === false;
   let attempt = engineKnownTooOld
@@ -877,6 +818,15 @@ export async function handler(args: {
         ? `The build succeeded but reported no Safari app identity, so this run cannot tell you which bundle identifier the app carries. Either the packager did not run (a non-macOS host skips packaging and leaves a plain bundle in dist/${browser}), or the engine installed in this project predates the reporting contract. Check the build output below, and run extension_doctor if you expected an app.`
         : null;
 
+    const signingFrame = safari
+      ? await safariSigningFrame(args.projectPath, browser, {
+          requested: signingTeam.team,
+          appName: safariIdentity?.appName ?? args.appName,
+          ...(safariIdentity?.appPath ? { appPath: safariIdentity.appPath } : {}),
+          sessionPid: null,
+        })
+      : null;
+
     return envelope({
       ok: true,
       command: COMMAND,
@@ -884,6 +834,7 @@ export async function handler(args: {
       value: {
         browser,
         ...(safariIdentity ? { safariApp: safariIdentity } : {}),
+        ...(signingFrame ? { signing: signingFrame.signing } : {}),
         outputPath: distDir,
         ...(typeof engineSummary?.total_bytes === "number"
           ? { totalBytes: engineSummary.total_bytes }
@@ -920,25 +871,24 @@ export async function handler(args: {
         derivedBundleIdNote,
         safariIdentityMissingNote,
         summaryPathNote,
+        ...(signingFrame?.warnings ?? []),
+        ...(signingFrame?.hints ?? []),
       ],
       hint: `The build is in ${distDir}. To read what is in it, call extension_analyze with this projectPath and browser "${browser}": it answers the sizes, the entry points and the store checks a reviewer runs, plus the emitted manifest of every built browser and the resolved keys that differ between them (manifestByBrowser), so there is no need to list or grep the folder by hand or to read dist/<browser>/manifest.json.${zipPath ? ` The store zip is ${zipPath}.` : ""}${platformListed() ? " To send the extension to someone, extension_publish gives the project's build on extension.dev a page with a download and a run command for each browser (the platform builds from the pushed source)." : ""}`,
     });
   }
 
   if (attempt.timedOut) {
-    const budget = spawn.timeoutMs;
+    const words = buildTimeoutWords(browser, spawn.timeoutMs, attempt.signal);
 
     return envelope({
       ok: false,
       command: COMMAND,
       status: "build-timeout",
-      error: {
-        code: "E_BUILD_TIMEOUT",
-        name: "BuildTimeout",
-        message: `This server stopped the build after ${budget} ms (${attempt.signal ?? "a signal"}); the engine did not fail, it ran out of the time it was given. A first build that installs dependencies can take longer than that, and the engine process may still be running.`,
-      },
-      value: { browser, buildExitCode: null, duration, output: lastLines(out, 12) },
-      hint: "This tool's budget is fixed at 180 s. Check for a still-running extension build process (it may finish on its own) before retrying; a retry that races it writes the same dist twice.",
+      error: { code: "E_BUILD_TIMEOUT", name: "BuildTimeout", message: words.message },
+      value: { browser, buildExitCode: null, duration, budgetMs: spawn.timeoutMs, output: lastLines(out, 12) },
+      warnings,
+      hint: words.hint,
     });
   }
 

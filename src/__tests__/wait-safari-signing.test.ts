@@ -70,6 +70,7 @@ describe("extension_wait reads the Safari app's signing from the session it alre
     expect(result.value.signing).toEqual({
       requested: "62ZL6K4MM4",
       identity: "ad-hoc",
+      status: "fell-back-to-ad-hoc",
       appPath: path.join(dir, "dist", "safari-xcode", ".derived", "Build", "Products", "Release", "Leon.app"),
     });
 
@@ -88,7 +89,7 @@ describe("extension_wait reads the Safari app's signing from the session it alre
     const result = JSON.parse(await handler({ projectPath: dir, browser: "safari", timeoutMs: 1500 }));
 
     expect(result.status).toBe("compiled-not-attached");
-    expect(result.value.signing).toEqual({ requested: null, identity: "team:JU3XAJJQ2G", appPath: expect.stringMatching(/Leon\.app$/) });
+    expect(result.value.signing).toEqual({ requested: null, identity: "team:JU3XAJJQ2G", status: "team-signed", appPath: expect.stringMatching(/Leon\.app$/) });
     expect(result.hint).toContain("The extension is not enabled in Safari yet");
     expect(result.hint).toContain("The app's signing identity changed since the previous run (ad-hoc before, team:JU3XAJJQ2G now). Safari treats the newly signed app as a new extension, so it must be enabled again");
     expect(result.hint).toContain("enableExtension: true does that without a Settings trip");
