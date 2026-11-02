@@ -14,6 +14,7 @@ import {
   pendingApproval,
 } from "./approval-outcome";
 import { loginRefusedOnApproval } from "./approval-login";
+import { pageTraceSentence, readPageTrace } from "./approval-page-trace";
 import { storedProjectId } from "./approval-record";
 import { linesSentence, readLines } from "./approval-lines";
 import { readTokenClaims } from "./credential-source";
@@ -393,16 +394,18 @@ export async function verifyApproval(params: {
   }
 
   if (status !== "approved") {
+    const trace = readPageTrace(data.page);
+
     return {
       blocked: true,
       envelope: pendingApproval({
         command: input.command,
         approvalId,
-        message: `Approval ${approvalId} has not been granted yet: ${describedBy(input, minted)}`,
+        message: `Approval ${approvalId} has not been granted yet: ${describedBy(input, minted)}${pageTraceSentence(trace)}`,
         undone: "Nothing was executed.",
         api: input.api,
         approvalUrl: (typeof data.approvalUrl === "string" ? data.approvalUrl.trim() : "") || minted?.approvalUrl || undefined,
-        value: { action: input.action, status: status || "pending", ...(lines.length ? { lines } : {}) },
+        value: { action: input.action, status: status || "pending", ...(lines.length ? { lines } : {}), ...(trace ? { page: trace } : {}) },
       }),
     };
   }

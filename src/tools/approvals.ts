@@ -8,6 +8,7 @@
 
 import { linesSentence, readLines } from "../lib/approval-lines";
 import { approvalUrlFor } from "../lib/approval-outcome";
+import { pageTraceSentence, readPageTrace } from "../lib/approval-page-trace";
 import { readJson } from "../lib/approval-verify";
 import { API_BASE } from "../lib/common-schema";
 import { LOGIN_STEPS, PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
@@ -173,7 +174,7 @@ export async function handler(args: { action?: string; approvalId?: string; proj
       command: COMMAND,
       status: state,
       value: { ...value, ...read.data, ...(lines.length ? { lines } : {}), approvalUrl, links },
-      hint: `${SAY[state] ?? ""}${lines.length ? ` Lines: ${linesSentence(lines)}.` : ""} The approval page is ${approvalUrl}.`.trim(),
+      hint: `${SAY[state] ?? ""}${lines.length ? ` Lines: ${linesSentence(lines)}.` : ""}${state === "pending" ? pageTraceSentence(readPageTrace(read.data.page)) : ""} The approval page is ${approvalUrl}.`.trim(),
     });
   }
 

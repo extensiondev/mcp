@@ -21,6 +21,13 @@ export const APPROVAL_OPENED_SENTENCE = "The approval page is open in your brows
 
 export const APPROVAL_OPENED_SHORT = "The approval page is open in your browser.";
 
+export const APPROVAL_BATCH_WINDOW_MS = 10 * 60 * 1000;
+
+export const APPROVAL_BATCH_MAX = 10;
+
+export const approvalBatchSentence = (count: number): string =>
+  `One page lists all ${count} requests asked for in the last few minutes and is open in your browser; it shows each request's state, and Approve all approves every one still waiting. Approve them, then tell me.`;
+
 export type UrlOpener = (url: string) => boolean;
 
 const truthy = (raw: string | undefined): boolean => {
@@ -67,8 +74,32 @@ export function openUrl(url: string): boolean {
 
 const opened = new Set<string>();
 
+let recent: Array<{ approvalId: string; origin: string; at: number }> = [];
+
 export function forgetOpenedApprovals(): void {
   opened.clear();
+  recent = [];
+}
+
+const APPROVAL_PAGE = /^\/device\/approve\/(apr_[A-Za-z0-9_-]{32})$/;
+
+export function approvalBatchUrl(approvalUrl: string, now: number = Date.now()): { url: string; count: number } {
+  let parsed: URL;
+
+  try {
+    parsed = new URL(approvalUrl);
+  } catch {
+    return { url: approvalUrl, count: 1 };
+  }
+
+  const approvalId = APPROVAL_PAGE.exec(parsed.pathname)?.[1];
+  if (!approvalId) return { url: approvalUrl, count: 1 };
+
+  recent = [...recent.filter((entry) => now - entry.at < APPROVAL_BATCH_WINDOW_MS && entry.approvalId !== approvalId), { approvalId, origin: parsed.origin, at: now }];
+  const ids = recent.filter((entry) => entry.origin === parsed.origin).slice(-APPROVAL_BATCH_MAX).map((entry) => entry.approvalId);
+  if (ids.length < 2) return { url: approvalUrl, count: 1 };
+
+  return { url: `${parsed.origin}/device/approve?ids=${ids.join(",")}`, count: ids.length };
 }
 
 export function canAutoOpen(options: { noShip: boolean }, env: Env = process.env, platform: NodeJS.Platform = process.platform): boolean {
@@ -100,18 +131,20 @@ export function openApprovalOnce(result: string, options: { noShip: boolean }, e
   if (opened.has(key) || !canAutoOpen(options, env, platform)) return result;
 
   opened.add(key);
-  if (!opener(approvalUrl)) return result;
+  const batch = approvalBatchUrl(approvalUrl);
+  if (!opener(batch.url)) return result;
 
   const hint = text(parsed.hint);
+  const said = batch.count > 1 ? approvalBatchSentence(batch.count) : /click approve, then tell me/i.test(hint) ? APPROVAL_OPENED_SHORT : APPROVAL_OPENED_SENTENCE;
 
   return envelope({
     ok: parsed.ok,
     command: parsed.command,
     status: parsed.status,
-    value: { ...value, approvalOpened: true },
+    value: { ...value, approvalOpened: true, ...(batch.count > 1 ? { approvalBatchUrl: batch.url } : {}) },
     error: parsed.error,
     warnings: parsed.warnings,
     ...(parsed.truncated !== undefined ? { truncated: parsed.truncated } : {}),
-    hint: [/click approve, then tell me/i.test(hint) ? APPROVAL_OPENED_SHORT : APPROVAL_OPENED_SENTENCE, hint].filter(Boolean).join(" "),
+    hint: [said, hint].filter(Boolean).join(" "),
   });
 }
