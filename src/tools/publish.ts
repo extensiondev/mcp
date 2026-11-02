@@ -57,6 +57,7 @@ import {
 } from "../lib/publish-artifacts";
 import { channelBrowsers, firefoxChannelFields, firefoxChannelSentence, servedOfAnswer } from "../lib/firefox-update-url";
 import { fillFromBuildIndex } from "../lib/publish-build-index";
+import { localizeExtensionName } from "../lib/publish-localized-name";
 import { withPackageAddresses } from "../lib/publish-package-commands";
 import { consoleProjectUrl } from "../lib/registry";
 
@@ -326,7 +327,7 @@ export async function handler(args: {
     ref,
     args.api,
   );
-  const nameNote = nameMismatchNote(
+  const nameNote = (await localizeExtensionName(data, args)) ?? nameMismatchNote(
     data,
     credential.ref
       ? consoleProjectUrl(credential.ref, "project-settings", args.api)
