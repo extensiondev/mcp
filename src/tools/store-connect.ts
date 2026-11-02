@@ -7,6 +7,15 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { canAutoOpen, openUrl } from "../lib/approval-open";
+import { checkSavedConnection, readSavedConnection } from "../lib/connect-existing";
+import {
+  alreadyConnectedAnswer,
+  refusedPrelude,
+  storeRefusalOf,
+  uncheckedAnswer,
+  workspaceFailingAnswer,
+  type StoreRefusal,
+} from "../lib/connect-existing-answer";
 import {
   CONNECT_ACTION,
   CONNECT_STORES,
@@ -41,6 +50,7 @@ export interface StoreConnectArgs {
   store?: string;
   browsers?: string[];
   connectSession?: string;
+  replace?: unknown;
   waitSeconds?: unknown;
   project?: string;
   api?: string;
@@ -86,7 +96,15 @@ function refusal(sent: ProjectApiRefusal, api: ProjectApi, args: StoreConnectArg
   });
 }
 
-function answer(api: ProjectApi, args: StoreConnectArgs, store: ConnectStore, session: ConnectSession, opened: boolean): string {
+interface Before {
+  prelude: string;
+  storeRefusal: StoreRefusal | null;
+  connectionUnread: string;
+}
+
+const NOTHING_BEFORE: Before = { prelude: "", storeRefusal: null, connectionUnread: "" };
+
+function answer(api: ProjectApi, args: StoreConnectArgs, store: ConnectStore, session: ConnectSession, opened: boolean, before: Before = NOTHING_BEFORE): string {
   const project = `${api.ref.workspace}/${api.ref.project}`;
   const trackUrl = storeSettingsUrl(api.ref, args.api);
 
@@ -117,7 +135,7 @@ function answer(api: ProjectApi, args: StoreConnectArgs, store: ConnectStore, se
     });
   }
 
-  const say = pendingSentences({ store, project, session, ...urls, opened });
+  const say = [before.prelude, pendingSentences({ store, project, session, ...urls, opened })].filter(Boolean).join(" ");
   const resume = `When they say it is done, call ${COMMAND} {action: "connect", store: "${store}", connectSession: "${session.id}", waitSeconds: 120}; it answers the account the store named and when, never the key.`;
 
   return envelope({
@@ -136,6 +154,8 @@ function answer(api: ProjectApi, args: StoreConnectArgs, store: ConnectStore, se
       expiresAt: session.expiresAt,
       opened,
       ...(session.refusal ? { lastRefusal: session.refusal } : {}),
+      ...(before.storeRefusal ? { storeRefusal: before.storeRefusal } : {}),
+      ...(before.connectionUnread ? { connectionUnread: before.connectionUnread } : {}),
       trackUrl,
       sayToPerson: say,
       nextStep: nextStep("connect", say, urls.connectUrl),
@@ -151,6 +171,21 @@ function openPages(store: ConnectStore, connectUrl: string): boolean {
   if (keyPage) openUrl(keyPage);
 
   return openUrl(connectUrl);
+}
+
+async function existingConnection(api: ProjectApi, args: StoreConnectArgs, store: ConnectStore): Promise<{ answered: string } | Before> {
+  const saved = await readSavedConnection(api, store);
+  if (!saved.read) return { ...NOTHING_BEFORE, connectionUnread: saved.message };
+  if (!saved.connection) return NOTHING_BEFORE;
+
+  const check = await checkSavedConnection(api, store, saved.connection);
+  const { connection } = check;
+
+  if (connection.healthy === true && !connection.reconnect) return { answered: alreadyConnectedAnswer(api, store, check, args.api) };
+  if (connection.source === "workspace" && (connection.healthy === false || connection.reconnect)) return { answered: workspaceFailingAnswer(api, store, check, args.api) };
+  if (connection.healthy !== false) return { answered: uncheckedAnswer(api, store, check, args.api) };
+
+  return { prelude: refusedPrelude(store, check), storeRefusal: storeRefusalOf(check), connectionUnread: "" };
 }
 
 async function readSession(api: ProjectApi, store: ConnectStore, id: string) {
@@ -169,6 +204,11 @@ export async function connectStoreAccount(args: StoreConnectArgs): Promise<strin
 
   const api = opened.api;
   const resumed = text(args.connectSession);
+  const replacing = args.replace === true || text(args.replace).toLowerCase() === "true";
+  const before = resumed || replacing ? NOTHING_BEFORE : await existingConnection(api, args, store);
+
+  if ("answered" in before) return before.answered;
+
   let sent = resumed ? await readSession(api, store, resumed) : await projectApiSend<Record<string, unknown>>(api, "POST", connectSessionRoute(store), {});
 
   if (!sent.ok) return refusal(sent, api, args, store);
@@ -191,5 +231,5 @@ export async function connectStoreAccount(args: StoreConnectArgs): Promise<strin
     session = readConnectSession(sent.json, store) ?? session;
   }
 
-  return answer(api, args, store, session, pageOpened);
+  return answer(api, args, store, session, pageOpened, before);
 }

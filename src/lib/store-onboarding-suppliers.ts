@@ -8,6 +8,7 @@
 
 import { isRow, text } from "./ship-act";
 import { NEVER_PREFILLED, supplyOf } from "./store-bring-list";
+import { WORKSPACE_RECONNECT_STATE } from "./store-connection";
 
 type Row = Record<string, unknown>;
 
@@ -139,6 +140,12 @@ export function requirementRowsOf(view: unknown): Row[] {
   return view.requirements.items.filter(isRow);
 }
 
+export function connectionPasses(view: unknown): boolean {
+  const connection = isRow(view) && isRow(view.connection) ? view.connection : null;
+
+  return Boolean(connection && text(connection.kind) && connection.healthy === true && text(connection.state) !== WORKSPACE_RECONNECT_STATE);
+}
+
 export function readinessRowsOf(stores: Row, asked: readonly string[]): ReadinessRows {
   const groups = Object.fromEntries(SUPPLIERS.map((supplier) => [supplier, { required: [], optional: [] }])) as unknown as ReadinessGroups;
   const statusById: Record<string, string> = {};
@@ -146,9 +153,11 @@ export function readinessRowsOf(stores: Row, asked: readonly string[]): Readines
   let requiredNotOnFile = 0;
 
   for (const store of asked) {
+    const passing = connectionPasses(stores[store]);
+
     for (const row of requirementRowsOf(stores[store])) {
       const id = text(row.id);
-      const status = text(row.status) || "unknown";
+      const status = passing && id === CREDENTIAL_ROWS[store] ? "have" : text(row.status) || "unknown";
       statusById[id] = status;
 
       if (status === "have") {
