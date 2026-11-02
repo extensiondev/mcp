@@ -97,7 +97,7 @@ export const schema = {
       },
       displayName: {
         type: "string",
-        description: "Human name for the project. Defaults to the project slug.",
+        description: "Human name for the project. Defaults to the project slug. To rename a project that already exists, use extension_workspace (action: 'configure-project', settings: { displayName }), never a second create.",
       },
       description: {
         type: "string",

@@ -23,6 +23,7 @@ import {
   type ProjectApi,
   type ProjectApiRefusal,
 } from "../lib/project-api";
+import { projectRename, renameHint } from "../lib/project-rename";
 import { isRow, text } from "../lib/ship-act";
 import { trackUrl } from "../lib/track-url";
 
@@ -301,13 +302,14 @@ export async function configureProject(args: ConfigureProjectArgs): Promise<stri
   }
 
   const gateLine = gate ? " The live channel change went through the approve page; the other fields were plain settings under your own token." : " These were plain settings under your own token; no approval page was involved.";
+  const rename = applied.includes("general") ? projectRename(project, stored.general ?? {}, change) : null;
 
   return envelope({
     ok: true,
     command: COMMAND,
     status: "project-configured",
-    value: { action: CONFIGURE_PROJECT, project, settings: change, changes, applied, trackUrl: page },
-    hint: `${project}'s settings now read: ${changes.join("; ")}.${gateLine} Read them back with extension_workspace (action: "settings"); the console page is ${page}.`,
+    value: { action: CONFIGURE_PROJECT, project, settings: change, changes, applied, ...(rename ? { rename } : {}), trackUrl: page },
+    hint: `${project}'s settings now read: ${changes.join("; ")}.${gateLine}${rename ? ` ${renameHint(rename)}` : ""} Read them back with extension_workspace (action: "settings"); the console page is ${page}.`,
   });
 }
 
