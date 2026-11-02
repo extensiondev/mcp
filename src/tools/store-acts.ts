@@ -556,7 +556,7 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
       error: {
         code: "E_PLATFORM",
         name: firstSubmission ? "FirstSubmissionInPartnerCenter" : "PublishFailed",
-        message: `The publish did not reach ${words.reviewer}'s ${words.reviewWord}: ${reason}.`,
+        message: `The publish did not reach ${words.reviewer}'s ${words.reviewWord}: ${reason.replace(/[.\s]+$/, "")}.`,
       },
       hint: firstSubmission
         ? `${step?.say ?? ""} Once it has been submitted there once, turn on "Submitted once in Partner Center" in the console Edge store settings (or wait for the platform to record the first publish Partner Center accepted), then call extension_submit action "publish" again; ${storesRead(args)} reads the record. ${made}`

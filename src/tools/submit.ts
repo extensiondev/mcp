@@ -117,6 +117,7 @@ import {
 import { syncListing } from "./store-listing";
 import { screenshotDoor } from "../lib/store-bring-list";
 import { readSafariReleaseIntentFor, safariApprovalReleaseSentence } from "../lib/safari-release-intent";
+import { withSafariPublishStep } from "../lib/safari-testflight-step";
 import { LISTING_INCOMPLETE_CODE, listingIncompleteOf, listingIncompleteSentence } from "../lib/store-listing-incomplete";
 
 import type { InputIssue } from "../lib/validate-input";
@@ -1442,10 +1443,13 @@ async function answer(args: SubmitToolArgs): Promise<string> {
               uploadedFailures.map((row) => String(row.record?.failure?.step)).join("; "),
               firstPage,
             )
-          : doneStep(
-              outcome.stores,
-              itemUrl,
-              outcome.stores.filter((store) => uploadTaken(waited.record?.[store]?.storeUpload)),
+          : withSafariPublishStep(
+              doneStep(
+                outcome.stores,
+                itemUrl,
+                outcome.stores.filter((store) => uploadTaken(waited.record?.[store]?.storeUpload)),
+              ),
+              { stores: outcome.stores, approvalId: coveredApproval, statusRead },
             );
     const refundLine = failedStores
       .map((store) => ({ store, sentence: approvalRefundSentence(waited.record?.[store]) }))
