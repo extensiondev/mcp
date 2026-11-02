@@ -8,7 +8,7 @@
 
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
-import { WAIT_SECONDS_INPUT } from "../lib/act-outcome";
+import { WAIT_SECONDS_INPUT, stampNow } from "../lib/act-outcome";
 import { API_BASE } from "../lib/common-schema";
 import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
 import { buildState, isActiveState, isRow, text, type Row } from "../lib/builds-list-row";
@@ -269,6 +269,7 @@ async function getBuild(args: HandlerArgs): Promise<string> {
   const failures = buildFailures(detail.json);
   const buildPage = buildConsoleUrl(opened.api, canonical, args.api);
   const figures = browserFigures(detail.json, canonical);
+  const readAt = stampNow();
 
   return envelope({
     ok: true,
@@ -276,6 +277,7 @@ async function getBuild(args: HandlerArgs): Promise<string> {
     status: "read",
     value: {
       action: "get",
+      readAt,
       build: { ...buildView(detail.json, buildPage), ...(figures.browsers ? { browsers: figures.browsers } : {}), consoleUrl: buildPage },
       run: { ...runOf(detail.json), ...(text(detail.json.runUrl) ? { runUrl: buildPage } : {}) },
       artifacts: artifactRows,
@@ -287,7 +289,7 @@ async function getBuild(args: HandlerArgs): Promise<string> {
           : { recorded: false }
         : { recorded: "unknown" },
     },
-    hint: `Build ${canonical} is ${text(detail.json.status) || "of unknown status"}${
+    hint: `Build ${canonical} is ${text(detail.json.status) || "of unknown status"}${unfinished ? ` as of ${readAt}` : ""}${
       unfinished
         ? UNFINISHED_CLAUSE
         : browsers.length

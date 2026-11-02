@@ -2,15 +2,17 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handler as builds } from "../tools/builds";
+import { outcomeClock } from "../lib/act-outcome";
 import { writeCredentials } from "../lib/credentials";
 
 const API = "http://localhost:3100";
 const PROJECT_ID = "prj_probe";
 const SHA = "41a0c7e";
 const BUILD_ROUTE = `/api/projects/${PROJECT_ID}/builds/${SHA}`;
+const READ_AT = "2026-11-02T01:05:03.000Z";
 
 type Route = { body?: unknown; status?: number; raw?: string };
 
@@ -94,6 +96,7 @@ describe("extension_builds get reads artifacts and integrity only once the build
     else process.env.EXTENSION_DEV_API_URL = prevApi;
 
     global.fetch = prevFetch;
+    vi.restoreAllMocks();
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
@@ -101,16 +104,18 @@ describe("extension_builds get reads artifacts and integrity only once the build
     if (process.platform === "win32") return;
 
     routes[BUILD_ROUTE] = { body: detail(status) };
+    vi.spyOn(outcomeClock, "now").mockReturnValue(Date.parse(READ_AT));
 
     const out = JSON.parse(await builds({ action: "get", buildId: SHA, api: API }));
 
     expect(out.ok).toBe(true);
     expect(out.status).toBe("read");
+    expect(out.value.readAt).toBe(READ_AT);
     expect(out.value.build).toMatchObject({ buildId: SHA, status });
     expect(out.value.artifacts).toEqual([]);
     expect(out.value.integrity).toEqual({});
     expect(out.warnings).toEqual([]);
-    expect(out.hint).toContain(`Build ${SHA} is ${status}; artifacts and integrity arrive when the build finishes.`);
+    expect(out.hint).toContain(`Build ${SHA} is ${status} as of ${READ_AT}; artifacts and integrity arrive when the build finishes.`);
     expect(out.hint).toContain('action:"logs"');
     expect(calls.filter((p) => p.endsWith("/artifacts") || p.includes("/integrity/"))).toEqual([]);
     expect(calls).toContain(`${BUILD_ROUTE}/usage`);
@@ -137,6 +142,7 @@ describe("extension_builds get reads artifacts and integrity only once the build
     ]);
 
     expect(out.hint).not.toContain("arrive when the build finishes");
+    expect(out.hint).not.toContain(" as of ");
     expect(out.warnings.join(" ")).not.toMatch(/https?:\/\/|\/api\//);
   });
 });

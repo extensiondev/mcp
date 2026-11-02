@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { stampNow } from "../lib/act-outcome";
 import { envelope } from "../lib/envelope";
 import { projectApiGet, projectApiReadFailure, type ProjectApi } from "../lib/project-api";
 import { COMMAND, isRow, text, type Row } from "./builds-acts";
@@ -14,6 +15,7 @@ export const LOG_TAIL = 200;
 
 const NOT_RUN_REASON = "the run failed before this browser's job started";
 const CANCELLED_REASON = "the run was canceled before this browser's job started";
+const RUNNING_REASON = "the run is still in progress, and the platform reports a browser's lines once the build records them";
 const FAILED_BUILD_STATUSES = new Set(["failed", "failure", "error", "timed_out", "cancelled", "canceled"]);
 
 export interface LogsRead {
@@ -79,9 +81,13 @@ function tailOf(item: Row): Row {
   };
 }
 
+function waitingForLines(item: Row): boolean {
+  return text(item.status) === "pending" && !(Array.isArray(item.logs) && item.logs.length);
+}
+
 function settled(item: Row, run: RunSection | null, legacyFailed: boolean): Row {
   if (text(item.status) !== "pending") return item;
-  if (!concluded(run) && !legacyFailed) return item;
+  if (!concluded(run) && !legacyFailed) return run && waitingForLines(item) ? { ...item, reason: text(item.reason) || RUNNING_REASON } : item;
   if (run?.conclusion === "cancelled") return { ...item, status: "cancelled", reason: text(item.reason) || CANCELLED_REASON };
 
   return { ...item, status: "skipped", reason: text(item.reason) || NOT_RUN_REASON };
@@ -175,6 +181,8 @@ export async function readLogs(read: LogsRead): Promise<string> {
   const skipped = items.filter((item) => text(item.status) === "skipped").map((item) => text(item.browser));
   const beforeBrowsers = all.length === 0 || all.every((item) => text(item.status) === "skipped");
   const cancelled = run?.conclusion === "cancelled" ? cancelledSentence(text(answer.json.buildId) || buildId, run.supersededBy) : "";
+  const readAt = stampNow();
+  const waiting = run && !concluded(run) && !legacy.failed ? items.filter(waitingForLines).map((item) => text(item.browser)) : [];
 
   let hint: string;
 
@@ -199,6 +207,8 @@ export async function readLogs(read: LogsRead): Promise<string> {
       run?.validation,
       read.consoleUrl,
     );
+  } else if (waiting.length) {
+    hint = `The run is ${run?.status || "in progress"} as of ${readAt}, so ${waiting.join(", ")} ${waiting.length === 1 ? "has" : "have"} no lines yet: the platform reports a browser's lines once the build records them. extension_builds action:"get" with this buildId shows each browser's progress now; the build page is ${read.consoleUrl}.`;
   } else if (skipped.length === items.length) {
     hint = `The run ended before ${skipped.join(", ")} ran, so there are no lines. The build page is ${read.consoleUrl}.`;
   } else {
@@ -211,6 +221,7 @@ export async function readLogs(read: LogsRead): Promise<string> {
     status: "read",
     value: {
       action: "logs",
+      readAt,
       buildId: text(answer.json.buildId) || buildId,
       ...(run ? { run } : {}),
       items,

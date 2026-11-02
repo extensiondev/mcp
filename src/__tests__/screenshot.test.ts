@@ -4,15 +4,32 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebSocketServer } from "ws";
 
 import { unpackedExtensionId } from "../lib/extension-identity";
 import { encodeRdpPacket, RdpPacketDecoder } from "../lib/rdp";
 import { browserArtifactsDir, readyContractPath } from "../lib/session-paths";
-import { readyContract, safariDevContract } from "./fixtures/engine-answers";
+import { actFailure, actVerbAnswer, readyContract, safariDevContract } from "./fixtures/engine-answers";
 import { solidPng } from "./fixtures/png";
 import { rgbaPng } from "./fixtures/png-alpha";
+
+import type * as ActModule from "../lib/act";
+
+const engineCalls = vi.hoisted(() => [] as string[][]);
+
+vi.mock("../lib/act", async (importOriginal) => {
+  const actual = await importOriginal<typeof ActModule>();
+
+  return {
+    ...actual,
+    runActVerb: async (cli: string[]) => {
+      engineCalls.push(cli);
+
+      return actVerbAnswer(actFailure(cli[0], { name: "NoSession", message: "no live session answers in this cell", code: "E_NO_SESSION" }), "extension_eval");
+    },
+  };
+});
 
 const screenshot = await import("../tools/screenshot");
 
@@ -21,6 +38,7 @@ const GECKO_UUID = "1e5c8097-57a9-4052-bd54-d5d37a7086de";
 const cleanups: Array<() => Promise<void> | void> = [];
 
 afterEach(async () => {
+  engineCalls.length = 0;
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
@@ -313,6 +331,8 @@ describe("extension_screenshot on Firefox captures the tab over the debugger pro
     expect(out.ok).toBe(false);
     expect(out.error.code).toBe("E_NO_TARGET");
     expect(out.error.message).toContain("sidebar/index.html");
+    expect(out.error.message).toContain("the add-on could not be named to the browser");
+    expect(engineCalls.map((cli) => cli[0])).toEqual(["eval"]);
     expect(firefox.captures).toHaveLength(0);
   });
 });
