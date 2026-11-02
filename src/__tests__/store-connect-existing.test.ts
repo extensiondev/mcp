@@ -122,15 +122,18 @@ describe("extension_submit connect recognizes a store that already has a working
     expect(platform.sent("POST", POLL)).toHaveLength(0);
   });
 
-  it("opens the page over a working key only with replace: true, reading and checking nothing first", async () => {
+  it("opens the page over a working key only with replace: true, checking nothing first and naming the key it replaces", async () => {
     checkAnswers(firefox({ checkedAt: NOW }));
 
     const out = JSON.parse(await submit({ action: "connect", store: "firefox", replace: true, api: API }));
 
     expect(out.status).toBe("connect-pending");
     expect(platform.sent("POST", SESSION("firefox"))).toHaveLength(1);
-    expect(platform.sent("GET", CONFIG)).toHaveLength(0);
+    expect(platform.sent("GET", CONFIG)).toHaveLength(1);
     expect(platform.sent("POST", POLL)).toHaveLength(0);
+    expect(out.value.keyOnFile).toEqual({ source: "project", connectedAs: "user:17:42", product: null, checkedAt: BEFORE, healthy: true });
+    expect(out.value.sayToPerson).toContain("A key saved on this page replaces it.");
+    expect(JSON.stringify(out)).not.toContain(SECRET);
   });
 
   it("counts a workspace account that covers the project and passed its check as connected, with no page and no project check", async () => {

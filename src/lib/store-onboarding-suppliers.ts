@@ -146,6 +146,27 @@ export function connectionPasses(view: unknown): boolean {
   return Boolean(connection && text(connection.kind) && connection.healthy === true && text(connection.state) !== WORKSPACE_RECONNECT_STATE);
 }
 
+const CREDENTIAL_CHECK = "store.credentials_present";
+
+export function credentialsRefused(view: unknown): boolean {
+  if (!isRow(view)) return false;
+
+  const connection = isRow(view.connection) ? view.connection : null;
+  if (connection && connection.healthy === false) return true;
+
+  const failing = Array.isArray(view.failing) ? view.failing.filter(isRow) : [];
+
+  return failing.some((check) => text(check.id) === CREDENTIAL_CHECK);
+}
+
+function credentialStatus(view: unknown, row: Row, passing: boolean): string {
+  if (passing) return "have";
+
+  const status = text(row.status) || "unknown";
+
+  return status === "have" && credentialsRefused(view) ? "missing" : status;
+}
+
 export function readinessRowsOf(stores: Row, asked: readonly string[]): ReadinessRows {
   const groups = Object.fromEntries(SUPPLIERS.map((supplier) => [supplier, { required: [], optional: [] }])) as unknown as ReadinessGroups;
   const statusById: Record<string, string> = {};
@@ -157,7 +178,7 @@ export function readinessRowsOf(stores: Row, asked: readonly string[]): Readines
 
     for (const row of requirementRowsOf(stores[store])) {
       const id = text(row.id);
-      const status = passing && id === CREDENTIAL_ROWS[store] ? "have" : text(row.status) || "unknown";
+      const status = id === CREDENTIAL_ROWS[store] ? credentialStatus(stores[store], row, passing) : text(row.status) || "unknown";
       statusById[id] = status;
 
       if (status === "have") {

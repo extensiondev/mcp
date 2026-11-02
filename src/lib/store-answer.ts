@@ -52,7 +52,10 @@ export function isStoreVersionRefusal(frame: Pick<Envelope, "error" | "value">):
   return [error.message, value.message, value.reason, value.platformMessage].some((field) => STORE_VERSION_MESSAGE.test(text(field)));
 }
 
-function requestedBrowsers(args: Row): string[] {
+function requestedBrowsers(args: Row, value: Row): string[] {
+  const named = text(args.action) === "connect" ? text(value.store).toLowerCase() || text(args.store).toLowerCase() : "";
+  if (named) return [named];
+
   const asked = Array.isArray(args.browsers) ? args.browsers.map(text).filter(Boolean) : [];
 
   return asked.length > 0 ? asked : ["chrome"];
@@ -89,7 +92,7 @@ export function shapeStoreAnswer(command: string, args: Row, result: string): st
   if (command === "extension_submit" && step && RESUME_KINDS.has(text(step.kind))) {
     value.nextStep = {
       ...step,
-      thenCall: { tool: "extension_submit_check", args: { action: "preflight", browsers: requestedBrowsers(args) } },
+      thenCall: { tool: "extension_submit_check", args: { action: "preflight", browsers: requestedBrowsers(args, value) } },
     };
 
     changed = true;

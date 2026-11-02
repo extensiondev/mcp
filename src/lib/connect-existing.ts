@@ -6,11 +6,10 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { accountOf, type ConnectStore } from "./connect-session";
 import { projectApiGet, projectApiSend, type ProjectApi, type ProjectApiRead } from "./project-api";
 import { isRow, text } from "./ship-act";
 import { WORKSPACE_RECONNECT_STATE } from "./store-connection";
-
-import type { ConnectStore } from "./connect-session";
 
 type Row = Record<string, unknown>;
 
@@ -24,6 +23,7 @@ export interface SavedConnection {
   source: "project" | "workspace";
   kind: string;
   connectedAs: string | null;
+  product: string | null;
   connectedAt: string | null;
   checkedAt: string | null;
   healthy: boolean | null;
@@ -37,7 +37,7 @@ export interface ConnectionCheck {
   notNow: string;
 }
 
-export type SavedRead = { read: true; connection: SavedConnection | null } | { read: false; message: string };
+export type SavedRead = { read: true; connection: SavedConnection | null; savedProduct: string } | { read: false; message: string };
 
 let pause = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -50,6 +50,12 @@ export function setConnectCheckPause(next: (ms: number) => Promise<void>): () =>
   };
 }
 
+export function savedProductOf(config: unknown, store: ConnectStore): string {
+  const view = store === "edge" && isRow(config) && isRow(config.edge) ? (config.edge as Row) : null;
+
+  return view ? text(view.storeId) : "";
+}
+
 export function savedConnectionOf(config: unknown, store: ConnectStore): SavedConnection | null {
   const view = isRow(config) && isRow(config[store]) ? (config[store] as Row) : null;
   const row = view && isRow(view.connection) ? (view.connection as Row) : null;
@@ -58,7 +64,7 @@ export function savedConnectionOf(config: unknown, store: ConnectStore): SavedCo
   return {
     source: text(row.source) === "workspace" ? "workspace" : "project",
     kind: text(row.kind),
-    connectedAs: text(row.connectedAs) || null,
+    ...accountOf(store, text(row.connectedAs), savedProductOf(config, store)),
     connectedAt: text(row.connectedAt) || null,
     checkedAt: text(row.checkedAt) || null,
     healthy: typeof row.healthy === "boolean" ? row.healthy : null,
@@ -71,7 +77,7 @@ export async function readSavedConnection(api: ProjectApi, store: ConnectStore):
   const read = await projectApiGet<Row>(api, "stores/config").catch(() => null);
   if (!read || !read.ok) return { read: false, message: read?.message || "the store settings could not be read" };
 
-  return { read: true, connection: savedConnectionOf(read.json, store) };
+  return { read: true, connection: savedConnectionOf(read.json, store), savedProduct: savedProductOf(read.json, store) };
 }
 
 function refusalWords(read: ProjectApiRead<Row> | null, fallback: string): string {

@@ -7,11 +7,11 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { canAutoOpen, openUrl } from "./approval-open";
-import { CONNECT_ACTION, CONNECT_STORE_NAMES, type ConnectStore } from "./connect-session";
+import { CONNECT_ACTION, CONNECT_STORE_NAMES, accountPhrase, type ConnectStore } from "./connect-session";
 import { envelope } from "./envelope";
 import { failedCheckSentence, nextStep, storeSettingsUrl, workspaceReconnectSentences, workspaceStoreAccountsUrl } from "./store-connection";
 
-import type { ConnectionCheck } from "./connect-existing";
+import type { ConnectionCheck, SavedConnection } from "./connect-existing";
 import type { ProjectApi } from "./project-api";
 
 const COMMAND = "extension_submit";
@@ -41,7 +41,7 @@ function replaceSentence(store: ConnectStore): string {
 export function passingSentence(store: ConnectStore, check: ConnectionCheck): string {
   const name = CONNECT_STORE_NAMES[store];
   const { connection } = check;
-  const account = connection.connectedAs ? ` as ${connection.connectedAs}` : "";
+  const account = accountPhrase(connection);
   const at = connection.checkedAt ? `, ${connection.checkedAt}` : "";
   const opener =
     connection.source === "workspace"
@@ -55,7 +55,7 @@ export function passingSentence(store: ConnectStore, check: ConnectionCheck): st
 
 export function uncheckedSentence(store: ConnectStore, check: ConnectionCheck): string {
   const name = CONNECT_STORE_NAMES[store];
-  const account = check.connection.connectedAs ? ` as ${check.connection.connectedAs}` : "";
+  const account = accountPhrase(check.connection);
   const why = check.notNow ? `: ${bare(check.notNow)}` : "";
 
   return `${capital(name)} has a saved key${account}, but no store check has answered for it yet${why}. I did not open a connect page over it, so nothing was replaced; the store settings page shows its check when it lands. ${replaceSentence(store)}`;
@@ -63,12 +63,39 @@ export function uncheckedSentence(store: ConnectStore, check: ConnectionCheck): 
 
 export function refusedPrelude(store: ConnectStore, check: ConnectionCheck): string {
   const name = CONNECT_STORE_NAMES[store];
-  const account = check.connection.connectedAs ? ` (${check.connection.connectedAs})` : "";
+  const named = check.connection.product ? `product ${check.connection.product}` : check.connection.connectedAs;
+  const account = named ? ` (${named})` : "";
   const when = check.checkedNow ? " when it was checked just now" : " at its last check";
   const at = check.connection.checkedAt ? `, ${check.connection.checkedAt}` : "";
   const said = bare(check.connection.reason) || "no reason was recorded";
 
   return `The store refused the saved ${name} key${account}${when}${at}: ${said}. A new key is needed.`;
+}
+
+export interface KeyOnFile {
+  source: "project" | "workspace";
+  connectedAs: string | null;
+  product: string | null;
+  checkedAt: string | null;
+  healthy: boolean | null;
+}
+
+export function keyOnFileOf(connection: SavedConnection | null): KeyOnFile | null {
+  if (!connection || connection.healthy === false || connection.reconnect) return null;
+
+  const { source, connectedAs, product, checkedAt, healthy } = connection;
+
+  return { source, connectedAs, product, checkedAt, healthy };
+}
+
+export function keyOnFileSentence(store: ConnectStore, key: KeyOnFile): string {
+  const name = CONNECT_STORE_NAMES[store];
+  const account = accountPhrase(key);
+  const checked = key.healthy === true ? `the store accepted it at its last check${key.checkedAt ? `, ${key.checkedAt}` : ""}` : "no store check has answered for it yet";
+
+  return key.source === "workspace"
+    ? `A working key is already on file: ${name} reads connected through the workspace's account${account}, which covers this project, and ${checked}. A key saved on this page becomes this project's own and shadows the workspace's account for this project only.`
+    : `A working key is already on file: ${name} reads connected with this project's key${account}, and ${checked}. A key saved on this page replaces it.`;
 }
 
 export function storeRefusalOf(check: ConnectionCheck): StoreRefusal {
@@ -84,6 +111,7 @@ function baseValue(api: ProjectApi, store: ConnectStore, check: ConnectionCheck,
     project: `${api.ref.workspace}/${api.ref.project}`,
     source: connection.source,
     connectedAs: connection.connectedAs,
+    ...(connection.product ? { product: connection.product } : {}),
     connectedAt: connection.connectedAt,
     checkedAt: connection.checkedAt,
     checkedNow: check.checkedNow,

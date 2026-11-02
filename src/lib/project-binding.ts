@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { approvalLogin } from "./approval-scope";
+import { connectSessionProject } from "./connect-session-projects";
 import { envToken, requestCredential } from "./credential-scope";
 import { resolveCredential } from "./credential-source";
 import { pinnedProject, readCredentials } from "./credentials";
@@ -97,6 +98,9 @@ export function bindCallProject(
 
   if (held) return { args, answeredFor: refOf(held) };
   if (named) return { args, answeredFor: namedRef(named, text(args.workspace), api) };
+
+  const sessionProject = name === "extension_submit" ? connectSessionProject(args.connectSession) : null;
+  if (sessionProject) return { args: { ...args, project: sessionProject }, answeredFor: sessionProject };
   if (args.projects !== undefined && args.projects !== null) return { args, answeredFor: null };
   if (options.project || pinnedProject() || requestCredential() || envToken()) return { args, answeredFor: resolvedRef(api) };
 

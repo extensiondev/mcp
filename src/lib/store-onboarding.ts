@@ -48,6 +48,10 @@ function listOf(words: string[]): string {
   return `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
 }
 
+function connectCalls(stores: string[]): string {
+  return listOf(stores.map((store) => `extension_submit {action: "connect", store: "${store}"}`));
+}
+
 const count = (group: { required: string[]; optional: string[] }): number => group.required.length + group.optional.length;
 
 function summaryLines(view: Omit<StoreReadiness, "summary">): string[] {
@@ -55,7 +59,7 @@ function summaryLines(view: Omit<StoreReadiness, "summary">): string[] {
   const needed = view.decisions.filter((decision) => !decision.onFile);
   const connection = view.noStoreConnected
     ? "No store is connected yet; connecting comes after the decisions and the listing draft, and no key ever passes through the chat."
-    : `Connected: ${listOf(view.connected.map((store) => STORE_NAMES[store] ?? store)) || "none"}.${view.notConnected.length ? ` Not connected: ${listOf(view.notConnected.map((store) => STORE_NAMES[store] ?? store))}.` : ""}`;
+    : `Connected: ${listOf(view.connected.map((store) => STORE_NAMES[store] ?? store)) || "none"}.${view.notConnected.length ? ` Not connected: ${listOf(view.notConnected.map((store) => STORE_NAMES[store] ?? store))}; ${connectCalls(view.notConnected)} ${view.notConnected.length === 1 ? "opens its" : "open each one's"} connect page.` : ""}`;
 
   return [
     `Readiness for ${names}: ${view.notOnFile} inputs are not on file yet and ${view.onFile} are.`,

@@ -10,10 +10,13 @@ import { canAutoOpen, openUrl } from "../lib/approval-open";
 import { checkSavedConnection, readSavedConnection } from "../lib/connect-existing";
 import {
   alreadyConnectedAnswer,
+  keyOnFileOf,
+  keyOnFileSentence,
   refusedPrelude,
   storeRefusalOf,
   uncheckedAnswer,
   workspaceFailingAnswer,
+  type KeyOnFile,
   type StoreRefusal,
 } from "../lib/connect-existing-answer";
 import {
@@ -31,6 +34,7 @@ import {
   type ConnectSession,
   type ConnectStore,
 } from "../lib/connect-session";
+import { rememberConnectSession } from "../lib/connect-session-projects";
 import { envelope } from "../lib/envelope";
 import {
   OWNER_REQUIRED_CODE,
@@ -100,9 +104,11 @@ interface Before {
   prelude: string;
   storeRefusal: StoreRefusal | null;
   connectionUnread: string;
+  keyOnFile: KeyOnFile | null;
+  savedProduct: string;
 }
 
-const NOTHING_BEFORE: Before = { prelude: "", storeRefusal: null, connectionUnread: "" };
+const NOTHING_BEFORE: Before = { prelude: "", storeRefusal: null, connectionUnread: "", keyOnFile: null, savedProduct: "" };
 
 function answer(api: ProjectApi, args: StoreConnectArgs, store: ConnectStore, session: ConnectSession, opened: boolean, before: Before = NOTHING_BEFORE): string {
   const project = `${api.ref.workspace}/${api.ref.project}`;
@@ -115,7 +121,7 @@ function answer(api: ProjectApi, args: StoreConnectArgs, store: ConnectStore, se
       ok: true,
       command: COMMAND,
       status: "store-connected",
-      value: { action: CONNECT_ACTION, store, project, connectedAs: session.connectedAs, connectedAt: session.connectedAt, trackUrl, sayToPerson: say, nextStep: nextStep("preflight", say) },
+      value: { action: CONNECT_ACTION, store, project, connectedAs: session.connectedAs, ...(session.product ? { product: session.product } : {}), connectedAt: session.connectedAt, trackUrl, sayToPerson: say, nextStep: nextStep("preflight", say) },
       hint: say,
     });
   }
@@ -135,8 +141,8 @@ function answer(api: ProjectApi, args: StoreConnectArgs, store: ConnectStore, se
     });
   }
 
-  const say = [before.prelude, pendingSentences({ store, project, session, ...urls, opened })].filter(Boolean).join(" ");
-  const resume = `When they say it is done, call ${COMMAND} {action: "connect", store: "${store}", connectSession: "${session.id}", waitSeconds: 120}; it answers the account the store named and when, never the key.`;
+  const say = [before.prelude, pendingSentences({ store, project, session, ...urls, opened, savedProduct: before.savedProduct })].filter(Boolean).join(" ");
+  const resume = `When they say it is done, call ${COMMAND} {action: "connect", store: "${store}", project: "${project}", connectSession: "${session.id}", waitSeconds: 120}; it answers what the store named and when, never the key.`;
 
   return envelope({
     ok: true,
@@ -156,6 +162,8 @@ function answer(api: ProjectApi, args: StoreConnectArgs, store: ConnectStore, se
       ...(session.refusal ? { lastRefusal: session.refusal } : {}),
       ...(before.storeRefusal ? { storeRefusal: before.storeRefusal } : {}),
       ...(before.connectionUnread ? { connectionUnread: before.connectionUnread } : {}),
+      ...(before.keyOnFile ? { keyOnFile: before.keyOnFile } : {}),
+      ...(before.savedProduct ? { savedProduct: before.savedProduct } : {}),
       trackUrl,
       sayToPerson: say,
       nextStep: nextStep("connect", say, urls.connectUrl),
@@ -176,7 +184,7 @@ function openPages(store: ConnectStore, connectUrl: string): boolean {
 async function existingConnection(api: ProjectApi, args: StoreConnectArgs, store: ConnectStore): Promise<{ answered: string } | Before> {
   const saved = await readSavedConnection(api, store);
   if (!saved.read) return { ...NOTHING_BEFORE, connectionUnread: saved.message };
-  if (!saved.connection) return NOTHING_BEFORE;
+  if (!saved.connection) return { ...NOTHING_BEFORE, savedProduct: saved.savedProduct };
 
   const check = await checkSavedConnection(api, store, saved.connection);
   const { connection } = check;
@@ -185,7 +193,16 @@ async function existingConnection(api: ProjectApi, args: StoreConnectArgs, store
   if (connection.source === "workspace" && (connection.healthy === false || connection.reconnect)) return { answered: workspaceFailingAnswer(api, store, check, args.api) };
   if (connection.healthy !== false) return { answered: uncheckedAnswer(api, store, check, args.api) };
 
-  return { prelude: refusedPrelude(store, check), storeRefusal: storeRefusalOf(check), connectionUnread: "" };
+  return { ...NOTHING_BEFORE, prelude: refusedPrelude(store, check), storeRefusal: storeRefusalOf(check), savedProduct: saved.savedProduct };
+}
+
+async function keyOnFileBefore(api: ProjectApi, store: ConnectStore): Promise<Before> {
+  const saved = await readSavedConnection(api, store);
+  if (!saved.read) return NOTHING_BEFORE;
+
+  const keyOnFile = keyOnFileOf(saved.connection);
+
+  return { ...NOTHING_BEFORE, keyOnFile, prelude: keyOnFile ? keyOnFileSentence(store, keyOnFile) : "", savedProduct: saved.savedProduct };
 }
 
 async function readSession(api: ProjectApi, store: ConnectStore, id: string) {
@@ -205,9 +222,9 @@ export async function connectStoreAccount(args: StoreConnectArgs): Promise<strin
   const api = opened.api;
   const resumed = text(args.connectSession);
   const replacing = args.replace === true || text(args.replace).toLowerCase() === "true";
-  const before = resumed || replacing ? NOTHING_BEFORE : await existingConnection(api, args, store);
+  const found = resumed || replacing ? null : await existingConnection(api, args, store);
 
-  if ("answered" in before) return before.answered;
+  if (found && "answered" in found) return found.answered;
 
   let sent = resumed ? await readSession(api, store, resumed) : await projectApiSend<Record<string, unknown>>(api, "POST", connectSessionRoute(store), {});
 
@@ -218,6 +235,8 @@ export async function connectStoreAccount(args: StoreConnectArgs): Promise<strin
   if (!session) {
     return refusal({ ok: false, status: 502, code: "", message: "The platform answered the connect session without a session.", held: false, body: sent.json }, api, args, store);
   }
+
+  rememberConnectSession(session.id, `${api.ref.workspace}/${api.ref.project}`);
 
   const pageOpened = resumed ? false : openPages(store, connectPageUrls(api.ref, session, args.api).connectUrl);
   const deadline = Date.now() + waitBound(args.waitSeconds) * 1000;
@@ -230,6 +249,8 @@ export async function connectStoreAccount(args: StoreConnectArgs): Promise<strin
 
     session = readConnectSession(sent.json, store) ?? session;
   }
+
+  const before = found ?? (session.status === "pending" ? await keyOnFileBefore(api, store) : NOTHING_BEFORE);
 
   return answer(api, args, store, session, pageOpened, before);
 }
