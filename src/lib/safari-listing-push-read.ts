@@ -8,11 +8,11 @@
 
 import { openProjectApi, projectApiGet } from "./project-api";
 import { spokenDate } from "./publish-link";
-import { readPushState, type PushState } from "./store-listing-push";
+import { lockedSentence, readPushState, type OwedField, type PushState } from "./store-listing-push";
 
 type Row = Record<string, unknown>;
 
-export type ListingPushState = "queued" | "running" | "failed" | "landed" | "unknown";
+export type ListingPushState = "queued" | "running" | "failed" | "landed" | "locked" | "unknown";
 
 export interface ListingPushView {
   state: ListingPushState;
@@ -20,6 +20,9 @@ export interface ListingPushView {
   failedStep?: string;
   failedReason?: string;
   landedAt?: string;
+  lockedVersion?: string;
+  lockedState?: string;
+  owed?: OwedField[];
   say: string;
 }
 
@@ -33,7 +36,7 @@ export const SAFARI_LISTING_RESEND = 'extension_submit {action: "sync-listing", 
 
 function stateOf(push: PushState): ListingPushState {
   if (push.runState && push.runState !== "unknown") return push.runState;
-  if (push.status === "landed") return "landed";
+  if (push.status === "landed" || push.status === "locked") return push.status;
   if (push.status === "failed") return push.runState === "unknown" ? "unknown" : "failed";
 
   return push.runState ?? "unknown";
@@ -41,15 +44,28 @@ function stateOf(push: PushState): ListingPushState {
 
 const at = (iso: string | undefined): string => (iso && Number.isFinite(Date.parse(iso)) ? ` dispatched ${spokenDate(iso)}` : "");
 
-function sentence(view: Omit<ListingPushView, "say">): string {
+const unclosed = (line: string): string => line.replace(/[.\s]+$/, "");
+
+function failedSentence(view: Omit<ListingPushView, "say">, head: string): string {
+  const step = view.failedStep ? ` at step "${view.failedStep}"` : "";
+  const why = view.failedReason ? `: ${unclosed(view.failedReason)}` : "";
+  const refused = view.owed?.length
+    ? `Apple refused ${view.owed.map((row) => (row.reason ? `${row.field} (${unclosed(row.reason)})` : row.field)).join("; ")}`
+    : "";
+  const reached = view.landedAt
+    ? `Apple still holds the listing that landed ${spokenDate(view.landedAt)}`
+    : refused || "Nothing reached App Store Connect";
+  const extra = view.landedAt && refused ? `. ${refused}` : "";
+
+  return `${head} failed${step}${why}. ${reached}${extra}; ${SAFARI_LISTING_RESEND} sends it again`;
+}
+
+function sentence(view: Omit<ListingPushView, "say">, message: string | undefined): string {
   const head = `${PUSH_LEAD}${at(view.dispatchedAt)}`;
 
-  if (view.state === "failed") {
-    const step = view.failedStep ? ` at step "${view.failedStep}"` : "";
-    const why = view.failedReason ? `: ${view.failedReason.replace(/[.\s]+$/, "")}` : "";
+  if (view.state === "failed") return failedSentence(view, head);
 
-    return `${head} failed${step}${why}. Nothing reached App Store Connect; ${SAFARI_LISTING_RESEND} sends it again`;
-  }
+  if (view.state === "locked") return unclosed(message || lockedSentence(view));
 
   if (view.state === "queued" || view.state === "running") {
     return `${head} is ${view.state}; read the release status again in a minute for what landed`;
@@ -69,8 +85,11 @@ export function listingPushView(push: PushState): ListingPushView {
   if (push.failedStep) view.failedStep = push.failedStep;
   if (push.failedReason) view.failedReason = push.failedReason;
   if (push.landedAt) view.landedAt = push.landedAt;
+  if (push.lockedVersion) view.lockedVersion = push.lockedVersion;
+  if (push.lockedState) view.lockedState = push.lockedState;
+  if (push.owed?.length) view.owed = push.owed;
 
-  return { ...view, say: sentence(view) };
+  return { ...view, say: sentence(view, view.state === "locked" ? push.reason : undefined) };
 }
 
 export function listingPushOpen(view: ListingPushView | null | undefined): boolean {

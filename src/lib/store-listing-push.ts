@@ -15,8 +15,8 @@ import type { ListingStore } from "./store-md-listing";
 
 type Row = Record<string, unknown>;
 
-const PUSH_STATUSES = ["dispatched", "failed", "unchanged", "landed"] as const;
-const RUN_STATES = ["queued", "running", "failed", "landed", "unknown"] as const;
+const PUSH_STATUSES = ["dispatched", "failed", "unchanged", "landed", "locked"] as const;
+const RUN_STATES = ["queued", "running", "failed", "landed", "locked", "unknown"] as const;
 
 export type PushStatus = (typeof PUSH_STATUSES)[number];
 export type RunState = (typeof RUN_STATES)[number];
@@ -39,6 +39,8 @@ export interface PushState {
   checkedAt?: string;
   landedAt?: string;
   owed?: OwedField[];
+  lockedVersion?: string;
+  lockedState?: string;
   warnings?: string[];
 }
 
@@ -92,6 +94,8 @@ export function readPushState(raw: unknown): PushState | null {
   if (text(raw.checkedAt)) state.checkedAt = text(raw.checkedAt);
   if (text(raw.landedAt)) state.landedAt = text(raw.landedAt);
   if (owed.length) state.owed = owed;
+  if (text(raw.lockedVersion)) state.lockedVersion = text(raw.lockedVersion);
+  if (text(raw.lockedState)) state.lockedState = text(raw.lockedState);
   if (warnings.length) state.warnings = warnings;
 
   return state;
@@ -189,22 +193,40 @@ function owedSentence(owed: OwedField[]): string {
   return `App Store Connect still needs: ${needs}; add ${joined} under the Safari section and say sync-listing again.`;
 }
 
+export function lockedSentence(state: Pick<PushState, "lockedVersion" | "lockedState" | "landedAt">): string {
+  const version = state.lockedVersion || "the latest macOS version";
+  const name = state.lockedState ? `${version} (${state.lockedState})` : version;
+  const held = state.landedAt ? `, so Apple still holds the listing that landed ${spokenDate(state.landedAt)}` : "";
+
+  return `The App Store listing is locked while Apple holds ${name}${held}; push the listing again once that version is editable.`;
+}
+
+export function heldSentence(landedAt: string | undefined): string {
+  return landedAt ? `Apple still holds the listing that landed ${spokenDate(landedAt)}.` : "";
+}
+
 export function pushSentence(state: PushState, resend: Resend): string {
   const at = state.landedAt || state.checkedAt;
   const when = at ? ` at ${spokenDate(at)}` : "";
   const effective =
-    state.status === "dispatched" && (state.runState === "failed" || state.runState === "landed") ? state.runState : state.status;
+    state.runState === "locked" ||
+    (state.status === "dispatched" && (state.runState === "failed" || state.runState === "landed"))
+      ? state.runState
+      : state.status;
   let sentence: string;
 
   if (resend === "refused") {
     sentence = `The listing is unchanged and no App Store Connect push has landed; the platform cannot resend an unchanged listing yet.`;
+  } else if (effective === "locked") {
+    return state.reason ? closed(state.reason) : lockedSentence(state);
   } else if (effective === "dispatched") {
     const word = state.runState === "queued" || state.runState === "running" ? state.runState : "dispatched";
     sentence = `The App Store Connect push is ${word}; say preflight in a minute and I read what landed.`;
   } else if (effective === "failed") {
     const where = state.failedStep ? ` at ${state.failedStep}` : "";
     const why = state.reason ? `: ${closed(state.reason)}` : ".";
-    sentence = `The App Store Connect push failed${where}${why} ${failedNext(state)}`;
+    const held = heldSentence(state.landedAt);
+    sentence = `The App Store Connect push failed${where}${why}${held ? ` ${held}` : ""} ${failedNext(state)}`;
   } else if (effective === "landed") {
     sentence =
       state.fieldsWritten !== undefined
