@@ -66,6 +66,20 @@ import {
   type CaptureFamily,
   type StoreChoice,
 } from "../lib/store-capture";
+import {
+  CAPTURE_BROWSERS,
+  browserDisplayName,
+  capturesFolder,
+  isCaptureBrowser,
+  majorVersion,
+  nextCapturePath,
+  recordCapture,
+  surfaceOfContext,
+  syncCapturesDoor,
+  type CaptureBrowser,
+  type CapturedIn,
+} from "../lib/browser-captures";
+import { capturedInChromium, capturedInGecko, capturedInWebKit } from "../lib/captured-in";
 import { resolveExtensionId, surfaceDocument, SURFACE_MANIFEST_KEYS } from "./open";
 
 import type { ListingStore } from "../lib/store-md-declarations";
@@ -77,7 +91,7 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 export const schema = {
   name: COMMAND,
   description:
-    "Take a screenshot of one open extension surface (popup, options, sidebar, newtab, history, bookmarks) or web page in a live extension_dev or extension_start session as a .png file. It asks the browser for the page's own pixels over the debug port (CDP on Chromium, the screenshot actor on Firefox, WebDriver on Safari, web pages only); it never captures the screen and never brings a window forward: on Chromium a page behind other windows or in a hidden tab is shown briefly for the capture (value.behindWindow, value.hiddenTab). Open the surface with extension_open first. `targetId` (from extension_open or extension_dom_snapshot listTargets) captures that exact page; a url matching several tabs of one page captures the most recently active one and warns. width and height set the Chromium viewport, resize the Safari window and crop from the top left on Firefox; deviceScaleFactor sets the pixel ratio. `store` (chrome, firefox, edge, safari or all) captures a store listing screenshot at that store's own size as a 24-bit PNG with no alpha into store/screenshots/<store>/, where extension_submit sync-listing picks it up; one call per view. The file goes under dist/extension-js/<browser>/screenshots unless `path` names one; the answer gives path and pixel size.",
+    "Take a screenshot of one open extension surface (popup, options, sidebar, newtab, history, bookmarks) or web page in a live extension_dev or extension_start session as a .png file. It asks the browser for the page's own pixels over the debug port (CDP on Chromium, the screenshot actor on Firefox, WebDriver on Safari, web pages only); it never captures the screen and never brings a window forward: on Chromium a page behind other windows or in a hidden tab is shown briefly for the capture (value.behindWindow, value.hiddenTab). Open the surface with extension_open first. `targetId` captures that exact page; a url matching several tabs of one page captures the most recently active one and warns. width and height set the Chromium viewport, resize the Safari window and crop from the top left on Firefox; deviceScaleFactor sets the pixel ratio. `store` captures a store listing screenshot at that store's size into store/screenshots/<store>/, where extension_submit sync-listing picks it up; `browserCapture` files a capture of the extension running in this browser under captures/<browser>/, where extension_publish sync-captures picks it up; one call per view. The file goes under dist/extension-js/<browser>/screenshots unless `path` names one; the answer gives path and pixel size.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -100,6 +114,11 @@ export const schema = {
         description:
           "Capture for this store's listing at the size it takes, with width, height and deviceScaleFactor set here (chrome, edge and firefox 1280x800 at 1x; safari 1440x900 at 2x, a 2880x1800 image) and the file written to store/screenshots/<store>/<n>.png, numbered from 01; passing any of the three beside store is refused. all on a Chromium session writes every store's file from the same page in one call (one capture for chrome, edge and firefox, a second for safari); all on Safari writes only the safari file and says which stores were skipped. A safari file made outside Safari carries a warning, since Apple's review wants the extension running in Safari. extension_submit action:\"sync-listing\" browsers:[<store>] reads the folder on its own, in filename order.",
       },
+      browserCapture: {
+        type: "boolean",
+        description:
+          `Capture the extension running in this session's browser for the project's build pages on extension.dev: the file goes to captures/<browser>/<context>-NN.png as a flat PNG, numbered per context, and captures/<browser>/captures.json records the live browser's name and version (capturedIn) and each file's surface. The session browser must be one of ${CAPTURE_BROWSERS.join(", ")}; width, height and deviceScaleFactor apply; store and path are refused beside it. One call per surface; extension_publish action:"sync-captures" browsers:[<browser>] sends the folder after a workspace owner approves.`,
+      },
       path: {
         type: "string",
         description:
@@ -120,6 +139,7 @@ interface Args extends CaptureSize {
   path?: string;
   store?: string;
   forStore?: string;
+  browserCapture?: boolean;
   timeout?: number;
 }
 
@@ -161,12 +181,15 @@ function captured(
   targetId?: string,
   behindWindow?: BehindWindow,
   hiddenTab?: HiddenTab,
+  capturedIn: CapturedIn | null = null,
 ): string {
   if (!outcome.ok) return captureFailure(outcome, url, behindWindow);
 
   const png = outcome.png;
   const size = pngDimensions(png);
   if (!size) return refuse("capture-failed", "E_CAPTURE_FAILED", `The browser answered data for ${url} that is not a .png image.`);
+
+  if (args.browserCapture && isCaptureBrowser(browser)) return capturedForBrowser(args, browser, context, png, url, transport, warnings, capturedIn, targetId);
 
   const written = writeScreenshot(args.projectPath, browser, context, png, args.path);
   if (!written.ok) return refuse("bad-request", "E_BAD_REQUEST", written.message, written.hint);
@@ -180,6 +203,60 @@ function captured(
     value: { browser, context, url, ...(targetId ? { targetId } : {}), ...(behindWindow?.tried ? { behindWindow } : {}), ...(hiddenTab ? { hiddenTab } : {}), path: file, width: size.width, height: size.height, bytes: png.length, transport },
     warnings,
     hint: `The image is ${file} (${size.width} x ${size.height} pixels). Open it with your image reader to look at it.`,
+  });
+}
+
+/* @invariant A BROWSER CAPTURE IS FILED FLAT, NUMBERED PER SURFACE, AND
+ * NAMES THE BROWSER THAT MADE IT. The file lands in captures/<browser>/ as
+ * <context>-NN.png with its alpha flattened, so the folder is already what
+ * sync-captures accepts, and captures.json beside it records the live
+ * browser's name and version and the file's surface, which is what the build
+ * page says under the image; the hint names the file, the browser and the
+ * surface, and the one call that sends the folder. */
+function capturedForBrowser(
+  args: Args,
+  browser: CaptureBrowser,
+  context: string,
+  png: Buffer,
+  url: string,
+  transport: string,
+  warnings: Array<string | null>,
+  capturedIn: CapturedIn | null,
+  targetId?: string,
+): string {
+  const flat = flattenPngAlpha(png);
+  if ("problem" in flat) return refuse("capture-failed", "E_CAPTURE_FAILED", `The browser answered ${flat.problem} for ${url}, which this tool cannot flatten for a browser capture.`);
+
+  const file = nextCapturePath(args.projectPath, browser, context);
+  const surface = surfaceOfContext(context);
+
+  writeStoreFile(file, flat.png);
+
+  const index = recordCapture(args.projectPath, browser, { file: path.basename(file), surface, width: flat.width, height: flat.height, capturedAt: new Date().toISOString() }, capturedIn);
+  const made = majorVersion(capturedIn) || majorVersion(index.capturedIn);
+  const notes = [...warnings, capturedIn ? null : `The ${browser} session did not answer its version, so ${capturesFolder(browser)}/captures.json ${index.capturedIn ? "keeps the browser it recorded before" : "records no capturedIn"}; the build page then says the browser without a version.`];
+
+  return envelope({
+    ok: true,
+    command: COMMAND,
+    status: "captured",
+    value: {
+      browser,
+      context,
+      url,
+      ...(targetId ? { targetId } : {}),
+      browserCapture: true,
+      surface,
+      path: file,
+      width: flat.width,
+      height: flat.height,
+      bytes: flat.png.length,
+      ...(index.capturedIn ? { capturedIn: index.capturedIn } : {}),
+      folder: capturesFolder(browser),
+      transport,
+    },
+    warnings: notes,
+    hint: `${file} (${flat.width} x ${flat.height} pixels) is a ${made || browserDisplayName(browser)} capture of the ${context}. ${syncCapturesDoor(browser)}`,
   });
 }
 
@@ -436,10 +513,11 @@ async function onChromium(args: Args, browser: string, context: string, timeoutM
     return capturedForStores(args, browser, context, "chromium", shoot, target.url, "cdp", [warning], target.targetId);
   }
 
+  const capturedIn = args.browserCapture && isCaptureBrowser(browser) ? await capturedInChromium(resolved.port, browser, timeoutMs) : null;
   const { outcome, behindWindow, hiddenTab } = await captureCdpPage(resolved.port, target.targetId, args, timeoutMs, session);
   const behindNote = behindWindow.tried && behindWindow.shown && outcome.ok ? BEHIND_WINDOW_CAPTURED : null;
 
-  return captured(args, browser, context, outcome, target.url, "cdp", [warning, behindNote, hiddenTabSentence(hiddenTab)], target.targetId, behindWindow, hiddenTab);
+  return captured(args, browser, context, outcome, target.url, "cdp", [warning, behindNote, hiddenTabSentence(hiddenTab)], target.targetId, behindWindow, hiddenTab, capturedIn);
 }
 
 async function onGecko(args: Args, browser: string, context: string, timeoutMs: number): Promise<string> {
@@ -453,6 +531,8 @@ async function onGecko(args: Args, browser: string, context: string, timeoutMs: 
   } catch (error) {
     return refuse("rdp-failed", "E_RDP", `Could not list tabs over RDP: ${error instanceof Error ? error.message : String(error)}`, "Confirm the session is ready (extension_wait), then retry.");
   }
+
+  const capturedIn = args.browserCapture && isCaptureBrowser(browser) ? await capturedInGecko(resolved.port, browser, args.projectPath, timeoutMs) : null;
 
   let tab: RdpTab | string;
   let pickWarning: string | null = null;
@@ -473,7 +553,7 @@ async function onGecko(args: Args, browser: string, context: string, timeoutMs: 
     if ("refusal" in doc) return doc.refusal;
 
     const panel = context === "sidebar" ? await captureGeckoSidebarPanel(args.projectPath, browser, resolved.port, args, timeoutMs) : null;
-    if (panel && "outcome" in panel) return captured(args, browser, context, panel.outcome, panel.url, "rdp", [panel.note]);
+    if (panel && "outcome" in panel) return captured(args, browser, context, panel.outcome, panel.url, "rdp", [panel.note], undefined, undefined, undefined, capturedIn);
 
     tab =
       geckoDocumentTab(tabs, doc.document) ??
@@ -507,7 +587,7 @@ async function onGecko(args: Args, browser: string, context: string, timeoutMs: 
   const outcome = await captureRdpTab(resolved.port, contextId, args, timeoutMs);
   const warnings = [pickWarning, args.width || args.height ? cropNote : null];
 
-  return captured(args, browser, context, outcome, String(tab.url ?? ""), "rdp", warnings, geckoTabRef(tab).targetId);
+  return captured(args, browser, context, outcome, String(tab.url ?? ""), "rdp", warnings, geckoTabRef(tab).targetId, undefined, undefined, capturedIn);
 }
 
 async function onWebKit(args: Args, browser: string, context: string, timeoutMs: number): Promise<string> {
@@ -554,7 +634,9 @@ async function onWebKit(args: Args, browser: string, context: string, timeoutMs:
 
     if (storeChoiceOf(args)) return capturedForStores(args, browser, "page", "webkit", shoot, current ?? "", "webdriver", warnings);
 
-    return captured(args, browser, "page", await shoot(args), current ?? "", "webdriver", warnings);
+    const capturedIn = args.browserCapture && isCaptureBrowser(browser) ? await capturedInWebKit(client, browser, timeoutMs) : null;
+
+    return captured(args, browser, "page", await shoot(args), current ?? "", "webdriver", warnings, undefined, undefined, undefined, capturedIn);
   } catch (error) {
     if (webdriverSessionEnded(error)) return refuse("webdriver-session-ended", "E_WEBDRIVER_SESSION_ENDED", webdriverSessionEndedMessage(info, browser), webdriverSessionEndedHint(browser));
 
@@ -583,10 +665,24 @@ export async function handler(args: Args): Promise<string> {
     args = { ...args, store: choice };
   }
 
+  if (args.browserCapture) {
+    if (choice !== undefined) return refuse("bad-request", "E_BAD_REQUEST", "store and browserCapture are two different files: store writes a listing screenshot at the store's size under store/screenshots/<store>/, browserCapture writes a capture of the extension running in this browser under captures/<browser>/; pass one of them.");
+    if (args.path) return refuse("bad-request", "E_BAD_REQUEST", "browserCapture names the file itself, captures/<browser>/<context>-NN.png, numbered per context; omit path with it.");
+  }
+
   const context = args.context ?? "page";
   if (context !== "page" && !SURFACES.includes(context)) return refuse("bad-request", "E_BAD_REQUEST", `context must be page or one of ${SURFACES.join(", ")}.`);
 
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
+
+  if (args.browserCapture && !isCaptureBrowser(browser)) {
+    return refuse(
+      "bad-request",
+      "E_BAD_REQUEST",
+      `The build pages show captures for ${CAPTURE_BROWSERS.join(", ")}, and this session runs ${browser}, so there is no captures/${browser}/ set to send.`,
+      `Start a dev session on one of them (extension_dev browser:"chrome") and capture there, or capture without browserCapture for a file of your own.`,
+    );
+  }
 
   if (args.path) {
     const target = resolveScreenshotPath(args.projectPath, browser, context, args.path);

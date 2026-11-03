@@ -43,7 +43,9 @@ export interface ShipAct {
   act: string;
   action: string;
   route: string;
+  method?: "POST" | "PUT";
   body: Row;
+  approvalBody?: Row;
   approvalId?: string;
   description: string;
   reason: string;
@@ -229,6 +231,7 @@ function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string
       ...(act.value ?? {}),
       ...(before ? { refusedBeforeApproval: true } : {}),
       ...(read.code === "LISTING_INCOMPLETE" ? { listingIncomplete: body } : {}),
+      ...(body.row !== undefined ? { row: body.row } : {}),
       ...storeStateFields(read.code, body),
       ...(RELEASE_STATE_CODES.has(read.code)
         ? {
@@ -333,6 +336,7 @@ async function askForApproval(act: ShipAct, read: ProjectApiRefusal, api: Projec
     api: act.apiHint,
     refusedStatus: refusedStatus(act.act),
     refusalHint: (code) => shipRefusalHint(code, undefined, text(act.value?.store)),
+    ...(act.approvalBody ? { body: act.approvalBody } : {}),
     reason: act.reason,
     stateRead: act.stateRead,
     irreversible: act.irreversible,
@@ -348,7 +352,7 @@ export async function openShipApi(command: string, args: { project?: string; api
 
 export async function runShipAct(act: ShipAct, api: ProjectApi): Promise<{ ok: true; json: Row } | { ok: false; out: string }> {
   const approvalId = text(act.approvalId);
-  const sent = await projectApiSend<Row>(api, "POST", act.route, { ...act.body, ...(approvalId ? { approvalId } : {}) });
+  const sent = await projectApiSend<Row>(api, act.method ?? "POST", act.route, { ...act.body, ...(approvalId ? { approvalId } : {}) });
   if (sent.ok) return { ok: true, json: isRow(sent.json) ? sent.json : {} };
 
   const context = { workspace: api.ref.workspace, project: `${api.ref.workspace}/${api.ref.project}` };

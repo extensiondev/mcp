@@ -202,6 +202,10 @@ export class WebDriverClient {
     return typeof value === "string" ? value : null;
   }
 
+  async capabilities(timeoutMs = 15_000): Promise<unknown> {
+    return this.call("GET", "", undefined, timeoutMs);
+  }
+
   async navigate(url: string, timeoutMs = 60_000): Promise<void> {
     await this.call("POST", "/url", { url }, timeoutMs);
   }

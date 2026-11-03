@@ -254,7 +254,11 @@ export const TRACK_ACTS: Record<string, (call: TrackCall) => TrackPlan | null> =
   extension_release_status: releaseStatusPlan,
   extension_approvals: () => ({ track: { page: "project" } }),
   extension_submit: submitPlan,
-  extension_publish: (call) => shareSteps(buildOf(call)),
+  extension_publish: (call) => {
+    if (text(call.args.action) !== "sync-captures") return shareSteps(buildOf(call));
+
+    return text(call.value.trackUrl) ? null : { track: { page: "project-settings" } };
+  },
   extension_shares: (call) => {
     const action = text(call.args.action) || "list";
 

@@ -42,6 +42,9 @@ export type ApprovalVerdict = "plain" | "approval" | "console";
  * under it one version approval also covers the publish act that sends the
  * TestFlight build to Apple's App Review, which cannot be taken back once
  * Apple approves, so the write is judged with its store and keeps the page.
+ * A browser capture set (extension_publish sync-captures) keeps the page:
+ * the files land on the public build pages for anyone who opens them, so a
+ * workspace owner sees the set as the platform computed it before it shows.
  * The platform holds the same table in www src/services/registry/approval-policy.ts;
  * a row changed on one side is changed on both.
  */
@@ -71,6 +74,7 @@ export const APPROVAL_POLICY = {
   "extension_settings.store-public-mode": "approval",
   "extension_project.visibility-public": "approval",
   "extension_store.listing-derived": "approval",
+  "extension_browsers.captures": "approval",
   "extension_store.disconnect": "console",
   "extension_builds.delete-channel": "console",
   "extension_project.delete": "console",

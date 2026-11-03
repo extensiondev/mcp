@@ -60,14 +60,36 @@ import { fillFromBuildIndex } from "../lib/publish-build-index";
 import { localizeExtensionName } from "../lib/publish-localized-name";
 import { withPackageAddresses } from "../lib/publish-package-commands";
 import { consoleProjectUrl } from "../lib/registry";
+import { CAPTURE_BROWSERS } from "../lib/browser-captures";
+import { SYNC_CAPTURES, syncCaptures } from "./publish-captures";
 
 export const schema = {
   name: "extension_publish",
   description:
-    "Publish a build of the logged-in project on extension.dev and answer the link to send testers, which opens a page with a download and a run command for each browser. Reach for this first whenever the ask is to share, publish, deploy, distribute, release or ship an extension, or to send it to testers. Not for a store: that is extension_submit. Not for a quick emulator link beside this one: that is extension_preview_web share:true. A project that does not exist on extension.dev yet starts with extension_project_create, then extension_auth. It records a share on the platform and answers what the platform recorded in value.outcome and every link it made or touched in value.links, waiting up to waitSeconds for the record and answering publish-dispatched until it confirms. There are two links. A build link opens one build, <workspace>.extension.dev/<project>/builds/<sha>, and on a private project expires after ttlHours (7 days by default). A channel link, <workspace>.extension.dev/<project>/channels/<channel>, always opens a channel's newest build and never expires; a public project gets one in value.channelUrl when a release channel serves the build. On a public project, or a public channel, send testers the channel link; otherwise send the build link and the date it stops working. A private project's channel link is withheld and value.channelUrlWithheld says why; visibility is set in the extension.dev project settings, not the GitHub repository. value.link is the link to send (kind, url, expiresAt, audience, renewBy), value.tellThem the message to send as written, value.trackUrl the console Share links page, value.artifacts the per-browser integrity read before the link is handed out, value.sharePage whether the page answers; a build whose every browser artifact failed is refused unless force is true, and while extension.dev is held the status is platform-held and tellThem adds the Chrome run command, which works now.",
+    "Publish a build of the logged-in project on extension.dev and answer the link to send testers, which opens a page with a download and a run command for each browser. Reach for this first whenever the ask is to share, publish, deploy, distribute, release or ship an extension, or to send it to testers. Not for a store: that is extension_submit. Not for a quick emulator link beside this one: that is extension_preview_web share:true. A project that does not exist on extension.dev yet starts with extension_project_create, then extension_auth. It records a share on the platform and answers what the platform recorded in value.outcome and every link it made or touched in value.links, waiting up to waitSeconds for the record and answering publish-dispatched until it confirms. There are two links. A build link opens one build, <workspace>.extension.dev/<project>/builds/<sha>, and on a private project expires after ttlHours (7 days by default). A channel link, <workspace>.extension.dev/<project>/channels/<channel>, always opens a channel's newest build and never expires; a public project gets one in value.channelUrl when a release channel serves the build. On a public project, or a public channel, send testers the channel link; otherwise send the build link and the date it stops working. A private project's channel link is withheld and value.channelUrlWithheld says why; visibility is set in the extension.dev project settings, not the GitHub repository. value.link is the link to send (kind, url, expiresAt, audience, renewBy), value.tellThem the message to send as written, value.trackUrl the console Share links page; a build whose every browser artifact failed is refused unless force is true, and while extension.dev is held the status is platform-held and tellThem adds the Chrome run command, which works now. action sync-captures sends captures/<browser>/, made by extension_screenshot browserCapture, to the project's build pages after a workspace owner approves.",
   inputSchema: {
     type: "object" as const,
     properties: {
+      action: {
+        type: "string",
+        enum: ["publish", SYNC_CAPTURES],
+        default: "publish",
+        description:
+          "publish (the default) mints the build link. sync-captures reads captures/<browser>/*.png in file name order, with the surfaces, captions and capturedIn in captures.json beside them, for every browser in browsers, refuses the set here (PNG only, no alpha, 1 to 10 files, at least 640 wide) before anything is sent, and PUTs it to the project's browser captures record: the first call answers approval-required with the change as the platform computed it and the approval URL, the call with that approvalId writes once and answers captures-synced with value.trackUrl and value.publicUrl. Needs projectPath.",
+      },
+      browsers: {
+        type: "array",
+        items: { type: "string", enum: [...CAPTURE_BROWSERS] },
+        description: "sync-captures: the browsers whose captures/<browser>/ folder to send (chrome, firefox, edge, safari). One approval per browser; pass one browser with its approvalId.",
+      },
+      projectPath: {
+        type: "string",
+        description: "sync-captures: the extension project root that holds captures/<browser>/.",
+      },
+      approvalId: {
+        type: "string",
+        description: "sync-captures: the approval id from the approval-required answer, once a workspace owner approved it; the call then writes the set once.",
+      },
       project: PROJECT_TOKEN_INPUT,
       ttlHours: {
         type: "number",
@@ -120,6 +142,10 @@ function fail(
 }
 
 export async function handler(args: {
+  action?: string;
+  browsers?: unknown;
+  projectPath?: string;
+  approvalId?: string;
   project?: string;
   ttlHours?: number;
   buildSha?: string;
@@ -127,6 +153,14 @@ export async function handler(args: {
   waitSeconds?: unknown;
   api?: string;
 }): Promise<string> {
+  const action = String(args.action ?? "publish").trim().toLowerCase() || "publish";
+
+  if (action === SYNC_CAPTURES) return syncCaptures(args);
+
+  if (action !== "publish") {
+    return fail("PublishBadRequest", `action must be publish or ${SYNC_CAPTURES}; got "${String(args.action)}".`, "bad-request", "E_BAD_REQUEST");
+  }
+
   const credential = resolveCredential({
     project: args.project,
     api: args.api,
