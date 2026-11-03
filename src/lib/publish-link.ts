@@ -181,7 +181,7 @@ export function carriesRegistryToken(commands: RunCommand[]): boolean {
 }
 
 function titled(browser: string): string {
-  return browser ? browser[0].toUpperCase() + browser.slice(1) : browser;
+  return browser ? browser.charAt(0).toUpperCase() + browser.slice(1) : browser;
 }
 
 function joined(names: string[]): string {

@@ -312,15 +312,15 @@ export function madeSentence(links: ActLink[]): string {
 
   for (const kind of Object.keys(KIND_NAMES) as LinkKind[]) {
     const ofKind = made.filter((link) => link.kind === kind);
-    if (!ofKind.length) continue;
+    const first = ofKind[0];
+    if (!first) continue;
 
     if (ofKind.length === 1) {
-      const [link] = ofKind;
-      names.push(`${KIND_NAMES[kind]}${link.expiresAt ? ` (expires ${shortDate(link.expiresAt)})` : ""}`);
+      names.push(`${KIND_NAMES[kind]}${first.expiresAt ? ` (expires ${shortDate(first.expiresAt)})` : ""}`);
       continue;
     }
 
-    const expiry = ofKind.every((link) => link.expiresAt === ofKind[0].expiresAt) && ofKind[0].expiresAt ? ` (expire ${shortDate(ofKind[0].expiresAt)})` : "";
+    const expiry = first.expiresAt && ofKind.every((link) => link.expiresAt === first.expiresAt) ? ` (expire ${shortDate(first.expiresAt)})` : "";
     names.push(`${ofKind.length} ${KIND_PLURALS[kind]}${expiry}`);
   }
 

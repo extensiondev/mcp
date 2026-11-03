@@ -207,15 +207,14 @@ function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string
   const ownerOnly = read.code === OWNER_REQUIRED_CODE;
   const status = ownerOnly
     ? "needs-owner"
-    : STATE_CODES[read.code]
-      ? STATE_CODES[read.code]
-      : read.status === 400
-      ? "bad-request"
-      : ALLOWANCE.has(read.code) || read.status === 429
-        ? read.code === "BUILD_DISPATCH_DISABLED"
-          ? "paused"
-          : "rate-limited"
-        : refusedStatus(act.act);
+    : (STATE_CODES[read.code] ??
+      (read.status === 400
+        ? "bad-request"
+        : ALLOWANCE.has(read.code) || read.status === 429
+          ? read.code === "BUILD_DISPATCH_DISABLED"
+            ? "paused"
+            : "rate-limited"
+          : refusedStatus(act.act)));
   const code: ErrorCode = status === "bad-request" ? "E_BAD_REQUEST" : read.status === 403 ? "E_AUTH_DENIED" : "E_PLATFORM";
   const refunded = Boolean(act.approvalId) && body.approvalRefunded === true;
   const spent = act.approvalId && !before && !refunded;

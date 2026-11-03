@@ -133,8 +133,9 @@ function isRow(value: unknown): value is Row {
 
 function firstBrowser(args: Row): string {
   const browsers = Array.isArray(args.browsers) ? args.browsers.map(text).filter(Boolean) : [];
+  const [only] = browsers;
 
-  return browsers.length === 1 ? browsers[0] : text(args.store);
+  return browsers.length === 1 && only ? only : text(args.store);
 }
 
 const FULL_SHA = /^[a-f0-9]{40}$/i;
@@ -291,10 +292,10 @@ function splitPair(value: string): { workspace: string; project: string } | null
 function refOf(call: TrackCall): TrackTarget {
   const v = call.value;
   const a = call.args;
-  const pairs = [text(v.project), text(a.project)].map(splitPair).filter(Boolean) as Array<{ workspace: string; project: string }>;
+  const [pair] = [text(v.project), text(a.project)].map(splitPair).filter(Boolean) as Array<{ workspace: string; project: string }>;
 
   if (text(v.workspaceSlug) && text(v.projectSlug)) return { workspace: text(v.workspaceSlug), project: text(v.projectSlug) };
-  if (pairs.length) return pairs[0];
+  if (pair) return pair;
   if (text(v.workspace) && text(v.project)) return { workspace: text(v.workspace), project: text(v.project) };
   if (text(a.workspace) && text(a.project) && !text(a.project).includes("/")) return { workspace: text(a.workspace), project: text(a.project) };
 

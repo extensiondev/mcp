@@ -74,12 +74,13 @@ export function packageFileOf(url: unknown): PackageFile | null {
   const match = BUILD_FILE.exec(pathname);
   if (!match) return null;
 
-  const file = match[2].replace(/\/+$/, "");
-  if (!file) return null;
+  const sha = match[1] ?? "";
+  const file = (match[2] ?? "").replace(/\/+$/, "");
+  if (!sha || !file) return null;
 
   const name = file.split("/").pop() ?? "";
 
-  return { sha: match[1], file, browser: name.replace(/\.[a-z0-9]+$/i, "").toLowerCase() };
+  return { sha, file, browser: name.replace(/\.[a-z0-9]+$/i, "").toLowerCase() };
 }
 
 export function packageFileName(browser: string, options: { signed?: boolean } = {}): string {
