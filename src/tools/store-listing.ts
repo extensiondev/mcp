@@ -51,6 +51,7 @@ import { onRecordRow, onRecordSentence, screenshotsOnRecord } from "../lib/listi
 import { onListingLine, type ListingRecordRead } from "../lib/listing-record-compare";
 import { chromePasteLines, type PasteLines } from "../lib/chrome-paste-lines";
 import { SCREENSHOTS_DOOR, screenshotsAdvice, screenshotsLineSentence } from "../lib/store-md-screenshots";
+import { storeSizeSentence } from "../lib/store-screenshot-sizes";
 import { approvalVerdict } from "../lib/approval-policy";
 import { badShipRequest, isRow, openShipApi, text } from "../lib/ship-act";
 import {
@@ -92,6 +93,8 @@ import {
   approvalBody,
   listingDigest,
   readScreenshots,
+  screenshotRefusal,
+  screenshotRule,
   writeBody,
   type ListingImage,
   type ListingPatch,
@@ -385,7 +388,7 @@ function coverageOf(local: LocalListing, id: string): Coverage {
 
     if (shots?.length) return { covered: `screenshots: ${shots.length} passed to sync-listing, not yet in the listing` };
 
-    return { missing: `screenshots: ${screenshotsAdvice(local.screenshotsNamed)}` };
+    return { missing: `screenshots: ${screenshotsAdvice(local.screenshotsNamed)}; ${storeSizeSentence(local.store)}` };
   }
 
   if (/categories_present$/.test(id) && local.store === "firefox") {
@@ -949,6 +952,31 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     }
 
     screenshots = read.screenshots;
+
+    for (const store of asked as ListingStore[]) {
+      const refusal = screenshotRefusal(store, screenshots);
+      if (!refusal) continue;
+
+      return envelope({
+        ok: false,
+        command: COMMAND,
+        status: "bad-request",
+        value: {
+          action: ACT,
+          screenshot: {
+            store,
+            ...(refusal.file ? { file: refusal.file, measured: refusal.measured } : {}),
+            accepted: screenshotRule(store).shown,
+          },
+        },
+        error: {
+          code: "E_BAD_REQUEST",
+          name: "ListingInputError",
+          message: `${refusal.message}. Nothing was sent.`,
+        },
+        hint: `Capture the ${store} screenshots at a size the store takes (extension_screenshot takes width and height) and call sync-listing again with the same browsers and projectPath.`,
+      });
+    }
   }
 
   const locals = new Map<ListingStore, LocalListing>();

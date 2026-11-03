@@ -2171,7 +2171,7 @@
           "name": "screenshots",
           "type": "array of string",
           "required": false,
-          "description": "With sync-listing, up to 5 PNG screenshots inside projectPath (for example written by extension_screenshot) to set as the listing's screenshots. The Chrome Web Store takes 1280x800 or 640x400."
+          "description": "With sync-listing, the PNG screenshots inside projectPath (for example written by extension_screenshot) to set as the listing's screenshots. Each store takes its own count and sizes, and a file off its store's sizes or a count over its cap is refused here before any approval: Chrome 1 to 5 at 1280x800 or 640x400; Edge up to 6 at 1280x800 or 640x480; Safari 1 to 10 macOS screenshots at exactly 1280x800, 1440x900, 2560x1600 or 2880x1800, showing the extension running in Safari; Firefox any size, optional."
         },
         {
           "name": "useBuild",
@@ -2302,7 +2302,7 @@
           "name": "screenshots",
           "type": "array of string",
           "required": false,
-          "description": "With sync-listing, up to 5 PNG screenshots inside projectPath (for example written by extension_screenshot) to set as the listing's screenshots. The Chrome Web Store takes 1280x800 or 640x400."
+          "description": "With sync-listing, the PNG screenshots inside projectPath (for example written by extension_screenshot) to set as the listing's screenshots. Each store takes its own count and sizes, and a file off its store's sizes or a count over its cap is refused here before any approval: Chrome 1 to 5 at 1280x800 or 640x400; Edge up to 6 at 1280x800 or 640x480; Safari 1 to 10 macOS screenshots at exactly 1280x800, 1440x900, 2560x1600 or 2880x1800, showing the extension running in Safari; Firefox any size, optional."
         },
         {
           "name": "useBuild",

@@ -11,10 +11,34 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { LISTING_TEXT_FIELDS, type ListingStore, type ListingText } from "./store-md-listing";
+import { STORE_SCREENSHOT_SPECS, sizeLabel } from "./store-screenshot-sizes";
 
 export const STORE_LISTING_ACTION = "extension_store.listing";
 
-export const MAX_SCREENSHOTS = 5;
+export const MAX_SCREENSHOTS = 10;
+const SCREENSHOT_CAPS: Record<ListingStore, number> = { chrome: 5, edge: 6, firefox: MAX_SCREENSHOTS, safari: 10 };
+
+export interface ScreenshotRule {
+  max: number;
+  sizes: readonly string[] | null;
+  shown: string;
+}
+
+export function screenshotRule(store: ListingStore): ScreenshotRule {
+  const spec = STORE_SCREENSHOT_SPECS[store];
+  const max = SCREENSHOT_CAPS[store];
+  if (store === "firefox") return { max, sizes: null, shown: "any size, optional" };
+
+  const sizes = spec.sizes.map(sizeLabel);
+  const listed = sizes.length > 1 ? `${sizes.slice(0, -1).join(", ")} or ${sizes[sizes.length - 1]}` : sizes[0]!;
+  const shown =
+    store === "safari"
+      ? `${spec.count} macOS screenshots at exactly ${listed}, showing the extension running in Safari`
+      : `${spec.count} at ${listed}`;
+
+  return { max, sizes, shown };
+}
+
 const MAX_ICON_BYTES = 512 * 1024;
 const MAX_SCREENSHOT_BYTES = 1024 * 1024;
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -167,6 +191,42 @@ export function readScreenshots(projectPath: string, paths: unknown): { screensh
   }
 
   return { screenshots };
+}
+
+export interface ScreenshotRefusal {
+  store: ListingStore;
+  message: string;
+  file?: string;
+  measured?: string;
+  accepted?: readonly string[];
+}
+
+export function screenshotRefusal(store: ListingStore, screenshots: ListingImage[]): ScreenshotRefusal | null {
+  const rule = screenshotRule(store);
+
+  if (screenshots.length > rule.max) {
+    return {
+      store,
+      message: `a ${store} listing takes at most ${rule.max} screenshots; ${screenshots.length} were given`,
+    };
+  }
+
+  if (!rule.sizes) return null;
+
+  for (const image of screenshots) {
+    const measured = `${image.width}x${image.height}`;
+    if (rule.sizes.includes(measured)) continue;
+
+    return {
+      store,
+      file: image.source,
+      measured,
+      accepted: rule.sizes,
+      message: `${image.source} is ${measured}; ${STORE_SCREENSHOT_SPECS[store].name} takes screenshots at exactly ${rule.sizes.join(", ")}`,
+    };
+  }
+
+  return null;
 }
 
 const imageView = (image: ListingImage) => ({ sha256: image.sha256, width: image.width, height: image.height });

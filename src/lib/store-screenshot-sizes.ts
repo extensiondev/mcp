@@ -50,7 +50,7 @@ export const STORE_SCREENSHOT_SPECS: Record<ListingStore, StoreScreenshotSpec> =
     store: "edge",
     name: "Edge Add-ons",
     sizes: [[1280, 800], [640, 480]],
-    count: "1 to 10",
+    count: "1 to 6",
     alpha: "accepted",
     docs: "https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/publish-extension",
   },

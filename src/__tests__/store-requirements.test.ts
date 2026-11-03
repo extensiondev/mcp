@@ -333,7 +333,7 @@ describe("extension_submit preflight carries what each store asks for and says w
 
     const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], projectPath: root, api: API }));
     const shots = out.value.stores.chrome.requirements.items.find((item: { id: string }) => item.id === "chrome.screenshots");
-    const door = 'screenshots: STORE.md names no screenshot file; pass screenshots to sync-listing as PNG paths inside projectPath, written by extension_screenshot with forStore: "<store>"';
+    const door = 'screenshots: STORE.md names no screenshot file; pass screenshots to sync-listing as PNG paths inside projectPath, written by extension_screenshot with forStore: "<store>"; the Chrome Web Store takes 1 to 5 screenshots at 1280x800 or 640x400 px, 24-bit PNG or JPEG with no alpha (https://developer.chrome.com/docs/webstore/images).';
 
     expect(shots).toMatchObject({ status: "missing", satisfiedBy: "store-md: Screenshots", actual: "0 screenshots" });
     expect(out.value.stores.chrome.storeMd.notCovered).toContain(door);
