@@ -6,7 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-
 import { runAskingOnly } from "../lib/ask-only";
 import { SUBMIT_CHECK_ACTIONS, SUBMIT_CHECK_TOOL, submitCheckRefused } from "../lib/submit-action-safety";
 import { handler as submitHandler, schema as submitSchema, type SubmitToolArgs } from "./submit";

@@ -43,6 +43,23 @@ function word(value: unknown): string {
   return text(value).toLowerCase();
 }
 
+export function buildNumberOf(value: unknown): number | null {
+  const raw = isRow(value) ? value.buildNumber : value;
+
+  return typeof raw === "number" && Number.isInteger(raw) && raw > 0 ? raw : null;
+}
+
+export function buildName(buildId: string, number: number | null, bare = "Build"): string {
+  return number ? `Build #${number} (${buildId})` : `${bare} ${buildId}`.trim();
+}
+
+export function rowWords(row: Row, status: string): string {
+  const number = buildNumberOf(row);
+  const buildId = text(row.buildId);
+
+  return number ? `Build #${number} (${buildId}, ${status})` : `${buildId} (${status})`;
+}
+
 export function buildState(statusLike: unknown, conclusionLike?: unknown): BuildState | string {
   const status = word(statusLike);
   const conclusion = word(conclusionLike);
@@ -115,6 +132,9 @@ export function listRow(item: Row, consoleUrl: (buildId: string) => string): Row
   const active = isActiveState(state);
   const browsers = browsersOf(item);
   const out: Row = { buildId };
+  const number = buildNumberOf(item);
+  if (number) out.buildNumber = number;
+
   const fields: Array<[string, unknown]> = [
     ["sha", item.commit],
     ["status", state],
@@ -155,7 +175,7 @@ export function listRow(item: Row, consoleUrl: (buildId: string) => string): Row
 }
 
 export function oneStampWarning(rows: Row[]): string | null {
-  const ids = rows.filter((row) => text(row.timestamp)).map((row) => text(row.buildId));
+  const ids = rows.filter((row) => text(row.timestamp)).map((row) => buildName(text(row.buildId), buildNumberOf(row), ""));
   if (!ids.length) return null;
 
   return `The platform recorded one timestamp for build${ids.length === 1 ? "" : "s"} ${ids.join(", ")}, not a start and an end; it is answered as timestamp beside the duration the platform reported.`;
@@ -165,7 +185,7 @@ export function browsersPendingSentence(rows: Row[]): string | null {
   const waiting = rows.filter((row) => isActiveState(row.status) && Array.isArray(row.browsers) && row.browsers.length === 0);
   if (!waiting.length) return null;
 
-  const named = waiting.map((row) => `${text(row.buildId)} (${text(row.status)}${text(row.runningFor) ? ` for ${text(row.runningFor)}` : ""})`);
+  const named = waiting.map((row) => rowWords(row, `${text(row.status)}${text(row.runningFor) ? ` for ${text(row.runningFor)}` : ""}`));
 
   return `${named.join(" and ")} ${waiting.length === 1 ? "has" : "have"} no browser reported by the platform yet; browsers land with the build record when the run finishes.`;
 }
@@ -187,7 +207,14 @@ function newerBuildThanPush(lastPush: Row, commit: string, rows: Row[]): Row | n
   const startedAt = Date.parse(text(newest.startedAt));
   if (!Number.isFinite(pushedAt) || !Number.isFinite(startedAt) || startedAt <= pushedAt) return null;
 
-  return { buildId, status: text(newest.status), startedAt: new Date(startedAt).toISOString().replace(/\.\d{3}Z$/, "Z") };
+  const number = buildNumberOf(newest);
+
+  return {
+    buildId,
+    ...(number ? { buildNumber: number } : {}),
+    status: text(newest.status),
+    startedAt: new Date(startedAt).toISOString().replace(/\.\d{3}Z$/, "Z"),
+  };
 }
 
 export function lastPushView(lastPush: Row | null, rows: Row[]): { lastPush: Row | null; sentence: string | null } {
@@ -199,17 +226,21 @@ export function lastPushView(lastPush: Row | null, rows: Row[]): { lastPush: Row
   const view: Row = { ...lastPush, ...(receivedAt ? { receivedAt } : {}) };
   const built = commit ? rows.find((row) => text(row.buildId).startsWith(commit.slice(0, 7))) : undefined;
 
-  if (built) view.build = { buildId: text(built.buildId), status: text(built.status) };
+  if (built) {
+    const number = buildNumberOf(built);
+    view.build = { buildId: text(built.buildId), ...(number ? { buildNumber: number } : {}), status: text(built.status) };
+  }
 
   const newer = newerBuildThanPush(lastPush, commit, rows);
 
   if (newer) {
     view.stale = true;
     view.newerBuild = newer;
+    const words = rowWords(newer, text(newer.status) || "status unknown");
 
     return {
       lastPush: view,
-      sentence: `lastPush is stale: it still names ${commit || "an earlier commit"}${receivedAt ? ` (received ${receivedAt})` : ""}, while build ${text(newer.buildId)} (${text(newer.status) || "status unknown"}) started at ${text(newer.startedAt)}, after that record; the platform has not recorded the push behind ${text(newer.buildId)} yet, so builds[0] is the newest build.`,
+      sentence: `lastPush is stale: it still names ${commit || "an earlier commit"}${receivedAt ? ` (received ${receivedAt})` : ""}, while ${buildNumberOf(newer) ? words : `build ${words}`} started at ${text(newer.startedAt)}, after that record; the platform has not recorded the push behind ${text(newer.buildId)} yet, so builds[0] is the newest build.`,
     };
   }
 

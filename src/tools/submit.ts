@@ -238,7 +238,7 @@ export const schema = {
       version: {
         type: "string",
         description:
-          "Version label for the submission record (optional). Left out, the platform reads the built manifest's version from the build's own record, and each submissions[] row answers version as the store version it sent (<manifest version>.<build number>, the same number extension_release_status reads) beside storeVersion; the sha appears as the version only when the build record cannot be read. A submit takes no channel: a submission is the stable release of its build for that store (Cezar, 2026-10-28), and the channel a row carries is the channel that pins the build on the registry, when one does.",
+          "Version label for the submission record (optional). Left out, the platform reads the built manifest's version from the build's own record, and each submissions[] row answers version as the store version it sent (<manifest version>.<build number>, the same number extension_release_status reads) beside storeVersion; the sha appears as the version only when the build record cannot be read. A submit takes no channel and buildSha names the build: a submission is the stable release of that build for that store, and the channel a submissions[] row carries is the one that pins the build on the registry, when one does, never an input.",
       },
       dryRun: {
         type: "boolean",

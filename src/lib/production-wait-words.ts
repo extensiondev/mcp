@@ -6,7 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-
 import { debugPortWords, productionDebugPortOutlook } from "./production-launch";
 import { waitCall } from "./production-receipt";
 

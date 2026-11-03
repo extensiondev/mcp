@@ -7,8 +7,9 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { stampNow } from "../lib/act-outcome";
+import { buildName, buildNumberOf } from "../lib/builds-list-row";
 import { envelope } from "../lib/envelope";
-import { projectApiGet, projectApiReadFailure, type ProjectApi } from "../lib/project-api";
+import { projectApiGet, projectApiReadFailure, type ProjectApi, type ProjectApiRead } from "../lib/project-api";
 import { COMMAND, isRow, text, type Row } from "./builds-acts";
 
 export const LOG_TAIL = 200;
@@ -34,12 +35,13 @@ interface RunSection {
   validation?: Row | null;
 }
 
-export function cancelledSentence(buildId: string, supersededBy: unknown): string {
+export function cancelledSentence(buildId: string, supersededBy: unknown, buildNumber: number | null = null): string {
   const newer = text(supersededBy);
+  const name = buildName(buildId, buildNumber);
 
   return newer
-    ? `Build ${buildId} was canceled because ${newer} landed; nothing is wrong with it.`
-    : `Build ${buildId} was canceled by the platform; nothing is wrong with it.`;
+    ? `${name} was canceled because ${newer} landed; nothing is wrong with it.`
+    : `${name} was canceled by the platform; nothing is wrong with it.`;
 }
 
 function runSectionOf(value: unknown): RunSection | null {
@@ -146,8 +148,7 @@ function failedJobSentence(failedJob: Row, beforeBrowsers: boolean): string {
   return beforeBrowsers ? `The run failed in ${where} before any browser built:` : `The run failed in ${where}:`;
 }
 
-async function legacyBuildFailed(read: LogsRead): Promise<{ failed: boolean; cause: Row | null }> {
-  const detail = await projectApiGet<Row>(read.api, `builds/${encodeURIComponent(read.buildId)}`);
+function legacyBuildFailed(detail: ProjectApiRead<Row>): { failed: boolean; cause: Row | null } {
   if (!detail.ok || !isRow(detail.json)) return { failed: false, cause: null };
 
   const status = text(detail.json.status).toLowerCase();
@@ -158,7 +159,8 @@ async function legacyBuildFailed(read: LogsRead): Promise<{ failed: boolean; cau
 
 export async function readLogs(read: LogsRead): Promise<string> {
   const { buildId } = read;
-  const answer = await projectApiGet<Row>(read.api, `builds/${encodeURIComponent(buildId)}/logs`);
+  const route = `builds/${encodeURIComponent(buildId)}`;
+  const [answer, detail] = await Promise.all([projectApiGet<Row>(read.api, `${route}/logs`), projectApiGet<Row>(read.api, route)]);
 
   if (!answer.ok) {
     return projectApiReadFailure(COMMAND, answer, {
@@ -174,13 +176,15 @@ export async function readLogs(read: LogsRead): Promise<string> {
   const run = runSectionOf(answer.json.run);
   const hasRunField = "run" in answer.json;
   const allPending = raw.length > 0 && raw.every((item) => text(item.status) === "pending");
-  const legacy = !hasRunField && allPending ? await legacyBuildFailed(read) : { failed: false, cause: null };
+  const legacy = !hasRunField && allPending ? legacyBuildFailed(detail) : { failed: false, cause: null };
   const all = raw.map((item) => settled(item, run, legacy.failed));
   const items = all.filter((item) => !wanted || text(item.browser).toLowerCase() === wanted).map(tailOf);
   const failed = items.filter((item) => text(item.status) === "failed").map((item) => text(item.browser));
   const skipped = items.filter((item) => text(item.status) === "skipped").map((item) => text(item.browser));
   const beforeBrowsers = all.length === 0 || all.every((item) => text(item.status) === "skipped");
-  const cancelled = run?.conclusion === "cancelled" ? cancelledSentence(text(answer.json.buildId) || buildId, run.supersededBy) : "";
+  const canonical = text(answer.json.buildId) || buildId;
+  const number = buildNumberOf(detail.ok ? detail.json : null);
+  const cancelled = run?.conclusion === "cancelled" ? cancelledSentence(canonical, run.supersededBy, number) : "";
   const readAt = stampNow();
   const waiting = run && !concluded(run) && !legacy.failed ? items.filter(waitingForLines).map((item) => text(item.browser)) : [];
 
@@ -199,8 +203,8 @@ export async function readLogs(read: LogsRead): Promise<string> {
     hint = `The run failed${where} before the browser steps, so no browser built and none has lines. The build page is ${read.consoleUrl}.`;
   } else if (items.length === 0) {
     hint = wanted
-      ? `No ${wanted} logs for build ${buildId}; the build may not target ${wanted}. Browsers with logs: ${all.map((i) => text(i.browser)).join(", ") || "none"}.`
-      : `No log lines are recorded for build ${buildId} yet; the build page is ${read.consoleUrl}.`;
+      ? `No ${wanted} logs for ${buildName(canonical, number, "build")}; the build may not target ${wanted}. Browsers with logs: ${all.map((i) => text(i.browser)).join(", ") || "none"}.`
+      : `No log lines are recorded for ${buildName(canonical, number, "build")} yet; the build page is ${read.consoleUrl}.`;
   } else if (failed.length) {
     hint = failedBrowsersHint(
       items.filter((item) => text(item.status) === "failed"),
@@ -222,7 +226,8 @@ export async function readLogs(read: LogsRead): Promise<string> {
     value: {
       action: "logs",
       readAt,
-      buildId: text(answer.json.buildId) || buildId,
+      buildId: canonical,
+      ...(number ? { buildNumber: number } : {}),
       ...(run ? { run } : {}),
       items,
       trackUrl: read.consoleUrl,

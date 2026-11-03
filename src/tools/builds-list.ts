@@ -10,11 +10,13 @@ import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
 import {
   browsersPendingSentence,
+  buildNumberOf,
   headLagView,
   isRow,
   lastPushView,
   listRow,
   oneStampWarning,
+  rowWords,
   text,
 } from "../lib/builds-list-row";
 import { consoleProjectUrl } from "../lib/registry";
@@ -50,7 +52,7 @@ export async function listBuilds(command: string, args: ListArgs): Promise<strin
   const rows = items.map((item) => listRow(item, (buildId) => consoleProjectUrl(opened.api.ref, ConsoleProjectPage.build(buildId), args.api)));
   const project = `${opened.api.ref.workspace}/${opened.api.ref.project}`;
   const buildsPageUrl = consoleProjectUrl(opened.api.ref, ConsoleProjectPage.builds, args.api);
-  const cancelledSentences = rows.filter((row) => row.status === "cancelled").map((row) => cancelledSentence(text(row.buildId), row.supersededBy));
+  const cancelledSentences = rows.filter((row) => row.status === "cancelled").map((row) => cancelledSentence(text(row.buildId), row.supersededBy, buildNumberOf(row)));
   const push = lastPushView(isRow(read.json?.lastPush) ? read.json.lastPush : null, rows);
   const headLag = headLagView(isRow(read.json?.headLag) && text(read.json.headLag.message) ? read.json.headLag : null);
   const spoken = [...(headLag ? [text(headLag.message)] : []), ...cancelledSentences];
@@ -77,7 +79,7 @@ export async function listBuilds(command: string, args: ListArgs): Promise<strin
     },
     hint: `${headLag ? `${text(headLag.message)} ` : ""}${
       latest
-        ? `${rows.length} recent build${rows.length === 1 ? "" : "s"} of ${project}, newest first; the latest is ${latest.buildId} (${latest.status ?? "status unknown"}). Pass action:"get" or action:"logs" with a buildId to read one.${
+        ? `${rows.length} recent build${rows.length === 1 ? "" : "s"} of ${project}, newest first; the latest is ${rowWords(latest, text(latest.status) || "status unknown")}. Pass action:"get" or action:"logs" with a buildId to read one.${
             rows.some((row) => row.status === "partial") ? " A partial build finished with at least one browser failed; failedBrowsers names them." : ""
           }${cancelledSentences.length ? ` ${cancelledSentences.join(" ")}` : ""}${noted.length ? ` ${noted.join(" ")}` : ""}`
         : `No builds are recorded for ${project} yet.${noted.length ? ` ${noted.join(" ")}` : ""} Push a commit to produce one, then check ${buildsPageUrl}.`

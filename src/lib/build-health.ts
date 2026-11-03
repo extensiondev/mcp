@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { buildNumberOf } from "./builds-list-row";
 import { openProjectApi, projectApiGet } from "./project-api";
 
 type Row = Record<string, unknown>;
@@ -49,6 +50,7 @@ export type BuildHealth =
   | {
       checked: true;
       buildId: string;
+      buildNumber?: number;
       run?: BuildRun;
       browsers: BrowserHealth[];
       good: string[];
@@ -169,10 +171,11 @@ export function browserHealthOf(
   };
 }
 
-export function summarizeBuildHealth(buildId: string, browsers: BrowserHealth[], run?: BuildRun): BuildHealth {
+export function summarizeBuildHealth(buildId: string, browsers: BrowserHealth[], run?: BuildRun, buildNumber: number | null = null): BuildHealth {
   return {
     checked: true,
     buildId,
+    ...(buildNumber ? { buildNumber } : {}),
     ...(run ? { run } : {}),
     browsers,
     good: browsers.filter((b) => b.usable === true).map((b) => b.browser),
@@ -279,5 +282,6 @@ export async function readBuildHealth(args: {
     text(detail.json.buildId) || buildId,
     rows.map((row, i) => browserHealthOf(row.browser, row.status, reads[i], { explicit: row.explicit, run })),
     run,
+    buildNumberOf(detail.json),
   );
 }

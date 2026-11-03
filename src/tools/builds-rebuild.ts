@@ -21,6 +21,7 @@ import {
   trackLinks,
   type Verdict,
 } from "../lib/act-outcome";
+import { buildName, buildNumberOf } from "../lib/builds-list-row";
 import { consoleProjectUrl } from "../lib/registry";
 import { envelope } from "../lib/envelope";
 import { approvalRoundTrip } from "../lib/approval-outcome";
@@ -176,10 +177,12 @@ async function alreadyRunning(sent: ProjectApiRefusal, args: ActArgs, api: Proje
     },
     judge: (detail) => judgeRunning(detail, startedAfter),
   });
-  const value = { ...base, outcome: waited.outcome, links };
+  const number = buildNumberOf(waited.record);
+  const named = buildName(commit, number, "build");
+  const value = { ...base, ...(number ? { buildNumber: number } : {}), outcome: waited.outcome, links };
   const made = madeSentence(links);
   const readCall = `extension_builds (action: "get", buildId: "${commit}")`;
-  const nothing = `Nothing was dispatched and nothing was spent: build ${commit} of ${project} ${RUNNING_WORDS[state] ?? RUNNING_WORDS.in_progress}${startedAt ? ` (since ${startedAt})` : ""}, and a second build of the same commit would cancel it.`;
+  const nothing = `Nothing was dispatched and nothing was spent: ${named} of ${project} ${RUNNING_WORDS[state] ?? RUNNING_WORDS.in_progress}${startedAt ? ` (since ${startedAt})` : ""}, and a second build of the same commit would cancel it.`;
 
   if (waited.failed) {
     return envelope({
@@ -187,7 +190,7 @@ async function alreadyRunning(sent: ProjectApiRefusal, args: ActArgs, api: Proje
       command: COMMAND,
       status: "build-failed",
       value,
-      error: { code: "E_PLATFORM", name: "BuildFailed", message: `The platform's record of build ${commit} reads ${waited.outcome.status}.` },
+      error: { code: "E_PLATFORM", name: "BuildFailed", message: `The platform's record of ${named} reads ${waited.outcome.status}.` },
       hint: `${nothing} That build has now finished and failed: read extension_builds action:"logs" with buildId ${commit} for the failed browser and step, and the build page ${buildPage}. ${made}`,
     });
   }
@@ -359,7 +362,9 @@ export async function rebuild(args: ActArgs): Promise<string> {
     judge: (detail) => judgeRebuild(detail, run.match, acceptedAt),
   });
   const made = madeSentence(links);
-  const value = { ...base, outcome: waited.outcome, links };
+  const number = buildNumberOf(waited.record);
+  const named = buildName(commit, number, "build");
+  const value = { ...base, ...(number ? { buildNumber: number } : {}), outcome: waited.outcome, links };
   const started = `This started a real build for ${project} at ${commit || "the branch head"} (${buildEnv || "staging"}) on ${browsers.join(", ") || "the enabled browsers"}, and it counts against the workspace's build allowance.`;
   const stripWarning = stripped.length ? `The platform left out ${stripped.join(", ")}, which this plan does not build.` : null;
 
@@ -369,7 +374,7 @@ export async function rebuild(args: ActArgs): Promise<string> {
       command: COMMAND,
       status: "build-failed",
       value,
-      error: { code: "E_PLATFORM", name: "BuildFailed", message: `The platform's record of build ${commit} reads ${waited.outcome.status} after this rebuild.` },
+      error: { code: "E_PLATFORM", name: "BuildFailed", message: `The platform's record of ${named} reads ${waited.outcome.status} after this rebuild.` },
       hint: `${started} The rebuild finished and failed: read extension_builds action:"logs" with buildId ${commit} for the failed browser and step, and the build page ${buildPage}. ${made}`,
       warnings: [stripWarning],
     });
@@ -381,7 +386,7 @@ export async function rebuild(args: ActArgs): Promise<string> {
       command: COMMAND,
       status: "built",
       value,
-      hint: `${started} The platform's record of build ${commit} now reads ${waited.outcome.status}; ${readCall} reads its artifacts and checks, and the build page is ${buildPage}. ${made}`,
+      hint: `${started} The platform's record of ${named} now reads ${waited.outcome.status}; ${readCall} reads its artifacts and checks, and the build page is ${buildPage}. ${made}`,
       warnings: [stripWarning],
     });
   }

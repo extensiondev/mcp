@@ -6,7 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-
 import { ITEM_ON_FILE_POINTER, itemOnFileSentences, type ChromeItemLeft } from "./chrome-item-left";
 import { linkItemSentences, nextStep } from "./store-connection";
 

@@ -6,7 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-
 import { splitChannelKey } from "./channel-link";
 import { channelXpiAddress, updateManifestAddress } from "./package-address";
 import { readBuiltManifest } from "./project-manifest";

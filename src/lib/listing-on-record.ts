@@ -6,7 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-
 import type { ImageRows } from "../tools/store-listing";
 import type { RequirementsView } from "./store-requirements";
 

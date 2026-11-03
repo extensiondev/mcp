@@ -8,6 +8,7 @@
 
 import { after, awaitRecordedOutcome, dispatchedHint, linksOf, madeSentence, missedRead, stampNow, type Verdict } from "../lib/act-outcome";
 import { browserHealthOf, describeBrowserHealth, readBuildHealth, type BrowserHealth } from "../lib/build-health";
+import { buildName } from "../lib/builds-list-row";
 import { envelope } from "../lib/envelope";
 import { projectApiSend, type ProjectApi } from "../lib/project-api";
 import { trackUrl } from "../lib/track-url";
@@ -164,19 +165,21 @@ export async function recheck(args: ActArgs & { browser?: string }): Promise<str
 
   const canonical = text(json.buildId) || buildId;
   const wanted = rows.map((row) => text(row.browser) || text(row.name)).filter(Boolean);
-  const waited = await awaitRecordedOutcome<BrowserHealth[]>({
+  const waited = await awaitRecordedOutcome<{ browsers: BrowserHealth[]; buildNumber: number | null }>({
     waitSeconds: args.waitSeconds,
     read: async () => {
       const health = await readBuildHealth({ command: COMMAND, buildId: canonical, project: args.project, api: args.api });
       if (!health.checked) return missedRead({ status: health.status ?? -1, message: health.reason });
 
-      return { ok: true, record: health.browsers };
+      return { ok: true, record: { browsers: health.browsers, buildNumber: health.buildNumber ?? null } };
     },
-    judge: (health) => judgeRecheck(health, browser ? [browser] : wanted, sinceIso),
+    judge: (record) => judgeRecheck(record.browsers, browser ? [browser] : wanted, sinceIso),
   });
+  const number = waited.record?.buildNumber ?? null;
+  const named = buildName(canonical, number);
 
   if (waited.outcome.recorded && waited.record) {
-    const fresh = waited.record.filter((row) => (browser ? row.browser === browser : wanted.length === 0 || wanted.includes(row.browser)));
+    const fresh = waited.record.browsers.filter((row) => (browser ? row.browser === browser : wanted.length === 0 || wanted.includes(row.browser)));
     done = fresh;
     checking = [];
     for (const row of fresh) browsers[row.browser] = browserRow(row);
@@ -191,6 +194,7 @@ export async function recheck(args: ActArgs & { browser?: string }): Promise<str
   const value = {
     action: "recheck",
     buildId: canonical,
+    ...(number ? { buildNumber: number } : {}),
     ...(text(json.checkedAt) ? { checkedAt: text(json.checkedAt) } : {}),
     browsers,
     good,
@@ -198,10 +202,10 @@ export async function recheck(args: ActArgs & { browser?: string }): Promise<str
     checking,
     publishable,
     status: !waited.outcome.recorded
-      ? `Build ${canonical} is being rechecked; the platform's record has not confirmed the verdict for ${checking.join(", ") || wanted.join(", ") || "its browsers"} yet.`
+      ? `${named} is being rechecked; the platform's record has not confirmed the verdict for ${checking.join(", ") || wanted.join(", ") || "its browsers"} yet.`
       : publishable
-        ? `Build ${canonical} passed the recheck for ${good.join(", ")}; nothing blocks publishing it.`
-        : `Build ${canonical} failed the recheck for ${failed.join(", ") || "every browser"}; a new build unblocks it.`,
+        ? `${named} passed the recheck for ${good.join(", ")}; nothing blocks publishing it.`
+        : `${named} failed the recheck for ${failed.join(", ") || "every browser"}; a new build unblocks it.`,
     trackUrl: buildPage,
     outcome: waited.outcome,
     links,
