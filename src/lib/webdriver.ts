@@ -223,6 +223,24 @@ export class WebDriverClient {
   ): Promise<unknown> {
     return this.call("POST", "/execute/sync", { script, args }, timeoutMs);
   }
+
+  async setWindowRect(width: number, height: number, timeoutMs = 15_000): Promise<void> {
+    await this.call("POST", "/window/rect", { width, height }, timeoutMs);
+  }
+
+  async innerSize(timeoutMs = 15_000): Promise<{ width: number; height: number } | null> {
+    const value = await this.execute("return [window.innerWidth, window.innerHeight];", [], timeoutMs);
+
+    return Array.isArray(value) && typeof value[0] === "number" && typeof value[1] === "number" ? { width: value[0], height: value[1] } : null;
+  }
+
+  async fitViewport(width: number, height: number, timeoutMs = 15_000): Promise<void> {
+    await this.setWindowRect(width, height, timeoutMs);
+    const inner = await this.innerSize(timeoutMs);
+    if (!inner || (inner.width === width && inner.height === height)) return;
+
+    await this.setWindowRect(width + (width - inner.width), height + (height - inner.height), timeoutMs);
+  }
 }
 
 export interface ExtensionRootReading {

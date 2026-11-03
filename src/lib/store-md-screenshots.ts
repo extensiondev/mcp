@@ -9,10 +9,10 @@
 import { STORE_MD_FILENAME } from "./store-md";
 
 export const SCREENSHOTS_DOOR =
-  'pass screenshots to sync-listing as PNG paths inside projectPath, written by extension_screenshot with forStore: "<store>"';
+  'capture them with extension_screenshot store:"<store>", one call per view, and sync-listing picks them up from store/screenshots/<store>/';
 
 const screenshotsArgument = (named: number): string =>
-  `sync-listing takes ${named === 1 ? "it" : "them"} as its screenshots argument, as PNG paths inside projectPath written by extension_screenshot with forStore: "<store>"`;
+  `sync-listing takes ${named === 1 ? "it" : "them"} as its screenshots argument, as PNG paths inside projectPath; extension_screenshot store:"<store>" writes them under store/screenshots/<store>/, which sync-listing reads on its own`;
 
 const IMAGE_PATH = /[^\s`'"()[\]<>,:]+\.(?:png|jpe?g|webp)\b/gi;
 

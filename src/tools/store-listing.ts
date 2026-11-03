@@ -52,6 +52,7 @@ import { onListingLine, type ListingRecordRead } from "../lib/listing-record-com
 import { chromePasteLines, type PasteLines } from "../lib/chrome-paste-lines";
 import { SCREENSHOTS_DOOR, screenshotsAdvice, screenshotsLineSentence } from "../lib/store-md-screenshots";
 import { storeSizeSentence } from "../lib/store-screenshot-sizes";
+import { listStoreScreenshots, storeScreenshotsFolder } from "../lib/store-capture";
 import { approvalVerdict } from "../lib/approval-policy";
 import { badShipRequest, isRow, openShipApi, text } from "../lib/ship-act";
 import {
@@ -105,6 +106,11 @@ const ACT = "sync-listing";
 const DONE_STATUSES = new Set(["synced", "unchanged", "icon-stale"]);
 
 type Row = Record<string, unknown>;
+
+interface StoreShots {
+  screenshots: ListingImage[];
+  from?: { folder: string; files: string[] };
+}
 
 export interface ListingArgs {
   browsers?: string[];
@@ -937,10 +943,29 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     );
   }
 
-  let screenshots: ListingImage[] | undefined;
+  const given = args.screenshots !== undefined ? readScreenshots(projectPath, args.screenshots) : null;
 
-  if (args.screenshots !== undefined) {
-    const read = readScreenshots(projectPath, args.screenshots);
+  if (given && "problem" in given) {
+    return badShipRequest(
+      COMMAND,
+      ACT,
+      "ListingInputError",
+      `${given.problem}. Nothing was sent.`,
+    );
+  }
+
+  const shotsFor = new Map<ListingStore, StoreShots>();
+
+  for (const store of asked as ListingStore[]) {
+    if (given) {
+      shotsFor.set(store, { screenshots: given.screenshots });
+      continue;
+    }
+
+    const paths = listStoreScreenshots(projectPath, store);
+    if (!paths.length) continue;
+
+    const read = readScreenshots(projectPath, paths);
 
     if ("problem" in read) {
       return badShipRequest(
@@ -951,11 +976,12 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       );
     }
 
-    screenshots = read.screenshots;
+    shotsFor.set(store, { screenshots: read.screenshots, from: { folder: storeScreenshotsFolder(store), files: paths.map((file) => path.basename(file)) } });
+  }
 
-    for (const store of asked as ListingStore[]) {
-      const refusal = screenshotRefusal(store, screenshots);
-      if (!refusal) continue;
+  for (const [store, shots] of shotsFor) {
+    const refusal = screenshotRefusal(store, shots.screenshots);
+    if (!refusal) continue;
 
       return envelope({
         ok: false,
@@ -974,15 +1000,14 @@ export async function syncListing(args: ListingArgs): Promise<string> {
           name: "ListingInputError",
           message: `${refusal.message}. Nothing was sent.`,
         },
-        hint: `Capture the ${store} screenshots at a size the store takes (extension_screenshot takes width and height) and call sync-listing again with the same browsers and projectPath.`,
+        hint: `Capture them again with extension_screenshot store:"${store}", one call per view (it writes ${storeScreenshotsFolder(store)}/ at the store's size), and call sync-listing again with the same browsers and projectPath.`,
       });
-    }
   }
 
   const locals = new Map<ListingStore, LocalListing>();
 
   for (const store of asked as ListingStore[]) {
-    const local = readLocalListing(projectPath, store, screenshots);
+    const local = readLocalListing(projectPath, store, shotsFor.get(store)?.screenshots);
 
     if ("problem" in local) {
       return badShipRequest(
@@ -1061,7 +1086,10 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       if (back?.problem) readProblems.push(back.problem);
     }
 
-    const record = screenshots === undefined && done ? { read: readBack !== null, screenshots: readBack?.screenshotsOnRecord ?? null } : null;
+    const shots = shotsFor.get(store);
+    const record = !shots && done ? { read: readBack !== null, screenshots: readBack?.screenshotsOnRecord ?? null } : null;
+    if (shots?.from) said.push(`For ${store}, ${shots.screenshots.length} screenshot${shots.screenshots.length === 1 ? " was" : "s were"} read from ${shots.from.folder} (${shots.from.files.join(", ")}).`);
+
     const onRecord = record ? onRecordRow(record) : null;
     const paste = store === "chrome" && done ? chromeDashboardPaste(local, readBack?.dashboardUrl ?? null, record) : null;
     const sentImages = local.patch.screenshots?.length ?? 0;
@@ -1106,6 +1134,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       ...(blocking ? { stillBlocking: blocking } : {}),
       ...(readBack?.images ? { images: readBack.images } : {}),
       ...(paste ? { pasteInDashboard: paste } : {}),
+      ...(shots?.from ? { screenshotsFrom: shots.from } : {}),
     };
   }
 

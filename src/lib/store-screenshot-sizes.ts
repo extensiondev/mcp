@@ -77,22 +77,6 @@ export function storeSizeSentence(store: ListingStore): string {
   return `${spec.name} takes ${spec.count} screenshots at ${sizes} px${spec.alpha === "refused" ? ", 24-bit PNG or JPEG with no alpha" : ", PNG or JPEG"} (${spec.docs}).`;
 }
 
-export type StoreSizePick = { ok: true; width: number; height: number } | { ok: false; message: string };
-
-export function pickStoreSize(store: ListingStore, width?: number, height?: number): StoreSizePick {
-  const spec = STORE_SCREENSHOT_SPECS[store];
-
-  if (width === undefined && height === undefined) return { ok: true, width: SHARED_SCREENSHOT_SIZE[0], height: SHARED_SCREENSHOT_SIZE[1] };
-
-  const accepted = spec.sizes.find((size) => size[0] === width && size[1] === height);
-  if (accepted) return { ok: true, width: accepted[0], height: accepted[1] };
-
-  return {
-    ok: false,
-    message: `${width ?? "?"}x${height ?? "?"} is not a size ${spec.name} accepts for a screenshot; pass one of ${spec.sizes.map(sizeLabel).join(", ")}, or omit width and height for ${sizeLabel(SHARED_SCREENSHOT_SIZE)}.`,
-  };
-}
-
 export function clearsStoreRow(store: ListingStore, width: number, height: number, hasAlpha: boolean): { clears: boolean; reason?: string } {
   const spec = STORE_SCREENSHOT_SPECS[store];
   const size = spec.sizes.some((s) => s[0] === width && s[1] === height);

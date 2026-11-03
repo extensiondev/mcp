@@ -361,67 +361,55 @@ describe("extension_screenshot on Safari captures web pages over WebDriver only"
   });
 });
 
-describe("extension_screenshot forStore captures at the store's size as a 24-bit PNG", () => {
-  it("renders 1280x800 at 1x, flattens the alpha channel, and says the file clears the Chrome row with the sync-listing door", async () => {
+describe("extension_screenshot store captures at the store's preset as a 24-bit PNG under store/screenshots", () => {
+  it("renders the popup at 1280x800 at 1x, flattens the alpha channel, files it as store/screenshots/chrome/01.png and names the sync-listing pickup", async () => {
     const { dir, chrome } = await chromeSession((extensionId) => [{ id: "P1", type: "page", url: `chrome-extension://${extensionId}/action/index.html` }]);
     chrome.alpha = true;
 
-    const out = await run({ projectPath: dir, browser: "chrome", context: "popup", forStore: "chrome" });
+    const out = await run({ projectPath: dir, browser: "chrome", context: "popup", store: "chrome" });
 
     expect(out.ok).toBe(true);
     expect(chrome.overrides[0]).toMatchObject({ width: 1280, height: 800, deviceScaleFactor: 1 });
+    expect(out.value.path).toBe(path.join(dir, "store", "screenshots", "chrome", "01.png"));
     expect(pngSize(out.value.path)).toEqual({ width: 1280, height: 800 });
     expect(fs.readFileSync(out.value.path)[25]).toBe(2);
-    expect(out.value.forStore).toEqual({
-      store: "chrome",
-      size: "1280x800",
-      alpha: "flattened",
-      clears: true,
-      sizes: ["1280x800", "640x400"],
-      docs: "https://developer.chrome.com/docs/webstore/images",
-    });
-
+    expect(out.value.files).toEqual([{ store: "chrome", path: out.value.path, width: 1280, height: 800, clears: true }]);
     expect(out.hint).toContain("clears the screenshot row of the Chrome Web Store");
-    expect(out.hint).toContain(`extension_submit action:"sync-listing" screenshots: ["${out.value.path}"]`);
+    expect(out.hint).toContain('extension_submit action:"sync-listing" browsers:["chrome"] picks the files up from store/screenshots/chrome/');
   });
 
-  it("takes another size the store accepts, refuses one it does not, and refuses a pixel ratio other than 1", async () => {
+  it("refuses a size or a pixel ratio beside store, and a store it does not know, before any capture", async () => {
     const { dir, chrome } = await chromeSession(() => [{ id: "W1", type: "page", url: "https://example.com/" }]);
 
-    const accepted = await run({ projectPath: dir, browser: "chrome", url: "example.com", forStore: "edge", width: 640, height: 480 });
+    const sized = await run({ projectPath: dir, browser: "chrome", url: "example.com", store: "edge", width: 640, height: 480 });
 
-    expect(accepted.ok).toBe(true);
-    expect(accepted.value.forStore).toMatchObject({ store: "edge", size: "640x480", alpha: "none", clears: true });
+    expect(sized.ok).toBe(false);
+    expect(sized.error.code).toBe("E_BAD_REQUEST");
+    expect(sized.error.message).toContain("chrome, edge and firefox 1280x800 at 1x; safari 1440x900 at 2x");
 
-    const refused = await run({ projectPath: dir, browser: "chrome", url: "example.com", forStore: "chrome", width: 640, height: 480 });
-
-    expect(refused.ok).toBe(false);
-    expect(refused.error.code).toBe("E_BAD_REQUEST");
-    expect(refused.error.message).toContain("1280x800, 640x400");
-    expect(refused.hint).toContain("https://developer.chrome.com/docs/webstore/images");
-
-    const scaled = await run({ projectPath: dir, browser: "chrome", url: "example.com", forStore: "safari", deviceScaleFactor: 2 });
+    const scaled = await run({ projectPath: dir, browser: "chrome", url: "example.com", store: "safari", deviceScaleFactor: 2 });
 
     expect(scaled.ok).toBe(false);
-    expect(scaled.error.message).toContain("1x pixel ratio");
+    expect(scaled.error.message).toContain("omit width, height and deviceScaleFactor with store");
 
-    const unknown = await run({ projectPath: dir, browser: "chrome", url: "example.com", forStore: "opera" });
+    const unknown = await run({ projectPath: dir, browser: "chrome", url: "example.com", store: "opera" });
 
     expect(unknown.ok).toBe(false);
-    expect(unknown.error.message).toContain("forStore must be one of chrome, firefox, edge, safari");
-    expect(chrome.methods.filter((m) => m === "Page.captureScreenshot")).toHaveLength(1);
+    expect(unknown.error.message).toContain("store must be one of chrome, firefox, edge, safari, all");
+    expect(chrome.methods.filter((m) => m === "Page.captureScreenshot")).toHaveLength(0);
   });
 
-  it("crops the Firefox tab to 1280x800 at 1x and answers the row it clears", async () => {
+  it("crops the Firefox tab to 1280x800 at 1x into store/screenshots/firefox/01.png and answers the row it clears", async () => {
     const firefox = await fakeFirefox([{ url: "https://example.com/", selected: true }]);
     const dir = project("firefox", readyContract("dev", "firefox", { rdpPort: firefox.port }));
 
-    const out = await run({ projectPath: dir, browser: "firefox", forStore: "firefox" });
+    const out = await run({ projectPath: dir, browser: "firefox", store: "firefox" });
 
     expect(out.ok).toBe(true);
     expect(firefox.captures[0]).toMatchObject({ rect: { left: 0, top: 0, width: 1280, height: 800 }, snapshotScale: 1 });
+    expect(out.value.path).toBe(path.join(dir, "store", "screenshots", "firefox", "01.png"));
     expect(pngSize(out.value.path)).toEqual({ width: 1280, height: 800 });
-    expect(out.value.forStore).toMatchObject({ store: "firefox", size: "1280x800", alpha: "none", clears: true });
+    expect(out.value.files[0]).toMatchObject({ store: "firefox", clears: true });
     expect(out.hint).toContain("clears the screenshot row of Firefox Add-ons");
   });
 });

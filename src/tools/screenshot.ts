@@ -6,6 +6,9 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import fs from "node:fs";
+import path from "node:path";
+
 import { CALL_TIMEOUT, SESSION_BROWSER, SESSION_PROJECT_PATH } from "../lib/common-schema";
 import { envelope } from "../lib/envelope";
 import { noSessionEnvelope } from "../lib/production-receipt";
@@ -51,9 +54,21 @@ import {
   type CaptureSize,
 } from "../lib/capture";
 import { flattenPngAlpha, pngHeader } from "../lib/png-flat";
-import { clearsStoreRow, isListingStoreName, pickStoreSize, STORE_SCREENSHOT_SPECS, sizeLabel, storeSizeSentence } from "../lib/store-screenshot-sizes";
-import { LISTING_STORES, type ListingStore } from "../lib/store-md-declarations";
+import { clearsStoreRow, STORE_SCREENSHOT_SPECS, storeSizeSentence } from "../lib/store-screenshot-sizes";
+import {
+  capturePlan,
+  expectedPixels,
+  isStoreChoice,
+  nextStoreScreenshotPath,
+  PRESET_SENTENCE,
+  STORE_CHOICES,
+  storeScreenshotsFolder,
+  type CaptureFamily,
+  type StoreChoice,
+} from "../lib/store-capture";
 import { resolveExtensionId, surfaceDocument, SURFACE_MANIFEST_KEYS } from "./open";
+
+import type { ListingStore } from "../lib/store-md-declarations";
 
 const COMMAND = "extension_screenshot";
 const SURFACES = ["popup", "options", "sidebar", "newtab", "history", "bookmarks"];
@@ -62,7 +77,7 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 export const schema = {
   name: COMMAND,
   description:
-    "Take a screenshot of one open extension surface (popup, options, sidebar, newtab, history, bookmarks) or web page in a live extension_dev or extension_start session as a .png file. It asks the browser for the page's own pixels over the debug port (CDP on Chromium, the screenshot actor on Firefox, WebDriver on Safari, web pages only); it never captures the screen and never brings a window forward: on Chromium a page behind other windows or in a hidden tab is shown briefly for the capture (value.behindWindow, value.hiddenTab). Open the surface with extension_open first. `targetId` (from extension_open or extension_dom_snapshot listTargets) captures that exact page; a url matching several tabs of one page captures the most recently active one and warns. width and height set the Chromium viewport and crop from the top left on Firefox; deviceScaleFactor sets the pixel ratio. `forStore` (chrome, firefox, edge or safari) captures a store listing screenshot at that store's accepted size (1280x800 by default) as a 24-bit PNG with no alpha, and value.forStore says whether it clears the store's screenshot row; pass the path to extension_submit sync-listing screenshots. The file goes under dist/extension-js/<browser>/screenshots unless `path` names one; the answer gives path and pixel size.",
+    "Take a screenshot of one open extension surface (popup, options, sidebar, newtab, history, bookmarks) or web page in a live extension_dev or extension_start session as a .png file. It asks the browser for the page's own pixels over the debug port (CDP on Chromium, the screenshot actor on Firefox, WebDriver on Safari, web pages only); it never captures the screen and never brings a window forward: on Chromium a page behind other windows or in a hidden tab is shown briefly for the capture (value.behindWindow, value.hiddenTab). Open the surface with extension_open first. `targetId` (from extension_open or extension_dom_snapshot listTargets) captures that exact page; a url matching several tabs of one page captures the most recently active one and warns. width and height set the Chromium viewport, resize the Safari window and crop from the top left on Firefox; deviceScaleFactor sets the pixel ratio. `store` (chrome, firefox, edge, safari or all) captures a store listing screenshot at that store's own size as a 24-bit PNG with no alpha into store/screenshots/<store>/, where extension_submit sync-listing picks it up; one call per view. The file goes under dist/extension-js/<browser>/screenshots unless `path` names one; the answer gives path and pixel size.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -78,12 +93,12 @@ export const schema = {
       targetId: TARGET_ID_PROPERTY,
       width: { type: "number", description: "Viewport width in CSS pixels (Chromium renders at it; Firefox crops to it)." },
       height: { type: "number", description: "Viewport height in CSS pixels (Chromium renders at it; Firefox crops to it)." },
-      deviceScaleFactor: { type: "number", description: "Pixel ratio of the image, 0.5 to 4. Defaults to the browser's own on Chromium and 1 on Firefox; with forStore it is 1." },
-      forStore: {
+      deviceScaleFactor: { type: "number", description: "Pixel ratio of the image, 0.5 to 4. Defaults to the browser's own on Chromium and 1 on Firefox; Safari answers at the display's own ratio. Set by store when it is given." },
+      store: {
         type: "string",
-        enum: [...LISTING_STORES],
+        enum: [...STORE_CHOICES],
         description:
-          "Capture for this store's listing: chrome (1280x800 or 640x400, 24-bit PNG, no alpha), firefox (1280x800 reads best), edge (1280x800 or 640x480) or safari (exactly 1280x800, 1440x900, 2560x1600 or 2880x1800, no alpha). The default 1280x800 24-bit capture clears the screenshot row of all four stores at once.",
+          "Capture for this store's listing at the size it takes, with width, height and deviceScaleFactor set here (chrome, edge and firefox 1280x800 at 1x; safari 1440x900 at 2x, a 2880x1800 image) and the file written to store/screenshots/<store>/<n>.png, numbered from 01; passing any of the three beside store is refused. all on a Chromium session writes every store's file from the same page in one call (one capture for chrome, edge and firefox, a second for safari); all on Safari writes only the safari file and says which stores were skipped. A safari file made outside Safari carries a warning, since Apple's review wants the extension running in Safari. extension_submit action:\"sync-listing\" browsers:[<store>] reads the folder on its own, in filename order.",
       },
       path: {
         type: "string",
@@ -103,18 +118,20 @@ interface Args extends CaptureSize {
   url?: string;
   targetId?: string;
   path?: string;
+  store?: string;
   forStore?: string;
   timeout?: number;
 }
 
-interface StoreVerdict {
+type Shooter = (size: CaptureSize) => Promise<CaptureOutcome>;
+
+interface StoreFile {
   store: ListingStore;
-  size: string;
-  alpha: "flattened" | "none";
+  path: string;
+  width: number;
+  height: number;
   clears: boolean;
   reason?: string;
-  sizes: string[];
-  docs: string;
 }
 
 function refuse(status: string, code: string, message: string, hint?: string, value?: unknown): string {
@@ -145,58 +162,144 @@ function captured(
   behindWindow?: BehindWindow,
   hiddenTab?: HiddenTab,
 ): string {
-  if (!outcome.ok) {
-    const behind = behindWindow?.tried
-      ? behindWindow.shown
-        ? " This tool already showed a blank tab in the page's window and retried, and the page still did not paint."
-        : ` This tool could not show another tab in the page's window to get it painted: ${behindWindow.reason}.`
-      : "";
+  if (!outcome.ok) return captureFailure(outcome, url, behindWindow);
 
-    return refuse(
-      outcome.timedOut ? "capture-timeout" : "capture-failed",
-      outcome.timedOut ? "E_CAPTURE_TIMEOUT" : "E_CAPTURE_FAILED",
-      `The browser did not hand back an image of ${url}: ${outcome.message}`,
-      outcome.timedOut
-        ? `The page did not paint within the budget.${behind} This tool never brings a window forward; run the session headless (the default), or retry with a larger timeout.`
-        : "Confirm the session is ready (extension_wait) and the page is still open, then retry.",
-    );
-  }
-
-  let png = outcome.png;
+  const png = outcome.png;
   const size = pngDimensions(png);
   if (!size) return refuse("capture-failed", "E_CAPTURE_FAILED", `The browser answered data for ${url} that is not a .png image.`);
-
-  const store = isListingStoreName(args.forStore) ? args.forStore : null;
-  let verdict: StoreVerdict | null = null;
-
-  if (store) {
-    const flat = flattenPngAlpha(png);
-    if ("problem" in flat) return refuse("capture-failed", "E_CAPTURE_FAILED", `The browser answered ${flat.problem} for ${url}, which this tool cannot flatten for a store listing.`);
-
-    png = flat.png;
-    const judged = clearsStoreRow(store, size.width, size.height, pngHeader(png)?.alpha !== "none");
-    const spec = STORE_SCREENSHOT_SPECS[store];
-    verdict = { store, size: sizeLabel([size.width, size.height]), alpha: flat.hadAlpha ? "flattened" : "none", ...judged, sizes: spec.sizes.map(sizeLabel), docs: spec.docs };
-  }
 
   const written = writeScreenshot(args.projectPath, browser, context, png, args.path);
   if (!written.ok) return refuse("bad-request", "E_BAD_REQUEST", written.message, written.hint);
 
   const file = written.file;
-  const storeLine = verdict
-    ? verdict.clears
-      ? ` It is a ${verdict.size} 24-bit PNG with no alpha, which clears the screenshot row of ${STORE_SCREENSHOT_SPECS[verdict.store].name}; pass it to extension_submit action:"sync-listing" screenshots: ["${file}"] to write it to that store's listing record.`
-      : ` It does not clear the screenshot row of ${STORE_SCREENSHOT_SPECS[verdict.store].name}: ${verdict.reason}. ${storeSizeSentence(verdict.store)}`
-    : "";
 
   return envelope({
     ok: true,
     command: COMMAND,
     status: "captured",
-    value: { browser, context, url, ...(targetId ? { targetId } : {}), ...(behindWindow?.tried ? { behindWindow } : {}), ...(hiddenTab ? { hiddenTab } : {}), path: file, width: size.width, height: size.height, bytes: png.length, transport, ...(verdict ? { forStore: verdict } : {}) },
+    value: { browser, context, url, ...(targetId ? { targetId } : {}), ...(behindWindow?.tried ? { behindWindow } : {}), ...(hiddenTab ? { hiddenTab } : {}), path: file, width: size.width, height: size.height, bytes: png.length, transport },
     warnings,
-    hint: `The image is ${file} (${size.width} x ${size.height} pixels).${storeLine || " Open it with your image reader to look at it."}`,
+    hint: `The image is ${file} (${size.width} x ${size.height} pixels). Open it with your image reader to look at it.`,
   });
+}
+
+function captureFailure(outcome: CaptureOutcome & { ok: false }, url: string, behindWindow?: BehindWindow): string {
+  const behind = behindWindow?.tried
+    ? behindWindow.shown
+      ? " This tool already showed a blank tab in the page's window and retried, and the page still did not paint."
+      : ` This tool could not show another tab in the page's window to get it painted: ${behindWindow.reason}.`
+    : "";
+
+  return refuse(
+    outcome.timedOut ? "capture-timeout" : "capture-failed",
+    outcome.timedOut ? "E_CAPTURE_TIMEOUT" : "E_CAPTURE_FAILED",
+    `The browser did not hand back an image of ${url}: ${outcome.message}`,
+    outcome.timedOut
+      ? `The page did not paint within the budget.${behind} This tool never brings a window forward; run the session headless (the default), or retry with a larger timeout.`
+      : "Confirm the session is ready (extension_wait) and the page is still open, then retry.",
+  );
+}
+
+const storeChoiceOf = (args: Args): StoreChoice | null => (isStoreChoice(args.store) ? args.store : null);
+
+function storeFileLine(file: StoreFile): string {
+  const name = STORE_SCREENSHOT_SPECS[file.store].name;
+
+  return file.clears
+    ? `${file.path} (${file.width} x ${file.height} pixels) clears the screenshot row of ${name}`
+    : `${file.path} (${file.width} x ${file.height} pixels) does not clear the screenshot row of ${name}: ${file.reason}. ${storeSizeSentence(file.store)}`;
+}
+
+/* @invariant A STORE CAPTURE IS MEASURED, NEVER ASSUMED. Chromium renders
+ * the preset exactly; Safari's WebDriver answers its window at the
+ * display's own pixel ratio, so the file is measured after the capture and
+ * a size other than the preset's pixels is said in a warning with the size
+ * Safari answered, rather than filed silently as a listing screenshot the
+ * store would refuse (the Rebeccat walk made its 2880x1800 files by hand).
+ */
+async function capturedForStores(
+  args: Args,
+  browser: string,
+  context: string,
+  family: CaptureFamily,
+  shoot: Shooter,
+  url: string,
+  transport: string,
+  warnings: Array<string | null> = [],
+  targetId?: string,
+): Promise<string> {
+  const choice = args.store as StoreChoice;
+  const plan = capturePlan(choice, family);
+  const files: StoreFile[] = [];
+  const notes: Array<string | null> = [...warnings];
+
+  for (const shot of plan.shots) {
+    const outcome = await shoot(shot.preset);
+    if (!outcome.ok) return captureFailure(outcome, url);
+
+    const flat = flattenPngAlpha(outcome.png);
+    if ("problem" in flat) return refuse("capture-failed", "E_CAPTURE_FAILED", `The browser answered ${flat.problem} for ${url}, which this tool cannot flatten for a store listing.`);
+
+    const measured = `${flat.width}x${flat.height}`;
+    const expected = expectedPixels(shot.preset);
+
+    if (measured !== expected) {
+      notes.push(
+        `${browser === "safari" ? "Safari" : browser} answered a ${measured} image for a ${shot.preset.width}x${shot.preset.height} window, not ${expected}: the display's pixel ratio is not ${shot.preset.deviceScaleFactor}, so the file is not at the size the ${shot.stores.join(", ")} preset names.`,
+      );
+    }
+
+    const alpha = pngHeader(flat.png)?.alpha !== "none";
+
+    for (const store of shot.stores) {
+      const file = choice === "all" || !args.path ? nextStoreScreenshotPath(args.projectPath, store) : null;
+      const written = file ? writeStoreFile(file, flat.png) : writeScreenshot(args.projectPath, browser, context, flat.png, args.path);
+      if (!written.ok) return refuse("bad-request", "E_BAD_REQUEST", written.message, written.hint);
+
+      files.push({ store, path: written.file, width: flat.width, height: flat.height, ...clearsStoreRow(store, flat.width, flat.height, alpha) });
+    }
+  }
+
+  if (plan.skipped.length) {
+    notes.push(`Only the safari file was written: Safari's WebDriver captures its own window at the display's pixel ratio, so ${plan.skipped.join(", ")} were skipped; capture them with store:"all" on a Chromium dev session.`);
+  }
+
+  if (family !== "webkit" && files.some((file) => file.store === "safari")) {
+    notes.push(`The safari file was captured on ${browser}, not Safari: Apple's review wants the extension running in Safari, so capture it again with store:"safari" on a Safari dev session (extension_dev browser:"safari") before the listing push.`);
+  }
+
+  const single = files.length === 1 ? files[0]! : null;
+  const stores = [...new Set(files.map((file) => file.store))];
+  const door =
+    choice === "all"
+      ? `One call per view; extension_submit action:"sync-listing" browsers:[${stores.map((store) => `"${store}"`).join(", ")}] picks each store's files up from store/screenshots/<store>/.`
+      : `One call per view; extension_submit action:"sync-listing" browsers:["${choice}"] picks the files up from ${storeScreenshotsFolder(choice)}/.`;
+  const hint = single ? `The image is ${storeFileLine(single)}. ${door}` : `Wrote ${files.map(storeFileLine).join("; ")}. ${door}`;
+
+  return envelope({
+    ok: true,
+    command: COMMAND,
+    status: "captured",
+    value: {
+      browser,
+      context,
+      url,
+      ...(targetId ? { targetId } : {}),
+      store: choice,
+      ...(single ? { path: single.path, width: single.width, height: single.height } : {}),
+      files,
+      transport,
+    },
+    warnings: notes,
+    hint,
+  });
+}
+
+function writeStoreFile(file: string, png: Buffer): { ok: true; file: string } {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, png);
+
+  return { ok: true, file };
 }
 
 function surfaceDocumentOrRefusal(args: Args, browser: string, context: string): { document: string } | { refusal: string } {
@@ -308,7 +411,15 @@ async function onChromium(args: Args, browser: string, context: string, timeoutM
   if (typeof chosen === "string") return chosen;
 
   const { target, warning } = chosen;
-  const { outcome, behindWindow, hiddenTab } = await captureCdpPage(resolved.port, target.targetId, args, timeoutMs, { projectPath: args.projectPath, browser });
+  const session = { projectPath: args.projectPath, browser };
+
+  if (storeChoiceOf(args)) {
+    const shoot: Shooter = async (size) => (await captureCdpPage(resolved.port, target.targetId, size, timeoutMs, session)).outcome;
+
+    return capturedForStores(args, browser, context, "chromium", shoot, target.url, "cdp", [warning], target.targetId);
+  }
+
+  const { outcome, behindWindow, hiddenTab } = await captureCdpPage(resolved.port, target.targetId, args, timeoutMs, session);
   const behindNote = behindWindow.tried && behindWindow.shown && outcome.ok ? BEHIND_WINDOW_CAPTURED : null;
 
   return captured(args, browser, context, outcome, target.url, "cdp", [warning, behindNote, hiddenTabSentence(hiddenTab)], target.targetId, behindWindow, hiddenTab);
@@ -368,11 +479,16 @@ async function onGecko(args: Args, browser: string, context: string, timeoutMs: 
   const contextId = (tab as RdpTab & { browsingContextID?: unknown }).browsingContextID;
   if (typeof contextId !== "number") return refuse("capture-failed", "E_CAPTURE_FAILED", `Firefox listed ${String(tab.url ?? "the tab")} without a browsing context id, so its screenshot actor has nothing to capture.`);
 
+  const cropNote = "Firefox's debugger protocol has no viewport override, so width and height crop the page as it is laid out, from the top left.";
+
+  if (storeChoiceOf(args)) {
+    const shoot: Shooter = (size) => captureRdpTab(resolved.port, contextId, size, timeoutMs);
+
+    return capturedForStores(args, browser, context, "gecko", shoot, String(tab.url ?? ""), "rdp", [pickWarning, cropNote], geckoTabRef(tab).targetId);
+  }
+
   const outcome = await captureRdpTab(resolved.port, contextId, args, timeoutMs);
-  const warnings = [
-    pickWarning,
-    args.width || args.height ? "Firefox's debugger protocol has no viewport override, so width and height crop the page as it is laid out, from the top left." : null,
-  ];
+  const warnings = [pickWarning, args.width || args.height ? cropNote : null];
 
   return captured(args, browser, context, outcome, String(tab.url ?? ""), "rdp", warnings, geckoTabRef(tab).targetId);
 }
@@ -395,8 +511,18 @@ async function onWebKit(args: Args, browser: string, context: string, timeoutMs:
   if (!info) return refuse("no-session", "E_NO_SESSION", `No WebDriver session for ${browser} on this project, so there is no window to capture.`, webdriverSessionMissingHint(readWebDriverUnavailableReason(args.projectPath, browser)));
 
   const client = new WebDriverClient(info);
-  const warnings =
-    args.width || args.height || args.deviceScaleFactor ? ["WebDriver captures the window as it is: width, height and deviceScaleFactor are not applied on Safari, and this tool does not resize the window."] : [];
+  const warnings = [
+    args.deviceScaleFactor !== undefined && !storeChoiceOf(args) ? "deviceScaleFactor is not applied on Safari: WebDriver answers the window at the display's own pixel ratio." : null,
+    (args.width === undefined) !== (args.height === undefined) ? "Safari's window is resized only when both width and height are given; neither was applied." : null,
+  ];
+
+  const shoot: Shooter = async (size) => {
+    if (size.width && size.height) await client.fitViewport(size.width, size.height, timeoutMs);
+
+    const png = await client.screenshot(timeoutMs);
+
+    return png ? { ok: true, png } : { ok: false, message: "safaridriver answered no image data" };
+  };
 
   try {
     let current = await client.currentUrl();
@@ -409,10 +535,9 @@ async function onWebKit(args: Args, browser: string, context: string, timeoutMs:
       current = await client.currentUrl();
     }
 
-    const png = await client.screenshot(timeoutMs);
-    const outcome: CaptureOutcome = png ? { ok: true, png } : { ok: false, message: "safaridriver answered no image data" };
+    if (storeChoiceOf(args)) return capturedForStores(args, browser, "page", "webkit", shoot, current ?? "", "webdriver", warnings);
 
-    return captured(args, browser, "page", outcome, current ?? "", "webdriver", warnings);
+    return captured(args, browser, "page", await shoot(args), current ?? "", "webdriver", warnings);
   } catch (error) {
     if (webdriverSessionEnded(error)) return refuse("webdriver-session-ended", "E_WEBDRIVER_SESSION_ENDED", webdriverSessionEndedMessage(info, browser), webdriverSessionEndedHint(browser));
 
@@ -427,14 +552,18 @@ export async function handler(args: Args): Promise<string> {
   const invalid = badSize(args);
   if (invalid) return refuse("bad-request", "E_BAD_REQUEST", invalid);
 
-  if (args.forStore !== undefined) {
-    if (!isListingStoreName(args.forStore)) return refuse("bad-request", "E_BAD_REQUEST", `forStore must be one of ${LISTING_STORES.join(", ")}; got "${String(args.forStore)}".`);
-    if (args.deviceScaleFactor !== undefined && args.deviceScaleFactor !== 1) return refuse("bad-request", "E_BAD_REQUEST", "A store screenshot is captured at a 1x pixel ratio so its pixel size is the store's size; omit deviceScaleFactor with forStore.");
+  const choice = args.store ?? args.forStore;
 
-    const picked = pickStoreSize(args.forStore, args.width, args.height);
-    if (!picked.ok) return refuse("bad-request", "E_BAD_REQUEST", picked.message, storeSizeSentence(args.forStore));
+  if (choice !== undefined) {
+    if (!isStoreChoice(choice)) return refuse("bad-request", "E_BAD_REQUEST", `store must be one of ${STORE_CHOICES.join(", ")}; got "${String(choice)}".`);
 
-    args = { ...args, width: picked.width, height: picked.height, deviceScaleFactor: 1 };
+    if (args.width !== undefined || args.height !== undefined || args.deviceScaleFactor !== undefined) {
+      return refuse("bad-request", "E_BAD_REQUEST", `store sets the size itself (${PRESET_SENTENCE}); omit width, height and deviceScaleFactor with store.`);
+    }
+
+    if (choice === "all" && args.path) return refuse("bad-request", "E_BAD_REQUEST", 'path names one file, and store:"all" writes one per store under store/screenshots/<store>/; omit path with all.');
+
+    args = { ...args, store: choice };
   }
 
   const context = args.context ?? "page";
@@ -442,8 +571,10 @@ export async function handler(args: Args): Promise<string> {
 
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
 
-  const target = resolveScreenshotPath(args.projectPath, browser, context, args.path);
-  if (!target.ok) return refuse("bad-request", "E_BAD_REQUEST", target.message, target.hint);
+  if (args.path) {
+    const target = resolveScreenshotPath(args.projectPath, browser, context, args.path);
+    if (!target.ok) return refuse("bad-request", "E_BAD_REQUEST", target.message, target.hint);
+  }
 
   const timeoutMs = args.timeout ?? DEFAULT_TIMEOUT_MS;
 

@@ -80,6 +80,7 @@ import {
   requirementsView,
 } from "../lib/store-requirements";
 import { bringListOf, bringListSentences, screenshotDoor } from "../lib/store-bring-list";
+import { captureRecipe } from "../lib/store-capture";
 import { notReadyForReviewStep, notReadyLine } from "../lib/store-not-ready";
 import { nextVersionOf, nextVersionSentence } from "../lib/store-readiness";
 import { LISTING_INCOMPLETE_CODE, listingIncompleteOf, listingIncompleteSentence } from "../lib/store-listing-incomplete";
@@ -1292,6 +1293,12 @@ export async function preflight(args: StoreActArgs): Promise<string> {
   const notReadyStep = notReady.length
     ? notReadyForReviewStep(notReady, inputsSay, edgeFirst, storesPageUrl, storeSettingsUrl(api.ref, args.api))
     : null;
+  const captureStores = asked.filter((store) => screenshotsOwed(stores[store], store)) as ListingStore[];
+  const captureLine = captureStores.map(captureRecipe).join(" ");
+  const captureStep =
+    captureStores.length && asked.every((store) => failingChecksOf(stores[store]).every((id) => /screenshots/.test(id)))
+      ? nextStep("screenshot", captureLine, storesPageUrl)
+      : null;
   const reviewing = chrome ? await chromeReviewInProgress(api) : null;
   const reviewBlocks = Boolean(reviewing) && !uploadStopsAtDraft("chrome", modeIdOf(stores.chrome));
   const reviewLine = reviewing ? (reviewBlocks ? reviewSentence(reviewing) : draftBesideReviewSentence(reviewing)) : "";
@@ -1323,19 +1330,42 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       trackUrl: reviewing ? reviewUrl : storesPageUrl,
       sayToPerson: readinessLead(
         storeReadinessOf({ stores, asked, projectPath: text(args.projectPath) }),
-        [inputsSay, edgeFirstLine, reviewLine, notReadyLine(notReady, green), readinessHint].filter(Boolean).join(" "),
+        [inputsSay, edgeFirstLine, reviewLine, notReadyLine(notReady, green), readinessHint, captureLine].filter(Boolean).join(" "),
       ),
       nextStep: reviewBlocks
         ? nextStep("done", reviewSay, reviewUrl)
-        : green
-          ? notReadyStep ?? submitStep(asked, modeIds)
-          : null,
+        : captureStep && (!green || !notReadyStep)
+          ? captureStep
+          : green
+            ? notReadyStep ?? submitStep(asked, modeIds)
+            : null,
     },
-    hint: [inputsSay, edgeFirstLine, reviewLine, notReadyLine(notReady, green), readinessHint]
+    hint: [inputsSay, edgeFirstLine, reviewLine, notReadyLine(notReady, green), readinessHint, captureLine]
       .filter(Boolean)
       .join(" "),
     warnings: [unreadLine],
   });
+}
+
+/* @invariant A MISSING SCREENSHOTS ROW NAMES ITS CAPTURE, REQUIRED OR NOT.
+ * The platform's requirement row (or, without rows, its failing
+ * screenshots check) is the reader of whether a store still lacks
+ * screenshots; the preflight adds the one recipe that fills it, and when
+ * nothing else fails for the stores asked the capture is the next step, so
+ * an optional row (Firefox) never leaves the agent with a null step and a
+ * row it could clear in one call.
+ */
+function screenshotsOwed(view: unknown, store: string): boolean {
+  if (!isRow(view)) return false;
+
+  const items = isRow(view.requirements) && Array.isArray(view.requirements.items) ? view.requirements.items.filter(isRow) : null;
+  if (items) return items.some((row) => text(row.id) === `${store}.screenshots` && text(row.status) === "missing");
+
+  return failingChecksOf(view).some((id) => /_screenshots_present$/.test(id));
+}
+
+function failingChecksOf(view: unknown): string[] {
+  return isRow(view) && Array.isArray(view.failing) ? view.failing.filter(isRow).map((check) => text(check.id)) : [];
 }
 
 function modeIdOf(view: unknown): string | undefined {

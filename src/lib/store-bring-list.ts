@@ -71,7 +71,7 @@ export function screenshotDoor(store: string): string {
   const spec = isListingStoreName(store) ? STORE_SCREENSHOT_SPECS[store] : null;
   const size = spec ? spec.sizes.map(sizeLabel).join(" or ") : "1280x800";
 
-  return `extension_screenshot with forStore: "${store}" captures an open surface at ${size} px as a 24-bit PNG inside the project; pass its path to extension_submit action: "sync-listing" screenshots: [<path>], which writes it to the ${STORE_NAMES[store] ?? store} listing record`;
+  return `extension_screenshot store:"${store}" captures an open surface at ${size} px as a 24-bit PNG under store/screenshots/${store}/, one call per view; extension_submit action: "sync-listing" browsers: ["${store}"] picks the files up and writes them to the ${STORE_NAMES[store] ?? store} listing record`;
 }
 
 function clearedBy(row: RequirementRow, store: string): string {

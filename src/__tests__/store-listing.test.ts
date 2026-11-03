@@ -83,7 +83,7 @@ const SAFARI_UNREAD = [
 
 const SAFARI_SECTION_UNREAD = SAFARI_UNREAD.filter((row) => !["subtitle", "searchTerms", "reviewContactPhone"].includes(row.field));
 
-const SCREENSHOTS_SKIPPED = 'the `- Screenshots:` line in STORE.md names no screenshot file; pass screenshots to sync-listing as PNG paths inside projectPath, written by extension_screenshot with forStore: "<store>"';
+const SCREENSHOTS_SKIPPED = 'the `- Screenshots:` line in STORE.md names no screenshot file; capture them with extension_screenshot store:"<store>", one call per view, and sync-listing picks them up from store/screenshots/<store>/';
 
 function png(width: number, height: number): Buffer {
   const bytes = Buffer.alloc(40);
@@ -467,7 +467,7 @@ describe("STORE.md fills the store listing", () => {
     expect(local.patch.screenshots).toBeUndefined();
     expect(local).not.toHaveProperty("screenshotsLine");
     expect(local.skipped).toEqual([
-      'the `- Screenshots (1280x800, in this order):` line in STORE.md names 1 screenshot; sync-listing takes it as its screenshots argument, as PNG paths inside projectPath written by extension_screenshot with forStore: "<store>"',
+      'the `- Screenshots (1280x800, in this order):` line in STORE.md names 1 screenshot; sync-listing takes it as its screenshots argument, as PNG paths inside projectPath; extension_screenshot store:"<store>" writes them under store/screenshots/<store>/, which sync-listing reads on its own',
     ]);
 
     expect(local.lines.title).toBe("Name");
@@ -742,7 +742,7 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     expect(fields).toEqual(["privacyPolicyUrl", "homepageUrl", "license", "releaseNotes"]);
     expect(again.value.stores.firefox.skipped).toEqual([
       "supportEmail in STORE.md is not an email address, so it was left out",
-      'the `- Screenshots:` line in STORE.md names 1 screenshot; sync-listing takes it as its screenshots argument, as PNG paths inside projectPath written by extension_screenshot with forStore: "<store>"',
+      'the `- Screenshots:` line in STORE.md names 1 screenshot; sync-listing takes it as its screenshots argument, as PNG paths inside projectPath; extension_screenshot store:"<store>" writes them under store/screenshots/<store>/, which sync-listing reads on its own',
     ]);
   });
 
@@ -1475,8 +1475,8 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     const root = project();
     fs.writeFileSync(
       path.join(root, "STORE.md"),
-      STORE_MD.replace("- Screenshots: TODO", "- Language: English (United States).\n- Screenshots: TODO") +
-        "\n## Chrome Web Store\n\n### Test instructions\n\nNo account is needed. Open the popup and click Hide.\n",
+      `${STORE_MD.replace("- Screenshots: TODO", "- Language: English (United States).\n- Screenshots: TODO") 
+        }\n## Chrome Web Store\n\n### Test instructions\n\nNo account is needed. Open the popup and click Hide.\n`,
     );
 
     const local = readLocalListing(root, "chrome");
@@ -1488,7 +1488,7 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     expect(from("testInstructions")).toBe("`### Test instructions` under `## Chrome Web Store` in STORE.md");
     expect(from("language")).toBe("`- Language:` under `## Listing` in STORE.md");
 
-    fs.writeFileSync(path.join(root, "STORE.md"), STORE_MD + "\n## Chrome Web Store\n\n### Test instructions\n\n### Single purpose\n\nHide names.\n");
+    fs.writeFileSync(path.join(root, "STORE.md"), `${STORE_MD  }\n## Chrome Web Store\n\n### Test instructions\n\n### Single purpose\n\nHide names.\n`);
     const bare = readLocalListing(root, "chrome");
     if ("problem" in bare) throw new Error(bare.problem);
 

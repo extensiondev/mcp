@@ -226,7 +226,7 @@ describe("extension_submit preflight carries what each store asks for and says w
     expect(out.value.stores.chrome.bringList.rows.find((row: { id: string }) => row.id === "chrome.screenshots")).toMatchObject({
       supply: "from your build",
       status: "missing",
-      clearedBy: expect.stringContaining('extension_screenshot with forStore: "chrome"'),
+      clearedBy: expect.stringContaining('extension_screenshot store:"chrome"'),
     });
 
     expect(out.value.stores.chrome.bringList.rows.find((row: { id: string }) => row.id === "chrome.title")).toMatchObject({ supply: "you supply", status: "have" });
@@ -254,7 +254,7 @@ describe("extension_submit preflight carries what each store asks for and says w
     expect(out.value.sayToPerson).not.toContain("not pushed");
     expect(out.value.stores.chrome.storeMd.notCovered.some((line: string) => line.startsWith("screenshots: STORE.md names 2 screenshots; sync-listing takes them as its screenshots argument"))).toBe(true);
     expect(out.value.stores.chrome.storeMd.skipped).toEqual([
-      'the `- Screenshots (1280x800, in this order):` line in STORE.md names 2 screenshots; sync-listing takes them as its screenshots argument, as PNG paths inside projectPath written by extension_screenshot with forStore: "<store>"',
+      'the `- Screenshots (1280x800, in this order):` line in STORE.md names 2 screenshots; sync-listing takes them as its screenshots argument, as PNG paths inside projectPath; extension_screenshot store:"<store>" writes them under store/screenshots/<store>/, which sync-listing reads on its own',
     ]);
 
     expect(out.value.trackUrl ?? out.value.storesPageUrl).toBeTruthy();
@@ -281,7 +281,7 @@ describe("extension_submit preflight carries what each store asks for and says w
 
     const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome", "firefox"], projectPath: root, api: API }));
 
-    expect(out.value.stores.firefox.storeMd.skipped).toEqual(['the `- Screenshots (1280x800, in this order):` line in STORE.md names 2 screenshots; sync-listing takes them as its screenshots argument, as PNG paths inside projectPath written by extension_screenshot with forStore: "<store>"']);
+    expect(out.value.stores.firefox.storeMd.skipped).toEqual(['the `- Screenshots (1280x800, in this order):` line in STORE.md names 2 screenshots; sync-listing takes them as its screenshots argument, as PNG paths inside projectPath; extension_screenshot store:"<store>" writes them under store/screenshots/<store>/, which sync-listing reads on its own']);
     expect(out.value.stores.chrome.storeMd.skipped).toEqual(out.value.stores.firefox.storeMd.skipped);
     expect(JSON.stringify(out.value.stores)).not.toMatch(/carries no screenshot|is retired|is not read/);
   });
@@ -333,7 +333,7 @@ describe("extension_submit preflight carries what each store asks for and says w
 
     const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], projectPath: root, api: API }));
     const shots = out.value.stores.chrome.requirements.items.find((item: { id: string }) => item.id === "chrome.screenshots");
-    const door = 'screenshots: STORE.md names no screenshot file; pass screenshots to sync-listing as PNG paths inside projectPath, written by extension_screenshot with forStore: "<store>"; the Chrome Web Store takes 1 to 5 screenshots at 1280x800 or 640x400 px, 24-bit PNG or JPEG with no alpha (https://developer.chrome.com/docs/webstore/images).';
+    const door = 'screenshots: STORE.md names no screenshot file; capture them with extension_screenshot store:"<store>", one call per view, and sync-listing picks them up from store/screenshots/<store>/; the Chrome Web Store takes 1 to 5 screenshots at 1280x800 or 640x400 px, 24-bit PNG or JPEG with no alpha (https://developer.chrome.com/docs/webstore/images).';
 
     expect(shots).toMatchObject({ status: "missing", satisfiedBy: "store-md: Screenshots", actual: "0 screenshots" });
     expect(out.value.stores.chrome.storeMd.notCovered).toContain(door);

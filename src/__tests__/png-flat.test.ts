@@ -3,7 +3,7 @@ import zlib from "node:zlib";
 import { describe, expect, it } from "vitest";
 
 import { flattenPngAlpha, pngHeader } from "../lib/png-flat";
-import { clearsStoreRow, pickStoreSize, STORE_SCREENSHOT_SPECS, storeSizeSentence } from "../lib/store-screenshot-sizes";
+import { clearsStoreRow, STORE_SCREENSHOT_SPECS, storeSizeSentence } from "../lib/store-screenshot-sizes";
 import { rgbaPng } from "./fixtures/png-alpha";
 import { solidPng } from "./fixtures/png";
 
@@ -52,15 +52,12 @@ describe("flattenPngAlpha composites a capture onto white as 24-bit RGB", () => 
 });
 
 describe("the store screenshot table", () => {
-  it("defaults to 1280x800 for every store, takes only a size the store accepts, and judges alpha per store", () => {
+  it("clears every store's row with a 1280x800 24-bit capture and judges alpha per store", () => {
     for (const store of ["chrome", "firefox", "edge", "safari"] as const) {
-      expect(pickStoreSize(store)).toEqual({ ok: true, width: 1280, height: 800 });
       expect(clearsStoreRow(store, 1280, 800, false)).toEqual({ clears: true });
       expect(STORE_SCREENSHOT_SPECS[store].docs).toMatch(/^https:\/\//);
     }
 
-    expect(pickStoreSize("chrome", 640, 400)).toEqual({ ok: true, width: 640, height: 400 });
-    expect(pickStoreSize("chrome", 640, 480)).toMatchObject({ ok: false, message: expect.stringContaining("1280x800, 640x400") });
     expect(clearsStoreRow("chrome", 1280, 800, true)).toEqual({ clears: false, reason: "the Chrome Web Store refuses an alpha channel" });
     expect(clearsStoreRow("edge", 1280, 800, true)).toEqual({ clears: true });
     expect(clearsStoreRow("safari", 1366, 683, false)).toMatchObject({ clears: false, reason: expect.stringContaining("1280x800, 1440x900, 2560x1600, 2880x1800") });

@@ -64,14 +64,14 @@ describe("extension_submit relays the platform's 409 LISTING_INCOMPLETE as a lis
     expect(out.value.refusedBeforeApproval).toBe(true);
     expect(out.value.missing.map((row: { id: string }) => row.id)).toEqual(["chrome.screenshots", "chrome.single_purpose"]);
     expect(out.value.bringList.readyForReview).toBe(false);
-    expect(out.value.bringList.rows[0]).toMatchObject({ id: "chrome.screenshots", supply: "from your build", clearedBy: expect.stringContaining('forStore: "chrome"') });
+    expect(out.value.bringList.rows[0]).toMatchObject({ id: "chrome.screenshots", supply: "from your build", clearedBy: expect.stringContaining('store:"chrome"') });
     expect(out.value.bringList.rows[1]).toMatchObject({ id: "chrome.single_purpose", supply: "you supply" });
     expect(out.value.trackUrl).toBe("http://console.extension.localhost/acme/widget/submissions/chrome");
     expect(out.value.nextStep).toMatchObject({ kind: "screenshot", url: out.value.trackUrl });
     expect(out.value.sayToPerson).toContain("The Chrome Web Store would refuse this review: the listing still lacks 2 required inputs: Screenshots (1 to 5 images, 1280x800 or 640x400 px, JPEG or 24-bit PNG with no alpha.); Single purpose description (One sentence.). Nothing was sent to review, no approval was spent and no submission was recorded.");
     expect(out.value.sayToPerson).toContain("From your build: Screenshots (");
     expect(out.value.sayToPerson).toContain("You supply: Single purpose description (");
-    expect(out.hint).toContain('extension_screenshot with forStore: "chrome"');
+    expect(out.hint).toContain('extension_screenshot store:"chrome"');
     expect(out.hint).toContain('sync-listing');
     expect(platform.sent("POST", "/api/cli/approvals")).toHaveLength(0);
     expect(JSON.stringify(out)).not.toMatch(/recorded as|in-review|publish-dispatched|on its way|github\.com|actions\/runs/);
@@ -94,7 +94,7 @@ describe("extension_submit relays the platform's 409 LISTING_INCOMPLETE as a lis
     expect(out.value.trackUrl).toBe("http://console.extension.localhost/acme/widget/submissions/chrome");
     expect(out.value.sayToPerson).toContain("1 required input: Single purpose description (One sentence.)");
     expect(out.value.sayToPerson).toContain("no submission was recorded");
-    expect(out.hint).not.toContain("forStore");
+    expect(out.hint).not.toContain("extension_screenshot");
     expect(out.warnings ?? []).toEqual([]);
     expect(JSON.stringify(out)).not.toMatch(/approval presented|may have spent|submitted to|github\.com|actions\/runs/);
   });
