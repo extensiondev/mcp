@@ -1512,7 +1512,7 @@
           "name": "sourceChannel",
           "type": "string",
           "required": false,
-          "description": "Channel to promote from (optional; inferred otherwise)"
+          "description": "Channel to promote from (optional; inferred otherwise: a promote to preview sources from preview, any other channel sources from itself). One of the project's declared channels; canary is no longer a channel and is refused before anything is sent."
         },
         {
           "name": "browsers",

@@ -36,6 +36,22 @@ describe("extension_release_promote cuts a release pull request and rolls a chan
     expect(TOOL_POLICY.extension_release_promote.ships).toBe("always");
   });
 
+  it("refuses the retired canary source channel before anything is sent, and says what to promote from instead", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+
+    const out = JSON.parse(await promote({ buildId: "abc1234", channel: "beta", sourceChannel: "canary", api: API }));
+
+    expect(platform.calls.filter((call) => call.method === "POST")).toHaveLength(0);
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("bad-request");
+    expect(out.error.name).toBe("ReleaseInputError");
+    expect(out.error.message).toContain('This project does not declare a "canary" channel to promote from');
+    expect(out.error.message).toContain("leave sourceChannel unset to promote from beta itself. Nothing was sent.");
+    expect(schema.inputSchema.properties.sourceChannel.description).toContain("canary is no longer a channel");
+  });
+
   it("cut asks the platform first, then requests the approval the platform described, and changes nothing", async () => {
     if (process.platform === "win32") return;
 

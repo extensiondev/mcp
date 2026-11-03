@@ -346,7 +346,7 @@ Promote a built extension to a release channel (stable, preview, beta) on extens
 | `buildId` | string | no |  | Build commit SHA to promote (a 7-char short SHA is fine) |
 | `channel` | string | no |  | Target release channel, e.g. stable, preview, beta. With cut, the channel the pull request releases to when merged (optional); with rollback, the channel to roll back. |
 | `level` | "patch" \| "minor" \| "major" | no |  | With cut, how far to bump the manifest version (default patch). A version, when passed, decides the bump instead. |
-| `sourceChannel` | string | no |  | Channel to promote from (optional; inferred otherwise) |
+| `sourceChannel` | string | no |  | Channel to promote from (optional; inferred otherwise: a promote to preview sources from preview, any other channel sources from itself). One of the project's declared channels; canary is no longer a channel and is refused before anything is sent. |
 | `browsers` | array of string | no |  | Browsers to release. Optional: when omitted the platform reads the build's browsers from its index, and falls back to chrome alone when that index cannot be read, so pass them to be sure. |
 | `version` | string | no |  | Version label for the release (optional). With cut, the exact manifest version to bump to, above the current one. |
 | `releaseNotes` | string | no |  | Release notes markdown (optional). With cut, the notes written into the pull request body. |

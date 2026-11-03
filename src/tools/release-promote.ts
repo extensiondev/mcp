@@ -66,7 +66,8 @@ export const schema = {
       },
       sourceChannel: {
         type: "string",
-        description: "Channel to promote from (optional; inferred otherwise)",
+        description:
+          "Channel to promote from (optional; inferred otherwise: a promote to preview sources from preview, any other channel sources from itself). One of the project's declared channels; canary is no longer a channel and is refused before anything is sent.",
       },
       browsers: {
         type: "array",
@@ -106,6 +107,12 @@ function fail(
     status,
     error: { code, name, message },
   });
+}
+
+const RETIRED_SOURCE_CHANNEL = "canary";
+
+function retiredSourceChannelMessage(channel: string): string {
+  return `This project does not declare a "${RETIRED_SOURCE_CHANNEL}" channel to promote from: ${RETIRED_SOURCE_CHANNEL} was retired as a release channel on 2026-11-03. Promote from one of the project's channels (extension_release_status lists them), or leave sourceChannel unset to promote from ${channel === "preview" ? "preview" : `${channel} itself`}. Nothing was sent.`;
 }
 
 function promoteRefusalHint(platformCode: string): string | undefined {
@@ -183,6 +190,11 @@ export async function handler(args: ReleaseActArgs & {
   const sourceChannel = args.sourceChannel
     ? String(args.sourceChannel).trim()
     : "";
+
+  if (sourceChannel === RETIRED_SOURCE_CHANNEL) {
+    return fail("ReleaseInputError", retiredSourceChannelMessage(channel), "bad-request", "E_BAD_REQUEST");
+  }
+
   const gateBrowsers = (Array.isArray(args.browsers) ? args.browsers : [])
     .map((b) => String(b).trim())
     .filter(Boolean);
