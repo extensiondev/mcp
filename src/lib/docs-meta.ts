@@ -52,7 +52,7 @@ export const TOOL_DOCS: Record<string, ToolDocsMeta> = {
   extension_preview_web: { tier: "platform", gate: `${PLATFORM}; sharing needs a login`, samplePrompt: "Share this build with my designer" },
   extension_shares: { tier: "platform", gate: `${LOGIN}; a revoke waits for a member's approval by default`, samplePrompt: "List every link I have shared and revoke the oldest one" },
   extension_publish: { tier: "platform", gate: `${LOGIN}; sync-captures needs a workspace owner's approval`, samplePrompt: "Send the latest build to my testers" },
-  extension_release_promote: { tier: "platform", gate: `${LOGIN}; cut and rollback need a workspace owner's approval`, samplePrompt: "Promote build 3f2a1c to the beta channel" },
+  extension_release_promote: { tier: "platform", gate: `${LOGIN}; cut and rollback need a workspace owner's approval`, samplePrompt: "Release build 3f2a1c to the beta channel" },
   extension_submit: { tier: "platform", gate: `${LOGIN}; dryRun: false, cancel, rollout, release, publish, sync-listing and configure-store need a workspace owner's approval`, samplePrompt: "Dry run a Chrome and Firefox store submission of the latest build" },
   extension_submit_check: { tier: "platform", gate: `${LOGIN}; never sends: asking for the approval of a submit, publish, cancel, rollout, release, derived sync-listing or public configure-store executes nothing, and the approved call runs through extension_submit`, samplePrompt: "Is my extension ready for the Chrome Web Store?" },
   extension_builds: { tier: "platform", gate: `${LOGIN}; a public channel audience needs a workspace owner's approval; delete-channel stays in the console`, samplePrompt: "Why did the last build fail? Show me the Firefox log" },
