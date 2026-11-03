@@ -85,7 +85,7 @@ function refusalHint(code: string, retryAfterSeconds?: number): string | undefin
   if (UNAVAILABLE.has(code)) return `The platform could not confirm this build is within the workspace's allowance, so it refused instead of guessing.${wait || " Try again shortly."}`;
 
   if (code === "REBUILD_REPLACES_LIVE_ARTIFACT") {
-    return 'This commit is live on a channel built for another environment, and this rebuild would replace what that channel serves. Pass the environment the channel needs as buildEnv (production for stable, staging for the other channels).';
+    return 'This commit is live on a channel built for another environment, and this rebuild would replace what that channel serves. Pass the environment the channel needs as buildEnv (production for Stable and every other channel, staging only for Preview).';
   }
 
   if (code === "REBUILD_FORCE_NEEDS_A_PERSON") return "Replacing artifacts a live channel serves is a person's decision: ask a person on the project to replace them from the console, where releasing this commit offers Replace and rebuild.";

@@ -192,7 +192,7 @@ export function recordedOutcome(status: string, storeState: string | null = null
 }
 
 export type LinkKind = "track" | "share" | "channel" | "submission" | "item" | "approval" | "privacy" | "build" | "release" | "project";
-export type LinkAudience = "anyone with the link" | "workspace members" | "the store's reviewers" | "you";
+export type LinkAudience = "anyone with the link" | "workspace members" | "the store's reviewers" | "you" | (string & Record<never, never>);
 
 export interface ActLink {
   kind: LinkKind;
@@ -202,7 +202,7 @@ export interface ActLink {
   made: boolean;
 }
 
-export type LinkRow = Partial<ActLink> & { kind: LinkKind; url?: string | null } & Record<string, unknown>;
+export type LinkRow = Partial<Omit<ActLink, "audience">> & { kind: LinkKind; url?: string | null; audience?: unknown } & Record<string, unknown>;
 
 const DEFAULT_AUDIENCE: Record<LinkKind, LinkAudience> = {
   track: "workspace members",
@@ -230,6 +230,10 @@ const KIND_NAMES: Record<LinkKind, string> = {
   project: "the project page",
 };
 
+function recordedAudience(row: LinkRow): string {
+  return typeof row.audience === "string" ? row.audience.trim() : "";
+}
+
 export function linksOf(rows: LinkRow[]): ActLink[] {
   const out: ActLink[] = [];
 
@@ -245,7 +249,8 @@ export function linksOf(rows: LinkRow[]): ActLink[] {
 
       if (known.kind === "track" && row.kind !== "track") {
         known.kind = row.kind;
-        if (row.audience) known.audience = row.audience;
+        const audience = recordedAudience(row);
+        if (audience) known.audience = audience;
       }
 
       continue;
@@ -255,7 +260,7 @@ export function linksOf(rows: LinkRow[]): ActLink[] {
       ...row,
       kind: row.kind,
       url,
-      audience: row.audience ?? DEFAULT_AUDIENCE[row.kind],
+      audience: recordedAudience(row) || DEFAULT_AUDIENCE[row.kind],
       expiresAt: row.expiresAt ?? null,
       made: row.made === true,
     });

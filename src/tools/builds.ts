@@ -56,7 +56,7 @@ export const schema = {
       buildEnv: {
         type: "string",
         enum: ["staging", "production"],
-        description: "With rebuild, the environment to build for: staging (the default) or production. stable takes production builds; the other channels take staging builds.",
+        description: "With rebuild, the environment to build for: staging (the default, a Preview build) or production (a Stable build). Preview takes any build; Stable and every other channel take Stable builds.",
       },
       buildSettings: {
         type: "object",

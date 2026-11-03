@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { actionFingerprint, evaluateApproval } from "../lib/approval-gate";
 import { handler as submitHandler } from "../tools/submit";
-import { handler as promoteHandler } from "../tools/release-promote";
+import { handler as promoteHandler, schema as promoteSchema } from "../tools/release-promote";
 import { handler as sharesHandler } from "../tools/shares";
 import { approvalRecord, promoteAnswer, submitAnswer } from "./fixtures/platform-answers";
 
@@ -203,7 +203,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       expect(out.error.platformCode).toBe("BUILD_ENV_MISMATCH");
       expect(out.error.message).toContain("no approval was requested");
       expect(out.value.approvalId).toBeUndefined();
-      expect(out.hint).toContain("rebuild this commit with environment production");
+      expect(out.hint).toContain("Rebuild this commit for Stable (Builds, Rebuild");
       expect(hit("POST /api/cli/release/promote")).toBe(false);
     });
 
@@ -240,7 +240,11 @@ describe("the approval gate guards irreversible outward actions and cannot self-
         await promoteHandler({ buildId: "abc1234", channel: "beta" }),
       );
       expect(out.status).toBe("promote-failed");
-      expect(out.hint).toContain("stable takes production builds");
+      expect(out.hint).toContain("Preview takes any build; Stable and every other channel take Stable builds");
+      expect(out.hint).toContain("Rebuild this commit for Stable (Builds, Rebuild");
+      expect(out.hint).not.toMatch(/staging/);
+      expect(promoteSchema.description).toContain("Stable and every other channel take Stable builds");
+      expect(promoteSchema.description).not.toMatch(/staging/);
     });
 
     it("says to ask an owner when a non-owner's approval is refused", async () => {

@@ -230,6 +230,15 @@ describe("links name every URL an act made or touched", () => {
     expect(madeSentence(linksOf([{ kind: "submission", url: "https://console.test/a", made: true }, { kind: "submission", url: "https://console.test/b", made: true }]))).toBe("Made: 2 submission pages.");
   });
 
+  it("carries the audience a record names on a channel link, and defaults it only when the record names none", () => {
+    const url = "https://acme.extension.dev/widget/channels/stable";
+    const recorded = linksOf([{ kind: "channel", channel: "stable", url, audience: "workspace members", made: true, at: "2026-11-03T12:00:00.000Z", buildId: "abc1234" }]);
+
+    expect(recorded).toEqual([{ kind: "channel", channel: "stable", url, audience: "workspace members", expiresAt: null, made: true, at: "2026-11-03T12:00:00.000Z", buildId: "abc1234" }]);
+    expect(linksOf([{ kind: "channel", url, audience: "" }])[0]?.audience).toBe("anyone with the link");
+    expect(linksOf([{ kind: "channel", url }])[0]?.audience).toBe("anyone with the link");
+  });
+
   it("says exactly how a dispatched act is read later", () => {
     expect(dispatchedHint({ acceptedAt: "2026-10-20T12:37:00.000Z", trackUrl: "https://console.test/p", readCall: 'extension_release_status (include: ["stores"])' })).toBe(
       'The platform accepted the act at 2026-10-20T12:37:00.000Z; its record has not confirmed the result yet. Watch https://console.test/p; call extension_release_status (include: ["stores"]) to read it.',
