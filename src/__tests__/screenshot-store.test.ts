@@ -120,7 +120,9 @@ describe("extension_screenshot store captures at the store's preset and files it
     expect(pngSize(first.value.path)).toEqual({ width: 1280, height: 800 });
     expect(chrome!.commands.find((c) => c.method === "Emulation.setDeviceMetricsOverride")?.params).toMatchObject({ width: 1280, height: 800, deviceScaleFactor: 1 });
     expect(first.value.files).toEqual([{ store: "chrome", path: first.value.path, width: 1280, height: 800, clears: true }]);
-    expect(first.hint).toContain('extension_submit action:"sync-listing" browsers:["chrome"] picks the files up from store/screenshots/chrome/');
+    expect(first.hint).toBe(
+      `${first.value.path} (1280 x 800 pixels) clears the screenshot row of the Chrome Web Store. One call per view; extension_submit action:"sync-listing" browsers:["chrome"] picks the files up from store/screenshots/chrome/.`,
+    );
 
     const second = await run({ projectPath: dir, browser: "chrome", url: "rebeccat", store: "chrome" });
 
@@ -157,12 +159,19 @@ describe("extension_screenshot store captures at the store's preset and files it
     expect(out.value.files.map((f: { store: string }) => f.store)).toEqual(["chrome", "edge", "firefox", "safari"]);
 
     for (const file of out.value.files) {
+      const size = file.store === "safari" ? { width: 2880, height: 1800 } : { width: 1280, height: 800 };
+
       expect(file.path).toBe(path.join(dir, "store", "screenshots", file.store, "01.png"));
-      expect(pngSize(file.path)).toEqual(file.store === "safari" ? { width: 2880, height: 1800 } : { width: 1280, height: 800 });
+      expect(pngSize(file.path)).toEqual(size);
+      expect({ width: file.width, height: file.height }).toEqual(size);
       expect(file.clears).toBe(true);
     }
 
-    expect(out.hint).toContain("store/screenshots/<store>/");
+    const at = (store: string) => path.join(dir, "store", "screenshots", store, "01.png");
+
+    expect(out.hint).toBe(
+      `Wrote ${at("chrome")} (1280 x 800 pixels) for the Chrome Web Store, ${at("edge")} (1280 x 800 pixels) for Edge Add-ons, ${at("firefox")} (1280 x 800 pixels) for Firefox Add-ons and ${at("safari")} (2880 x 1800 pixels) for the App Store; each clears that store's screenshot row. One call per view; extension_submit action:"sync-listing" browsers:["chrome", "edge", "firefox", "safari"] picks each store's files up from store/screenshots/<store>/.`,
+    );
   });
 
   it("all on Safari writes only the safari file and says which stores were skipped and why", async () => {
@@ -205,6 +214,7 @@ describe("extension_screenshot on Safari sizes the window over WebDriver and mea
     expect(out.ok).toBe(true);
     expect(pngSize(out.value.path)).toEqual({ width: 1440, height: 900 });
     expect(out.value.files[0]).toMatchObject({ store: "safari", clears: true });
+    expect(out.hint.startsWith(`${out.value.path} (1440 x 900 pixels) clears the screenshot row of the App Store. One call per view; `)).toBe(true);
     expect(out.warnings.join("\n")).toContain("Safari answered a 1440x900 image for a 1440x900 window, not 2880x1800");
   });
 

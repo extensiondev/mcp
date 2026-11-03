@@ -202,12 +202,29 @@ function captureFailure(outcome: CaptureOutcome & { ok: false }, url: string, be
 
 const storeChoiceOf = (args: Args): StoreChoice | null => (isStoreChoice(args.store) ? args.store : null);
 
-function storeFileLine(file: StoreFile): string {
-  const name = STORE_SCREENSHOT_SPECS[file.store].name;
+const storeName = (store: ListingStore): string => STORE_SCREENSHOT_SPECS[store].name;
+const pixels = (file: StoreFile): string => `${file.path} (${file.width} x ${file.height} pixels)`;
 
-  return file.clears
-    ? `${file.path} (${file.width} x ${file.height} pixels) clears the screenshot row of ${name}`
-    : `${file.path} (${file.width} x ${file.height} pixels) does not clear the screenshot row of ${name}: ${file.reason}. ${storeSizeSentence(file.store)}`;
+const notClearing = (file: StoreFile): string =>
+  `${file.path} does not clear the screenshot row of ${storeName(file.store)}: ${file.reason}. ${storeSizeSentence(file.store).replace(/\.$/, "")}`;
+
+function storeFilesSentence(files: StoreFile[]): string {
+  if (files.length === 1) {
+    const file = files[0]!;
+
+    return file.clears ? `${pixels(file)} clears the screenshot row of ${storeName(file.store)}.` : `${pixels(file)}: ${notClearing(file)}.`;
+  }
+
+  const listed = files.map((file) => `${pixels(file)} for ${storeName(file.store)}`);
+  const joined = `${listed.slice(0, -1).join(", ")} and ${listed[listed.length - 1]}`;
+  const failing = files.filter((file) => !file.clears);
+
+  if (!failing.length) return `Wrote ${joined}; each clears that store's screenshot row.`;
+
+  const rest = files.length - failing.length;
+  const others = rest ? ` The other ${rest === 1 ? "file clears its" : "files clear their"} store's screenshot row.` : "";
+
+  return `Wrote ${joined}. ${failing.map((file) => `${notClearing(file)}.`).join(" ")}${others}`;
 }
 
 /* @invariant A STORE CAPTURE IS MEASURED, NEVER ASSUMED. Chromium renders
@@ -274,7 +291,7 @@ async function capturedForStores(
     choice === "all"
       ? `One call per view; extension_submit action:"sync-listing" browsers:[${stores.map((store) => `"${store}"`).join(", ")}] picks each store's files up from store/screenshots/<store>/.`
       : `One call per view; extension_submit action:"sync-listing" browsers:["${choice}"] picks the files up from ${storeScreenshotsFolder(choice)}/.`;
-  const hint = single ? `The image is ${storeFileLine(single)}. ${door}` : `Wrote ${files.map(storeFileLine).join("; ")}. ${door}`;
+  const hint = `${storeFilesSentence(files)} ${door}`;
 
   return envelope({
     ok: true,
