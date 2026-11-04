@@ -65,24 +65,6 @@ describe(SUITE, () => {
     expect(out.hint).toContain("120 seconds");
   });
 
-  it("rebuild that would replace a live channel's artifacts names the matching environment", async () => {
-    if (process.platform === "win32") return;
-
-    login();
-    world.routes[`POST ${DISPATCH_ROUTE}`] = () => ({
-      body: { code: "REBUILD_REPLACES_LIVE_ARTIFACT", message: "Commit 603fc8a is live on stable (requires production)." },
-      status: 409,
-    });
-
-    const out = JSON.parse(await builds({ action: "rebuild", buildId: "603fc8a", api: API }));
-
-    expect(out.ok).toBe(false);
-    expect(out.status).toBe("refused");
-    expect(out.error.platformCode).toBe("REBUILD_REPLACES_LIVE_ARTIFACT");
-    expect(out.hint).toContain("buildEnv");
-    expect(world.calls.filter((call) => call.method === "POST")).toHaveLength(1);
-  });
-
   it("rebuild of the commit a Stable channel serves says to rebuild another commit or release a new build first", async () => {
     if (process.platform === "win32") return;
 

@@ -67,10 +67,6 @@ function refusalHint(code: string, retryAfterSeconds?: number): string | undefin
   if (code === "BUILD_DISPATCH_DISABLED") return "Build dispatch is paused for every project right now, so nothing was dispatched. Try again later.";
   if (UNAVAILABLE.has(code)) return `The platform could not confirm this build is within the workspace's allowance, so it refused instead of guessing.${wait || " Try again shortly."}`;
 
-  if (code === "REBUILD_REPLACES_LIVE_ARTIFACT") {
-    return 'This commit is live on a channel built for another environment, and this rebuild would replace what that channel serves. Pass the environment the channel needs as buildEnv (production for Stable and every other channel, staging only for Preview).';
-  }
-
   if (code === "BUILD_ENV_SERVED") {
     return "This commit is what a Stable channel serves, and a Preview rebuild would change the environment recorded for the build that channel points at. Rebuild another commit for Preview, or release a new build to that channel first.";
   }
