@@ -8,11 +8,13 @@
 
 import { envelope } from "./envelope";
 import { headlessHint } from "./launch-flags";
+import { denoiseCliLog } from "./legacy-stdout";
 import { productionLoadProofLine } from "./production-launch";
 import { waitCall } from "./production-receipt";
 import { START_WAIT_BUDGET_MS } from "./start-landing";
 import { handler as waitHandler } from "../tools/wait";
 
+import type { ChildProcess } from "node:child_process";
 import type { ProductionLaunchEvidence } from "./production-launch";
 import type { ReadyContract } from "./types";
 
@@ -60,6 +62,36 @@ export interface StartFacts {
   replacedSession: unknown;
   warnings: Array<string | null | false | undefined>;
   landing: StartLanding | null;
+  engineExit: EngineExit | null;
+}
+
+export interface EngineExit {
+  exitCode: number | null;
+  signal: string | null;
+  output: string;
+}
+
+const OUTPUT_SHOWN = 2000;
+const LAST_LINES = 3;
+
+export function engineExitAfterBoot(
+  child: Pick<ChildProcess, "exitCode" | "signalCode">,
+  readOutput: () => string,
+): EngineExit | null {
+  const exitCode = typeof child.exitCode === "number" ? child.exitCode : null;
+  const signal = typeof child.signalCode === "string" ? child.signalCode : null;
+
+  if (exitCode === null && signal === null) return null;
+
+  return { exitCode, signal, output: denoiseCliLog(readOutput()).trimEnd() };
+}
+
+function lastWords(output: string): string[] {
+  return output
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !/^at\s/.test(line))
+    .slice(-LAST_LINES);
 }
 
 const STOP = "When you are done, call extension_stop to shut the session down.";
@@ -160,11 +192,40 @@ function failedAnswer(facts: StartFacts, frame: WaitFrame): string {
   });
 }
 
-export function startAnswer(facts: StartFacts): string {
+function launchFailedAnswer(facts: StartFacts, exit: EngineExit): string {
+  const how = exit.signal ? `signal ${exit.signal}` : `exit code ${exit.exitCode}`;
+  const words = lastWords(exit.output);
+  const said = words.length ? ` Its last output: ${words.join(" | ")}` : " It wrote no output.";
   const { landing } = facts;
 
-  if (landing?.kind === "landed") return landedAnswer(facts, landing.frame);
+  return envelope({
+    ok: false,
+    command: facts.command,
+    status: "launch-failed",
+    error: {
+      code: "E_SESSION_EXITED",
+      message: `The engine's ${facts.verb} process was alive 5 s after spawn and then exited (${how}) before ${facts.browser} ran the extension, so no session is running.${said}`,
+    },
+    value: {
+      ...sessionValue(facts),
+      exitCode: exit.exitCode,
+      signal: exit.signal,
+      lastOutput: words,
+      output: exit.output.slice(-OUTPUT_SHOWN),
+      ...(exit.output.length > OUTPUT_SHOWN ? { outputTruncated: { shown: OUTPUT_SHOWN, total: exit.output.length, kept: "tail" } } : {}),
+      ...(landing ? { waited: { ...waitedOut(landing.frame), status: "engine-exited" } } : {}),
+    },
+    hint: "Read value.lastOutput and value.output for the engine's own account of why it stopped, fix that, then call extension_start again. Nothing needs extension_stop.",
+    warnings: facts.warnings,
+  });
+}
+
+export function startAnswer(facts: StartFacts): string {
+  const { landing, engineExit } = facts;
+
   if (landing?.kind === "failed") return failedAnswer(facts, landing.frame);
+  if (engineExit) return launchFailedAnswer(facts, engineExit);
+  if (landing?.kind === "landed") return landedAnswer(facts, landing.frame);
 
   const alive = `The engine's ${facts.verb} process was alive 5 s after spawn and`;
   const lead =

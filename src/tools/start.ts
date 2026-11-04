@@ -24,7 +24,7 @@ import { isGeckoFamily } from "../lib/browser-family";
 import { removeCarrier } from "../lib/carrier";
 import { envelope } from "../lib/envelope";
 import { productionLaunchEvidence, readFreshContract, readLoadOverDebugPort } from "../lib/production-launch";
-import { awaitStartLanding, startAnswer } from "../lib/start-answer";
+import { awaitStartLanding, engineExitAfterBoot, startAnswer } from "../lib/start-answer";
 import { controlledIdentity, resolveLoadedId, sessionIdentityWarnings } from "../lib/controlled-identity";
 import { spawnExtensionCli, spawnFailedEnvelope } from "../lib/exec";
 import { geckoAddonId } from "../lib/gecko-addon";
@@ -421,6 +421,7 @@ export async function handler(
     contract: freshContract,
     replacedSession: replaced[0],
     landing,
+    engineExit: args.noBrowser ? null : engineExitAfterBoot(child, spawned.readOutput),
     warnings: [
       profileReused && !args.noBrowser
         ? `${reusedProfileNote(freshContract?.profilePath ?? carryover.profilePath)}${identity.copyId && !isGeckoFamily(browser) ? ` That carry-over does not reach this controlled copy: its id ${loaded.extensionId ?? identity.copyId} is its own, so its chrome.storage starts empty and it holds no grants from the plain build's runs.` : ""}`

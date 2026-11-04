@@ -13,7 +13,6 @@ import { isProjectRef } from "../lib/credentials";
 import { compareVersions, resolvedEngineFacts } from "../lib/engine-version";
 import { envelope } from "../lib/envelope";
 import { packageAddress } from "../lib/package-address";
-import { pidState } from "../lib/process-identity";
 import { PRODUCTION_DEBUG_PORT_FLOOR } from "../lib/production-launch";
 import { userlandProjectUrl, type ProjectRef } from "../lib/registry";
 import { downloadTryPackage, pickTryBuild, readTryBuilds, type TryRefusal } from "../lib/try-package";
@@ -290,19 +289,11 @@ export async function handler(args: Args): Promise<string> {
     }),
   );
 
-  const enginePid = typeof started.value?.pid === "number" ? started.value.pid : null;
-
-  if (started.ok && enginePid !== null && pidState(enginePid) !== "alive") {
-    started.ok = false;
-    started.error = { code: "E_SESSION_EXITED", message: `the engine process (pid ${enginePid}) exited while ${browser} was launching, after the start answered.` };
-    started.hint = "Run extension_try again; if it fails the same way, the build cannot be launched by this engine.";
-  }
-
   if (!started.ok) {
     await stopHandler({ projectPath: run.dir, browser });
     removeTryRun(run.dir);
 
-    return refuse("launch-failed", started.error?.code ?? "E_BROWSER_EXITED", `${browser} did not come up with build ${buildId}: ${started.error?.message ?? "the launch gave no reason"} Nothing stays on the machine.`, started.hint ?? "Read error.message for the cause.", { ...value, ...packageFacts, engine: engine.version, launchStatus: started.status ?? null });
+    return refuse("launch-failed", started.error?.code ?? "E_BROWSER_EXITED", `${browser} did not come up with build ${buildId}: ${started.error?.message ?? "the launch gave no reason"} Nothing stays on the machine.`, started.status === "launch-failed" ? "Run extension_try again; if it fails the same way, the build cannot be launched by this engine." : started.hint ?? "Read error.message for the cause.", { ...value, ...packageFacts, engine: engine.version, launchStatus: started.status ?? null });
   }
 
   const launched = started.value ?? {};

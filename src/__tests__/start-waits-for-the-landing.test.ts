@@ -27,6 +27,8 @@ const live = {
   waitCalls: [] as Array<Record<string, unknown>>,
   waitAnswer: null as null | (() => string),
   landContract: null as null | (() => void),
+  child: null as null | (EventEmitter & { pid: number; exitCode: number | null; signalCode: string | null }),
+  output: "",
 };
 
 vi.mock("../lib/exec", async (importOriginal) => {
@@ -34,11 +36,15 @@ vi.mock("../lib/exec", async (importOriginal) => {
 
   return {
     ...actual,
-    spawnExtensionCli: () => ({
-      child: Object.assign(new EventEmitter(), { pid: ENGINE_PID, kill: () => true }),
-      logPath: path.join(live.project, "session.log"),
-      readOutput: () => "",
-    }),
+    spawnExtensionCli: () => {
+      live.child = Object.assign(new EventEmitter(), { pid: ENGINE_PID, exitCode: null, signalCode: null, kill: () => true });
+
+      return {
+        child: live.child,
+        logPath: path.join(live.project, "session.log"),
+        readOutput: () => live.output,
+      };
+    },
   };
 });
 
@@ -113,7 +119,33 @@ beforeEach(() => {
   live.waitCalls = [];
   live.waitAnswer = null;
   live.landContract = () => stampReady();
+  live.child = null;
+  live.output = "";
 });
+
+function engineExits(exitCode: number | null, signalCode: string | null = null): void {
+  live.output = [
+    "npm notice run npx",
+    "Error: Cannot copy /tmp/run/extension/ to a subdirectory of self /tmp/run/extension/dist/extension-js/chrome/controlled",
+    "    at cpSyncFn (node:internal/fs/cp/cp-sync:56:13)",
+    "    at async extensionPreview (file:///engine/dist/832~0.mjs:5218:25)",
+    "",
+  ].join("\n");
+
+  Object.assign(live.child ?? {}, { exitCode, signalCode });
+}
+
+const NO_SESSION = () => {
+  engineExits(1);
+
+  return JSON.stringify({
+    ok: false,
+    command: "extension_wait",
+    status: "no-session",
+    error: { code: "E_NO_SESSION", message: "No chrome session is known for the project." },
+    value: { budgetMs: 45_000, elapsedMs: 45_000 },
+  });
+};
 
 afterEach(() => {
   vi.useRealTimers();
@@ -208,7 +240,47 @@ describe("extension_start waits for the build and the browser the way extension_
     expect(result.hint).toMatch(/^The engine's start process was alive 5 s after spawn and/);
   });
 
-  it("never waits for a browser on a noBrowser start", async () => {
+  it("refuses as launch-failed, never ok, when the engine exits during the wait, and quotes its last output without the stack", async () => {
+    live.landContract = null;
+    live.waitAnswer = NO_SESSION;
+    fs.writeFileSync(path.join(live.project, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "Bare", version: "1.0.0" }));
+
+    const result = JSON.parse(await handler({ projectPath: live.project, outputPath: ".", allowControl: true }));
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("launch-failed");
+    expect(result.error.code).toBe("E_SESSION_EXITED");
+    expect(result.error.message).toBe(
+      "The engine's preview process was alive 5 s after spawn and then exited (exit code 1) before chrome ran the extension, so no session is running. Its last output: npm notice run npx | Error: Cannot copy /tmp/run/extension/ to a subdirectory of self /tmp/run/extension/dist/extension-js/chrome/controlled",
+    );
+
+    expect(result.value).toMatchObject({ pid: ENGINE_PID, verb: "preview", exitCode: 1, signal: null, waited: { status: "engine-exited", budgetMs: 45_000 } });
+    expect(result.value.output).toContain("at cpSyncFn");
+  });
+
+  it.each([
+    ["an exit code", 1, null, "exit code 1"],
+    ["a signal", null, "SIGKILL", "signal SIGKILL"],
+  ])("refuses as launch-failed with wait: false when the engine is gone by %s right after the boot check", async (_how, exitCode, signal, words) => {
+    live.landContract = () => {
+      stampReady();
+      engineExits(exitCode, signal);
+    };
+
+    const result = JSON.parse(await handler({ projectPath: live.project, wait: false }));
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("launch-failed");
+    expect(result.error.message).toContain(`then exited (${words})`);
+    expect(result.value.waited).toBeUndefined();
+  });
+
+  it("never waits for a browser on a noBrowser start, and an engine that ends with its build is not a failed launch there", async () => {
+    live.landContract = () => {
+      stampReady();
+      engineExits(0);
+    };
+
     const result = JSON.parse(await handler({ projectPath: live.project, noBrowser: true }));
 
     expect(live.waitCalls).toEqual([]);
