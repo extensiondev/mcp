@@ -39,7 +39,7 @@
   "main": "./dist/module.js",
   "types": "./dist/module.d.ts",
   "bin": {
-    "extension-mcp": "./bin/extension-mcp.js"
+    "extension-mcp": "bin/extension-mcp.js"
   },
   "files": [
     "dist",
