@@ -29,6 +29,7 @@ export const TOOL_DOCS: Record<string, ToolDocsMeta> = {
   extension_build: { tier: "build", gate: NONE, samplePrompt: "Build this extension for Chrome and Firefox" },
   extension_dev: { tier: "run", gate: NONE, samplePrompt: "Run my extension in Chrome and let me act on it" },
   extension_start: { tier: "run", gate: NONE, samplePrompt: "Launch the production build in Edge" },
+  extension_try: { tier: "run", gate: NONE, samplePrompt: "Try cezaraugusto/rebeccat for me and show me what it does" },
   extension_wait: { tier: "run", gate: SESSION, samplePrompt: "Wait until the dev session is ready, then tell me the ports" },
   extension_stop: { tier: "run", gate: SESSION, samplePrompt: "Stop the running session and close its browser" },
   extension_manifest_validate: { tier: "see", gate: NONE, samplePrompt: "Will this manifest load on Firefox and Safari?" },

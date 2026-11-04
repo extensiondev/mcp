@@ -16,6 +16,7 @@ import * as templates from "./tools/templates";
 import * as build from "./tools/build";
 import * as dev from "./tools/dev";
 import * as start from "./tools/start";
+import * as tryTool from "./tools/try";
 import * as previewWeb from "./tools/preview-web";
 import * as shares from "./tools/shares";
 import * as stop from "./tools/stop";
@@ -78,6 +79,7 @@ export const tools: ToolModule[] = [
   build,
   dev,
   start,
+  tryTool,
   previewWeb,
   shares,
   stop,

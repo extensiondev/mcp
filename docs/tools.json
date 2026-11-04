@@ -1,7 +1,7 @@
 {
   "generatedFrom": "src/index.ts schemas, src/lib/tool-policy.ts, src/lib/docs-meta.ts; regenerate with pnpm docs:tools",
   "version": "10.20.0",
-  "count": 37,
+  "count": 38,
   "tools": [
     {
       "name": "extension_add_feature",
@@ -2491,6 +2491,60 @@
           "type": "string",
           "required": false,
           "description": "Path to a theme manifest.json (or a { manifest } seed wrapper). Read in place of the inline manifest."
+        }
+      ]
+    },
+    {
+      "name": "extension_try",
+      "tier": "run",
+      "group": "local",
+      "description": "Run a published extension.dev build for the person in a fresh browser on this machine, so they see it work without downloading a package, turning on developer mode or running an installer. It downloads the build's package (newest by default), checks it against the platform's integrity record when there is one, unpacks it into a temporary folder and launches it with a new profile; on Extension.js 4.1.34 or later it then opens the popup or replays the toolbar action and saves a screenshot, and on an older engine it only launches and says the extension was not used. The answer names the version, the package size, what was confirmed and what was not, the screenshot, and what the extension can reach in plain words: warn the person about that. Nothing stays installed: call it again with action:'close' when done. For a project on disk use extension_dev or extension_start.",
+      "gate": "none",
+      "samplePrompt": "Try cezaraugusto/rebeccat for me and show me what it does",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": true,
+      "untrusted": true,
+      "inputs": [
+        {
+          "name": "project",
+          "type": "string",
+          "required": true,
+          "description": "The published project as \"<workspace>/<project>\", the two names in its extension.dev address <workspace>.extension.dev/<project>."
+        },
+        {
+          "name": "version",
+          "type": "string",
+          "required": false,
+          "description": "The version to run (0.3.0), or a build sha or its first characters (6b393ca). Omitted, the newest successful build that has a package for the browser."
+        },
+        {
+          "name": "browser",
+          "type": "string",
+          "required": false,
+          "default": "chrome",
+          "description": "chrome, edge or firefox. safari is refused: its package is an app that needs signing and a manual enable in Safari's settings."
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "required": false,
+          "description": "The http or https page to open with the extension. Omitted, the browser opens about:blank: no sample page ships with this server."
+        },
+        {
+          "name": "headless",
+          "type": "boolean",
+          "required": false,
+          "default": true,
+          "description": "true runs the browser with no window, which never takes the person's keyboard. false opens a window they can see and use."
+        },
+        {
+          "name": "action",
+          "type": "\"run\" | \"close\"",
+          "required": false,
+          "default": "run",
+          "description": "run downloads and launches. close ends every try of this project (one browser with `browser`) and deletes its folder and profile; screenshots stay."
         }
       ]
     },

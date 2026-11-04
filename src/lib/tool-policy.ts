@@ -73,6 +73,7 @@ export const TOOL_TITLES: Record<string, string> = {
   extension_inspect: "Inspect a live page",
   extension_dom_snapshot: "Snapshot the page",
   extension_screenshot: "Take a screenshot",
+  extension_try: "Try a published extension",
   extension_list_extensions: "List the loaded extensions",
   extension_logs: "Read the console",
   extension_doctor: "Diagnose the session",
@@ -135,6 +136,11 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
   extension_screenshot: {
     group: "local",
     annotations: acts({ idempotentHint: true }),
+    untrusted: true,
+  },
+  extension_try: {
+    group: "local",
+    annotations: acts({ openWorldHint: true }),
     untrusted: true,
   },
   extension_list_extensions: {

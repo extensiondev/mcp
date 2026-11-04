@@ -2,7 +2,7 @@
 
 Generated from the schemas the server registers (`src/index.ts`); do not edit by hand. Regenerate with `pnpm docs:tools`. A test fails when this file and the schemas disagree.
 
-37 tools.
+38 tools.
 
 ## extension_add_feature
 
@@ -555,6 +555,19 @@ Verify a Chrome theme manifest before it ships. This settles the four-leg WYSIWY
 | --- | --- | --- | --- | --- |
 | `manifest` | object | no |  | The Chrome theme manifest object (with a `theme` block). Pass this or manifestPath. |
 | `manifestPath` | string | no |  | Path to a theme manifest.json (or a { manifest } seed wrapper). Read in place of the inline manifest. |
+
+## extension_try
+
+Run a published extension.dev build for the person in a fresh browser on this machine, so they see it work without downloading a package, turning on developer mode or running an installer. It downloads the build's package (newest by default), checks it against the platform's integrity record when there is one, unpacks it into a temporary folder and launches it with a new profile; on Extension.js 4.1.34 or later it then opens the popup or replays the toolbar action and saves a screenshot, and on an older engine it only launches and says the extension was not used. The answer names the version, the package size, what was confirmed and what was not, the screenshot, and what the extension can reach in plain words: warn the person about that. Nothing stays installed: call it again with action:'close' when done. For a project on disk use extension_dev or extension_start.
+
+| input | type | required | default | description |
+| --- | --- | --- | --- | --- |
+| `project` | string | yes |  | The published project as "<workspace>/<project>", the two names in its extension.dev address <workspace>.extension.dev/<project>. |
+| `version` | string | no |  | The version to run (0.3.0), or a build sha or its first characters (6b393ca). Omitted, the newest successful build that has a package for the browser. |
+| `browser` | string | no | `"chrome"` | chrome, edge or firefox. safari is refused: its package is an app that needs signing and a manual enable in Safari's settings. |
+| `url` | string | no |  | The http or https page to open with the extension. Omitted, the browser opens about:blank: no sample page ships with this server. |
+| `headless` | boolean | no | `true` | true runs the browser with no window, which never takes the person's keyboard. false opens a window they can see and use. |
+| `action` | "run" \| "close" | no | `"run"` | run downloads and launches. close ends every try of this project (one browser with `browser`) and deletes its folder and profile; screenshots stay. |
 
 ## extension_wait
 

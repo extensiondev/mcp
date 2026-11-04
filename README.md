@@ -7,7 +7,7 @@
 
 # @extension.dev/mcp [![Version][npm-version-image]][npm-version-url] [![Downloads][npm-downloads-image]][npm-downloads-url] [![Discord][discord-image]][discord-url]
 
-> Give your AI agent hands for browser extension development. 37 MCP tools that scaffold, run, inspect, debug, test, and build cross-browser extensions on your machine, plus a platform lane (private alpha) to share and publish them.
+> Give your AI agent hands for browser extension development. 38 MCP tools that scaffold, run, inspect, debug, test, and build cross-browser extensions on your machine, plus a platform lane (private alpha) to share and publish them.
 
 <img alt="Logo" align="right" src="https://media.extension.land/brand/extension-dev/logo-dock.png" width="20.7%" />
 
@@ -121,7 +121,7 @@ Or write it into `~/.codex/config.toml` as a `[mcp_servers.extension-dev]` table
 
 ### Flags
 
-- By default the server exposes the 24 of its 37 tools that work on this machine (the 13 platform tools are off). `--features=local,platform` adds the platform group. Env: `EXTENSION_DEV_FEATURES`.
+- By default the server exposes the 25 of its 38 tools that work on this machine (the 13 platform tools are off). `--features=local,platform` adds the platform group. Env: `EXTENSION_DEV_FEATURES`.
 - `--no-ship` refuses every call that puts something in front of other people (publish, promote, a real submit, a shared preview, a revoke). Env: `EXTENSION_DEV_NO_SHIP=1`.
 - `--project <workspace>/<project>` pins the server to one project. Env: `EXTENSION_DEV_PROJECT`.
 - When a platform act answers `approval-required` on a desktop (not headless, not CI, and on Linux with a display), the server opens the approval page once in the default browser. `--no-ship` or `EXTENSION_DEV_NO_AUTO_OPEN=1` turns that off.
@@ -143,7 +143,7 @@ mkdir -p .claude/skills && cp -R node_modules/@extension.dev/skill/skills/extens
 
 ## Tools
 
-On by default, the 24 that work on this machine:
+On by default, the 25 that work on this machine:
 
 | Tier | Tool | Description |
 | ---- | ---- | ----------- |
@@ -154,6 +154,7 @@ On by default, the 24 that work on this machine:
 | build | `extension_build` | Build for production |
 | run | `extension_dev` | Dev server with HMR |
 | run | `extension_start` | Build + launch the production build (`build: false` launches the existing dist; `outputPath` launches any prebuilt unpacked directory) |
+| run | `extension_try` | Run a published extension.dev build in a fresh local browser, use it once with a screenshot, and say what it can reach; `action: "close"` removes it |
 | run | `extension_wait` | Poll the dev-server ready contract |
 | run | `extension_stop` | Stop a dev/start/preview session (server + browser) |
 | see | `extension_manifest_validate` | Cross-browser manifest validation |
