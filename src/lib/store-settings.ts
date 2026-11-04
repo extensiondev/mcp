@@ -32,7 +32,7 @@ export const SAFARI_RELEASE_LINE_SENTENCE =
 
 const SAFARI_RELEASE_KEYS = new Set(["releasetype", "release", "releasemode"]);
 
-export const STORE_SETTING_KEYS = ["enabled", "submissionMode", "sourceArchive", "releaseChannel", "chromeItemId", "edgeProductId", "firefoxAddonGuid", "appStoreId", "bundleId", "firstSubmitted", "storeUrl", "publisherId"] as const;
+export const STORE_SETTING_KEYS = ["enabled", "submissionMode", "sourceArchive", "releaseChannel", "chromeItemId", "edgeProductId", "firefoxAddonGuid", "appStoreId", "bundleId", "firstSubmitted", "storeUrl", "publisherId", "dashboardPasted"] as const;
 
 const FIREFOX_ONLY_KEYS = new Set(["sourceArchive", "releaseChannel"]);
 
@@ -64,7 +64,7 @@ const CONSOLE_ONLY_KEYS = new Set([
 
 const CREDENTIAL_KEY = /secret|token|password|credential|issuer|key|client|json|p8|pem|cert|account|oauth|refresh/i;
 
-export const PATCH_KEYS = ["enabled", "dryRun", "skipPublish", "stagedPublish", "publishAfter", "releaseChannel", "sourceArchive", "storeId", "bundleId", "firstSubmitted", "storeUrl", "publisherId"] as const;
+export const PATCH_KEYS = ["enabled", "dryRun", "skipPublish", "stagedPublish", "publishAfter", "releaseChannel", "sourceArchive", "storeId", "bundleId", "firstSubmitted", "storeUrl", "publisherId", "dashboardPasted"] as const;
 
 export type StoreSettingsPatch = Partial<Record<(typeof PATCH_KEYS)[number], boolean | string | null>>;
 
@@ -152,6 +152,10 @@ export function readStoreSettingsChange(store: StoreSettingsStore, raw: unknown)
     return { problem: `"firstSubmitted" is an edge store setting; ${store} does not have it.` };
   }
 
+  if (store !== "chrome" && "dashboardPasted" in raw) {
+    return { problem: `"dashboardPasted" is a chrome store setting; ${store} does not have it.` };
+  }
+
   if (store !== "chrome" && "publisherId" in raw) {
     return { problem: `"publisherId" is a chrome store setting; ${store} does not have it.` };
   }
@@ -235,6 +239,19 @@ export function readStoreSettingsChange(store: StoreSettingsStore, raw: unknown)
 
     patch.firstSubmitted = raw.firstSubmitted;
     requested.firstSubmitted = raw.firstSubmitted;
+  }
+
+  /* @invariant THE CHROME DASHBOARD PASTE WORD IS THE OWNER'S, SENT AS IS.
+   * `dashboardPasted: true` says every field only the item's dashboard takes
+   * was pasted there (the console card's "Pasted in the Chrome dashboard"
+   * switch), which lifts the platform's one refusal of a first Chrome review;
+   * the platform stamps the time and `false` withdraws it.
+   */
+  if ("dashboardPasted" in raw) {
+    if (typeof raw.dashboardPasted !== "boolean") return { problem: "storeSettings.dashboardPasted must be true or false." };
+
+    patch.dashboardPasted = raw.dashboardPasted;
+    requested.dashboardPasted = raw.dashboardPasted;
   }
 
   /* @invariant THE EDGE LISTING URL IS SENT AS THE CRX ID LINK OR NOT AT ALL.
@@ -353,7 +370,7 @@ function readStoreId(store: StoreSettingsStore, raw: Row): { key: string; storeI
  * a sha256 over {store, settings} with the settings keys in the order
  * enabled, dryRun, skipPublish, stagedPublish, publishAfter, releaseChannel,
  * sourceArchive, storeId, bundleId, firstSubmitted, storeUrl, publisherId,
- * only the keys the patch carries, rendered with JSON.stringify. A digest that differs from the platform's asks a human to
+ * dashboardPasted, only the keys the patch carries, rendered with JSON.stringify. A digest that differs from the platform's asks a human to
  * approve a change that can never run, so it is refused instead.
  */
 export function storeSettingsDigest(store: StoreSettingsStore, patch: StoreSettingsPatch): string {

@@ -42,6 +42,7 @@ describe("extension_submit configure-store changes a store's settings as a plain
       "bundleId",
       "firstSubmitted",
       "storeUrl",
+      "dashboardPasted",
     ]);
 
     for (const property of Object.values((schema.inputSchema.properties as Record<string, any>).storeSettings.properties) as Array<{ description?: string }>) {
@@ -306,6 +307,19 @@ describe("extension_submit configure-store changes a store's settings as a plain
     expect(readStoreSettingsChange("edge", { firstSubmitted: false })).toEqual({ patch: { firstSubmitted: false }, requested: { firstSubmitted: false } });
     expect(readStoreSettingsChange("chrome", { firstSubmitted: true })).toEqual({ problem: '"firstSubmitted" is an edge store setting; chrome does not have it.' });
     expect(readStoreSettingsChange("edge", { firstSubmitted: "yes" })).toEqual({ problem: "storeSettings.firstSubmitted must be true or false." });
+  });
+
+  it("hashes dashboardPasted last, the bytes the platform hashes, and refuses it off Chrome or as anything but a boolean", async () => {
+    const { createHash } = await import("node:crypto");
+    const platformBytes = JSON.stringify({ store: "chrome", settings: { dryRun: false, publisherId: "1a2b3c4d-1a2b-4c3d-8e9f-1a2b3c4d5e6f", dashboardPasted: true } });
+
+    expect(
+      storeSettingsDigest("chrome", { dashboardPasted: true, publisherId: "1a2b3c4d-1a2b-4c3d-8e9f-1a2b3c4d5e6f", dryRun: false }),
+    ).toBe(createHash("sha256").update(platformBytes).digest("hex"));
+
+    expect(readStoreSettingsChange("chrome", { dashboardPasted: true })).toEqual({ patch: { dashboardPasted: true }, requested: { dashboardPasted: true } });
+    expect(readStoreSettingsChange("edge", { dashboardPasted: true })).toEqual({ problem: '"dashboardPasted" is a chrome store setting; edge does not have it.' });
+    expect(readStoreSettingsChange("chrome", { dashboardPasted: "yes" })).toEqual({ problem: "storeSettings.dashboardPasted must be true or false." });
   });
 
   it("writes the Edge listing URL as the canonical crx id link through the store config route, hashing storeUrl last", async () => {
