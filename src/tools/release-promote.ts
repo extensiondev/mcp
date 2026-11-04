@@ -207,7 +207,7 @@ export async function handler(args: ReleaseActArgs & {
       ...(sourceChannel ? { sourceChannel } : {}),
       ...(gateBrowsers.length ? { browsers: [...gateBrowsers].sort() } : {}),
     },
-    description: `Promote build ${buildId} to the ${channel} channel, changing what ${channel} serves.`,
+    description: `Release build ${buildId} to the ${channel} channel.`,
     approvalId: args.approvalId,
     token,
     api: args.api,
