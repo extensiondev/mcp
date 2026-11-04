@@ -24,7 +24,8 @@ import {
   type ProjectApi,
   type ProjectApiRefusal,
 } from "../lib/project-api";
-import { configure, createChannel } from "./builds-acts";
+import { configure } from "./builds-configure";
+import { createChannel } from "./builds-create-channel";
 import { CONFIGURE_CHANNEL, DELETE_CHANNEL, configureChannel, deleteChannelConsoleOnly } from "./builds-channel";
 import { DOWNLOAD_ACTION, download, type DownloadArgs } from "./builds-download";
 import { DEFAULT_LIMIT, MAX_LIMIT, listBuilds } from "./builds-list";
