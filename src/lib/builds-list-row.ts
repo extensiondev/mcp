@@ -28,6 +28,7 @@ const CANCELLED_WORDS = new Set(["cancelled", "canceled"]);
 const BUILDING_WORDS = new Set(["building", "running", "in_progress", "in progress"]);
 const PENDING_WORDS = new Set(["pending", "queued", "waiting", "requested"]);
 const QUEUED_PUSH_OUTCOMES = new Set(["DEBOUNCED", "DEFERRED", "HEAD_QUEUED"]);
+const SETTINGS_SKIP_OUTCOMES = new Set(["BRANCH_FILTERED", "PATH_FILTERED", "DOCS_ONLY", "PULL_REQUEST_BUILDS_OFF"]);
 
 export const BROWSERS_NOT_REPORTED = "the platform has not reported this run's browsers yet; they land with the build record";
 
@@ -241,6 +242,15 @@ export function lastPushView(lastPush: Row | null, rows: Row[]): { lastPush: Row
     return {
       lastPush: view,
       sentence: `lastPush is stale: it still names ${commit || "an earlier commit"}${receivedAt ? ` (received ${receivedAt})` : ""}, while ${buildNumberOf(newer) ? words : `build ${words}`} started at ${text(newer.startedAt)}, after that record; the platform has not recorded the push behind ${text(newer.buildId)} yet, so builds[0] is the newest build.`,
+    };
+  }
+
+  const skipMessage = text(lastPush.message);
+
+  if (lastPush.dispatched === false && SETTINGS_SKIP_OUTCOMES.has(outcome) && skipMessage) {
+    return {
+      lastPush: view,
+      sentence: `The last push the platform received${commit ? `, ${commit}` : ""}${text(lastPush.ref) ? ` to ${text(lastPush.ref)}` : ""}${receivedAt ? ` (received ${receivedAt})` : ""}, was skipped by the project's own settings (${outcome}) and no build row names it: ${skipMessage}`,
     };
   }
 

@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { handler as builds } from "../tools/builds";
+import { handler as builds, schema } from "../tools/builds";
 import { TOOL_POLICY } from "../lib/tool-policy";
 import { writeCredentials } from "../lib/credentials";
 
@@ -223,6 +223,41 @@ describe("extension_builds reads the platform's builds with the project's own to
     expect(out.value.headLag).toEqual({ ...headLag, lastBuildAt: "2026-10-11T16:45:37Z", pushReceivedAt: "2026-10-24T23:50:33Z" });
     expect(out.value.sayToPerson).toBe(headLag.message);
     expect(out.hint.startsWith(headLag.message)).toBe(true);
+  });
+
+  it("names a push to another branch the deployment branch filter skipped, in the platform's words, and says lastPush reads any branch", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+    const message =
+      "Push to step4 skipped: this project builds pushes to main only. No push build was spent. Clear the deployment branch in project settings to build every branch, or click Build in the console to run this commit.";
+    const lastPush = {
+      commit: "5520dc1",
+      ref: "step4",
+      receivedAt: "2026-11-04T15:14:58.000Z",
+      outcome: "BRANCH_FILTERED",
+      dispatched: false,
+      message,
+    };
+    routes[`/api/projects/${PROJECT_ID}/builds`] = {
+      body: { items: [BUILD_ROW], latest: BUILD_ROW, lastPush, headLag: null },
+    };
+
+    const out = JSON.parse(await builds({ api: API }));
+
+    expect(out.value.lastPush).toEqual({ ...lastPush, receivedAt: "2026-11-04T15:14:58Z" });
+    expect(out.value.headLag).toBeUndefined();
+    expect(out.hint).toContain(
+      `The last push the platform received, 5520dc1 to step4 (received 2026-11-04T15:14:58Z), was skipped by the project's own settings (BRANCH_FILTERED) and no build row names it: ${message}`,
+    );
+
+    expect(out.hint.split("Push to step4 skipped").length).toBe(2);
+
+    const action = String(schema.inputSchema.properties.action.description);
+
+    expect(action).toContain("lastPush is the newest push the platform received for the project, on the build branch or any other");
+    expect(action).toContain("BRANCH_FILTERED, PATH_FILTERED, DOCS_ONLY or PULL_REQUEST_BUILDS_OFF for one the project's own settings skipped, with message in the platform's words");
+    expect(action).not.toContain("lastPush is the branch's last push");
   });
 
   it("gets one build with its artifacts, an integrity summary per browser, and usage", async () => {
