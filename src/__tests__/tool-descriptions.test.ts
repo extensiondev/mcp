@@ -18,6 +18,7 @@ const IMPERATIVE_VERBS = [
   "Promote",
   "Publish",
   "Read",
+  "Release",
   "Reload",
   "Run",
   "Sign",

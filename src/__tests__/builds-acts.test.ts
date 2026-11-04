@@ -198,6 +198,23 @@ describe("extension_builds starts a rebuild, changes build settings as a plain c
     expect(calls.filter((call) => call.method === "POST")).toHaveLength(1);
   });
 
+  it("rebuild of the commit a Stable channel serves says to rebuild another commit or release a new build first", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+    routes[`POST ${DISPATCH_ROUTE}`] = () => ({
+      body: { code: "BUILD_ENV_SERVED", message: "Commit 603fc8a is what stable serves, and a Preview rebuild would change the environment recorded for the build stable points at. Rebuild another commit for Preview, or release a new build to stable first." },
+      status: 409,
+    });
+
+    const out = JSON.parse(await builds({ action: "rebuild", buildId: "603fc8a", api: API }));
+
+    expect(out.ok).toBe(false);
+    expect(out.error.platformCode).toBe("BUILD_ENV_SERVED");
+    expect(out.hint).toContain("Rebuild another commit for Preview, or release a new build to");
+    expect(calls.filter((call) => call.method === "POST")).toHaveLength(1);
+  });
+
   it("configure applies a merged change with an owner's token and no approval id, minting nothing and reading no approval", async () => {
     if (process.platform === "win32") return;
 

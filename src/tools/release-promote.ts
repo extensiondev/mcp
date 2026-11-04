@@ -38,7 +38,7 @@ import { firefoxChannelFields, firefoxChannelSentence, servedOfAnswer } from "..
 export const schema = {
   name: "extension_release_promote",
   description:
-    "Promote a built extension to a release channel (stable, preview, beta) on extension.dev, headless: action promote (the default) points channel at buildId, cut opens a release pull request that bumps the manifest version, and rollback returns channel to the build it served before. A promote needs a token minted by a workspace owner and a workspace owner's approval of that exact promote, every time; cut and rollback need a workspace owner's approval of the exact act too: the first call runs the platform's checks and either refuses with the reason and the next step, asking nobody, or answers approval-required with the approval URL and the platform's own description of the act; the same call with approvalId then runs it once. It records the release on the platform and answers what the platform recorded in value.outcome and every link it made or touched in value.links (the release page, the channel link, the build page), waiting up to waitSeconds for the record: promoted only when the record confirms the channel at that build, promote-dispatched until then, promote-failed when the record reads failed, promoted-partially with warnings naming what did not happen (never repeat it whole), promote-unconfirmed when the platform's answer carried no result, so read extension_release_status before promoting again. Preview takes any build; Stable and every other channel take Stable builds, refusing a Preview build as BUILD_ENV_MISMATCH. Not for a store: that is extension_submit. Not for a tester link: that is extension_publish. The project comes from your stored login (extension_auth) or a release token in EXTENSION_DEV_TOKEN; tokens live at most 7 days, so CI re-mints before expiry, and project picks one of several logins. On a public project a promote answers value.channelUrl, the channel link, which always opens the channel's newest build and never expires; on a public project, or a public channel, send testers the channel link; a build link from extension_publish opens one build and, on a private project, expires; a private project gets value.channelUrlWithheld instead.",
+    "Release a build to a channel. On extension.dev, headless: action promote (the default) points channel at buildId, cut opens a release pull request that bumps the manifest version, and rollback returns channel to the build it served before. A release needs a token minted by a workspace owner and a workspace owner's approval of that exact release, every time; cut and rollback need a workspace owner's approval of the exact act too: the first call runs the platform's checks and either refuses with the reason and the next step, asking nobody, or answers approval-required with the approval URL and the platform's own description of the act; the same call with approvalId then runs it once. It records the release on the platform and answers what the platform recorded in value.outcome and every link it made or touched in value.links (the release page, the channel link, the build page), waiting up to waitSeconds for the record: promoted only when the record confirms the channel at that build, promote-dispatched until then, promote-failed when the record reads failed, promoted-partially with warnings naming what did not happen (never repeat it whole), promote-unconfirmed when the platform's answer carried no result, so read extension_release_status before releasing again. Preview takes any build; Stable and every other channel take Stable builds, refusing a Preview build as BUILD_ENV_MISMATCH. Not for a store: that is extension_submit. Not for a tester link: that is extension_publish. The project comes from your stored login (extension_auth) or a release token in EXTENSION_DEV_TOKEN; tokens live at most 7 days, so CI re-mints before expiry, and project picks one of several logins. On a public project a release answers value.channelUrl, the channel link, which always opens the channel's newest build and never expires; on a public project, or a public channel, send testers the channel link; a build link from extension_publish opens one build and, on a private project, expires; a private project gets value.channelUrlWithheld instead.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -86,7 +86,7 @@ export const schema = {
       approvalId: {
         type: "string",
         description:
-          "The approval handle returned by a prior approval-required response. Promoting changes what a public channel serves and is not reversible in place, so every promote needs a workspace owner's approval: call once without this to get an approval id and URL, have a human approve at extension.dev, then call again with the same id.",
+          "The approval handle returned by a prior approval-required response. Releasing changes what a public channel serves and is not reversible in place, so every release needs a workspace owner's approval: call once without this to get an approval id and URL, have a human approve at extension.dev, then call again with the same id.",
       },
       waitSeconds: WAIT_SECONDS_INPUT,
       api: API_BASE,
@@ -117,14 +117,14 @@ function retiredSourceChannelMessage(channel: string): string {
 
 function promoteRefusalHint(platformCode: string): string | undefined {
   if (platformCode === "APPROVER_NOT_OWNER") {
-    return "A promote needs a workspace owner's approval, and whoever approved this one is not an owner of the workspace now, so it was not used and nothing was promoted. Call again without approvalId to request a fresh approval, then have a workspace owner approve it.";
+    return "A release needs a workspace owner's approval, and whoever approved this one is not an owner of the workspace now, so it was not used and nothing was released. Call again without approvalId to request a fresh approval, then have a workspace owner approve it.";
   }
 
   if (platformCode !== "BUILD_ENV_MISMATCH" && platformCode !== "UNSTAMPED_BUILD_BLOCKED") {
     return undefined;
   }
 
-  return `Preview takes any build; Stable and every other channel take Stable builds, and this build is not one. Rebuild this commit for Stable (Builds, Rebuild in the console, or extension_builds action:"rebuild" with this buildId and buildEnv:"production"), wait for it to pass, then promote it again. To ship this build as it is, promote it to Preview instead.`;
+  return `Preview takes any build; Stable and every other channel take Stable builds, and this build is not one. Rebuild this commit for Stable (Builds, Rebuild in the console, or extension_builds action:"rebuild" with this buildId and buildEnv:"production"), wait for it to pass, then release it again. To ship this build as it is, release it to Preview instead.`;
 }
 
 export async function handler(args: ReleaseActArgs & {

@@ -182,7 +182,7 @@ On with `--features=local,platform`, the 12 that reach the extension.dev platfor
 | platform | `extension_preview_web` | Render a build in the web emulator, and share it as a link |
 | platform | `extension_shares` | List every link you have shared, share a platform build as a link, and revoke one permanently |
 | platform | `extension_publish` | Mint a shareable link for a build extension.dev already holds (nothing is uploaded) |
-| platform | `extension_release_promote` | Promote a build to a release channel, headless |
+| platform | `extension_release_promote` | Release a build to a channel, headless |
 | platform | `extension_submit` | Submit for store review: Chrome, Firefox, Edge and Safari, through extension.dev |
 | platform | `extension_submit_check` | Read a store submission's readiness and status, rehearse it, and ask for its approval, under a read-only hint |
 | platform | `extension_release_status` | Read release channels, release history, recent builds, and store configuration, submission and review state |

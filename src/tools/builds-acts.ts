@@ -88,6 +88,10 @@ function refusalHint(code: string, retryAfterSeconds?: number): string | undefin
     return 'This commit is live on a channel built for another environment, and this rebuild would replace what that channel serves. Pass the environment the channel needs as buildEnv (production for Stable and every other channel, staging only for Preview).';
   }
 
+  if (code === "BUILD_ENV_SERVED") {
+    return "This commit is what a Stable channel serves, and a Preview rebuild would change the environment recorded for the build that channel points at. Rebuild another commit for Preview, or release a new build to that channel first.";
+  }
+
   if (code === "REBUILD_FORCE_NEEDS_A_PERSON") return "Replacing artifacts a live channel serves is a person's decision: ask a person on the project to replace them from the console, where releasing this commit offers Replace and rebuild.";
   if (code === "TESTING_WORKSPACE_READ_ONLY") return "This is a testing workspace, which reads but does not build or change anything.";
 
