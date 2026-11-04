@@ -12,6 +12,7 @@ import { releaseChangeOfRow, type ReleaseTypeChange, type ReleaseTypeChangeRefus
 import { AMO_SIGNED_STATUS, amoUnlistedSigning } from "./review-beside-submission";
 
 import type { UpdateManifestView } from "./firefox-update-url";
+import type { StoreReadView } from "./store-reads";
 
 export { releaseChangeOfRow, releaseChangeSentence, type ReleaseTypeChange, type ReleaseTypeChangeRefused } from "./release-type-change";
 
@@ -29,6 +30,7 @@ export interface SubmissionView extends ApprovalRefund {
   storeVersion?: { packaged: string; displayed: string; source: string; buildNumber?: number };
   storeCrxVersion?: string;
   storeReview?: StoreReview;
+  storeReads?: StoreReadView[];
   storeUpload?: StoreUpload;
   statusRead?: StoreStatusRead;
   releaseType?: string;

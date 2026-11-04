@@ -15,6 +15,7 @@ import { platformFetch } from "./platform-fetch";
 import { platformApiGet, type ProjectApi } from "./project-api";
 import { releaseChangeOfRow, type ReleaseTypeChange, type ReleaseTypeChangeRefused } from "./release-type-change";
 import { identityHeaders } from "./session-identity";
+import { storeReadsOf, type StoreReadView } from "./store-reads";
 
 export const RETRIED_SENTENCE = "GitHub canceled the run before upload; the platform started it again.";
 
@@ -175,6 +176,7 @@ export interface PlatformSubmission extends ApprovalRefund {
   storeUrl?: string;
   sourceArchive?: string;
   storeReview?: StoreReview;
+  storeReads?: StoreReadView[];
   storeUpload?: StoreUpload;
   failure?: StepFailure;
   retryOf?: string;
@@ -419,6 +421,7 @@ export function toSubmission(raw: Record<string, unknown>): PlatformSubmission |
   const out: PlatformSubmission = { store, run };
   const storeReview = storeReviewOf(raw.storeReview);
   const statusRead = statusReadOf(raw.statusRead);
+  const storeReads = storeReadsOf(raw.storeReads);
   const storeUpload = storeUploadOf(raw.storeUpload);
   const cancel = storeActOf(raw.cancel);
   const publish = storeActOf(raw.publish);
@@ -429,6 +432,7 @@ export function toSubmission(raw: Record<string, unknown>): PlatformSubmission |
   if (storeVersion) out.storeVersion = storeVersion;
   if (updateManifest) out.updateManifest = updateManifest;
   if (storeReview) out.storeReview = storeReview;
+  if (storeReads) out.storeReads = storeReads;
   if (statusRead) out.statusRead = statusRead;
   if (storeUpload) out.storeUpload = storeUpload;
   if (cancel) out.cancel = cancel;
