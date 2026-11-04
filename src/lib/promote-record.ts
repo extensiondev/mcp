@@ -35,12 +35,26 @@ function sameBuild(a: string, b: string): boolean {
   return Boolean(x) && Boolean(y) && (x.startsWith(y) || y.startsWith(x));
 }
 
+const UNPROVEN_RELEASE_STATUSES = new Set(["promoting", "unconfirmed"]);
+
 export function judgeRelease(item: Row): Verdict {
   const status = text(item.status).toLowerCase();
-  if (PENDING_STATUSES.has(status)) return { kind: "waiting", status };
+  if (PENDING_STATUSES.has(status) || UNPROVEN_RELEASE_STATUSES.has(status)) return { kind: "waiting", status };
   if (FAILED_STATUSES.has(status)) return { kind: "recorded", status, failed: true };
 
   return { kind: "recorded", status: status || "promoted" };
+}
+
+export function recordedAfterDispatch(item: Row, sinceIso: string): boolean {
+  const promotedAt = text(item.promotedAt);
+  if (promotedAt) return after(promotedAt, sinceIso);
+
+  const promotion = isRow(item.promotion) ? item.promotion : {};
+  if (promotion.verified === true && text(promotion.runStatus) === "completed") return true;
+
+  const at = text(item.createdAt) || text(item.startedAt);
+
+  return !at || after(at, sinceIso);
 }
 
 export async function awaitPromoteRecord(args: {
@@ -62,13 +76,9 @@ export async function awaitPromoteRecord(args: {
     if (!list.ok) return missedRead(list);
 
     const items = (Array.isArray(list.json.items) ? list.json.items : []).filter(isRow);
-    const match = items.find((item) => {
-      if (text(item.channel) !== args.channel || !sameBuild(text(item.buildId) || text(item.build), args.buildId)) return false;
-
-      const at = text(item.createdAt) || text(item.promotedAt) || text(item.startedAt);
-
-      return !at || after(at, sinceIso);
-    });
+    const match = items.find(
+      (item) => text(item.channel) === args.channel && sameBuild(text(item.buildId) || text(item.build), args.buildId) && recordedAfterDispatch(item, sinceIso),
+    );
 
     return { ok: true, record: match ?? null };
   };
