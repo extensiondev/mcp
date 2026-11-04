@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { composedDashboardUrl } from "./dashboard-url-meter";
 import { isRow, text } from "./ship-act";
 
 type Row = Record<string, unknown>;
@@ -41,7 +42,7 @@ function failing(checks: unknown[]): Row[] {
  * decisions, so the sentence offers the call and decides nothing.
  */
 export function itemOnFileSentences(left: ChromeItemLeft): string {
-  const address = `https://chrome.google.com/webstore/devconsole/<publisherId>/${left.itemId}/edit`;
+  const address = composedDashboardUrl(`https://chrome.google.com/webstore/devconsole/<publisherId>/${left.itemId}/edit`);
   const checks = failing(left.checks);
   const enabledOff = checks.some((check) => text(check.id) === STORE_ENABLED_CHECK);
   const others = checks.filter((check) => !SAID_BY_THE_ITEM.has(text(check.id)));

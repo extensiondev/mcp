@@ -10,6 +10,7 @@ import { ConsoleProjectPage, consoleWorkspacePath } from "@extension.dev/urls/pa
 
 import { approvalSubjectPhrase, subjectOf } from "./approval-subject";
 import { consoleBase, consoleProjectUrl } from "./console-urls";
+import { composedDashboardUrl } from "./dashboard-url-meter";
 import { envelope, isEnvelope } from "./envelope";
 import { handUploadSentence, platformVersionNote } from "./hand-upload";
 import { itemPackageUrl, packageAddressMode, packageFileOf, packagePathOf, type PackageScope } from "./package-address";
@@ -259,7 +260,7 @@ export function itemLinkUrls(rows: unknown[], settingsUrl: string, scope?: Packa
   const pick = (key: string) => rows.map((row) => (isRow(row) ? text(row[key]) : "")).find(Boolean) ?? "";
 
   return {
-    newItemUrl: pick("newItemUrl") || CHROME_DASHBOARD,
+    newItemUrl: pick("newItemUrl") || composedDashboardUrl(CHROME_DASHBOARD),
     packageUrl: itemPackageUrl(rows, scope, settingsUrl),
     linkItemUrl: pick("linkItemUrl") || `${settingsUrl}?connect=chrome`,
   };
@@ -338,9 +339,9 @@ export function chromeItemUrl(row: Row): string {
 
   const publisherId = text(row.publisherId);
 
-  return publisherId
-    ? `${CHROME_DASHBOARD}/${encodeURIComponent(publisherId)}/${encodeURIComponent(itemId)}/edit`
-    : CHROME_DASHBOARD;
+  return composedDashboardUrl(
+    publisherId ? `${CHROME_DASHBOARD}/${encodeURIComponent(publisherId)}/${encodeURIComponent(itemId)}/edit` : CHROME_DASHBOARD,
+  );
 }
 
 export function connectionOf(json: Row, apiHint?: string): (StoreConnection & Partial<ItemLinkUrls> & { connectUrl?: string; packageFile?: string }) | null {

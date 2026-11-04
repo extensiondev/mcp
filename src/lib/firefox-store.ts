@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { composedDashboardUrl } from "./dashboard-url-meter";
 import { isRow, text } from "./ship-act";
 import { connectionOf, failedCheckSentence, fallbackConnectUrl } from "./store-connection";
 
@@ -13,7 +14,7 @@ import type { ProjectRef } from "./registry";
 
 type Row = Record<string, unknown>;
 
-export const AMO_API_KEY_PAGE = "https://addons.mozilla.org/developers/addon/api/key/";
+export const AMO_API_KEY_PAGE = composedDashboardUrl("https://addons.mozilla.org/developers/addon/api/key/");
 
 const CREDENTIALS_CHECK = "store.credentials_present";
 

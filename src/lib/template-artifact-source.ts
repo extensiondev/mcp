@@ -8,7 +8,7 @@
 
 import { PROD_ORIGINS } from "@extension.dev/urls/origins";
 
-import { mcpOrigins } from "./registry";
+import { mcpOrigins } from "./origins";
 
 const DEFAULT_CATALOG_URL = `${PROD_ORIGINS.registry}/extension-dev/catalog/latest.json`;
 

@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { composedDashboardUrl } from "./dashboard-url-meter";
 import { isRow, text } from "./ship-act";
 import { nextStep, type NextStep } from "./store-connection";
 
@@ -25,7 +26,7 @@ export interface EdgeFirstSubmission {
 }
 
 export function partnerCenterProductUrl(productId: string): string {
-  return `https://partner.microsoft.com/dashboard/microsoftedge/${encodeURIComponent(text(productId))}/packages/dashboard`;
+  return composedDashboardUrl(`https://partner.microsoft.com/dashboard/microsoftedge/${encodeURIComponent(text(productId))}/packages/dashboard`);
 }
 
 export function isEdgeCreateNotAllowed(message: unknown): boolean {

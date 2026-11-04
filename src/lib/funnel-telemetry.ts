@@ -9,7 +9,7 @@
 import { PROD_ORIGINS } from "@extension.dev/urls/origins";
 
 import { sanitizeMcpProperties } from "./analytics-scrub";
-import { mcpOrigins } from "./registry";
+import { mcpOrigins } from "./origins";
 import { sessionId, telemetryDisabled } from "./session-identity";
 import { resolvedTemplateCommit } from "./template-artifact-source";
 

@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { consoleProjectUrl } from "./console-urls";
+import { composedDashboardUrl } from "./dashboard-url-meter";
 import { AMO_API_KEY_PAGE } from "./firefox-store";
 import { isRow, text } from "./ship-act";
 
@@ -23,8 +24,8 @@ export const CONNECT_WAIT_MAX_SECONDS = 600;
 export const STORE_KEY_PAGES: Record<ConnectStore, string | null> = {
   chrome: null,
   firefox: AMO_API_KEY_PAGE,
-  edge: "https://partner.microsoft.com/dashboard/microsoftedge/publishapi",
-  safari: "https://appstoreconnect.apple.com/access/integrations/api",
+  edge: composedDashboardUrl("https://partner.microsoft.com/dashboard/microsoftedge/publishapi"),
+  safari: composedDashboardUrl("https://appstoreconnect.apple.com/access/integrations/api"),
 };
 
 export const CONNECT_STORE_NAMES: Record<ConnectStore, string> = {
