@@ -41,6 +41,10 @@ export function screenshotRule(store: ListingStore): ScreenshotRule {
 
 const MAX_ICON_BYTES = 512 * 1024;
 export const MAX_SCREENSHOT_BYTES = 1024 * 1024;
+export const MAX_SCREENSHOT_MASTER_BYTES = 3 * 1024 * 1024;
+const RESIZED_WIDTH = 1280;
+const RESIZED_HEIGHT = 800;
+const RESIZING_STORES: ReadonlySet<ListingStore> = new Set(["chrome", "edge"]);
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 export interface ListingImage {
@@ -73,15 +77,42 @@ function inside(root: string, target: string): boolean {
   return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
-function imageFromBytes(bytes: Buffer, maxBytes: number, source: string): ListingImage | string {
+/* @invariant A MASTER OVER 1 MB IS TAKEN ONLY WHERE THE PLATFORM RESIZES IT.
+ * www takes a screenshot up to 3 MB (MAX_SCREENSHOT_MASTER_BYTES, the write's
+ * own media cap) and, for Chrome and Edge only, derives a 1280x800 copy of a
+ * PNG wider than 1280 at 16:10 that is not already one of the store's sizes;
+ * every image a store's listing receives, derived or sent as it is, is held to
+ * 1 MB (www b04fd7654). Safari and Firefox get the master unresized, so a set
+ * sent to either stays at 1 MB, and an image Chrome or Edge would receive as
+ * it is stays at 1 MB too. Whether the derived copy fits is the platform's
+ * answer, said verbatim.
+ */
+export function screenshotByteCap(stores: readonly ListingStore[]): number {
+  return stores.length > 0 && stores.every((store) => RESIZING_STORES.has(store)) ? MAX_SCREENSHOT_MASTER_BYTES : MAX_SCREENSHOT_BYTES;
+}
+
+export function resizedForStore(store: ListingStore, image: { width: number; height: number }): boolean {
+  if (!RESIZING_STORES.has(store)) return false;
+  if (STORE_SCREENSHOT_SPECS[store].sizes.some(([width, height]) => width === image.width && height === image.height)) return false;
+
+  return image.width > RESIZED_WIDTH && image.width * RESIZED_HEIGHT === image.height * RESIZED_WIDTH;
+}
+
+function overCap(source: string, bytes: number, maxBytes: number, stores: readonly ListingStore[]): string {
+  return maxBytes === MAX_SCREENSHOT_BYTES && stores.some((store) => !RESIZING_STORES.has(store))
+    ? `${source} is ${bytes} bytes, over the ${maxBytes} a Safari or Firefox listing takes as it is sent; only a set for Chrome and Edge alone may carry a 16:10 PNG up to ${MAX_SCREENSHOT_MASTER_BYTES} that the platform resizes to ${RESIZED_WIDTH}x${RESIZED_HEIGHT}`
+    : `${source} is ${bytes} bytes, over the ${maxBytes} a listing image takes`;
+}
+
+function imageFromBytes(bytes: Buffer, maxBytes: number, source: string, stores: readonly ListingStore[] = []): ListingImage | string {
   const size = readPngSize(bytes);
   if (!size) return `${source} is not a PNG image`;
-  if (bytes.length > maxBytes) return `${source} is ${bytes.length} bytes, over the ${maxBytes} a listing image takes`;
+  if (bytes.length > maxBytes) return overCap(source, bytes.length, maxBytes, stores);
 
   return { sha256: crypto.createHash("sha256").update(bytes).digest("hex"), ...size, bytes, source };
 }
 
-function readImage(file: string, maxBytes: number, source: string): ListingImage | string {
+function readImage(file: string, maxBytes: number, source: string, stores: readonly ListingStore[] = []): ListingImage | string {
   let bytes: Buffer;
 
   try {
@@ -90,7 +121,7 @@ function readImage(file: string, maxBytes: number, source: string): ListingImage
     return `${source} could not be read`;
   }
 
-  return imageFromBytes(bytes, maxBytes, source);
+  return imageFromBytes(bytes, maxBytes, source, stores);
 }
 
 export function icon128FromBytes(bytes: Buffer, source: string): { icon: ListingImage } | { missing: string } {
@@ -160,7 +191,11 @@ export function iconFromSource(projectPath: string): { icon: ListingImage } | { 
   return { missing: "no manifest.json in the project" };
 }
 
-export function readScreenshots(projectPath: string, paths: unknown): { screenshots: ListingImage[] } | { problem: string } {
+export function readScreenshots(
+  projectPath: string,
+  paths: unknown,
+  stores: readonly ListingStore[] = [],
+): { screenshots: ListingImage[] } | { problem: string } {
   if (!Array.isArray(paths) || !paths.every((p) => typeof p === "string" && p.trim())) {
     return { problem: "screenshots must be an array of PNG paths inside projectPath" };
   }
@@ -184,7 +219,7 @@ export function readScreenshots(projectPath: string, paths: unknown): { screensh
       return { problem: `screenshot ${given} must be a .png file inside projectPath` };
     }
 
-    const read = readImage(real, MAX_SCREENSHOT_BYTES, path.relative(root, real));
+    const read = readImage(real, screenshotByteCap(stores), path.relative(root, real), stores);
     if (typeof read === "string") return { problem: read };
 
     screenshots.push(read);
@@ -215,7 +250,19 @@ export function screenshotRefusal(store: ListingStore, screenshots: ListingImage
 
   for (const image of screenshots) {
     const measured = `${image.width}x${image.height}`;
-    if (rule.sizes.includes(measured)) continue;
+    const resized = resizedForStore(store, image);
+
+    if (!resized && image.bytes.length > MAX_SCREENSHOT_BYTES) {
+      return {
+        store,
+        file: image.source,
+        measured,
+        accepted: rule.sizes,
+        message: `${image.source} is ${image.bytes.length} bytes at ${measured}; the platform sends it to ${STORE_SCREENSHOT_SPECS[store].name} as it is, and a listing image it sends is at most ${MAX_SCREENSHOT_BYTES} bytes (only a 16:10 PNG wider than ${RESIZED_WIDTH} is resized to ${RESIZED_WIDTH}x${RESIZED_HEIGHT} and may be up to ${MAX_SCREENSHOT_MASTER_BYTES})`,
+      };
+    }
+
+    if (resized || rule.sizes.includes(measured)) continue;
 
     return {
       store,

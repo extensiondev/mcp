@@ -9,10 +9,11 @@
 import { openProjectApi, projectApiGet } from "./project-api";
 import { releaseTypeMeaning } from "./store-row-sources";
 
-export const STORE_RELEASE_STATES = ["uploaded", "in-review", "approved", "live", "signed", "rejected", "withdrawn", "superseded"] as const;
+export const STORE_RELEASE_STATES = ["uploaded", "in-review", "approved", "live", "signed", "rejected", "withdrawn", "superseded", "failed"] as const;
 
 export const SIGNED_STATE_SENTENCE = "signed (unlisted, not on AMO)";
 export const AMO_FILE_STATUS_LABEL = "AMO's file status";
+export const FAILED_STATE_SENTENCE = "upload failed (the store did not take the package)";
 
 export type StoreReleaseState = (typeof STORE_RELEASE_STATES)[number] | "unknown";
 
@@ -250,7 +251,9 @@ export function storeReleaseSentence(row: StoreReleaseView): string {
       ? `${row.stateWord || "unknown"} (a state this MCP does not know; update the MCP to read it)`
       : row.state === "signed"
         ? SIGNED_STATE_SENTENCE
-        : row.state;
+        : row.state === "failed"
+          ? FAILED_STATE_SENTENCE
+          : row.state;
   const audience =
     row.state === "live"
       ? row.visibility

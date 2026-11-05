@@ -839,11 +839,13 @@ async function syncOne(
 
   if (answered) return { out: answered };
 
+  const platformWords = sent.code === "INVALID_LISTING" && isRow(sent.body) ? text(sent.body.message) : "";
+
   return {
     store,
     status: sent.code === "OWNER_REQUIRED" ? "needs-owner" : "refused",
     code: sent.code,
-    message: sent.message,
+    message: platformWords || sent.message,
   };
 }
 
@@ -943,7 +945,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     );
   }
 
-  const given = args.screenshots !== undefined ? readScreenshots(projectPath, args.screenshots) : null;
+  const given = args.screenshots !== undefined ? readScreenshots(projectPath, args.screenshots, asked as ListingStore[]) : null;
 
   if (given && "problem" in given) {
     return badShipRequest(
@@ -965,7 +967,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     const paths = listStoreScreenshots(projectPath, store);
     if (!paths.length) continue;
 
-    const read = readScreenshots(projectPath, paths);
+    const read = readScreenshots(projectPath, paths, [store]);
 
     if ("problem" in read) {
       return badShipRequest(
