@@ -28,7 +28,7 @@ import { platformFetch } from "../lib/platform-fetch";
 import { identityHeaders } from "../lib/session-identity";
 import { REFUNDED_SAY, REFUNDED_STEP } from "../lib/ship-act";
 import { STORE_MD_FILENAME, parseStoreMd } from "../lib/store-md";
-import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
+import { platformHoldEnvelope, pricedRefusal, sawPlatformHold } from "../lib/platform-hold";
 import {
   approvalGateEnabled,
   evaluateApproval,
@@ -1038,6 +1038,8 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       !BEFORE_APPROVAL.has(platformCode) &&
       !approvalRefunded;
     const retry = retryStores(refusedLines);
+    const priced = pricedRefusal(platformCode, data);
+    const upgradeValue = priced?.upgradeUrl ? { upgradeUrl: priced.upgradeUrl } : {};
 
     return envelope({
       ok: false,
@@ -1051,17 +1053,20 @@ async function answer(args: SubmitToolArgs): Promise<string> {
               approvalId: String(body.approvalId),
               approvalRefunded: true,
               ...lineValue,
+              ...upgradeValue,
               sayToPerson: REFUNDED_SAY,
               nextStep: REFUNDED_STEP,
             },
           }
         : refusedLines.length
-          ? { value: { browsers, buildSha, approvalId: String(body.approvalId), ...lineValue } }
-          : {}),
+          ? { value: { browsers, buildSha, approvalId: String(body.approvalId), ...lineValue, ...upgradeValue } }
+          : priced?.upgradeUrl
+            ? { value: { browsers, buildSha, ...upgradeValue } }
+            : {}),
       error: {
         code: "E_PLATFORM",
         name: "SubmitError",
-        message: `${dryRun ? "preflight" : "submit"} failed (${res.status}): ${data?.message || text || "unknown error"}`,
+        message: priced ? priced.hint : `${dryRun ? "preflight" : "submit"} failed (${res.status}): ${data?.message || text || "unknown error"}`,
         ...(typeof data?.code === "string" ? { platformCode: data.code } : {}),
       },
       ...(approvalRefunded && refusedLines.length
