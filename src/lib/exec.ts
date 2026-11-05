@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { execFileSync } from "node:child_process";
+import { ChildProcess, execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -23,7 +23,6 @@ import { envelope } from "./envelope";
 
 import { dependencies } from "../../package.json";
 
-import type { ChildProcess } from "node:child_process";
 
 function descendantPids(pid: number): number[] {
   try {
@@ -232,7 +231,27 @@ export function spawnExtensionCli(
   const logDir = fs.mkdtempSync(path.join(os.tmpdir(), "extension-mcp-"));
   const logPath = path.join(logDir, "session.log");
   const fd = fs.openSync(logPath, "a");
-  if (refusal) fs.writeSync(fd, `${refusal}\n`);
+
+  const readOutput = () => {
+    try {
+      return fs.readFileSync(logPath, "utf8");
+    } catch {
+      return "";
+    }
+  };
+
+  if (refusal) {
+    fs.writeSync(fd, `${refusal}\n`);
+    fs.closeSync(fd);
+    const failure = new Error(refusal);
+
+    return {
+      child: new ChildProcess(),
+      logPath,
+      readOutput,
+      spawnError: () => failure,
+    };
+  }
 
   const child = spawn(command, [...prefixArgs, ...args], {
     cwd: options?.cwd ?? options?.projectDir,
@@ -242,7 +261,7 @@ export function spawnExtensionCli(
   });
   fs.closeSync(fd);
 
-  let spawnFailure: Error | null = refusal ? new Error(refusal) : null;
+  let spawnFailure: Error | null = null;
   child.on("error", (err) => {
     spawnFailure ??= err;
   });
@@ -252,13 +271,7 @@ export function spawnExtensionCli(
   return {
     child,
     logPath,
-    readOutput: () => {
-      try {
-        return fs.readFileSync(logPath, "utf8");
-      } catch {
-        return "";
-      }
-    },
+    readOutput,
     spawnError: () => spawnFailure,
   };
 }

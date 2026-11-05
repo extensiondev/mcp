@@ -245,6 +245,7 @@ describe("a set override with no bin refuses every spawn", () => {
     const parsed = JSON.parse(await spawnFailedEnvelope("extension_dev", spawned));
 
     expect(spawned.child.pid).toBeUndefined();
+    expect(spawned.child.spawnfile).toBeNull();
     expect(spawned.spawnError?.()?.message).toContain(`${ENGINE_DIR_ENV}=${dir} names no engine bin`);
     expect(spawned.readOutput()).toContain("names no engine bin");
     expect(parsed.ok).toBe(false);
