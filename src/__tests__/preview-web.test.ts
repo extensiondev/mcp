@@ -318,7 +318,7 @@ describe("extension_preview_web", () => {
       expect(out.ok).toBe(false);
       expect(out.error.code).toBe("E_BAD_HOST_URL");
       expect(reached).toBe(false);
-      expect(JSON.stringify(out)).not.toContain(dir);
+      expect(JSON.stringify(out)).not.toContain(JSON.stringify(dir).slice(1, -1));
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

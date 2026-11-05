@@ -253,7 +253,7 @@ describe("ledger 391: the client's own repository names the one login its origin
 
     expect(out.status).not.toBe("project-ambiguous");
     expect(out.value.answeredFor).toBe("cezaraugusto/soccer-analysis");
-    expect(JSON.stringify(out)).toContain(`from the origin remote of ${dir}`);
+    expect(out.value.note).toContain(`from the origin remote of ${dir} (github.com/${WORKSPACE}/soccer-analysis)`);
     expect(sent.length).toBeGreaterThan(0);
     expect(sent.every((req) => req.auth === "Bearer soccer-analysis.sig")).toBe(true);
   });

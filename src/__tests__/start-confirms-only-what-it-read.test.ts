@@ -112,7 +112,7 @@ describe("extension_start confirms only what it read and never points at a temp 
 
     expect(result.status).toBe("started");
     expect(result.value.logPath).toBeUndefined();
-    expect(text).not.toContain(cli!.logPath);
+    expect(text).not.toContain(JSON.stringify(cli!.logPath).slice(1, -1));
     expect(text).not.toMatch(/session\.log/);
     expect(result.value.extensionLoaded).toBeNull();
     expect(result.hint).toMatch(/cannot confirm/);
