@@ -10,9 +10,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { userlandChannelUrl } from "@extension.dev/urls/userland";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { serverInstructions } from "../index";
+import { serverInstructions, tools } from "../index";
 import { handler as publish, schema as publishSchema } from "../tools/publish";
 import { handler as promote, schema as promoteSchema } from "../tools/release-promote";
 import { readReleases } from "../tools/release-list";
@@ -179,5 +180,36 @@ describe("extension_release_status carries each channel's audience when the plat
   it("says where a build link's validity is read today", () => {
     expect(releaseStatusSchema.description).toMatch(/Settings, Share links section/);
     expect(releaseStatusSchema.description).toMatch(/audience/);
+  });
+});
+
+function spelledChannelLink(browser?: string): string {
+  const url = userlandChannelUrl({ workspace: "workspace", project: "project" }, "channel", browser ? { browser } : {});
+
+  return url
+    .replace(/^https:\/\//, "")
+    .replace(/^workspace\./, "<workspace>.")
+    .replace("/project/", "/<project>/")
+    .replace(/\/channel(?=\/|$)/, "/<channel>")
+    .replace(/\/browser$/, "/<browser>");
+}
+
+describe("every channel link a tool spells is the one the urls package formats", () => {
+  it.each([
+    ["the server instructions", () => serverInstructions({ features: ["local", "platform"], noShip: false }), undefined],
+    ["extension_publish", () => publishSchema.description, undefined],
+    ["extension_release_status include", () => releaseStatusSchema.inputSchema.properties.include.description, "browser"],
+  ])("%s", (_where, read, browser) => {
+    const text = read();
+
+    expect(text).toContain(spelledChannelLink(browser));
+    expect(text).not.toMatch(/\/channels\/<|\/channels\/\$\{/);
+  });
+
+  it("no tool spells a channel page under the old channels path", () => {
+    const spelled = JSON.stringify(tools.map((tool) => tool.schema));
+
+    expect(spelled).toContain("<project>/<channel>");
+    expect(spelled).not.toMatch(/\/channels\/</);
   });
 });
