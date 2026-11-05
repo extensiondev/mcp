@@ -36,6 +36,7 @@ import {
 import { compactPreflightStores, PREFLIGHT_DETAIL_SENTENCE, preflightDetail } from "../lib/preflight-detail";
 import { summaryAgreeingWithRows } from "../lib/preflight-summary";
 import { readinessAnswer, readinessLead, storeReadinessOf } from "../lib/store-onboarding";
+import { safariSigningOf, safariSigningSentence } from "../lib/safari-signing-expiry";
 import { submissionModeSentence, submissionModeView } from "../lib/submission-mode-view";
 import { consoleProjectUrl } from "../lib/registry";
 import { platformReleaseSentence, readSafariReleaseIntent, safariApprovalReleaseSentence } from "../lib/safari-release-intent";
@@ -910,7 +911,9 @@ export async function preflight(args: StoreActArgs): Promise<string> {
               ),
               ...(updateManifest ? { updateManifest } : {}),
             }
-          : view;
+          : store === "safari" && safariSigningOf(json)
+            ? { ...view, signing: safariSigningOf(json) }
+            : view;
     } else unread.push(`${store}: ${read.message}`);
   });
 
@@ -979,7 +982,8 @@ export async function preflight(args: StoreActArgs): Promise<string> {
   const lockLine = lockSentences(storePreflight);
   const versionLine = nextVersionSentences(storePreflight);
   const iconSay = iconPaddingSentences(stores);
-  const packageSay = `${packageLine ? ` ${packageLine}` : ""}${iconSay ? ` ${iconSay}` : ""}`;
+  const signingSay = safariSigningSentence(stores);
+  const packageSay = `${packageLine ? ` ${packageLine}` : ""}${iconSay ? ` ${iconSay}` : ""}${signingSay ? ` ${signingSay}` : ""}`;
   const readinessHint = blocked.length
     ? `${blocked.join(", ")} cannot be submitted yet; each failing check says what to fix.${syncLine}${sourceLine}${lockLine ? ` ${lockLine}` : ""}${versionLine ? ` ${versionLine}` : ""}${packageSay} This read wrote nothing.`
     : `${notReady.length ? "Every store read here can take an upload." : "Every store read here is ready to submit."}${buildLine}${modeLine}${sourceLine}${workspaceLine}${lockLine ? ` ${lockLine}` : ""}${versionLine ? ` ${versionLine}` : ""}${packageSay} This read wrote nothing; extension_submit with dryRun:false submits.`;
