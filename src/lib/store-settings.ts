@@ -8,6 +8,7 @@
 
 import crypto from "node:crypto";
 
+import { composedDashboardUrl } from "./dashboard-url-meter";
 import { edgeListingUrlOf } from "./edge-listing";
 import { AMO_API_KEY_PAGE } from "./firefox-store";
 import { isRow, text } from "./ship-act";
@@ -42,7 +43,7 @@ const CHROME_ITEM_ID = /^[a-p]{32}$/i;
 const CHROME_PUBLISHER_ID = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,62}[A-Za-z0-9])?$/;
 const CHROME_DASHBOARD_ADDRESS = /^(?:https?:\/\/)?chrome\.google\.com\/(?:u\/\d+\/)?webstore\/devconsole\/([^/\s?#]+)\/([a-p]{32})(?:[/?#]|$)/i;
 const CHROME_PUBLISHER_ADDRESS = /^(?:https?:\/\/)?chrome\.google\.com\/(?:u\/\d+\/)?webstore\/devconsole\/([^/\s?#]+)(?:[/?#]|$)/i;
-const CHROME_DASHBOARD_FORM = "chrome.google.com/webstore/devconsole/<publisherId>/<itemId>/edit";
+const CHROME_DASHBOARD_FORM = composedDashboardUrl("https://chrome.google.com/webstore/devconsole/<publisherId>/<itemId>/edit");
 const EDGE_PRODUCT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const AMO_GUID = /^(?:\{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}|[a-z0-9._-]*@[a-z0-9._-]+)$/i;
 const APP_STORE_ID = /^[1-9]\d{5,14}$/;

@@ -20,6 +20,7 @@ import { STORE_KEY_PAGES } from "../lib/connect-session";
 import { partnerCenterProductUrl } from "../lib/edge-first-submission";
 import { AMO_API_KEY_PAGE } from "../lib/firefox-store";
 import { chromeItemUrl, itemLinkUrls } from "../lib/store-connection";
+import { readStoreSettingsChange } from "../lib/store-settings";
 
 type Sent = { event: string; properties: Record<string, unknown> };
 
@@ -124,6 +125,22 @@ describe("a store dashboard address this server composes is counted once per ans
     expect(chromeItemUrl({ itemUrl: "https://chrome.google.com/webstore/devconsole/given" })).toBe("https://chrome.google.com/webstore/devconsole/given");
     expect(composedDashboardUrls()).toEqual(expect.arrayContaining([chromeItem, chromeDashboard, product, STORE_KEY_PAGES.edge, STORE_KEY_PAGES.safari, AMO_API_KEY_PAGE]));
     expect(composedDashboardUrls()).not.toContain("https://chrome.google.com/webstore/devconsole/given");
+  });
+
+  it("counts the Chrome dashboard address form a store settings refusal names in its sentence", async () => {
+    const form = "https://chrome.google.com/webstore/devconsole/<publisherId>/<itemId>/edit";
+    const read = readStoreSettingsChange("chrome", { publisherId: "not a publisher id!" });
+    const problem = "problem" in read ? String(read.problem) : "";
+
+    expect(problem).toContain(`dashboard address (${form}), or that address itself`);
+    expect(composedDashboardUrls()).toContain(form);
+
+    const properties = await meterComposedDashboardUrls(
+      { command: "extension_submit", status: "bad-request", error: { code: "E_BAD_REQUEST", name: "StoreSettingsInputError", message: problem } },
+      capture,
+    );
+
+    expect(properties).toMatchObject({ tool: "extension_submit", status: "bad-request", stores: "chrome", dashboard_hosts: "chrome.google.com", count: 1 });
   });
 
   it("fires one PostHog event through the funnel channel from the envelope itself, and none while telemetry is off", async () => {
