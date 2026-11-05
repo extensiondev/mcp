@@ -369,6 +369,7 @@ describe("extension_start opens the control channel on a production run", () => 
     expect(result.error.code).toBe("E_ENGINE_TOO_OLD");
     expect(result.error.message).toMatch(/--allow-control/);
     expect(result.error.message).toMatch(/4\.1\.33/);
+    expect(result.hint).toMatch(/Extension\.js 4\.1\.34 or later/);
     expect(result.hint).toMatch(/extension_dev/);
   });
 });

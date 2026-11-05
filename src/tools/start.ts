@@ -74,7 +74,7 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Open the agent-bridge control channel on the production run, so extension_storage, extension_reload, extension_open and extension_dom_snapshot reach it. The browser loads a copy of the build with the control producer prepended to the background; dist/<browser> keeps the shipped bytes, and extension_reload then reloads the installed extension under open tabs the way a store update does, which is how to test content scripts an update orphans. Needs an engine that honors the flag (Extension.js 4.1.34 or later); on an older engine the call is refused as engine-unsupported.",
+          "Open the agent-bridge control channel on the production run, so extension_storage, extension_reload, extension_open and extension_dom_snapshot reach it. The browser loads a copy of the build with the control producer prepended to the background; dist/<browser> keeps the shipped bytes, and extension_reload then reloads the installed extension under open tabs the way a store update does, which is how to test content scripts an update orphans. Needs an engine that honors the flag (Extension.js 4.1.34 or later); on an older engine the call is refused as engine-unsupported, and extension_dev drives the run instead.",
       },
       allowEval: {
         type: "boolean",
@@ -268,7 +268,7 @@ export async function handler(
           message: `The project's Extension.js engine refused ${refusedFlag[1]}: its ${command} verb has no control channel. Extension.js 4.1.33 and earlier do not have it; a production run takes --allow-control and --allow-eval from Extension.js 4.1.34 on. No session is running.`,
         },
         value: { ...session, exitCode: code, signal, allowControl, allowEval },
-        hint: "Upgrade the project's engine (npm i -D extension@latest) once a release with start --allow-control is out, or drive the run with extension_dev, which carries the control channel today. extension_start without allowControl still runs the production build.",
+        hint: "Upgrade the project's engine to Extension.js 4.1.34 or later (npm i -D extension@latest), or drive the run with extension_dev, which carries the control channel. extension_start without allowControl still runs the production build.",
         warnings: boot.warnings,
       });
     }

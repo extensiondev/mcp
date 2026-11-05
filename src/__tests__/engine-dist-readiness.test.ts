@@ -166,18 +166,16 @@ describe(`the installed engine (extension-develop ${enginePackage.version}) and 
     }
   });
 
-  describe(`startProductionControl (what start --allow-control turns on) is ${ENGINE_TOKENS.startProductionControl ? "present" : "absent"} in this engine`, () => {
-    if (ENGINE_TOKENS.startProductionControl) {
-      it("still takes allowControl and allowEval", () => {
-        expect(Object.keys(startSchema.inputSchema.properties)).toEqual(expect.arrayContaining(["allowControl", "allowEval"]));
-      });
-    } else {
-      it("describes the refusal an older engine gets and the way around it", () => {
-        expect(startSchema.description).toMatch(ENGINE_FLOOR);
-        expect(startSchema.description).toMatch(/refused as engine-unsupported/);
-        expect(startSchema.description).toMatch(/extension_dev drives the run instead/);
-      });
-    }
+  describe("start --allow-control, which the project's own engine honors or refuses at run time", () => {
+    it("still takes allowControl and allowEval", () => {
+      expect(Object.keys(startSchema.inputSchema.properties)).toEqual(expect.arrayContaining(["allowControl", "allowEval"]));
+    });
+
+    it("describes the refusal an older engine gets and the way around it", () => {
+      expect(startSchema.description).toMatch(ENGINE_FLOOR);
+      expect(startSchema.description).toMatch(/refused as engine-unsupported/);
+      expect(startSchema.inputSchema.properties.allowControl.description).toMatch(/refused as engine-unsupported, and extension_dev drives the run instead/);
+    });
   });
 
   it("states the engine floor each feature needs and never a release state npm can overtake", () => {
