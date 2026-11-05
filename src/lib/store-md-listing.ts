@@ -22,6 +22,7 @@ import { resolveStoreCategories, storesNamingACategory, type CategoryRead } from
 import { bulletLine, storeOwnLinesBody } from "./store-md-bullets";
 import { safariTitle } from "./store-md-safari-title";
 import { screenshotFilesNamed } from "./store-md-screenshots";
+import { STORE_LABELS, storeSearchTermsProblem, storeTextOverLimit } from "./store-text-limits";
 
 export * from "./store-md-declarations";
 
@@ -458,6 +459,12 @@ function bounded(field: string, value: unknown, skipped: string[], store: Listin
       return { reason: `is ${text.length} characters, over the ${limit} the listing takes` };
     }
 
+    const over = storeTextOverLimit(store, field, text);
+
+    if (over) {
+      return { reason: `is ${over.length} ${over.unit}, over the ${over.max} ${over.unit} ${STORE_LABELS[store]} takes` };
+    }
+
     const emailField = field === "supportEmail" || field === "reviewContactEmail";
     const shapeless =
       (/Url$/.test(field) && !/^https?:\/\/\S+$/i.test(text)) ||
@@ -494,6 +501,12 @@ function bounded(field: string, value: unknown, skipped: string[], store: Listin
 
   if (joinedLimit && joined > joinedLimit) {
     return { reason: `is ${joined} characters joined by commas, over the ${joinedLimit} the App Store keywords take` };
+  }
+
+  const termsProblem = field === "searchTerms" ? storeSearchTermsProblem(store, items) : null;
+
+  if (termsProblem) {
+    return { reason: termsProblem.replace(/^listing\.searchTerms /, "").replace(/, so nothing was written$/, "") };
   }
 
   return { value: items.length ? items.slice(0, limits.items) : undefined };

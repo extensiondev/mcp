@@ -339,6 +339,31 @@ describe("STORE.md fills the store listing", () => {
     expect(listingForStore(withLines("Blur names", "privacy"), "edge").skipped).toEqual([]);
   });
 
+  it("leaves a value out of each store whose own limit it passes, and keeps it for the stores that take it", () => {
+    const parsed = parseStoreMdListing(
+      STORE_MD.replace("  are blurred on every open tab.", `  ${"a".repeat(4_500)}`).replace(
+        "TODO user-facing notes.",
+        "b".repeat(3_001),
+      ),
+    );
+
+    const length = listingForStore(parsed, "chrome").listing.fullDescription?.length ?? 0;
+
+    expect(length).toBeGreaterThan(4_500);
+    expect(listingForStore(parsed, "edge").listing.fullDescription).toHaveLength(length);
+
+    const safari = listingForStore(parsed, "safari");
+    const firefox = listingForStore(parsed, "firefox");
+
+    expect(safari.listing).not.toHaveProperty("fullDescription");
+    expect(safari.unread.fullDescription?.reason).toBe(`is ${length} characters, over the 4000 characters the App Store takes`);
+    expect(firefox.listing.fullDescription).toHaveLength(length);
+    expect(firefox.listing).not.toHaveProperty("releaseNotes");
+    expect(firefox.skipped).toContain(
+      "releaseNotes in STORE.md is 3001 characters, over the 3000 characters Firefox Add-ons takes, so it was left out",
+    );
+  });
+
   it("names the App Store subtitle the platform derives from a short Summary, and nothing when the Summary is long or a Subtitle line exists", () => {
     const summary = (text: string) => listingForStore(parseStoreMdListing(STORE_MD.replace(/- Summary: .*\n/, `- Summary: ${text}\n`)), "safari");
     const long = "Blur names, emails, phone numbers and card numbers on every open tab with one click, before you share it all.";
