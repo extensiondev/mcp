@@ -23,6 +23,7 @@ import {
   type ProjectApi,
   type ProjectApiRefusal,
 } from "./project-api";
+import { pricedRefusal } from "./platform-hold";
 
 type Row = Record<string, unknown>;
 
@@ -150,7 +151,10 @@ function storeDraftHint(code: string, store: string): string | undefined {
   return undefined;
 }
 
-export function shipRefusalHint(code: string, retryAfterSeconds?: number, store = ""): string | undefined {
+export function shipRefusalHint(code: string, retryAfterSeconds?: number, store = "", body?: unknown): string | undefined {
+  const priced = pricedRefusal(code, body);
+  if (priced) return priced.hint;
+
   const wait = retryAfterSeconds ? ` The platform asks for ${retryAfterSeconds} seconds before the next try.` : "";
   const drafted = storeDraftHint(code, store);
 
@@ -205,7 +209,8 @@ function storeStateFields(code: string, body: Row): Row {
 function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string {
   const body = isRow(read.body) ? read.body : {};
   const before = body.refusedBeforeApproval === true;
-  const hint = shipRefusalHint(read.code, read.retryAfterSeconds, text(act.value?.store));
+  const hint = shipRefusalHint(read.code, read.retryAfterSeconds, text(act.value?.store), read.body);
+  const upgradeUrl = pricedRefusal(read.code, read.body)?.upgradeUrl;
   const ownerOnly = read.code === OWNER_REQUIRED_CODE;
   const status = ownerOnly
     ? "needs-owner"
@@ -264,6 +269,7 @@ function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string
           }
         : {}),
       ...(read.retryAfterSeconds ? { retryAfterSeconds: read.retryAfterSeconds } : {}),
+      ...(upgradeUrl ? { upgradeUrl } : {}),
       ...(refunded ? { approvalId: act.approvalId, approvalRefunded: true, sayToPerson: REFUNDED_SAY, nextStep: REFUNDED_STEP } : {}),
     },
     error: {
@@ -335,7 +341,7 @@ async function askForApproval(act: ShipAct, read: ProjectApiRefusal, api: Projec
     token: api.token,
     api: act.apiHint,
     refusedStatus: refusedStatus(act.act),
-    refusalHint: (code) => shipRefusalHint(code, undefined, text(act.value?.store)),
+    refusalHint: (code, body) => shipRefusalHint(code, undefined, text(act.value?.store), body),
     ...(act.approvalBody ? { body: act.approvalBody } : {}),
     reason: act.reason,
     stateRead: act.stateRead,

@@ -48,7 +48,7 @@ export interface ApprovalGateInput {
   enabled?: boolean;
   now?: number;
   refusedStatus?: string;
-  refusalHint?: (platformCode: string) => string | undefined;
+  refusalHint?: (platformCode: string, body?: unknown) => string | undefined;
   body?: Record<string, unknown>;
   reason?: string;
   stateRead?: string;

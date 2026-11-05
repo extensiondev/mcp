@@ -53,6 +53,9 @@ function router(
 
 const GEN_ID = `gen_${"a".repeat(64)}`;
 
+const WRONG_ENV =
+  "This build was produced for Preview, but the Stable channel takes Stable builds. Rebuild this commit for Stable (Builds, Rebuild), then release it. The rebuild spends 1 build from the monthly allowance.";
+
 describe("the approval gate guards irreversible outward actions and cannot self-approve", () => {
   let prevToken: string | undefined;
   let prevGate: string | undefined;
@@ -189,10 +192,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
 
     it("answers a promote the platform refuses before asking anyone as the promote's own failure", async () => {
       global.fetch = router(calls, {
-        "POST /api/cli/approvals": refusedBeforeApproval(
-          "BUILD_ENV_MISMATCH",
-          'This build was produced for the "staging" environment, but the stable channel requires a "production" build.',
-        ),
+        "POST /api/cli/approvals": refusedBeforeApproval("BUILD_ENV_MISMATCH", WRONG_ENV),
         "POST /api/cli/release/promote": () => jsonResponse(promoteAnswer()),
       });
 
@@ -203,7 +203,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       expect(out.error.platformCode).toBe("BUILD_ENV_MISMATCH");
       expect(out.error.message).toContain("no approval was requested");
       expect(out.value.approvalId).toBeUndefined();
-      expect(out.hint).toContain("Rebuild this commit for Stable (Builds, Rebuild");
+      expect(out.hint).toBe(WRONG_ENV);
       expect(hit("POST /api/cli/release/promote")).toBe(false);
     });
 
@@ -230,10 +230,24 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       expect(hit("DELETE /api/artifacts")).toBe(false);
     });
 
-    it("tells the agent how to get a production build when the platform refuses the environment", async () => {
+    it("prints the platform's own environment refusal, price included, when it says one", async () => {
       global.fetch = router(calls, {
         "POST /api/cli/release/promote": () =>
-          jsonResponse({ code: "BUILD_ENV_MISMATCH", message: "wrong environment" }, 409),
+          jsonResponse({ code: "UNSTAMPED_BUILD_BLOCKED", message: WRONG_ENV, upgradeUrl: "https://www.extension.dev/pricing" }, 409),
+      });
+
+      const out = JSON.parse(
+        await promoteHandler({ buildId: "abc1234", channel: "beta" }),
+      );
+      expect(out.status).toBe("promote-failed");
+      expect(out.hint).toBe(WRONG_ENV);
+      expect(out.value.upgradeUrl).toBe("https://www.extension.dev/pricing");
+    });
+
+    it("tells the agent how to get a production build when the platform refuses the environment with no sentence", async () => {
+      global.fetch = router(calls, {
+        "POST /api/cli/release/promote": () =>
+          jsonResponse({ code: "BUILD_ENV_MISMATCH" }, 409),
       });
 
       const out = JSON.parse(

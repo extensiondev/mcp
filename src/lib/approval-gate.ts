@@ -16,7 +16,7 @@ import { mintedApproval, rememberMintedApproval } from "./approval-record";
 import { readApprovalSubject } from "./approval-subject";
 import { envelope } from "./envelope";
 import { resolveApiBase, safeApiBase } from "./login-flow";
-import { platformHoldEnvelope, sawPlatformHold } from "./platform-hold";
+import { platformHoldEnvelope, readUpgradeUrl, sawPlatformHold } from "./platform-hold";
 import {
   APPROVAL_EXPIRED_STATUS,
   APPROVAL_REJECTED_STATUS,
@@ -180,7 +180,8 @@ async function requestApproval(params: {
 
   if (!res.ok && data.refusedBeforeApproval === true) {
     const platformCode = typeof data.code === "string" ? data.code : "";
-    const hint = platformCode ? input.refusalHint?.(platformCode) : undefined;
+    const hint = platformCode ? input.refusalHint?.(platformCode, data) : undefined;
+    const upgradeUrl = readUpgradeUrl(data);
     const reason = typeof data.message === "string" && data.message ? data.message : "no reason given";
     const message = `The platform refused this action before asking anyone to approve it (${res.status}): ${reason} Nothing was executed and no approval was requested, so fix the cause and call again.`;
 
@@ -194,6 +195,7 @@ async function requestApproval(params: {
           action: input.action,
           description: input.description,
           ...(Array.isArray(data.stores) ? { stores: data.stores } : {}),
+          ...(upgradeUrl ? { upgradeUrl } : {}),
         },
         error: { code: "E_PLATFORM", name: "ActionRefused", message, ...(platformCode ? { platformCode } : {}) },
         ...(hint ? { hint } : {}),

@@ -61,6 +61,23 @@ export function readPlatformMessage(body: unknown): string {
   return typeof message === "string" ? message.trim() : "";
 }
 
+export const PRICED_REFUSAL_CODES = new Set(["monthly_cap", "BUILD_ENV_MISMATCH", "UNSTAMPED_BUILD_BLOCKED"]);
+
+export function readUpgradeUrl(body: unknown): string {
+  const value = asRecord(body)?.upgradeUrl;
+  const url = typeof value === "string" ? value.trim() : "";
+
+  return /^https?:\/\//i.test(url) ? url : "";
+}
+
+export function pricedRefusal(code: string, body: unknown): { hint: string; upgradeUrl: string } | null {
+  if (!PRICED_REFUSAL_CODES.has(code)) return null;
+
+  const hint = readPlatformMessage(body);
+
+  return hint ? { hint, upgradeUrl: readUpgradeUrl(body) } : null;
+}
+
 export function sawPlatformHold(
   res?: { headers?: { get?: (name: string) => string | null } } | null,
   body?: unknown,

@@ -16,6 +16,7 @@ import {
   type ProjectApi,
   type ProjectApiRefusal,
 } from "../lib/project-api";
+import { pricedRefusal } from "../lib/platform-hold";
 
 export const COMMAND = "extension_builds";
 export const BUILD_ENVS = ["staging", "production"] as const;
@@ -58,7 +59,10 @@ export function badRequest(action: string, name: string, message: string, extra:
 const RATE_LIMITED = new Set(["burst_cap", "monthly_cap", "RATE_LIMITED"]);
 const UNAVAILABLE = new Set(["counter_unavailable", "entitlement_unavailable", "kill_switch", "unattributed"]);
 
-function refusalHint(code: string, retryAfterSeconds?: number): string | undefined {
+function refusalHint(code: string, retryAfterSeconds?: number, body?: unknown): string | undefined {
+  const priced = pricedRefusal(code, body);
+  if (priced) return priced.hint;
+
   const wait = retryAfterSeconds ? ` The platform asks for ${retryAfterSeconds} seconds before the next try.` : "";
 
   if (code === "burst_cap") return `The workspace started too many builds in the last hour.${wait} Nothing was dispatched.`;
@@ -84,7 +88,8 @@ export function actRefusal(read: ProjectApiRefusal, action: string, api: Project
     return projectApiReadFailure(COMMAND, read, { api: args.api, name: "Builds", value: { action, ...value }, context });
   }
 
-  const hint = refusalHint(read.code, read.retryAfterSeconds);
+  const hint = refusalHint(read.code, read.retryAfterSeconds, read.body);
+  const upgradeUrl = pricedRefusal(read.code, read.body)?.upgradeUrl;
   const status =
     read.status === 400
       ? "bad-request"
@@ -106,6 +111,7 @@ export function actRefusal(read: ProjectApiRefusal, action: string, api: Project
       action,
       ...value,
       ...(read.retryAfterSeconds ? { retryAfterSeconds: read.retryAfterSeconds } : {}),
+      ...(upgradeUrl ? { upgradeUrl } : {}),
     },
     error: {
       code: status === "bad-request" ? "E_BAD_REQUEST" : read.status === 403 ? "E_AUTH_DENIED" : "E_PLATFORM",

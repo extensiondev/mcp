@@ -215,6 +215,36 @@ describe("extension_release_promote cuts a release pull request and rolls a chan
     expect(out.warnings.join(" ")).toContain("firefox");
   });
 
+  it("cut refused for a spent month prints the platform's priced sentence and its upgrade link", async () => {
+    if (process.platform === "win32") return;
+
+    const said = "You have reached your monthly build limit (25), so a release PR opened now could not build after merging. It resets next month. Pro is $29 per workspace per month and includes 350 builds a month.";
+    platform.login();
+    platform.routes[`POST ${CUT}`] = () => ({
+      status: 429,
+      body: { code: "monthly_cap", message: said, upgradeUrl: "https://www.extension.dev/pricing", refusedBeforeApproval: true },
+    });
+
+    const out = JSON.parse(await promote({ action: "cut", level: "minor", channel: "beta", api: API }));
+
+    expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
+    expect(out.status).toBe("rate-limited");
+    expect(out.hint).toBe(said);
+    expect(out.value.upgradeUrl).toBe("https://www.extension.dev/pricing");
+  });
+
+  it("cut refused for a spent month with no sentence keeps the fallback", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${CUT}`] = () => ({ status: 429, body: { code: "monthly_cap", refusedBeforeApproval: true } });
+
+    const out = JSON.parse(await promote({ action: "cut", level: "minor", channel: "beta", api: API }));
+
+    expect(out.hint).toContain("The workspace's build allowance for this month is spent, so nothing ran.");
+    expect(out.value.upgradeUrl).toBeUndefined();
+  });
+
   it("promote still needs a buildId and a channel", async () => {
     platform.login();
     const out = JSON.parse(await promote({ api: API }));

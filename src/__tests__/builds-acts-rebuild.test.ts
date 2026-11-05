@@ -81,4 +81,47 @@ describe(SUITE, () => {
     expect(out.hint).toContain("Rebuild another commit for Preview, or release a new build to");
     expect(world.calls.filter((call) => call.method === "POST")).toHaveLength(1);
   });
+
+  it("rebuild refused for a spent month prints the platform's priced sentence and its upgrade link as they came", async () => {
+    if (process.platform === "win32") return;
+
+    const said = "This build was refused and nothing was dispatched: monthly build limit of 25 reached. Retry in 3600 seconds. Pro is $29 per workspace per month and includes 350 builds a month.";
+    login();
+    world.routes[`POST ${DISPATCH_ROUTE}`] = () => ({
+      body: { code: "monthly_cap", message: said, upgradeUrl: "https://www.extension.dev/pricing" },
+      status: 429,
+    });
+
+    const out = JSON.parse(await builds({ action: "rebuild", api: API }));
+
+    expect(out.status).toBe("rate-limited");
+    expect(out.error.platformCode).toBe("monthly_cap");
+    expect(out.hint).toBe(said);
+    expect(out.value.upgradeUrl).toBe("https://www.extension.dev/pricing");
+  });
+
+  it("rebuild refused for a spent month with no sentence keeps the fallback and names no upgrade link", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+    world.routes[`POST ${DISPATCH_ROUTE}`] = () => ({ body: { code: "monthly_cap" }, status: 429 });
+
+    const out = JSON.parse(await builds({ action: "rebuild", api: API }));
+
+    expect(out.hint).toContain("The workspace's build allowance for this month is spent, so nothing was dispatched.");
+    expect(out.value.upgradeUrl).toBeUndefined();
+  });
+
+  it("rebuild refused for the wrong environment prints the platform's sentence, price included", async () => {
+    if (process.platform === "win32") return;
+
+    const said = "This build was produced for Preview, but the Stable channel takes Stable builds. Rebuild this commit for Stable (Builds, Rebuild), then release it. The rebuild spends 1 build from the monthly allowance.";
+    login();
+    world.routes[`POST ${DISPATCH_ROUTE}`] = () => ({ body: { code: "BUILD_ENV_MISMATCH", message: said }, status: 409 });
+
+    const out = JSON.parse(await builds({ action: "rebuild", api: API }));
+
+    expect(out.error.platformCode).toBe("BUILD_ENV_MISMATCH");
+    expect(out.hint).toBe(said);
+  });
 });

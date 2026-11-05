@@ -16,7 +16,7 @@ import { envelope, type ErrorCode } from "../lib/envelope";
 import { PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
 import { platformFetch } from "../lib/platform-fetch";
-import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
+import { platformHoldEnvelope, pricedRefusal, sawPlatformHold } from "../lib/platform-hold";
 import {
   approvalGateEnabled,
   evaluateApproval,
@@ -115,7 +115,7 @@ function retiredSourceChannelMessage(channel: string): string {
   return `This project does not declare a "${RETIRED_SOURCE_CHANNEL}" channel to promote from: ${RETIRED_SOURCE_CHANNEL} was retired as a release channel on 2026-11-03. Promote from one of the project's channels (extension_release_status lists them), or leave sourceChannel unset to promote from ${channel === "preview" ? "preview" : `${channel} itself`}. Nothing was sent.`;
 }
 
-function promoteRefusalHint(platformCode: string): string | undefined {
+function promoteRefusalHint(platformCode: string, body?: unknown): string | undefined {
   if (platformCode === "APPROVER_NOT_OWNER") {
     return "A release needs a workspace owner's approval, and whoever approved this one is not an owner of the workspace now, so it was not used and nothing was released. Call again without approvalId to request a fresh approval, then have a workspace owner approve it.";
   }
@@ -123,6 +123,9 @@ function promoteRefusalHint(platformCode: string): string | undefined {
   if (platformCode !== "BUILD_ENV_MISMATCH" && platformCode !== "UNSTAMPED_BUILD_BLOCKED") {
     return undefined;
   }
+
+  const priced = pricedRefusal(platformCode, body);
+  if (priced) return priced.hint;
 
   return `Preview takes any build; Stable and every other channel take Stable builds, and this build is not one. Rebuild this commit for Stable (Builds, Rebuild in the console, or extension_builds action:"rebuild" with this buildId and buildEnv:"production"), wait for it to pass, then release it again. To ship this build as it is, release it to Preview instead.`;
 }
@@ -294,7 +297,8 @@ export async function handler(args: ReleaseActArgs & {
     const enrich = unknownBuild ? await unknownBuildEnrichment(credential.ref, args.api) : {};
     const hint = unknownBuild
       ? "Run extension_release_status to see this project's channels, their promoted shas, and recent builds."
-      : (code && promoteRefusalHint(code)) || "";
+      : (code && promoteRefusalHint(code, data)) || "";
+    const upgradeUrl = code ? pricedRefusal(code, data)?.upgradeUrl : "";
 
     return envelope({
       ok: false,
@@ -306,7 +310,7 @@ export async function handler(args: ReleaseActArgs & {
         message: `promote failed (${res.status}): ${data?.message || text || "unknown error"}`,
         ...(code ? { platformCode: code } : {}),
       },
-      value: enrich,
+      value: { ...enrich, ...(upgradeUrl ? { upgradeUrl } : {}) },
       hint,
     });
   }
