@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -7,6 +6,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 
 import { envelope } from "../lib/envelope";
 import { readyContract } from "./fixtures/engine-answers";
+import { unpackedExtensionId } from "../lib/extension-identity";
 
 import type * as ActModule from "../lib/act";
 import type * as CdpPortModule from "../lib/cdp-port";
@@ -126,18 +126,6 @@ const open = await import("../tools/open");
 const cdpExtensionPage = await import("../lib/cdp-extension-page");
 const evalTool = await import("../tools/eval");
 
-function expectedId(distPath: string): string {
-  const d = crypto.createHash("sha256").update(distPath).digest();
-  let id = "";
-
-  for (let i = 0; i < 16; i++) {
-    id += String.fromCharCode(97 + (d[i] >> 4));
-    id += String.fromCharCode(97 + (d[i] & 0x0f));
-  }
-
-  return id;
-}
-
 const dirs: string[] = [];
 
 function project(options: { devtools?: boolean; browser?: string } = {}): { dir: string; id: string } {
@@ -159,7 +147,7 @@ function project(options: { devtools?: boolean; browser?: string } = {}): { dir:
   const readyDir = path.join(dir, "dist", "extension-js", browser);
   fs.mkdirSync(readyDir, { recursive: true });
   fs.writeFileSync(path.join(readyDir, "ready.json"), JSON.stringify(readyContract("dev", "chrome", { distPath })));
-  extensionId = expectedId(distPath);
+  extensionId = unpackedExtensionId(distPath);
 
   return { dir, id: extensionId };
 }

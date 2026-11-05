@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -6,6 +5,7 @@ import path from "node:path";
 import { describe, it, expect, afterEach, vi } from "vitest";
 
 import { readyContract } from "./fixtures/engine-answers";
+import { unpackedExtensionId } from "../lib/extension-identity";
 
 import type * as CdpPortModule from "../lib/cdp-port";
 
@@ -44,18 +44,6 @@ vi.mock("../lib/cdp", () => {
 });
 
 const listExtensions = await import("../tools/list-extensions");
-
-function expectedId(distPath: string): string {
-  const d = crypto.createHash("sha256").update(distPath).digest();
-  let id = "";
-
-  for (let i = 0; i < 16; i++) {
-    id += String.fromCharCode(97 + (d[i] >> 4));
-    id += String.fromCharCode(97 + (d[i] & 0x0f));
-  }
-
-  return id;
-}
 
 const MANAGER_ID = "kgdaecdpfkikjncaalnmmnjjfpofkcbl";
 
@@ -97,7 +85,7 @@ function project(
     );
   }
 
-  return { dir, distPath, id: expectedId(distPath) };
+  return { dir, distPath, id: unpackedExtensionId(distPath) };
 }
 
 afterEach(() => {

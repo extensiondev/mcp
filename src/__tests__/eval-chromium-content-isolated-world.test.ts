@@ -6,7 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -18,6 +17,7 @@ import { envelope } from "../lib/envelope";
 import { extensionIsolatedContexts, type ExecutionContextDescription } from "../lib/cdp-isolated-world";
 import { writeEvalToken } from "./fixtures/ready-contract";
 import { actVerbAnswer, evalRefusal } from "./fixtures/engine-answers";
+import { unpackedExtensionId } from "../lib/extension-identity";
 
 import type * as ActModule from "../lib/act";
 import type * as CdpPortModule from "../lib/cdp-port";
@@ -81,18 +81,6 @@ vi.mock("../lib/cdp", () => {
 
 const evalTool = await import("../tools/eval");
 
-function unpackedId(distPath: string): string {
-  const d = crypto.createHash("sha256").update(distPath).digest();
-  let id = "";
-
-  for (let i = 0; i < 16; i++) {
-    id += String.fromCharCode(97 + (d[i] >> 4));
-    id += String.fromCharCode(97 + (d[i] & 0x0f));
-  }
-
-  return id;
-}
-
 let dir: string;
 let extensionId: string;
 
@@ -115,7 +103,7 @@ beforeEach(() => {
   fs.mkdirSync(readyDir, { recursive: true });
   fs.writeFileSync(path.join(readyDir, "ready.json"), JSON.stringify({ status: "ready", distPath }));
   writeEvalToken(dir, "chrome");
-  extensionId = unpackedId(distPath);
+  extensionId = unpackedExtensionId(distPath);
 
   cdpTargets = [
     { id: "sw", type: "service_worker", url: `chrome-extension://${extensionId}/background.js`, title: "" },

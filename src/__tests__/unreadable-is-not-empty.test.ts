@@ -1,5 +1,4 @@
 
-import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -8,6 +7,7 @@ import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 
 import { envelope } from "../lib/envelope";
 import { writeEvalToken } from "./fixtures/ready-contract";
+import { unpackedExtensionId } from "../lib/extension-identity";
 
 import type * as CdpPortModule from "../lib/cdp-port";
 import type * as ActModule from "../lib/act";
@@ -133,18 +133,6 @@ afterEach(() => {
   for (const dir of tmpDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-function expectedId(distPath: string): string {
-  const d = crypto.createHash("sha256").update(distPath).digest();
-  let id = "";
-
-  for (let i = 0; i < 16; i++) {
-    id += String.fromCharCode(97 + (d[i] >> 4));
-    id += String.fromCharCode(97 + (d[i] & 0x0f));
-  }
-
-  return id;
-}
-
 function chromeProject(manifest: Record<string, unknown>): { dir: string; id: string } {
   const dir = tmpDir("mcp-unreadable-");
   fs.mkdirSync(path.join(dir, "src"), { recursive: true });
@@ -157,7 +145,7 @@ function chromeProject(manifest: Record<string, unknown>): { dir: string; id: st
   fs.writeFileSync(path.join(readyDir, "ready.json"), JSON.stringify({ status: "ready", distPath }));
   writeEvalToken(dir, "chrome");
 
-  return { dir, id: expectedId(distPath) };
+  return { dir, id: unpackedExtensionId(distPath) };
 }
 
 describe("a read that threw is unreadable with its reason, never an empty list: session markers and carrier records", () => {
