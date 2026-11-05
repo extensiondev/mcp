@@ -304,7 +304,10 @@ export async function handler(args: {
           continue;
         }
 
-        const runtimeErrors = recentErrorLogs(args.projectPath, browser, 3);
+        const reloadedMs = unattached.recovery?.outcome === "attached" ? Date.parse(unattached.recovery.reloadedAt) : Number.NaN;
+        const recovered = Number.isFinite(reloadedMs);
+        const runtimeErrors = recentErrorLogs(args.projectPath, browser, 3, {}, recovered ? { fromMs: reloadedMs } : {});
+        const beforeRecovery = recovered ? recentErrorLogs(args.projectPath, browser, 3, {}, { beforeMs: reloadedMs }) : [];
         const guestCheck = await verifyGuestLoaded(args.projectPath, browser);
         const signingFrame = await safariSigningFrame(args.projectPath, browser);
         const warnings: string[] = [...(signingFrame?.warnings ?? []), ...(unattached.recovery ? [unattached.recovery.say] : [])];
@@ -347,6 +350,14 @@ export async function handler(args: {
             budgetMs,
             elapsedMs: Date.now() - start,
             ...(runtimeErrors.length ? { runtimeErrors } : {}),
+            ...(beforeRecovery.length
+              ? {
+                  beforeRecovery: {
+                    errors: beforeRecovery,
+                    note: `Logged before the recovery reload at ${unattached.recovery?.outcome === "attached" ? unattached.recovery.reloadedAt : ""}, by the build the browser held before it; the reload replaced that build, so these are not the live build's errors.`,
+                  },
+                }
+              : {}),
             ...(unattached.recovery ? { executorRecovery: unattached.recovery } : {}),
             ...(signingFrame ? { signing: signingFrame.signing } : {}),
           },

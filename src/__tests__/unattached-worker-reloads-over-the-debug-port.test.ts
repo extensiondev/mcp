@@ -41,9 +41,17 @@ function reloadsRun(): FakeCommand[] {
   return (chrome?.commands ?? []).filter((c) => c.method === "Runtime.evaluate" && String(c.params.expression).includes("chrome.runtime.reload()"));
 }
 
-async function browserWhoseReload(attaches: boolean, targets = [WORKER]): Promise<FakeChrome> {
+function logError(message: string, timestamp: number): void {
+  const file = path.join(dir, "dist", "extension-js", "chrome", "logs.ndjson");
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.appendFileSync(file, `${JSON.stringify({ v: 1, id: `evt-${timestamp}`, seq: timestamp, timestamp, level: "error", context: "background", messageParts: [message], runId: "run-1" })}\n`);
+}
+
+async function browserWhoseReload(attaches: boolean, targets = [WORKER], onReload?: () => void): Promise<FakeChrome> {
   chrome = await startFakeChrome(targets, (command) => {
     if (command.method !== "Runtime.evaluate") return undefined;
+
+    onReload?.();
 
     if (attaches) {
       const at = new Date().toISOString();
@@ -91,6 +99,20 @@ describe("a Chromium dev session whose background never connected is reloaded ov
     expect(result.warnings.join(" ")).toContain("this server reloaded the extension over the debug port");
     expect(reloadsRun()).toHaveLength(1);
     expect(reloadsRun()[0]!.sessionId).toBe("S-SW1");
+  }, 40_000);
+
+  it("ledger 397: errors the build before the recovery reload logged answer under beforeRecovery, not runtimeErrors", async () => {
+    logError("WebSocket connection to 'ws://127.0.0.1:60090/' failed", Date.now() - 5_000);
+    const browser = await browserWhoseReload(true, [WORKER], () => logError("TypeError: live build broke", Date.now() + 50));
+    stamp(browser.port, { runId: "run-wait-recovers-errors" });
+
+    const result = JSON.parse(await wait({ projectPath: dir, browser: "chrome", timeoutMs: RECOVER_AFTER_MS + 9_000 }));
+
+    expect(result.status).toBe("ready");
+    expect(result.value.executorRecovery).toMatchObject({ outcome: "attached" });
+    expect(result.value.runtimeErrors).toEqual(["TypeError: live build broke"]);
+    expect(result.value.beforeRecovery.errors).toEqual(["WebSocket connection to 'ws://127.0.0.1:60090/' failed"]);
+    expect(result.value.beforeRecovery.note).toContain(result.value.executorRecovery.reloadedAt);
   }, 40_000);
 
   it("leaves the session alone before the background has been unconnected for the recovery delay, and off Chromium", async () => {

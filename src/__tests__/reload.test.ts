@@ -241,3 +241,37 @@ describe("a background reload waits for the contract to show the executor back",
     expect(out.value.reattachedMs).toBeLessThan(5_000);
   });
 });
+
+describe("ledger 396: a reload of an extension_start session says it does not pick up a rebuild", () => {
+  it("names the controlled copy it reloaded, copyRefreshed false, and points to extension_dev", async () => {
+    session.browser = "zen";
+    const copy = path.join(projectPath, "dist", "extension-js", "zen", "controlled");
+    contractFile = writeModernContract(projectPath, "zen", { command: "start", distPath: copy, runtime: "attached", executorAttachedAt: ATTACHED_AT, ts: ATTACHED_AT });
+
+    act.onCall = () => {
+      setTimeout(() => stampExecutorDetached(contractFile, "2026-10-07T12:00:01.000Z"), 10);
+      setTimeout(() => stampExecutorAttached(contractFile, "2026-10-07T12:00:01.300Z"), 60);
+    };
+
+    const out = parsed(await reload.handler({ projectPath }));
+
+    expect(out.value.reloadedCopy).toBe(copy);
+    expect(out.value.copyRefreshed).toBe(false);
+    expect(out.warnings.join(" ")).toContain("never reads a rebuilt build folder");
+    expect(out.warnings.join(" ")).toContain("extension_dev");
+  });
+
+  it("says nothing of a copy on a dev session", async () => {
+    session.browser = "zen";
+
+    act.onCall = () => {
+      setTimeout(() => stampExecutorDetached(contractFile, "2026-10-07T12:00:01.000Z"), 10);
+      setTimeout(() => stampExecutorAttached(contractFile, "2026-10-07T12:00:01.300Z"), 60);
+    };
+
+    const out = parsed(await reload.handler({ projectPath }));
+
+    expect(out.value.reloadedCopy).toBeUndefined();
+    expect(out.warnings).toEqual([]);
+  });
+});

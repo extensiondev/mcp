@@ -525,6 +525,13 @@ export async function handler(
   });
 }
 
+export function firstLogsRecoveryNote(readyValue: Record<string, unknown>): string | null {
+  const recovery = readyValue.executorRecovery as { outcome?: unknown; reloadedAt?: unknown } | undefined;
+  if (recovery?.outcome !== "attached" || typeof recovery.reloadedAt !== "string") return null;
+
+  return `This server reloaded the extension at ${recovery.reloadedAt} to attach it; lines in firstLogs timestamped before then came from the build the browser held before that reload, not the live build (ready.beforeRecovery lists those errors).`;
+}
+
 async function awaitReadyAndFirstLogs(projectPath: string, browser: string) {
   const ready = JSON.parse(await waitHandler({ projectPath, browser, timeoutMs: 45_000 })) as {
     status: string;
@@ -539,8 +546,11 @@ async function awaitReadyAndFirstLogs(projectPath: string, browser: string) {
   const readyValue: Record<string, unknown> = { ...(ready.value ?? {}) };
   delete readyValue.signing;
 
+  const firstLogsNote = firstLogsRecoveryNote(readyValue);
+
   return {
     ready: { status: ready.status, ...readyValue },
     firstLogs: logs.ok ? (logs.value ?? {}) : { status: logs.status },
+    ...(firstLogsNote ? { firstLogsNote } : {}),
   };
 }

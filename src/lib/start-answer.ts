@@ -111,8 +111,16 @@ function bridgeLine(facts: StartFacts): string {
     ? ", and extension_eval runs where the build's content_security_policy allows it (context:'page' in a tab always does)"
     : "; extension_eval needs allowEval:true";
 
-  return `${channel} on a copy of the build at ${controlledCopy}, so extension_storage, extension_reload (a real reload of the installed extension under open tabs, as a store update does), extension_open and extension_dom_snapshot attach${evalWords}. extension_logs has no console stream for it.`;
+  const watched = facts.noBrowser || facts.headless ? "" : ` ${WATCHED_UI_LINE}`;
+
+  return `${channel} on a copy of the build at ${controlledCopy}, so extension_storage, extension_reload (a real reload of the installed extension under open tabs, as a store update does), extension_open and extension_dom_snapshot attach${evalWords}. extension_logs has no console stream for it. ${COPY_IS_FIXED_LINE}${watched}`;
 }
+
+export const COPY_IS_FIXED_LINE =
+  "That copy is made once, when the session starts: extension_reload reloads the copy as it was and never reads a rebuilt build folder, so a rebuild reaches this browser only through extension_start with replace: true, which closes and relaunches the browser.";
+
+export const WATCHED_UI_LINE =
+  "A person is watching this window, so for UI changes use extension_dev instead: it rebuilds on every save and reloads the extension in place without closing the browser.";
 
 function sessionValue(facts: StartFacts): Record<string, unknown> {
   return {

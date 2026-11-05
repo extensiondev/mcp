@@ -208,6 +208,7 @@ export function recentErrorLogs(
   browser: string,
   max = 5,
   query: Omit<LogQuery, "level"> = {},
+  window: { fromMs?: number; beforeMs?: number } = {},
 ): string[] {
   const errs: string[] = [];
 
@@ -215,6 +216,15 @@ export function recentErrorLogs(
     ...query,
     level: "error",
   })) {
+    const at = Number((event as { timestamp?: unknown }).timestamp);
+
+    if (Number.isFinite(at)) {
+      if (window.fromMs !== undefined && at < window.fromMs) continue;
+      if (window.beforeMs !== undefined && at >= window.beforeMs) continue;
+    } else if (window.beforeMs !== undefined) {
+      continue;
+    }
+
     const ev = event as {
       messageParts?: unknown[];
       errorName?: string;

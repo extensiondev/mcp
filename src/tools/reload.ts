@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import fs from "node:fs";
+
 import {
   CALL_TIMEOUT,
   SESSION_BROWSER,
@@ -13,6 +15,8 @@ import {
 } from "../lib/common-schema";
 import { actFrameJson, runActVerb, commonFlags, type ActArgs } from "../lib/act";
 import { readExecutorStamp, watchExecutorReattach } from "../lib/executor-stamp";
+import { readyContractPath } from "../lib/session-paths";
+import { COPY_IS_FIXED_LINE } from "../lib/start-answer";
 import {
   ambiguousSessionRefusal,
   resolveSessionBrowser,
@@ -40,6 +44,17 @@ export const schema = {
 };
 
 const REATTACH_BUDGET_CEILING_MS = 5_000;
+
+function productionCopy(projectPath: string, browser: string): string | null {
+  try {
+    const contract = JSON.parse(fs.readFileSync(readyContractPath(projectPath, browser), "utf8")) as { command?: unknown; distPath?: unknown };
+    if (contract.command !== "start" && contract.command !== "preview") return null;
+
+    return typeof contract.distPath === "string" && contract.distPath ? contract.distPath : `dist/extension-js/${browser}/controlled`;
+  } catch {
+    return null;
+  }
+}
 
 export async function handler(args: ActArgs): Promise<string> {
   const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
@@ -90,6 +105,13 @@ export async function handler(args: ActArgs): Promise<string> {
     warnings.push(
       `The engine answered reloading, but this server could not read ready.json for ${browser} before the call, so the reattach was not watched; the next read may meet the gap between the old background and the new one.`,
     );
+  }
+
+  const copy = productionCopy(args.projectPath, browser);
+
+  if (copy) {
+    frame.value = { ...frame.value, reloadedCopy: copy, copyRefreshed: false };
+    warnings.push(`This is an extension_start session, so the reload ran the copy at ${copy}. ${COPY_IS_FIXED_LINE} For UI iteration with a person watching, extension_dev rebuilds and reloads in place without closing the window.`);
   }
 
   frame.warnings = warnings;
