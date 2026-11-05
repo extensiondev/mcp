@@ -13,7 +13,7 @@ import path from "node:path";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const API = "http://localhost:3100";
 const APPROVAL_ID = "apr_J3pJzcFuh6UWFwP_AMwl_IZ085Ookc_R";
@@ -232,6 +232,10 @@ async function login(project: "leon" | "rebeccat"): Promise<void> {
     api: API,
   });
 }
+
+beforeAll(async () => {
+  await import("../index");
+}, 60_000);
 
 beforeEach(() => {
   for (const key of KEYS) saved[key] = process.env[key];
