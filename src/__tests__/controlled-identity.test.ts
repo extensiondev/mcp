@@ -43,7 +43,7 @@ describe("the controlled copy's id comes from the folder the engine loads", () =
     expect(identity.copyId).not.toBe(identity.plainId);
   });
 
-  it("hashes the real path Chrome registers, resolving a symlinked ancestor of a folder that does not exist yet", () => {
+  it.skipIf(process.platform === "win32")("hashes the real path Chrome registers on POSIX, resolving a symlinked ancestor of a folder that does not exist yet (Chrome on Windows registers the path as given)", () => {
     const root = tmpProject();
     const real = path.join(root, "real");
     fs.mkdirSync(real);
@@ -57,6 +57,24 @@ describe("the controlled copy's id comes from the folder the engine loads", () =
     expect(registeredExtensionId(missing)).not.toBe(unpackedExtensionId(missing));
   });
 
+  it("hashes the path as given on Windows, where Chrome registers a folder without resolving links or short names", () => {
+    const root = tmpProject();
+    const real = path.join(root, "real");
+    fs.mkdirSync(real);
+    const link = path.join(root, "link");
+    fs.symlinkSync(real, link);
+    const missing = path.join(link, "dist", "extension-js", "chrome", "controlled");
+    const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
+    Object.defineProperty(process, "platform", { value: "win32" });
+
+    try {
+      expect(registeredDirectoryPath(missing)).toBe(path.resolve(missing));
+      expect(registeredExtensionId(missing)).toBe(unpackedExtensionId(path.resolve(missing)));
+    } finally {
+      Object.defineProperty(process, "platform", platform);
+    }
+  });
+
   it("rewrites a startingUrl that names the plain build's id under either spelling of its path", () => {
     const root = tmpProject();
     const real = path.join(root, "real");
@@ -65,7 +83,7 @@ describe("the controlled copy's id comes from the folder the engine loads", () =
     fs.symlinkSync(real, link);
     const literal = unpackedExtensionId(path.join(link, "dist", "chrome"));
     const registered = registeredExtensionId(path.join(link, "dist", "chrome"));
-    expect(literal).not.toBe(registered);
+    expect(literal === registered).toBe(process.platform === "win32");
 
     for (const id of [literal, registered]) {
       const identity = controlledIdentity({

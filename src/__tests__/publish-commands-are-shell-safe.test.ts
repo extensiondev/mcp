@@ -36,7 +36,7 @@ function commandsOf(api: string, previewCommands: Record<string, string>): Recor
 }
 
 describe("every run command extension_publish prints passes its URL whole through sh and zsh (ledger 371)", () => {
-  it("has a shell to run the commands in", () => {
+  it.skipIf(process.platform === "win32")("has a shell to run the commands in on a POSIX host (Windows has no /bin/sh)", () => {
     expect(SHELLS).toContain("/bin/sh");
   });
 

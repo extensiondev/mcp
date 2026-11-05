@@ -77,7 +77,7 @@ afterEach(() => {
 });
 
 describe("every filesystem path the MCP prints inside a shell command reaches the shell whole", () => {
-  it("has sh and zsh to run the commands in", () => {
+  it.skipIf(process.platform === "win32")("has sh and zsh to run the commands in on a POSIX host (Windows has no /bin/sh)", () => {
     expect(SHELLS).toContain("/bin/sh");
   });
 

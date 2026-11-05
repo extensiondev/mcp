@@ -202,7 +202,7 @@ describe("extension_doctor project-engine against the package.json pin (ledger 2
 
     expect(check.status).toBe("warn");
     expect(check.detail).toContain("package.json pins extension@4.1.36, node_modules has extension@4.1.35");
-    expect(check.remediation).toContain(`(cd ${project} && pnpm install)`);
+    expect(check.remediation!.replaceAll("'", "")).toContain(`(cd ${project} && pnpm install)`);
     expect(check.remediation).toContain("npm i -D extension@4.1.36");
   });
 

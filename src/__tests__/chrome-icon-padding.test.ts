@@ -72,7 +72,7 @@ describe("the 128 px icon is measured against the Chrome Web Store padding rule 
     const padded = JSON.parse(await validate({ projectPath: project(PADDED), browsers: ["chrome"] }));
     const says = (answer: { value: { warnings?: string[] }; warnings?: string[] }) => JSON.stringify(answer);
 
-    expect(says(chrome)).toContain("src/images/icon-128.png, the 128 px icon, has square art 128x128 with 0 px of padding per side");
+    expect(says(chrome)).toContain(JSON.stringify(`${path.join("src", "images", "icon-128.png")}, the 128 px icon, has square art 128x128 with 0 px of padding per side`).slice(1, -1));
     expect(says(firefox)).not.toContain("the 128 px icon, has");
     expect(says(padded)).not.toContain("the 128 px icon, has");
   });
