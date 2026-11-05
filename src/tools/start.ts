@@ -22,7 +22,8 @@ import {
 } from "../lib/profile-carryover";
 import { isGeckoFamily } from "../lib/browser-family";
 import { removeCarrier } from "../lib/carrier";
-import { envelope } from "../lib/envelope";
+import { envelope, isEnvelope, type Envelope } from "../lib/envelope";
+import { buildIsolatedRun, isolatedEngineRefusal, isolatedSentence, openIsolatedRun, removeIsolatedRun, type IsolatedRun } from "../lib/isolated-run";
 import { productionLaunchEvidence, readFreshContract, readLoadOverDebugPort } from "../lib/production-launch";
 import { awaitStartLanding, engineExitAfterBoot, startAnswer } from "../lib/start-answer";
 import { controlledIdentity, resolveLoadedId, sessionIdentityWarnings } from "../lib/controlled-identity";
@@ -91,7 +92,13 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Stop the live session this projectPath runs for the same browser first (an extension_dev or extension_start session), reported as replacedSession. Without it the call is refused: one session per browser owns dist/<browser> and its ready.json and eval token, and a production start would rebuild them under the running session. A session for another browser keeps running either way.",
+          "Stop the live session this projectPath runs for the same browser first (an extension_dev or extension_start session), reported as replacedSession. Without it the call is refused: one session per browser owns dist/<browser> and its ready.json and eval token, and a production start would rebuild them under the running session. A session for another browser keeps running either way. To run a second session beside the person's own instead of replacing it, pass isolated: true.",
+      },
+      isolated: {
+        type: "boolean",
+        default: false,
+        description:
+          "Run a throwaway session beside the person's own for the same project and browser, never touching it: the project is built for production into a folder under the system temp directory (extension build --out-dir, Extension.js 4.1.36 or later), and launched from there on a new profile, headless unless headless: false, with the control channel and eval as allowControl and allowEval say. The answer's value.isolated.projectPath is the projectPath to pass to every other tool for this session (extension_open, extension_eval, extension_screenshot, extension_dom_snapshot, extension_stop), since the run is a project of its own to the engine; the person's session for the real projectPath keeps its window, profile and dist/<browser>. extension_stop with that projectPath ends it; the folder stays until deleted. replace, outputPath, build: false and noBrowser do not apply with it.",
       },
       wait: {
         type: "boolean",
@@ -118,9 +125,13 @@ export async function handler(
     allowEval?: boolean;
     replace?: boolean;
     wait?: boolean;
+    isolated?: boolean;
   } & LaunchFlagArgs,
 ): Promise<string> {
   const browser = args.browser ?? "chrome";
+
+  if (args.isolated) return isolatedStart(args, browser);
+
   const outputPath =
     typeof args.outputPath === "string" && args.outputPath.trim()
       ? path.resolve(args.projectPath, args.outputPath.trim())
@@ -437,4 +448,99 @@ export async function handler(
         `${stale.note} A Live Preview carrier is still in ./extensions and the engine loads that folder, so this run has the debug companion beside your extension.`,
     ],
   });
+}
+
+type IsolatedStartArgs = Parameters<typeof handler>[0];
+
+function isolatedAnswer(answer: string, run: IsolatedRun): string {
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(answer);
+  } catch {
+    return answer;
+  }
+
+  if (!isEnvelope(parsed)) return answer;
+
+  const frame = parsed as Envelope & { hint?: string };
+  const value = frame.value && typeof frame.value === "object" && !Array.isArray(frame.value) ? (frame.value as Record<string, unknown>) : {};
+  const isolated = {
+    projectPath: run.dir,
+    sourceProject: run.sourceProject,
+    extensionDir: run.extensionDir,
+    profile: run.profileDir,
+    startedAt: run.startedAt,
+  };
+
+  return envelope({
+    ok: frame.ok,
+    command: frame.command,
+    status: frame.status,
+    value: { ...value, isolated },
+    error: frame.error ?? undefined,
+    warnings: frame.warnings,
+    ...(frame.truncated !== undefined ? { truncated: frame.truncated } : {}),
+    hint: frame.ok ? `${isolatedSentence(run)} ${frame.hint ?? ""}`.trim() : `${frame.hint ?? ""} The isolated run folder ${run.dir} was removed; the person's own session was not touched.`.trim(),
+  });
+}
+
+async function isolatedStart(args: IsolatedStartArgs, browser: string): Promise<string> {
+  const clashing: string[] = (["replace", "outputPath", "noBrowser"] as const).filter((name) => Boolean(args[name]));
+  if (args.build === false) clashing.push("build: false");
+
+  if (clashing.length) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "bad-request",
+      error: {
+        code: "E_BAD_REQUEST",
+        message: `isolated builds the project itself into a temporary folder and launches it there, so ${clashing.join(", ")} ${clashing.length === 1 ? "does" : "do"} not apply with it.`,
+      },
+      hint: "Drop those arguments and call extension_start with isolated: true again, or drop isolated to run the project's own dist.",
+    });
+  }
+
+  if (browser === "safari" || browser === "webkit-based") {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "unsupported-browser",
+      error: {
+        code: "E_UNSUPPORTED_BROWSER",
+        message: "An isolated run launches through the engine's preview verb, which does not run Safari.",
+      },
+      hint: 'Use extension_dev with browser: "safari", which builds, packages and opens the Safari app.',
+    });
+  }
+
+  const tooOld = await isolatedEngineRefusal(schema.name, args.projectPath);
+  if (tooOld) return tooOld;
+
+  const run = openIsolatedRun(args.projectPath, browser);
+  const built = await buildIsolatedRun(schema.name, run);
+  if (!built.ok) return built.refusal;
+
+  const { isolated: _isolated, ...rest } = args;
+  const answer = await handler({
+    ...rest,
+    projectPath: run.dir,
+    browser,
+    outputPath: run.extensionDir,
+    profile: run.profileDir,
+    headless: args.headless !== false,
+    replace: false,
+  });
+  let parsed: { ok?: boolean } = {};
+
+  try {
+    parsed = JSON.parse(answer);
+  } catch {
+    parsed = {};
+  }
+
+  if (parsed.ok !== true) removeIsolatedRun(run.dir);
+
+  return isolatedAnswer(answer, run);
 }

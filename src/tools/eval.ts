@@ -401,6 +401,19 @@ async function evaluateOnChromiumExtensionPage(
   if (context === "page" && distinctUrls(targets).length > 1) return ambiguousUrl(wanted, targets.map(pageRef));
 
   if (targets.length === 0) {
+    const origin = /^(chrome-extension:\/\/[^/]+\/)/.exec(wanted)?.[1] ?? null;
+    const originRead = origin ? await readExtensionPageTargets(resolved.port, origin) : null;
+    const openPages = originRead && "targets" in originRead ? originRead.targets.filter((t) => !isBrowserErrorPage(t.url)).map(pageRef) : [];
+    const openWords = openPages.length
+      ? ` The extension's open pages right now: ${openPages.map((t) => `${t.url} (targetId ${t.targetId})`).join(", ")}; none is ${wanted}.`
+      : origin
+        ? " The extension has no page open at all right now."
+        : "";
+    const sidebarWords =
+      context === "sidebar" && openPages.length
+        ? " A side panel that the extension points at another document per tab (chrome.sidePanel.setOptions with a path other than side_panel.default_path) is one of those pages: pass context: \"page\" with its url."
+        : "";
+
     return envelope({
       ok: false,
       command: schema.name,
@@ -408,12 +421,13 @@ async function evaluateOnChromiumExtensionPage(
       error: {
         code: "E_NO_TARGET",
         name: "NoTarget",
-        message: `No open page at ${wanted}, so there is nothing to evaluate in. An extension page evaluates over CDP on its own target, which exists only while the page is open.`,
+        message: `No open page at ${wanted}, so there is nothing to evaluate in. An extension page evaluates over CDP on its own target, which exists only while the page is open.${openWords}`,
       },
+      value: { wanted, openExtensionPages: openPages },
       hint:
         context === "page"
           ? "Open it first with extension_open (url: this address), then retry. extension_dom_snapshot with listTargets: true lists what is open."
-          : `Open it first with extension_open surface: "${context}", then retry. extension_dom_snapshot with listTargets: true lists what is open.`,
+          : `Open it first with extension_open surface: "${context}", then retry.${sidebarWords} extension_dom_snapshot with listTargets: true lists what is open.`,
     });
   }
 
@@ -1394,6 +1408,15 @@ function noDebugPort(projectPath: string, browser: string, protocol: string): st
   });
 }
 
+/* @invariant A TARGET THAT WENT AWAY ANSWERS THE SAME WAY EVERYWHERE. The
+ * screenshot tool promises E_TARGET_NOT_FOUND with the live targets for a
+ * targetId that is gone, and the debug port says "Inspected target navigated
+ * or closed" for both a closed tab and a tab that merely navigated. Re-listing
+ * the targets tells the two apart: gone is the shared refusal, navigated is one
+ * retry on the same target with the new url named (ledger 399).
+ */
+const TARGET_WENT_AWAY = /navigated or closed|No target with given id|Target closed|not attached to an active page|Session with given id not found/i;
+
 async function evaluateByTargetId(
   args: ActArgs & { expression: string },
   browser: string,
@@ -1440,20 +1463,36 @@ async function evaluateByTargetId(
   const resolved = await resolveCdpPort(args.projectPath, browser, { timeoutMs: args.timeout });
   if (!resolved) return noDebugPort(args.projectPath, browser, "CDP");
 
-  let live: TargetRef[];
+  const discover = async (): Promise<TargetRef[] | { unreadable: string }> => {
+    try {
+      return (await CDPClient.discoverTargets(resolved.port))
+        .filter((t) => !String(t.url ?? "").startsWith("devtools://"))
+        .map((t) => ({ targetId: String(t.id), url: String(t.url ?? "") }));
+    } catch (err) {
+      return { unreadable: err instanceof Error ? err.message : String(err) };
+    }
+  };
 
-  try {
-    live = (await CDPClient.discoverTargets(resolved.port))
-      .filter((t) => !String(t.url ?? "").startsWith("devtools://"))
-      .map((t) => ({ targetId: String(t.id), url: String(t.url ?? "") }));
-  } catch (err) {
-    return targetsUnreadable(err instanceof Error ? err.message : String(err));
-  }
+  const live = await discover();
+  if ("unreadable" in live) return targetsUnreadable(live.unreadable);
 
   const target = live.find((t) => t.targetId === targetId);
   if (!target) return targetNotFound(schema.name, targetId, live, { projectPath: args.projectPath, browser });
 
-  const outcome = await evaluateOnExtensionPage(resolved.port, targetId, args.expression, args.timeout);
+  let outcome = await evaluateOnExtensionPage(resolved.port, targetId, args.expression, args.timeout);
+  let navigatedTo: string | null = null;
+
+  if (!outcome.ok && !outcome.thrown && !outcome.timedOut && !outcome.paused && TARGET_WENT_AWAY.test(outcome.message)) {
+    const again = await discover();
+    const still = "unreadable" in again ? undefined : again.find((t) => t.targetId === targetId);
+
+    if (!("unreadable" in again) && !still) return targetNotFound(schema.name, targetId, again, { projectPath: args.projectPath, browser });
+
+    if (still) {
+      navigatedTo = still.url;
+      outcome = await evaluateOnExtensionPage(resolved.port, targetId, args.expression, args.timeout);
+    }
+  }
 
   if (!outcome.ok && outcome.paused) return pausedPageRefusal(outcome.paused);
 
@@ -1467,9 +1506,12 @@ async function evaluateByTargetId(
         name: outcome.thrown ? "EvalError" : "CdpError",
         message: outcome.message,
       },
+      ...(navigatedTo !== null ? { value: { targetId, url: navigatedTo, navigated: true } } : {}),
       hint: outcome.thrown
-        ? `The expression threw inside ${target.url} (targetId ${targetId}); it ran over CDP in that target's main world.`
-        : "The session's debug port refused the call or the target went away. extension_doctor names which.",
+        ? `The expression threw inside ${navigatedTo ?? target.url} (targetId ${targetId}); it ran over CDP in that target's main world.`
+        : navigatedTo !== null
+          ? `The tab with targetId ${targetId} navigated while the expression ran (it now shows ${navigatedTo}) and a second attempt after the navigation failed the same way; retry once the page settles, or pass url: "${navigatedTo}".`
+          : "The session's debug port refused the call. extension_doctor names why; a target that had gone would have answered E_TARGET_NOT_FOUND with the live targets.",
     });
   }
 
@@ -1478,8 +1520,13 @@ async function evaluateByTargetId(
     command: schema.name,
     status: "evaluated",
     value: outcome.value,
-    warnings: [outcome.note ?? null],
-    hint: `Evaluated over CDP in ${target.url} (targetId ${targetId}), the target's main world through the inspector, which neither the page's CSP nor the extension's governs; a promise is awaited before returning.`,
+    warnings: [
+      outcome.note ?? null,
+      navigatedTo !== null
+        ? `The tab with targetId ${targetId} navigated while the first attempt ran (it now shows ${navigatedTo}), so the expression was run again after the navigation; this value is from that second run.`
+        : null,
+    ],
+    hint: `Evaluated over CDP in ${navigatedTo ?? target.url} (targetId ${targetId}), the target's main world through the inspector, which neither the page's CSP nor the extension's governs; a promise is awaited before returning.`,
   });
 }
 

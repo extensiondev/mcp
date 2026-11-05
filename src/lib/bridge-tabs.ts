@@ -29,6 +29,31 @@ export type { BridgeTab };
 
 const UNKNOWN_VERB = /unknown command/i;
 
+const ARGUMENT_REFUSAL = /^E_FLAG_|^E_USAGE|^E_BAD_REQUEST/;
+
+export const TAB_ID_HINT =
+  "`tab` is a chrome.tabs id, a positive integer the browser assigned, not a tab position, so 0 and negatives name no tab. extension_dom_snapshot with listTabs: true lists the open tabs with their ids; omit tab to open the url in a new tab.";
+
+const CONTROL_CHANNEL_HINT =
+  "URL navigation rides the agent bridge, so the dev session needs its control channel: start it with extension_dev without allowControl: false.";
+
+/* @invariant THE HINT MATCHES THE REFUSAL. The engine's navigate verb refuses
+ * for two unrelated reasons: an argument it cannot take (a `tab` that is not a
+ * chrome.tabs id) and a session with no control channel. The control-channel
+ * sentence on an argument refusal sent an agent to restart a session that was
+ * fine (ledger 398), so an argument refusal gets the argument's own hint.
+ */
+export function navigateRefusalHint(frame: { status?: unknown; error?: { code?: unknown; message?: unknown } }): string {
+  const code = String(frame.error?.code ?? "");
+  const message = String(frame.error?.message ?? "");
+  const aboutArguments = frame.status === "usage" || ARGUMENT_REFUSAL.test(code);
+
+  if (aboutArguments && /\btab\b/i.test(message)) return TAB_ID_HINT;
+  if (aboutArguments) return "The engine refused the call's arguments, not the session: read error.message and fix the argument it names.";
+
+  return CONTROL_CHANNEL_HINT;
+}
+
 export interface NavigateTarget {
   tab?: number;
   newTab?: boolean;
@@ -77,7 +102,7 @@ export async function navigateToUrlViaBridge(
           ? verbFrame
           : {
               ...verbFrame,
-              hint: "URL navigation rides the agent bridge, so the dev session needs its control channel: start it with extension_dev without allowControl: false.",
+              hint: navigateRefusalHint(verbFrame),
             },
       );
     }

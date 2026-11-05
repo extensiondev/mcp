@@ -122,7 +122,7 @@ export const schema = {
       path: {
         type: "string",
         description:
-          "Where to write the image, relative to projectPath and inside it: a file name ending in .png (shots/home.png), or a folder with a trailing slash (shots/) that gets a timestamped .png. A path outside projectPath, or a file name that does not end in .png, is refused with E_BAD_REQUEST, so no other file is ever overwritten. Defaults to dist/extension-js/<browser>/screenshots.",
+          "Where to write the image: a file name ending in .png (shots/home.png), or a folder with a trailing slash (shots/) that gets a timestamped .png, relative to projectPath, or an absolute path under projectPath, the system temp folder (os.tmpdir(), /tmp) or one of the client's MCP roots, so a scratch folder outside the repo takes screenshots without piling them up in the working tree. A path anywhere else, or a file name that does not end in .png, is refused with E_BAD_REQUEST, so no other file is ever overwritten. Defaults to dist/extension-js/<browser>/screenshots, which git ignores only when dist is ignored.",
       },
       timeout: CALL_TIMEOUT,
     },

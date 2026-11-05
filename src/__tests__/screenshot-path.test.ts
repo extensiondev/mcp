@@ -4,7 +4,8 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { screenshotsDir, writeScreenshot } from "../lib/capture";
+import { resolveScreenshotPath, sanctionedScreenshotRoots, screenshotsDir, writeScreenshot } from "../lib/capture";
+import { setClientRoots } from "../lib/client-roots";
 import { readyContractPath } from "../lib/session-paths";
 import { readyContract } from "./fixtures/engine-answers";
 import { solidPng } from "./fixtures/png";
@@ -20,6 +21,23 @@ afterEach(() => {
 function tempDir(prefix: string): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   cleanups.push(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  return dir;
+}
+
+function homeDir(prefix: string): string {
+  const parent = path.join(os.homedir(), ".mcp-screenshot-path-tests");
+  fs.mkdirSync(parent, { recursive: true });
+  const dir = fs.mkdtempSync(path.join(parent, prefix));
+  cleanups.push(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  return dir;
+}
+
+function projectOutsideTemp(): string {
+  const dir = path.join(homeDir("project-"), "project");
+  fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "src", "manifest.json"), JSON.stringify({ manifest_version: 3, name: "Shot", version: "1.0.0" }));
 
   return dir;
 }
@@ -81,7 +99,7 @@ describe("writeScreenshot keeps the file inside the project as a .png", () => {
 
   it("refuses an absolute path outside the project and writes nothing there", () => {
     const dir = project();
-    const elsewhere = tempDir("mcp-screenshot-elsewhere-");
+    const elsewhere = homeDir("elsewhere-");
     const file = path.join(elsewhere, "shot.png");
 
     const out = expectRefused(dir, file);
@@ -91,7 +109,7 @@ describe("writeScreenshot keeps the file inside the project as a .png", () => {
   });
 
   it("refuses a ../ escape out of the project", () => {
-    const dir = project();
+    const dir = projectOutsideTemp();
     const parent = path.dirname(dir);
 
     const out = expectRefused(dir, "../escaped.png");
@@ -180,7 +198,7 @@ describe("extension_screenshot refuses a bad path before asking the browser for 
 
   it("answers E_BAD_REQUEST for a path outside the project", async () => {
     const dir = session();
-    const elsewhere = tempDir("mcp-screenshot-elsewhere-");
+    const elsewhere = homeDir("elsewhere-");
 
     const out = await run({ projectPath: dir, browser: "chrome", path: path.join(elsewhere, "shot.png"), timeout: 1000 });
 
@@ -188,5 +206,57 @@ describe("extension_screenshot refuses a bad path before asking the browser for 
     expect(out.error.code).toBe("E_BAD_REQUEST");
     expect(out.error.message).toContain("inside the project");
     expect(fs.readdirSync(elsewhere)).toEqual([]);
+  });
+});
+
+describe("400: a screenshot may land in the system temp folder or a client root, never anywhere else", () => {
+  it("accepts an absolute .png path under the system temp folder", () => {
+    const dir = project();
+    const scratch = tempDir("mcp-screenshot-scratch-");
+    const file = path.join(scratch, "me-pick.png");
+
+    const out = write(dir, file);
+
+    expect(out).toEqual({ ok: true, file });
+    expect(fs.existsSync(file)).toBe(true);
+  });
+
+  it("accepts a new folder under the temp folder and creates it", () => {
+    const dir = project();
+    const scratch = tempDir("mcp-screenshot-scratch-");
+    const file = path.join(scratch, "deeper", "shots", "home.png");
+
+    const out = write(dir, file);
+
+    expect(out).toEqual({ ok: true, file });
+    expect(fs.existsSync(file)).toBe(true);
+  });
+
+  it("accepts a path under a client MCP root and refuses it once the root is gone", () => {
+    const dir = project();
+    const home = path.join(os.homedir(), ".mcp-screenshot-root-probe");
+    setClientRoots([`file://${home}`]);
+
+    const allowed = resolveScreenshotPath(dir, "chrome", "page", path.join(home, "shot.png"));
+    setClientRoots(null);
+    const refused = resolveScreenshotPath(dir, "chrome", "page", path.join(home, "shot.png"));
+
+    expect(allowed.ok).toBe(true);
+    expect(refused.ok).toBe(false);
+    if (refused.ok) throw new Error("unreachable");
+
+    expect(refused.message).toContain("client root");
+    expect(refused.hint).toContain(os.tmpdir());
+    expect(sanctionedScreenshotRoots(dir)).toContain(os.tmpdir());
+  });
+
+  it("still refuses the user's home and a sibling of a project outside the temp folder", () => {
+    const dir = projectOutsideTemp();
+
+    for (const wanted of [path.join(os.homedir(), "shot.png"), path.join(path.dirname(dir), "sibling.png")]) {
+      const out = resolveScreenshotPath(dir, "chrome", "page", wanted);
+
+      expect(out.ok).toBe(false);
+    }
   });
 });

@@ -69,34 +69,10 @@ afterEach(() => {
   }
 });
 
-describe("the clobber warning is said only on a build that wrote, because the engine never promotes its staging dir on a failed build", () => {
-  it("warns that a live dev session's dist was written over when the build wrote", async () => {
+describe("402: a build over a registered dev session's dist is refused before the engine runs, never written and warned about after", () => {
+  it("refuses with the session's pid and names outDir and extension_stop", async () => {
     const dir = project();
     registerSession({ projectPath: dir, browser: "chrome", pid: process.pid, command: "dev" });
-
-    const result = JSON.parse(await build.handler({ projectPath: dir, browser: "chrome" }));
-
-    expect(result.ok).toBe(true);
-    expect(result.warnings.join(" ")).toContain("wrote over its dist/chrome output");
-  });
-
-  it("says nothing about clobbering when the build failed and wrote nothing", async () => {
-    const dir = project();
-    registerSession({ projectPath: dir, browser: "chrome", pid: process.pid, command: "dev" });
-    failTheBuild = true;
-
-    const result = JSON.parse(await build.handler({ projectPath: dir, browser: "chrome" }));
-
-    expect(result.ok).toBe(false);
-    expect(JSON.stringify(result)).not.toContain("wrote over");
-  });
-});
-
-describe("a build the engine refuses because a live dev session serves the dist answers that refusal, not a compile failure", () => {
-  it("passes the engine's code through and points at extension_stop", async () => {
-    const dir = project();
-    registerSession({ projectPath: dir, browser: "chrome", pid: process.pid, command: "dev" });
-    devSessionOwnsTheDist = true;
 
     const result = JSON.parse(await build.handler({ projectPath: dir, browser: "chrome" }));
 
@@ -104,6 +80,36 @@ describe("a build the engine refuses because a live dev session serves the dist 
     expect(result.status).toBe("build-refused");
     expect(result.error.code).toBe("E_DEV_SESSION_DIST_SHARED");
     expect(result.value.livePids).toEqual([process.pid]);
+    expect(result.hint).toContain("outDir");
+    expect(result.hint).toContain("extension_stop");
+    expect(JSON.stringify(result)).not.toContain("wrote over");
+    expect(fs.existsSync(path.join(dir, "dist", "chrome", "manifest.json"))).toBe(false);
+  });
+
+  it("says nothing about clobbering when the build failed for another reason", async () => {
+    const dir = project();
+    failTheBuild = true;
+
+    const result = JSON.parse(await build.handler({ projectPath: dir, browser: "chrome" }));
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("build-failed");
+    expect(JSON.stringify(result)).not.toContain("wrote over");
+  });
+});
+
+describe("a build the engine refuses because a live dev session serves the dist answers that refusal, not a compile failure", () => {
+  it("passes the engine's code through and points at outDir and extension_stop", async () => {
+    const dir = project();
+    devSessionOwnsTheDist = true;
+
+    const result = JSON.parse(await build.handler({ projectPath: dir, browser: "chrome" }));
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("build-refused");
+    expect(result.error.code).toBe("E_DEV_SESSION_DIST_SHARED");
+    expect(result.value.livePids).toEqual([]);
+    expect(result.hint).toContain("outDir");
     expect(result.hint).toContain("extension_stop");
     expect(JSON.stringify(result)).not.toContain("wrote over");
   });

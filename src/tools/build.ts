@@ -11,7 +11,7 @@ import path from "node:path";
 
 import { LAUNCH_BROWSER, PROJECT_PATH } from "../lib/common-schema";
 import { runExtensionCli } from "../lib/exec";
-import { outputJsonVerdict, refusedTheOutputFlag } from "../lib/engine-version";
+import { compareVersions, outputJsonVerdict, refusedTheOutputFlag, resolvedEngineFacts } from "../lib/engine-version";
 import { liveProjectSessions } from "../lib/session-browser";
 import { channelAwareBuildWarnings } from "../lib/amo-update-url";
 import { CARRIER_DIR_NAME, removeCarrier } from "../lib/carrier";
@@ -43,6 +43,74 @@ import { reviewCoverageNotes, reviewDistReport, reviewRiskWarnings } from "../li
 
 const COMMAND = "extension_build";
 const DEV_SESSION_OWNS_THE_DIST = "E_DEV_SESSION_DIST_SHARED" as const;
+export const OUT_DIR_FLOOR = "4.1.36";
+
+const OUT_DIR_REFUSED = /unknown option '--out-dir'|--out-dir/i;
+
+export function resolveBuildOutDir(projectPath: string, outDir: string | undefined): string | null {
+  const wanted = typeof outDir === "string" ? outDir.trim() : "";
+
+  return wanted ? path.resolve(projectPath, wanted) : null;
+}
+
+function outDirRefusal(projectPath: string, outDir: string): string | null {
+  const resolved = resolveBuildOutDir(projectPath, outDir);
+  if (!resolved) return null;
+
+  if (resolved === path.resolve(projectPath)) {
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "bad-request",
+      error: {
+        code: "E_BAD_REQUEST",
+        message: `outDir ${JSON.stringify(outDir)} is the project root; the build writes <outDir>/<browser>, so it needs a folder other than the project itself.`,
+      },
+      hint: 'Pass a folder such as outDir: "build", which writes build/<browser> and the zip beside it.',
+    });
+  }
+
+  return null;
+}
+
+async function outDirEngineRefusal(projectPath: string): Promise<string | null> {
+  let version: string | null;
+
+  try {
+    version = (await resolvedEngineFacts(projectPath)).version;
+  } catch {
+    return null;
+  }
+
+  if (version === null || (compareVersions(version, OUT_DIR_FLOOR) ?? 0) >= 0) return null;
+
+  return envelope({
+    ok: false,
+    command: COMMAND,
+    status: "engine-unsupported",
+    error: {
+      code: "E_ENGINE_TOO_OLD",
+      message: `The project's Extension.js engine reports ${version}, and extension build takes --out-dir only from ${OUT_DIR_FLOOR} on, so outDir cannot be honored. Nothing was built.`,
+    },
+    hint: `Upgrade the project's engine (npm i -D extension@latest) to build into outDir, or build without outDir after extension_stop on the session that serves dist/<browser>.`,
+  });
+}
+
+function devSessionOwnsOutputRefusal(browser: string, pids: number[], start: number): string {
+  const who = pids.length === 1 ? `A live dev session (pid ${pids[0]})` : `Live dev sessions (pids ${pids.join(", ")})`;
+
+  return envelope({
+    ok: false,
+    command: COMMAND,
+    status: "build-refused",
+    error: {
+      code: DEV_SESSION_OWNS_THE_DIST,
+      message: `${who} for ${browser} ${pids.length === 1 ? "is" : "are"} running on this project and ${pids.length === 1 ? "serves" : "serve"} dist/${browser}, the folder this build would write. A production bundle written over it pulls the files out from under that browser, so nothing was built and the session is untouched.`,
+    },
+    value: { browser, duration: Date.now() - start, livePids: pids, outputPath: `dist/${browser}` },
+    hint: `Pass outDir (for example "build", which writes build/${browser} and the zip beside it, and leaves dist/${browser} to the session) to build next to the session, or call extension_stop with this projectPath and browser "${browser}" first.`,
+  });
+}
 
 interface EngineSafariSummary {
   appName?: string;
@@ -335,6 +403,7 @@ function explicitZipStem(zipFilename: string): string {
 
 function locateDistZip(
   projectPath: string,
+  distRoot: string,
   browser: string,
   zipFilename: string | undefined,
   since: number,
@@ -343,8 +412,7 @@ function locateDistZip(
   const fromSummary = zipFromSummary(summary, "dist", since);
   if (fromSummary) return fromSummary;
 
-  const distDir = path.resolve(projectPath, "dist", engineBrowserName(browser));
-  const distRoot = path.resolve(projectPath, "dist");
+  const distDir = path.resolve(distRoot, engineBrowserName(browser));
   const stem = zipFilename
     ? explicitZipStem(zipFilename)
     : engineZipBase(distDir, projectPath);
@@ -365,6 +433,7 @@ function locateDistZip(
 
 function locateSourceZip(
   projectPath: string,
+  distRoot: string,
   browser: string,
   zipFilename: string | undefined,
   since: number,
@@ -373,8 +442,7 @@ function locateSourceZip(
   const fromSummary = zipFromSummary(summary, "source", since);
   if (fromSummary) return fromSummary;
 
-  const distDir = path.resolve(projectPath, "dist", engineBrowserName(browser));
-  const distRoot = path.resolve(projectPath, "dist");
+  const distDir = path.resolve(distRoot, engineBrowserName(browser));
   const stem = zipFilename
     ? explicitZipStem(zipFilename)
     : engineZipBase(distDir, projectPath);
@@ -387,7 +455,7 @@ function locateSourceZip(
 export const schema = {
   name: "extension_build",
   description:
-    "Build a browser extension for production. This tool always passes --browser (chrome unless you set it), so the output lands in dist/<browser>/ (dist/chrome by default) and the answer's outputPath always names the folder that was written (the engine's reported path, else dist/<browser> under the package root, the same folder this tool checked for the manifest), with zipPath beside it when a zip was asked for: read those paths instead of assuming one. To know what is in the build (sizes, entry points, the checks a store reviewer runs) call extension_analyze on the same projectPath and browser instead of listing or reading the output folder by hand; the answer's hint says so. A scaffolded project's own `npm run build` runs `extension build` with no --browser, which the engine defaults to chromium, so that script writes dist/chromium/ instead. Pass zip:true to also package a .zip for store submission. With browser:'safari' the build converts the extension into a macOS app through Xcode, and bundleId sets the identifier it ships under. The build refuses a manifest with build-blocking errors unless you pass skipValidation:true, because such a manifest yields a broken bundle the bundler itself never flags.",
+    "Build a browser extension for production. This tool always passes --browser (chrome unless you set it), so the output lands in dist/<browser>/ (dist/chrome by default; <outDir>/<browser>/ with outDir, and a build over a live dev session's dist is refused and names outDir), and the answer's outputPath names the folder that was written, with zipPath beside it when a zip was asked for: read those paths instead of assuming one. To know what is in the build (sizes, entry points, the checks a store reviewer runs) call extension_analyze on the same projectPath and browser instead of listing or reading the output folder by hand; the answer's hint says so. A scaffolded project's own `npm run build` runs `extension build` with no --browser, which the engine defaults to chromium, so that script writes dist/chromium/ instead. Pass zip:true to also package a .zip for store submission. With browser:'safari' the build converts the extension into a macOS app through Xcode, and bundleId sets the identifier it ships under. The build refuses a manifest with build-blocking errors unless you pass skipValidation:true, because such a manifest yields a broken bundle the bundler itself never flags.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -428,6 +496,11 @@ export const schema = {
         default: false,
         description:
           "Build even when extension_manifest_validate reports build-blocking errors. The build normally refuses: the engine itself stops only on missing scripts, icons, DNR rule files, default_locale and manifest_version, and ships a bundle over the rest.",
+      },
+      outDir: {
+        type: "string",
+        description:
+          "Write the build under this folder instead of dist: the engine writes <outDir>/<browser> and puts the zip beside it, and leaves dist/<browser> to a running dev session, which keeps serving its own files. Relative to projectPath (an absolute path works too); the project root itself is refused. Without it, a build for a browser that a live extension_dev session serves is refused before anything runs, since it would write over the files that browser is running from; pass outDir to build beside the session. Needs Extension.js 4.1.36 or later.",
       },
       ...SAFARI_BUILD_OPTION_SCHEMA,
     },
@@ -558,12 +631,29 @@ export async function handler(args: {
   silent?: boolean;
   mode?: "development" | "production" | "none";
   skipValidation?: boolean;
+  outDir?: string;
 } & SafariBuildArgs): Promise<string> {
   const start = Date.now();
   const browser = args.browser ?? "chrome";
   const safari = isSafariTarget(browser);
   const safariRefusal = safariBuildRefusal(COMMAND, browser, args, start);
   if (safariRefusal) return safariRefusal;
+
+  const outDir = resolveBuildOutDir(args.projectPath, args.outDir);
+
+  if (outDir) {
+    const invalid = outDirRefusal(args.projectPath, String(args.outDir));
+    if (invalid) return invalid;
+
+    const tooOld = await outDirEngineRefusal(args.projectPath);
+    if (tooOld) return tooOld;
+  }
+
+  const liveSameBrowser = liveProjectSessions(args.projectPath).filter((session) => session.browser === browser);
+
+  if (!outDir && liveSameBrowser.length) {
+    return devSessionOwnsOutputRefusal(browser, liveSameBrowser.map((session) => session.pid), start);
+  }
 
   const signingTeam = safariBuildTeam(args.projectPath, browser, args.developmentTeam);
   const teamRefusal = await teamUnknownToXcodeRefusal(COMMAND, browser, signingTeam.team, start);
@@ -614,16 +704,10 @@ export async function handler(args: {
     });
   }
 
-  const clobberedSessions = liveProjectSessions(args.projectPath).filter(
-    (session) => session.browser === browser,
-  );
   const warnings: string[] = carrierNotes;
-  const clobberNotes: string[] = clobberedSessions.map(
-      (session) =>
-        `A live dev session (pid ${session.pid}) is running on this project for ${browser}, and this build wrote over its dist/${browser} output. The dev browser may now serve the production artifact instead of the dev build until the next recompile. Run extension_stop, or let dev recompile on the next source change, to resolve it.`,
-  );
 
   const cliArgs = ["build", args.projectPath, "--browser", browser];
+  if (outDir) cliArgs.push("--out-dir", outDir);
   if (args.zip) cliArgs.push("--zip");
   if (args.zipSource) cliArgs.push("--zip-source");
   if (args.zipFilename) cliArgs.push("--zip-filename", args.zipFilename);
@@ -691,10 +775,11 @@ export async function handler(args: {
       engineSummary.warnings_count > buildWarnings.length
         ? engineSummary.warnings_count
         : undefined;
+    const distRoot = outDir ?? path.join(engineProjectRoot(args.projectPath), "dist");
     const distDir =
       typeof engineSummary?.output_path === "string" && engineSummary.output_path
         ? path.resolve(engineSummary.output_path)
-        : path.join(engineProjectRoot(args.projectPath), "dist", engineBrowserName(browser));
+        : path.join(distRoot, engineBrowserName(browser));
     const distManifest = path.join(distDir, "manifest.json");
     let distWrittenAt: number | null = null;
 
@@ -723,7 +808,7 @@ export async function handler(args: {
           output: lastLines(out, 12),
         },
         warnings: [...warnings, ...(preflight?.warnings ?? [])],
-        hint: "Check the build output above and the project's output configuration: the dist this tool reads is the one the engine reports (output_path), else dist/<browser> under the package root.",
+        hint: `Check the build output above and the project's output configuration: the dist this tool reads is the one the engine reports (output_path), else ${outDir ? "<outDir>/<browser>" : "dist/<browser> under the package root"}.`,
       });
     }
 
@@ -787,23 +872,24 @@ export async function handler(args: {
     }
 
     const zipNotes: string[] = [];
+    const zipRootWords = outDir ? path.relative(args.projectPath, outDir) || outDir : "dist";
     const zipPath = args.zip
-      ? locateDistZip(args.projectPath, browser, args.zipFilename, start, engineSummary)
+      ? locateDistZip(args.projectPath, distRoot, browser, args.zipFilename, start, engineSummary)
       : null;
 
     if (args.zip && !zipPath) {
       zipNotes.push(
-        `zip: true was requested and the build succeeded, but the engine's summary names no zip and no .zip newer than this build was found under dist/ (the engine writes dist/<name>-<version>-${browser}.zip). Check the build output below.`,
+        `zip: true was requested and the build succeeded, but the engine's summary names no zip and no .zip newer than this build was found under ${zipRootWords}/ (the engine writes ${zipRootWords}/<name>-<version>-${browser}.zip). Check the build output below.`,
       );
     }
 
     const zipSourcePath = args.zipSource
-      ? locateSourceZip(args.projectPath, browser, args.zipFilename, start, engineSummary)
+      ? locateSourceZip(args.projectPath, distRoot, browser, args.zipFilename, start, engineSummary)
       : null;
 
     if (args.zipSource && !zipSourcePath) {
       zipNotes.push(
-        `zipSource: true was requested and the build succeeded, but the engine's summary names no source zip and no *-source.zip newer than this build was found under dist/. Check the build output below.`,
+        `zipSource: true was requested and the build succeeded, but the engine's summary names no source zip and no *-source.zip newer than this build was found under ${zipRootWords}/. Check the build output below.`,
       );
     }
 
@@ -861,7 +947,6 @@ export async function handler(args: {
       },
       warnings: [
         ...warnings,
-        ...clobberNotes,
         ...(preflight?.warnings ?? []),
         ...buildWarnings,
         ...reviewRiskWarnings(risks),
@@ -911,10 +996,25 @@ export async function handler(args: {
       value: {
         browser,
         duration,
-        livePids: clobberedSessions.map((session) => session.pid),
+        livePids: liveSameBrowser.map((session) => session.pid),
       },
       warnings,
-      hint: `A running extension_dev session serves dist/${browser} and the engine refused to write over it, so nothing was built and the session is untouched. Call extension_stop with this projectPath and browser "${browser}", then build again.`,
+      hint: `A running dev session serves dist/${browser} and the engine refused to write over it, so nothing was built and the session is untouched. Pass outDir (for example "build", which writes build/${browser}) to build beside it, or call extension_stop with this projectPath and browser "${browser}" and build again.`,
+    });
+  }
+
+  if (outDir && OUT_DIR_REFUSED.test(stderr) && /unknown option/i.test(stderr)) {
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "engine-unsupported",
+      error: {
+        code: "E_ENGINE_TOO_OLD",
+        message: `The project's Extension.js engine refused --out-dir, which extension build takes only from ${OUT_DIR_FLOOR} on, so outDir cannot be honored. Nothing was built.`,
+      },
+      value: { browser, duration },
+      warnings,
+      hint: `Upgrade the project's engine (npm i -D extension@latest) to build into outDir, or build without outDir after extension_stop on the session that serves dist/${browser}.`,
     });
   }
 

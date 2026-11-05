@@ -254,7 +254,7 @@
       "name": "extension_build",
       "tier": "build",
       "group": "local",
-      "description": "Build a browser extension for production. This tool always passes --browser (chrome unless you set it), so the output lands in dist/<browser>/ (dist/chrome by default) and the answer's outputPath always names the folder that was written (the engine's reported path, else dist/<browser> under the package root, the same folder this tool checked for the manifest), with zipPath beside it when a zip was asked for: read those paths instead of assuming one. To know what is in the build (sizes, entry points, the checks a store reviewer runs) call extension_analyze on the same projectPath and browser instead of listing or reading the output folder by hand; the answer's hint says so. A scaffolded project's own `npm run build` runs `extension build` with no --browser, which the engine defaults to chromium, so that script writes dist/chromium/ instead. Pass zip:true to also package a .zip for store submission. With browser:'safari' the build converts the extension into a macOS app through Xcode, and bundleId sets the identifier it ships under. The build refuses a manifest with build-blocking errors unless you pass skipValidation:true, because such a manifest yields a broken bundle the bundler itself never flags.",
+      "description": "Build a browser extension for production. This tool always passes --browser (chrome unless you set it), so the output lands in dist/<browser>/ (dist/chrome by default; <outDir>/<browser>/ with outDir, and a build over a live dev session's dist is refused and names outDir), and the answer's outputPath names the folder that was written, with zipPath beside it when a zip was asked for: read those paths instead of assuming one. To know what is in the build (sizes, entry points, the checks a store reviewer runs) call extension_analyze on the same projectPath and browser instead of listing or reading the output folder by hand; the answer's hint says so. A scaffolded project's own `npm run build` runs `extension build` with no --browser, which the engine defaults to chromium, so that script writes dist/chromium/ instead. Pass zip:true to also package a .zip for store submission. With browser:'safari' the build converts the extension into a macOS app through Xcode, and bundleId sets the identifier it ships under. The build refuses a manifest with build-blocking errors unless you pass skipValidation:true, because such a manifest yields a broken bundle the bundler itself never flags.",
       "gate": "none",
       "samplePrompt": "Build this extension for Chrome and Firefox",
       "readOnly": false,
@@ -323,6 +323,12 @@
           "required": false,
           "default": false,
           "description": "Build even when extension_manifest_validate reports build-blocking errors. The build normally refuses: the engine itself stops only on missing scripts, icons, DNR rule files, default_locale and manifest_version, and ships a bundle over the rest."
+        },
+        {
+          "name": "outDir",
+          "type": "string",
+          "required": false,
+          "description": "Write the build under this folder instead of dist: the engine writes <outDir>/<browser> and puts the zip beside it, and leaves dist/<browser> to a running dev session, which keeps serving its own files. Relative to projectPath (an absolute path works too); the project root itself is refused. Without it, a build for a browser that a live extension_dev session serves is refused before anything runs, since it would write over the files that browser is running from; pass outDir to build beside the session. Needs Extension.js 4.1.36 or later."
         },
         {
           "name": "appName",
@@ -1198,7 +1204,7 @@
           "name": "tab",
           "type": "number",
           "required": false,
-          "description": "With `url`: navigate this chrome.tabs id in place instead of opening a new tab (rides the engine's navigate verb over the control channel, which a dev session carries unless started with allowControl: false). Without it an existing page is never taken over."
+          "description": "With `url`: navigate this chrome.tabs id in place instead of opening a new tab (rides the engine's navigate verb over the control channel, which a dev session carries unless started with allowControl: false). A chrome.tabs id is a positive integer the browser assigned, not a tab position: 0 is not the first tab and is refused. extension_dom_snapshot with listTabs: true lists the open tabs with their ids. Without it an existing page is never taken over."
         },
         {
           "name": "asTab",
@@ -1786,7 +1792,7 @@
           "name": "path",
           "type": "string",
           "required": false,
-          "description": "Where to write the image, relative to projectPath and inside it: a file name ending in .png (shots/home.png), or a folder with a trailing slash (shots/) that gets a timestamped .png. A path outside projectPath, or a file name that does not end in .png, is refused with E_BAD_REQUEST, so no other file is ever overwritten. Defaults to dist/extension-js/<browser>/screenshots."
+          "description": "Where to write the image: a file name ending in .png (shots/home.png), or a folder with a trailing slash (shots/) that gets a timestamped .png, relative to projectPath, or an absolute path under projectPath, the system temp folder (os.tmpdir(), /tmp) or one of the client's MCP roots, so a scratch folder outside the repo takes screenshots without piling them up in the working tree. A path anywhere else, or a file name that does not end in .png, is refused with E_BAD_REQUEST, so no other file is ever overwritten. Defaults to dist/extension-js/<browser>/screenshots, which git ignores only when dist is ignored."
         },
         {
           "name": "timeout",
@@ -1970,7 +1976,14 @@
           "type": "boolean",
           "required": false,
           "default": false,
-          "description": "Stop the live session this projectPath runs for the same browser first (an extension_dev or extension_start session), reported as replacedSession. Without it the call is refused: one session per browser owns dist/<browser> and its ready.json and eval token, and a production start would rebuild them under the running session. A session for another browser keeps running either way."
+          "description": "Stop the live session this projectPath runs for the same browser first (an extension_dev or extension_start session), reported as replacedSession. Without it the call is refused: one session per browser owns dist/<browser> and its ready.json and eval token, and a production start would rebuild them under the running session. A session for another browser keeps running either way. To run a second session beside the person's own instead of replacing it, pass isolated: true."
+        },
+        {
+          "name": "isolated",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "Run a throwaway session beside the person's own for the same project and browser, never touching it: the project is built for production into a folder under the system temp directory (extension build --out-dir, Extension.js 4.1.36 or later), and launched from there on a new profile, headless unless headless: false, with the control channel and eval as allowControl and allowEval say. The answer's value.isolated.projectPath is the projectPath to pass to every other tool for this session (extension_open, extension_eval, extension_screenshot, extension_dom_snapshot, extension_stop), since the run is a project of its own to the engine; the person's session for the real projectPath keeps its window, profile and dist/<browser>. extension_stop with that projectPath ends it; the folder stays until deleted. replace, outputPath, build: false and noBrowser do not apply with it."
         },
         {
           "name": "wait",

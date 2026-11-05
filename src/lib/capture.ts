@@ -7,9 +7,11 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import { CDPClient } from "./cdp";
+import { clientRoots } from "./client-roots";
 import { RdpSession } from "./rdp";
 import { browserArtifactsDir } from "./session-paths";
 
@@ -155,20 +157,76 @@ export function screenshotsDir(projectPath: string, browser: string): string {
 
 export type ScreenshotPath = { ok: true; file: string } | { ok: false; message: string; hint: string };
 
-export const SCREENSHOT_PATH_RULES = "path must stay inside projectPath and name a .png file, or a folder with a trailing slash.";
+export const SCREENSHOT_PATH_RULES =
+  "path must name a .png file, or a folder with a trailing slash, inside projectPath, the system temp folder, or one of the client's MCP roots.";
+
+function realDir(dir: string): string | null {
+  try {
+    return fs.realpathSync.native(dir);
+  } catch {
+    return null;
+  }
+}
+
+function existingAncestor(file: string): string {
+  let dir = file;
+
+  while (!fs.existsSync(dir)) {
+    const up = path.dirname(dir);
+    if (up === dir) return dir;
+
+    dir = up;
+  }
+
+  return dir;
+}
+
+function within(root: string, file: string): boolean {
+  const relative = path.relative(root, file);
+
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+/* @invariant A SCREENSHOT LANDS IN THE PROJECT, THE TEMP FOLDER OR A CLIENT ROOT.
+ * The guard exists so this tool never overwrites a file elsewhere, and the
+ * project-only form of it made agents write screenshots into the working tree,
+ * where they piled up untracked (ledger 400). The system temp folder and the
+ * client's own MCP roots are the two places an agent already keeps scratch
+ * files, so a path under either is sanctioned; anything else stays refused.
+ */
+export function sanctionedScreenshotRoots(projectPath: string): string[] {
+  const temp = [os.tmpdir(), ...(process.platform === "win32" ? [] : ["/tmp", "/private/tmp"])];
+
+  return [path.resolve(projectPath), ...temp, ...clientRoots()];
+}
+
+function insideSanctionedRoot(projectPath: string, resolved: string): boolean {
+  const real = (() => {
+    const base = existingAncestor(resolved);
+    const realBase = realDir(base);
+
+    return realBase ? path.join(realBase, path.relative(base, resolved)) : resolved;
+  })();
+
+  return sanctionedScreenshotRoots(projectPath).some((root) => {
+    const literal = path.resolve(root);
+    const realRoot = realDir(literal) ?? literal;
+
+    return within(literal, resolved) || within(realRoot, real);
+  });
+}
 
 export function resolveScreenshotPath(projectPath: string, browser: string, context: string, wanted?: string): ScreenshotPath {
   if (!wanted) return { ok: true, file: path.join(screenshotsDir(projectPath, browser), defaultName(context)) };
 
   const root = path.resolve(projectPath);
   const resolved = path.resolve(root, wanted);
-  const relative = path.relative(root, resolved);
 
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+  if (!insideSanctionedRoot(projectPath, resolved)) {
     return {
       ok: false,
-      message: `path ${wanted} resolves to ${resolved}, which is not inside the project at ${root}. ${SCREENSHOT_PATH_RULES}`,
-      hint: "Pass a path relative to projectPath, such as shots/home.png or shots/, or omit it to write under dist/extension-js/<browser>/screenshots.",
+      message: `path ${wanted} resolves to ${resolved}, which is not inside the project at ${root}, the system temp folder (${os.tmpdir()}) or a client root. ${SCREENSHOT_PATH_RULES}`,
+      hint: `Pass a path relative to projectPath, such as shots/home.png or shots/, an absolute .png path under ${os.tmpdir()} or one of the client's MCP roots, or omit it to write under dist/extension-js/<browser>/screenshots.`,
     };
   }
 

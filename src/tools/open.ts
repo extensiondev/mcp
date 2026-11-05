@@ -56,6 +56,7 @@ import {
   navigateToUrlViaBridge,
   resolveBridgeBaseUrl,
   listBridgeTabs,
+  TAB_ID_HINT,
 } from "../lib/bridge-tabs";
 import { openSidePanelWithSyntheticGesture } from "../lib/cdp-extension-page";
 import { openDevToolsPanel } from "../lib/cdp-devtools";
@@ -1148,7 +1149,7 @@ export const schema = {
       tab: {
         type: "number",
         description:
-          "With `url`: navigate this chrome.tabs id in place instead of opening a new tab (rides the engine's navigate verb over the control channel, which a dev session carries unless started with allowControl: false). Without it an existing page is never taken over.",
+          "With `url`: navigate this chrome.tabs id in place instead of opening a new tab (rides the engine's navigate verb over the control channel, which a dev session carries unless started with allowControl: false). A chrome.tabs id is a positive integer the browser assigned, not a tab position: 0 is not the first tab and is refused. extension_dom_snapshot with listTabs: true lists the open tabs with their ids. Without it an existing page is never taken over.",
       },
       asTab: {
         type: "boolean",
@@ -1272,6 +1273,24 @@ async function resolveExtensionDocumentUrl(
   };
 }
 
+function isTabId(tab: unknown): tab is number {
+  return typeof tab === "number" && Number.isInteger(tab) && tab > 0;
+}
+
+function tabIdRefusal(tab: unknown): string {
+  return envelope({
+    ok: false,
+    command: schema.name,
+    status: "bad-request",
+    error: {
+      code: "E_BAD_REQUEST",
+      name: "BadRequest",
+      message: `\`tab\` expects a chrome.tabs id (a positive integer), got: ${JSON.stringify(tab)}. Nothing was opened.`,
+    },
+    hint: TAB_ID_HINT,
+  });
+}
+
 export async function handler(
   args: ActArgs & {
     surface?: string;
@@ -1294,6 +1313,8 @@ export async function handler(
   }
 
   if (args.url) {
+    if (args.tab !== undefined && !isTabId(args.tab)) return tabIdRefusal(args.tab);
+
     const absolute = /^[a-z][a-z0-9+.-]*:/i.test(args.url)
       ? args.url
       : await resolveExtensionDocumentUrl(args.projectPath, browser, args.url);

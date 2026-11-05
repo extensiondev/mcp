@@ -316,7 +316,7 @@ describe("extension_build zip path reporting", () => {
   });
 });
 
-describe("extension_build warns over a live dev session", () => {
+describe("402: extension_build never writes over a live dev session's dist", () => {
   function writeReadyContract(dir: string, browser: string, pid: number): void {
     const contractDir = path.join(dir, "dist", "extension-js", browser);
     fs.mkdirSync(contractDir, { recursive: true });
@@ -326,20 +326,72 @@ describe("extension_build warns over a live dev session", () => {
     );
   }
 
-  it("warns that the build wrote over the live session's dist", async () => {
+  it("refuses before the engine runs when a live session serves dist/<browser>, and names outDir", async () => {
     const dir = project({ manifest_version: 3, name: "F", version: "1.0.0" });
     writeReadyContract(dir, "chrome", process.pid);
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
 
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("build-refused");
+    expect(result.error.code).toBe("E_DEV_SESSION_DIST_SHARED");
+    expect(result.error.message).toContain(`pid ${process.pid}`);
+    expect(result.error.message).toContain("dist/chrome");
+    expect(result.error.message).toContain("nothing was built");
+    expect(result.value.livePids).toEqual([process.pid]);
+    expect(result.hint).toContain("outDir");
+    expect(result.hint).toContain("build/chrome");
+    expect(result.hint).toContain("extension_stop");
+    expect(cliCalls).toHaveLength(0);
+    expect(fs.existsSync(path.join(dir, "dist", "chrome", "manifest.json"))).toBe(false);
+  });
+
+  it("builds beside the session with outDir, passes --out-dir and reads <outDir>/<browser>", async () => {
+    const dir = project({ manifest_version: 3, name: "F", version: "1.0.0" });
+    writeReadyContract(dir, "chrome", process.pid);
+    const built = path.join(dir, "build", "chrome");
+    skipDist = true;
+
+    onCli = () => {
+      fs.mkdirSync(built, { recursive: true });
+      fs.writeFileSync(path.join(built, "manifest.json"), fs.readFileSync(path.join(dir, "src", "manifest.json")));
+    };
+
+    cliResultOverride = {
+      code: 0,
+      stdout: `${JSON.stringify({
+        schema: 1,
+        ok: true,
+        command: "build",
+        status: "built",
+        value: { projectPath: dir, browsers: ["chrome"], mode: "production", summaries: [buildSummary("chrome", { output_path: built })] },
+        error: null,
+        warnings: [],
+      })}\n`,
+      stderr: "",
+    };
+
+    const result = JSON.parse(await build.handler({ projectPath: dir, outDir: "build" }));
+
     expect(result.ok).toBe(true);
+    expect(result.status).toBe("built");
+    expect(result.value.outputPath).toBe(built);
     expect(cliCalls).toHaveLength(1);
-    expect(Array.isArray(result.warnings)).toBe(true);
-    const warning = result.warnings.join(" ");
-    expect(warning).toContain("dev session");
-    expect(warning).toContain("dist/chrome");
-    expect(warning).toContain("production artifact");
-    expect(warning).toContain("extension_stop");
+    expect(cliCalls[0]).toContain("--out-dir");
+    expect(cliCalls[0][cliCalls[0].indexOf("--out-dir") + 1]).toBe(path.join(dir, "build"));
+    expect(result.warnings.join(" ")).not.toMatch(/wrote over|dev session/);
+    expect(fs.existsSync(path.join(dir, "dist", "chrome", "manifest.json"))).toBe(false);
+  });
+
+  it("refuses outDir that names the project root", async () => {
+    const dir = project({ manifest_version: 3, name: "F", version: "1.0.0" });
+
+    const result = JSON.parse(await build.handler({ projectPath: dir, outDir: "." }));
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("bad-request");
+    expect(result.error.message).toContain("project root");
+    expect(cliCalls).toHaveLength(0);
   });
 
   it("stays quiet when the ready contract's pid is dead", async () => {
@@ -364,15 +416,21 @@ describe("extension_build warns over a live dev session", () => {
     expect(result.warnings.join(" ")).not.toContain("dev session");
   });
 
-  it("does not say a failed build wrote over the dev dist: the engine promotes its staging dir only on success", async () => {
+  it("names outDir when the engine itself refuses the shared dist", async () => {
     const dir = project({ manifest_version: 3, name: "F", version: "1.0.0" });
-    writeReadyContract(dir, "chrome", process.pid);
-    cliResultOverride = { code: 1, stdout: "", stderr: "boom" };
+    cliResultOverride = {
+      code: 1,
+      stdout: `${JSON.stringify({ schema: 1, ok: false, command: "build", status: "failed", value: null, error: { code: "E_DEV_SESSION_DIST_SHARED", message: "A running dev session serves dist/chrome." }, warnings: [] })}\n`,
+      stderr: "",
+    };
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
 
     expect(result.ok).toBe(false);
-    expect(result.warnings.join(" ")).not.toMatch(/wrote over its dist/);
+    expect(result.status).toBe("build-refused");
+    expect(result.error.code).toBe("E_DEV_SESSION_DIST_SHARED");
+    expect(result.hint).toContain("outDir");
+    expect(result.hint).toContain("extension_stop");
   });
 });
 

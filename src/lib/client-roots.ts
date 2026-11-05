@@ -42,6 +42,10 @@ export function setClientRoots(uris: unknown[] | null): void {
  * directory when the client reports no roots) may name the project through
  * its GitHub origin. Two roots name no one directory, so they name nothing.
  */
+export function clientRoots(): string[] {
+  return reported ? [...reported] : [];
+}
+
 export function clientProjectDir(): string | null {
   if (reported) return reported.length === 1 ? (reported[0] ?? null) : null;
 
