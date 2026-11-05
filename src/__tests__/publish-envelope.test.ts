@@ -371,7 +371,8 @@ describe("extension_publish envelope compatibility", () => {
       expect(note).toContain('manifest names the extension "Rebeccat"');
       expect(note).toContain('display name on extension.dev is "PII Shield"');
       expect(note).toMatch(/project-settings/);
-      expect(note).toContain("does not write them");
+      expect(note).toContain('extension_workspace {action: "configure-project", settings: {displayName: "Rebeccat"}}');
+      expect(note).not.toContain("does not write");
 
       const same = await publishAgainst(
         publishAnswerWithLink({

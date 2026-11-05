@@ -8,7 +8,7 @@
 
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
-import { WAIT_SECONDS_INPUT, stampNow } from "../lib/act-outcome";
+import { OUTCOME_POLL_MS, WAIT_SECONDS_INPUT, WAIT_SECONDS_MAX, outcomeClock, stampNow } from "../lib/act-outcome";
 import { API_BASE } from "../lib/common-schema";
 import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
 import { buildName, buildNumberOf, buildState, isActiveState, isRow, text, type Row } from "../lib/builds-list-row";
@@ -93,7 +93,7 @@ export const schema = {
       },
       projectPath: {
         type: "string",
-        description: "With download, the extension project root a relative `to` is resolved against. The default destination is your cache directory, never a path under the project, so this is optional and nothing in the project is written or changed.",
+        description: "The extension project's directory. On any action, when the call names no project and several logins are stored, the login whose '<workspace>/<project>' is this directory's GitHub origin answers it (the client's own root or working directory does the same when projectPath is left out). With download, also the root a relative `to` is resolved against. The default destination is your cache directory, never a path under the project, so this is optional and nothing in the project is written or changed.",
       },
       to: {
         type: "string",
@@ -104,7 +104,10 @@ export const schema = {
         description: `How many builds list returns, 1 to ${MAX_LIMIT} (default ${DEFAULT_LIMIT}).`,
       },
       project: PROJECT_TOKEN_INPUT,
-      waitSeconds: WAIT_SECONDS_INPUT,
+      waitSeconds: {
+        ...WAIT_SECONDS_INPUT,
+        description: `${WAIT_SECONDS_INPUT.description} With get, the read waits instead for the build to leave building or pending (0 to ${WAIT_SECONDS_MAX}; omitted, it reads once), so a call right after a push answers the build's verdict without a sleep; value.waited says how long it waited and whether the build settled.`,
+      },
       api: API_BASE,
     },
     required: [],
@@ -199,6 +202,15 @@ function readProblem(read: ProjectApiRefusal): string {
 
 const UNFINISHED_CLAUSE = "; artifacts and integrity arrive when the build finishes";
 
+function getWaitBoundMs(raw: unknown): number {
+  if (raw === undefined || raw === null || raw === "") return 0;
+
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 0;
+
+  return Math.min(WAIT_SECONDS_MAX, Math.max(0, Math.floor(n))) * 1000;
+}
+
 function requireBuildId(args: HandlerArgs, action: string): string | null {
   const buildId = text(args.buildId);
   if (buildId) return null;
@@ -228,7 +240,15 @@ async function getBuild(args: HandlerArgs): Promise<string> {
   }
 
   const route = `builds/${encodeURIComponent(buildId)}`;
-  const detail = await projectApiGet<Row>(opened.api, route);
+  const boundMs = getWaitBoundMs(args.waitSeconds);
+  const started = outcomeClock.now();
+  const settled = (build: Row) => !isActiveState(buildState(build.status, build.conclusion));
+  let detail = await projectApiGet<Row>(opened.api, route);
+
+  while (detail.ok && !settled(detail.json) && outcomeClock.now() - started < boundMs) {
+    await outcomeClock.sleep(Math.min(OUTCOME_POLL_MS, Math.max(0, boundMs - (outcomeClock.now() - started))));
+    detail = await projectApiGet<Row>(opened.api, route);
+  }
 
   if (!detail.ok) {
     return projectApiReadFailure(COMMAND, detail, {
@@ -271,7 +291,8 @@ async function getBuild(args: HandlerArgs): Promise<string> {
   const failing = Object.entries(integrityByBrowser).filter(([, v]) => (v as Row).ok !== true).map(([k]) => k);
   const failures = buildFailures(detail.json);
   const buildPage = buildConsoleUrl(opened.api, canonical, args.api);
-  const figures = browserFigures(detail.json, canonical);
+  const figures = browserFigures(detail.json, canonical, artifacts?.ok ? artifacts.json : []);
+  const waited = boundMs > 0 ? { seconds: Math.round((outcomeClock.now() - started) / 1000), settled: !unfinished } : null;
   const readAt = stampNow();
 
   return envelope({
@@ -282,6 +303,7 @@ async function getBuild(args: HandlerArgs): Promise<string> {
       action: "get",
       readAt,
       build: { ...buildView(detail.json, buildPage), ...(figures.browsers ? { browsers: figures.browsers } : {}), consoleUrl: buildPage },
+      ...(waited ? { waited } : {}),
       run: { ...runOf(detail.json), ...(text(detail.json.runUrl) ? { runUrl: buildPage } : {}) },
       artifacts: artifactRows,
       integrity: integrityByBrowser,
@@ -292,7 +314,11 @@ async function getBuild(args: HandlerArgs): Promise<string> {
           : { recorded: false }
         : { recorded: "unknown" },
     },
-    hint: `${buildName(canonical, number)} is ${text(detail.json.status) || "of unknown status"}${unfinished ? ` as of ${readAt}` : ""}${
+    hint: `${
+      waited && !waited.settled
+        ? `The ${waited.seconds}s wait passed before ${buildName(canonical, number)} settled; call get again with waitSeconds to keep waiting. `
+        : ""
+    }${buildName(canonical, number)} is ${text(detail.json.status) || "of unknown status"}${unfinished ? ` as of ${readAt}` : ""}${
       unfinished
         ? UNFINISHED_CLAUSE
         : browsers.length

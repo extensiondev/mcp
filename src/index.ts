@@ -46,6 +46,7 @@ import * as addFeature from "./tools/add-feature";
 import * as auth from "./tools/auth";
 import { readIdentity } from "./tools/whoami";
 import { clearLocalCredentials } from "./tools/logout";
+import { watchClientRoots } from "./lib/client-roots";
 import { requestDeviceCode, pollDeviceToken } from "./lib/device-flow";
 import {
   fetchLoginConfig,
@@ -215,6 +216,7 @@ export async function startServer(
     openApprovals: true,
     ...(setup.importBuild ? { importBuild: setup.importBuild } : {}),
   });
+  watchClientRoots(server);
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

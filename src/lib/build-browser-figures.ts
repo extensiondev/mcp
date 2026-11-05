@@ -26,13 +26,39 @@ function sharedCommandNote(row: Row, duration: string): string {
     : `${name}'s ${duration} is the time of one build command it shared with another browser.`;
 }
 
-export function browserFigures(build: Row, buildId: string): BrowserFigures {
+const UNKNOWN_SIZE = new Set(["", "-", "unknown", "n/a"]);
+
+function knownSize(value: unknown): string {
+  const size = text(value);
+
+  return UNKNOWN_SIZE.has(size.toLowerCase()) ? "" : size;
+}
+
+function withPackageSize(entry: unknown, packages: Row[]): unknown {
+  if (!isRow(entry) || knownSize(entry.size)) return entry;
+
+  const name = rowName(entry).toLowerCase();
+  const own = packages.filter((row) => text(row.browser).toLowerCase() === name);
+  const match = own.find((row) => /package/i.test(text(row.type))) ?? own[0];
+  const rest: Row = { ...entry };
+  delete rest.size;
+
+  const size = match ? knownSize(match.size) : "";
+  if (size) return { ...rest, size, ...(typeof match?.bytes === "number" && typeof rest.bytes !== "number" ? { bytes: match.bytes } : {}) };
+
+  return { ...rest, sizeUnknown: "The platform has not recorded a package size for this browser." };
+}
+
+export function browserFigures(build: Row, buildId: string, artifacts: unknown = []): BrowserFigures {
   if (!Array.isArray(build.browsers)) return { browsers: null, notes: [] };
+
+  const packages = (Array.isArray(artifacts) ? artifacts : []).filter(isRow);
 
   const buildDuration = text(build.duration);
   const shared: string[] = [];
   const commandShared: string[] = [];
-  const browsers = build.browsers.map((entry) => {
+  const browsers = build.browsers.map((raw) => {
+    const entry = withPackageSize(raw, packages);
     if (!isRow(entry)) return entry;
 
     const duration = text(entry.duration);
@@ -65,7 +91,7 @@ export function browserFigures(build: Row, buildId: string): BrowserFigures {
 
   notes.push(...commandShared);
 
-  const sized = rows.filter((row) => text(row.size) && text(row.size) !== "-");
+  const sized = rows.filter((row) => knownSize(row.size));
   const exact = sized.every((row) => typeof row.bytes === "number");
   const sizes = new Set(sized.map((row) => text(row.size)));
 

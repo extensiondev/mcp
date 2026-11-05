@@ -112,7 +112,7 @@ export function nameMismatchNote(
   if (!extensionName || !projectName || extensionName === projectName)
     {return null;}
 
-  return `The build's manifest names the extension "${extensionName}" while the project's display name on extension.dev is "${projectName}"; the tester message uses the manifest name. Change the display name in the console's project settings${settingsUrl ? ` (${settingsUrl})` : ""}; the MCP reads those settings but does not write them.`;
+  return `The build's manifest names the extension "${extensionName}" while the project's display name on extension.dev is "${projectName}"; the tester message uses the manifest name. To match them, rename the project with extension_workspace {action: "configure-project", settings: {displayName: ${JSON.stringify(extensionName)}}}, a plain owner call that keeps the slug, URLs and logins; the console's project settings${settingsUrl ? ` (${settingsUrl})` : ""} change it too.`;
 }
 
 export function pageLine(

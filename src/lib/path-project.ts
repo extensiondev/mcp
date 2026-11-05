@@ -150,6 +150,19 @@ export function loginForPath(projectPath: string, api?: string): PathLogin {
   return { state: "unmatched", named: slugs.map((slug) => (owner ? `${owner}/${slug}` : slug)) };
 }
 
+export function loginForOrigin(dir: string, api?: string): { project: string; owner: string; repo: string } | null {
+  const { owner, repo } = pathIdentity(dir);
+  if (!owner || !repo) return null;
+
+  const store = readCredentialStore();
+  const server = targetServer(api);
+  const matches = store
+    ? Object.values(store.entries).filter((entry) => serverOf(entry.api) === server && !entry.movedTo && refOf(entry) === `${owner}/${repo}`)
+    : [];
+
+  return matches.length === 1 && matches[0] ? { project: refOf(matches[0]), owner, repo } : null;
+}
+
 export interface ServerLogins {
   live: string[];
   kept: string | null;

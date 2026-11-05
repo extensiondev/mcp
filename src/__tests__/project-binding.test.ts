@@ -9,9 +9,11 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { clientDirs, setClientRoots } from "../lib/client-roots";
 import { resolveCredential } from "../lib/credential-source";
 import { credentialKey, credentialsPath, writeCredentials } from "../lib/credentials";
 import { loginForPath, pathIdentity } from "../lib/path-project";
@@ -80,6 +82,8 @@ beforeEach(() => {
   delete process.env.EXTENSION_DEV_TOKEN;
   delete process.env.EXTENSION_DEV_PROJECT;
   sent = [];
+  setClientRoots(null);
+  clientDirs.cwd = () => tmp;
   prevFetch = global.fetch;
   global.fetch = (async (url: string, init?: RequestInit) => {
     const headers = (init?.headers ?? {}) as Record<string, string>;
@@ -97,6 +101,8 @@ beforeEach(() => {
 
 afterEach(() => {
   global.fetch = prevFetch;
+  setClientRoots(null);
+  clientDirs.cwd = () => process.cwd();
 
   for (const [key, value] of Object.entries(saved)) {
     if (value === undefined) delete process.env[key];
@@ -234,5 +240,60 @@ describe("ledger 252: with several logins stored, an unpinned platform call neve
 
     expect(out.value.answeredFor).toBe("cezaraugusto/rebeccat");
     expect(sent.filter((row) => row.auth).every((row) => row.auth === "Bearer rebeccat.sig")).toBe(true);
+  });
+});
+
+describe("ledger 391: the client's own repository names the one login its origin is", () => {
+  it("answers an unnamed builds list from the working directory whose origin is one stored login, and says so", async () => {
+    otherProcessesSignIn("hands-free", "rebeccat", "soccer-analysis");
+    const dir = extensionDir("lance", "soccer-analysis");
+    clientDirs.cwd = () => dir;
+
+    const out = await call("extension_builds", { limit: 3, api: API });
+
+    expect(out.status).not.toBe("project-ambiguous");
+    expect(out.value.answeredFor).toBe("cezaraugusto/soccer-analysis");
+    expect(JSON.stringify(out)).toContain(`from the origin remote of ${dir}`);
+    expect(sent.length).toBeGreaterThan(0);
+    expect(sent.every((req) => req.auth === "Bearer soccer-analysis.sig")).toBe(true);
+  });
+
+  it("takes projectPath on a builds list the same way", async () => {
+    otherProcessesSignIn("hands-free", "soccer-analysis");
+    const dir = extensionDir("lance", "soccer-analysis");
+
+    const out = await call("extension_builds", { limit: 3, projectPath: dir, api: API });
+
+    expect(out.value.answeredFor).toBe("cezaraugusto/soccer-analysis");
+  });
+
+  it("uses the client's single root over the working directory, and two roots name nothing", async () => {
+    otherProcessesSignIn("hands-free", "soccer-analysis");
+    const root = extensionDir("lance", "soccer-analysis");
+    const other = extensionDir("hands-free", "hands-free");
+
+    setClientRoots([pathToFileURL(root).href]);
+    const one = await call("extension_builds", { limit: 3, api: API });
+    expect(one.value.answeredFor).toBe("cezaraugusto/soccer-analysis");
+
+    setClientRoots([pathToFileURL(root).href, pathToFileURL(other).href]);
+    clientDirs.cwd = () => root;
+    sent = [];
+    const two = await call("extension_builds", { limit: 3, api: API });
+    expect(two.status).toBe("project-ambiguous");
+    expect(sent).toEqual([]);
+  });
+
+  it("keeps the refusal when the origin is no stored login, such as a fork", async () => {
+    otherProcessesSignIn("hands-free", "rebeccat");
+    const dir = path.join(tmp, "fork");
+    fs.mkdirSync(path.join(dir, ".git"), { recursive: true });
+    fs.writeFileSync(path.join(dir, ".git", "config"), `[remote "origin"]\n\turl = https://github.com/someone-else/rebeccat.git\n`);
+    clientDirs.cwd = () => dir;
+
+    const out = await call("extension_builds", { limit: 3, api: API });
+
+    expect(out.status).toBe("project-ambiguous");
+    expect(sent).toEqual([]);
   });
 });

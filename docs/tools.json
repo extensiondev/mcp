@@ -436,7 +436,7 @@
           "name": "projectPath",
           "type": "string",
           "required": false,
-          "description": "With download, the extension project root a relative `to` is resolved against. The default destination is your cache directory, never a path under the project, so this is optional and nothing in the project is written or changed."
+          "description": "The extension project's directory. On any action, when the call names no project and several logins are stored, the login whose '<workspace>/<project>' is this directory's GitHub origin answers it (the client's own root or working directory does the same when projectPath is left out). With download, also the root a relative `to` is resolved against. The default destination is your cache directory, never a path under the project, so this is optional and nothing in the project is written or changed."
         },
         {
           "name": "to",
@@ -460,7 +460,7 @@
           "name": "waitSeconds",
           "type": "number",
           "required": false,
-          "description": "How long, in seconds, this call waits for the platform's own record to show the act's result before answering: 0 to 600, default 180. 0 reads the record once and answers at once. When the bound passes first, the status is <act>-dispatched with value.outcome.recorded false, and the hint names the read that confirms it later. A read the platform does not answer (a timeout, a refused connection, a 429 or a 5xx) is retried after retryAfterSeconds while the bound lasts, and only when the bound is spent on such reads does value.outcome.readProblem name them with their count. With approvalId, a call that names waitSeconds also waits for an approval nobody has decided yet: it polls the approval every retryAfterSeconds up to the bound, and once a person approves it goes straight on to the act and the record wait in the same call, with what is left of the bound."
+          "description": "How long, in seconds, this call waits for the platform's own record to show the act's result before answering: 0 to 600, default 180. 0 reads the record once and answers at once. When the bound passes first, the status is <act>-dispatched with value.outcome.recorded false, and the hint names the read that confirms it later. A read the platform does not answer (a timeout, a refused connection, a 429 or a 5xx) is retried after retryAfterSeconds while the bound lasts, and only when the bound is spent on such reads does value.outcome.readProblem name them with their count. With approvalId, a call that names waitSeconds also waits for an approval nobody has decided yet: it polls the approval every retryAfterSeconds up to the bound, and once a person approves it goes straight on to the act and the record wait in the same call, with what is left of the bound. With get, the read waits instead for the build to leave building or pending (0 to 600; omitted, it reads once), so a call right after a push answers the build's verdict without a sleep; value.waited says how long it waited and whether the build settled."
         },
         {
           "name": "api",

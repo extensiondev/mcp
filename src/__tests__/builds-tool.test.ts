@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { handler as builds, schema } from "../tools/builds";
+import { outcomeClock } from "../lib/act-outcome";
 import { TOOL_POLICY } from "../lib/tool-policy";
 import { writeCredentials } from "../lib/credentials";
 
@@ -63,6 +64,7 @@ const ARTIFACTS = [
   {
     name: "chrome-extension.zip",
     browser: "chrome",
+    size: "45.4 MB",
     type: "Extension package",
     downloadUrl: "https://registry.extension.land/acme/widget/builds/603fc8a/chrome.zip",
   },
@@ -282,6 +284,70 @@ describe("extension_builds reads the platform's builds with the project's own to
 
     expect(out.value.integrity.firefox).toMatchObject({ ok: true, failed: [] });
     expect(out.value.usage).toEqual({ recorded: false });
+  });
+
+  it("fills each browser's size from its package artifact and drops an unknown one instead of answering a dash", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+
+    const out = JSON.parse(await builds({ action: "get", buildId: "603fc8a", api: API }));
+    const [chrome, firefox] = out.value.build.browsers;
+
+    expect(chrome).toMatchObject({ name: "chrome", size: "45.4 MB" });
+    expect(firefox.size).toBeUndefined();
+    expect(firefox.sizeUnknown).toBeTruthy();
+    expect(JSON.stringify(out.value.build.browsers)).not.toContain('"-"');
+  });
+
+  it("waits with waitSeconds until a building build settles and answers its verdict", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+
+    const route = `/api/projects/${PROJECT_ID}/builds/603fc8a`;
+    routes[route] = { body: { ...DETAIL, status: "building" } };
+    const sleep = outcomeClock.sleep;
+    let slept = 0;
+
+    outcomeClock.sleep = async () => {
+      slept += 1;
+      routes[route] = { body: DETAIL };
+    };
+
+    try {
+      const out = JSON.parse(await builds({ action: "get", buildId: "603fc8a", waitSeconds: 300, api: API }));
+
+      expect(slept).toBe(1);
+      expect(out.value.build.status).toBe("success");
+      expect(out.value.waited).toMatchObject({ settled: true });
+    } finally {
+      outcomeClock.sleep = sleep;
+    }
+  });
+
+  it("reads a build once when waitSeconds is not given", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+
+    routes[`/api/projects/${PROJECT_ID}/builds/603fc8a`] = { body: { ...DETAIL, status: "building" } };
+    const sleep = outcomeClock.sleep;
+    let slept = 0;
+
+    outcomeClock.sleep = async () => {
+      slept += 1;
+    };
+
+    try {
+      const out = JSON.parse(await builds({ action: "get", buildId: "603fc8a", api: API }));
+
+      expect(slept).toBe(0);
+      expect(out.value.build.status).toBe("building");
+      expect(out.value.waited).toBeUndefined();
+    } finally {
+      outcomeClock.sleep = sleep;
+    }
   });
 
   it("reads the logs of one browser, keeping the tail of a long log and saying it cut it", async () => {

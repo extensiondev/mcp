@@ -13,7 +13,8 @@ import { resolveCredential } from "./credential-source";
 import { pinnedProject, readCredentials } from "./credentials";
 import { envelope, isEnvelope } from "./envelope";
 import { noLoginForProjectRefusal } from "./no-login-for-project";
-import { loginForPath, serverLogins } from "./path-project";
+import { clientProjectDir } from "./client-roots";
+import { loginForOrigin, loginForPath, serverLogins } from "./path-project";
 import { TOOL_POLICY, type ServerOptions } from "./tool-policy";
 
 type Args = Record<string, unknown>;
@@ -35,6 +36,12 @@ function takesProject(name: string, args: Args, inputSchema: Record<string, unkn
   if (name === "extension_workspace" && WORKSPACE_READS.has(text(args.action) || "info")) return false;
 
   return true;
+}
+
+function takesPath(inputSchema: Record<string, unknown>): boolean {
+  const properties = inputSchema.properties;
+
+  return Boolean(properties && typeof properties === "object" && "projectPath" in properties);
 }
 
 function refOf(entry: { workspaceSlug: string; projectSlug: string }): string {
@@ -77,7 +84,10 @@ export type CallProject = { args: Args; answeredFor: string | null; note?: strin
  * EXTENSION_DEV_TOKEN and the login an approval was minted under each settle
  * it. Otherwise a project directory settles it (path-project.ts), and with
  * neither, the one stored login on the server, or the one this server chose
- * by signing in through it. Several stored logins and no way to tell them
+ * by signing in through it. With several logins, the client's one directory
+ * (projectPath, its single root, or the working directory) settles it only
+ * when its GitHub origin is exactly one stored login's '<workspace>/<project>'
+ * (ledger 391), and the answer says so. Several stored logins and no way to tell them
  * apart is a refusal that lists them, never the newest one. A directory
  * whose project no stored login is for is a no-login-for-project refusal
  * that names the create or the login to finish, never another project's
@@ -132,12 +142,23 @@ export function bindCallProject(
   }
 
   if (!fallback && logins.live.length > 1) {
+    const dir = text(args.projectPath) || clientProjectDir();
+    const origin = dir ? loginForOrigin(dir, api) : null;
+
+    if (dir && origin) {
+      return {
+        args: { ...args, project: origin.project },
+        answeredFor: origin.project,
+        note: `Answered for ${origin.project}, from the origin remote of ${dir} (github.com/${origin.owner}/${origin.repo}); ${logins.live.length} logins are stored, so pass project to answer for another.`,
+      };
+    }
+
     return {
       refused: refusal(
         name,
         "project-ambiguous",
         `This machine holds ${logins.live.length} logins for this server (${logins.live.join(", ")}) and the call named neither project nor projectPath, so it was not sent: the newest login could be another agent's project.`,
-        `Pass project: one of ${quoted(logins.live)}${PATH_NAMES_PROJECT.has(name) ? ", or projectPath for the extension's directory" : ""}.`,
+        `Pass project: one of ${quoted(logins.live)}${PATH_NAMES_PROJECT.has(name) || takesPath(inputSchema) ? ", or projectPath for the extension's directory" : ""}.`,
         { logins: logins.live },
       ),
     };
