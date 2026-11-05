@@ -15,6 +15,11 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+/* @invariant Each cell re-imports the server after vi.resetModules, which only
+ * re-evaluates it. This import pays the cold transform of the whole graph once,
+ * at collection, so no cell's budget is spent compiling the server. */
+import "../index";
+
 const API = "http://localhost:3100";
 const APPROVAL_ID = "apr_J3pJzcFuh6UWFwP_AMwl_IZ085Ookc_R";
 const APPROVAL_URL = `${API}/device/approve/${APPROVAL_ID}`;

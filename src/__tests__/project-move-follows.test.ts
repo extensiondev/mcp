@@ -14,6 +14,11 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+/* @invariant Each cell re-imports the server after vi.resetModules, which only
+ * re-evaluates it. This import pays the cold transform of the whole graph once,
+ * at collection, so no cell's budget is spent compiling the server. */
+import "../index";
+
 const API = "http://localhost:3100";
 const PROJECT_ID = "prj_a017a32f";
 const KEYS = ["XDG_CONFIG_HOME", "EXTENSION_DEV_API_URL", "EXTENSION_DEV_TOKEN", "EXTENSION_DEV_PROJECT"];
