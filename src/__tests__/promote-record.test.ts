@@ -47,6 +47,16 @@ describe("recordedAfterDispatch reads the promotion's own time before the build'
     expect(recordedAfterDispatch(tonightsRow({ promotedAt: undefined, promotion: { verified: false, dispatched: true } }), SINCE)).toBe(false);
   });
 
+  it("holds a verified completed run to its completedAt when the row carries one, and to the old rule when it does not", () => {
+    const run = (completedAt?: string) => ({ promotedAt: undefined, promotion: { verified: true, runId: 41745, runStatus: "completed", ...(completedAt ? { completedAt } : {}) } });
+
+    expect(recordedAfterDispatch(tonightsRow(run(EVENT_AT)), SINCE)).toBe(true);
+    expect(recordedAfterDispatch(tonightsRow(run("2026-11-03T23:59:30.000Z")), SINCE)).toBe(true);
+    expect(recordedAfterDispatch(tonightsRow(run("2026-11-03T23:58:30.000Z")), SINCE)).toBe(false);
+    expect(recordedAfterDispatch(tonightsRow({ ...run("2026-11-01T10:00:00.000Z"), createdAt: undefined }), SINCE)).toBe(false);
+    expect(recordedAfterDispatch(tonightsRow(run()), SINCE)).toBe(true);
+  });
+
   it("only then compares createdAt or startedAt to the dispatch, as before", () => {
     expect(recordedAfterDispatch(tonightsRow({ promotedAt: undefined, promotion: undefined }), SINCE)).toBe(false);
     expect(recordedAfterDispatch(tonightsRow({ promotedAt: undefined, promotion: undefined, createdAt: EVENT_AT }), SINCE)).toBe(true);

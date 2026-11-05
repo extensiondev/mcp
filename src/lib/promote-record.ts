@@ -50,7 +50,12 @@ export function recordedAfterDispatch(item: Row, sinceIso: string): boolean {
   if (promotedAt) return after(promotedAt, sinceIso);
 
   const promotion = isRow(item.promotion) ? item.promotion : {};
-  if (promotion.verified === true && text(promotion.runStatus) === "completed") return true;
+
+  if (promotion.verified === true && text(promotion.runStatus) === "completed") {
+    const completedAt = text(promotion.completedAt);
+
+    return !completedAt || after(completedAt, sinceIso);
+  }
 
   const at = text(item.createdAt) || text(item.startedAt);
 
