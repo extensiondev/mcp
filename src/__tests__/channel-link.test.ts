@@ -84,7 +84,7 @@ describe("a public project's answers carry the link that follows a release chann
     const out = JSON.parse(await publish({ api: API }));
 
     expect(out.ok).toBe(true);
-    expect(out.value.channelUrl).toBe(`${PROJECT}/channels/stable`);
+    expect(out.value.channelUrl).toBe(`${PROJECT}/stable`);
   });
 
   it("extension_release_status links each channel, per browser where the channel is", async () => {
@@ -95,9 +95,9 @@ describe("a public project's answers carry the link that follows a release chann
     );
 
     expect(byName).toEqual({
-      "chrome-stable": `${PROJECT}/channels/chrome/stable`,
-      "firefox-stable": `${PROJECT}/channels/firefox/stable`,
-      beta: `${PROJECT}/channels/beta`,
+      "chrome-stable": `${PROJECT}/stable/chrome`,
+      "firefox-stable": `${PROJECT}/stable/firefox`,
+      beta: `${PROJECT}/beta`,
     });
   });
 
@@ -109,8 +109,8 @@ describe("a public project's answers carry the link that follows a release chann
 
     expect(out.status).toBe("promoted");
     expect(out.value.outcome).toMatchObject({ recorded: true, status: "completed" });
-    expect(out.value.channelUrl).toBe(`${PROJECT}/channels/stable`);
-    expect(out.value.links).toContainEqual({ kind: "channel", url: `${PROJECT}/channels/stable`, audience: "anyone with the link", expiresAt: null, made: false });
+    expect(out.value.channelUrl).toBe(`${PROJECT}/stable`);
+    expect(out.value.links).toContainEqual({ kind: "channel", url: `${PROJECT}/stable`, audience: "anyone with the link", expiresAt: null, made: false });
   });
 });
 

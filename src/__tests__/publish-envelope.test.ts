@@ -464,7 +464,7 @@ describe("extension_publish envelope compatibility", () => {
           }),
           expect.objectContaining({
             kind: "channel",
-            url: "https://acme.extension.dev/widget/channels/stable",
+            url: "https://acme.extension.dev/widget/stable",
             expiresAt: null,
             pointsAt: "latest in stable",
             made: false,
@@ -472,7 +472,7 @@ describe("extension_publish envelope compatibility", () => {
         ]);
 
         expect(out.value.tellThem).toBe(
-          "Here is widget to try: https://acme.extension.dev/widget/channels/stable. It always opens the newest stable build.",
+          "Here is widget to try: https://acme.extension.dev/widget/stable. It always opens the newest stable build.",
         );
 
         expect(out.hint).toContain(
@@ -495,7 +495,7 @@ describe("extension_publish envelope compatibility", () => {
 
       expect(out.value.link).toMatchObject({
         kind: "channel",
-        url: "https://acme.extension.dev/widget/channels/stable",
+        url: "https://acme.extension.dev/widget/stable",
         expiresAt: null,
         audience: "public",
       });

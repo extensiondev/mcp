@@ -382,7 +382,7 @@ describe("extension_release_promote and extension_publish name the update manife
     const both = JSON.parse(await publish({ api: API }));
 
     expect(both.ok).toBe(true);
-    expect(both.value.channelUrl).toBe(`${PROJECT}/channels/stable`);
+    expect(both.value.channelUrl).toBe(`${PROJECT}/stable`);
     expect(both.value.firefox).toEqual({ channel: "stable", updateManifestUrl: `${PROJECT}/channels/stable/updates.json`, channelXpiUrl: `${PROJECT}/channels/stable/firefox.xpi` });
     expect(both.hint).toContain(`${PROJECT}/channels/stable/updates.json`);
     expect(both.hint).toContain(UPDATE_URL_NETWORK_NOTE);
@@ -391,7 +391,7 @@ describe("extension_release_promote and extension_publish name the update manife
     registry({ "chrome-stable": { sha: "abc1234" } }, ["chrome"]);
     const chrome = JSON.parse(await publish({ api: API }));
 
-    expect(chrome.value.channelUrl).toBe(`${PROJECT}/channels/stable`);
+    expect(chrome.value.channelUrl).toBe(`${PROJECT}/stable`);
     expect(chrome.value.firefox).toBeUndefined();
     expect(chrome.hint).not.toContain("updates.json");
   });

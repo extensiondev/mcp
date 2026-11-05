@@ -21,7 +21,7 @@ function jsonResponse(body: unknown, status = 200): Response {
   } as unknown as Response;
 }
 
-const CHANNELS = { channels: { stable: { sha: "0c7471e0c7471e0c7471e0c7471e0c7471e0c7471e", audience: "public" } } };
+const CHANNELS = { stable: { sha: "0c7471e0c7471e0c7471e0c7471e0c7471e0c7471e", audience: "public" } };
 const BUILDS = { items: [] };
 
 describe("extension_release_status include releases answers the platform's project visibility", () => {
@@ -107,7 +107,7 @@ describe("extension_release_status include releases answers the platform's proje
     expect(out.value.projectVisibility).toBe("private");
     expect(out.value.projectVisibilitySource).toBe("platform");
     expect(out.value.visibility).toBe("public");
-    expect(out.value.channels[0].channelUrl).toContain("/channels/");
+    expect(out.value.channels[0].channelUrl).toMatch(/\/acme\/alpha\/stable$/);
     expect(out.value.channelUrlWithheld).toBeUndefined();
     expect(out.warnings.join(" ")).toContain("records this project as private while the registry's meta.json says public");
     expect(calls.some((url) => new URL(url).pathname === `/api/projects/${ALPHA_ID}/visibility`)).toBe(true);
