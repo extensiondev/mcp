@@ -68,6 +68,7 @@ export const STORE_SECTIONS: Record<ListingStore, string> = {
 export const STORE_OWN_LINES: Partial<Record<ListingStore, ListingField[]>> = {
   safari: ["appStoreName", "reviewContactName", "reviewContactEmail", "reviewContactPhone", "releaseMode"],
   chrome: ["visibility"],
+  firefox: ["license"],
 };
 
 export const STORE_FIELDS: Record<ListingStore, ListingField[]> = {

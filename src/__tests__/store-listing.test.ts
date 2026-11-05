@@ -752,7 +752,7 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
       { field: "supportEmail", line: "- Support email:", section: "## Listing" },
       { field: "privacyPolicyUrl", line: "- Privacy policy URL:", section: "## Privacy and data use" },
       { field: "homepageUrl", line: "- Homepage:", section: "## Listing" },
-      { field: "license", line: "- License:", section: "## Listing" },
+      { field: "license", line: "- License:", section: "## Firefox Add-ons" },
       { field: "releaseNotes", line: "### Release notes", section: "## Firefox Add-ons" },
     ]);
 
@@ -1323,7 +1323,7 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     expect(firefox.storeMd.notCovered).toEqual([
       category,
       email,
-      "license: STORE.md has no `- License:` under `## Listing`",
+      "license: STORE.md has no `- License:` under `## Firefox Add-ons`",
     ]);
 
     expect(firefox.failing.map((check: { message?: string }) => check.message)).toEqual([

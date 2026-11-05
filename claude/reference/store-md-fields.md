@@ -42,7 +42,7 @@ Generated from the parser's own declarations in `src/lib/store-md-declarations.t
 | `- Support email:` | `## Listing` | `## Firefox Add-ons` | `supportEmail` | an email address, up to 200 characters |
 | `- Privacy policy URL:` | `## Privacy and data use` | `## Listing`, `## Firefox Add-ons` | `privacyPolicyUrl` | an http or https URL, up to 2,000 characters |
 | `- Homepage:` | `## Listing` | `## Firefox Add-ons` | `homepageUrl` | an http or https URL, up to 2,000 characters |
-| `- License:` | `## Listing` | `## Firefox Add-ons` | `license` | up to 100 characters |
+| `- License:` | `## Firefox Add-ons` | `## Listing` | `license` | up to 100 characters, asked only when a Firefox version goes to the listed audience, because AMO refuses a listed version without one, and never otherwise |
 | `### Reviewer notes` | `## Firefox Add-ons` |  | `reviewerNotes` | up to 8,000 characters |
 | `### Release notes` | `## Firefox Add-ons` |  | `releaseNotes` | up to 8,000 characters |
 

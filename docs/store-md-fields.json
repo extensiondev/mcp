@@ -178,11 +178,11 @@
       {
         "field": "license",
         "line": "- License:",
-        "section": "## Listing",
+        "section": "## Firefox Add-ons",
         "alsoRead": [
-          "## Firefox Add-ons"
+          "## Listing"
         ],
-        "limit": "up to 100 characters"
+        "limit": "up to 100 characters, asked only when a Firefox version goes to the listed audience, because AMO refuses a listed version without one, and never otherwise"
       },
       {
         "field": "reviewerNotes",

@@ -97,10 +97,18 @@ const SPECS: DecisionSpec[] = [
     id: "license",
     ask: "The license AMO shows on a listed Firefox add-on.",
     fields: ["license"],
-    writes: [{ line: "- License:", section: LISTING, stores: ["firefox"] }],
+    writes: [{ line: "- License:", section: "## Firefox Add-ons", stores: ["firefox"] }],
     settles: ["firefox.license"],
   },
 ];
+
+/* @invariant An extension has no license field (Cezar, 2026-11-04). AMO asks
+ * for one on a listed Firefox version alone (Cezar, 2026-11-05, option A), and
+ * the platform answers the firefox.license row only on that channel, so the
+ * decision exists only when the row does, and its default is the owner's own
+ * package.json license or nothing; no license is ever picked for the owner.
+ */
+const LISTED_ONLY = new Set(["firefox.license"]);
 
 export const DECISION_IDS: readonly DecisionId[] = SPECS.map((spec) => spec.id);
 
@@ -212,7 +220,7 @@ function defaultOf(id: DecisionId, facts: ProjectFacts, asked: readonly string[]
 
   if (license) return { value: license, from: "package.json license" };
 
-  return { value: "all-rights-reserved", from: facts.licenseFile ? "a LICENSE file AMO has no preset for: name it, or keep all-rights-reserved" : "no license on file" };
+  return { value: null, from: facts.licenseFile ? "a LICENSE file AMO has no preset for: the agent asks which license to name" : "none on file: the agent asks for one" };
 }
 
 export function decisionsOf(args: { asked: readonly string[]; statusById: Record<string, string>; projectPath: string }): Decision[] {
@@ -220,7 +228,7 @@ export function decisionsOf(args: { asked: readonly string[]; statusById: Record
   const storeOf = (id: string): string => id.split(".")[0] ?? "";
 
   return SPECS.flatMap((spec): Decision[] => {
-    const settles = spec.settles.filter((id) => args.asked.includes(storeOf(id)));
+    const settles = spec.settles.filter((id) => args.asked.includes(storeOf(id)) && (!LISTED_ONLY.has(id) || id in args.statusById));
     if (!settles.length) return [];
 
     const rowsHave = settles.every((id) => args.statusById[id] === "have");

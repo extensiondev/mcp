@@ -94,7 +94,7 @@ describe("extension_submit preflight answers one readiness list and one decision
     expect(byId.category.default).toBe("Tools (Chrome), Productivity (Edge), Other (Firefox), Utilities (Safari)");
     expect(byId.distribution.default).toContain("Chrome unlisted");
     expect(byId.distribution.writes).toEqual([{ line: "- Visibility:", section: "## Chrome Web Store", stores: ["chrome"] }]);
-    expect(byId.license).toMatchObject({ default: "MIT", writes: [{ line: "- License:", section: "## Listing", stores: ["firefox"] }] });
+    expect(byId.license).toMatchObject({ default: "MIT", defaultFrom: "package.json license", writes: [{ line: "- License:", section: "## Firefox Add-ons", stores: ["firefox"] }] });
 
     expect(readiness.summary).toHaveLength(4);
     expect(readiness.summary[0]).toBe(`Readiness for the Chrome Web Store, Edge Add-ons, Firefox AMO and the App Store: ${open.length} inputs are not on file yet and 0 are.`);
@@ -113,6 +113,31 @@ describe("extension_submit preflight answers one readiness list and one decision
     expect(readiness.decisionsOnFile).toEqual(["support-email", "license"]);
     expect(readiness.decisions.map((decision: Row) => decision.id)).toEqual(["homepage", "privacy-policy", "category", "distribution"]);
     expect(readiness.summary[2]).toMatch(/^4 decisions need your answer/);
+  });
+
+  it("asks no license when the platform answers no firefox.license row, which is every channel but listed", async () => {
+    const reports = freshReports();
+    reports.firefox!.requirements.items = (reports.firefox!.requirements.items as Row[]).filter((row) => row.id !== "firefox.license");
+    serve(reports);
+
+    const out = JSON.parse(await submit({ action: "preflight", browsers: [...STORES], projectPath: project({ "package.json": PACKAGE }), api: API }));
+    const readiness = out.value.readiness;
+
+    expect(readiness.decisions.map((decision: Row) => decision.id)).toEqual(DECISIONS.filter((id) => id !== "license"));
+    expect(readiness.summary[2]).not.toContain("license");
+    expect(JSON.stringify(readiness)).not.toContain("- License:");
+  });
+
+  it("never picks a license for the owner when package.json names none AMO takes", async () => {
+    serve(freshReports());
+
+    for (const files of [{ "package.json": JSON.stringify({ name: "widget" }) }, { "package.json": JSON.stringify({ name: "widget", license: "SEE LICENSE IN LICENSE" }), LICENSE: "Custom terms" }] as Array<Record<string, string>>) {
+      const out = JSON.parse(await submit({ action: "preflight", browsers: ["firefox"], projectPath: project(files), api: API }));
+      const license = (out.value.readiness.decisions as Row[]).find((decision) => decision.id === "license");
+
+      expect(license?.default).toBeNull();
+      expect(license?.defaultFrom).toContain("the agent asks");
+    }
   });
 
   it("names only the decisions of the stores read, and keeps the answer's own lead once a store is connected", async () => {
