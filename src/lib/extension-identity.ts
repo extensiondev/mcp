@@ -17,8 +17,16 @@ const STATIC_COMPANION_IDS = new Set<string>([
   CARRIER_EXTENSION_ID,
 ]);
 
+function chromiumPathBytes(distPath: string): Buffer {
+  if (process.platform !== "win32") return Buffer.from(distPath, "utf8");
+
+  const normalized = /^[a-z]:/.test(distPath) ? distPath[0]!.toUpperCase() + distPath.slice(1) : distPath;
+
+  return Buffer.from(normalized, "utf16le");
+}
+
 export function unpackedExtensionId(distPath: string): string {
-  const digest = crypto.createHash("sha256").update(distPath).digest();
+  const digest = crypto.createHash("sha256").update(chromiumPathBytes(distPath)).digest();
   let id = "";
 
   for (let i = 0; i < 16; i++) {
