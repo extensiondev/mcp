@@ -123,7 +123,7 @@ export function pageLine(
   const lead = `Here is ${name} to try: ${link.url}.`;
 
   if (link.kind === "channel")
-    {return `${lead} It always opens the newest ${channelOf(link, fallbackChannel)} build.`;}
+    {return `${lead} It always opens the newest ${channelOf(link, fallbackChannel)} build${link.expiresAt ? `, until ${spokenDate(link.expiresAt)}` : ""}.`;}
 
   return link.expiresAt
     ? `${lead} It works until ${spokenDate(link.expiresAt)}.`
@@ -294,12 +294,24 @@ export function publishLinkFields(input: LinkInput): LinkFields {
         }
       : null;
   const fromPlatform = platformLink(data.link);
+  const channelRenewBy =
+    !isPublic && fromPlatform?.kind === "channel"
+      ? {
+          tool: "extension_publish" as const,
+          args: {
+            ...(input.project ? { project: input.project } : {}),
+            channel: channelOf(fromPlatform, channel),
+            ttlHours: answeredTtl ?? requestedTtl ?? 168,
+          },
+        }
+      : undefined;
   const link: PublishLink = fromPlatform
     ? {
         ...fromPlatform,
         ...(renewBy && fromPlatform.kind === "build" && !fromPlatform.renewBy
           ? { renewBy }
           : {}),
+        ...(channelRenewBy && !fromPlatform.renewBy ? { renewBy: channelRenewBy } : {}),
       }
     : (channelLink ?? buildLink);
   const name = nameOf(data, ref);

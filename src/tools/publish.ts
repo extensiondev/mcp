@@ -30,7 +30,10 @@ import {
 } from "../lib/platform-hold";
 import {
   CHANNEL_LINK_ADVICE,
+  CHANNEL_NAME_INPUT,
   channelLinkFields,
+  channelServesOf,
+  channelShareNote,
   channelServing,
   readChannels,
 } from "../lib/channel-link";
@@ -66,7 +69,7 @@ import { SYNC_CAPTURES, syncCaptures } from "./publish-captures";
 export const schema = {
   name: "extension_publish",
   description:
-    "Publish a build of the logged-in project on extension.dev and answer the link to send testers, which opens a page with a download and a run command for each browser. Reach for this first whenever the ask is to share, publish, deploy, distribute, release or ship an extension, or to send it to testers. Not for a store: that is extension_submit. Not for a quick emulator link beside this one: that is extension_preview_web share:true. A project that does not exist on extension.dev yet starts with extension_project_create, then extension_auth. It records a share on the platform and answers what the platform recorded in value.outcome and every link it made or touched in value.links, waiting up to waitSeconds for the record and answering publish-dispatched until it confirms. There are two links. A build link opens one build, <workspace>.extension.dev/<project>/builds/<sha>, and on a private project expires after ttlHours (7 days by default). A channel link, <workspace>.extension.dev/<project>/channels/<channel>, always opens a channel's newest build and never expires; a public project gets one in value.channelUrl when a release channel serves the build. On a public project, or a public channel, send testers the channel link; otherwise send the build link and the date it stops working. A private project's channel link is withheld and value.channelUrlWithheld says why; visibility is set in the extension.dev project settings, not the GitHub repository. value.link is the link to send (kind, url, expiresAt, audience, renewBy), value.tellThem the message to send as written, value.trackUrl the console Share links page; a build whose every browser artifact failed is refused unless force is true, and while extension.dev is held the status is platform-held and tellThem adds the Chrome run command, which works now. action sync-captures sends captures/<browser>/, made by extension_screenshot browserCapture, to the project's build pages after a workspace owner approves.",
+    "Publish a build of the logged-in project on extension.dev and answer the link to send testers, which opens a page with a download and a run command for each browser. Reach for this first whenever the ask is to share, publish, deploy, distribute, release or ship an extension, or to send it to testers. Not for a store: that is extension_submit. Not for a quick emulator link beside this one: that is extension_preview_web share:true. A project that does not exist on extension.dev yet starts with extension_project_create, then extension_auth. It records a share on the platform and answers what the platform recorded in value.outcome and every link it made or touched in value.links, waiting up to waitSeconds for the record and answering publish-dispatched until it confirms. There are two links. A build link, <workspace>.extension.dev/<project>/builds/<sha>, opens one build and on a private project expires after ttlHours (default 7 days). A channel link, <workspace>.extension.dev/<project>/<channel>, opens the channel's newest build: never expiring on a public project (value.channelUrl, when a channel serves the build); on a private one, channel: '<name>' mints it as a share link that expires like a build link, for a site, else value.channelUrlWithheld says why. On a public project, or a public channel, send testers the channel link; else the channel or build link and its end date; visibility is set in the extension.dev project settings, not the GitHub repository. value.link is the link to send (kind, url, expiresAt, audience, renewBy), value.tellThem the message to send as written, value.trackUrl the console Share links page; a build whose every browser artifact failed is refused unless force is true, and while extension.dev is held the status is platform-held and tellThem adds the Chrome run command, which works now. action sync-captures sends captures/<browser>/, made by extension_screenshot browserCapture, to the project's build pages after a workspace owner approves.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -100,6 +103,11 @@ export const schema = {
         type: "string",
         description:
           "Pin the URL to a build sha (7-40 hex chars). The platform rejects a sha missing from a readable build index; when its index cannot be read it echoes the sha back and a pin on a failed build is accepted, so value.buildSha is the platform's claim, not a verified build. extension_release_status lists the builds it knows.",
+      },
+      channel: {
+        type: "string",
+        description:
+          "Link a release channel (preview, stable) instead of one build. On a private project it is a share link scoped to that one channel: the same address opens the channel's newest build as new builds are promoted, value.link.serves names the builds it opens, and it expires after ttlHours like a build link, so it is renewed once per window rather than once per build. On a public project it is the channel page, which never expires. Not with buildSha.",
       },
       force: {
         type: "boolean",
@@ -149,6 +157,7 @@ export async function handler(args: {
   project?: string;
   ttlHours?: number;
   buildSha?: string;
+  channel?: string;
   force?: boolean;
   waitSeconds?: unknown;
   api?: string;
@@ -209,6 +218,26 @@ export async function handler(args: {
     }
   }
 
+  const channelArg = args.channel === undefined || args.channel === null ? "" : args.channel;
+
+  if (args.channel !== undefined && args.channel !== null && (typeof channelArg !== "string" || !CHANNEL_NAME_INPUT.test(channelArg))) {
+    return fail(
+      "PublishBadRequest",
+      "channel must name one of the project's release channels, lowercase letters, digits and dashes, like preview or stable.",
+      "bad-request",
+      "E_BAD_REQUEST",
+    );
+  }
+
+  if (channelArg && args.buildSha) {
+    return fail(
+      "PublishBadRequest",
+      "Send channel for a link that follows the channel's newest build, or buildSha for a link to one build, not both.",
+      "bad-request",
+      "E_BAD_REQUEST",
+    );
+  }
+
   const force = args.force === true;
   let health: BuildHealth | null = null;
 
@@ -228,6 +257,7 @@ export async function handler(args: {
   const result = await publish({
     ttlHours: args.ttlHours,
     buildSha: args.buildSha,
+    ...(channelArg ? { channel: channelArg } : {}),
     api: args.api,
     token,
   });
@@ -256,6 +286,24 @@ export async function handler(args: {
           platformCode: code,
         },
         hint: "This private project has no completed build yet, so there is no build link to make: a build link opens one build. Push a commit or start one with extension_builds (action: 'rebuild'), then publish again once extension_builds lists it as successful.",
+      });
+    }
+
+    if (code === "CHANNEL_NOT_FOUND" || code === "CHANNEL_HAS_NO_BUILD") {
+      return envelope({
+        ok: false,
+        command: "extension_publish",
+        status: code === "CHANNEL_NOT_FOUND" ? "channel-unknown" : "channel-has-no-build",
+        error: {
+          code: "E_PLATFORM",
+          name: "PublishError",
+          message: result.error.message,
+          platformCode: code,
+        },
+        hint:
+          code === "CHANNEL_NOT_FOUND"
+            ? `The project has no release channel named ${channelArg}, so no link was minted. extension_release_status (include: ['channels']${args.project ? `, project: '${args.project}'` : ""}) lists the channels it has.`
+            : `Channel ${channelArg} serves no build yet, so its link would open nothing and none was minted. Promote a successful build to it with extension_release_promote, then publish its channel link.`,
       });
     }
 
@@ -370,6 +418,8 @@ export async function handler(args: {
 
   let channelNote: string | null = null;
   let serving: string | null = null;
+  const platformKind = data.link && typeof data.link === "object" ? (data.link as Record<string, unknown>).kind : null;
+  const channelShare = data.visibility !== "public" && platformKind === "channel";
 
   if (ref && data.visibility === "public") {
     const channels = await readChannels(ref, args.api);
@@ -392,7 +442,7 @@ export async function handler(args: {
         ? `No release channel serves build ${String(data.buildSha ?? "(none)")} yet, so no channelUrl is offered. Promote it with extension_release_promote for a link that follows the channel. ${CHANNEL_LINK_ADVICE}`
         : "The project's channels.json could not be read, so whether a release channel serves this build is unknown and no channelUrl is offered.";
     }
-  } else if (ref) {
+  } else if (ref && !channelShare) {
     Object.assign(
       data,
       channelLinkFields(ref, data.visibility, null, args.api),
@@ -407,7 +457,7 @@ export async function handler(args: {
     ...linkFields
   } = publishLinkFields({
     data,
-    channel: serving,
+    channel: serving ?? (channelArg || null),
     ref,
     ttlHours: args.ttlHours,
     project: args.project,
@@ -467,7 +517,7 @@ export async function handler(args: {
   const acceptedAt = stampNow();
   const isPublic = data.visibility === "public";
   const shareId =
-    send.kind === "build" && send.id
+    (send.kind === "build" || send.kind === "channel") && send.id
       ? String(send.id)
       : typeof data.shareId === "string"
         ? data.shareId
@@ -510,6 +560,18 @@ export async function handler(args: {
           ? "Send value.tellThem to the person as written."
           : "Send value.tellThem to the person as written; its link is long because the platform has not minted a short one yet.";
   const hint = [unconfirmed, what, watch, made, firefoxChannelSentence(data)].filter(Boolean).join(" ");
+  const servesNote = (() => {
+    if (!channelShare) return null;
+
+    const serves = channelServesOf((data.link as Record<string, unknown>).serves);
+    const ends = typeof data.expiresAt === "string" && data.expiresAt ? spokenDate(data.expiresAt) : null;
+
+    return serves ? channelShareNote(serves, ends) : null;
+  })();
+  const channelIgnored =
+    channelArg && platformKind !== "channel"
+      ? `You asked for channel ${channelArg}, but the platform answered a build link, not a channel link: it does not mint channel links for this project yet, so this address opens one build and changes with the next build. Do not put it on a site as the lasting address.`
+      : null;
 
   if (held && sharePage) {
     const answer = `${sharePage.status}${sharePage.retryAfter ? `, retry-after ${sharePage.retryAfter}` : ""}`;
@@ -535,6 +597,8 @@ export async function handler(args: {
         buildNote,
         nameNote,
         channelNote,
+        servesNote,
+        channelIgnored,
         credential.note,
       ],
       hint,
@@ -557,6 +621,8 @@ export async function handler(args: {
       buildNote,
       nameNote,
       channelNote,
+      servesNote,
+      channelIgnored,
       credential.note,
     ],
     hint,

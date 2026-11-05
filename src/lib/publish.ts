@@ -20,6 +20,7 @@ export function resolveToken(options: { project?: string; api?: string } = {}): 
 export interface PublishOptions {
   ttlHours?: number;
   buildSha?: string;
+  channel?: string;
   api?: string;
   token?: string;
   fetchImpl?: FetchImpl;
@@ -65,6 +66,7 @@ export async function publish(
   const body: Record<string, unknown> = {};
   if (options.ttlHours != null) body.ttlHours = Number(options.ttlHours);
   if (options.buildSha) body.buildSha = options.buildSha;
+  if (options.channel) body.channel = options.channel;
 
   let res: Response;
 
