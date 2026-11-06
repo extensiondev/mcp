@@ -90,7 +90,9 @@ describe("extension_submit preflight answers one readiness list and one decision
     expect(byId["support-email"]).toMatchObject({ default: "help@widget.example", defaultFrom: "package.json", writes: [{ line: "- Support email:", section: "## Listing" }] });
     expect(byId.homepage).toMatchObject({ default: "https://widget.example", writes: expect.arrayContaining([expect.objectContaining({ line: "- Support URL:", stores: ["safari"] })]) });
     expect(byId["privacy-policy"]).toMatchObject({ default: null, writes: [{ line: "- Privacy policy URL:", section: "## Privacy and data use" }] });
-    expect(byId["privacy-policy"].defaultFrom).toContain("you pick where it is hosted");
+    expect(byId["privacy-policy"].defaultFrom).toBe("no policy on file: you write it and pick where it is hosted; the agent quotes the code facts in listingDraft.ownerAnswers and drafts none of it");
+    expect(byId["privacy-policy"].ask).toContain("you write it");
+    expect(`${byId["privacy-policy"].ask} ${byId["privacy-policy"].defaultFrom}`).not.toMatch(/agent drafts|drafts (one|it|the policy|PRIVACY)/i);
     expect(byId.category.default).toBe("Tools (Chrome), Productivity (Edge), Other (Firefox), Utilities (Safari)");
     expect(byId.distribution.default).toContain("Chrome unlisted");
     expect(byId.distribution.writes).toEqual([{ line: "- Visibility:", section: "## Chrome Web Store", stores: ["chrome"] }]);

@@ -74,7 +74,7 @@ const SPECS: DecisionSpec[] = [
   },
   {
     id: "privacy-policy",
-    ask: "The privacy policy URL; with no policy yet, the agent drafts one from what the code does and you pick where it is hosted.",
+    ask: "The privacy policy URL. With no policy yet, you write it and pick where it is hosted; the agent only quotes what the code does, never the policy's words.",
     fields: ["privacyPolicyUrl"],
     writes: [{ line: "- Privacy policy URL:", section: "## Privacy and data use", stores: ["chrome", "edge", "firefox", "safari"] }],
     settles: ["chrome.privacy_policy_url", "edge.privacy_policy_url", "firefox.privacy_policy", "safari.privacy_policy_url"],
@@ -196,7 +196,7 @@ function defaultOf(id: DecisionId, facts: ProjectFacts, asked: readonly string[]
 
     if (facts.privacyFile && repo) return { value: `${repo}/blob/HEAD/${facts.privacyFile}`, from: `${facts.privacyFile} in the repository` };
 
-    return { value: null, from: "no policy on file: the agent drafts PRIVACY.md from the code and you pick where it is hosted" };
+    return { value: null, from: "no policy on file: you write it and pick where it is hosted; the agent quotes the code facts in listingDraft.ownerAnswers and drafts none of it" };
   }
 
   if (id === "category") {
