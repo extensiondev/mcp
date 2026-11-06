@@ -170,7 +170,14 @@ describe("extension_publish while the platform holds the public", () => {
 
     expect(out.status).toBe("publish-dispatched");
     expect(out.value.outcome.readProblem).toContain("minted no short link");
-    expect(out.value.sharePage).toBeUndefined();
+    expect(out.value.sharePage).toEqual({
+      url: SHARE,
+      status: 200,
+      retryAfter: null,
+      opensNow: null,
+      reason: "the platform minted no short link, so there is no share record to read back",
+    });
+
     expect(out.value.tellThem).toBe(`Here is pii-shield to try: ${SHARE}. It works until October 26, 2026 at 17:27 UTC.`);
   });
 

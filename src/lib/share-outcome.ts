@@ -36,6 +36,18 @@ export function shareLinks(data: Row, track: { trackUrl: string; trackLinks?: st
   ];
 }
 
+/* @invariant THE RECORD IS READ THE WAY THE PAGE READS IT. The share page
+ * rewrites its address to the seven character sha and exchanges the share id
+ * under that sha, signed out, so this read sends the same sha: a record that
+ * answers here is one the page's own exchange gets too (ledger 435). */
+const FULL_SHA = /^[0-9a-f]{40}$/i;
+
+export function pageSha(sha: string): string {
+  const trimmed = sha.trim();
+
+  return FULL_SHA.test(trimmed) ? trimmed.slice(0, 7).toLowerCase() : trimmed;
+}
+
 export async function shareOutcome(args: {
   data: Row;
   ref: ProjectRef | null;
@@ -45,7 +57,7 @@ export async function shareOutcome(args: {
   api?: string;
 }): Promise<{ outcome: ActOutcome; expiresAt: string | null }> {
   const { data } = args;
-  const sha = typeof data.buildSha === "string" ? data.buildSha : "";
+  const sha = typeof data.buildSha === "string" ? pageSha(data.buildSha) : "";
   const apiCheck = safeApiBase(resolveApiBase(args.api), args.api);
 
   if (args.noBuild) {

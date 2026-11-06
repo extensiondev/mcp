@@ -102,6 +102,28 @@ export function nameOf(
   );
 }
 
+/* @invariant THE LINK HANDED OUT NAMES THE BUILD THE WAY THE PAGE DOES. The
+ * build page canonicalizes its address to the seven character sha, the run
+ * commands beside the link already use it, and a platform that minted the
+ * page link with the forty character sha made it the one address in the
+ * answer that read differently from the page it opened (ledger 435). The
+ * share resolver matches a prefix either way, so only the address changes. */
+const LONG_PAGE_SHA = /\/builds\/([0-9a-f]{40})(?=[/?#]|$)/i;
+
+export function pageShaShortened(url: string): string {
+  return url.replace(LONG_PAGE_SHA, (_match, sha: string) => `/builds/${sha.slice(0, 7).toLowerCase()}`);
+}
+
+export function shortenPageShas(data: Record<string, unknown>): void {
+  if (typeof data.shareUrl === "string") data.shareUrl = pageShaShortened(data.shareUrl);
+
+  const link = data.link;
+
+  if (link && typeof link === "object" && typeof (link as Record<string, unknown>).url === "string") {
+    (link as Record<string, unknown>).url = pageShaShortened((link as Record<string, unknown>).url as string);
+  }
+}
+
 export function nameMismatchNote(
   data: Record<string, unknown>,
   settingsUrl: string | null,

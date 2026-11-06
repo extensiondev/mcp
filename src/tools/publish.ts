@@ -47,6 +47,7 @@ import {
   runCommandsOf,
   spokenDate,
   nameMismatchNote,
+  shortenPageShas,
   type RunCommand,
 } from "../lib/publish-link";
 import { GRANT_QUERY } from "../lib/package-address";
@@ -72,7 +73,7 @@ import { SYNC_CAPTURES, syncCaptures } from "./publish-captures";
 export const schema = {
   name: "extension_publish",
   description:
-    "Publish a build of the logged-in project on extension.dev and answer the link to send testers, which opens a page with a download and a run command for each browser. Reach for this first whenever the ask is to share, publish, deploy, distribute, release or ship an extension, or to send it to testers. Not for a store: that is extension_submit. Not for a quick emulator link beside this one: that is extension_preview_web share:true. A project that does not exist on extension.dev yet starts with extension_project_create, then extension_auth. It records a share on the platform and answers what the platform recorded in value.outcome and every link it made or touched in value.links, waiting up to waitSeconds for the record and answering publish-dispatched until it confirms. There are two links. A build link, <workspace>.extension.dev/<project>/builds/<sha>, opens one build and on a private project expires after ttlHours (default 7 days). A channel link, <workspace>.extension.dev/<project>/<channel>, opens the channel's newest build: never expiring on a public project (value.channelUrl, when a channel serves the build); on a private one, channel: '<name>' mints it as a share link that expires like a build link, for a site, else value.channelUrlWithheld says why. On a public project, or a public channel, send testers the channel link; else the channel or build link and its end date; visibility is set in the extension.dev project settings, not the GitHub repository. value.link is the link to send (kind, url, expiresAt, audience, renewBy), value.tellThem the message to send as written, value.trackUrl the console Share links page; a build whose every browser artifact failed is refused unless force is true, and while extension.dev is held the status is platform-held and tellThem adds the Chrome run command, which works now. action sync-captures sends captures/<browser>/, made by extension_screenshot browserCapture, to the project's build pages after a workspace owner approves.",
+    "Publish a build of the logged-in project on extension.dev and answer the link to send testers, which opens a page with a download and a run command for each browser. Reach for this first when the ask is to share, publish, deploy, distribute, release or ship an extension, or send it to testers. Not for a store: that is extension_submit. Not for a quick emulator link: that is extension_preview_web share:true. A project not on extension.dev yet starts with extension_project_create, then extension_auth. It records a share on the platform and answers what the platform recorded in value.outcome and every link it made or touched in value.links, waiting up to waitSeconds for the record and answering publish-dispatched until it confirms. There are two links. A build link, <workspace>.extension.dev/<project>/builds/<sha>, opens one build and on a private project expires after ttlHours (default 7 days). A channel link, <workspace>.extension.dev/<project>/<channel>, opens the channel's newest build: never expiring on a public project (value.channelUrl, when a channel serves the build); on a private one, channel: '<name>' mints it as a share link that expires like a build link, for a site, else value.channelUrlWithheld says why. On a public project, or a public channel, send testers the channel link; else the channel or build link and its end date; visibility is set in the extension.dev project settings, not the GitHub repository. value.link is the link to send (kind, url, expiresAt, audience, renewBy), value.tellThem the message to send as written, value.sharePage whether it opens now, value.trackUrl the console Share links page; a build whose every browser artifact failed is refused unless force is true, and while extension.dev is held the status is platform-held and tellThem adds the Chrome run command, which works now. action sync-captures sends captures/<browser>/, made by extension_screenshot browserCapture, to the project's build pages after a workspace owner approves.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -143,6 +144,24 @@ function linkIsShort(send: { id: string | null }, url: string, runs: RunCommand[
   if (send.id) return true;
 
   return !GRANT_QUERY.test(url) && !carriesShareToken(runs);
+}
+
+function sharePageField(args: {
+  url: string;
+  probe: { url: string; status: number; retryAfter: string | null } | null;
+  held: boolean;
+  outcome: { recorded: boolean; readProblem?: string };
+}): Record<string, unknown> {
+  const { probe, held, outcome } = args;
+
+  if (!probe) return { url: args.url, status: null, retryAfter: null, opensNow: null, reason: "the page did not answer the probe within 4 seconds" };
+
+  const base = { url: probe.url, status: probe.status, retryAfter: probe.retryAfter };
+
+  if (held || probe.status >= 400) return { ...base, opensNow: false };
+  if (outcome.recorded) return { ...base, opensNow: true };
+
+  return { ...base, opensNow: null, reason: outcome.readProblem ?? "the share record was not read back, so the grant behind the page is unproven" };
 }
 
 function fail(
@@ -378,6 +397,7 @@ export async function handler(args: {
   }
 
   delete data.token;
+  shortenPageShas(data);
 
   if (!health && typeof data.buildSha === "string" && data.buildSha.trim()) {
     health = await readBuildHealth({
@@ -499,19 +519,17 @@ export async function handler(args: {
   const held = Boolean(sharePage?.held);
   const told = String(data.tellThem);
 
+  const pageNote =
+    sharePage && !held && sharePage.status >= 400
+      ? `The share page ${sharePage.url} answered ${sharePage.status} when this tool opened it, so do not send it until it opens; the run commands in value.previewCommands work on their own.`
+      : null;
+
   if (held && sharePage) {
     const longLines = short ? null : longHeldLines(name, send, runs);
 
     data.tellThem = longLines
       ? told.replace(page, longLines)
       : `${told}\n${heldRunLine(runs)}`;
-
-    data.sharePage = {
-      url: sharePage.url,
-      status: sharePage.status,
-      retryAfter: sharePage.retryAfter,
-      opensNow: false,
-    };
   }
 
   const track = trackFields("extension_publish", {
@@ -546,6 +564,20 @@ export async function handler(args: {
   const links = linksOf(shareLinks(data, track, !isPublic && !noBuild));
   data.outcome = outcome;
   data.links = links;
+
+  /* @invariant EVERY PUBLISH THAT SERVES A BUILD SAYS WHETHER ITS PAGE
+   * OPENS. value.sharePage used to appear only while the platform held the
+   * page, so an answer with no sharePage read as "the page opens" when the
+   * probe had not run, had not answered, or had answered an error (ledger
+   * 435). It is present whenever a page was handed out. opensNow is true only
+   * when the page answered under 400 AND the share record read back under the
+   * short sha the page rewrites to, which is the exchange the page's own
+   * script makes for a signed-out visitor; false when the page is held or
+   * answered an error; null, with the reason, when the page or the record did
+   * not answer in time, since an unread grant is not a proven one. */
+  if (!noBuild && sendUrl) {
+    data.sharePage = sharePageField({ url: String(sendUrl), probe: sharePage, held, outcome });
+  }
 
   const made = madeSentence(links);
   const unconfirmed =
@@ -627,6 +659,7 @@ export async function handler(args: {
     value: data,
     warnings: [
       noBuildNote,
+      pageNote,
       artifactNote,
       note,
       buildNote,
