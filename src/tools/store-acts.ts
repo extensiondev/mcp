@@ -36,6 +36,7 @@ import {
 import { compactPreflightStores, PREFLIGHT_DETAIL_SENTENCE, preflightDetail } from "../lib/preflight-detail";
 import { summaryAgreeingWithRows } from "../lib/preflight-summary";
 import { readinessAnswer, readinessLead, storeReadinessOf } from "../lib/store-onboarding";
+import { releaseLoopOf } from "../lib/store-release-loop";
 import { safariSigningOf, safariSigningSentence } from "../lib/safari-signing-expiry";
 import { submissionLandingLine } from "../lib/submission-landing";
 import { submissionModeView } from "../lib/submission-mode-view";
@@ -996,10 +997,12 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     const lifted = screenshotsLineOnce(stores);
     const compact = compactPreflightStores(lifted.stores, detail);
     const readiness = readinessAnswer(storeReadinessOf({ stores, asked, projectPath: text(args.projectPath) }));
+    const releaseLoop = releaseLoopOf({ stores, asked: asked.filter((store) => isRow(stores[store])), projectPath: text(args.projectPath) });
 
     return {
       ...(readiness ? { readiness } : {}),
       ...(lifted.screenshotsLine ? { screenshotsLine: lifted.screenshotsLine } : {}),
+      ...(releaseLoop ? { releaseLoop } : {}),
       ...(compact.trimmed ? { stores: compact.stores, detail: PREFLIGHT_DETAIL_SENTENCE } : { stores: compact.stores }),
       ...(Object.keys(storePreflight).length ? { storePreflight } : {}),
     };
