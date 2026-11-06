@@ -22,6 +22,7 @@ export type PlatformFetchResult = { ok: true; res: Response } | { ok: false; unr
 
 export interface PlatformFetchOptions {
   kind?: PlatformFetchKind;
+  boundMs?: number;
   signal?: AbortSignal;
   fetchImpl?: typeof fetch;
 }
@@ -78,8 +79,11 @@ export function unreachedBy(url: string, err: unknown, boundMs: number): Platfor
 }
 
 /* @invariant ONE BOUNDED FETCH PER PLATFORM CALL, AND THE BOUND IS THIS
- * SERVER'S OWN TIMER. A read is given 15 s and a write that dispatches 60 s;
- * nothing here retries, so a call lasts at most one bound past whatever its
+ * SERVER'S OWN TIMER. A read is given 15 s and a write that dispatches 60 s,
+ * unless the caller passes boundMs (a store submit passes 60 s per store
+ * asked, see submit-dispatch-bound.ts, because www submits the stores one
+ * after another inside the request); nothing here retries, so a call lasts
+ * at most one bound past whatever its
  * own timeout input allows. The bound is a setTimeout of this module raced
  * against the fetch, not only an AbortSignal handed to fetch, so a fetch
  * that never settles still answers at the bound, and the answer names what
@@ -91,7 +95,7 @@ export function unreachedBy(url: string, err: unknown, boundMs: number): Platfor
  */
 export async function platformFetch(url: string, init: RequestInit, options: PlatformFetchOptions = {}): Promise<PlatformFetchResult> {
   const kind = options.kind ?? "read";
-  const boundMs = platformBoundMs(kind);
+  const boundMs = Number.isFinite(options.boundMs) && (options.boundMs as number) > 0 ? (options.boundMs as number) : platformBoundMs(kind);
   const doFetch = options.fetchImpl ?? globalThis.fetch;
   const controller = new AbortController();
   const bound = new DOMException(`The platform did not answer within ${Math.round(boundMs / 1000)} s`, "TimeoutError");
