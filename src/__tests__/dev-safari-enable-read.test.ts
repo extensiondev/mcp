@@ -16,6 +16,7 @@ import { handler } from "../tools/wait";
 import { registerSession, removeSession, removeSessionMarker } from "../lib/process-manager";
 import { parsePluginkitList, safariEnableFrame, safariEnableProbes } from "../lib/safari-enable-read";
 import { writeCompiledUnattachedContract } from "./fixtures/ready-contract";
+import { extensionsPlistXml, TEAM, TEAM_SIGNED_CODESIGN } from "./fixtures/safari-extensions-plist";
 
 const NEW_ID = "com.acme.visionario.Extension";
 const OLD_ID = "dev.extensionjs.Hands-free.Extension";
@@ -61,6 +62,8 @@ beforeEach(() => {
 
   safariEnableProbes.safariRunning = () => true;
   safariEnableProbes.pluginkitList = () => listing([{ mark: " ", id: NEW_ID, app: "Visionario.app" }]);
+  safariEnableProbes.extensionsPlist = () => ({ xml: extensionsPlistXml([{ id: NEW_ID, identity: TEAM, enabled: false }]), reason: "" });
+  safariEnableProbes.codesign = () => TEAM_SIGNED_CODESIGN;
   safariEnableProbes.hostApp = () => "iTerm";
 });
 
@@ -119,13 +122,14 @@ describe("extension_dev / extension_wait on a Safari session the engine could no
     expect(safariEnableFrame(dir, "safari", true)?.safari.blocker?.kind).toBe("permission-prompt");
   });
 
-  it("answers enabled when pluginkit lists the rebuilt app on, never says not enabled, and skips the osascript probe", async () => {
+  it("answers enabled when Extensions.plist holds the rebuilt app's own identity on, never says not enabled, and skips the osascript probe", async () => {
     session(BUILT + SETTINGS_DID_NOT_OPEN);
     safariEnableProbes.pluginkitList = () => listing([{ mark: "+", id: NEW_ID, app: "Visionario.app" }]);
+    safariEnableProbes.extensionsPlist = () => ({ xml: extensionsPlistXml([{ id: NEW_ID, identity: TEAM, enabled: true }]), reason: "" });
 
     const result = await wait();
 
-    expect(result.value.safari).toMatchObject({ enabled: true, bundleId: NEW_ID, carriesOver: true, blocker: null, appPath });
+    expect(result.value.safari).toMatchObject({ enabled: true, source: "extensions-plist", identity: TEAM, bundleId: NEW_ID, carriesOver: true, blocker: null, appPath });
     expect(result.value.safari.registeredPath).toContain("Visionario.app/Contents/PlugIns");
     expect(result.hint).toContain("Visionario is enabled in Safari");
     expect(result.hint).toContain("the enable holds across the rebuild");
@@ -161,7 +165,8 @@ describe("extension_dev / extension_wait on a Safari session the engine could no
     safariEnableProbes.pluginkitList = () => "  (no matches)\n";
     const unregistered = safariEnableFrame(dir, "safari", true);
     expect(unregistered?.safari.blocker?.kind).toBe("not-registered");
-    expect(unregistered?.hint).toContain("pluginkit lists no extension for this build");
+    expect(unregistered?.hint).toContain(`Safari holds ${NEW_ID} (${TEAM}) off`);
+    expect(unregistered?.hint).toContain("pluginkit lists no Safari extension under");
 
     removeSession(dir, "safari");
     removeSessionMarker(dir, "safari");

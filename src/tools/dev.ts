@@ -474,7 +474,7 @@ export async function handler(
 
   const safariEnable =
     !sessionReady && readiness?.ready.status === "compiled-not-attached" && isSafariTarget(browser)
-      ? safariEnableFrame(args.projectPath, browser, Boolean(args.enableExtension))
+      ? safariEnableFrame(args.projectPath, browser, Boolean(args.enableExtension), { identity: signingFrame?.signing.identity })
       : null;
   const nextStep = sessionReady
     ? "The session is ready (ready.status: ready) and the first log lines are in firstLogs, so no extension_wait is needed: extension_inspect reads the live state and extension_logs the console."

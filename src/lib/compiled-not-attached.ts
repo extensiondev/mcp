@@ -276,7 +276,7 @@ export async function compiledNotAttachedAnswer(
   const observed = await observeAttachLegs(ctx.contract, ctx);
   const wayOut = observed.freshProfile ? wayOutSentence(observed.freshProfile) : null;
   const enableExtension = findSessionInfo(ctx.projectPath, ctx.browser)?.enableExtension === true;
-  const safariEnable = safariEnableFrame(ctx.projectPath, ctx.browser, enableExtension);
+  const safariEnable = safariEnableFrame(ctx.projectPath, ctx.browser, enableExtension, { identity: signingFrame?.signing.identity });
 
   return envelope({
     ok: false,

@@ -8,6 +8,8 @@
 
 import { spawnSync } from "node:child_process";
 
+import { safariExtensionsPlistPath } from "./safari-extensions-plist";
+
 export const SAFARI_WEB_EXTENSION_PROTOCOL = "com.apple.Safari.web-extension";
 
 const PROBE_MS = 3000;
@@ -19,11 +21,18 @@ export interface AutomationProbe {
   detail: string;
 }
 
+export interface PlistProbe {
+  xml: string | null;
+  reason: string;
+}
+
 export interface SafariEnableProbes {
   platform: () => string;
   automation: () => AutomationProbe;
   safariRunning: () => boolean | null;
   pluginkitList: () => string | null;
+  extensionsPlist: () => PlistProbe;
+  codesign: (appPath: string) => string | null;
   hostApp: () => string;
 }
 
@@ -82,6 +91,20 @@ export const safariEnableProbes: SafariEnableProbes = {
     const result = run("pluginkit", ["-m", "-v", "-p", SAFARI_WEB_EXTENSION_PROTOCOL]);
 
     return result.status === 0 ? result.stdout : null;
+  },
+  extensionsPlist: () => {
+    const file = safariExtensionsPlistPath();
+    const result = run("plutil", ["-convert", "xml1", "-o", "-", file]);
+
+    if (result.timedOut) return { xml: null, reason: `plutil did not answer within ${PROBE_MS / 1000} s reading ${file}` };
+    if (result.status === 0 && result.stdout.trim()) return { xml: result.stdout, reason: "" };
+
+    return { xml: null, reason: `${file} could not be read: ${(result.stderr.trim() || result.stdout.trim()) || `plutil exited ${result.status}`}` };
+  },
+  codesign: (appPath: string) => {
+    const result = run("codesign", ["-dv", "--verbose=2", appPath]);
+
+    return result.status === 0 ? `${result.stdout}\n${result.stderr}` : null;
   },
   hostApp: () => {
     const result = run("ps", ["-Ao", "pid=,ppid=,command="]);
