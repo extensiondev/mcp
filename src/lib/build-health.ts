@@ -33,6 +33,7 @@ export interface BrowserHealth {
   freshness: Freshness;
   staleVerdict?: "passed" | "failed";
   recorded?: false;
+  servedOnly?: true;
 }
 
 export interface BuildRun {
@@ -96,6 +97,30 @@ export function unrecordedBrowsers(recorded: string[], artifacts: unknown): stri
   const known = new Set(recorded.map((name) => name.toLowerCase()));
 
   return packageBrowsersOf(artifacts).filter((browser) => !known.has(browser));
+}
+
+export function servedOnlyReason(browser: string): string {
+  return `the platform's record of this build has no ${browser} row and its artifact list no ${browser} package, so ${browser} was never checked, and the ${browser} run command in value.previewCommands hands over an unchecked file`;
+}
+
+/* @invariant EVERY BROWSER A PUBLISH SERVES APPEARS ONCE IN THE VERDICT. The
+ * platform's publish answer builds its run commands from the build's browser
+ * list, while the integrity verdict is built from the build record's rows
+ * and its artifact list; a Safari build whose record and artifact list both
+ * omit safari answered a safari.zip command beside a verdict that named
+ * three browsers and nothing about the fourth (ledger 431). A served browser
+ * the verdict never saw is listed as unchecked with its own reason, never
+ * dropped and never called good. */
+export function withServedBrowsers(health: BuildHealth, served: string[]): BuildHealth {
+  if (!health.checked) return health;
+
+  const known = new Set(health.browsers.map((b) => b.browser.toLowerCase()));
+  const rows: BrowserHealth[] = served
+    .map((browser) => browser.toLowerCase())
+    .filter((browser, i, all) => browser && !known.has(browser) && all.indexOf(browser) === i)
+    .map((browser) => ({ browser, status: null, integrity: "unread", failedChecks: [], usable: null, checkedAt: null, checkedRun: null, freshness: "unknown", recorded: false, servedOnly: true }));
+
+  return rows.length ? summarizeBuildHealth(health.buildId, [...health.browsers, ...rows], health.run, health.buildNumber ?? null) : health;
 }
 
 export function unrecordedRowReason(browser: string): string {

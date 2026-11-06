@@ -28,6 +28,12 @@ export async function windowOf(port: number, targetId: string): Promise<number |
 }
 
 export async function tabsWorker(port: number, projectPath: string, browser: string): Promise<{ targetId: string } | { reason: string }> {
+  const found = await tabsWorkers(port, projectPath, browser);
+
+  return "reason" in found ? found : { targetId: found.workers[0]!.targetId };
+}
+
+export async function tabsWorkers(port: number, projectPath: string, browser: string): Promise<{ workers: Array<{ targetId: string; url: string }> } | { reason: string }> {
   const identity = sessionGuestIdentity(projectPath, browser);
   const preferred = [...identity.expectedIds, ...identity.companionIds];
   let listed: Array<{ id: string; type: string; url: string }>;
@@ -47,13 +53,13 @@ export async function tabsWorker(port: number, projectPath: string, browser: str
     return at === -1 ? preferred.length : at;
   };
 
-  const best = workers.sort((a, b) => rank(a.url) - rank(b.url))[0];
-  if (best) return { targetId: best.id };
+  const ranked = workers.sort((a, b) => rank(a.url) - rank(b.url)).map((t) => ({ targetId: t.id, url: t.url }));
+  if (ranked.length) return { workers: ranked };
 
   for (const id of identity.expectedIds) {
     const wake = await wakeExtensionWorker(port, id);
     const woken = wake.woken ? wake.targets.find((t) => BACKGROUND_TARGET_TYPES.has(t.type)) : undefined;
-    if (woken) return { targetId: woken.targetId };
+    if (woken) return { workers: [{ targetId: woken.targetId, url: `chrome-extension://${id}/` }] };
   }
 
   return { reason: "no extension background is running in the browser to switch tabs from" };

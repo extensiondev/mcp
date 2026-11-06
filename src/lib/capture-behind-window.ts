@@ -9,7 +9,7 @@
 import { captureCdpTarget, type CaptureOutcome, type CaptureSize } from "./capture";
 import { evaluateOnExtensionPage } from "./cdp-extension-page";
 import { showHiddenTab, type HiddenTab } from "./capture-hidden-tab";
-import { tabsWorker, windowOf } from "./tab-switch-worker";
+import { tabsWorkers, windowOf } from "./tab-switch-worker";
 
 export const FIRST_CAPTURE_MS = 4_000;
 
@@ -42,6 +42,53 @@ export async function captureCdpPage(
   return { ...capture, hiddenTab: await hidden.restore() };
 }
 
+/* @invariant THE BLANK TAB IS OPENED FROM THE FIRST BACKGROUND THAT HAS THE
+ * TABS API, AND A BACKGROUND WITHOUT IT IS A REASON IN PLAIN WORDS, NOT A
+ * THROWN MESSAGE. On a headed session the best-ranked extension background
+ * answered "TypeError: Cannot read properties of undefined (reading
+ * 'query')" (ledger 432): chrome.tabs was not there, the fallback died on
+ * its first line, and the hint quoted the stack message as advice. The
+ * script now checks for the API before it calls it, every ranked background
+ * is tried in turn, and the reason names the background that lacked it. */
+async function openBlankTab(
+  port: number,
+  workers: Array<{ targetId: string; url: string }>,
+  windowId: number,
+): Promise<{ worker: { targetId: string; url: string }; ids: { shownId: number | null; blankId: number } } | { reason: string }> {
+  const reasons: string[] = [];
+
+  for (const worker of workers) {
+    const shown = await evaluateOnExtensionPage(
+      port,
+      worker.targetId,
+      `(async () => { const tabs = globalThis.chrome && globalThis.chrome.tabs; if (!tabs || typeof tabs.query !== "function" || typeof tabs.create !== "function") return { noTabs: true }; const [shown] = await chrome.tabs.query({ active: true, windowId: ${windowId} }); const blank = await chrome.tabs.create({ windowId: ${windowId}, active: true, url: "about:blank", ...(shown ? { index: shown.index + 1 } : {}) }); return { shownId: shown ? shown.id : null, blankId: blank.id }; })()`,
+      3_000,
+    );
+    const origin = worker.url.replace(/^(chrome-extension:\/\/[a-p]{32}).*$/i, "$1");
+
+    if (!shown.ok) {
+      reasons.push(`the extension background at ${origin} threw while opening a blank tab (${shown.message})`);
+      continue;
+    }
+
+    const value = shown.value as { noTabs?: unknown; shownId?: unknown; blankId?: unknown } | null;
+
+    if (value?.noTabs === true) {
+      reasons.push(`the extension background at ${origin} exposes no chrome.tabs API`);
+      continue;
+    }
+
+    if (!value || typeof value.blankId !== "number") {
+      reasons.push(`the extension background at ${origin} opened no blank tab`);
+      continue;
+    }
+
+    return { worker, ids: { shownId: typeof value.shownId === "number" ? value.shownId : null, blankId: value.blankId } };
+  }
+
+  return { reason: reasons.join("; ") || "no extension background is running in the browser to switch tabs from" };
+}
+
 async function capturePaintedPage(
   port: number,
   targetId: string,
@@ -57,23 +104,16 @@ async function capturePaintedPage(
   const windowId = await windowOf(port, targetId);
   if (windowId === null) return { outcome: first, behindWindow: { tried: true, shown: false, reason: "the browser did not say which window holds the page" } };
 
-  const worker = await tabsWorker(port, session.projectPath, session.browser);
-  if ("reason" in worker) return { outcome: first, behindWindow: { tried: true, shown: false, reason: worker.reason } };
+  const found = await tabsWorkers(port, session.projectPath, session.browser);
+  if ("reason" in found) return { outcome: first, behindWindow: { tried: true, shown: false, reason: found.reason } };
 
-  const shown = await evaluateOnExtensionPage(
-    port,
-    worker.targetId,
-    `(async () => { const [shown] = await chrome.tabs.query({ active: true, windowId: ${windowId} }); const blank = await chrome.tabs.create({ windowId: ${windowId}, active: true, url: "about:blank", ...(shown ? { index: shown.index + 1 } : {}) }); return { shownId: shown ? shown.id : null, blankId: blank.id }; })()`,
-    3_000,
-  );
-  const ids = shown.ok ? (shown.value as { shownId?: unknown; blankId?: unknown } | null) : null;
+  const opened = await openBlankTab(port, found.workers, windowId);
+  if ("reason" in opened) return { outcome: first, behindWindow: { tried: true, shown: false, reason: opened.reason } };
 
-  if (!ids || typeof ids.blankId !== "number") {
-    return { outcome: first, behindWindow: { tried: true, shown: false, reason: shown.ok ? "the browser opened no blank tab" : shown.message } };
-  }
+  const { worker, ids } = opened;
 
   const second = await captureCdpTarget(port, targetId, size, Math.max(timeoutMs - firstMs, MIN_SECOND_CAPTURE_MS));
-  const shownId = typeof ids.shownId === "number" ? ids.shownId : null;
+  const shownId = ids.shownId;
   const restored = await evaluateOnExtensionPage(
     port,
     worker.targetId,

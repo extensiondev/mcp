@@ -117,6 +117,67 @@ describe("extension_screenshot captures the shown tab of a window behind other w
     expect(evaluated("chrome.tabs.create")).toHaveLength(0);
   }, 20_000);
 
+  it("432: skips a background without the tabs API and opens the blank tab from the next one", async () => {
+    const other = { id: "SW2", type: "service_worker", url: "chrome-extension://abcdefghijklmnopabcdefghijklmnop/background.js" };
+    let shownTab = 11;
+
+    chrome = await startFakeChrome([PAGE, WORKER, other], (command) => {
+      if (command.method === "Browser.getWindowForTarget") return { windowId: WINDOW_ID, bounds: { windowState: "normal" } };
+
+      if (command.method === "Runtime.evaluate") {
+        const expression = String(command.params.expression);
+
+        if (expression.includes("chrome.tabs.create")) {
+          if (command.sessionId === "S-SW1") return { result: { type: "object", value: { noTabs: true } } };
+
+          shownTab = 99;
+
+          return { result: { type: "object", value: { shownId: 11, blankId: 99 } } };
+        }
+
+        if (expression.includes("chrome.tabs.remove")) {
+          shownTab = 11;
+
+          return { result: { type: "boolean", value: true } };
+        }
+      }
+
+      if (command.method === "Page.captureScreenshot") return shownTab === 11 ? HANG : { data: solidPng(640, 480).toString("base64") };
+
+      return undefined;
+    });
+
+    session(chrome.port);
+
+    const result = JSON.parse(await screenshot.handler({ projectPath: dir, targetId: PAGE.id, path: "shots/google.png", timeout: 6_000 }));
+
+    expect(result.status).toBe("captured");
+    expect(result.value.behindWindow).toEqual({ tried: true, shown: true, restored: true });
+    expect(evaluated("chrome.tabs.create").map((c) => c.sessionId)).toEqual(["S-SW1", "S-SW2"]);
+    expect(String(evaluated("chrome.tabs.create")[0]!.params.expression)).toContain('typeof tabs.query !== "function"');
+    expect(evaluated("chrome.tabs.remove")[0]!.sessionId).toBe("S-SW2");
+  }, 20_000);
+
+  it("432: names the background that lacks the tabs API in plain words and points at extension_open foreground, never a thrown message", async () => {
+    chrome = await startFakeChrome([PAGE, WORKER], (command) => {
+      if (command.method === "Browser.getWindowForTarget") return { windowId: WINDOW_ID, bounds: { windowState: "normal" } };
+      if (command.method === "Runtime.evaluate" && String(command.params.expression).includes("chrome.tabs.create")) return { result: { type: "object", value: { noTabs: true } } };
+      if (command.method === "Page.captureScreenshot") return HANG;
+
+      return undefined;
+    });
+
+    session(chrome.port);
+
+    const result = JSON.parse(await screenshot.handler({ projectPath: dir, targetId: PAGE.id, timeout: 4_000 }));
+
+    expect(result.status).toBe("capture-timeout");
+    expect(result.hint).toContain(`the extension background at chrome-extension://${EXTENSION_ID} exposes no chrome.tabs API`);
+    expect(result.hint).toContain("extension_open {url, foreground: true}");
+    expect(result.hint).not.toContain("TypeError");
+    expect(result.hint).toContain("never brings a window forward");
+  }, 30_000);
+
   it("says why it could not show another tab when no extension background runs, and still never brings the window forward", async () => {
     await browserWithPageBehindOtherWindows([PAGE]);
 

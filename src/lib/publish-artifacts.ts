@@ -11,8 +11,10 @@ import {
   describeBrowserHealth,
   everyArtifactFailed,
   integrityWasChecked,
+  servedOnlyReason,
   staleFailures,
   unrecordedRowReason,
+  withServedBrowsers,
   type BuildHealth,
 } from "./build-health";
 import { trackUrl } from "./track-url";
@@ -48,6 +50,7 @@ export function artifactsValue(health: BuildHealth): Record<string, unknown> {
           freshness: b.freshness,
           ...(b.failedChecks.length ? { failedChecks: b.failedChecks } : {}),
           ...(b.recorded === false ? { recorded: false } : {}),
+          ...(b.servedOnly ? { servedOnly: true, reason: servedOnlyReason(b.browser) } : {}),
         },
       ]),
     ),
@@ -140,10 +143,15 @@ function partialNote(health: Extract<BuildHealth, { checked: true }>): string {
   }`;
 }
 
+function servedBrowsersOf(previewCommands: unknown): string[] {
+  return previewCommands && typeof previewCommands === "object" ? Object.keys(previewCommands as Record<string, unknown>) : [];
+}
+
 export function applyArtifactHealth(
   data: Record<string, unknown>,
-  health: BuildHealth | null,
+  read: BuildHealth | null,
 ): { note: string | null; failed: Set<string> } {
+  const health = read ? withServedBrowsers(read, servedBrowsersOf(data.previewCommands)) : read;
   const failed = new Set(health?.checked ? health.failed.map((b) => b.toLowerCase()) : []);
 
   if (!health) return { note: null, failed };
@@ -188,9 +196,11 @@ export function applyArtifactHealth(
 }
 
 function uncheckedNote(health: Extract<BuildHealth, { checked: true }>): string {
-  const unrecorded = health.browsers.filter((b) => b.usable === null && b.recorded === false).map((b) => b.browser);
-  const recorded = health.unchecked.filter((browser) => !unrecorded.includes(browser));
+  const servedOnly = health.browsers.filter((b) => b.servedOnly).map((b) => b.browser);
+  const unrecorded = health.browsers.filter((b) => b.usable === null && b.recorded === false && !b.servedOnly).map((b) => b.browser);
+  const recorded = health.unchecked.filter((browser) => !unrecorded.includes(browser) && !servedOnly.includes(browser));
   const lines = [
+    servedOnly.length ? `Integrity was not checked for ${listed(servedOnly)}: ${servedOnly.map(servedOnlyReason).join("; ")}.` : null,
     recorded.length
       ? `Integrity was not checked for ${listed(recorded)}: the platform reported no readable integrity result for ${recorded.length === 1 ? "that artifact" : "those artifacts"}.`
       : null,

@@ -272,7 +272,7 @@ function captureFailure(outcome: CaptureOutcome & { ok: false }, url: string, be
     outcome.timedOut ? "E_CAPTURE_TIMEOUT" : "E_CAPTURE_FAILED",
     `The browser did not hand back an image of ${url}: ${outcome.message}`,
     outcome.timedOut
-      ? `The page did not paint within the budget.${behind} This tool never brings a window forward; run the session headless (the default), or retry with a larger timeout.`
+      ? `The page did not paint within the budget.${behind} This tool never brings a window forward; bring the page's tab forward yourself with extension_open {url, foreground: true} (it reloads the tab in place) and retry, run the session headless (the default), or retry with a larger timeout.`
       : "Confirm the session is ready (extension_wait) and the page is still open, then retry.",
   );
 }

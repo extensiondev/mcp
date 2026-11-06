@@ -194,6 +194,12 @@ async function browserRunsHeadless(
   }
 }
 
+function sameDocument(tabUrl: string, destination: string): boolean {
+  const strip = (value: string) => value.replace(/#.*$/, "");
+
+  return Boolean(tabUrl) && strip(tabUrl) === strip(destination);
+}
+
 function isDisposableTab(
   tabUrl: string,
   destination: string,
@@ -210,6 +216,7 @@ function isDisposableTab(
 
 export interface NavigateOptions {
   reuse?: "blank" | "surface";
+  newTab?: boolean;
   tab?: number;
   avoidUrls?: string[];
   reloadRetried?: boolean;
@@ -339,14 +346,25 @@ export async function navigateToUrl(
     await cdp.connect(browserWsUrl);
 
     const avoid = new Set(options.avoidUrls ?? []);
-    const reusable = pageTargets.find(
-      (t) =>
-        isDisposableTab(String(t.url ?? ""), url, reuse) &&
-        (!avoid.has(String(t.url ?? "").replace(/#.*$/, "")) || renderedTabTargets.has(String(t.id))),
-    );
+    /* @invariant A URL A TAB ALREADY SHOWS IS RELOADED IN THAT TAB, NEVER
+     * OPENED AGAIN. The rebuild-and-look loop calls extension_open with the
+     * same url after every edit, and each call used to add a tab and a new
+     * targetId while the old tab stayed open behind it (ledger 433). A tab
+     * whose url, hash aside, is the destination is navigated in place, which
+     * is a reload, and the answer says reused: true; newTab: true is the one
+     * way to open a second tab on purpose. */
+    const sameUrl = options.newTab === true ? undefined : pageTargets.find((t) => sameDocument(String(t.url ?? ""), url));
+    const reusable =
+      sameUrl ??
+      pageTargets.find(
+        (t) =>
+          isDisposableTab(String(t.url ?? ""), url, reuse) &&
+          (!avoid.has(String(t.url ?? "").replace(/#.*$/, "")) || renderedTabTargets.has(String(t.id))),
+      );
     let navigatedTargetId: string | undefined;
     let previousUrl: string | undefined;
     let openedNewTab = false;
+    const reused = Boolean(sameUrl);
 
     if (reusable) {
       navigatedTargetId = String(reusable.id);
@@ -508,6 +526,7 @@ export async function navigateToUrl(
       value: {
         navigated: url,
         ...(openedNewTab ? { openedNewTab: true } : {}),
+        ...(reused ? { reused: true } : {}),
         ...(settled.redirectedFrom
           ? {
               redirected: { from: settled.redirectedFrom, to: settled.url },
@@ -1104,7 +1123,7 @@ async function confirmSurfaceTarget(
 export const schema = {
   name: "extension_open",
   description:
-    "Open an extension surface (popup, options, sidebar, the newtab, history or bookmarks override page, or the extension's DevTools panel), navigate a tab to a url, or replay an event (the toolbar action, a chrome.commands shortcut) in a running session, over the dev session's control channel (on unless extension_dev was called with allowControl:false). Opening a url on Chromium answers target.targetId, the CDP target id of the tab it opened: pass it as `targetId` to extension_screenshot, extension_dom_snapshot, extension_inspect or extension_eval to address that exact tab (extension_dom_snapshot listTargets: true lists every targetId, on Firefox too). A url answer also carries tab {active, visibilityState}, viewport {width, height} and headless: an element below the viewport is not observed until it is scrolled into view. A url opens in a background tab unless foreground: true. Not for evaluating in the page once it is open: that is extension_eval. An action or command replay invokes your listener without a user gesture, so the gesture-derived activeTab grant does not apply.",
+    "Open an extension surface (popup, options, sidebar, the newtab, history or bookmarks override page, or the extension's DevTools panel), navigate a tab to a url, or replay an event (the toolbar action, a chrome.commands shortcut) in a running session, over the dev session's control channel (on unless extension_dev was called with allowControl:false). Opening a url on Chromium answers target.targetId, the CDP target id of the tab it opened: pass it as `targetId` to extension_screenshot, extension_dom_snapshot, extension_inspect or extension_eval to address that exact tab. A url answer also carries tab {active, visibilityState}, viewport {width, height} and headless: an element below the viewport is not observed until it is scrolled into view. A url opens in a background tab unless foreground: true; a tab already showing the url is reloaded in place (reused: true) unless newTab: true. Not for evaluating in the page once it is open: that is extension_eval. An action or command replay invokes your listener without a user gesture, so the gesture-derived activeTab grant does not apply.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -1145,6 +1164,12 @@ export const schema = {
         default: false,
         description:
           "With `url`, on Chromium: bring the opened tab forward for a page the PERSON must act on (a sign-in, a consent screen, a payment or captcha step), by making it the active tab (CDP Target.activateTarget) and raising its browser window (Page.bringToFront). Raising the window takes the screen from whatever the person was doing, so pass it only when the person has to see or act on that page now, never for pages only the agent reads. The answer says what happened in value.foreground {activated, windowRaised} and in the hint, and what to tell the person. Default false: the tab opens in the background and the window stays where it is.",
+      },
+      newTab: {
+        type: "boolean",
+        default: false,
+        description:
+          "With `url`, on Chromium: open a second tab even when a tab already shows that url. Without it a tab that already shows the url (hash aside) is reloaded in place and answered with reused: true, so a rebuild-and-look loop never piles up tabs.",
       },
       tab: {
         type: "number",
@@ -1301,6 +1326,7 @@ export async function handler(
     url?: string;
     asTab?: boolean;
     foreground?: boolean;
+    newTab?: boolean;
   },
 ): Promise<string> {
   const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
@@ -1323,6 +1349,7 @@ export async function handler(
     const opened = await navigateToUrl(args.projectPath, browser, absolute, args.timeout, {
       tab: args.tab,
       foreground: args.foreground === true,
+      newTab: args.newTab === true,
     });
 
     return args.foreground === true ? withForegroundRefusal(opened, args.projectPath, browser, args.tab) : opened;
