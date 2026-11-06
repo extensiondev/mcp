@@ -88,4 +88,14 @@ describe("spawn failure never registers a phantom session", () => {
     expect(result.error.code).toBe("E_CLI");
     expect(inMemorySession(project, "chrome")).toBeUndefined();
   });
+
+  it("the hint names the project's own extension dev or start run by hand as the fallback, and the tools that then work on it", async () => {
+    const project = tmpProject();
+
+    const devAnswer = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
+    const startAnswer = JSON.parse(await start.handler({ wait: false, projectPath: project }));
+
+    expect(devAnswer.hint).toContain("Or run the session by hand: the project's own `npx extension dev --browser <b> --allow-control` (add --allow-eval for extension_eval) writes the same dist/extension-js/<browser>/ready.json contract, and extension_logs, extension_open and extension_eval then work on it.");
+    expect(startAnswer.hint).toContain("`npx extension start --browser <b> --allow-control`");
+  });
 });

@@ -129,7 +129,7 @@
           "name": "projectPath",
           "type": "string",
           "required": true,
-          "description": "Extension project root (needs a running session: extension_dev or extension_start)"
+          "description": "Extension project root (needs a running session: extension_dev or extension_start, or `npx extension dev` / `npx extension start` run by hand in the same project, since any run that writes dist/extension-js/<browser>/ready.json is adopted; by hand, --allow-control opens the control channel and --allow-eval the eval channel)"
         },
         {
           "name": "expect",
@@ -758,7 +758,7 @@
           "name": "projectPath",
           "type": "string",
           "required": true,
-          "description": "Extension project root (needs a running session: extension_dev or extension_start)"
+          "description": "Extension project root (needs a running session: extension_dev or extension_start, or `npx extension dev` / `npx extension start` run by hand in the same project, since any run that writes dist/extension-js/<browser>/ready.json is adopted; by hand, --allow-control opens the control channel and --allow-eval the eval channel)"
         },
         {
           "name": "tab",
@@ -845,7 +845,7 @@
       "name": "extension_eval",
       "tier": "act",
       "group": "local",
-      "description": "Evaluate an expression in a running extension context: the background, an extension surface (popup, options, sidebar, devtools, newtab, history, bookmarks), a content script or a page, picked by context, url, tab or targetId. Start the session with allowEval:true (extension_dev), which writes a 0600 session token; without that token every route of this tool, the debug port included, answers eval-disabled. A returned promise is awaited; a value that cannot be cloned (a DOM node, a function) comes back as its string form. To wait for a condition that is still settling (a model loading, an element appearing), pass until: {} (or {timeoutMs, intervalMs}) and the eval repeats until its value is truthy, answering that value, or the last one on timeout. Debug-port evaluates run with a user gesture, so gesture-gated APIs (permissions.request, sidePanel.open) can succeed here and still fail when the extension's own code calls them. Naming a tab the browser refuses to script (page-not-scriptable, extension-page-unreachable) needs Extension.js 4.1.34 or later; on an older engine such a refusal still answers as a missing target. On Safari this tool reaches only page contexts, through the automation window's WebDriver session: the background and the extension surfaces are out of reach (extension_logs reads the background). Not for reading a page's structure: that is extension_dom_snapshot, which also lists tabs and targets. Pass `targetId` (the target.targetId extension_open answers, or one from extension_dom_snapshot listTargets:true) to evaluate in that exact page over the debug port; context, url and tab are then ignored.",
+      "description": "Evaluate an expression in a running extension context: the background, an extension surface (popup, options, sidebar, devtools, newtab, history, bookmarks), a content script or a page, picked by context, url, tab or targetId. Start the session with allowEval:true (extension_dev, or `npx extension dev --allow-eval` by hand), which writes a 0600 session token; without that token every route of this tool, the debug port included, answers eval-disabled. A returned promise is awaited; an uncloneable value (a DOM node, a function) comes back as its string form. To wait for a condition that is still settling (a model loading, an element appearing), pass until: {} (or {timeoutMs, intervalMs}) and the eval repeats until its value is truthy, answering that value, or the last one on timeout. Debug-port evaluates run with a user gesture, so gesture-gated APIs (permissions.request, sidePanel.open) can succeed here and still fail when the extension's own code calls them. Naming a tab the browser refuses to script (page-not-scriptable, extension-page-unreachable) needs Extension.js 4.1.34 or later; an older engine answers such a refusal as a missing target. On Safari this tool reaches only page contexts, through the automation window's WebDriver session: the background and the extension surfaces are out of reach (extension_logs reads the background). Not for reading a page's structure: that is extension_dom_snapshot, which also lists tabs and targets. Pass `targetId` (the target.targetId extension_open answers, or one from extension_dom_snapshot listTargets:true) to evaluate in that exact page over the debug port; context, url and tab are then ignored.",
       "gate": "a session started with allowEval: true on extension_dev",
       "samplePrompt": "Evaluate chrome.runtime.id in the background and in the popup",
       "readOnly": false,
@@ -858,7 +858,7 @@
           "name": "projectPath",
           "type": "string",
           "required": true,
-          "description": "Extension project root (needs a running session: extension_dev or extension_start)"
+          "description": "Extension project root (needs a running session: extension_dev or extension_start, or `npx extension dev` / `npx extension start` run by hand in the same project, since any run that writes dist/extension-js/<browser>/ready.json is adopted; by hand, --allow-control opens the control channel and --allow-eval the eval channel)"
         },
         {
           "name": "expression",
@@ -927,7 +927,7 @@
           "name": "projectPath",
           "type": "string",
           "required": true,
-          "description": "Extension project root (needs a running session: extension_dev or extension_start)"
+          "description": "Extension project root (needs a running session: extension_dev or extension_start, or `npx extension dev` / `npx extension start` run by hand in the same project, since any run that writes dist/extension-js/<browser>/ready.json is adopted; by hand, --allow-control opens the control channel and --allow-eval the eval channel)"
         },
         {
           "name": "url",
@@ -997,7 +997,7 @@
           "name": "projectPath",
           "type": "string",
           "required": true,
-          "description": "Extension project root (needs a running session: extension_dev or extension_start)"
+          "description": "Extension project root (needs a running session: extension_dev or extension_start, or `npx extension dev` / `npx extension start` run by hand in the same project, since any run that writes dist/extension-js/<browser>/ready.json is adopted; by hand, --allow-control opens the control channel and --allow-eval the eval channel)"
         },
         {
           "name": "browser",
@@ -1011,7 +1011,7 @@
       "name": "extension_logs",
       "tier": "see",
       "group": "local",
-      "description": "Read or stream logs from every context of a running dev session (service worker, content scripts, popup, options, sidebar, devtools, pages) in one ordered timeline. This reads the same agent-bridge plane as the `extension logs` CLI: a one-shot returns the most recent matching lines from logs.ndjson, and follow:true connects to the live control channel, receives the broker's replay of its recent ring (up to 5,000 events, counted in value.replayed) and then the frames that arrive during followMs (value.live). This requires an active extension_dev session.",
+      "description": "Read or stream logs from every context of a running dev session (service worker, content scripts, popup, options, sidebar, devtools, pages) in one ordered timeline. This reads the same agent-bridge plane as the `extension logs` CLI: a one-shot returns the most recent matching lines from logs.ndjson, and follow:true connects to the live control channel, replays the broker's recent ring (up to 5,000 events, value.replayed) and then the frames that arrive during followMs (value.live). The session may be extension_dev's or a `npx extension dev` run by hand (follow needs --allow-control there).",
       "gate": "a live dev or start session",
       "samplePrompt": "Show me every log line since the session started, in order",
       "readOnly": true,
@@ -1024,7 +1024,7 @@
           "name": "projectPath",
           "type": "string",
           "required": true,
-          "description": "Extension project root (needs a running session: extension_dev or extension_start)"
+          "description": "Extension project root (needs a running session: extension_dev or extension_start, or `npx extension dev` / `npx extension start` run by hand in the same project, since any run that writes dist/extension-js/<browser>/ready.json is adopted; by hand, --allow-control opens the control channel and --allow-eval the eval channel)"
         },
         {
           "name": "browser",
@@ -1141,7 +1141,7 @@
       "name": "extension_open",
       "tier": "act",
       "group": "local",
-      "description": "Open an extension surface (popup, options, sidebar, the newtab, history or bookmarks override page, or the extension's DevTools panel), navigate a tab to a url, or replay an event (the toolbar action, a chrome.commands shortcut) in a running session, over the dev session's control channel (on unless extension_dev was called with allowControl:false). Opening a url on Chromium answers target.targetId, the CDP target id of the tab it opened: pass it as `targetId` to extension_screenshot, extension_dom_snapshot, extension_inspect or extension_eval to address that exact tab. A url answer also carries tab {active, visibilityState}, viewport {width, height} and headless: an element below the viewport is not observed until it is scrolled into view. A url opens in a background tab unless foreground: true; a tab already showing the url is reloaded in place (reused: true) unless newTab: true. Not for evaluating in the page once it is open: that is extension_eval. An action or command replay invokes your listener without a user gesture, so the gesture-derived activeTab grant does not apply.",
+      "description": "Open an extension surface (popup, options, sidebar, the newtab, history or bookmarks override page, or the extension's DevTools panel), navigate a tab to a url, or replay an event (the toolbar action, a chrome.commands shortcut) in a running session over its control channel (on unless extension_dev passed allowControl:false; a `npx extension dev` run by hand needs --allow-control). Opening a url on Chromium answers target.targetId, the CDP target id of the tab it opened: pass it as `targetId` to extension_screenshot, extension_dom_snapshot, extension_inspect or extension_eval to address that exact tab. A url answer also carries tab {active, visibilityState}, viewport {width, height} and headless: an element below the viewport is not observed until it is scrolled into view. A url opens in a background tab unless foreground: true; a tab already showing the url is reloaded in place (reused: true) unless newTab: true. Evaluating in the page once it is open is extension_eval. An action or command replay invokes your listener without a user gesture, so the activeTab grant does not apply.",
       "gate": "a dev session, which carries control unless started with allowControl: false",
       "samplePrompt": "Open the side panel, then trigger the action button",
       "readOnly": false,
@@ -1154,7 +1154,7 @@
           "name": "projectPath",
           "type": "string",
           "required": true,
-          "description": "Extension project root (needs a running session: extension_dev or extension_start)"
+          "description": "Extension project root (needs a running session: extension_dev or extension_start, or `npx extension dev` / `npx extension start` run by hand in the same project, since any run that writes dist/extension-js/<browser>/ready.json is adopted; by hand, --allow-control opens the control channel and --allow-eval the eval channel)"
         },
         {
           "name": "surface",
@@ -1692,7 +1692,7 @@
           "name": "projectPath",
           "type": "string",
           "required": true,
-          "description": "Extension project root (needs a running session: extension_dev or extension_start)"
+          "description": "Extension project root (needs a running session: extension_dev or extension_start, or `npx extension dev` / `npx extension start` run by hand in the same project, since any run that writes dist/extension-js/<browser>/ready.json is adopted; by hand, --allow-control opens the control channel and --allow-eval the eval channel)"
         },
         {
           "name": "context",
@@ -1725,7 +1725,7 @@
       "name": "extension_screenshot",
       "tier": "see",
       "group": "local",
-      "description": "Take a screenshot of one open extension surface (popup, options, sidebar, newtab, history, bookmarks) or web page in a live extension_dev or extension_start session as a .png file. It asks the browser for the page's own pixels over the debug port (CDP on Chromium, the screenshot actor on Firefox, WebDriver on Safari, web pages only); it never captures the screen and never brings a window forward: on Chromium a page behind other windows or in a hidden tab is shown briefly for the capture (value.behindWindow, value.hiddenTab). Open the surface with extension_open first. `targetId` captures that exact page; a url matching several tabs of one page captures the most recently active one and warns. width and height set the Chromium viewport, resize the Safari window and crop from the top left on Firefox; deviceScaleFactor sets the pixel ratio. `store` captures a store listing screenshot at that store's size into store/screenshots/<store>/, where extension_submit sync-listing picks it up; `browserCapture` files a capture of the extension running in this browser under captures/<browser>/, where extension_publish sync-captures picks it up; one call per view. The file goes under dist/extension-js/<browser>/screenshots unless `path` names one; the answer gives path and pixel size.",
+      "description": "Take a screenshot of one open extension surface (popup, options, sidebar, newtab, history, bookmarks) or web page in a live session (extension_dev, extension_start or the same run by hand) as a .png file. It asks the browser for the page's own pixels over the debug port (CDP on Chromium, the screenshot actor on Firefox, WebDriver on Safari, web pages only); it never captures the screen or brings a window forward: on Chromium a page behind other windows or in a hidden tab is shown briefly for the capture (value.behindWindow, value.hiddenTab). Open the surface with extension_open first. `targetId` captures that exact page; a url matching several tabs captures the most recently active one and warns. width and height set the Chromium viewport, resize the Safari window and crop from the top left on Firefox; deviceScaleFactor sets the pixel ratio. `store` captures a store listing screenshot at that store's size into store/screenshots/<store>/, where extension_submit sync-listing picks it up; `browserCapture` files a capture of the extension running in this browser under captures/<browser>/, where extension_publish sync-captures picks it up; one call per view. The file goes under dist/extension-js/<browser>/screenshots unless `path` names one; the answer gives path and pixel size.",
       "gate": "a live dev or start session",
       "samplePrompt": "Open the popup and take a screenshot of it for the store listing",
       "readOnly": false,
@@ -1738,7 +1738,7 @@
           "name": "projectPath",
           "type": "string",
           "required": true,
-          "description": "Extension project root (needs a running session: extension_dev or extension_start)"
+          "description": "Extension project root (needs a running session: extension_dev or extension_start, or `npx extension dev` / `npx extension start` run by hand in the same project, since any run that writes dist/extension-js/<browser>/ready.json is adopted; by hand, --allow-control opens the control channel and --allow-eval the eval channel)"
         },
         {
           "name": "browser",
@@ -2114,7 +2114,7 @@
           "name": "projectPath",
           "type": "string",
           "required": true,
-          "description": "Extension project root (needs a running session: extension_dev or extension_start)"
+          "description": "Extension project root (needs a running session: extension_dev or extension_start, or `npx extension dev` / `npx extension start` run by hand in the same project, since any run that writes dist/extension-js/<browser>/ready.json is adopted; by hand, --allow-control opens the control channel and --allow-eval the eval channel)"
         },
         {
           "name": "action",

@@ -281,6 +281,7 @@ export async function spawnFailedEnvelope(
   spawned: SpawnedCli,
 ): Promise<string> {
   const deadline = Date.now() + 500;
+  const handVerb = command === "extension_start" ? "start" : "dev";
   let cause = spawned.spawnError?.() ?? null;
 
   while (!cause && Date.now() < deadline) {
@@ -297,6 +298,6 @@ export async function spawnFailedEnvelope(
       name: "CliError",
       message: `The extension CLI process could not be spawned${cause ? ` (${cause.message})` : ""}. No session was started and nothing was registered.`,
     },
-    hint: "The one command this server chose could not be launched: the engine override when EXTENSION_MCP_ENGINE_DIR is set, else the project-local node_modules/.bin/extension when the project has one, else npx. Fix or unset the override, install the engine in the project (npm i -D extension) or put npx on the PATH the MCP server runs with, then call the tool again.",
+    hint: `The one command this server chose could not be launched: the engine override when EXTENSION_MCP_ENGINE_DIR is set, else the project-local node_modules/.bin/extension when the project has one, else npx. Fix or unset the override, install the engine in the project (npm i -D extension) or put npx on the PATH the MCP server runs with, then call the tool again. Or run the session by hand: the project's own \`npx extension ${handVerb} --browser <b> --allow-control\` (add --allow-eval for extension_eval) writes the same dist/extension-js/<browser>/ready.json contract, and extension_logs, extension_open and extension_eval then work on it.`,
   });
 }

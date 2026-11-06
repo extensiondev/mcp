@@ -51,7 +51,8 @@ export const PROJECT_PATH = {
 
 export const SESSION_PROJECT_PATH = {
   type: "string",
-  description: "Extension project root (needs a running session: extension_dev or extension_start)",
+  description:
+    "Extension project root (needs a running session: extension_dev or extension_start, or `npx extension dev` / `npx extension start` run by hand in the same project, since any run that writes dist/extension-js/<browser>/ready.json is adopted; by hand, --allow-control opens the control channel and --allow-eval the eval channel)",
 } as const;
 
 export const SESSION_BROWSER = {

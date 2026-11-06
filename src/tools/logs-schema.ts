@@ -17,7 +17,7 @@ import {
 export const schema = {
   name: "extension_logs",
   description:
-    "Read or stream logs from every context of a running dev session (service worker, content scripts, popup, options, sidebar, devtools, pages) in one ordered timeline. This reads the same agent-bridge plane as the `extension logs` CLI: a one-shot returns the most recent matching lines from logs.ndjson, and follow:true connects to the live control channel, receives the broker's replay of its recent ring (up to 5,000 events, counted in value.replayed) and then the frames that arrive during followMs (value.live). This requires an active extension_dev session.",
+    "Read or stream logs from every context of a running dev session (service worker, content scripts, popup, options, sidebar, devtools, pages) in one ordered timeline. This reads the same agent-bridge plane as the `extension logs` CLI: a one-shot returns the most recent matching lines from logs.ndjson, and follow:true connects to the live control channel, replays the broker's recent ring (up to 5,000 events, value.replayed) and then the frames that arrive during followMs (value.live). The session may be extension_dev's or a `npx extension dev` run by hand (follow needs --allow-control there).",
   inputSchema: {
     type: "object" as const,
     properties: {

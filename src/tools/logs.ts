@@ -68,7 +68,7 @@ export function emptyReason(
       fs.readFileSync(readyContractPath(projectPath, browser), "utf8"),
     );
   } catch {
-    return `No ready.json for this project/browser: no dev session has produced a build here, so there is nothing to log. Start one with extension_dev. ${sessionPathHint(readyContractPath(projectPath, browser))}`;
+    return `No ready.json for this project/browser: no dev session has produced a build here, so there is nothing to log. Start one with extension_dev, or \`npx extension dev --browser <b>\` by hand. ${sessionPathHint(readyContractPath(projectPath, browser))}`;
   }
 
   if (contract.status === "error") {

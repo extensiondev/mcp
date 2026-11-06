@@ -46,7 +46,7 @@ describe("the extension_assert description names both session kinds and which ch
   });
 
   it("keeps the shared projectPath and doctor wording off a dev-only session", () => {
-    expect(SESSION_PROJECT_PATH.description).toBe("Extension project root (needs a running session: extension_dev or extension_start)");
+    expect(SESSION_PROJECT_PATH.description).toMatch(/^Extension project root \(needs a running session: extension_dev or extension_start, /);
     expect(JSON.stringify(doctorSchema)).not.toMatch(/live dev session/);
   });
 
