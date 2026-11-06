@@ -104,6 +104,8 @@ import {
   type ModeIds,
 } from "../lib/store-connection";
 import { browserBuildRefusal, browserBuildVerdicts } from "../lib/browser-builds";
+import { localSubmitPrecheck } from "../lib/submit-local-precheck";
+import { appendWarnings } from "../lib/envelope-warnings";
 import { reviewPromiseFromApproval } from "../lib/review-promise";
 import { SUBMIT_ACTION_SAFETY } from "../lib/submit-action-safety";
 import { readStoresAfterUnconfirmed, submitDispatchBoundMs, unconfirmedStoresHint } from "../lib/submit-dispatch-bound";
@@ -561,7 +563,7 @@ async function connectionPrecheck(
   browsers: string[],
   ref: ProjectRef | null,
   scope: { buildSha: string },
-): Promise<{ refused: string | null; modes: ModeIds; reports: Record<string, Record<string, unknown>> }> {
+): Promise<{ refused: string | null; modes: ModeIds; reports: Record<string, Record<string, unknown>>; warnings: string[] }> {
   const read = await readConnectionsAndModes(
     {
       project: args.project,
@@ -587,7 +589,11 @@ async function connectionPrecheck(
     const verdicts = read.api ? await browserBuildVerdicts(read.api, browsers, scope.buildSha, ctx) : {};
     const verdict = browsers.map((browser) => verdicts[browser]).find(Boolean);
 
-    return { refused: verdict ? browserBuildRefusal(verdict, browsers, scope.buildSha) : null, modes, reports: read.reports };
+    if (verdict) return { refused: browserBuildRefusal(verdict, browsers, scope.buildSha), modes, reports: read.reports, warnings: [] };
+
+    const local = await localSubmitPrecheck({ api: read.api, browsers, buildSha: scope.buildSha, projectPath: args.projectPath, ref, apiBase: args.api });
+
+    return { refused: local.refused, modes, reports: read.reports, warnings: local.warnings };
   }
 
   const step = connectionStep(blocked, connections[blocked.browser], ctx);
@@ -622,7 +628,7 @@ async function connectionPrecheck(
     hint: linkAnswer.hint,
   });
 
-  return { refused, modes, reports: read.reports };
+  return { refused, modes, reports: read.reports, warnings: [] };
 }
 
 async function answer(args: SubmitToolArgs): Promise<string> {
@@ -722,6 +728,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
   if (args.version) body.version = String(args.version).trim();
 
   let modes: ModeIds = {};
+  let localWarnings: string[] = [];
   let safariRelease = "";
   let firefoxSetting: string | undefined;
 
@@ -785,6 +792,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
     if (precheck.refused) return precheck.refused;
 
     modes = precheck.modes;
+    localWarnings = precheck.warnings;
     if (safariReviewCovers(browsers, modes)) safariRelease = safariApprovalReleaseSentence(await readSafariReleaseIntentFor({ command: "extension_submit", project: args.project, api: args.api }));
 
     firefoxSetting = sourceArchiveOf(precheck.reports.firefox ?? {})?.setting;
@@ -793,7 +801,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       ...gateInputFor(modes),
       enabled: approvalGateEnabled(true),
     });
-    if (gate.blocked) return asked(gate.envelope);
+    if (gate.blocked) return appendWarnings(asked(gate.envelope), localWarnings);
 
     const approvalId =
       gate.approvalId ??
@@ -1161,6 +1169,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       browsers,
       String(args.projectPath || "").trim() || process.cwd(),
     ),
+    ...localWarnings,
   );
 
   const result: Record<string, unknown> = { mode: "platform", dryRun, ...data };
