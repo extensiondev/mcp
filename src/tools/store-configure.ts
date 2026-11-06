@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { appendWarnings } from "../lib/envelope-warnings";
 import { resolveCredential } from "../lib/credential-source";
 import { envelope } from "../lib/envelope";
 import { type ApprovalGateInput } from "../lib/approval-gate";
@@ -152,7 +153,7 @@ export async function configureStore(args: ConfigureStoreArgs): Promise<string> 
   if ("problem" in read) return badShipRequest(COMMAND, CONFIGURE_STORE, "StoreSettingsInputError", `${read.problem} Nothing was sent.`);
 
   const opened = await openShipApi(COMMAND, args, { action: CONFIGURE_STORE, store });
-  if ("refused" in opened) return opened.refused;
+  if ("refused" in opened) return appendWarnings(opened.refused, read.warnings);
 
   const api = opened.api;
   const project = `${api.ref.workspace}/${api.ref.project}`;
@@ -203,7 +204,7 @@ export async function configureStore(args: ConfigureStoreArgs): Promise<string> 
     },
   });
 
-  if (!written.ok) return written.out ?? refusal(written.sent, api, args, store, settingsPage);
+  if (!written.ok) return appendWarnings(written.out ?? refusal(written.sent, api, args, store, settingsPage), read.warnings);
 
   const changes = Array.isArray(written.json.changes) ? written.json.changes.filter((line): line is string => typeof line === "string") : lines;
   const config = await projectApiGet<Record<string, unknown>>(api, "stores/config").catch(() => null);
@@ -230,6 +231,7 @@ export async function configureStore(args: ConfigureStoreArgs): Promise<string> 
       sayToPerson: say,
       nextStep: nextStep("preflight", say),
     },
+    warnings: read.warnings,
     hint: `${project}'s ${store} store settings now read as storeSettings: ${changes.join("; ")}.${gateLine} The next submit runs under them; read the store's readiness with ${preflightRead}. The settings page is ${settingsPage}.`,
   });
 }

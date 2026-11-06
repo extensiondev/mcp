@@ -6,7 +6,10 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { API_BASE } from "../lib/common-schema";
+import { API_BASE, PROJECT_PATH } from "../lib/common-schema";
+import { isProjectRef } from "../lib/credentials";
+import { appendWarnings } from "../lib/envelope-warnings";
+import { loginForPath, pathIdentity } from "../lib/path-project";
 import { DEVICE_WAIT_MAX_SECONDS, deviceWaitDescription } from "../lib/device-wait";
 import { envelope } from "../lib/envelope";
 import { loginToProject, loginToProjects, loginToWorkspace } from "./login";
@@ -32,6 +35,10 @@ export const schema = {
         type: "string",
         description:
           "login: target project as '<workspace>/<project>'; the token is scoped to it. The slug pair is the console address bar: an existing project's page is console.extension.dev/<workspace>/<project>. Create one at extension.dev/new if none exists yet. Logins to several projects are all kept, the latest is the default; token-scoped tools take `project` to pick another. status: report this project's stored login and the server's verdict on its token (omitted, the default login with the list of every stored one). logout: remove only this project's login (omitted, every stored login goes).",
+      },
+      projectPath: {
+        ...PROJECT_PATH,
+        description: "login: the extension's directory; names the project from its stored login or GitHub origin when project is omitted.",
       },
       projects: {
         type: ["array", "string"],
@@ -70,9 +77,20 @@ function listMisuse(message: string): string {
   });
 }
 
+function projectAtPath(projectPath: string, api?: string): { project: string; via: string } | null {
+  const found = loginForPath(projectPath, api);
+  if (found.state === "match") return { project: found.project, via: `its ${found.via}, a stored login` };
+
+  const { owner, repo } = pathIdentity(projectPath);
+  const project = `${owner}/${repo}`;
+
+  return owner && repo && isProjectRef(project) ? { project, via: "its GitHub origin" } : null;
+}
+
 export async function handler(args: {
   action?: string;
   project?: string;
+  projectPath?: string;
   projects?: unknown;
   workspace?: string;
   deviceCode?: string;
@@ -129,12 +147,24 @@ export async function handler(args: {
   }
 
   if (action === "login") {
-    return loginToProject({
-      project: String(args.project ?? ""),
+    const named = String(args.project ?? "").trim();
+    const projectPath = String(args.projectPath ?? "").trim();
+    const atPath = !named && projectPath ? projectAtPath(projectPath, args.api) : null;
+
+    if (!named && projectPath && !atPath) {
+      return listMisuse(
+        `projectPath ${projectPath} names no project: no stored login matches its package.json name or GitHub origin, and it has no github.com origin. Pass project as '<workspace>/<project>'.`,
+      );
+    }
+
+    const out = await loginToProject({
+      project: atPath?.project ?? named,
       deviceCode: args.deviceCode,
       waitSeconds: args.waitSeconds,
       api: args.api,
     });
+
+    return atPath ? appendWarnings(out, [`Logging in to ${atPath.project}, the project at projectPath (${atPath.via}).`]) : out;
   }
 
   return readIdentity(undefined, args.api, args.project);

@@ -178,6 +178,12 @@
           "description": "login: target project as '<workspace>/<project>'; the token is scoped to it. The slug pair is the console address bar: an existing project's page is console.extension.dev/<workspace>/<project>. Create one at extension.dev/new if none exists yet. Logins to several projects are all kept, the latest is the default; token-scoped tools take `project` to pick another. status: report this project's stored login and the server's verdict on its token (omitted, the default login with the list of every stored one). logout: remove only this project's login (omitted, every stored login goes)."
         },
         {
+          "name": "projectPath",
+          "type": "string",
+          "required": false,
+          "description": "login: the extension's directory; names the project from its stored login or GitHub origin when project is omitted."
+        },
+        {
           "name": "projects",
           "type": "array | string",
           "required": false,
@@ -1069,6 +1075,12 @@
           "type": "number",
           "required": false,
           "description": "Only events from this tab id."
+        },
+        {
+          "name": "match",
+          "type": "string",
+          "required": false,
+          "description": "Only lines whose text matches this case-insensitive regex or substring (alias grep); value.matched of value.total counts them."
         },
         {
           "name": "follow",

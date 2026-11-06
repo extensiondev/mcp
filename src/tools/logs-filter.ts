@@ -46,6 +46,33 @@ export interface LogsArgs {
   follow?: boolean;
   followMs?: number;
   limit?: number;
+  match?: string;
+}
+
+export function textMatcher(args: LogsArgs): ((event: unknown) => boolean) | null {
+  const raw = String(args.match ?? "");
+  if (!raw) return null;
+
+  let pattern: RegExp | null = null;
+
+  try {
+    pattern = new RegExp(raw, "i");
+  } catch {
+    pattern = null;
+  }
+
+  const needle = raw.toLowerCase();
+
+  return (event: unknown): boolean => {
+    const record = (event ?? {}) as { message?: unknown; messageParts?: unknown };
+    const parts = Array.isArray(record.messageParts) ? record.messageParts : [];
+    const line = [record.message, ...parts]
+      .map((part) => (typeof part === "string" ? part : part === undefined ? "" : JSON.stringify(part)))
+      .filter(Boolean)
+      .join(" ");
+
+    return pattern ? pattern.test(line) : line.toLowerCase().includes(needle);
+  };
 }
 
 export function makeFilter(args: LogsArgs): (event: unknown) => boolean {
@@ -60,7 +87,9 @@ export function makeFilter(args: LogsArgs): (event: unknown) => boolean {
     tab: args.tab,
   };
 
-  return (event: unknown): boolean => matchesLogQuery(event as never, query);
+  const text = textMatcher(args);
+
+  return (event: unknown): boolean => matchesLogQuery(event as never, query) && (!text || text(event));
 }
 
 export function isBrowserChannelEvent(event: unknown): boolean {

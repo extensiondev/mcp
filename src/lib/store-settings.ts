@@ -108,14 +108,45 @@ export function modeToPatch(store: StoreSettingsStore, mode: string): StoreSetti
 }
 
 export type StoreSettingsRead =
-  | { patch: StoreSettingsPatch; requested: Row }
+  | { patch: StoreSettingsPatch; requested: Row; warnings?: string[] }
   | { problem: string }
   | { credential: string[] };
 
-export function readStoreSettingsChange(store: StoreSettingsStore, raw: unknown): StoreSettingsRead {
-  if (!isRow(raw) || Object.keys(raw).length === 0) {
+function nativeIdKey(store: StoreSettingsStore): string {
+  return Object.keys(ID_KEYS).find((name) => ID_KEYS[name] === store) ?? "";
+}
+
+function aliasStoreId(store: StoreSettingsStore, raw: Row): { raw: Row; warning?: string } {
+  if (!("storeId" in raw)) return { raw };
+
+  const key = nativeIdKey(store);
+  const value = text(raw.storeId);
+  const read = readStoreId(store, { [key]: value });
+
+  if (!value || !read || "problem" in read) return { raw };
+  if (key in raw && text(raw[key]) !== value) return { raw };
+
+  const rest: Row = { ...raw, [key]: raw[key] ?? value };
+  delete rest.storeId;
+
+  return {
+    raw: rest,
+    warning: `storeSettings.storeId was read as ${key}, the ${store} listing id; pass ${key} next time.`,
+  };
+}
+
+export function readStoreSettingsChange(store: StoreSettingsStore, given: unknown): StoreSettingsRead {
+  if (!isRow(given) || Object.keys(given).length === 0) {
     return { problem: `storeSettings must name at least one of ${STORE_SETTING_KEYS.join(", ")}, such as { "enabled": true }.` };
   }
+
+  const { raw, warning } = aliasStoreId(store, given);
+  const read = readStoreSettingsRow(store, raw);
+
+  return warning && "patch" in read ? { ...read, warnings: [warning] } : read;
+}
+
+function readStoreSettingsRow(store: StoreSettingsStore, raw: Row): StoreSettingsRead {
 
   const credential = Object.keys(raw).filter((key) => !(STORE_SETTING_KEYS as readonly string[]).includes(key) && CREDENTIAL_KEY.test(key));
   if (credential.length) return { credential };

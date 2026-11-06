@@ -72,6 +72,10 @@ export const schema = {
         type: "number",
         description: "Only events from this tab id.",
       },
+      match: {
+        type: "string",
+        description: "Only lines whose text matches this case-insensitive regex or substring (alias grep); value.matched of value.total counts them.",
+      },
       follow: {
         type: "boolean",
         default: false,

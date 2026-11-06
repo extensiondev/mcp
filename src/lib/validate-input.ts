@@ -97,6 +97,7 @@ const ARG_ALIASES: Record<string, string[]> = {
   timeout: ["timeoutMs", "timeoutMillis"],
   limit: ["lines", "count", "max", "maxLines"],
   tab: ["tabId"],
+  match: ["grep"],
   url: ["href", "pageUrl"],
   browser: ["browserName"],
   buildSha: ["buildId"],
