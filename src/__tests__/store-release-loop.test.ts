@@ -127,14 +127,27 @@ describe("extension_submit preflight answers what the next release costs in appr
     expect(none.say).toMatch(/^Under the saved settings the next release sends nothing:/);
   });
 
-  it("answers no loop while any store read cannot submit, since what blocks it leads", async () => {
+  it("answers the loop for the stores that can submit and names the locked store and its reason, in the loop's say line", async () => {
     serve({});
+
+    const locked = structuredClone(WALK.safari!);
+    locked.summary = { ...locked.summary, blockingFailures: 1, canSubmit: false };
+    locked.checks = [...(locked.checks ?? []), { id: "store.safari_app_review_lock", label: "App Review lock", status: "locked", severity: "blocking", stage: "review", message: "Apple is reviewing 0.3.0 (build 18)." }];
+    platform.routes[`POST ${PREFLIGHT("safari")}`] = () => ({ body: locked });
+
+    const loop = await loopOf(project());
+
+    expect((loop.stores as Row[]).map((entry) => entry.store)).toEqual(["chrome", "edge", "firefox"]);
+    expect(loop.excluded).toEqual([{ store: "safari", reason: "Apple is reviewing 0.3.0 (build 18)" }]);
+    expect(loop.approvals).toBe(2);
+    expect(loop.say).toMatch(/^Under the saved settings the next release costs 2 owner approvals: Chrome stops at a draft, then publish;/);
+    expect(loop.say).toContain("Safari is left out of this count until it can submit: Apple is reviewing 0.3.0 (build 18).");
+    expect(loop.say).not.toContain("Safari stops");
 
     const blocked = structuredClone(WALK.chrome!);
     blocked.summary = { ...blocked.summary, fail: 1, blockingFailures: 1, canSubmit: false };
-    platform.routes[`POST ${PREFLIGHT("chrome")}`] = () => ({ body: blocked });
+    for (const store of ["chrome", "edge", "firefox", "safari"]) platform.routes[`POST ${PREFLIGHT(store)}`] = () => ({ body: store === "safari" ? locked : blocked });
 
     expect(await loopOf(project())).toBeUndefined();
-    expect(await loopOf(project(), ["edge", "firefox"])).toMatchObject({ approvals: 2 });
   });
 });

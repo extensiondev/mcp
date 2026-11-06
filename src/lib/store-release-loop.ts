@@ -33,8 +33,14 @@ export interface ReleaseLoopStore {
   fold?: StoreFold;
 }
 
+export interface ReleaseLoopExcluded {
+  store: string;
+  reason: string;
+}
+
 export interface ReleaseLoop {
   stores: ReleaseLoopStore[];
+  excluded?: ReleaseLoopExcluded[];
   approvals: number;
   oneApproval: boolean;
   foldCall?: string;
@@ -103,6 +109,13 @@ function countApprovals(stores: ReleaseLoopStore[]): number {
   return 1 + publish + release;
 }
 
+function reasonOf(view: Row): string {
+  const rows = [view.locked, view.failing].flatMap((list) => (Array.isArray(list) ? list.filter(isRow) : []));
+  const said = rows.map((row) => text(row.message) || text(row.label)).find(Boolean) ?? "";
+
+  return said ? said.replace(/[.\s]+$/, "") : "it cannot submit yet";
+}
+
 const LANDS: Record<Landing, string> = {
   review: "goes to the store's review",
   draft: "stops at a draft",
@@ -121,7 +134,11 @@ function sayOf(loop: Omit<ReleaseLoop, "say">): string {
       ? " A store's fold is what would put it on one approval: less private than the default, so it is the owner's choice and never made for them."
       : "";
 
-  return `Under the saved settings the next release ${cost}: ${lines.join("; ")}.${tail}`;
+  const out = loop.excluded?.length
+    ? ` ${loop.excluded.map((entry) => `${NAMES[entry.store]} is left out of this count until it can submit: ${entry.reason}.`).join(" ")}`
+    : "";
+
+  return `Under the saved settings the next release ${cost}: ${lines.join("; ")}.${tail}${out}`;
 }
 
 /* @invariant THE LOOP IS READ FROM THE SAVED SETTINGS, NEVER CHANGED BY IT.
@@ -135,19 +152,25 @@ function sayOf(loop: Omit<ReleaseLoop, "say">): string {
  * least public default (Chrome draft-until-public, Edge and Safari draft,
  * Firefox unlisted), and the settings that would fold a store into one
  * approval are named as the owner's choice, never proposed as a default.
- * The loop is about the next release of a ready project, so a preflight
- * where any store read cannot submit answers no loop: what blocks it leads.
+ * A store read that cannot submit is left out of the count and named in
+ * `excluded` with the reason its checks give, so the stores that can submit
+ * still get their cost; only when no store asked can submit is there no
+ * loop, since what blocks every store leads.
  */
 export function releaseLoopOf(args: { stores: Row; asked: readonly string[]; projectPath: string }): ReleaseLoop | null {
   const asked = ORDER.filter((store) => args.asked.includes(store));
   if (!asked.length) return null;
-  if (asked.some((store) => isRow(args.stores[store]) && args.stores[store].canSubmit === false)) return null;
 
+  const blocked = (store: string) => isRow(args.stores[store]) && args.stores[store].canSubmit === false;
+  const ready = asked.filter((store) => !blocked(store));
+  if (!ready.length) return null;
+
+  const excluded = asked.filter(blocked).map((store) => ({ store, reason: reasonOf(args.stores[store] as Row) }));
   const release = args.projectPath.trim() ? safariReleaseOf(args.projectPath.trim()) : safariReleaseIntentOf(undefined);
-  const stores = asked.map((store) => storeOf(store, args.stores[store], release));
+  const stores = ready.map((store) => storeOf(store, args.stores[store], release));
   const approvals = countApprovals(stores);
   const watch = `extension_release_status {include: ["stores"]} after the approval: report each store live on its own read word, never an inferred one.`;
-  const loop = { stores, approvals, oneApproval: approvals === 1, ...(stores.some((entry) => entry.fold) ? { foldCall: FOLD_CALL } : {}), watch };
+  const loop = { stores, ...(excluded.length ? { excluded } : {}), approvals, oneApproval: approvals === 1, ...(stores.some((entry) => entry.fold) ? { foldCall: FOLD_CALL } : {}), watch };
 
   return { ...loop, say: sayOf(loop) };
 }
