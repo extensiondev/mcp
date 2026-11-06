@@ -161,7 +161,7 @@ describe("406: extension_builds get answers every browser the artifact list carr
     expect(calls).toContain(`${BUILD_ROUTE}/integrity/safari`);
   });
 
-  it("reads Safari's integrity when the platform has it and then says every check passed", async () => {
+  it("reads Safari's integrity when the platform has it and names Safari as not recorded instead of saying every check passed", async () => {
     if (process.platform === "win32") return;
 
     routes[`${BUILD_ROUTE}/integrity/safari`] = { body: { ok: true, checks: [{ id: "zip-structure", ok: true }] } };
@@ -170,8 +170,9 @@ describe("406: extension_builds get answers every browser the artifact list carr
     expect(Object.keys(out.value.integrity)).toEqual([...RECORDED, "safari"]);
     expect(out.value.integrity.safari).toMatchObject({ ok: true, failed: [] });
     expect(out.value.unchecked).toBeUndefined();
-    expect(out.hint).toContain("every integrity check passed");
-    expect(out.value.build.browsers[3]).toMatchObject({ name: "safari", recorded: false });
+    expect(out.hint).not.toContain("every integrity check passed");
+    expect(out.hint).toContain("safari is not recorded in the build record");
+    expect(out.value.build.browsers[3]).toMatchObject({ name: "safari", recorded: false, submitReady: true });
   });
 
   it("scopes a derived browser by the browser argument like a recorded one", async () => {
