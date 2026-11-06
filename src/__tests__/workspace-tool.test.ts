@@ -237,8 +237,8 @@ describe("extension_workspace reads a workspace with any project login it holds"
     const out = JSON.parse(await workspace({ api: API }));
 
     expect(out.ok).toBe(true);
-    expect(out.hint.startsWith("8 builds remain of 350 this month; each project creation spends one, and so does a push to the build branch that changes a file under the root directory; a push to another branch, or one that changes only docs or license files outside public/, spends nothing (extension_builds list names each skipped push with its outcome). acme is on the pro plan: 342 of 350 builds")).toBe(true);
-    expect(out.value.allowance).toEqual({ used: 342, limit: 350, remaining: 8, warning: "8 builds remain of 350 this month; each project creation spends one, and so does a push to the build branch that changes a file under the root directory; a push to another branch, or one that changes only docs or license files outside public/, spends nothing (extension_builds list names each skipped push with its outcome)." });
+    expect(out.hint.startsWith("8 builds remain of 350 this month; each project creation spends one, and so does a push to the build branch that changes a file under the root directory; a push to another branch, one that changes only docs or license files outside public/, or one whose head commit says [skip build] (or [skip ci], or carries an Extension-Build: skip trailer) spends nothing (extension_builds list names each skipped push with its outcome). acme is on the pro plan: 342 of 350 builds")).toBe(true);
+    expect(out.value.allowance).toEqual({ used: 342, limit: 350, remaining: 8, warning: "8 builds remain of 350 this month; each project creation spends one, and so does a push to the build branch that changes a file under the root directory; a push to another branch, one that changes only docs or license files outside public/, or one whose head commit says [skip build] (or [skip ci], or carries an Extension-Build: skip trailer) spends nothing (extension_builds list names each skipped push with its outcome)." });
   });
 
   it("warns under five percent of a larger allowance, and not at five percent", async () => {

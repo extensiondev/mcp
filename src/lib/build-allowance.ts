@@ -63,7 +63,7 @@ export function readBuildAllowance(plan: unknown): BuildAllowance | null {
  * became a project rule that had an agent ask the owner before every push
  * (ledger 426). */
 export const PUSH_COST_SENTENCE =
-  "each project creation spends one, and so does a push to the build branch that changes a file under the root directory; a push to another branch, or one that changes only docs or license files outside public/, spends nothing (extension_builds list names each skipped push with its outcome).";
+  "each project creation spends one, and so does a push to the build branch that changes a file under the root directory; a push to another branch, one that changes only docs or license files outside public/, or one whose head commit says [skip build] (or [skip ci], or carries an Extension-Build: skip trailer) spends nothing (extension_builds list names each skipped push with its outcome).";
 
 function buildsWord(count: number): string {
   return count === 1 ? "1 build remains" : `${count} builds remain`;

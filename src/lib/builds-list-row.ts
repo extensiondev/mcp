@@ -28,7 +28,7 @@ const CANCELLED_WORDS = new Set(["cancelled", "canceled"]);
 const BUILDING_WORDS = new Set(["building", "running", "in_progress", "in progress"]);
 const PENDING_WORDS = new Set(["pending", "queued", "waiting", "requested"]);
 const QUEUED_PUSH_OUTCOMES = new Set(["DEBOUNCED", "DEFERRED", "HEAD_QUEUED"]);
-const SETTINGS_SKIP_OUTCOMES = new Set(["BRANCH_FILTERED", "PATH_FILTERED", "DOCS_ONLY", "PULL_REQUEST_BUILDS_OFF"]);
+const SETTINGS_SKIP_OUTCOMES = new Set(["SKIP_REQUESTED", "BRANCH_FILTERED", "PATH_FILTERED", "DOCS_ONLY", "PULL_REQUEST_BUILDS_OFF"]);
 
 export const BROWSERS_NOT_REPORTED = "the platform has not reported this run's browsers yet; they land with the build record";
 

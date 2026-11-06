@@ -243,7 +243,7 @@ You approve a code at [extension.dev/device](https://extension.dev/device); no G
 
 </div>
 
-A push to the project's build branch spends one platform build only when it changes a file under the project's root directory; a push to another branch, or one that changes only docs or license files outside `public/`, spends nothing, and `extension_builds` lists each skipped push with its outcome. `extension_workspace` reads the allowance and the branch and root directory the filters read.
+A push to the project's build branch spends one platform build only when it changes a file under the project's root directory; a push to another branch, one that changes only docs or license files outside `public/`, or one whose head commit says `[skip build]` (or `[skip ci]`, or carries an `Extension-Build: skip` trailer on its own line) spends nothing, and `extension_builds` lists each skipped push with its outcome, `SKIP_REQUESTED` for the last. `extension_workspace` reads the allowance and the branch and root directory the filters read.
 
 The details, the approval flow and the batch login for several projects are under [Share a build in progress](https://docs.extension.dev/tools/mcp/platform#share-a-build-in-progress), [Publish is not submit](https://docs.extension.dev/tools/mcp/platform#publish-is-not-submit) and [Login](https://docs.extension.dev/tools/mcp/platform#login).
 

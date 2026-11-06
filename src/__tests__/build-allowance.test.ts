@@ -43,7 +43,7 @@ describe("the shared low-builds threshold", () => {
     const low = readBuildAllowance(plan(342, 350))!;
     const fine = readBuildAllowance(plan(4, 350))!;
 
-    expect(buildAllowanceWarning(low)).toBe("8 builds remain of 350 this month; each project creation spends one, and so does a push to the build branch that changes a file under the root directory; a push to another branch, or one that changes only docs or license files outside public/, spends nothing (extension_builds list names each skipped push with its outcome).");
+    expect(buildAllowanceWarning(low)).toBe("8 builds remain of 350 this month; each project creation spends one, and so does a push to the build branch that changes a file under the root directory; a push to another branch, one that changes only docs or license files outside public/, or one whose head commit says [skip build] (or [skip ci], or carries an Extension-Build: skip trailer) spends nothing (extension_builds list names each skipped push with its outcome).");
     expect(buildAllowanceWarning(readBuildAllowance(plan(349, 350))!)).toContain("1 build remains of 350");
     expect(buildAllowanceWarning(fine)).toBeNull();
     expect(buildAllowanceValue(low)).toEqual({ used: 342, limit: 350, remaining: 8, warning: expect.stringContaining("8 builds remain") });
@@ -73,7 +73,7 @@ describe("the first build's spend narration", () => {
 
     expect(spent.remains).toBe("Before this call the workspace had 8 of 350 builds left this month; the first build spends one, leaving 7.");
     expect(spent.remaining).toBe(7);
-    expect(spent.warning).toBe("7 builds remain of 350 this month; each project creation spends one, and so does a push to the build branch that changes a file under the root directory; a push to another branch, or one that changes only docs or license files outside public/, spends nothing (extension_builds list names each skipped push with its outcome).");
+    expect(spent.warning).toBe("7 builds remain of 350 this month; each project creation spends one, and so does a push to the build branch that changes a file under the root directory; a push to another branch, one that changes only docs or license files outside public/, or one whose head commit says [skip build] (or [skip ci], or carries an Extension-Build: skip trailer) spends nothing (extension_builds list names each skipped push with its outcome).");
 
     const withheld = firstBuildSpendNarration({ what: "x", dispatched: false, before });
 

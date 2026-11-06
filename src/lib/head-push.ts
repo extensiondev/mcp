@@ -16,11 +16,14 @@ export const QUOTA_EXCEEDED = "QUOTA_EXCEEDED";
 
 export const PUSH_BUILDS_EXHAUSTED = "PUSH_BUILDS_EXHAUSTED";
 
-export const CONFIGURED_SKIP_OUTCOMES = new Set(["BRANCH_FILTERED", "PATH_FILTERED", DOCS_ONLY, "PULL_REQUEST_BUILDS_OFF"]);
+export const SKIP_REQUESTED = "SKIP_REQUESTED";
+
+export const CONFIGURED_SKIP_OUTCOMES = new Set([SKIP_REQUESTED, "BRANCH_FILTERED", "PATH_FILTERED", DOCS_ONLY, "PULL_REQUEST_BUILDS_OFF"]);
 
 export const REFUSED_OUTCOMES = new Set([QUOTA_EXCEEDED, PUSH_BUILDS_EXHAUSTED]);
 
 const SKIP_STEPS: Record<string, string> = {
+  SKIP_REQUESTED: "its head commit asked for no build ([skip build], [skip ci] or an Extension-Build: skip trailer), so push a commit without that word, or run extension_builds {action: \"rebuild\", buildId: \"<sha>\"} on it",
   PATH_FILTERED: "none of its changed paths touched the project's root directory, so push a change inside it, or run extension_builds {action: \"rebuild\", buildId: \"<sha>\"} on it",
   BRANCH_FILTERED: "the branch is not the project's deployment branch, so push to that branch, clear the deployment branch in the project settings, or run extension_builds {action: \"rebuild\", buildId: \"<sha>\"} on it",
   PULL_REQUEST_BUILDS_OFF: "pull request builds are off for the project, so merge it to the deployment branch, or turn them on in the project settings",
