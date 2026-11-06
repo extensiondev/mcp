@@ -76,15 +76,20 @@ function headlineRelease(row: Row): StoreReleaseView | null {
   return found ? (found as unknown as StoreReleaseView) : null;
 }
 
-/* @invariant A DRY RUN NEVER HEADLINES A STORE THAT HOLDS A REAL RELEASE.
+/* @invariant A DRY RUN NEVER HEADLINES A STORE THAT HOLDS A REAL RELEASE,
+ * AND NEITHER DOES AN EMPTY SUBMISSION RECORD.
  * A dry run sends nothing to the store, so on Rebeccat (2026-11-06) the
  * status read "chrome 0.3.0: dry_run" while Chrome served 0.3.0.9 as
  * PUBLISHED and Apple held Safari 0.3.0 in WAITING_FOR_REVIEW (ledger 442).
- * When the newest submission record is a dry run and the store row carries
- * a live, in-review, approved or signed release, the entry is that release
- * with the store's word, and the dry run follows it as newerDryRun.
+ * When the newest submission record is a dry run, or there is no submission
+ * record at all, and the store row carries a live, in-review, approved or
+ * signed release, the entry is that release with the store's word (ledger
+ * 446). The dry run follows it as newerDryRun only when its submittedAt is
+ * after the release's own submittedAt, or its readAt when the release row
+ * carries none; an older dry run is not named, since the field claims an
+ * order (ledger 447).
  */
-function releaseEntryOf(row: Row, release: StoreReleaseView, submission: Row): StoreVersionStatus {
+function releaseEntryOf(row: Row, release: StoreReleaseView, newerDryRun: Row | null): StoreVersionStatus {
   return {
     store: text(row.store),
     submissionId: text(release.submissionId) || null,
@@ -96,19 +101,32 @@ function releaseEntryOf(row: Row, release: StoreReleaseView, submission: Row): S
     source: text(release.source) || null,
     releaseType: text(release.releaseType) || null,
     ...(isRow(row.listingPush) ? { listingPush: row.listingPush as unknown as ListingPushView } : {}),
-    newerDryRun: {
-      submissionId: text(submission.id) || null,
-      version: text(isRow(submission.storeVersion) ? submission.storeVersion.packaged : "") || text(submission.version) || null,
-      submittedAt: text(submission.submittedAt) || null,
-    },
+    ...(newerDryRun
+      ? {
+          newerDryRun: {
+            submissionId: text(newerDryRun.id) || null,
+            version: text(isRow(newerDryRun.storeVersion) ? newerDryRun.storeVersion.packaged : "") || text(newerDryRun.version) || null,
+            submittedAt: text(newerDryRun.submittedAt) || null,
+          },
+        }
+      : {}),
     nextStep: isRow(row.nextStep) ? (row.nextStep as unknown as NextStep) : null,
   };
 }
 
+function dryRunAfterRelease(submission: Row, release: StoreReleaseView): boolean {
+  const dryAt = Date.parse(text(submission.submittedAt));
+  const releaseAt = Date.parse(text(release.submittedAt) || text(release.readAt));
+
+  return Number.isFinite(dryAt) && Number.isFinite(releaseAt) && dryAt > releaseAt;
+}
+
 function statusOfRow(row: Row): StoreVersionStatus {
   const submission: Row = isRow(row.lastSubmission) ? row.lastSubmission : {};
-  const release = DRY_RUN_STATUSES.has(text(submission.status)) ? headlineRelease(row) : null;
-  if (release) return releaseEntryOf(row, release, submission);
+  const dryRun = DRY_RUN_STATUSES.has(text(submission.status));
+  const unrecorded = !text(submission.status) && !text(submission.version);
+  const release = dryRun || unrecorded ? headlineRelease(row) : null;
+  if (release) return releaseEntryOf(row, release, dryRun && dryRunAfterRelease(submission, release) ? submission : null);
 
   const read: Row = isRow(submission.statusRead) ? submission.statusRead : {};
   const review: Row = isRow(submission.storeReview) ? submission.storeReview : {};
