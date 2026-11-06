@@ -23,6 +23,12 @@ export function runAskingOnly<T>(run: () => Promise<T>): Promise<T> {
 const carriesApproval = (body: unknown): boolean =>
   Boolean(body) && typeof body === "object" && typeof (body as Record<string, unknown>).approvalId === "string" && Boolean(((body as Record<string, unknown>).approvalId as string).trim());
 
-export function askOnlyBlocks(method: string, body: unknown): boolean {
-  return askingOnly() && (method !== "POST" || carriesApproval(body));
+const LISTING_IMAGE_STAGE = /^\/api\/projects\/[^/]+\/stores\/[^/]+\/listing\/images$/;
+
+const stagesAListingImage = (method: string, path: string): boolean => method === "PUT" && LISTING_IMAGE_STAGE.test(path);
+
+export function askOnlyBlocks(method: string, body: unknown, path = ""): boolean {
+  if (!askingOnly() || carriesApproval(body)) return askingOnly();
+
+  return method !== "POST" && !stagesAListingImage(method, path);
 }

@@ -331,7 +331,7 @@ export async function platformApiGet<T = unknown>(
   const qs = search.toString();
   const url = `${api.base}${path}${qs ? `?${qs}` : ""}`;
 
-  if (send && askOnlyBlocks(send.method, send.body)) {
+  if (send && askOnlyBlocks(send.method, send.body, path)) {
     return { ok: false, status: 0, code: ASK_ONLY_CODE, message: `extension_submit_check only reads and asks for approvals, so the ${send.method} to ${url.split("?")[0]} was not sent. Nothing was executed.`, held: false, body: null };
   }
 

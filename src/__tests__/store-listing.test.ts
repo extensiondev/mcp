@@ -1624,9 +1624,9 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
     expect(Object.keys(puts[1]!.body.listing)).toEqual(["title", "subtitle", "shortDescription", "fullDescription"]);
     expect(asked.status).toBe("approval-required");
     expect(asked.value.stores.safari.digest).toEqual({
-      client: ["title", "appStoreName", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone", "supportUrl", "releaseMode"],
+      client: ["title", "subtitle", "shortDescription", "fullDescription", "searchTerms", "reviewContactPhone"],
       platform: known,
-      differ: ["appStoreName", "searchTerms", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone", "supportUrl", "releaseMode"],
+      differ: ["searchTerms", "reviewContactPhone"],
     });
 
     expect(asked.value.stores.safari.deferred).toEqual(["searchTerms", "reviewContactPhone"]);
@@ -1689,9 +1689,9 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
     platform.login();
 
     const digest = {
-      client: ["title", "appStoreName", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone", "supportUrl", "releaseMode"],
+      client: ["title", "subtitle", "shortDescription", "fullDescription", "searchTerms", "reviewContactPhone"],
       platform: LEGACY_SAFARI,
-      differ: ["appStoreName", "subtitle", "searchTerms", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone", "supportUrl", "releaseMode"],
+      differ: ["subtitle", "searchTerms", "reviewContactPhone"],
     };
 
     platform.routes[`PUT ${LISTING("safari")}`] = () => ({
@@ -1708,7 +1708,7 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
       store: "safari",      status: "refused",
       code: "LISTING_DIGEST_MISMATCH",
       message:
-        "The platform hashes this listing differently from this server even after leaving out subtitle, searchTerms and reviewContactPhone: this server declares appStoreName, subtitle, searchTerms, reviewerNotes, reviewContactName, reviewContactEmail, reviewContactPhone, supportUrl and releaseMode, which the platform does not hash, so this server is newer than the platform's build. No approval was requested. Say sync-listing again after the platform updates.",
+        "The platform hashes this listing differently from this server even after leaving out subtitle, searchTerms and reviewContactPhone, the fields it sent that the platform does not hash, so this server is newer than the platform's build. No approval was requested. Say sync-listing again after the platform updates.",
       digest,
       trackUrl: SUBMISSIONS,
       filled: ["title", "subtitle", "shortDescription", "fullDescription", "searchTerms", "reviewContactPhone", "icons"],
@@ -1733,10 +1733,12 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
     const behind = JSON.parse(await sync());
 
     expect(platform.sent("PUT", LISTING("safari"))).toHaveLength(1);
-    expect(behind.value.stores.safari.digest).toEqual({ client: digest.client, platform: [...digest.client, "ageRating"], differ: ["ageRating"] });
+    expect(behind.value.stores.safari.digest).toEqual({ client: digest.client, platform: [...digest.client, "ageRating"], differ: [] });
     expect(behind.value.stores.safari.message).toBe(
-      "The platform hashes this listing differently from this server: the platform hashes ageRating, which this server does not know, so the platform is newer than this server. No approval was requested. Update this server to the latest release, then say sync-listing again.",
+      "The platform hashes this listing differently from this server: the platform hashes every field this server sent and the two still disagree on the hash, so the two builds compute it differently. No approval was requested. Update this server to the latest release, then say sync-listing again.",
     );
+
+    expect(behind.value.stores.safari.message).not.toMatch(/ageRating|privacySection|privacyPolicyAttested/);
   });
 
   it("leaves chrome, edge and firefox at one send and names the digest on their mismatch", async () => {
@@ -1763,9 +1765,9 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
       expect(refused.status).toBe("sync-listing-refused");
       expect(refused.value.stores[store].code).toBe("LISTING_DIGEST_MISMATCH");
       expect(refused.value.stores[store].digest.differ).toEqual([]);
-      expect(refused.value.stores[store].digest.client).toEqual(refused.value.stores[store].digest.platform);
+      expect(refused.value.stores[store].digest.client.every((field: string) => (STORE_FIELDS[store] as string[]).includes(field))).toBe(true);
       expect(refused.value.stores[store].deferred).toBeUndefined();
-      expect(refused.value.stores[store].message).toContain("both declare the same fields and still disagree on the hash, so the platform is newer than this server");
+      expect(refused.value.stores[store].message).toContain("the platform hashes every field this server sent and the two still disagree on the hash");
     }
   });
 });

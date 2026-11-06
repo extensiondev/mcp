@@ -36,6 +36,7 @@ import {
   type ApprovalScope,
 } from "../lib/approval-gate";
 import { askingOnly } from "../lib/ask-only";
+import { checkDigestPatch, type StageFailure } from "../lib/listing-check-stage";
 import { checkRefused, plainListingAsk } from "../lib/submit-action-safety";
 import {
   VERSION_ACTION,
@@ -835,26 +836,28 @@ async function syncOne(
 
   if (guarded) return { out: guarded };
 
-  if (!approvalId && askingOnly()) {
-    if (!derivedListingFields(store, patch.listing).length) return { out: checkRefused(ACT, plainListingAsk(store)) };
-    if (versioned) return { store, status: "approval-wanted", digestPatch: patch };
-
-    return askListing(api, args, store, patch, { store, listingDigest: listingDigest(patch) });
-  }
-
   const context = {
     workspace: api.ref.workspace,
     project: `${api.ref.workspace}/${api.ref.project}`,
   };
+  const stageFailure = (failed: StageFailure) =>
+    "out" in failed
+      ? { out: failed.out }
+      : { out: projectApiReadFailure(COMMAND, failed.refused, { api: args.api, name: "Listing", value: { action: ACT, store }, context }) };
+
+  if (!approvalId && askingOnly()) {
+    if (!derivedListingFields(store, patch.listing).length) return { out: checkRefused(ACT, plainListingAsk(store)) };
+
+    const checked = await checkDigestPatch(api, store, patch);
+    if (!("listing" in checked)) return stageFailure(checked);
+    if (versioned) return { store, status: "approval-wanted", digestPatch: checked };
+
+    return askListing(api, args, store, checked, { store, listingDigest: listingDigest(checked) });
+  }
+
   const staging = await stageListingImages(api, store, patch);
 
-  if ("out" in staging) return { out: staging.out };
-
-  if ("refused" in staging) {
-    return {
-      out: projectApiReadFailure(COMMAND, staging.refused, { api: args.api, name: "Listing", value: { action: ACT, store }, context }),
-    };
-  }
+  if ("out" in staging || "refused" in staging) return stageFailure(staging);
 
   const staged = staging.mode === "staged" ? staging.images : null;
   const stagedRow = staged ? { staged } : { imagesDoor: "single-body" };
@@ -932,7 +935,7 @@ async function syncOne(
     if (
       text(asked.fingerprint) !== actionFingerprint(STORE_LISTING_ACTION, scope)
     ) {
-      const mismatch = retried ?? digestMismatchOf(store, sent.body, patch);
+      const mismatch = retried ?? digestMismatchOf(sent.body, patch);
       if (!retried && mismatch.deferred.length) return subsetRetry(mismatch);
 
       return {
@@ -963,7 +966,7 @@ async function syncOne(
   }
 
   if (approvalId && !retried && sent.code === "APPROVAL_SCOPE_MISMATCH") {
-    const mismatch = digestMismatchOf(store, sent.body, patch);
+    const mismatch = digestMismatchOf(sent.body, patch);
     if (mismatch.deferred.length) return subsetRetry(mismatch);
   }
 
