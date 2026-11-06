@@ -6,9 +6,10 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { browserBuildSettingsUrl, browserBuildStep, browserBuildVerdict, isBrowserBuildState, readBrowserBuilds, type BrowserBuildRead, type BrowserBuildState, type BrowserBuildVerdict } from "./browser-builds";
 import { chromeItemLeftOf, itemOnFileSentences } from "./chrome-item-left";
 import { EDGE_FIRST_SUBMISSION_STATE, edgeFirstSubmissionOf, firstSubmissionStep, type EdgeFirstSubmission } from "./edge-first-submission";
-import { projectApiSend } from "./project-api";
+import { projectApiSend, type ProjectApi } from "./project-api";
 import { fetchRegistryJson, registryFileUrl, type ProjectRef, type RegistryFetchRefusal } from "./registry";
 import { firefoxKeyPairFailedSentences } from "./firefox-store";
 import { isRow, openShipApi, text } from "./ship-act";
@@ -42,6 +43,7 @@ export type StoreState =
   | "store-unhealthy"
   | "workspace-reconnect-required"
   | typeof EDGE_FIRST_SUBMISSION_STATE
+  | BrowserBuildState
   | "not-checked";
 
 export type Verdict = StoreState | "platform-refused";
@@ -69,6 +71,7 @@ export interface StoreRow {
   nextVersion?: string;
   landing?: string;
   reason?: string;
+  fix?: string;
 }
 
 interface Context {
@@ -124,9 +127,9 @@ export function nextVersionSentence(store: string, view: Pick<NextVersionView, "
 export async function readConnectionsAndModes(
   args: { project?: string; api?: string; buildSha?: string },
   browsers: string[],
-): Promise<{ connections: Record<string, ConnectionRecord>; modes: Record<string, StoreSubmissionMode>; reports: Record<string, Row> }> {
+): Promise<{ connections: Record<string, ConnectionRecord>; modes: Record<string, StoreSubmissionMode>; reports: Record<string, Row>; api: ProjectApi | null }> {
   const opened = await openShipApi("extension_submit", args, { action: "submit" }).catch(() => null);
-  if (!opened || "refused" in opened) return { connections: {}, modes: {}, reports: {} };
+  if (!opened || "refused" in opened) return { connections: {}, modes: {}, reports: {}, api: null };
 
   const body: Row = {};
   if (text(args.buildSha)) body.buildId = text(args.buildSha);
@@ -152,7 +155,7 @@ export async function readConnectionsAndModes(
     if (mode) modes[browser] = mode;
   });
 
-  return { connections, modes, reports };
+  return { connections, modes, reports, api: opened.api };
 }
 
 export async function readConnections(
@@ -265,16 +268,25 @@ export function rowFromHealth(browser: string, health: HealthRead): StoreRow {
   return { ...base, ok: true, state: "ready", configured: true, healthy: true };
 }
 
+export function rowWithBuildVerdict(row: StoreRow, verdict: BrowserBuildVerdict | null): StoreRow {
+  if (!verdict || isConnectionState(row.state) || row.state === "store-unhealthy") return row;
+
+  const unread: Partial<StoreRow> = row.source === "connection" ? {} : { source: "none", configured: NOT_CHECKED, healthy: NOT_CHECKED };
+
+  return { ...row, ...unread, ok: false, state: verdict.state, reason: verdict.reason, fix: verdict.fix };
+}
+
 export async function readStoreRows(
   args: { project?: string; api?: string; buildSha?: string },
   browsers: string[],
   ctx: Context,
 ): Promise<{ rows: StoreRow[]; connections: Record<string, ConnectionRecord> }> {
-  const { connections, modes, reports } = await readConnectionsAndModes(args, browsers);
+  const { connections, modes, reports, api } = await readConnectionsAndModes(args, browsers);
   const needsHealth = browsers.some((browser) => !connections[browser]);
-  const health = needsHealth ? await readLegacyHealth(ctx) : null;
+  const [health, builds] = await Promise.all([needsHealth ? readLegacyHealth(ctx) : null, api ? readBrowserBuilds(api, browsers, text(args.buildSha)) : Promise.resolve({} as Record<string, BrowserBuildRead>)]);
   const rows = browsers.map((browser) => {
-    const row = connections[browser] ? rowFromConnection(browser, connections[browser]) : rowFromHealth(browser, health as HealthRead);
+    const read = connections[browser] ? rowFromConnection(browser, connections[browser]) : rowFromHealth(browser, health as HealthRead);
+    const row = rowWithBuildVerdict(read, browserBuildVerdict(builds[browser], ctx));
     const version = reports[browser] ? nextVersionOf(reports[browser], browser) : null;
 
     return {
@@ -289,6 +301,8 @@ export async function readStoreRows(
 
 export function connectionStep(row: StoreRow, connection: ConnectionRecord | undefined, ctx: Context): NextStep {
   const settingsUrl = storeSettingsUrl(ctx.ref, ctx.api);
+
+  if (isBrowserBuildState(row.state)) return browserBuildStep({ reason: row.reason ?? "", fix: row.fix ?? "", settingsUrl: browserBuildSettingsUrl(ctx) });
 
   if (row.state === EDGE_FIRST_SUBMISSION_STATE) {
     return firstSubmissionStep(connection?.firstSubmission ?? { partnerCenterUrl: null, steps: [] }, settingsUrl);
@@ -362,7 +376,11 @@ export function dryRunVerdict(
 
   if (blocked) {
     const step = connectionStep(blocked, connections[blocked.browser], ctx);
-    const trackUrl = blocked.state === "store-item-not-linked" || isConnectionState(blocked.state) || blocked.source === "health" ? storeSettingsUrl(ctx.ref, ctx.api) : ctx.storePageUrl;
+    const trackUrl = isBrowserBuildState(blocked.state)
+      ? step.url ?? ctx.storePageUrl
+      : blocked.state === "store-item-not-linked" || isConnectionState(blocked.state) || blocked.source === "health"
+        ? storeSettingsUrl(ctx.ref, ctx.api)
+        : ctx.storePageUrl;
 
     return { verdict: blocked.state, ok: false, nextStep: step, trackUrl, say: `Not ready for ${blocked.browser}: ${step.say}` };
   }

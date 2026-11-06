@@ -103,6 +103,7 @@ import {
   withoutSecretNames,
   type ModeIds,
 } from "../lib/store-connection";
+import { browserBuildRefusal, browserBuildVerdicts } from "../lib/browser-builds";
 import { reviewPromiseFromApproval } from "../lib/review-promise";
 import { SUBMIT_ACTION_SAFETY } from "../lib/submit-action-safety";
 import { readStoresAfterUnconfirmed, submitDispatchBoundMs, unconfirmedStoresHint } from "../lib/submit-dispatch-bound";
@@ -248,7 +249,7 @@ export const schema = {
         type: "boolean",
         default: true,
         description:
-          "true (the default) rehearses and dispatches nothing: the platform verifies the token and project, finds the store workflow, reads the build from its index and each store's connection record, and answers one value.verdict (ready, not-checked, platform-refused, or the blocking state store-not-connected, store-connection-failed, store-item-not-linked, store-not-configured or store-unhealthy) with value.nextStep and value.trackUrl; it does not run the owner gate, the approval, the build quota, the dispatch pause or the submission-mode check, which the real run does first. false submits: it reads the store connection and refuses before any approval when the store is not ready, needs a token issued by a workspace owner and that owner's approval of this exact submission, dispatches the store workflow, and a Chrome or Edge upload from here stops at the draft under the default modes (Chrome draft-until-public, Edge draft), while a mode saved in the console store settings is honored whoever saved it: Chrome public or staged and Edge review send the upload on to review, and the approval says so (preflight answers the saved mode under value.stores.<store>.submissionMode, extension_release_status under config.submissionMode). Store credentials are never arguments, and no local file is uploaded.",
+          "true (the default) rehearses and dispatches nothing: the platform verifies the token and project, finds the store workflow, reads the build from its index and each store's connection record, and answers one value.verdict (ready, not-checked, platform-refused, or the blocking state store-not-connected, store-connection-failed, store-item-not-linked, store-not-configured, store-unhealthy, browser-builds-off when the project's build settings have that store's browser off, or build-artifact-missing when the build carries no package for it) with value.nextStep and value.trackUrl; it does not run the owner gate, the approval, the build quota, the dispatch pause or the submission-mode check, which the real run does first. false submits: it reads the store connection and the build settings and refuses before any approval when the store is not ready or the browser is not built (a build settings fix names extension_builds action configure, never the store connect page), needs a token issued by a workspace owner and that owner's approval of this exact submission, dispatches the store workflow, and a Chrome or Edge upload from here stops at the draft under the default modes (Chrome draft-until-public, Edge draft), while a mode saved in the console store settings is honored whoever saved it: Chrome public or staged and Edge review send the upload on to review, and the approval says so (preflight answers the saved mode under value.stores.<store>.submissionMode, extension_release_status under config.submissionMode). Store credentials are never arguments, and no local file is uploaded.",
       },
       projectPath: {
         type: "string",
@@ -580,9 +581,15 @@ async function connectionPrecheck(
         rowFromConnection(browser, connections[browser]),
     )
     .find((row) => row && isConnectionState(row.state));
-  if (!blocked) return { refused: null, modes, reports: read.reports };
-
   const ctx = { ref, api: args.api, sha: scope.buildSha };
+
+  if (!blocked) {
+    const verdicts = read.api ? await browserBuildVerdicts(read.api, browsers, scope.buildSha, ctx) : {};
+    const verdict = browsers.map((browser) => verdicts[browser]).find(Boolean);
+
+    return { refused: verdict ? browserBuildRefusal(verdict, browsers, scope.buildSha) : null, modes, reports: read.reports };
+  }
+
   const step = connectionStep(blocked, connections[blocked.browser], ctx);
   const settingsUrl = storeSettingsUrl(ref, args.api);
   const linked = blocked.state === "store-item-not-linked";

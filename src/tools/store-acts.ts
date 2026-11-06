@@ -16,6 +16,7 @@ import {
   stampNow,
 } from "../lib/act-outcome";
 import { lineId, readLines } from "../lib/approval-lines";
+import { browserBuildStep, browserBuildVerdicts, withBrowserBuildVerdict } from "../lib/browser-builds";
 import { approvalSubjectPhrase, subjectOf } from "../lib/approval-subject";
 import { envelope, isEnvelope } from "../lib/envelope";
 import {
@@ -1044,12 +1045,19 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     } else unread.push(`${store}: ${read.message}`);
   });
 
-  const packageBuilds = await packageBuildViews(api, text(args.projectPath), reports, asked);
+  const [packageBuilds, buildVerdicts] = await Promise.all([
+    packageBuildViews(api, text(args.projectPath), reports, asked),
+    browserBuildVerdicts(api, asked.filter((store) => isRow(stores[store])), text(args.buildSha), { ref: api.ref, api: args.api }),
+  ]);
 
   asked.forEach((store, i) => {
     const view = packageBuilds[i];
     if (view && isRow(stores[store])) stores[store] = { ...(stores[store] as Row), packageBuild: view };
+    if (buildVerdicts[store] && isRow(stores[store])) stores[store] = withBrowserBuildVerdict(stores[store] as Row, buildVerdicts[store]);
   });
+
+  const buildVerdict = asked.map((store) => buildVerdicts[store]).find(Boolean) ?? null;
+  const buildsLine = Object.values(buildVerdicts).map((verdict) => `${verdict.reason} ${verdict.fix}`).join(" ");
 
   const packageLine = packageBuildLine(packageBuilds);
   const blocked = Object.entries(stores)
@@ -1446,7 +1454,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       ? captureStep
       : green
         ? notReadyStep ?? submitStep(asked, modeIds)
-        : partialSubmitStep(goes, blocked, modeIds);
+        : partialSubmitStep(goes, blocked, modeIds) ?? (buildVerdict ? browserBuildStep(buildVerdict) : null);
 
   return envelope({
     ok: true,
@@ -1461,7 +1469,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       trackUrl: reviewing ? reviewUrl : storesPageUrl,
       sayToPerson: readinessLead(
         storeReadinessOf({ stores, asked, projectPath: text(args.projectPath) }),
-        [landingLine, inputsSay, edgeFirstLine, reviewLine, notReadyLine(notReady, green), readinessHint, captureLine].filter(Boolean).join(" "),
+        [buildsLine, landingLine, inputsSay, edgeFirstLine, reviewLine, notReadyLine(notReady, green), readinessHint, captureLine].filter(Boolean).join(" "),
       ),
       nextStep: step,
     },
