@@ -63,6 +63,14 @@ import {
   type DigestMismatch,
 } from "../lib/store-listing-digest";
 import { pushAnswer, pushSentence, readPushState, sendListing } from "../lib/store-listing-push";
+import {
+  LISTING_TOO_LARGE_STATUS,
+  PLATFORM_REQUEST_BODY_LIMIT_BYTES,
+  listingBodyView,
+  listingTooLargeHint,
+  listingTooLargeMessage,
+  measureListingBody,
+} from "../lib/listing-body-limit";
 import { firefoxCategoryCover } from "../lib/firefox-category-cover";
 import { iconPaddingView } from "../lib/chrome-icon-padding";
 import { STORE_MD_FILENAME } from "../lib/store-md";
@@ -788,6 +796,19 @@ async function askListing(api: ProjectApi, args: ListingArgs, store: ListingStor
       };
 }
 
+function listingTooLarge(store: ListingStore, patch: ListingPatch, bytes: number, refusedByPlatform: boolean): string {
+  const view = listingBodyView(patch, bytes);
+
+  return envelope({
+    ok: false,
+    command: COMMAND,
+    status: LISTING_TOO_LARGE_STATUS,
+    value: { action: ACT, store, listing: { body: view }, ...(refusedByPlatform ? { platformStatus: 413 } : {}) },
+    error: { code: "E_BAD_REQUEST", name: "ListingTooLarge", message: listingTooLargeMessage(store, view, refusedByPlatform) },
+    hint: listingTooLargeHint(store, patch, view),
+  });
+}
+
 async function syncOne(
   api: ProjectApi,
   args: ListingArgs,
@@ -797,6 +818,10 @@ async function syncOne(
   versioned = false,
 ): Promise<Row | { out: string }> {
   const approvalId = text(args.approvalId);
+  const body = { ...writeBody(patch), ...(approvalId ? { approvalId } : {}) };
+  const bodyBytes = measureListingBody(body);
+
+  if (bodyBytes > PLATFORM_REQUEST_BODY_LIMIT_BYTES) return { out: listingTooLarge(store, patch, bodyBytes, false) };
 
   if (!approvalId && askingOnly()) {
     if (!derivedListingFields(store, patch.listing).length) return { out: checkRefused(ACT, plainListingAsk(store)) };
@@ -805,15 +830,14 @@ async function syncOne(
     return askListing(api, args, store, patch, { store, listingDigest: listingDigest(patch) });
   }
 
-  const { sent, resend } = await sendListing(api, store, {
-    ...writeBody(patch),
-    ...(approvalId ? { approvalId } : {}),
-  });
+  const { sent, resend } = await sendListing(api, store, body);
   const pushUrl = consoleProjectUrl(
     api.ref,
     ConsoleProjectPage.submissionsStore(store),
     args.api,
   );
+
+  if (!sent.ok && sent.status === 413) return { out: listingTooLarge(store, patch, bodyBytes, true) };
 
   const subsetRetry = async (mismatch: DigestMismatch): Promise<Row | { out: string }> => {
     const again = await syncOne(api, args, store, withoutFields(patch, mismatch.deferred), mismatch);

@@ -264,7 +264,7 @@ export const schema = {
         type: "array",
         items: { type: "string" },
         description:
-          "With sync-listing, the PNG screenshots inside projectPath (for example written by extension_screenshot) to set as the listing's screenshots. Each store takes its own count and sizes, and a file off its store's sizes or a count over its cap is refused here before any approval: Chrome 1 to 5 at 1280x800 or 640x400; Edge up to 6 at 1280x800 or 640x480; Safari 1 to 10 macOS screenshots at exactly 1280x800, 1440x900, 2560x1600 or 2880x1800, showing the extension running in Safari; Firefox any size, optional.",
+          "With sync-listing, the PNG screenshots inside projectPath (for example written by extension_screenshot) to set as the listing's screenshots. Each store takes its own count and sizes, and a file off its store's sizes or a count over its cap is refused here before any approval: Chrome 1 to 5 at 1280x800 or 640x400; Edge up to 6 at 1280x800 or 640x480; Safari 1 to 10 macOS screenshots at exactly 1280x800, 1440x900, 2560x1600 or 2880x1800, showing the extension running in Safari; Firefox any size, optional. The request body that carries them is capped at 4.5 MB in total (each PNG goes base64-encoded, a third larger), so large captures go in several calls, a subset of screenshots each; a set over the cap is refused here with the sizes before anything is sent.",
       },
       useBuild: {
         type: "string",
