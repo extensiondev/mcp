@@ -7,9 +7,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { handler } from "../tools/doctor";
 
 import type * as ExecModule from "../lib/exec";
+import type * as ProcessManagerModule from "../lib/process-manager";
 
 const cli = vi.hoisted(() => ({
   response: { code: 1, stdout: "", stderr: "" },
+}));
+
+const registry = vi.hoisted(() => ({
+  projectPath: "",
 }));
 
 vi.mock("../lib/exec", async (importOriginal) => ({
@@ -23,11 +28,26 @@ vi.mock("../lib/engine-version", () => ({
   outputFlagRefusalMessage: async () => "unused",
 }));
 
+vi.mock("../lib/process-manager", async (importOriginal) => ({
+  ...(await importOriginal<typeof ProcessManagerModule>()),
+  listSessions: () => [
+    {
+      pid: process.pid,
+      browser: "chrome",
+      projectPath: registry.projectPath,
+      command: "dev",
+      allowControl: false,
+    },
+  ],
+  listSessionMarkers: () => [],
+}));
+
 const tmpDirs: string[] = [];
 
 function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-doctor-readonly-"));
   tmpDirs.push(dir);
+  registry.projectPath = dir;
 
   return dir;
 }
@@ -131,6 +151,7 @@ describe("extension_doctor on a session that is read-only by choice", () => {
     expect(out.status).toBe("read-only");
     expect(out.error).toBeNull();
     expect(out.value.readOnly).toBe(true);
+    expect(out.value.startedBy).toBe("extension_dev");
   });
 
   it("names the condition on the leg instead of leaving it a failure", async () => {

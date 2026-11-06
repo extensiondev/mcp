@@ -22,6 +22,7 @@ import { toMcpSpeak } from "../lib/act";
 import { envelope, isEnvelope } from "../lib/envelope";
 import {
   ambiguousSessionRefusal,
+  liveProjectSessions,
   resolveSessionBrowser,
 } from "../lib/session-browser";
 import { WEBKIT_FAMILY } from "../lib/browser-family";
@@ -96,7 +97,7 @@ function sightedContractBrowser(projectPath: string): string | null {
 export const schema = {
   name: "extension_doctor",
   description:
-    "Diagnose a dev session end to end: ready contract, dev-server process, control-port agreement, control channel, eval token, executor, browser liveness. This returns one {check, status, detail, remediation?} per leg, in dependency order. Read a 'skip' as blocked, not as a pass: it names the check that blocked it. A session started with allowControl: false comes back ok:true with status 'read-only', not as an error. On Chromium, value.capabilities reads each extension context's WebGPU adapter, crossOriginIsolated and headless. Run this first when any act tool errors unexpectedly. Call it with no projectPath for a pre-flight environment check (node, the Extension.js CLI, the template cache).",
+    "Diagnose a dev session end to end: ready contract, dev-server process, control-port agreement, control channel, eval token, executor, browser liveness. This returns one {check, status, detail, remediation?} per leg, in dependency order. Read a 'skip' as blocked, not as a pass: it names the check that blocked it. A read-only session comes back ok:true with status 'read-only', not as an error. On Chromium, value.capabilities reads each extension context's WebGPU adapter, crossOriginIsolated and headless. Run this first when any act tool errors unexpectedly. Call it with no projectPath for a pre-flight environment check (node, the Extension.js CLI, the template cache).",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -311,6 +312,40 @@ function reconcileRelaunchedBrowser(
   return true;
 }
 
+type ReadOnlyStarter = "extension_dev" | "cli";
+
+interface ReadOnlyWording {
+  startedBy: ReadOnlyStarter;
+  remediation: string;
+  hint: string;
+}
+
+const READ_ONLY_VERBS =
+  "logs, inspect, wait and doctor all work, while storage, reload, open, dom_snapshot and eval stay locked";
+
+function readOnlyWording(projectPath: string, browser: string): ReadOnlyWording {
+  const session = liveProjectSessions(projectPath).find(
+    (live) => live.browser === browser,
+  );
+
+  if (session?.source === "registry") {
+    return {
+      startedBy: "extension_dev",
+      remediation:
+        "Nothing failed. To unlock the control verbs, call extension_dev again without allowControl: false (allowEval: true for eval as well) plus replace: true, which stops this session first; a plain second call is refused so the session does not fork.",
+      hint: `This session is read-only because it was started with allowControl: false, not because anything is wrong: ${READ_ONLY_VERBS}.`,
+    };
+  }
+
+  const rerun = `npx extension dev --browser ${browser} --allow-control`;
+
+  return {
+    startedBy: "cli",
+    remediation: `Nothing failed. This session was started from the shell, not by extension_dev, and the CLI leaves control off unless --allow-control is given. To unlock the control verbs, stop it in its own terminal and rerun it with the same arguments plus --allow-control (${rerun}; add --allow-eval for extension_eval), which keeps the person's own window and terminal. extension_dev with replace: true also works, but it stops the browser the person is using and starts one this server owns, so only take that route when the person asks for it.`,
+    hint: `This session is read-only because the CLI started it without --allow-control, not because anything is wrong: ${READ_ONLY_VERBS}. Rerun ${rerun} to unlock them.`,
+  };
+}
+
 function controlOffByChoiceLeg(checks: DoctorCheck[]): DoctorCheck | null {
   return (
     checks.find(
@@ -504,11 +539,13 @@ export async function handler(args: {
     const readOnly =
       readOnlyLeg !== null && failures.length === 1 && failures[0] === readOnlyLeg;
 
-    if (readOnly && readOnlyLeg) {
+    const wording =
+      readOnly && readOnlyLeg ? readOnlyWording(projectPath, browser) : null;
+
+    if (readOnlyLeg && wording) {
       readOnlyLeg.status = "warn";
       readOnlyLeg.detail = `read-only by choice: ${readOnlyLeg.detail}`;
-      readOnlyLeg.remediation =
-        "Nothing failed. To unlock the control verbs, call extension_dev again without allowControl: false (allowEval: true for eval as well) plus replace: true, which stops this session first; a plain second call is refused so the session does not fork.";
+      readOnlyLeg.remediation = wording.remediation;
     }
 
     const capabilitiesRead = await readSessionCapabilities(projectPath, browser);
@@ -520,7 +557,7 @@ export async function handler(args: {
       value: {
         browser,
         ...engineFields,
-        ...(readOnly ? { readOnly: true } : {}),
+        ...(wording ? { readOnly: true, startedBy: wording.startedBy } : {}),
         ...(production ? { sessionCommand: production.verb } : {}),
         checks,
         capabilities: capabilitiesRead.capabilities,
@@ -528,10 +565,8 @@ export async function handler(args: {
           ? {}
           : { capabilitiesReason: capabilitiesRead.reason }),
       },
-      ...(readOnly
-        ? {
-            hint: "This session is read-only because it was started with allowControl: false, not because anything is wrong: logs, inspect, wait and doctor all work, while storage, reload, open, dom_snapshot and eval stay locked.",
-          }
+      ...(wording
+        ? { hint: wording.hint }
         : production
           ? { hint: productionDoctorHint(production) }
           : {}),
