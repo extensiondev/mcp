@@ -26,6 +26,7 @@ import {
 import { type Envelope, envelope, isEnvelope } from "../lib/envelope";
 import { platformListed } from "../lib/tool-policy";
 import { manifestDivergence } from "../lib/manifest-by-browser";
+import { droppedRuntimePages, isDroppedRuntimePageWarning } from "../lib/dropped-runtime-pages";
 import { engineBrowserName } from "../lib/browser-family";
 import { BUNDLE_ID_PATTERN, isSafariTarget } from "../lib/safari-dev-options";
 import {
@@ -1025,6 +1026,7 @@ export async function handler(args: {
     }
 
     const distFiles = listDistFiles(distDir);
+    const droppedPages = droppedRuntimePages(args.projectPath, browser, distDir);
     const duplicates = findDuplicateAssets(distDir, distFiles);
     const largestFiles = largestFilesOf(distFiles, duplicates);
     const largestFilesInline = (largestFiles[0]?.size ?? 0) >= LARGE_ASSET_FLOOR || duplicates.length > 0 ? largestFiles : null;
@@ -1082,6 +1084,7 @@ export async function handler(args: {
           ? { buildWarningsTruncated }
           : {}),
         ...(divergence.length ? { productionDivergence: divergence } : {}),
+        ...(droppedPages.length ? { droppedRuntimePages: droppedPages } : {}),
         zip: args.zip ?? false,
         ...(zipPath ? { zipPath } : {}),
         ...(zipSourcePath ? { zipSourcePath } : {}),
@@ -1090,7 +1093,8 @@ export async function handler(args: {
       },
       warnings: [
         ...warnings,
-        ...(preflight?.warnings ?? []),
+        ...(preflight?.warnings ?? []).filter((line) => !isDroppedRuntimePageWarning(line)),
+        ...droppedPages.map((page) => page.say),
         ...buildWarnings,
         ...reviewRiskWarnings(risks),
         ...reviewCoverageNotes(review),

@@ -15,6 +15,7 @@ import { listTemplates } from "../lib/templates-cache";
 import { envelope } from "../lib/envelope";
 import { apiUsesIn, type ApiUse } from "../lib/guarded-api-uses";
 import { chromeIconPaddingOfFile } from "../lib/chrome-icon-padding";
+import { droppedRuntimePages } from "../lib/dropped-runtime-pages";
 
 const COMMAND = "extension_manifest_validate";
 
@@ -846,6 +847,10 @@ export async function handler(args: {
       result.warnings.push(
         `${browser}: checked as its Chromium source manifest only; Safari-specific rules (the Xcode conversion) are not checked here.`,
       );
+    }
+
+    if (explicitBrowsers) {
+      for (const page of droppedRuntimePages(projectRoot, browser, null, manifest)) result.warnings.push(page.say);
     }
 
     result.browserSupport[browser] = {

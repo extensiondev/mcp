@@ -59,6 +59,7 @@ import {
 import { safariSigningFrame } from "../lib/safari-signing";
 import { safariNotAttachedHint } from "../lib/safari-app-stage";
 import { safariEnableFrame } from "../lib/safari-enable-read";
+import { droppedRuntimePages } from "../lib/dropped-runtime-pages";
 import { teamUnknownToXcodeRefusal } from "../lib/xcode-teams";
 import { safariStartingUrlWarning } from "../lib/safari-session-notes";
 import {
@@ -514,6 +515,7 @@ export async function handler(
       portKeptNote,
       ...boot.warnings,
       ...(signingFrame?.warnings ?? []),
+      ...droppedRuntimePages(args.projectPath, browser, readyDistPath(readiness?.ready)).map((page) => page.say),
       readiness ? safariStartingUrlWarning(args.projectPath, browser, args.startingUrl) : null,
       markerWarning,
     ],
@@ -536,6 +538,10 @@ export function firstLogsRecoveryNote(readyValue: Record<string, unknown>): stri
   if (recovery?.outcome !== "attached" || typeof recovery.reloadedAt !== "string") return null;
 
   return `This server reloaded the extension at ${recovery.reloadedAt} to attach it; lines in firstLogs timestamped before then came from the build the browser held before that reload, not the live build (ready.beforeRecovery lists those errors).`;
+}
+
+function readyDistPath(ready: Record<string, unknown> | undefined): string | null {
+  return typeof ready?.distPath === "string" ? ready.distPath : null;
 }
 
 async function awaitReadyAndFirstLogs(projectPath: string, browser: string) {
