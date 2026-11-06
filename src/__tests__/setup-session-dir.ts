@@ -5,6 +5,7 @@ import path from "node:path";
 import { beforeEach } from "vitest";
 
 import { outcomeClock } from "../lib/act-outcome";
+import { safariEnableProbes } from "../lib/safari-enable-probes";
 import { xcodeTeamsReader } from "../lib/xcode-teams";
 
 process.env.EXTENSION_MCP_SESSION_DIR = fs.mkdtempSync(
@@ -14,6 +15,8 @@ process.env.EXTENSION_MCP_SESSION_DIR = fs.mkdtempSync(
 process.env.EXTENSION_DEV_NO_TELEMETRY = "1";
 
 xcodeTeamsReader.read = async () => null;
+
+safariEnableProbes.platform = () => "test";
 
 let slept = 0;
 outcomeClock.now = () => Date.now() + slept;

@@ -14,6 +14,7 @@ import { pidState } from "./process-identity";
 import { findSessionInfo } from "./process-manager";
 import { isSafariTarget } from "./safari-dev-options";
 import { buildingAppAnswer, safariAppBuilding, safariNotAttachedHint } from "./safari-app-stage";
+import { safariEnableFrame } from "./safari-enable-read";
 import { safariSigningFrame } from "./safari-signing";
 import { browserProfileRootDir } from "./session-paths";
 import { sessionPorts } from "./session-ports";
@@ -274,6 +275,8 @@ export async function compiledNotAttachedAnswer(
   const undiagnosed = isSafariTarget(ctx.browser) ? "" : `, and ${NO_ATTACH_DIAGNOSIS_NOTE}`;
   const observed = await observeAttachLegs(ctx.contract, ctx);
   const wayOut = observed.freshProfile ? wayOutSentence(observed.freshProfile) : null;
+  const enableExtension = findSessionInfo(ctx.projectPath, ctx.browser)?.enableExtension === true;
+  const safariEnable = safariEnableFrame(ctx.projectPath, ctx.browser, enableExtension);
 
   return envelope({
     ok: false,
@@ -305,16 +308,13 @@ export async function compiledNotAttachedAnswer(
           }
         : {}),
       ...(signingFrame ? { signing: signingFrame.signing } : {}),
+      ...(safariEnable ? { safari: safariEnable.safari } : {}),
     },
     warnings: [...(ctx.warnings ?? []), ...(signingFrame?.warnings ?? [])],
     hint: [
       observed.failedLegSays && wayOut
         ? `${observed.failedLegSays} ${wayOut}`
-        : safariNotAttachedHint(
-            ctx.projectPath,
-            ctx.browser,
-            findSessionInfo(ctx.projectPath, ctx.browser)?.enableExtension === true,
-          ),
+        : (safariEnable?.hint ?? safariNotAttachedHint(ctx.projectPath, ctx.browser, enableExtension)),
       ...(signingFrame?.hints ?? []),
     ].join(" "),
   });

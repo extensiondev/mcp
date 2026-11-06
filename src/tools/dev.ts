@@ -58,6 +58,7 @@ import {
 } from "../lib/safari-dev-options";
 import { safariSigningFrame } from "../lib/safari-signing";
 import { safariNotAttachedHint } from "../lib/safari-app-stage";
+import { safariEnableFrame } from "../lib/safari-enable-read";
 import { teamUnknownToXcodeRefusal } from "../lib/xcode-teams";
 import { safariStartingUrlWarning } from "../lib/safari-session-notes";
 import {
@@ -470,12 +471,16 @@ export async function handler(
     });
   }
 
+  const safariEnable =
+    !sessionReady && readiness?.ready.status === "compiled-not-attached" && isSafariTarget(browser)
+      ? safariEnableFrame(args.projectPath, browser, Boolean(args.enableExtension))
+      : null;
   const nextStep = sessionReady
     ? "The session is ready (ready.status: ready) and the first log lines are in firstLogs, so no extension_wait is needed: extension_inspect reads the live state and extension_logs the console."
     : readiness
       ? `ready.status is ${readiness.ready.status}, not ready: ${
           readiness.ready.status === "compiled-not-attached" && isSafariTarget(browser)
-            ? safariNotAttachedHint(args.projectPath, browser, Boolean(args.enableExtension))
+            ? (safariEnable?.hint ?? safariNotAttachedHint(args.projectPath, browser, Boolean(args.enableExtension)))
             : readiness.ready.status === "compiled-not-attached"
               ? typeof (readiness.ready as Record<string, unknown>).failedLegSays === "string"
                 ? `${String((readiness.ready as Record<string, unknown>).failedLegSays)} Call extension_wait to keep waiting on the same contract; ${NO_ATTACH_DIAGNOSIS_NOTE}, so this server read the legs itself.`
@@ -498,6 +503,7 @@ export async function handler(
       ...(replaced.length > 0 ? { replacedSession: replaced[0] } : {}),
       ...(args.noBrowser ? {} : { headless: visibility.headless }),
       ...(signingFrame ? { signing: signingFrame.signing } : {}),
+      ...(safariEnable ? { safari: safariEnable.safari } : {}),
       capabilities,
       engine: describeExtensionInvocation(args.projectPath),
       logPath,
