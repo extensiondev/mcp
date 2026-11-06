@@ -86,6 +86,7 @@ import {
   safariOfferSentences,
 } from "../lib/store-requirements";
 import { bringListOf, screenshotDoor } from "../lib/store-bring-list";
+import { safariAppRecordStep, withSafariAppRecordStep } from "../lib/safari-app-record-step";
 import { captureRecipe } from "../lib/store-capture";
 import { notReadyForReviewStep, notReadyLine } from "../lib/store-not-ready";
 import { nextVersionOf, nextVersionSentence } from "../lib/store-readiness";
@@ -898,7 +899,8 @@ function readinessView(
   const requirements = read ? { ...read, items: withHandUploadRows(read.items, { ...scope, sha }, nextVersionOf(json, store)?.nextVersion) } : null;
   const summary = summaryAgreeingWithRows({ summary: recounted, platform: isRow(json.summary) ? json.summary : {}, recounted: deferred.length > 0, rows: read?.items ?? null, checks, json, store });
   const review = isRow(summary.review) ? summary.review : null;
-  const bringList = bringListOf(store, requirements, review?.canSubmitForReview !== false);
+  const appRecord = store === "safari" ? safariAppRecordStep({ requirements, checks, local, scope }) : null;
+  const bringList = withSafariAppRecordStep(bringListOf(store, requirements, review?.canSubmitForReview !== false), appRecord);
 
   return {
     canSubmit: summary.canSubmit === true,
