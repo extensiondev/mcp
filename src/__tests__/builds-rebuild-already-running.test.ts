@@ -109,30 +109,35 @@ describe("extension_builds rebuild of a commit whose build is already running", 
     expect(calls.filter((call) => call.method === "POST")).toHaveLength(1);
   });
 
-  it("answers the record once that build has finished", async () => {
+  it("sends the rebuild once that build has finished, and says it finished without calling it building", async () => {
     if (process.platform === "win32") return;
 
-    routes[`POST ${DISPATCH_ROUTE}`] = () => running({ state: "queued", startedAt: null });
-    routes[`GET ${BUILD_ROUTE}`] = () => ({ body: { buildId: "4478aff", status: "success" } });
+    let posts = 0;
+    routes[`POST ${DISPATCH_ROUTE}`] = () => (posts++ === 0 ? running({ state: "queued", startedAt: null }) : { body: { ok: true, branch: "main", commit: "4478aff", browsers: "chrome", origin: "mcp" } });
+    routes[`GET ${BUILD_ROUTE}`] = () => ({ body: { buildId: "4478aff", status: "success", startedAt: "2026-10-24T23:51:05.000Z" } });
 
     const out = JSON.parse(await builds({ action: "rebuild", buildId: "4478aff", waitSeconds: 0, api: API }));
 
     expect(out.ok).toBe(true);
-    expect(out.status).toBe("built");
-    expect(out.value.outcome).toMatchObject({ recorded: true, status: "success" });
-    expect(calls.filter((call) => call.method === "POST")).toHaveLength(1);
+    expect(out.status).toBe("rebuild-dispatched");
+    expect(out.value.earlierBuild).toMatchObject({ state: "queued", status: "success" });
+    expect(out.hint).toContain("has finished");
+    expect(out.hint).not.toMatch(/already building|already queued/);
+    expect(calls.filter((call) => call.method === "POST")).toHaveLength(2);
   });
 
-  it("names a failed build as failed once the build it found has finished red", async () => {
+  it("sends the rebuild once the build it found has finished red", async () => {
     if (process.platform === "win32") return;
 
-    routes[`POST ${DISPATCH_ROUTE}`] = () => running({ state: "in_progress", startedAt: "2026-10-24T23:51:05.000Z" });
-    routes[`GET ${BUILD_ROUTE}`] = () => ({ body: { buildId: "4478aff", status: "failed" } });
+    let posts = 0;
+    routes[`POST ${DISPATCH_ROUTE}`] = () => (posts++ === 0 ? running({ state: "in_progress", startedAt: "2026-10-24T23:51:05.000Z" }) : { body: { ok: true, branch: "main", commit: "4478aff", browsers: "chrome", origin: "mcp" } });
+    routes[`GET ${BUILD_ROUTE}`] = () => ({ body: { buildId: "4478aff", status: "failed", startedAt: "2026-10-24T23:51:05.000Z" } });
 
     const out = JSON.parse(await builds({ action: "rebuild", buildId: "4478aff", waitSeconds: 0, api: API }));
 
-    expect(out.ok).toBe(false);
-    expect(out.status).toBe("build-failed");
-    expect(out.hint).toContain('action:"logs"');
+    expect(out.ok).toBe(true);
+    expect(out.status).toBe("rebuild-dispatched");
+    expect(out.value.earlierBuild).toMatchObject({ state: "in_progress", status: "failed" });
+    expect(calls.filter((call) => call.method === "POST")).toHaveLength(2);
   });
 });

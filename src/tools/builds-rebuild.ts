@@ -19,6 +19,7 @@ import {
   missedRead,
   stampNow,
   trackLinks,
+  waitBound,
   type Verdict,
 } from "../lib/act-outcome";
 import { buildName, buildNumberOf } from "../lib/builds-list-row";
@@ -31,7 +32,7 @@ import {
   requestApprovalAfterRefusal,
   type ApprovalGateInput,
 } from "../lib/approval-gate";
-import { projectApiGet, projectApiSend, type ProjectApi, type ProjectApiRefusal } from "../lib/project-api";
+import { projectApiGet, projectApiSend, type ProjectApi } from "../lib/project-api";
 import {
   BUILD_ENVS,
   COMMAND,
@@ -39,15 +40,27 @@ import {
   badRequest,
   isRow,
   openFor,
+  rebuildTarget,
   text,
   type ActArgs,
   type Row,
 } from "./builds-acts";
+import { ALREADY_RUNNING_CODE, followRunning, followedSentence, heldAsRunning, type FinishedBuild } from "./builds-rebuild-running";
 
 const REBUILD_ACTION = "extension_builds.rebuild";
 const FULL_SHA = /^[a-f0-9]{40}$/;
 
 const REBUILD_CONSUMED_NEXT = 'The call that used it may already have started the run: read extension_builds (action: "list") first, and request a fresh approval only if no run for that commit is there.';
+
+interface RebuildCall {
+  args: ActArgs;
+  api: ProjectApi;
+  body: Row;
+  buildEnv: string;
+  commitSha: string;
+  approvalId: string;
+  waitSeconds: unknown;
+}
 
 /* @invariant A REBUILD OF A COMMIT THAT ALREADY BUILT KEEPS ITS BUILD ID, SO
  * THE RUN IS WHAT TELLS THIS REBUILD FROM THE BUILD BEFORE IT. The platform
@@ -109,111 +122,6 @@ function judgeRebuild(detail: Row, match: Row | undefined, acceptedAt: string): 
   return { kind: "recorded", status };
 }
 
-const ALREADY_RUNNING_CODE = "BUILD_ALREADY_RUNNING";
-
-const RUNNING_WORDS: Record<string, string> = {
-  in_progress: "is already building",
-  queued: "is already queued to build",
-  starting: "was just pushed and its build is starting",
-};
-
-function judgeRunning(detail: Row, startedAfter: string): Verdict {
-  const run = isRow(detail.run) ? detail.run : {};
-  const startedAt = text(detail.startedAt) || text(run.startedAt) || text(detail.createdAt);
-
-  if (startedAfter && startedAt && !after(startedAt, startedAfter)) return { kind: "waiting", status: "earlier run" };
-
-  const status = text(detail.status).toLowerCase();
-  if (!status || PENDING_STATUSES.has(status)) return { kind: "waiting", status: status || null };
-  if (FAILED_STATUSES.has(status)) return { kind: "recorded", status, failed: true };
-
-  return { kind: "recorded", status };
-}
-
-/* @invariant A REBUILD NEVER CANCELS THE BUILD IT ASKS FOR. The platform
- * answers BUILD_ALREADY_RUNNING, dispatching and spending nothing, when the
- * commit is already queued, running or starting from its push, because a
- * second build of it would cancel the first. That is the build this call
- * wanted, so the answer follows it like a rebuild of its own: the same build
- * page, the same bounded wait on the platform's record, and no success word
- * before the record shows one.
- */
-async function alreadyRunning(sent: ProjectApiRefusal, args: ActArgs, api: ProjectApi, buildEnv: string, commitSha: string): Promise<string> {
-  const body = isRow(sent.body) ? sent.body : {};
-  const details = isRow(body.details) ? body.details : {};
-  const commit = text(details.buildId) || text(details.commit) || commitSha.slice(0, 7).toLowerCase();
-  const state = text(details.state) || "in_progress";
-  const startedAt = text(details.startedAt) || null;
-  const deploymentId = text(details.deploymentId);
-  const project = `${api.ref.workspace}/${api.ref.project}`;
-  const scope = args.project ? { project: args.project } : {};
-  const base: Row = {
-    action: "rebuild",
-    project,
-    commit,
-    branch: text(details.branch) || null,
-    buildEnv: buildEnv || "staging",
-    dispatched: false,
-    running: { state, startedAt, ...(deploymentId ? { deploymentId } : {}) },
-    follow: {
-      list: { action: "list", ...scope },
-      get: { action: "get", buildId: commit, ...scope },
-      logs: { action: "logs", buildId: commit, ...scope },
-    },
-    buildsPageUrl: consoleProjectUrl(api.ref, ConsoleProjectPage.builds, args.api),
-  };
-  const links = linksOf(trackLinks(COMMAND, { ...args, action: "rebuild", buildId: commit } as Row, "build-already-running", base).map((row) => (row.kind === "track" ? { ...row, kind: "build" as const } : row)));
-  const buildPage = links.find((link) => link.kind === "build")?.url ?? String(base.buildsPageUrl);
-  const startedAfter = state === "starting" && startedAt ? startedAt : "";
-  const waited = await awaitRecordedOutcome<Row>({
-    waitSeconds: args.waitSeconds,
-    read: async () => {
-      if (!commit) return { ok: false, message: "the platform named no commit for the running build, so its record cannot be read by build id" };
-
-      const read = await projectApiGet<Row>(api, `builds/${encodeURIComponent(commit)}`);
-      if (!read.ok) return missedRead(read);
-
-      return { ok: true, record: isRow(read.json) ? read.json : {} };
-    },
-    judge: (detail) => judgeRunning(detail, startedAfter),
-  });
-  const number = buildNumberOf(waited.record);
-  const named = buildName(commit, number, "build");
-  const value = { ...base, ...(number ? { buildNumber: number } : {}), outcome: waited.outcome, links };
-  const made = madeSentence(links);
-  const readCall = `extension_builds (action: "get", buildId: "${commit}")`;
-  const nothing = `Nothing was dispatched and nothing was spent: ${named} of ${project} ${RUNNING_WORDS[state] ?? RUNNING_WORDS.in_progress}${startedAt ? ` (since ${startedAt})` : ""}, and a second build of the same commit would cancel it.`;
-
-  if (waited.failed) {
-    return envelope({
-      ok: false,
-      command: COMMAND,
-      status: "build-failed",
-      value,
-      error: { code: "E_PLATFORM", name: "BuildFailed", message: `The platform's record of ${named} reads ${waited.outcome.status}.` },
-      hint: `${nothing} That build has now finished and failed: read extension_builds action:"logs" with buildId ${commit} for the failed browser and step, and the build page ${buildPage}. ${made}`,
-    });
-  }
-
-  if (waited.outcome.recorded) {
-    return envelope({
-      ok: true,
-      command: COMMAND,
-      status: "built",
-      value,
-      hint: `${nothing} That build has now finished: the platform's record reads ${waited.outcome.status}; ${readCall} reads its artifacts and checks, and the build page is ${buildPage}. ${made}`,
-    });
-  }
-
-  return envelope({
-    ok: true,
-    command: COMMAND,
-    status: "build-already-running",
-    value,
-    hint: `${nothing} Follow it at ${buildPage}, or call ${readCall} to read where it is. Do not rebuild while it runs; rebuild it once it has finished if you still need another build. ${made}`,
-  });
-}
-
 /* @invariant A REBUILD IS A REAL BUILD, ASKED FOR AS THE AGENT AND NEVER FORCED.
  * The dispatch spends the workspace's build allowance on real runners, so the
  * request names its origin as mcp for the meter, and never sends force: a
@@ -246,7 +154,22 @@ export async function rebuild(args: ActArgs): Promise<string> {
   if (buildEnv) body.buildEnv = buildEnv;
   if (commitSha) body.commitSha = commitSha;
 
-  const gateFor = (scope: { commit: string; buildEnv: string }): ApprovalGateInput => ({
+  if (approvalId) {
+    const gate = await evaluateApproval({
+      ...gateFor(api, args, { commit: commitSha.toLowerCase(), buildEnv: buildEnv || "staging" }),
+      approvalId,
+      enabled: true,
+    });
+    if (gate.blocked) return gate.envelope;
+
+    body.approvalId = approvalId;
+  }
+
+  return dispatch({ args, api, body, buildEnv, commitSha, approvalId, waitSeconds: args.waitSeconds }, null);
+}
+
+function gateFor(api: ProjectApi, args: ActArgs, scope: { commit: string; buildEnv: string }): ApprovalGateInput {
+  return {
     command: COMMAND,
     action: REBUILD_ACTION,
     scope,
@@ -257,23 +180,25 @@ export async function rebuild(args: ActArgs): Promise<string> {
     body: { commitSha: scope.commit, buildEnv: scope.buildEnv },
     reason: `A rebuild is a plain act under the owner's own token, and the platform asked a workspace owner to approve this exact one before it runs. Call again with buildId ${scope.commit} and buildEnv ${scope.buildEnv} so the run matches what was approved.`,
     stateRead: 'extension_builds (action: "list") for the runs it started',
-  });
+  };
+}
 
-  if (approvalId) {
-    const gate = await evaluateApproval({
-      ...gateFor({ commit: commitSha.toLowerCase(), buildEnv: buildEnv || "staging" }),
-      approvalId,
-      enabled: true,
-    });
-    if (gate.blocked) return gate.envelope;
-
-    body.approvalId = approvalId;
-  }
-
+async function dispatch(call: RebuildCall, found: FinishedBuild | null): Promise<string> {
+  const { args, api, body, buildEnv, commitSha, approvalId } = call;
   const sent = await projectApiSend<Row>(api, "POST", "builds/dispatch", body);
 
   if (!sent.ok) {
-    if (sent.code === ALREADY_RUNNING_CODE) return alreadyRunning(sent, args, api, buildEnv, commitSha);
+    if (sent.code === ALREADY_RUNNING_CODE) {
+      const running = { sent, args, api, buildEnv, commitSha };
+      if (found) return heldAsRunning(running, found);
+
+      const followed = await followRunning(running);
+      if (typeof followed === "string") return followed;
+
+      const waitSeconds = Math.max(0, waitBound(call.waitSeconds) - followed.outcome.waitedSeconds);
+
+      return dispatch({ ...call, waitSeconds }, followed);
+    }
 
     if (!approvalId && sent.code === "APPROVAL_REQUIRED") {
       const asked = isRow(sent.body) && isRow((sent.body as Row).approvalRequest) ? ((sent.body as Row).approvalRequest as Row) : {};
@@ -299,7 +224,7 @@ export async function rebuild(args: ActArgs): Promise<string> {
         });
       }
 
-      return requestApprovalAfterRefusal(gateFor(wanted));
+      return requestApprovalAfterRefusal(gateFor(api, args, wanted));
     }
 
     const answered = approvalId
@@ -327,17 +252,20 @@ export async function rebuild(args: ActArgs): Promise<string> {
   const project = `${api.ref.workspace}/${api.ref.project}`;
   const scope = args.project ? { project: args.project } : {};
   const run = runHandle(sent.json);
+  const target = rebuildTarget(buildEnv);
   const acceptedAt = text(sent.json.dispatchedAt) || stampNow();
   const base: Row = {
     action: "rebuild",
     project,
     commit,
     branch: text(sent.json.branch) || null,
-    buildEnv: buildEnv || "staging",
+    buildEnv: target.buildEnv,
+    channel: target.channel,
     browsers,
     ...(stripped.length ? { strippedBrowsers: stripped } : {}),
     origin: text(sent.json.origin) || "mcp",
     ...run.value,
+    ...(found ? { earlierBuild: { name: found.name, state: found.state, startedAt: found.startedAt, status: found.status } } : {}),
     follow: {
       list: { action: "list", ...scope },
       get: { action: "get", buildId: commit, ...scope },
@@ -350,7 +278,7 @@ export async function rebuild(args: ActArgs): Promise<string> {
   const buildPage = links.find((link) => link.kind === "build")?.url ?? String(base.buildsPageUrl);
   const readCall = `extension_builds (action: "get", buildId: "${commit || "<the new build>"}")`;
   const waited = await awaitRecordedOutcome<Row>({
-    waitSeconds: args.waitSeconds,
+    waitSeconds: call.waitSeconds,
     read: async () => {
       if (!commit) return { ok: false, message: "the platform named no commit for this rebuild, so its record cannot be read by build id" };
 
@@ -365,7 +293,8 @@ export async function rebuild(args: ActArgs): Promise<string> {
   const number = buildNumberOf(waited.record);
   const named = buildName(commit, number, "build");
   const value = { ...base, ...(number ? { buildNumber: number } : {}), outcome: waited.outcome, links };
-  const started = `This started a real build for ${project} at ${commit || "the branch head"} (${buildEnv || "staging"}) on ${browsers.join(", ") || "the enabled browsers"}, and it counts against the workspace's build allowance.`;
+  const before = found ? `${followedSentence(found)} ` : "";
+  const started = `${before}This started a real build for ${project} at ${commit || "the branch head"} on ${browsers.join(", ") || "the enabled browsers"}, and it counts against the workspace's build allowance. ${target.sentence}`;
   const stripWarning = stripped.length ? `The platform left out ${stripped.join(", ")}, which this plan does not build.` : null;
 
   if (waited.failed) {

@@ -23,6 +23,27 @@ export const BUILD_ENVS = ["staging", "production"] as const;
 
 export type Row = Record<string, unknown>;
 
+export interface RebuildTarget {
+  buildEnv: string;
+  channel: "preview" | "stable";
+  isDefault: boolean;
+  sentence: string;
+}
+
+export function rebuildTarget(buildEnv: string): RebuildTarget {
+  const env = buildEnv || "staging";
+  const stable = env === "production";
+
+  return {
+    buildEnv: env,
+    channel: stable ? "stable" : "preview",
+    isDefault: !buildEnv,
+    sentence: stable
+      ? "This rebuild is for Stable (buildEnv production), the build a store submission or a Stable release takes; buildEnv staging, the default, makes a Preview build."
+      : `This rebuild is for Preview (buildEnv staging${buildEnv ? "" : ", the default"}); a store submission or a Stable release takes a Stable build, which buildEnv production makes, the same choice as the console's Rebuild for Stable.`,
+  };
+}
+
 export interface ActArgs {
   action?: string;
   buildId?: string;
