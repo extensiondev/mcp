@@ -21,6 +21,7 @@ import {
   unrecordedOutcome,
 } from "../lib/act-outcome";
 import { envelope } from "../lib/envelope";
+import { deferWarning } from "../lib/deferred-warnings";
 import { consoleProjectUrl } from "../lib/registry";
 import {
   projectApiGet,
@@ -71,6 +72,16 @@ import {
   listingTooLargeMessage,
   measureListingBody,
 } from "../lib/listing-body-limit";
+import {
+  IMAGES_DOOR_MISSING_WARNING,
+  IMAGE_NOT_ON_LISTING,
+  IMAGE_NOT_ON_LISTING_NEXT,
+  stageListingImages,
+  stagedImageGuard,
+  stagedSentence,
+  stagedWriteBody,
+  type StagedImage,
+} from "../lib/listing-image-stage";
 import { firefoxCategoryCover } from "../lib/firefox-category-cover";
 import { iconPaddingView } from "../lib/chrome-icon-padding";
 import { STORE_MD_FILENAME } from "../lib/store-md";
@@ -818,10 +829,9 @@ async function syncOne(
   versioned = false,
 ): Promise<Row | { out: string }> {
   const approvalId = text(args.approvalId);
-  const body = { ...writeBody(patch), ...(approvalId ? { approvalId } : {}) };
-  const bodyBytes = measureListingBody(body);
+  const guarded = stagedImageGuard(store, patch);
 
-  if (bodyBytes > PLATFORM_REQUEST_BODY_LIMIT_BYTES) return { out: listingTooLarge(store, patch, bodyBytes, false) };
+  if (guarded) return { out: guarded };
 
   if (!approvalId && askingOnly()) {
     if (!derivedListingFields(store, patch.listing).length) return { out: checkRefused(ACT, plainListingAsk(store)) };
@@ -829,6 +839,27 @@ async function syncOne(
 
     return askListing(api, args, store, patch, { store, listingDigest: listingDigest(patch) });
   }
+
+  const context = {
+    workspace: api.ref.workspace,
+    project: `${api.ref.workspace}/${api.ref.project}`,
+  };
+  const staging = await stageListingImages(api, store, patch);
+
+  if ("out" in staging) return { out: staging.out };
+
+  if ("refused" in staging) {
+    return {
+      out: projectApiReadFailure(COMMAND, staging.refused, { api: args.api, name: "Listing", value: { action: ACT, store }, context }),
+    };
+  }
+
+  const staged = staging.mode === "staged" ? staging.images : null;
+  const stagedRow = staged ? { staged } : { imagesDoor: "single-body" };
+  const body = { ...(staged ? stagedWriteBody(patch, staged) : writeBody(patch)), ...(approvalId ? { approvalId } : {}) };
+  const bodyBytes = measureListingBody(body);
+
+  if (bodyBytes > PLATFORM_REQUEST_BODY_LIMIT_BYTES) return { out: listingTooLarge(store, patch, bodyBytes, false) };
 
   const { sent, resend } = await sendListing(api, store, body);
   const pushUrl = consoleProjectUrl(
@@ -860,17 +891,13 @@ async function syncOne(
     return {
       store,
       status: "synced",
+      ...stagedRow,
       changes: Array.isArray(sent.json.changes) ? sent.json.changes : [],
       ...(derived.length ? { derived } : {}),
       ...(lines.length ? { lines } : {}),
       ...pushRow(sent.json.appStoreConnect),
     };
   }
-
-  const context = {
-    workspace: api.ref.workspace,
-    project: `${api.ref.workspace}/${api.ref.project}`,
-  };
 
   if (sent.held || sent.status === 0 || tokenRefusal(sent.code, context)) {
     return {
@@ -887,6 +914,7 @@ async function syncOne(
     return {
       store,
       status: "unchanged",
+      ...stagedRow,
       ...pushRow(isRow(sent.body) ? sent.body.appStoreConnect : null),
     };
   }
@@ -958,6 +986,7 @@ async function syncOne(
     status: sent.code === "OWNER_REQUIRED" ? "needs-owner" : "refused",
     code: sent.code,
     message: platformWords || sent.message,
+    ...(sent.code === IMAGE_NOT_ON_LISTING ? { next: IMAGE_NOT_ON_LISTING_NEXT } : {}),
     ...(over ? { overLimit: overLimitRows([over]) } : {}),
   };
 }
@@ -1202,6 +1231,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
   const screenshotsLine = [...locals.values()].map((local) => local.screenshotsLine).find(Boolean) ?? "";
 
   let plain = false;
+  const stagedImages: Row[] = [];
 
   for (const [store, local] of locals) {
     if (local.overLimit.length) {
@@ -1228,6 +1258,16 @@ export async function syncListing(args: ListingArgs): Promise<string> {
 
     const result = await syncOne(api, args, store, local.patch, undefined, versioned);
     if ("out" in result) return result.out as string;
+
+    if (Array.isArray(result.staged) && result.staged.length) {
+      stagedImages.push(...(result.staged as StagedImage[]).map((image) => ({ store, ...image })));
+      said.push(stagedSentence(store, result.staged as StagedImage[]));
+    }
+
+    if (result.imagesDoor === "single-body" && (local.patch.screenshots?.length || local.patch.icons?.length)) deferWarning(IMAGES_DOOR_MISSING_WARNING);
+
+    delete result.staged;
+    delete result.imagesDoor;
 
     if (result.status === "approval-wanted") {
       stores[store] = result;
@@ -1341,6 +1381,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       args.api,
     ),
     ...(screenshotsLine ? { screenshotsLine } : {}),
+    ...(stagedImages.length ? { listing: { images: stagedImages, staged: stagedImages.length } } : {}),
     ...(lineRows.length ? { lines: lineRows } : {}),
     ...(say ? { sayToPerson: say } : {}),
   };
