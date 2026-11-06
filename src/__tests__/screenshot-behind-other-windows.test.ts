@@ -93,7 +93,7 @@ describe("extension_screenshot captures the shown tab of a window behind other w
     const result = JSON.parse(await screenshot.handler({ projectPath: dir, targetId: PAGE.id, path: "shots/google.png", timeout: 6_000 }));
 
     expect(result.status).toBe("captured");
-    expect(result.value.behindWindow).toEqual({ tried: true, shown: true, restored: true });
+    expect(result.value.behindWindow).toEqual({ tried: true, shown: true, restored: true, windowState: "normal" });
     expect(fs.existsSync(path.join(dir, "shots", "google.png"))).toBe(true);
     expect(result.warnings.join(" ")).toContain("never brought the window forward");
 
@@ -152,7 +152,7 @@ describe("extension_screenshot captures the shown tab of a window behind other w
     const result = JSON.parse(await screenshot.handler({ projectPath: dir, targetId: PAGE.id, path: "shots/google.png", timeout: 6_000 }));
 
     expect(result.status).toBe("captured");
-    expect(result.value.behindWindow).toEqual({ tried: true, shown: true, restored: true });
+    expect(result.value.behindWindow).toEqual({ tried: true, shown: true, restored: true, windowState: "normal" });
     expect(evaluated("chrome.tabs.create").map((c) => c.sessionId)).toEqual(["S-SW1", "S-SW2"]);
     expect(String(evaluated("chrome.tabs.create")[0]!.params.expression)).toContain('typeof tabs.query !== "function"');
     expect(evaluated("chrome.tabs.remove")[0]!.sessionId).toBe("S-SW2");
@@ -186,5 +186,31 @@ describe("extension_screenshot captures the shown tab of a window behind other w
     expect(result.status).toBe("capture-timeout");
     expect(result.hint).toContain("could not show another tab in the page's window");
     expect(result.hint).toContain("never brings a window forward");
+  }, 30_000);
+
+  it("437: spends the whole timeout on the capture when no blank tab can be shown, and names the budget and the window", async () => {
+    await browserWithPageBehindOtherWindows([PAGE]);
+
+    const result = JSON.parse(await screenshot.handler({ projectPath: dir, targetId: PAGE.id, timeout: 4_600 }));
+
+    expect(result.status).toBe("capture-timeout");
+    expect(result.error.message).toContain("did not answer within 4600ms in all (4000ms, then 600ms");
+    expect(result.error.message).not.toContain("(4000ms)");
+    expect((chrome?.commands ?? []).filter((c) => c.method === "Page.captureScreenshot")).toHaveLength(2);
+    expect(result.hint).toContain("on another macOS Space");
+    expect(result.hint).toContain("the browser reports its window as normal");
+    expect(result.hint).toContain("spent on the capture in full");
+    expect(result.hint).not.toContain("run the session headless (the default), or retry with a larger timeout.");
+    expect(result.value?.behindWindow ?? result.behindWindow).toBeUndefined();
+  }, 30_000);
+
+  it("437: a timeout under the first-try bound is spent once and named as given", async () => {
+    await browserWithPageBehindOtherWindows([PAGE]);
+
+    const result = JSON.parse(await screenshot.handler({ projectPath: dir, targetId: PAGE.id, timeout: 1_500 }));
+
+    expect(result.status).toBe("capture-timeout");
+    expect(result.error.message).toContain("(1500ms)");
+    expect((chrome?.commands ?? []).filter((c) => c.method === "Page.captureScreenshot")).toHaveLength(1);
   }, 30_000);
 });

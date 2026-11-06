@@ -9,7 +9,7 @@
 import { captureCdpTarget, type CaptureOutcome, type CaptureSize } from "./capture";
 import { evaluateOnExtensionPage } from "./cdp-extension-page";
 import { showHiddenTab, type HiddenTab } from "./capture-hidden-tab";
-import { tabsWorkers, windowOf } from "./tab-switch-worker";
+import { tabsWorkers, windowStateOf } from "./tab-switch-worker";
 
 export const FIRST_CAPTURE_MS = 4_000;
 
@@ -17,8 +17,8 @@ const MIN_SECOND_CAPTURE_MS = 3_000;
 
 export type BehindWindow =
   | { tried: false }
-  | { tried: true; shown: false; reason: string }
-  | { tried: true; shown: true; restored: boolean };
+  | { tried: true; shown: false; reason: string; windowState: string | null }
+  | { tried: true; shown: true; restored: boolean; windowState: string | null };
 
 export interface BehindWindowCapture {
   outcome: CaptureOutcome;
@@ -89,6 +89,20 @@ async function openBlankTab(
   return { reason: reasons.join("; ") || "no extension background is running in the browser to switch tabs from" };
 }
 
+/* @invariant THE WHOLE TIMEOUT IS SPENT ON THE CAPTURE, AND THE MESSAGE NAMES
+ * IT. The first try is bounded to FIRST_CAPTURE_MS so a page behind other
+ * windows gets the blank-tab path quickly, but when that path could not run
+ * the answer used to be the first try's "timed out (4000ms)" whatever
+ * timeout the call named, so the hint's "retry with a larger timeout" could
+ * not be followed (ledger 437). The rest of the budget is now spent on a
+ * second plain try, and a capture that still times out says the whole budget
+ * and how it was split. */
+function wholeBudget(outcome: CaptureOutcome, firstMs: number, restMs: number): CaptureOutcome {
+  if (outcome.ok || !outcome.timedOut) return outcome;
+
+  return { ...outcome, message: `Page.captureScreenshot did not answer within ${firstMs + restMs}ms in all (${firstMs}ms, then ${restMs}ms after this tool tried to get the page painted)` };
+}
+
 async function capturePaintedPage(
   port: number,
   targetId: string,
@@ -101,18 +115,27 @@ async function capturePaintedPage(
 
   if (first.ok || !first.timedOut) return { outcome: first, behindWindow: { tried: false } };
 
-  const windowId = await windowOf(port, targetId);
-  if (windowId === null) return { outcome: first, behindWindow: { tried: true, shown: false, reason: "the browser did not say which window holds the page" } };
+  const restMs = timeoutMs - firstMs;
+  const { windowId, windowState } = await windowStateOf(port, targetId);
+
+  const giveUp = async (reason: string): Promise<BehindWindowCapture> => {
+    const again = restMs > 0 ? wholeBudget(await captureCdpTarget(port, targetId, size, restMs), firstMs, restMs) : first;
+
+    return { outcome: again, behindWindow: { tried: true, shown: false, reason, windowState } };
+  };
+
+  if (windowId === null) return giveUp("the browser did not say which window holds the page");
 
   const found = await tabsWorkers(port, session.projectPath, session.browser);
-  if ("reason" in found) return { outcome: first, behindWindow: { tried: true, shown: false, reason: found.reason } };
+  if ("reason" in found) return giveUp(found.reason);
 
   const opened = await openBlankTab(port, found.workers, windowId);
-  if ("reason" in opened) return { outcome: first, behindWindow: { tried: true, shown: false, reason: opened.reason } };
+  if ("reason" in opened) return giveUp(opened.reason);
 
   const { worker, ids } = opened;
 
-  const second = await captureCdpTarget(port, targetId, size, Math.max(timeoutMs - firstMs, MIN_SECOND_CAPTURE_MS));
+  const secondMs = Math.max(restMs, MIN_SECOND_CAPTURE_MS);
+  const second = wholeBudget(await captureCdpTarget(port, targetId, size, secondMs), firstMs, secondMs);
   const shownId = ids.shownId;
   const restored = await evaluateOnExtensionPage(
     port,
@@ -121,5 +144,5 @@ async function capturePaintedPage(
     3_000,
   );
 
-  return { outcome: second, behindWindow: { tried: true, shown: true, restored: restored.ok } };
+  return { outcome: second, behindWindow: { tried: true, shown: true, restored: restored.ok, windowState } };
 }

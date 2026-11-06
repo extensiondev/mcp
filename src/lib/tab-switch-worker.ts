@@ -13,15 +13,24 @@ import { sessionGuestIdentity } from "./extension-identity";
 const EXTENSION_ORIGIN = /^chrome-extension:\/\/([a-p]{32})\//i;
 
 export async function windowOf(port: number, targetId: string): Promise<number | null> {
+  return (await windowStateOf(port, targetId)).windowId;
+}
+
+export async function windowStateOf(port: number, targetId: string): Promise<{ windowId: number | null; windowState: string | null }> {
   const cdp = new CDPClient();
 
   try {
     await cdp.connect(await CDPClient.discoverBrowserWsUrl(port));
-    const found = (await cdp.sendCommand("Browser.getWindowForTarget", { targetId }, undefined, 3_000)) as { windowId?: unknown } | undefined;
+    const found = (await cdp.sendCommand("Browser.getWindowForTarget", { targetId }, undefined, 3_000)) as
+      | { windowId?: unknown; bounds?: { windowState?: unknown } }
+      | undefined;
 
-    return typeof found?.windowId === "number" ? found.windowId : null;
+    return {
+      windowId: typeof found?.windowId === "number" ? found.windowId : null,
+      windowState: typeof found?.bounds?.windowState === "string" ? found.bounds.windowState : null,
+    };
   } catch {
-    return null;
+    return { windowId: null, windowState: null };
   } finally {
     cdp.disconnect();
   }

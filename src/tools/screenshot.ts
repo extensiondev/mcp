@@ -266,13 +266,15 @@ function captureFailure(outcome: CaptureOutcome & { ok: false }, url: string, be
       ? " This tool already showed a blank tab in the page's window and retried, and the page still did not paint."
       : ` This tool could not show another tab in the page's window to get it painted: ${behindWindow.reason}.`
     : "";
+  const windowState = behindWindow?.tried && behindWindow.windowState ? ` (the browser reports its window as ${behindWindow.windowState})` : "";
+  const whyNoPaint = ` On a headed session the browser paints a shown tab only while its window is on screen: a window that is minimized, behind another app's window or on another macOS Space does not paint, and this tool cannot see which of those holds the page${windowState}.`;
 
   return refuse(
     outcome.timedOut ? "capture-timeout" : "capture-failed",
     outcome.timedOut ? "E_CAPTURE_TIMEOUT" : "E_CAPTURE_FAILED",
     `The browser did not hand back an image of ${url}: ${outcome.message}`,
     outcome.timedOut
-      ? `The page did not paint within the budget.${behind} This tool never brings a window forward; bring the page's tab forward yourself with extension_open {url, foreground: true} (it reloads the tab in place) and retry, run the session headless (the default), or retry with a larger timeout.`
+      ? `The page did not paint within the budget.${behind}${whyNoPaint} This tool never brings a window forward; bring the page's tab forward yourself with extension_open {url, foreground: true} (it reloads the tab in place), or move the window onto the screen you are on, and retry; run the session headless (the default); or retry with a larger timeout, which is spent on the capture in full.`
       : "Confirm the session is ready (extension_wait) and the page is still open, then retry.",
   );
 }

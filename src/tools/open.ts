@@ -200,18 +200,32 @@ function sameDocument(tabUrl: string, destination: string): boolean {
   return Boolean(tabUrl) && strip(tabUrl) === strip(destination);
 }
 
+/* @invariant A SURFACE RENDER TAKES OVER ONLY A TAB THIS TOOL RENDERED AS A
+ * SURFACE. reuse: "surface" used to navigate any page target of the
+ * extension's origin in place, so rendering the options page replaced the
+ * welcome page the agent had opened by url seconds earlier, under the same
+ * targetId and without a word (ledger 436). A tab is disposable for a
+ * surface render when it is blank, a new-tab page, or a tab this tool itself
+ * rendered as a surface (renderedTabTargets); a tab opened by url, by the
+ * person or by the extension is never the one taken over. A taken-over tab
+ * is answered as reused: true with the url it replaced. */
 function isDisposableTab(
   tabUrl: string,
   destination: string,
   reuse: "blank" | "surface",
+  renderedBySurface: boolean,
 ): boolean {
   if (!tabUrl || tabUrl === "about:blank") return true;
   if (/^chrome:\/\/(newtab|new-tab-page)/.test(tabUrl)) return true;
-  if (reuse === "blank") return false;
+  if (reuse === "blank" || !renderedBySurface) return false;
 
   const origin = destination.match(/^chrome-extension:\/\/[a-p]{32}\//)?.[0];
 
   return Boolean(origin && tabUrl.startsWith(origin));
+}
+
+function isBlankTab(tabUrl: string): boolean {
+  return !tabUrl || tabUrl === "about:blank" || /^chrome:\/\/(newtab|new-tab-page)/.test(tabUrl);
 }
 
 export interface NavigateOptions {
@@ -358,13 +372,14 @@ export async function navigateToUrl(
       sameUrl ??
       pageTargets.find(
         (t) =>
-          isDisposableTab(String(t.url ?? ""), url, reuse) &&
+          isDisposableTab(String(t.url ?? ""), url, reuse, renderedTabTargets.has(String(t.id))) &&
           (!avoid.has(String(t.url ?? "").replace(/#.*$/, "")) || renderedTabTargets.has(String(t.id))),
       );
     let navigatedTargetId: string | undefined;
     let previousUrl: string | undefined;
     let openedNewTab = false;
-    const reused = Boolean(sameUrl);
+    const reused = Boolean(sameUrl) || Boolean(reusable && !isBlankTab(String(reusable.url ?? "")));
+    const replaced = !sameUrl && reusable && !isBlankTab(String(reusable.url ?? "")) ? String(reusable.url) : null;
 
     if (reusable) {
       navigatedTargetId = String(reusable.id);
@@ -527,6 +542,7 @@ export async function navigateToUrl(
         navigated: url,
         ...(openedNewTab ? { openedNewTab: true } : {}),
         ...(reused ? { reused: true } : {}),
+        ...(replaced ? { replaced } : {}),
         ...(settled.redirectedFrom
           ? {
               redirected: { from: settled.redirectedFrom, to: settled.url },

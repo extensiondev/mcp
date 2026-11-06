@@ -460,7 +460,7 @@ describe("open never destroys the page you were watching", () => {
     expect(navigations).toEqual([`chrome-extension://${p.id}/popup.html`]);
   });
 
-  it("reuses its own surface tab when the same extension is reopened", async () => {
+  it("436: leaves an extension tab this tool did not render alone and opens its own", async () => {
     const p = project({
       manifest_version: 3,
       name: "F",
@@ -474,8 +474,8 @@ describe("open never destroys the page you were watching", () => {
 
     await open.handler({ projectPath: p.dir, surface: "options", asTab: true });
 
-    expect(createdTabs).toEqual([]);
-    expect(navigations).toEqual([`chrome-extension://${p.id}/options.html`]);
+    expect(createdTabs.map((t) => t.url)).toEqual([`chrome-extension://${p.id}/options.html`]);
+    expect(cdpTargets.find((t) => t.id === "surface")?.url).toBe(`chrome-extension://${p.id}/popup.html`);
   });
 
   it("treats a client-side redirect as a landing, not a NavigateFailed", async () => {
@@ -638,4 +638,43 @@ describe("open never calls a tab that stayed put navigated", () => {
     expect(result.ok).toBe(false);
     expect(result.status).toBe("navigate-failed");
   }, 15_000);
+});
+
+describe("436: a surface rendered as a tab never takes over a tab opened by url", () => {
+  it("opens its own tab beside an extension page the agent opened a moment earlier", async () => {
+    const p = project({ manifest_version: 3, name: "Hands-free", options_ui: { page: "options.html" } });
+    const welcome = `chrome-extension://${p.id}/pages/welcome.html?step=practice`;
+    cdpTargets = [
+      { id: "sw", type: "service_worker", url: `chrome-extension://${p.id}/background.js` },
+      { id: "welcome", type: "page", url: welcome, title: "Welcome" },
+    ];
+
+    const result = JSON.parse(await open.handler({ projectPath: p.dir, surface: "options", asTab: true }));
+
+    expect(result.ok).toBe(true);
+    expect(result.value.openedNewTab).toBe(true);
+    expect(result.value.reused).toBeUndefined();
+    expect(result.value.target.targetId).toBe("created");
+    expect(createdTabs.map((t) => t.url)).toEqual([`chrome-extension://${p.id}/options.html`]);
+    expect(cdpTargets.find((t) => t.id === "welcome")?.url).toBe(welcome);
+  });
+
+  it("still replaces a tab this tool itself rendered as a surface, and says what it replaced", async () => {
+    const p = project({
+      manifest_version: 3,
+      name: "Hands-free",
+      action: { default_popup: "popup.html" },
+      options_ui: { page: "options.html" },
+    });
+    cdpTargets = [{ id: "sw", type: "service_worker", url: `chrome-extension://${p.id}/background.js` }];
+
+    const popup = JSON.parse(await open.handler({ projectPath: p.dir, surface: "popup", asTab: true }));
+    const options = JSON.parse(await open.handler({ projectPath: p.dir, surface: "options", asTab: true }));
+
+    expect(popup.value.target.targetId).toBe("created");
+    expect(options.value.target.targetId).toBe("created");
+    expect(options.value.reused).toBe(true);
+    expect(options.value.replaced).toBe(`chrome-extension://${p.id}/popup.html`);
+    expect(createdTabs).toHaveLength(1);
+  });
 });
