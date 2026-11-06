@@ -8,7 +8,7 @@
 
 import { UserlandProjectPage } from "@extension.dev/urls/userland";
 
-import { CHANNEL_LINK_ADVICE, channelLinkFields, channelUrl } from "../lib/channel-link";
+import { CHANNEL_LINK_ADVICE, channelLinkFields, channelSource, channelUrl, splitChannelKey } from "../lib/channel-link";
 import {
   consoleProjectUrl,
   fetchRegistryJson,
@@ -21,6 +21,7 @@ import {
   requireShape,
   channelsShapeProblem,
   buildIndexShapeProblem,
+  type ChannelEntry,
 } from "../lib/registry";
 import { contradictoryRef } from "./store-status";
 import { envelope, type ErrorCode } from "../lib/envelope";
@@ -41,6 +42,30 @@ function fail(
     value: extra ?? {},
     error: { code, name, message },
   });
+}
+
+export function channelsServeLine(channels: ChannelEntry[]): string {
+  const byName = new Map<string, Set<string>>();
+
+  for (const entry of channels) {
+    const name = splitChannelKey(entry.channel).channel;
+    const shas = byName.get(name) ?? new Set<string>();
+    const sha = entry.sha || entry.buildId || "";
+
+    if (sha) shas.add(sha);
+
+    byName.set(name, shas);
+  }
+
+  return Array.from(byName.entries())
+    .map(([name, shas]) => {
+      const served = Array.from(shas).join(", ") || "no build yet";
+
+      return channelSource(name) === "environment"
+        ? `${name} serves ${served} by environment (every successful build lands there, no promotion)`
+        : `${name} pins ${served} (promoted)`;
+    })
+    .join("; ");
 }
 
 export async function readReleases(args: {
@@ -112,17 +137,14 @@ export async function readReleases(args: {
     ? (metaRes.json as Record<string, unknown>)
     : undefined;
 
-  const promotable = Array.from(
-    new Set(channels.map((c) => c.sha).filter(Boolean)),
-  );
-
   const visibility = metaRes.ok ? String(meta?.visibility || "private").toLowerCase() : "unknown";
   const isPrivate = visibility !== "public";
   const publicProjectUrl = userlandProjectUrl(ref, "", args.api);
   const channelsWithUrls = channels.map((c) => {
     const url = isPrivate ? "" : channelUrl(ref, c.channel, args.api, { perBrowser: true });
+    const source = channelSource(c.channel);
 
-    return url ? { ...c, channelUrl: url } : { ...c };
+    return url ? { ...c, source, channelUrl: url } : { ...c, source };
   });
   const channelWithheld = isPrivate ? channelLinkFields(ref, visibility, null, args.api) : {};
   const registryVisibility: ProjectVisibility | null = metaRes.ok ? (isPrivate ? "private" : "public") : null;
@@ -175,15 +197,13 @@ export async function readReleases(args: {
       ...channelWithheld,
     },
     hint:
-      promotable.length > 0 || recentBuilds.length > 0
-        ? `Promotable shas: channels currently pin ${
-            promotable.length > 0 ? promotable.join(", ") : "none"
-          }; recent builds add ${
+      channels.length > 0 || recentBuilds.length > 0
+        ? `Shas on record: ${channels.length > 0 ? channelsServeLine(channels) : "no channels"}; recent builds add ${
             recentBuilds
               .filter(isSuccessfulBuild)
               .map((b) => b.sha)
               .join(", ") || "none"
-          }. Use one of these as buildId/buildSha for promote/deploy/publish.`
+          }. Use one as buildId/buildSha for promote/deploy/publish; extension_publish channel opens a channel only while its sha is set, and each channel's source says how it fills.`
         : !channelsRes.ok || !buildsRes.ok
           ? `The registry could not be read for ${ref.workspace}/${ref.project} (${[
               !channelsRes.ok ? `channels.json: ${channelsRes.message}` : null,

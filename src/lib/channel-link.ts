@@ -26,6 +26,20 @@ export function splitChannelKey(key: string): { browser?: string; channel: strin
   return match ? { browser: match[1], channel: match[2] } : { channel: key };
 }
 
+export const ENVIRONMENT_CHANNELS: readonly string[] = ["preview"];
+
+export type ChannelSource = "environment" | "promotion";
+
+export function channelSource(key: string): ChannelSource {
+  return ENVIRONMENT_CHANNELS.includes(splitChannelKey(key).channel.toLowerCase()) ? "environment" : "promotion";
+}
+
+export function channelFillSentence(name: string): string {
+  return channelSource(name) === "environment"
+    ? `${name} fills by environment: the next successful build lands there with no promotion, so build once (push a commit, or extension_builds action:'rebuild'), then publish its channel link.`
+    : `Promote a successful build to ${name} with extension_release_promote, then publish its channel link.`;
+}
+
 export function channelUrl(
   ref: ProjectRef | null,
   key: string,

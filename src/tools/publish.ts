@@ -31,6 +31,7 @@ import {
 import {
   CHANNEL_LINK_ADVICE,
   CHANNEL_NAME_INPUT,
+  channelFillSentence,
   channelLinkFields,
   channelServesOf,
   channelShareNote,
@@ -331,8 +332,8 @@ export async function handler(args: {
         },
         hint:
           code === "CHANNEL_NOT_FOUND"
-            ? `The project has no release channel named ${channelArg}, so no link was minted. extension_release_status (include: ['channels']${args.project ? `, project: '${args.project}'` : ""}) lists the channels it has.`
-            : `Channel ${channelArg} serves no build yet, so its link would open nothing and none was minted. Promote a successful build to it with extension_release_promote, then publish its channel link.`,
+            ? `The project has no release channel named ${channelArg}, so no link was minted. extension_release_status (include: ['releases']${args.project ? `, project: '${args.project}'` : ""}) lists the channels it has.`
+            : `Channel ${channelArg} serves no build yet, so its link would open nothing and none was minted. extension_release_status (include: ['releases']) value.channels predicts this: a channel whose sha is empty serves nothing, and its source says how it fills. ${channelFillSentence(channelArg)}`,
       });
     }
 
