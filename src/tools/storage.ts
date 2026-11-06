@@ -25,7 +25,7 @@ import {
 export const schema = {
   name: "extension_storage",
   description:
-    "Read or write chrome.storage in a running extension. Every call runs in the extension's background (the engine honors no context), so it proves nothing about what a content script or page can read. A set is read back and the answer says whether the stored value and its type match. Rides the dev session's control channel, on unless extension_dev was called with allowControl:false. One key per call.",
+    "Read or write one chrome.storage key from the background, over the control channel.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -33,22 +33,23 @@ export const schema = {
       action: {
         type: "string",
         enum: ["get", "set"],
-        description: "get reads a key (or the whole area); set writes a key",
+        description: "get reads a key or the whole area; set writes one.",
       },
       area: {
         type: "string",
         enum: ["local", "sync", "session", "managed"],
         default: "local",
+        description: "chrome.storage area.",
       },
-      key: { type: "string", description: "Key to get or set" },
+      key: { type: "string", description: "Key to get or set." },
       value: {
         description:
-          "Value to set (any JSON value); action=set needs value or valueJson. Some clients send null as the text \"null\" and an empty string as the two characters \"\"; both are refused here as ambiguous, so pass valueJson for them.",
+          "Value to set; for null or \"\" use valueJson.",
       },
       valueJson: {
         type: "string",
         description:
-          "The value to set as JSON text, parsed by this server so its type survives any client: \"null\" stores null, \"\\\"\\\"\" an empty string, \"0\", \"false\", \"[1,2]\" and \"{\\\"a\\\":1}\" their own types. Pass value or valueJson, not both.",
+          "Value as JSON text; not with value.",
       },
       browser: SESSION_BROWSER,
       timeout: CALL_TIMEOUT,

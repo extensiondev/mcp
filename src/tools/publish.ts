@@ -75,7 +75,7 @@ import { SYNC_CAPTURES, syncCaptures } from "./publish-captures";
 export const schema = {
   name: "extension_publish",
   description:
-    "Publish a build of the logged-in project on extension.dev and answer the link to send testers, which opens a page with a download and a run command for each browser. Reach for this first when the ask is to share, publish, deploy, distribute, release or ship an extension, or send it to testers. Not for a store: that is extension_submit. Not for a quick emulator link: that is extension_preview_web share:true. A project not on extension.dev yet starts with extension_project_create, then extension_auth. It records a share on the platform and answers what the platform recorded in value.outcome and every link it made or touched in value.links, waiting up to waitSeconds for the record and answering publish-dispatched until it confirms. There are two links. A build link, <workspace>.extension.dev/<project>/builds/<sha>, opens one build and on a private project expires after ttlHours (default 7 days). A channel link, <workspace>.extension.dev/<project>/<channel>, opens the channel's newest build: never expiring on a public project (value.channelUrl, when a channel serves the build); on a private one, channel: '<name>' mints it as a share link that expires like a build link, for a site, else value.channelUrlWithheld says why. On a public project, or a public channel, send testers the channel link; else the channel or build link and its end date; visibility is set in the extension.dev project settings, not the GitHub repository. value.link is the link to send (kind, url, expiresAt, audience, renewBy), value.tellThem the message to send as written, value.sharePage whether it opens now, value.trackUrl the console Share links page; a build whose every browser artifact failed is refused unless force is true, and while extension.dev is held the status is platform-held and tellThem adds the Chrome run command, which works now. action sync-captures sends captures/<browser>/, made by extension_screenshot browserCapture, to the project's build pages after a workspace owner approves.",
+    "Publish a build on extension.dev: the link for testers, with a download and a run command for each browser; use it first to share or ship (no project yet: extension_project_create). On a public project, or a public channel, send testers the channel link (<workspace>.extension.dev/<project>/<channel>); a private build link expires.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -84,41 +84,41 @@ export const schema = {
         enum: ["publish", SYNC_CAPTURES],
         default: "publish",
         description:
-          "publish (the default) mints the build link. sync-captures reads captures/<browser>/*.png in file name order, with the surfaces, captions and capturedIn in captures.json beside them, for every browser in browsers, refuses the set here (PNG only, no alpha, 1 to 10 files, at least 640 wide) before anything is sent, and PUTs it to the project's browser captures record: the first call answers approval-required with the change as the platform computed it and the approval URL, the call with that approvalId writes once and answers captures-synced with value.trackUrl and value.publicUrl. Needs projectPath.",
+          "publish (default): the link; sync-captures: captures/<browser>/*.png to build pages (approval).",
       },
       browsers: {
         type: "array",
         items: { type: "string", enum: [...CAPTURE_BROWSERS] },
-        description: "sync-captures: the browsers whose captures/<browser>/ folder to send (chrome, firefox, edge, safari). One approval per browser; pass one browser with its approvalId.",
+        description: "sync-captures: browsers, one approval each.",
       },
       projectPath: {
         type: "string",
-        description: "sync-captures: the extension project root that holds captures/<browser>/.",
+        description: "sync-captures: project root.",
       },
       approvalId: {
         type: "string",
-        description: "sync-captures: the approval id from the approval-required answer, once a workspace owner approved it; the call then writes the set once.",
+        description: "sync-captures: approved approval id.",
       },
       project: PROJECT_TOKEN_INPUT,
       ttlHours: {
         type: "number",
         description:
-          "Private-project build link lifetime in hours. Defaults to 7 days; ask for up to the plan's share window (30 days free, 365 Pro), up to 8760 here, and the platform cuts a longer ask back to the window. Ignored for public projects.",
+          "Private link lifetime, hours (default 168).",
       },
       buildSha: {
         type: "string",
         description:
-          "Pin the URL to a build sha (7-40 hex chars). The platform rejects a sha missing from a readable build index; when its index cannot be read it echoes the sha back and a pin on a failed build is accepted, so value.buildSha is the platform's claim, not a verified build. extension_release_status lists the builds it knows.",
+          "Build sha, 7 to 40 hex (an unreadable index echoes the sha back unverified); not with channel.",
       },
       channel: {
         type: "string",
         description:
-          "Link a release channel (preview, stable) instead of one build. On a private project it is a share link scoped to that one channel: the same address opens the channel's newest build as new builds are promoted, value.link.serves names the builds it opens, and it expires after ttlHours like a build link, so it is renewed once per window rather than once per build. On a public project it is the channel page, which never expires. Not with buildSha.",
+          "Link a channel's newest build instead.",
       },
       force: {
         type: "boolean",
         description:
-          "Publish even when the platform's checks reject every browser's artifact of the build (integrity failed or the browser build failed). Without it such a build is refused with E_ARTIFACTS_UNVERIFIED; with it the link is minted and the answer still warns and names the failed browsers.",
+          "Publish despite failed checks.",
       },
       waitSeconds: WAIT_SECONDS_INPUT,
       api: API_BASE,

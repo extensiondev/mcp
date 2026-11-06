@@ -73,7 +73,7 @@ import {
 export const schema = {
   name: "extension_dev",
   description:
-    "Run the extension while you edit it: dev build, hot module replacement, and a browser with the extension loaded. Reach for this first when the ask is \"run my extension\": by default it waits for the session to be ready and answers with the readiness and the first log lines, so one call covers the ask; pass wait:false to return as soon as the server is spawned. A dev session carries the control channel that extension_storage, extension_reload, extension_open and extension_dom_snapshot need (local, same machine, same user) unless you pass allowControl:false; the eval channel that extension_eval needs is the one gate that stays off until you pass allowEval:true (which implies control, so you never need to pass both). Use extension_start instead to run the production build in a browser. When the answer's ready.status is \"ready\" the session is up and nothing else needs calling before extension_logs, extension_inspect or the control verbs; extension_wait is only for wait:false, an answer whose ready.status was not ready, or a build-only session.",
+    "Run the extension while you edit it (dev build, hot reload, browser): the first call for \"run my extension\". ready.status \"ready\" means nothing else to call. extension_start runs the production build.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -81,17 +81,17 @@ export const schema = {
       browser: LAUNCH_BROWSER,
       port: {
         type: "number",
-        description: "Dev server port (0 for auto-assign)",
+        description: "Port (0 picks one).",
       },
       noBrowser: {
         type: "boolean",
         default: false,
-        description: "Start the dev server without launching a browser",
+        description: "No browser.",
       },
       polyfill: {
         type: "boolean",
         default: true,
-        description: "Apply cross-browser polyfill",
+        description: "Cross-browser polyfill.",
       },
       ...LAUNCH_FLAG_SCHEMA,
       ...SAFARI_DEV_OPTION_SCHEMA,
@@ -99,25 +99,25 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Stop the live session this projectPath runs for the same browser first, reported as replacedSession. Without it a second call for that browser is refused rather than forking: one session per browser owns dist/<browser> and its ready.json and eval token. A session for another browser keeps running either way, since each browser has its own output, profile and port.",
+          "Replace this project's session; else refused.",
       },
       allowControl: {
         type: "boolean",
         default: true,
         description:
-          "The agent-bridge control channel that extension_storage/reload/open/dom_snapshot ride (local, same machine). On unless you pass false; eval is the gate that stays off (allowEval).",
+          "Control channel for the bridge verbs.",
       },
       wait: {
         type: "boolean",
         default: true,
         description:
-          "Wait for the session to be ready before answering (the same contract extension_wait reads, up to 45s) and include the first log lines. false returns as soon as the server is spawned; call extension_wait and extension_logs yourself then.",
+          "Wait up to 45 s for ready.",
       },
       allowEval: {
         type: "boolean",
         default: false,
         description:
-          "Enable extension_eval (runs code in a context; writes a 0600 session token). Implies allowControl, so you never need to pass both.",
+          "Enable extension_eval; implies allowControl.",
       },
     },
     required: ["projectPath"],

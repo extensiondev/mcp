@@ -659,7 +659,7 @@ export function expiredStoredLogin(selector?: CredentialSelector, nowSeconds?: n
 export const PROJECT_TOKEN_INPUT = {
   type: "string",
   description:
-    "Which stored login to use, as '<workspace>/<project>' (or a project slug that matches one login), when extension_auth has signed in to more than one project on this machine. Omitted, the login this server resolved first is used, after EXTENSION_DEV_TOKEN when that is set, and a login made elsewhere on this machine does not move it. Named, it outranks EXTENSION_DEV_TOKEN. extension_auth (action: status) lists the stored logins.",
+    "Stored login '<workspace>/<project>' when several exist.",
 } as const;
 
 export const LOGIN_STEPS =

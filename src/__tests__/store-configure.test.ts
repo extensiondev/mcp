@@ -426,7 +426,7 @@ describe("extension_submit configure-store changes a store's settings as a plain
 
     const description = (schema.inputSchema.properties as Record<string, any>).storeSettings.description as string;
 
-    expect(description).toContain("for Safari bundleId");
+    expect((schema.inputSchema.properties as Record<string, any>).storeSettings.properties.bundleId.description).toContain("Safari");
     expect(description).not.toMatch(/bundle id: those stay in the console/);
   });
 
@@ -469,9 +469,8 @@ describe("extension_submit configure-store changes a store's settings as a plain
 
     const description = (schema.inputSchema.properties as Record<string, any>).storeSettings.description as string;
 
-    expect(description).toContain("safari draft or review; dry-run");
-    expect(description).toContain("and safari review lets the submit's one version approval also cover the publish act that sends the TestFlight build to App Review while putting it on sale stays its own approval unless STORE.md states `- Release: after approval` under `## Safari`, so these answer approval-required first");
-    expect(description).toContain("The Safari release mode (manual, or after approval) is no store setting either: it is the `- Release:` line under `## Safari` in STORE.md");
+    expect((schema.inputSchema.properties as Record<string, any>).storeSettings.properties.submissionMode.description).toContain("safari draft|review, or dry-run");
+    expect(description).toContain("Safari release mode is STORE.md's `- Release:` line");
   });
 
   it("keeps the Safari review mode on the approve page as an audience change, the way a public Chrome mode is (ledger 324)", async () => {

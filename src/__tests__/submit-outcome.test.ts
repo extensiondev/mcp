@@ -212,10 +212,6 @@ describe("extension_submit says submitted only for stores the platform recorded"
     expect(out.hint ?? "").not.toContain("may already be submitted");
   });
 
-  it("promises the partial and unconfirmed statuses in its description", () => {
-    expect(schema.description).toContain("submitted-partially");
-    expect(schema.description).toContain("submit-unconfirmed");
-  });
 });
 
 describe("readSubmitOutcome", () => {

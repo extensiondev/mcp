@@ -116,7 +116,7 @@ const STORAGE_CONTEXTS = [
 export const schema = {
   name: COMMAND,
   description:
-    "Run a test stage on an extension_dev or extension_start session: one verdict per expectation (see expect): pass, fail, not ready (a precondition; see settledBy) or inconclusive (a platform limit). page-world-clean, no-outside-requests and background-worker-booted read the debug port: meant for the production build (extension_start, allowControl:true). storage-key-present needs the control channel; content-script-injected and console-errors-empty read the dev log stream: extension_dev only.",
+    "Run a test stage on an extension_dev or extension_start session: pass, fail, not ready (a precondition) or inconclusive per expectation. Debug-port checks: extension_start allowControl:true; content-script-injected and console-errors-empty: extension_dev only.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -125,7 +125,7 @@ export const schema = {
         type: "array",
         items: { type: "object" },
         description:
-          "One object per expectation, each { assert: <check id>, ...args }. background-worker-booted: no args. surface-rendered: surface (popup, options, sidebar, newtab, history, bookmarks), optional selector and minNodes. content-script-injected: url. storage-key-present: key, optional area (default local), equals, context. console-errors-empty: optional context (array), since (seq cursor), ignore (substrings). page-world-clean: url (a page the content scripts match, open in the session; Chromium only), optional pageGlobals (window property names the page itself defines: not reported as unknown and never read as a global the extension's own build sets). no-outside-requests: optional allow (host names), durationMs (default 5000): watches every target of the extension (worker, pages, offscreen documents, workers under them, extension frames in web pages) and fails on any request that leaves the machine.",
+          "Each { assert: <id>, ...args }: background-worker-booted; surface-rendered {surface, selector?, minNodes?}; content-script-injected {url}; storage-key-present {key, area?, equals?, context?}; console-errors-empty {context?, since?, ignore?}; page-world-clean {url, pageGlobals?}; no-outside-requests {allow?, durationMs?}.",
       },
       browser: SESSION_BROWSER,
       timeout: CALL_TIMEOUT,

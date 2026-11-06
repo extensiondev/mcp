@@ -97,19 +97,19 @@ function sightedContractBrowser(projectPath: string): string | null {
 export const schema = {
   name: "extension_doctor",
   description:
-    "Diagnose a dev session end to end: ready contract, dev-server process, control-port agreement, control channel, eval token, executor, browser liveness. This returns one {check, status, detail, remediation?} per leg, in dependency order. Read a 'skip' as blocked, not as a pass: it names the check that blocked it. A read-only session comes back ok:true with status 'read-only', not as an error. On Chromium, value.capabilities reads each extension context's WebGPU adapter, crossOriginIsolated and headless. Run this first when any act tool errors unexpectedly. Call it with no projectPath for a pre-flight environment check (node, the Extension.js CLI, the template cache).",
+    "Diagnose a dev session leg by leg, each with its remediation; run it first when an act tool errors unexpectedly. value.capabilities reads WebGPU and isolation; with no projectPath it checks node, the CLI and the template cache.",
   inputSchema: {
     type: "object" as const,
     properties: {
       projectPath: {
         type: "string",
         description:
-          "Path to the extension project root. Omit for a pre-flight environment check with no project.",
+          "Project root; omit for an environment check.",
       },
       browser: {
         type: "string",
         description:
-          "Browser session to diagnose. Defaults to the active dev session's browser for this project; required when the project runs sessions for more than one browser.",
+          "Session browser; required when several run.",
       },
     },
   },

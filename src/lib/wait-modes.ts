@@ -22,12 +22,12 @@ export const WAIT_MODE_PROPERTIES = {
     enum: ["ready", "rebuild"],
     default: "ready",
     description:
-      "What to wait for. \"ready\" (the default) waits for the session to be ready. \"rebuild\" waits for the compile after a source edit: until ready.json's compiledAt moves past its value at call time (or past since), then for the reload: an engine that stamps reloadedAt is waited on until that stamp lands after the new compiledAt and after its value at call time (a stamp older than the compile, such as the previous Safari re-sync, never counts), answering reload.outcome \"reloaded\" with reloadKind (full, background, content, page or safari-resync) and reloadLabel; an older engine is watched briefly for the background to connect again (reattached, still-detached, or not-stamped for a content-script, page or Safari app re-sync reload, which it does not stamp). On a Chromium dev session whose background is not connected to the dev server, the dev server cannot apply the reload, so this call reloads the extension over the debug port itself (chrome.runtime.reload in its background) and answers reattached when the new background connects, or not-reached with why, never a silent wait. It answers status \"rebuilt\" with the new compiledAt, errors and reload, or status \"compile-error\" with the errors.",
+      "rebuild: the next compile and reload after an edit.",
   },
   since: {
     type: "string",
     description:
-      "for: \"rebuild\" only. An ISO time: a compile stamped after it counts, so pass the compiledAt an earlier answer returned (or a time before your edit) and a rebuild that landed before this call is not missed.",
+      "rebuild: ISO time a compile must follow.",
   },
 };
 

@@ -39,7 +39,7 @@ import { firefoxChannelFields, firefoxChannelSentence, servedOfAnswer } from "..
 export const schema = {
   name: "extension_release_promote",
   description:
-    "Release a build to a channel. On extension.dev, headless: action promote (the default) points channel at buildId, cut opens a release pull request that bumps the manifest version, and rollback returns channel to the build it served before. A release needs a token minted by a workspace owner and a workspace owner's approval of that exact release, every time; cut and rollback need a workspace owner's approval of the exact act too: the first call runs the platform's checks and either refuses with the reason and the next step, asking nobody, or answers approval-required with the approval URL and the platform's own description of the act; the same call with approvalId then runs it once. It records the release on the platform and answers what the platform recorded in value.outcome and every link it made or touched in value.links (the release page, the channel link, the build page), waiting up to waitSeconds for the record: promoted only when the record confirms the channel at that build, promote-dispatched until then, promote-failed when the record reads failed, promoted-partially with warnings naming what did not happen (never repeat it whole), promote-unconfirmed when the platform's answer carried no result, so read extension_release_status before releasing again. Preview takes any build; Stable and every other channel take Stable builds, refusing a Preview build as BUILD_ENV_MISMATCH. Not for a store: that is extension_submit. Not for a tester link: that is extension_publish. The project comes from your stored login (extension_auth) or a release token in EXTENSION_DEV_TOKEN; tokens live at most 7 days, so CI re-mints before expiry, and project picks one of several logins. On a public project a release answers value.channelUrl, the channel link, which always opens the channel's newest build and never expires; on a public project, or a public channel, send testers the channel link; a build link from extension_publish opens one build and, on a private project, expires; a private project gets value.channelUrlWithheld instead.",
+    "Release a build to a channel on extension.dev. A release needs a workspace owner's token and approval of that exact release, every time (approval-required, then the same call with approvalId). Preview takes any build; Stable and every other channel take Stable builds. Tokens live 7 days.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -48,46 +48,46 @@ export const schema = {
         enum: ["promote", "cut", "rollback"],
         default: "promote",
         description:
-          "promote (the default) points channel at buildId; cut opens a release pull request that bumps the manifest version; rollback returns channel to the build it served before.",
+          "promote (default): channel to buildId; cut: version-bump pull request; rollback: previous build.",
       },
       project: PROJECT_TOKEN_INPUT,
       buildId: {
         type: "string",
-        description: "Build commit SHA to promote (a 7-char short SHA is fine); extension_release_status lists the valid ones.",
+        description: "Build commit sha (7+ characters).",
       },
       channel: {
         type: "string",
         description:
-          "Target release channel, e.g. stable, preview, beta. Preview takes any build; Stable and every other channel take Stable builds, so a Preview build promoted there is refused with BUILD_ENV_MISMATCH and the rebuild for Stable that fixes it. With cut, the channel the pull request releases to when merged (optional); with rollback, the channel to roll back.",
+          "Target channel, e.g. stable, preview.",
       },
       level: {
         type: "string",
         enum: ["patch", "minor", "major"],
-        description: "With cut, how far to bump the manifest version (default patch). A version, when passed, decides the bump instead.",
+        description: "cut: version bump (default patch).",
       },
       sourceChannel: {
         type: "string",
         description:
-          "Channel to promote from (optional; inferred otherwise: a promote to preview sources from preview, any other channel sources from itself). One of the project's declared channels; canary is no longer a channel and is refused before anything is sent.",
+          "Channel to promote from (inferred).",
       },
       browsers: {
         type: "array",
         items: { type: "string" },
         description:
-          "Browsers to release. Optional: when omitted the platform reads the build's browsers from its index, and falls back to chrome alone when that index cannot be read, so pass them to be sure.",
+          "Browsers; default the build's index, which falls back to chrome alone.",
       },
       version: {
         type: "string",
-        description: "Version label for the release (optional). With cut, the exact manifest version to bump to, above the current one.",
+        description: "Version label; cut: the exact version.",
       },
       releaseNotes: {
         type: "string",
-        description: "Release notes markdown (optional). With cut, the notes written into the pull request body.",
+        description: "Release notes, markdown.",
       },
       approvalId: {
         type: "string",
         description:
-          "The approval handle returned by a prior approval-required response. Releasing changes what a public channel serves and is not reversible in place, so every release needs a workspace owner's approval: call once without this to get an approval id and URL, have a human approve at extension.dev, then call again with the same id.",
+          "Approved approval id; every release needs a workspace owner's approval.",
       },
       waitSeconds: WAIT_SECONDS_INPUT,
       api: API_BASE,

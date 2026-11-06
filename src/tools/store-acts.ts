@@ -748,7 +748,9 @@ export function lockSentences(storePreflight: Record<string, Row>, now = Date.no
         return `${store}: a submission is in certification review and its state ${text(lock.reason) || "could not be read from here"}; the ${text(block.act) || "act"} is queued until ${text(lock.clearsWhen)} (${text(lock.storeWord) || text(lock.kind)}), never failed, and nothing here can call the product idle.`;
       }
 
-      return `${store}: the ${text(block.act) || "act"} is locked until ${text(lock.clearsWhen)} (${text(lock.storeWord) || text(lock.kind)}); a submit or publish is queued behind it, never failed.`;
+      const edge = store === "edge" ? " An Edge upload meanwhile replaces the draft package only and never cancels that review." : "";
+
+      return `${store}: the ${text(block.act) || "act"} is locked until ${text(lock.clearsWhen)} (${text(lock.storeWord) || text(lock.kind)}); a submit or publish is queued behind it, never failed.${edge}`;
     })
     .filter(Boolean)
     .join(" ");

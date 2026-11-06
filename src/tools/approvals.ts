@@ -24,7 +24,7 @@ const APPROVAL_ID = /^apr_[A-Za-z0-9_-]{32}$/;
 export const schema = {
   name: COMMAND,
   description:
-    "Read or revoke one approval a workspace owner was asked for on extension.dev. action status (the default) answers where the approval stands: pending, approved and unused, used, declined, revoked or expired. action revoke takes back a pending approval, or one that was approved and not used yet, so no act can ever run with it; only a token minted by a workspace owner may revoke, nothing else changes, and an approval that already ran is refused with what it ran. Use revoke when the person says they approved something by mistake or no longer wants it to happen. The answer reports what the platform recorded after the revoke in value.outcome and the approval page in value.links.",
+    "Read or revoke one approval on extension.dev; revoke a pending or unused one approved by mistake (owner token).",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -32,11 +32,11 @@ export const schema = {
         type: "string",
         enum: ["status", "revoke"],
         default: "status",
-        description: "status reads the approval; revoke ends a pending or approved, unused approval for good.",
+        description: "status (default) or revoke.",
       },
       approvalId: {
         type: "string",
-        description: "The approval, apr_ followed by 32 characters, as an approval-required answer or the approval page link gave it.",
+        description: "The apr_ id.",
       },
       project: PROJECT_TOKEN_INPUT,
       api: API_BASE,

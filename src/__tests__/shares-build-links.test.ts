@@ -142,7 +142,7 @@ describe("extension_shares lists and revokes build links", () => {
     expect(props.kind.enum).toEqual(["build-link", "preview", "both"]);
     expect(props.kind.default).toBe("both");
     expect(props.tokenId).toBeTruthy();
-    expect(schema.description).toContain("kind: build-link");
+    expect(schema.description).toContain("build link");
   });
 
   it("lists the build links alone with kind build-link, never an api token or a token value", async () => {

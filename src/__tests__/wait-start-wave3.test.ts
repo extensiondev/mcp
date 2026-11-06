@@ -60,7 +60,7 @@ describe("wait and start say what they observed", () => {
 
   it("the schema describes noBrowser and port as the engine runs them", () => {
     const props = startSchema.inputSchema.properties as unknown as Record<string, { description: string }>;
-    expect(props.noBrowser.description).toMatch(/process ends once the build does/);
+    expect(props.noBrowser.description).toMatch(/process ends with the build/);
     expect(props.port.description).not.toBe("Server port (0 for auto-assign)");
   });
 });

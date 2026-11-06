@@ -8,26 +8,27 @@
 
 import { describe, expect, it } from "vitest";
 
+import { lockSentences } from "../tools/store-acts";
 import { schema } from "../tools/submit";
 
-const IN_PROGRESS_SUBMISSION =
-  "InProgressSubmission: Can't publish extension as your extension submission is in progress. Please try again later.";
+const LOCKED = {
+  edge: {
+    act: "publish",
+    lock: { kind: "review", clearsWhen: "Edge finishes certification", storeWord: "InProgressSubmission", source: "store" },
+  },
+};
 
 describe("extension_submit tells the agent what Edge does while a submission is in certification review", () => {
-  const description = String(schema.description);
-  const action = String((schema.inputSchema.properties as Record<string, { description?: string }>).action.description);
+  it("says in the answer that a locked publish is queued, never failed, and never cancels the review", () => {
+    const said = lockSentences(LOCKED);
 
-  it("names the platform's edgePreflight rules, the lock a review in progress sets, and that a locked publish is queued, never failed", () => {
-    expect(action).toContain("edgePreflight");
-    expect(action).toContain("{id, severity blocking or warn, lock?}");
-    expect(action).toContain(IN_PROGRESS_SUBMISSION);
-    expect(action).toMatch(/queued behind that review, never failed/);
-    expect(action).toMatch(/never cancels it/);
+    expect(said).toContain("edge: the publish is locked until Edge finishes certification (InProgressSubmission)");
+    expect(said).toMatch(/queued behind it, never failed/);
+    expect(said).toMatch(/never cancels that review/);
   });
 
-  it("says an Edge upload during a review replaces the draft only, and that the approval names what the act does to what is in flight", () => {
-    expect(action).toMatch(/upload while a submission is in certification review replaces the draft package only/);
-    expect(action).toContain("edgePreflight.approval");
-    expect(description).toContain("Edge Add-ons");
+  it("says an Edge upload during a review replaces the draft package only, and names Edge in the description", () => {
+    expect(lockSentences(LOCKED)).toMatch(/upload meanwhile replaces the draft package only/);
+    expect(String(schema.description)).toContain("Edge");
   });
 });

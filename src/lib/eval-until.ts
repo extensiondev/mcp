@@ -27,17 +27,17 @@ const MIN_POLL_TIMEOUT_MS = 300;
 export const EVAL_UNTIL_PROPERTY = {
   type: "object",
   description:
-    "Repeat the eval until it returns a truthy value, for a condition that is still settling (a model loading, an element appearing), instead of answering the first reading. Pass {} for the defaults. Answers status \"condition-met\" with value.result (the truthy value) and value.polls, or status \"timeout\" (E_WAIT_TIMEOUT) with value.lastResult, the last value read. A refusal polling cannot change (eval disabled, no such surface, an ended Safari session) answers at once. Works on Chromium, Firefox and Safari sessions. Never sleep or tail the session log in a shell to wait.",
+    "Repeat until truthy ({} for defaults); never sleep in a shell.",
   properties: {
     timeoutMs: {
       type: "number",
       default: DEFAULT_TIMEOUT_MS,
-      description: `Budget for the whole wait. Default ${DEFAULT_TIMEOUT_MS}, clamped to ${MIN_TIMEOUT_MS}-${MAX_TIMEOUT_MS} so one call stays under the client's 60s request timeout. On timeout, call again to keep waiting.`,
+      description: `Whole wait in ms, default ${DEFAULT_TIMEOUT_MS}, max ${MAX_TIMEOUT_MS}.`,
     },
     intervalMs: {
       type: "number",
       default: DEFAULT_INTERVAL_MS,
-      description: `Pause between evals. Default ${DEFAULT_INTERVAL_MS}, clamped to ${MIN_INTERVAL_MS}-${MAX_INTERVAL_MS}.`,
+      description: `Pause in ms, default ${DEFAULT_INTERVAL_MS}.`,
     },
   },
 };

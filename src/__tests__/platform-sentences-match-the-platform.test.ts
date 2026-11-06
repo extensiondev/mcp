@@ -47,7 +47,7 @@ describe("submit says what the platform checks and answers", () => {
     const dryRun = String((submitSchema.inputSchema as { properties?: Record<string, { description?: string }> }).properties?.dryRun?.description ?? "");
 
     expect(dryRun).toMatch(/does not run the owner gate, the approval, the build quota/);
-    expect(dryRun).toMatch(/stops at the draft under the default modes \(Chrome draft-until-public, Edge draft\), while a mode saved in the console store settings is honored/);
+    expect(dryRun).toMatch(/stops at the draft under the default modes unless a saved store mode says otherwise/);
     expect(submitSchema.description).toMatch(/workspace owner/);
   });
 

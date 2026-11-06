@@ -9,8 +9,8 @@ import { pollDeviceGrant } from "../lib/device-flow";
 
 describe("the auth and create tools describe what the platform does", () => {
   it("auth status names the statuses it emits, and create names who approves", () => {
-    expect(authSchema.description).toMatch(/value\.server\.verdict as confirmed, refused or unavailable/);
-    expect(createSchema.description).toMatch(/a signed-in member of the workspace approves/);
+    expect(authSchema.description).toMatch(/value\.server\.verdict is confirmed, refused or unavailable/);
+    expect(createSchema.description).toMatch(/a signed-in workspace member approves/);
   });
 
   it("create says the platform runs the stored build command as it is, so its default names the browser", () => {

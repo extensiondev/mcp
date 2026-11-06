@@ -38,31 +38,31 @@ const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/i;
 export const schema = {
   name: COMMAND,
   description:
-    "Create an extension.dev workspace that does not exist yet, without opening the console. Use it before extension_project_create when the project's workspace is not there: project creation can only target an existing workspace, and this tool is what brings one into existence. Two-phase, like login: the first call returns a code and a URL where a signed-in GitHub user approves creating exactly this workspace and becomes its owner; call again with the returned deviceCode to finish. Check `ownerGithubLogin` in the answer: whoever approved the code owns the workspace. The approval mints a grant that lives minutes, can only create the one named workspace, names no project, and is kept on this machine only while a create's outcome is unknown: then it sits in a file only this user can read, beside the stored logins, so calling again with the same deviceCode reads that outcome with no second approval. Then run extension_project_create against '<workspace>/<project>'.",
+    "Create a missing extension.dev workspace, before extension_project_create. The first call answers a code and URL, and whoever approves becomes its owner; call again with deviceCode.",
   inputSchema: {
     type: "object" as const,
     properties: {
       workspace: {
         type: "string",
         description:
-          "Slug of the new workspace, lowercase letters, digits and hyphens, no slash. It must not exist yet; a personal workspace (the GitHub login) already exists for every signed-in user, so this is for a shared or organization-style workspace.",
+          "New slug (lowercase, digits, hyphens); your personal one exists.",
       },
       displayName: {
         type: "string",
-        description: "Human name for the workspace. Defaults to the slug.",
+        description: "Human name (default the slug).",
       },
       description: {
         type: "string",
-        description: "Short workspace description. Optional.",
+        description: "Short description.",
       },
       developerUrl: {
         type: "string",
-        description: "Public URL for the workspace. Optional.",
+        description: "Public URL.",
       },
       deviceCode: {
         type: "string",
         description:
-          "Resume token from the prior call's `deviceCode`; omit on the first call.",
+          "Resume token.",
       },
       api: API_BASE,
     },

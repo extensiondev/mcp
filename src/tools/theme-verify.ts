@@ -25,19 +25,19 @@ const COMMAND = "extension_theme_verify";
 export const schema = {
   name: "extension_theme_verify",
   description:
-    "Verify a Chrome theme manifest before it ships. This settles the four-leg WYSIWYG contract (app-shows == manifest-says == chrome-paints, plus chrome-accepts) as far as is possible headless: it derives every color current Chrome would paint from the manifest through the transcribed Chromium resolver, and classifies each problem as D1 fabrication, D3 parity gap, or D4 acceptance gap (keys Chrome silently discards: dead legacy, incognito, unknown, out-of-range). It verifies only, and never authors or mutates a theme. The app-rendered and real-pixel legs need a browser, so they come back as needsAttended with the step that settles each one (the theme editor at themes.extension.dev, and a dev session in Chrome), never as passed.",
+    "Verify a Chrome theme manifest headless: the colors Chrome would paint and the keys it discards.",
   inputSchema: {
     type: "object" as const,
     properties: {
       manifest: {
         type: "object",
         description:
-          "The Chrome theme manifest object (with a `theme` block). Pass this or manifestPath.",
+          "Theme manifest object; or manifestPath.",
       },
       manifestPath: {
         type: "string",
         description:
-          "Path to a theme manifest.json (or a { manifest } seed wrapper). Read in place of the inline manifest.",
+          "Path to a theme manifest.json.",
       },
     },
     required: [],

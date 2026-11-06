@@ -32,21 +32,17 @@ describe("the extension_assert description names both session kinds and which ch
   });
 
   it("names the debug-port checks as meant for the production build, the control-channel check, and the dev-only log readers", () => {
-    expect(schema.description).toMatch(
-      /page-world-clean, no-outside-requests and background-worker-booted read the debug port: meant for the production build \(extension_start, allowControl:true\)/,
-    );
-
-    expect(schema.description).toMatch(/storage-key-present needs the control channel/);
-    expect(schema.description).toMatch(/content-script-injected and console-errors-empty read the dev log stream: extension_dev only/);
+    expect(schema.description).toMatch(/Debug-port checks: extension_start allowControl:true/);
+    expect(schema.description).toMatch(/content-script-injected and console-errors-empty: extension_dev only/);
   });
 
   it("names not ready beside inconclusive, as a precondition rather than a platform limit", () => {
-    expect(schema.description).toMatch(/not ready \(a precondition; see settledBy\) or inconclusive \(a platform limit\)/);
+    expect(schema.description).toMatch(/not ready \(a precondition\) or inconclusive/);
     expect(schema.description).not.toMatch(/cannot cover the question today/);
   });
 
   it("keeps the shared projectPath and doctor wording off a dev-only session", () => {
-    expect(SESSION_PROJECT_PATH.description).toMatch(/^Extension project root \(needs a running session: extension_dev or extension_start, /);
+    expect(SESSION_PROJECT_PATH.description).toMatch(/^Project root of a running session: extension_dev, extension_start, /);
     expect(JSON.stringify(doctorSchema)).not.toMatch(/live dev session/);
   });
 

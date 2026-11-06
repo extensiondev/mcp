@@ -63,29 +63,29 @@ const KNOWN_PERMISSIONS = new Set<string>([
 export const schema = {
   name: "extension_manifest_validate",
   description:
-    "Validate a manifest.json across browsers. This reports missing fields, invalid permissions, dangling file references, and cross-browser compatibility issues. Read buildBlocking for the errors that make extension_build refuse.",
+    "Validate a manifest.json across browsers; buildBlocking lists the errors that make extension_build refuse.",
   inputSchema: {
     type: "object" as const,
     properties: {
       manifestPath: {
         type: "string",
-        description: "Path to manifest.json. Or pass projectPath and the manifest is located for you.",
+        description: "Path to manifest.json; or projectPath.",
       },
       projectPath: {
         type: "string",
         description:
-          "Path to the extension project root; manifest.json is resolved from it (root or src/). Accepted in place of manifestPath.",
+          "Project root (manifest at root or src/).",
       },
       browsers: {
         type: "array",
         items: { type: "string" },
         default: ["chrome", "firefox", "edge"],
-        description: "Browsers to validate against",
+        description: "Browsers to validate against.",
       },
       browser: {
         type: "string",
         description:
-          "Single browser to validate against; alias for browsers:[browser] to match the other tools.",
+          "One browser; alias for browsers:[browser].",
       },
     },
     required: [],

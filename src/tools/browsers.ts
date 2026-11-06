@@ -16,7 +16,7 @@ import { uninstallManagedBrowser } from "./uninstall-browser";
 export const schema = {
   name: "extension_browsers",
   description:
-    "Find, install and remove the browsers Extension.js tooling can launch. Pass action:'detect' (the default) to scan both system-installed and managed browsers, and report each one's binary path, version, engine and debugger support. Pass action:'list' for the managed cache this tool downloads into, with each binary's version and size on disk. Both report the version the binary itself carries (its bundle metadata, else --version), prerelease suffix included (159.0a1), never the cache folder's name. Pass action:'install' to download a managed binary: several hundred MB in one blocking call, so allow a generous client timeout. Pass action:'uninstall' to remove managed binaries; it never touches a system install.",
+    "Find, install and remove browsers Extension.js launches. detect (default) scans system and managed ones; install downloads hundreds of MB in one blocking call; uninstall never touches a system install.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -24,22 +24,23 @@ export const schema = {
         type: "string",
         enum: ["detect", "list", "install", "uninstall"],
         default: "detect",
+        description: "list reads the managed cache.",
       },
       browsers: {
         type: "array",
         items: { type: "string", enum: REAL_BROWSERS },
-        description: "detect: limit the scan to these. Omit to check all.",
+        description: "detect: only these.",
       },
       browser: {
         type: "string",
         enum: MANAGED_BROWSERS,
         description:
-          "install/uninstall: which managed binary. Required for install.",
+          "install or uninstall: the managed binary.",
       },
       all: {
         type: "boolean",
         default: false,
-        description: "uninstall: remove every managed binary.",
+        description: "uninstall: every managed binary.",
       },
     },
     required: [],

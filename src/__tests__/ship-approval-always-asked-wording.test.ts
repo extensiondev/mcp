@@ -14,7 +14,7 @@ describe("a token promote and a real submission always ask a human", () => {
   });
 
   it("says a release needs an owner's token and an owner's approval every time", () => {
-    expect(promote.description).toContain("A release needs a token minted by a workspace owner and a workspace owner's approval of that exact release, every time");
+    expect(promote.description).toContain("A release needs a workspace owner's token and approval of that exact release, every time");
     expect(approvalIdOf(promote)).toContain("every release needs a workspace owner's approval");
   });
 

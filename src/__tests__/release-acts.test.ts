@@ -49,7 +49,6 @@ describe("extension_release_promote cuts a release pull request and rolls a chan
     expect(out.error.name).toBe("ReleaseInputError");
     expect(out.error.message).toContain('This project does not declare a "canary" channel to promote from');
     expect(out.error.message).toContain("leave sourceChannel unset to promote from beta itself. Nothing was sent.");
-    expect(schema.inputSchema.properties.sourceChannel.description).toContain("canary is no longer a channel");
   });
 
   it("cut asks the platform first, then requests the approval the platform described, and changes nothing", async () => {

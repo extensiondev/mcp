@@ -123,6 +123,6 @@ export function firstCallWaitWarning(tool: string, bound: number): string {
   return `waitSeconds applies to the call that carries deviceCode: this first answer carries the link and code so the owner can open them, so it was not held for ${bound} s. Show the link, then call ${tool} again with this deviceCode and waitSeconds to block until the owner approves.`;
 }
 
-export function deviceWaitDescription(tool: string, result: string): string {
-  return `How long, in seconds, a call that carries deviceCode blocks while it polls the approval: 0 to ${DEVICE_WAIT_MAX_SECONDS}, clamped to the code's remaining life, polling on the interval the platform set (longer when it answers slow_down). It answers ${result} in the same call the moment the owner approves, authorization-pending with waitedSeconds, expiresAt and expiresInSeconds when the bound passes first, and expired when the code dies meanwhile. 0 reads once. Left out, the call reads for a few seconds as before. The first call (no deviceCode) never blocks: it answers the link and code for the owner to open, then ${tool} is called again with deviceCode and waitSeconds.`;
+export function deviceWaitDescription(): string {
+  return `With deviceCode, seconds the call blocks for approval (0 to ${DEVICE_WAIT_MAX_SECONDS}).`;
 }

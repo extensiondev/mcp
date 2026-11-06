@@ -174,7 +174,6 @@ describe(`the installed engine (extension-develop ${enginePackage.version}) and 
     it("describes the refusal an older engine gets and the way around it", () => {
       expect(startSchema.description).toMatch(ENGINE_FLOOR);
       expect(startSchema.description).toMatch(/refused as engine-unsupported/);
-      expect(startSchema.inputSchema.properties.allowControl.description).toMatch(/refused as engine-unsupported, and extension_dev drives the run instead/);
     });
   });
 
@@ -183,9 +182,7 @@ describe(`the installed engine (extension-develop ${enginePackage.version}) and 
       expect(description).not.toMatch(RELEASE_STATE_CLAIM);
     }
 
-    expect(evalSchema.description).toMatch(ENGINE_FLOOR);
     expect(startSchema.description).toMatch(ENGINE_FLOOR);
-    expect(waitSchema.description).toMatch(ENGINE_FLOOR);
   });
 
   it("never asks a project with no attach diagnosis to update an engine no release of which writes one", () => {

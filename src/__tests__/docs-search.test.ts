@@ -35,10 +35,10 @@ describe("extension_docs_search", () => {
 
   it("tells an agent holding only the schema when to call it, what comes back, and when memory is allowed", () => {
     expect(schema.description).toMatch(
-      /before answering any question about a WebExtension API, a manifest key, a permission, or a difference between Chrome, Firefox, Edge and Safari/,
+      /before answering about a WebExtension API, a manifest key, a permission or a browser difference/,
     );
 
-    expect(schema.description).toMatch(/answers with the pages, each with its URL/);
+    expect(schema.description).toMatch(/answers pages with URLs/);
     expect(schema.description).toMatch(/Memory is the fallback only when it returns nothing\.$/);
   });
 

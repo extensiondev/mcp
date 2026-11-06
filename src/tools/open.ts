@@ -1139,7 +1139,7 @@ async function confirmSurfaceTarget(
 export const schema = {
   name: "extension_open",
   description:
-    "Open an extension surface (popup, options, sidebar, the newtab, history or bookmarks override page, or the extension's DevTools panel), navigate a tab to a url, or replay an event (the toolbar action, a chrome.commands shortcut) in a running session over its control channel (on unless extension_dev passed allowControl:false; a `npx extension dev` run by hand needs --allow-control). Opening a url on Chromium answers target.targetId, the CDP target id of the tab it opened: pass it as `targetId` to extension_screenshot, extension_dom_snapshot, extension_inspect or extension_eval to address that exact tab. A url answer also carries tab {active, visibilityState}, viewport {width, height} and headless: an element below the viewport is not observed until it is scrolled into view. A url opens in a background tab unless foreground: true; a tab already showing the url is reloaded in place (reused: true) unless newTab: true. Evaluating in the page once it is open is extension_eval. An action or command replay invokes your listener without a user gesture, so the activeTab grant does not apply.",
+    "Open an extension surface or a url, or replay the toolbar action or a shortcut, over the control channel (by hand: --allow-control). A url opens in a background tab and answers target.targetId for extension_screenshot and the readers. A replay carries no user gesture.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -1148,55 +1148,55 @@ export const schema = {
         type: "string",
         enum: ["popup", "options", "sidebar", "devtools", "newtab", "history", "bookmarks", "action", "command"],
         description:
-          "Which surface to open or event to replay. popup, options or sidebar open a UI surface; newtab, history or bookmarks open the matching chrome_url_overrides page in a tab (always a tab, resolved by the server, never sent to the engine). On Chromium, when Chrome refuses the sidebar for lack of a user gesture, the server opens the real panel through a synthetic click on the extension's own page and says so in warnings; if that fails too it renders the sidebar document as a tab. devtools opens the browser's DevTools on a tab (the one `url` matches, else the first web page) and shows the extension's panel there, picked by `panel` title when there are several: Chromium only, over CDP Target.openDevTools, headed or headless; the result names the panel document's url, which extension_eval reads with context 'page' and that url (the panel is no tab, so the tab-based readers do not reach it). action triggers the toolbar action, which opens its popup or replays chrome.action.onClicked when there is none; on Firefox a popup-less browser_action or page_action is clicked through the browser's own toolbar action over the debugger protocol, first and with user input when the build declares a sidebar_action (the engine's replay carries none, so sidebarAction.open or toggle would do nothing). On Firefox, sidebar opens the real panel through the browser's sidebar controller over the debugger protocol. command with `name` replays a chrome.commands.onCommand shortcut; the engine's own frame is returned as is.",
+          "Surface to open; action and command replay; devtools is Chromium only.",
       },
       name: {
         type: "string",
-        description: "For surface 'command': the chrome.commands name to trigger.",
+        description: "command: the chrome.commands name.",
       },
       panel: {
         type: "string",
         description:
-          "For surface 'devtools': the title the extension gave chrome.devtools.panels.create, when it registers more than one panel. Omitted, the extension's first panel is shown.",
+          "devtools: panel title.",
       },
       waitMs: {
         type: "number",
         description:
-          "For surface 'devtools': how long to wait for the panel to register after DevTools opens (default 15000, up to 120000). Extensions that create their panel on a page event need longer, or `reload`.",
+          "devtools: ms to wait (default 15000).",
       },
       reload: {
         type: "boolean",
         default: false,
         description:
-          "For surface 'devtools': reload the inspected tab once DevTools is open, for extensions that create their panel only when the page reports to them on a load that starts with DevTools open (Preact Devtools). Discards the page state under test.",
+          "devtools: reload the inspected tab.",
       },
       url: {
         type: "string",
         description:
-          "Navigate a real tab here instead of opening a surface, in a NEW tab unless `tab` names one (a blank or new-tab page is reused). An absolute url opens as given; a path with no scheme, such as pages/options.html, is resolved against the extension's own origin. Use for content-script test pages, or a surface as a page.",
+          "Url to open (a path resolves to the extension).",
       },
       foreground: {
         type: "boolean",
         default: false,
         description:
-          "With `url`, on Chromium: bring the opened tab forward for a page the PERSON must act on (a sign-in, a consent screen, a payment or captcha step), by making it the active tab (CDP Target.activateTarget) and raising its browser window (Page.bringToFront). Raising the window takes the screen from whatever the person was doing, so pass it only when the person has to see or act on that page now, never for pages only the agent reads. The answer says what happened in value.foreground {activated, windowRaised} and in the hint, and what to tell the person. Default false: the tab opens in the background and the window stays where it is.",
+          "Raise the tab; only for a page the person must act on.",
       },
       newTab: {
         type: "boolean",
         default: false,
         description:
-          "With `url`, on Chromium: open a second tab even when a tab already shows that url. Without it a tab that already shows the url (hash aside) is reloaded in place and answered with reused: true, so a rebuild-and-look loop never piles up tabs.",
+          "New tab even if one shows the url.",
       },
       tab: {
         type: "number",
         description:
-          "With `url`: navigate this chrome.tabs id in place instead of opening a new tab (rides the engine's navigate verb over the control channel, which a dev session carries unless started with allowControl: false). A chrome.tabs id is a positive integer the browser assigned, not a tab position: 0 is not the first tab and is refused. extension_dom_snapshot with listTabs: true lists the open tabs with their ids. Without it an existing page is never taken over.",
+          "With url: navigate this chrome.tabs id (not a tab position; from dom_snapshot listTabs: true).",
       },
       asTab: {
         type: "boolean",
         default: false,
         description:
-          "popup/options/sidebar: render the surface's document in a real tab instead of a popup window. This is how you inspect a surface HEADLESSLY, and it is applied automatically when a headless session refuses to open one. Same page and APIs, but no popup sizing and window.close() closes the tab.",
+          "Render the surface in a tab.",
       },
       browser: SESSION_BROWSER,
       timeout: CALL_TIMEOUT,

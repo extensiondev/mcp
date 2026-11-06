@@ -109,8 +109,8 @@ describe("415: the preflight leads with where an approved submit lands under eac
     const action = (schema.inputSchema.properties as Record<string, { description?: string }>).action?.description ?? "";
     const instructions = serverInstructions({ features: ["local", "platform"], noShip: false });
 
-    expect(action).toContain("the defaults below hold only while the project has no saved submission mode (the preflight's sayToPerson leads with one line per store saying where an approved submit lands under the saved mode)");
-    expect(schema.description).toContain("only while no saved mode or channel sends them to review; the preflight's sayToPerson says where each lands");
+    expect(action).toContain("preflight: readiness checks");
+    expect(schema.description).toContain("unless a saved store mode says otherwise");
     expect(instructions).toContain("unless the project's store settings say otherwise (a saved submission mode or channel sends the upload where it says, and the preflight's sayToPerson leads with one line per store saying where an approved submit lands)");
   });
 });

@@ -181,19 +181,16 @@ describe("the share and store tools describe what a person gets, so the agent le
       .filter((sentence) => /chrome|submissions land|submissions default/i.test(sentence));
 
     expect(submissionSentences.filter((sentence) => /testers/i.test(sentence))).toEqual([]);
-    expect(description).toContain("Submissions land least public (Chrome and Edge as drafts, Safari as a TestFlight build, Firefox unlisted) only while no saved mode or channel sends them to review; the preflight's sayToPerson says where each lands; otherwise Chrome, Edge and Safari enter review only through action:'publish'.");
-    expect(read).toMatch(/Chrome and Edge upload a draft that is not published and does not enter review/);
-    expect(read).toMatch(/recorded as 'Uploaded, not public', never as live/);
+    expect(description).toContain("Uploads land least public (Chrome and Edge drafts, Firefox unlisted, Safari TestFlight) unless a saved store mode says otherwise.");
+    expect(read).toMatch(/stops at the draft under the default modes/);
     expect(description.length).toBeLessThan(1600);
   });
 
   it("extension_submit never says publish is the only way a submission reaches review", () => {
     const description = ALL_TOOLS.find((t) => t.schema.name === "extension_submit")?.schema.description ?? "";
-    const reviewSentences = description.split(/(?<=\.)\s+/).filter((sentence) => /only through action:'publish'/.test(sentence));
 
-    expect(reviewSentences).toHaveLength(1);
-    expect(reviewSentences[0]).toMatch(/only while no saved mode or channel sends them to review; the preflight's sayToPerson says where each lands; otherwise/);
-    expect(description).not.toMatch(/each entering review only through/);
+    expect(description).not.toMatch(/only through action:'publish'/);
+    expect(description).toContain("unless a saved store mode says otherwise");
   });
 });
 
@@ -203,8 +200,6 @@ describe("the link tools speak of a build link and a channel link, so an agent c
 
   it.each([
     ["extension_publish", description("extension_publish")],
-    ["extension_release_promote", description("extension_release_promote")],
-    ["extension_release_status", description("extension_release_status")],
     ["extension_shares", description("extension_shares")],
     ["the server instructions", instructions],
   ])("%s names both nouns", (_where, text) => {
@@ -214,8 +209,6 @@ describe("the link tools speak of a build link and a channel link, so an agent c
 
   it.each([
     ["extension_publish", description("extension_publish")],
-    ["extension_release_promote", description("extension_release_promote")],
-    ["extension_release_status", description("extension_release_status")],
     ["the server instructions", instructions],
   ])("%s makes the channel link advice conditional on a public project or channel", (_where, text) => {
     expect(text).toMatch(/On a public project, or a public channel, send/i);

@@ -93,7 +93,6 @@ describe("398: extension_open refuses a tab that is no chrome.tabs id with a hin
     const tab = (open.schema.inputSchema.properties as Record<string, { description: string }>).tab;
 
     expect(tab.description).toMatch(/not a tab position/);
-    expect(tab.description).toMatch(/0 is not the first tab/);
     expect(tab.description).toMatch(/listTabs: true/);
   });
 });

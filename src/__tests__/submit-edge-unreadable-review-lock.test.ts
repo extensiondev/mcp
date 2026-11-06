@@ -20,7 +20,7 @@ const REASON = `could not be read: Partner Center does not expose a hand submiss
 const LOCK = {
   kind: "review-in-progress",
   source: "unreadable",
-  clearsWhen: "Edge Add-ons lists the product (the store serves it, so the owner's Partner Center submission of 2026-10-31 is certified) or the 7 business days of certification pass; its state " + REASON + ".",
+  clearsWhen: `Edge Add-ons lists the product (the store serves it, so the owner's Partner Center submission of 2026-10-31 is certified) or the 7 business days of certification pass; its state ${  REASON  }.`,
   storeWord: IN_PROGRESS_WORD,
   readAt: "2026-10-31T13:00:00.000Z",
   reason: REASON,
@@ -80,13 +80,5 @@ describe("extension_submit preflight relays the Edge review the platform could n
     expect(out.value.sayToPerson).toContain("never failed, and nothing here can call the product idle");
     expect(JSON.stringify(out)).not.toContain("nothing is in certification review");
     expect(JSON.stringify(out)).not.toContain("nothing is in review");
-  });
-
-  it("tells the agent in the tool description what an unreadable lock source means", () => {
-    const action = String((schema.inputSchema.properties as Record<string, { description?: string }>).action.description);
-
-    expect(action).toContain("lock.source is store for a review the platform sent");
-    expect(action).toContain("unreadable for the owner's own Partner Center submission");
-    expect(action).toContain("lock.reason says so and names the Partner Center page");
   });
 });

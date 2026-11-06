@@ -44,9 +44,7 @@ export function submitAsks(args: Args): boolean {
 
 const quoted = (actions: readonly string[]): string => actions.map((action) => `'${action}'`).join(", ");
 
-const ASKING_ACTS = SUBMIT_SHIP_ACTIONS.filter((action) => action !== "sync-listing");
-
-export const SUBMIT_ACTION_SAFETY = `Per action: ${quoted(SUBMIT_READ_ACTIONS)} and submit with dryRun true (the default) are read-only and dispatch nothing; submit with dryRun:false and no approvalId executes nothing either, it only asks for the owner's approval on extension.dev and answers approval-required, so that page is the gate; the first call of ${quoted(ASKING_ACTS)} with no approvalId only asks the same way, and so does a 'sync-listing' carrying a value the platform derives and a ${quoted(SUBMIT_SETTING_ACTIONS)} to a submission mode that sends the next upload to a review that publishes it; the call carrying the approved approvalId and ${quoted(SUBMIT_SHIP_ACTIONS)} change what a store holds, ${quoted(SUBMIT_SETTING_ACTIONS)} changes the project's store settings, and a plain sync-listing or configure-store writes at once under the owner's own token; 'connect' changes nothing a store holds and takes no key: it opens a connect page where the person hands the key straight to the platform, and waits on the platform's record; 'first-submission' only reads, opening the console's first-submission page beside the store's dashboard. MCP annotations are per tool, so this one tool carries the destructive hint of its acts, and ${SUBMIT_CHECK_TOOL} takes the read-only calls and every approval request under a read-only hint; a client that accepts the approval page as its only gate allows this tool by name.`;
+export const SUBMIT_ACTION_SAFETY = `Per action: ${quoted(SUBMIT_READ_ACTIONS)} and submit with dryRun true (the default) are read-only; submit with dryRun:false and no approvalId executes nothing either, it only asks for the owner's approval, as does the first call of any store act; the approved approvalId runs it.`;
 
 export const SUBMIT_CHECK_ACTIONS = [...SUBMIT_READ_ACTIONS, "submit", ...SUBMIT_SHIP_ACTIONS, ...SUBMIT_SETTING_ACTIONS, ...SUBMIT_CONNECT_ACTIONS] as const;
 

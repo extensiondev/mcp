@@ -370,13 +370,10 @@ describe("extension_project_create with projects: refusals before a device code 
   });
 
   it("names the limit in the tool description and the projects input", () => {
-    expect(schema.description).toContain("One approval creates at most 10 projects");
+    expect(schema.description).toContain("projects: up to 10 per approval");
     expect(schema.description).toContain("at most 10 per hour");
-    expect(schema.description).toContain("the next 10 can start in a new call once that limit allows");
     expect(schema.description).toContain("never split silently");
-    expect(schema.description).toContain("does not advertise batch onboarding");
-    expect(schema.inputSchema.properties.projects.description).toContain("1 to 10 entries");
-    expect(schema.inputSchema.properties.projects.description).toContain("at most 48 characters");
+    expect(schema.inputSchema.properties.projects.description).toContain("1 to 10 (max 20)");
   });
 });
 

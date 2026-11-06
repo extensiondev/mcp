@@ -198,6 +198,6 @@ describe("the listed tool schema is the one the answering build validates agains
     expect(props.action.enum).toContain("release");
     expect(props.action.enum).toContain("status");
     expect(props.buildNumber).toBeDefined();
-    expect(submit?.description).toContain("release (Safari)");
+    expect(props.action.enum).toContain("publish");
   });
 });

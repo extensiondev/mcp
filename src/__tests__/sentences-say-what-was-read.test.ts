@@ -46,13 +46,12 @@ describe("102c, 102e, 102f: schema and fence sentences describe what is read", (
     expect(context.items?.enum).not.toContain("page");
     expect((logsSchema.inputSchema.properties as Record<string, { description?: string }>).browser.description).toMatch(/else chrome\./);
     expect(logsSchema.description).toMatch(/replayed/);
-    expect(logsSchema.description).not.toMatch(/bounded window\./);
   });
 
   it("the inspect schema does not promise shadow DOM it does not cross", () => {
     expect(inspectSchema.description).not.toMatch(/full HTML including shadow DOM/);
-    expect(inspectSchema.description).toMatch(/not crossed/);
     const deepDom = (inspectSchema.inputSchema.properties as Record<string, { description?: string }>).deepDom;
+    expect(deepDom.description).toMatch(/not crossed/);
     expect(deepDom.description).not.toMatch(/open ones are read anyway/);
   });
 });

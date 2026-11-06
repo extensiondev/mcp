@@ -45,7 +45,7 @@ const LOGIN_HINT = LOGIN_STEPS;
 export const schema = {
   name: "extension_shares",
   description:
-    "List, create and revoke the emulator preview links that give a tester one build and its zip (the uploads this login has shared, the same links extension_preview_web share:true hands out), and list and revoke the build links extension_publish minted (kind: build-link, preview, or both, the default). Not for making a build link or a channel link: use extension_publish. action list (the default) answers every artifact the logged-in project owns with its ids, state, dates and URLs so a link whose answer you lost is findable again; action create shares a build the platform already made, with no local build, metered like share:true; action revoke kills one link permanently, with no way back, after a workspace owner approves. It records the share on the platform and answers what the platform recorded in value.outcome and every link it made or touched in value.links. Pass projectPath to reconcile against the project's own append-only .extension.dev/shared-previews.json, which is read and never rewritten. This needs the same login as sharing (extension_auth or EXTENSION_DEV_TOKEN); without one, list still answers the local record with a login hint.",
+    "List, create and revoke emulator preview links for a tester, and list and revoke build links (a build link or channel link comes from extension_publish). A revoke is permanent and needs an owner's approval.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -55,59 +55,59 @@ export const schema = {
         enum: ["build-link", "preview", "both"],
         default: "both",
         description:
-          "Which links list and revoke address. preview: the emulator preview uploads. build-link: the links extension_publish minted, each with its tokenId, label, build, audience, createdAt, expiresAt, revokedAt, live and shareUrl, read from the platform's access token list (never a token value; lastUsedAt is null because the platform does not record it). both (the default) lists both, with the build links under value.buildLinks; a revoke with a tokenId, or a url carrying share=, is a build link revoke.",
+          "preview, build-link or both (default).",
       },
       tokenId: {
         type: "string",
-        description: "With revoke and kind build-link, the build link to kill (the tokenId from action list with kind build-link). The link itself as url works too.",
+        description: "revoke: a build link's tokenId.",
       },
       action: {
         type: "string",
         enum: ["list", "create", "revoke"],
         default: "list",
         description:
-          "list (the default) answers every artifact the logged-in project owns, with its artifactId, name, version, live or dead state, createdAt, expiresAt, revokedAt, size, previewUrl, zipUrl and revokeUrl; each row carries owner and sharedBy as the platform returned them, attribution.ownership says who may revoke ('project' means the workspace holds it and any member can pull it back, 'personal' one person alone, 'unknown' no owner disclosed) and attribution.credit names the publisher as credit only, never access ('CLI token <id>' or 'not recorded' when no person can be named). create with a buildId (and browser, default chrome) downloads the build's package from the registry, unpacks it in a temporary folder and uploads it the way share:true uploads a local build, metered the same way, answering previewUrl, zipUrl, revokeUrl and expiresAt. revoke with an artifactId, or any URL of the share, kills it permanently. With projectPath, a share made on another machine shows as remoteOnly and a record with no live artifact as localOnly; the record is append-only, so localOnly is counted by distinct artifactId and a build re-shared unchanged is one share, not two; server.count and server.matched are share counts, while server.scanned counts records the platform read and is never a share count.",
+          "list (default); create: share a build; revoke: one share, for good.",
       },
       buildId: {
         type: "string",
         description:
-          "With create, the platform build to share, as its short or full commit sha (extension_builds lists them).",
+          "create: build commit sha.",
       },
       browser: {
         type: "string",
-        description: "With create, which browser's package of the build to share (default chrome).",
+        description: "create: browser (default chrome).",
       },
       artifactId: {
         type: "string",
         description:
-          "Which share to revoke (the gen_... id from a share response or from action:\"list\"). Required for revoke unless url is given.",
+          "revoke: the gen_... id.",
       },
       url: {
         type: "string",
         description:
-          "Any URL of the share to revoke (previewUrl, zipUrl, viewUrl, or revokeUrl). The artifact id is read out of it, so the link you sent someone is enough to pull it back.",
+          "revoke: any URL of the share.",
       },
       approvalId: {
         type: "string",
         description:
-          "The approval handle returned by a prior approval-required response for a revoke. Revoking permanently burns a share and cannot be undone, so when the platform's approval gate is on this needs a human approval: call revoke once without this to get an approval id and URL, have a human approve at extension.dev, then call revoke again with the same id. Listing never needs it.",
+          "revoke: approved approval id.",
       },
       projectPath: {
         type: "string",
         description:
-          "Path to the extension project root. Reconciles the platform's answer against this project's .extension.dev/shared-previews.json record. Read-only.",
+          "Project root.",
       },
       status: {
         type: "string",
         enum: ["all", "live"],
         default: "all",
         description:
-          "all (default) includes expired and revoked shares, which is what makes a dead link explainable; live returns only the links the platform reported resolving at list time (a 429 or 503 from the platform answers listed-local-only, which says nothing about any link).",
+          "all or live.",
       },
       limit: {
         type: "number",
         description:
-          "How many shares to return, 1 to 200 (platform default 100). A cut list comes back with truncated:true.",
+          "1 to 200 (default 100).",
       },
       api: API_BASE,
     },

@@ -45,7 +45,7 @@ import {
 export const schema = {
   name: "extension_start",
   description:
-    "Run the PRODUCTION build in a browser: build, serve and launch. No hot module replacement, so edits are not picked up; use extension_dev while writing code, and this to check what ships. By default there is no control channel, so extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot cannot attach; pass allowControl:true (or allowEval:true, which implies it) to drive the run with them. Both flags need Extension.js 4.1.34 or later; an older engine is refused as engine-unsupported. build:false launches an existing dist/<browser>; outputPath launches any prebuilt unpacked extension directory. By default it waits for the build and the browser like extension_dev (up to 45 s) and answers build-ready with the session, the extension id and cdpPort, so no extension_wait is needed before extension_open or extension_assert; wait:false answers once the engine process is alive 5 s after spawn, and a wait that runs out answers started naming the extension_wait call. It says what a production session cannot do (no hot reload, no console stream for extension_logs, and the bridge verbs need allowControl); whether the browser loaded the extension is read over its debug port on Extension.js 4.1.34 or later, and only extension_dev proves it on an older engine.",
+    "Run the PRODUCTION build in a browser (extension_dev is for writing code); no hot reload or extension_logs. Bridge verbs need allowControl:true (Extension.js 4.1.34 or later; older is refused as engine-unsupported).",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -55,56 +55,56 @@ export const schema = {
         type: "boolean",
         default: true,
         description:
-          "Build before serving. false serves the existing dist/<browser> as-is and fails when there is none.",
+          "false: launch the existing dist.",
       },
       polyfill: {
         type: "boolean",
         default: true,
-        description: "Apply cross-browser polyfill (build only)",
+        description: "Cross-browser polyfill.",
       },
       port: {
         type: "number",
-        description: "Passed to the engine as --port (0 for auto-assign). A production start serves nothing over it today; it matters only to a toolchain that reads it.",
+        description: "Engine --port; unused here.",
       },
       noBrowser: {
         type: "boolean",
         default: false,
-        description: "Build (or, with build:false, check the dist) without launching a browser. A production start serves nothing, so with no browser the engine process ends once the build does; read the result with extension_build rather than a session.",
+        description: "Build only; the process ends with the build.",
       },
       allowControl: {
         type: "boolean",
         default: false,
         description:
-          "Open the agent-bridge control channel on the production run, so extension_storage, extension_reload, extension_open and extension_dom_snapshot reach it. The browser loads a copy of the build with the control producer prepended to the background; dist/<browser> keeps the shipped bytes, and extension_reload then reloads the installed extension under open tabs the way a store update does, which is how to test content scripts an update orphans. Needs an engine that honors the flag (Extension.js 4.1.34 or later); on an older engine the call is refused as engine-unsupported, and extension_dev drives the run instead.",
+          "Control channel for the bridge verbs.",
       },
       allowEval: {
         type: "boolean",
         default: false,
         description:
-          "Also enable extension_eval on the production run (writes a 0600 session token). Implies allowControl. The build's own content_security_policy still governs eval in its extension pages and background.",
+          "Enable extension_eval; implies allowControl.",
       },
       outputPath: {
         type: "string",
         description:
-          "An existing unpacked extension directory to launch as it is (a manifest.json at its root), for an artifact built by another toolchain or an exact release candidate. Implies build:false; projectPath still names the project the session belongs to. Relative paths resolve against projectPath.",
+          "Unpacked directory to launch as is.",
       },
       replace: {
         type: "boolean",
         default: false,
         description:
-          "Stop the live session this projectPath runs for the same browser first (an extension_dev or extension_start session), reported as replacedSession. Without it the call is refused: one session per browser owns dist/<browser> and its ready.json and eval token, and a production start would rebuild them under the running session. A session for another browser keeps running either way. To run a second session beside the person's own instead of replacing it, pass isolated: true.",
+          "Replace this project's session; else refused.",
       },
       isolated: {
         type: "boolean",
         default: false,
         description:
-          "Run a throwaway session beside the person's own for the same project and browser, never touching it: the project is built for production into a folder under the system temp directory (extension build --out-dir, Extension.js 4.1.36 or later), and launched from there on a new profile, headless unless headless: false, with the control channel and eval as allowControl and allowEval say. The answer's value.isolated.projectPath is the projectPath to pass to every other tool for this session (extension_open, extension_eval, extension_screenshot, extension_dom_snapshot, extension_stop), since the run is a project of its own to the engine; the person's session for the real projectPath keeps its window, profile and dist/<browser>. extension_stop with that projectPath ends it; the folder stays until deleted. replace, outputPath, build: false and noBrowser do not apply with it.",
+          "Throwaway headless run in a temp folder (4.1.36+); later calls and extension_stop use value.isolated.projectPath.",
       },
       wait: {
         type: "boolean",
         default: true,
         description:
-          "Wait for the build to land and the browser to launch before answering (the same ready.json contract extension_wait reads, up to 45 s after the 5 s boot check), then answer build-ready with the session, the extension id and cdpPort, so extension_open and extension_assert can follow at once. false answers as soon as the engine process is alive 5 s after spawn; call extension_wait yourself then. A noBrowser start never waits.",
+          "Wait up to 45 s; false: call extension_wait.",
       },
       ...LAUNCH_FLAG_SCHEMA,
     },

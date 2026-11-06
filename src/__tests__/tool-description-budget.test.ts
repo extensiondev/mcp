@@ -15,47 +15,47 @@ import { TOOL_POLICY, TOOL_TITLES, toolTitle } from "../lib/tool-policy";
  * descriptions and workflow in the server instructions.
  */
 const CEILINGS: Record<string, number> = {
-  extension_add_feature: 400,
-  extension_analyze: 600,
-  extension_approvals: 700,
-  extension_assert: 500,
-  extension_auth: 1800,
-  extension_browsers: 800,
-  extension_build: 1300,
-  extension_builds: 1500,
-  extension_create: 1400,
-  extension_dev: 1100,
-  extension_docs_search: 400,
-  extension_doctor: 700,
-  extension_dom_snapshot: 1300,
-  extension_eval: 1700,
-  extension_inspect: 1400,
-  extension_list_extensions: 800,
-  extension_logs: 600,
-  extension_manifest_validate: 300,
-  extension_open: 1100,
-  extension_preview_web: 1300,
-  extension_project_create: 2000,
-  extension_publish: 2000,
-  extension_release_promote: 2100,
-  extension_release_status: 1700,
-  extension_reload: 600,
-  extension_screenshot: 1300,
-  extension_shares: 1300,
-  extension_start: 1300,
-  extension_stop: 600,
-  extension_storage: 500,
-  extension_submit: 1600,
-  extension_submit_check: 600,
-  extension_templates: 600,
-  extension_theme_verify: 800,
-  extension_try: 1000,
-  extension_wait: 2000,
-  extension_workspace: 1800,
-  extension_workspace_create: 1000,
+  extension_add_feature: 300,
+  extension_analyze: 150,
+  extension_approvals: 150,
+  extension_assert: 300,
+  extension_auth: 350,
+  extension_browsers: 250,
+  extension_build: 150,
+  extension_builds: 300,
+  extension_create: 300,
+  extension_dev: 250,
+  extension_docs_search: 300,
+  extension_doctor: 250,
+  extension_dom_snapshot: 200,
+  extension_eval: 300,
+  extension_inspect: 200,
+  extension_list_extensions: 100,
+  extension_logs: 250,
+  extension_manifest_validate: 150,
+  extension_open: 300,
+  extension_preview_web: 300,
+  extension_project_create: 450,
+  extension_publish: 350,
+  extension_release_promote: 300,
+  extension_release_status: 150,
+  extension_reload: 150,
+  extension_screenshot: 150,
+  extension_shares: 250,
+  extension_start: 250,
+  extension_stop: 100,
+  extension_storage: 100,
+  extension_submit: 550,
+  extension_submit_check: 350,
+  extension_templates: 150,
+  extension_theme_verify: 100,
+  extension_try: 250,
+  extension_wait: 250,
+  extension_workspace: 300,
+  extension_workspace_create: 200,
 };
 
-const TARGET = 700;
+const TARGET = 400;
 
 describe("tool descriptions only get shorter", () => {
   it("stays under each tool's ceiling, and the ceiling table names every tool", () => {
@@ -76,7 +76,7 @@ describe("tool descriptions only get shorter", () => {
       .map((tool) => tool.schema.name)
       .sort();
 
-    expect(over.length).toBeLessThanOrEqual(26);
+    expect(over.length).toBeLessThanOrEqual(2);
   });
 });
 

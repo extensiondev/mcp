@@ -20,15 +20,12 @@ const SHIPPED_RUN_DOCS = [
 
 describe("running an extension is one call: extension_dev waits and answers ready", () => {
   it("the wait tool names the cases that still need it and says a ready dev answer is not one", () => {
-    expect(waitSchema.description).toMatch(/started with wait:false/);
-    expect(waitSchema.description).toMatch(/ready\.status was not "ready"/);
-    expect(waitSchema.description).toMatch(/build-only \(noBrowser\) session/);
-    expect(waitSchema.description).toMatch(/nothing left to wait for/);
+    expect(waitSchema.description).toMatch(/only after wait:false, a ready\.status not "ready", or noBrowser/);
   });
 
   it("the dev tool and the server instructions say a ready answer ends the recipe", () => {
     expect(devSchema.description).toMatch(
-      /ready\.status is "ready" the session is up and nothing else needs calling/,
+      /ready\.status "ready" means nothing else to call/,
     );
 
     expect(devSchema.description).not.toMatch(/process info that extension_wait/);

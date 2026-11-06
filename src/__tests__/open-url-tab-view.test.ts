@@ -147,10 +147,4 @@ describe("extension_open with a url says whether the tab is shown, how big the v
     expect(result.value.headless).toBe(true);
     expect(result.hint).not.toContain("viewport is");
   });
-
-  it("names the fields and the scroll rule in the tool description", () => {
-    expect(open.schema.description).toContain("tab {active, visibilityState}");
-    expect(open.schema.description).toContain("viewport {width, height}");
-    expect(open.schema.description).toContain("not observed until it is scrolled into view");
-  });
 });

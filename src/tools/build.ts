@@ -585,7 +585,7 @@ function locateSourceZip(
 export const schema = {
   name: "extension_build",
   description:
-    "Build a browser extension for production, or for development with mode:'development' (readable code, source maps, NODE_ENV=development: the build Playwright and e2e harnesses load; with outDir it lands beside the production one). The answer's value.mode names the mode built. This tool always passes --browser (chrome unless you set it), so the output lands in dist/<browser>/ (<outDir>/<browser>/ with outDir; a build over a live dev session's dist is refused and names outDir), and the answer's outputPath names the folder written, with zipPath beside it when a zip was asked for: read those paths instead of assuming one. To know what is in the build (sizes, entry points, store checks) call extension_analyze on the same projectPath and browser instead of reading the folder by hand. A scaffolded project's own `npm run build` passes no --browser, so the engine writes dist/chromium/ instead. Pass zip:true to also package a .zip for store submission. With browser:'safari' the build converts the extension into a macOS app through Xcode, and bundleId sets the identifier it ships under. The build refuses a manifest with build-blocking errors unless you pass skipValidation:true, because such a manifest yields a broken bundle the bundler itself never flags.",
+    "Build the extension on this machine into dist/<browser>/; never for sharing (extension_builds). Refuses a dist a dev session serves unless outDir.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -594,44 +594,44 @@ export const schema = {
       zip: {
         type: "boolean",
         default: false,
-        description: "Create a .zip file for store distribution",
+        description: "Also write a .zip.",
       },
       zipSource: {
         type: "boolean",
         default: false,
-        description: "Include source code zip (required by some stores)",
+        description: "Also zip the source.",
       },
       zipFilename: {
         type: "string",
-        description: "Custom .zip file name (defaults to name and version)",
+        description: "Zip file name.",
       },
       polyfill: {
         type: "boolean",
         default: false,
-        description: "Apply cross-browser polyfill",
+        description: "Cross-browser polyfill.",
       },
       silent: {
         type: "boolean",
         default: false,
-        description: "Suppress build output",
+        description: "Suppress build output.",
       },
       mode: {
         type: "string",
         enum: ["development", "production", "none"],
         default: "production",
         description:
-          "Bundler mode, which also sets NODE_ENV. production (the default) is the minified store build. development keeps readable code and source maps with NODE_ENV=development: the build Playwright and e2e harnesses load; give it its own outDir to keep it beside the production one, since both land in dist/<browser> otherwise. none leaves the bundler's mode unset. The answer's value.mode names the mode the engine built.",
+          "development: readable, source maps (with outDir); none: unset.",
       },
       skipValidation: {
         type: "boolean",
         default: false,
         description:
-          "Build even when extension_manifest_validate reports build-blocking errors. The build normally refuses: the engine itself stops only on missing scripts, icons, DNR rule files, default_locale and manifest_version, and ships a bundle over the rest.",
+          "Build despite manifest errors.",
       },
       outDir: {
         type: "string",
         description:
-          "Write the build under this folder instead of dist: the engine writes <outDir>/<browser> and puts the zip beside it, and leaves dist/<browser> to a running dev session, which keeps serving its own files. Relative to projectPath (an absolute path works too); the project root itself is refused. Without it, a build for a browser that a live extension_dev session serves is refused before anything runs, since it would write over the files that browser is running from; pass outDir to build beside the session. Needs Extension.js 4.1.36 or later.",
+          "Build folder instead of dist (Extension.js 4.1.36+).",
       },
       ...SAFARI_BUILD_OPTION_SCHEMA,
     },

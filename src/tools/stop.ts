@@ -46,37 +46,37 @@ import type { ProcessInfo, ReadyContract } from "../lib/types";
 export const schema = {
   name: "extension_stop",
   description:
-    "Stop a session that extension_dev or extension_start is running: terminate the server and the browser it launched, and remove the live-preview carrier if extension_dev placed one. The answer names the server pid and the browser pid the launcher recorded, each with whether it is gone (serverGone, browserGone), so a \"close its browser\" ask is settled by this answer with no process check by hand. This covers extension_start build:false too, which the registry records as a preview session. Call it when you are done verifying, so sessions do not accumulate.",
+    "Stop a dev or start session, naming the server and browser pid it ended. Call it when done.",
   inputSchema: {
     type: "object" as const,
     properties: {
       projectPath: {
         ...PROJECT_PATH,
         description:
-          "Extension project root. Optional when exactly one project has a live session: that session is stopped and named in the answer (projectPath, browser, pid). When sessions for two or more projects are live the call is refused with them listed under value.sessions; with none live it answers no-session.",
+          "Project root; optional when exactly one project has a live session.",
       },
       browser: {
         type: "string",
         description:
-          "Browser of the session to stop. Only that browser's server and browser processes are ended; a session the same project runs for another browser keeps running. Defaults to the single live session for this project rather than assuming chrome; when the project runs sessions for more than one browser, the call is refused with the list instead of stopping one.",
+          "Session browser; default the only live one.",
       },
       all: {
         type: "boolean",
         default: false,
         description:
-          "Stop every known session across projects and browsers, found from this server's registry AND the on-disk markers written by this server or by servers that are no longer running, so it still works after an MCP restart. Because it crosses projects, a call with no projectPath whose sessions span more than one project answers confirm-required with every session it would end grouped by project (wouldStop) and stops nothing until called again with confirm: true; projectPath beside it scopes the stop to that one project's sessions and carrier with no confirmation, and sessions that all belong to one project need none either. browser is ignored. A marker owned by another MCP server that is still running is left alone and listed under skippedForeign (foreign on a confirm-required answer) unless includeOtherServers is true. It also takes back every live-preview carrier still recorded on this machine, including one in a project whose session was never stopped.",
+          "Stop every session; across projects needs confirm.",
       },
       confirm: {
         type: "boolean",
         default: false,
         description:
-          "With all: true and no projectPath, end every session the confirm-required answer listed, across projects. Without it, a stop that would cross projects only lists what it would end.",
+          "With all: confirm the listed stop.",
       },
       includeOtherServers: {
         type: "boolean",
         default: false,
         description:
-          "With all: true, also stop sessions whose markers belong to another MCP server that is still running (the markers sit in a per-user directory every server shares). Off by default, since those sessions are someone else's.",
+          "With all: include other servers' sessions.",
       },
     },
     required: [],

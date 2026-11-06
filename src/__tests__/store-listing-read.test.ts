@@ -112,7 +112,6 @@ describe("extension_release_status include listing", () => {
 
     expect(props.include.items?.enum).toContain("listing");
     expect(props.store.enum).toEqual(["chrome", "firefox", "edge", "safari"]);
-    expect(schema.description).toContain("include:'listing'");
   });
 
   it("reads one store's saved listing and says what it lacks", async () => {

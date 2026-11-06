@@ -24,7 +24,7 @@ export type TargetFamily = "chromium" | "gecko";
 export const TARGET_ID_PROPERTY = {
   type: "string",
   description:
-    "Pick one open page directly by its targetId: the target.targetId extension_open answers, or a targetId from extension_dom_snapshot listTargets: true (a CDP target id on Chromium, the tab's browserId on Firefox). When given, `url` is ignored. A target that is gone is refused with E_TARGET_NOT_FOUND, naming the live ones.",
+    "A page's targetId (extension_open, or dom_snapshot listTargets); overrides url.",
 };
 
 export const AMBIGUOUS_TARGET_HINT =

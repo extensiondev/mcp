@@ -28,11 +28,10 @@ describe("extension_builds configure-channel changes a channel as a plain call a
 
     expect(schema.inputSchema.properties.action.enum).toContain("configure-channel");
     expect(schema.inputSchema.properties.action.enum).toContain("delete-channel");
-    expect(properties.channel.description).toContain("configure-channel or delete-channel");
-    expect(properties.description.description).toContain("configure-channel");
-    expect(properties.color.description).toContain("configure-channel");
-    expect(properties.audience.description).toMatch(/Private is a plain call; public keeps a workspace owner's approval/);
-    expect(properties.approvalId.description).toContain("configure-channel");
+    expect(properties.channel.description).toContain("Channel name");
+    expect(properties.description.description).toContain("Channel description");
+    expect(properties.color.description).toContain("#rrggbb");
+    expect(properties.audience.description).toMatch(/private, or public \(owner approval\)/);
   });
 
   it("sends a description, a color and a private audience as one PATCH under the owner's token, minting nothing", async () => {

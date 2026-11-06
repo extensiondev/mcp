@@ -191,7 +191,6 @@ describe("extension_open foreground: true brings a page the person must act on f
 
     expect(described.default).toBe(false);
     expect(described.description).toContain("must act on");
-    expect(described.description).toContain("never for pages only the agent reads");
-    expect(open.schema.description).toContain("opens in a background tab unless foreground: true");
+    expect(open.schema.description).toContain("opens in a background tab");
   });
 });

@@ -53,8 +53,7 @@ describe("the preflight names every way a store can go public, and who chose the
   it("the tool description lists Safari review among the go-public modes and never says Safari always stops at the draft", () => {
     const described = JSON.stringify(schema.inputSchema);
 
-    expect(described).toContain("(chrome public or staged, edge review, firefox listed, safari review; chrome draft-until-public");
-    expect(described).toContain("stops at the TestFlight draft unless the saved safari mode is review");
+    expect(described).toContain("safari draft|review, or dry-run; public, staged, review and listed publish on review");
     expect(described).not.toContain("stops at the TestFlight draft;");
   });
 

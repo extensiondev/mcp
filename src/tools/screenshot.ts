@@ -91,7 +91,7 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 export const schema = {
   name: COMMAND,
   description:
-    "Take a screenshot of one open extension surface (popup, options, sidebar, newtab, history, bookmarks) or web page in a live session (extension_dev, extension_start or the same run by hand) as a .png file. It asks the browser for the page's own pixels over the debug port (CDP on Chromium, the screenshot actor on Firefox, WebDriver on Safari, web pages only); it never captures the screen or brings a window forward: on Chromium a page behind other windows or in a hidden tab is shown briefly for the capture (value.behindWindow, value.hiddenTab). Open the surface with extension_open first. `targetId` captures that exact page; a url matching several tabs captures the most recently active one and warns. width and height set the Chromium viewport, resize the Safari window and crop from the top left on Firefox; deviceScaleFactor sets the pixel ratio. `store` captures a store listing screenshot at that store's size into store/screenshots/<store>/, where extension_submit sync-listing picks it up; `browserCapture` files a capture of the extension running in this browser under captures/<browser>/, where extension_publish sync-captures picks it up; one call per view. The file goes under dist/extension-js/<browser>/screenshots unless `path` names one; the answer gives path and pixel size.",
+    "Take a .png of one open surface, page or targetId in a live session (Safari: pages only); open it with extension_open first.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -101,28 +101,28 @@ export const schema = {
         type: "string",
         enum: ["page", ...SURFACES],
         default: "page",
-        description: "page captures a tab picked by `url` (or the only or selected one); the rest capture that extension surface, which must already be open.",
+        description: "page: the tab url picks; else that open surface.",
       },
-      url: { type: "string", description: "page: the tab whose url contains this (a web address or the extension's own page url)." },
+      url: { type: "string", description: "page: tab url substring." },
       targetId: TARGET_ID_PROPERTY,
-      width: { type: "number", description: "Viewport width in CSS pixels (Chromium renders at it; Firefox crops to it)." },
-      height: { type: "number", description: "Viewport height in CSS pixels (Chromium renders at it; Firefox crops to it)." },
-      deviceScaleFactor: { type: "number", description: "Pixel ratio of the image, 0.5 to 4. Defaults to the browser's own on Chromium and 1 on Firefox; Safari answers at the display's own ratio. Set by store when it is given." },
+      width: { type: "number", description: "Viewport width (CSS px)." },
+      height: { type: "number", description: "Viewport height (CSS px)." },
+      deviceScaleFactor: { type: "number", description: "Pixel ratio, 0.5 to 4." },
       store: {
         type: "string",
         enum: [...STORE_CHOICES],
         description:
-          "Capture for this store's listing at the size it takes, with width, height and deviceScaleFactor set here (chrome, edge and firefox 1280x800 at 1x; safari 1440x900 at 2x, a 2880x1800 image) and the file written to store/screenshots/<store>/<n>.png, numbered from 01; passing any of the three beside store is refused. all on a Chromium session writes every store's file from the same page in one call (one capture for chrome, edge and firefox, a second for safari); all on Safari writes only the safari file and says which stores were skipped. A safari file made outside Safari carries a warning, since Apple's review wants the extension running in Safari. extension_submit action:\"sync-listing\" browsers:[<store>] reads the folder on its own, in filename order.",
+          "Store listing size, for extension_submit sync-listing.",
       },
       browserCapture: {
         type: "boolean",
         description:
-          `Capture the extension running in this session's browser for the project's build pages on extension.dev: the file goes to captures/<browser>/<context>-NN.png as a flat PNG, numbered per context, and captures/<browser>/captures.json records the live browser's name and version (capturedIn) and each file's surface. The session browser must be one of ${CAPTURE_BROWSERS.join(", ")}; width, height and deviceScaleFactor apply; store and path are refused beside it. One call per surface; extension_publish action:"sync-captures" browsers:[<browser>] sends the folder after a workspace owner approves.`,
+          "Capture for extension_publish sync-captures.",
       },
       path: {
         type: "string",
         description:
-          "Where to write the image: a file name ending in .png (shots/home.png), or a folder with a trailing slash (shots/) that gets a timestamped .png, relative to projectPath, or an absolute path under projectPath, the system temp folder (os.tmpdir(), /tmp) or one of the client's MCP roots, so a scratch folder outside the repo takes screenshots without piling them up in the working tree. A path anywhere else, or a file name that does not end in .png, is refused with E_BAD_REQUEST, so no other file is ever overwritten. Defaults to dist/extension-js/<browser>/screenshots, which git ignores only when dist is ignored.",
+          "A .png or folder/ under projectPath or an MCP root.",
       },
       timeout: CALL_TIMEOUT,
     },

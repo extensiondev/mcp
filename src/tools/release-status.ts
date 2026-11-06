@@ -18,7 +18,7 @@ import { readListing } from "./store-listing-read";
 export const schema = {
   name: "extension_release_status",
   description:
-    "Read where a project stands on extension.dev from the public registry (registry.extension.land): its release channels with each channel's audience and recent builds (include:'releases'), the per-store picture after an extension_submit (include:'stores', read from stores/health.json, stores/status.json and stores/submissions.json), the platform's release history (include:'history'), one release and its events (releaseId), the newest release workflow runs (include:'runs'), the Chrome staged rollout (include:'rollout'), whether a release pull request could build (include:'cut') and each store's saved extension.dev listing with what it lacks (include:'listing', one store with store). This is read-only: it dispatches and promotes nothing, and it is how you find a valid sha for extension_release_promote, extension_submit or extension_publish. Not for acting on a build or a submission: those are extension_release_promote and extension_submit. Not for whether a build link still opens: extension_shares (kind:'build-link') lists each link with its expiry, as the console Settings, Share links section does. Each channel on a public project carries channelUrl, the channel link that always opens that channel's newest build and never expires; on a public project, or a public channel, send testers the channel link; a build link from extension_publish opens one build and, on a private project, expires, and a private project gets value.channelUrlWithheld instead. It defaults to the logged-in project (extension_auth); pass workspace and project to read another, which works for a private project your stored login covers. Registry state can lag the store dashboards by a polling interval.",
+    "Read where a project stands on extension.dev: channels, builds, store submissions and reviews, history, rollout, listings. Read-only.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -27,49 +27,49 @@ export const schema = {
         items: { type: "string", enum: ["releases", "stores", "history", "runs", "rollout", "cut", "listing"] },
         default: ["releases", "stores"],
         description:
-          "What to read. releases: the project's visibility as the platform records it (projectVisibility, public or private, with the registry's copy as the fallback), each channel's sha and source (environment: preview serves every successful build with no promotion; promotion: the rest move by extension_release_promote), each channel's audience (public or private) when the platform records it, recent builds, and a build page URL for each, which opens for anyone on a public project and only for workspace members on a private one; on a public project each channel also carries channelUrl per browser, <workspace>.extension.dev/<project>/<channel>/<browser>. stores: for chrome, firefox, edge and safari, configured or not, the last credential health check, the last recorded submission and the latest review status; the safari row carries listingPush {state, dispatchedAt, failedStep, failedReason, landedAt, lockedVersion, lockedState, owed, say}, the newest App Store Connect listing push as the platform read it, and a failed push is also a warning; state locked means Apple holds the version named by lockedVersion and lockedState, so nothing was pushed and none is owed until that version is editable, never a retry or a warning; landedAt on a failed push is the listing Apple still holds; when your login covers the project it also reads the platform's own submission records and their store runs (a run that failed before any store step is recorded as failed, and no store received it), each store's configuration (enabled, credentials set and the names of any missing ones, never a value, listing URL, submission mode) and up to 5 earlier submissions per store, each with the id extension_submit (action:'cancel') takes; the safari row carries nextStep {kind, say, url} when a store check or the publish answer read Apple's state, watch while Apple reviews the version and release (extension_submit {action:'release', browsers:['safari']}) once Apple reads PENDING_DEVELOPER_RELEASE, and none for a word the platform inferred or someone recorded by hand. history: each release (browser and channel) with its build, version, rollout, promotion run and its 5 most recent events, plus whether a build is ready to promote; only a token minted by a workspace owner may read it. runs: the newest release workflow runs (the last 7 days, or since a date within the last 30 days), also owner-minted only. rollout: the Chrome staged rollout percentage and whether it can be raised. cut: whether a release pull request opened now could build after merging. listing: each store's saved listing (title, summary, description, categories, license, support email, homepage, privacy policy URL, per-store notes, icon and screenshot counts) and what it lacks; the four stores unless store names one. releases and stores are included by default.",
+          "releases: channels, builds; stores: submissions, reviews; history, runs: owner only; rollout: Chrome; cut: would a release PR build; listing: listings, gaps.",
       },
       since: {
         type: "string",
-        description: "With runs, the earliest date to read from (ISO 8601, within the last 30 days; default 7 days).",
+        description: "runs: earliest ISO date, within 30 days.",
       },
       refresh: {
         type: "array",
         items: { type: "string", enum: ["chrome", "edge", "firefox", "safari"] },
         description:
-          "With stores, ask the platform to read these stores again now (one poll per project per two minutes, within the platform's GitHub budget), under the stored login and with no approval; value.refresh names what happened per store: a store check is one per project, so the first store named answers dispatched with sharedWith listing the others, each of those answers {covered: true, by: <store>, dispatchedAt} for the same check (Edge beside its storeRead, read now), and a store the platform queued for the budget reset or refused for another reason says so in its own words. The registry reflects the poll a minute or two later, so without waitSeconds read again before saying the state changed. Use it after a publish, or after the owner submitted in a store's own dashboard.",
+          "stores: re-read these stores now (once per two minutes).",
       },
       waitSeconds: {
         type: "number",
         description:
-          "With refresh, how long this call waits, 0 to 600 seconds, for the store check it dispatched to land in the registry, re-reading every 10 seconds, so a fresh store state takes one call: refresh:['safari'], waitSeconds:180. It answers once every store the check covers (the one that dispatched it and each one covered by it) has its state read after the dispatch, or when the bound passes; value.refreshWait {landed, waitedSeconds, stores} lists them all and says which, and landed false means the read is the state before the check. Without refresh, or when no check was dispatched, it reads once.",
+          "refresh: wait 0 to 600 s for the check.",
       },
       submissionId: {
         type: "string",
         description:
-          "With stores, read this one store submission by its id (or its first 8 characters) from every submission the platform records, not only the newest shown in submissionHistory; value.stores.submission answers its store, status, the store's own word and, for Firefox, the AMO channel. Use it to verify a record older than the history shows.",
+          "stores: one submission by id or 8-character prefix.",
       },
       store: {
         type: "string",
         enum: ["chrome", "firefox", "edge", "safari"],
-        description: "With listing or stores, read only this store, never all four.",
+        description: "Only this store.",
       },
       releaseId: {
         type: "string",
-        description: "Read this one release and its events (an id from include:'history', such as chrome-stable). Alone, it reads only that release.",
+        description: "One release, e.g. chrome-stable.",
       },
       workspace: {
         type: "string",
-        description: "Workspace slug override (default: the stored login's).",
+        description: "Workspace slug.",
       },
       project: {
         type: "string",
-        description: "Project slug override (default: the stored login's).",
+        description: "Project slug.",
       },
       projectPath: {
         type: "string",
         description:
-          "Path to the extension project root, to read the project it names: the stored login whose project is its package.json name or GitHub origin, as extension_submit and extension_submit_check resolve it. A directory no stored login is for is refused with both names and nothing is read. Nothing local is read beyond that.",
+          "Project root; picks its project.",
       },
       api: API_BASE,
     },

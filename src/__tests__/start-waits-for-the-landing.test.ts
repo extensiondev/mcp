@@ -160,7 +160,6 @@ describe("extension_start waits for the build and the browser the way extension_
 
     expect(wait.default).toBe(true);
     expect(wait.description).toMatch(/extension_wait/);
-    expect(schema.description).toMatch(/no extension_wait is needed/);
   });
 
   it("answers build-ready with the session, the extension id and cdpPort once the contract lands, and says no extension_wait is needed", async () => {

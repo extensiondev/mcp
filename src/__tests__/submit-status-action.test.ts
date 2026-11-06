@@ -136,7 +136,7 @@ describe("extension_submit action status reads the store's own state for the new
 
     expect(action.enum).toEqual([...SUBMIT_ACTIONS]);
     expect(action.enum).toContain("status");
-    expect(action.description).toContain("status reads, for each store in browsers");
+    expect(action.description).toContain("status: each store's word");
   });
 
   it("names the store read when the action is unknown", async () => {

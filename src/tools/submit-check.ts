@@ -14,10 +14,29 @@ const submitProperties = submitSchema.inputSchema.properties as Record<string, R
 
 const SHARED = Object.keys(submitProperties).filter((key) => key !== "action" && key !== "approvalId");
 
+const STORE_SETTINGS = {
+  type: "object",
+  description: "With configure-store, only what changes for store, the same keys extension_submit's storeSettings lists.",
+};
+
+const SHORTER: Record<string, string> = {
+  dryRun: "true (the default) reads only; false only asks the owner's approval of the real submit.",
+  screenshots: "With sync-listing, PNGs in projectPath, at the sizes extension_submit lists.",
+  detail: "With preflight, true or a list of stores and requirement ids answers those rows in full.",
+};
+
+const sharedProperty = (key: string): Record<string, unknown> => {
+  if (key === "storeSettings") return STORE_SETTINGS;
+
+  const property = submitProperties[key]!;
+
+  return SHORTER[key] ? { ...property, description: SHORTER[key] } : property;
+};
+
 export const schema = {
   name: SUBMIT_CHECK_TOOL,
   description:
-    "Read a store submission and ask for an approval through extension_submit's own handler, under a read-only hint. preflight, status and submit with dryRun true (the default) dispatch nothing. Every first call with no approvalId that only asks a workspace owner to approve an exact act (approval-required, value.approvalUrl) comes here and executes nothing: submit with dryRun:false, publish, cancel, rollout, release, a derived sync-listing, a public configure-store. The call carrying the approvalId, and a plain sync-listing or configure-store, run through extension_submit; this tool refuses them.",
+    "Read a store submission or ask for an approval, under a read-only hint; it executes nothing. A real submit or store act first answers approval-required with value.approvalUrl here; the call carrying the approvalId runs through extension_submit.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -26,9 +45,9 @@ export const schema = {
         enum: [...SUBMIT_CHECK_ACTIONS],
         default: "submit",
         description:
-          "preflight, status, or submit (the default): a dry run unless dryRun is false, which only asks for the owner's approval; publish, review, cancel, rollout, release, sync-listing and configure-store only ask for the approval of that act, with the same arguments extension_submit takes for it. Each answers as extension_submit answers the same call.",
+          "preflight, status, or submit (default; a dry run unless dryRun:false, which only asks approval); publish, review, cancel, rollout, release, sync-listing, configure-store only ask approval.",
       },
-      ...Object.fromEntries(SHARED.map((key) => [key, submitProperties[key]])),
+      ...Object.fromEntries(SHARED.map((key) => [key, sharedProperty(key)])),
     },
     required: [],
   },

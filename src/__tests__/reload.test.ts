@@ -75,7 +75,7 @@ const parsed = (out: string) => JSON.parse(out) as { ok: boolean; status: string
 describe("extension_reload hands the reload verb to the engine as it was asked", () => {
   it("is registered as extension_reload and names the control channel it needs", () => {
     expect(reload.schema.name).toBe("extension_reload");
-    expect(reload.schema.description).toContain("allowControl");
+    expect(reload.schema.description).toContain("control channel (allowControl)");
     expect(reload.schema.inputSchema.required).toEqual(["projectPath"]);
     expect((reload.schema.inputSchema.properties.context as { default: string }).default).toBe("background");
   });

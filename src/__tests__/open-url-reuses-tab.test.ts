@@ -140,7 +140,6 @@ describe("433: extension_open reloads a tab that already shows the url instead o
   });
 
   it("names the reuse rule and the newTab switch in the schema", () => {
-    expect(open.schema.description).toContain("a tab already showing the url is reloaded in place (reused: true) unless newTab: true");
-    expect(open.schema.inputSchema.properties.newTab.description).toContain("reloaded in place");
+    expect((open.schema.inputSchema.properties as Record<string, { description: string }>).newTab.description).toContain("even if one shows the url");
   });
 });

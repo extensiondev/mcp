@@ -13,7 +13,7 @@ import { envelope } from "../lib/envelope";
 export const schema = {
   name: "extension_templates",
   description:
-    "Browse the extension.dev template catalog. Pass action:'list' (the default) to search and filter it and get metadata per template. Pass action:'source' with a `slug` to read one template's files, for learning a pattern before building something similar. Read `framework` as the UI framework only, never the language: TypeScript and JavaScript templates live under slugs ('typescript', 'content-typescript'), shadcn is a React variant ('sidebar-shadcn'), and provider AIs carry the 'ai' tag ('ai-chatgpt', 'ai-claude'). Reach those through query, tags or slug.",
+    "Browse the template catalog or read a template's files. TypeScript is slug 'typescript', shadcn 'sidebar-shadcn'; AI templates tag 'ai'.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -21,42 +21,43 @@ export const schema = {
         type: "string",
         enum: ["list", "source"],
         default: "list",
+        description: "list searches; source reads one template's files.",
       },
       slug: {
         type: "string",
         description:
-          "source: which template to read (e.g. 'ai-claude', 'content-react'). Required for source.",
+          "source: the template, e.g. 'content-react'.",
       },
       files: {
         type: "array",
         items: { type: "string" },
         description:
-          "source: paths to read (e.g. ['src/manifest.json']). Omit for the file listing.",
+          "source: paths to read; omit for the listing.",
       },
       query: {
         type: "string",
         description:
-          "list: keyword search over slug, description, tags and useCases. Ranks by word matches, so a natural phrase works.",
+          "list: keywords or a natural phrase.",
       },
       surface: {
         type: "string",
         enum: ["content", "sidebar", "newtab", "background"],
         description:
-          "list: filter by surface. For a popup/action starter use query:'action', not a surface.",
+          "list: surface; for a popup use query:'action'.",
       },
       framework: {
         type: "string",
         enum: ["react", "vue", "svelte", "preact", ""],
-        description: "list: UI framework filter (empty string = vanilla JS).",
+        description: "list: UI framework; empty string is vanilla.",
       },
       tags: {
         type: "array",
         items: { type: "string" },
-        description: "list: filter by tags, e.g. ['ai', 'chat'].",
+        description: "list: tags, e.g. ['ai'].",
       },
       featured: {
         type: "boolean",
-        description: "list: only featured templates.",
+        description: "list: featured only.",
       },
     },
     required: [],

@@ -22,7 +22,6 @@ describe("426: what a push costs is said with its filters, never as a blanket ru
 
   it("the extension_builds description names the skip word outcome beside the settings skips", () => {
     expect(buildsSchema.description).toMatch(/\[skip build\] pushes/);
-    expect(JSON.stringify(buildsSchema.inputSchema)).toMatch(/SKIP_REQUESTED for one whose head commit said \[skip build\], \[skip ci\] or Extension-Build: skip/);
   });
 
   it("a push the head commit opted out of reads as a configured skip with the way back", () => {

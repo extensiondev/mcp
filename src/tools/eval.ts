@@ -122,23 +122,23 @@ const pageRef = (t: { targetId: string; url: string }): TargetRef => ({ targetId
 export const schema = {
   name: "extension_eval",
   description:
-    `Evaluate an expression in a running extension context: the background, an extension surface (popup, options, sidebar, devtools, newtab, history, bookmarks), a content script or a page, picked by context, url, tab or targetId. Start the session with allowEval:true (extension_dev, or \`npx extension dev --allow-eval\` by hand), which writes a 0600 session token; without that token every route of this tool, the debug port included, answers eval-disabled. A returned promise is awaited; an uncloneable value (a DOM node, a function) comes back as its string form. To wait for a condition that is still settling (a model loading, an element appearing), pass until: {} (or {timeoutMs, intervalMs}) and the eval repeats until its value is truthy, answering that value, or the last one on timeout. Debug-port evaluates run with a user gesture, so gesture-gated APIs (permissions.request, sidePanel.open) can succeed here and still fail when the extension's own code calls them. Naming a tab the browser refuses to script (page-not-scriptable, extension-page-unreachable) needs Extension.js 4.1.34 or later; an older engine answers such a refusal as a missing target. ${SAFARI_EVAL_LIMIT} Not for reading a page's structure: that is extension_dom_snapshot, which also lists tabs and targets. Pass \`targetId\` (the target.targetId extension_open answers, or one from extension_dom_snapshot listTargets:true) to evaluate in that exact page over the debug port; context, url and tab are then ignored.`,
+    "Evaluate JavaScript in a running extension's background, surface, content script, page or targetId. Needs allowEval:true at start (by hand: --allow-eval) on every route, the debug port included, whose runs carry a user gesture. Safari: pages only; extension_logs reads the background.",
   inputSchema: {
     type: "object" as const,
     properties: {
       projectPath: SESSION_PROJECT_PATH,
       expression: {
         type: "string",
-        description: "JavaScript expression to evaluate in the target context",
+        description: "Expression to evaluate.",
       },
       context: {
         type: "string",
         enum: ["background", "popup", "options", "sidebar", "devtools", "newtab", "history", "bookmarks", "content", "page"],
         description:
-          "Where to evaluate. Default background, except on a Chromium MV3 session (the default template) where it defaults to page, the active tab; background on Chromium goes over the debug port (the service worker). For content and page, pass `url` to pick the tab, or omit both `url` and `tab` for the active tab; a numeric `tab` only disambiguates, and a url that matches several tabs showing the same page evaluates in the most recently active one and warns with the others' targetIds. Extension surfaces (popup, options, sidebar, devtools) and override pages (newtab, history, bookmarks) need no tab id but must already be open: open one with extension_open first, because a closed one returns an explicit error. On a Chromium MV3 session those pages, and page with a chrome-extension:// url, evaluate over CDP, the inspector path the extension page CSP does not govern; elsewhere they evaluate over the in-bundle relay. On Chromium, content with a url evaluates over CDP in the extension's isolated world of the matching tab, the world its content scripts share, which the extension's content_security_policy does not govern, so chrome.runtime and what the content script left on globals or the DOM are readable even under the MV3 default CSP; when the tab holds several such worlds the newest one where chrome.runtime.id is set is used, a world orphaned by an extension reload (chrome.runtime.id unset) is never evaluated in and the answer names it instead, and a tab where no content script of the extension has run yet goes through the relay instead. On Firefox a document whose content security policy forbids eval (the extension's own pages, or a site's) is evaluated over the debugger protocol instead, which takes one expression; a page inside the extension that is no declared surface (pages/*) is reached the same way by page and its moz-extension:// url once a tab shows it. An extension_start session's pages carry no relay, so there a surface shown in a tab (options) and an extension page url are evaluated over the debugger protocol too, while a surface in its own window (popup) is not reachable and the answer says so. The one case where a promise is not awaited is Firefox MV2 without the scripting API, where the expression runs through tabs.executeScript and must return a synchronous value.",
+          "Default background; surfaces must be open (extension_open).",
       },
-      url: { type: "string", description: "content/page: pick the tab by url (match pattern, then substring). Preferred over `tab`." },
-      tab: { type: "number", description: "Numeric chrome.tabs id, only to disambiguate when several tabs match." },
+      url: { type: "string", description: "content/page: the tab by url." },
+      tab: { type: "number", description: "chrome.tabs id to break a url tie." },
       targetId: TARGET_ID_PROPERTY,
       browser: SESSION_BROWSER,
       timeout: CALL_TIMEOUT,

@@ -172,7 +172,7 @@ describe("extension_eval on Safari names the contexts it cannot reach", () => {
   it("carries the Safari sentence in the description", () => {
     const description = evalTool.schema.description;
 
-    expect(description).toContain("On Safari this tool reaches only page contexts");
+    expect(description).toContain("Safari: pages only");
     expect(description).toContain("extension_logs reads the background");
   });
 

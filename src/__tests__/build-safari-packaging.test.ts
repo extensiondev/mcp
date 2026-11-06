@@ -807,7 +807,7 @@ describe("extension_build refuses a Safari packaging option it cannot honour", (
     ).macOsOnly;
 
     expect(macOsOnly?.type).toBe("boolean");
-    expect(macOsOnly?.description).toContain("Safari targets only");
+    expect(macOsOnly?.description).toMatch(/^Safari: /);
   });
 
   it("rejects a bundle id Xcode would reject, before paying for a build", async () => {

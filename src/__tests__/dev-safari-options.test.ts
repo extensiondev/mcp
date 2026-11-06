@@ -121,11 +121,10 @@ describe("extension_dev carries the Safari options extension_build already has, 
     const properties = dev.schema.inputSchema.properties as unknown as Record<string, { description: string }>;
 
     for (const name of ["appName", "bundleId", "developmentTeam", "macOsOnly", "forceRegenerate", "enableExtension"]) {
-      expect(properties[name]?.description, name).toMatch(/^Safari targets only/);
+      expect(properties[name]?.description, name).toMatch(/^Safari: /);
     }
 
     expect(properties.enableExtension!.description).toContain("Accessibility");
-    expect(properties.enableExtension!.description).toContain("compiled-not-attached");
   });
 
   it("passes the engine's own flag names through, in the engine's spelling", async () => {

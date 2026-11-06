@@ -299,7 +299,7 @@ function detectSurfaces(manifest: Record<string, any>): string[] {
 export const schema = {
   name: "extension_preview_web",
   description:
-    "Preview a build in the web emulator and share it as a quick link anyone can open, with no install, sign-in or dev server. This builds the project (unless build:false) and previews dist/<browser>. Pass share:true unless you are working inside the extension.dev monorepo: it uploads the build and returns that link, and it is the only lane that works from an npm install of this server. Sharing also serves the build as a zip, so it hands over the built code; read the share property before using it. For the link to send testers, the build's own page with a download and a run command for each browser, use extension_publish; this link is the quick emulator view beside it. Popups, options pages and side panels render in the emulator, and content scripts run on the emulator's sample pages (example.com, example.org, example.net and their /fixtures/ pages), not on any site: that is a limit of the preview only, not of the build or of sharing it. The default lane instead returns a deep link over the dev-only preview://build scheme, which resolves only against a preview.extension.dev dev server on this machine, so it is for people developing extension.dev itself. Call extension_shares to list and revoke every link shared this way, so one never vanishes with this response.",
+    "Preview a build in the web emulator; share:true returns a link anyone opens with no install (the preview://build default is for developing extension.dev itself). Tester links: extension_publish. Content scripts run only on sample pages, a limit of the preview only.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -310,47 +310,47 @@ export const schema = {
         enum: REAL_BROWSERS,
         default: "chrome",
         description:
-          "Which dist/<browser> output to preview. The preview page runs a Chromium build in its emulator and has a Firefox view that opens a build in a real Gecko engine.",
+          "dist/<browser> to preview; Firefox view for Firefox.",
       },
       build: {
         type: "boolean",
         default: true,
         description:
-          "Build first. false previews the existing dist/<browser> as-is.",
+          "Build first.",
       },
       distPath: {
         type: "string",
         description:
-          "Preview this built directory instead of dist/<browser> under projectPath. Implies build:false.",
+          "Preview this directory; implies build:false.",
       },
       hostUrl: {
         type: "string",
         description:
-          "Origin of the running preview.extension.dev dev server (default http://localhost:3110).",
+          "Local preview server origin.",
       },
       probe: {
         type: "boolean",
         default: true,
         description:
-          "Fetch the surface's dev middleware first to confirm the artifact loads on the local host. With share:true it also checks the shared link the way a browser would, following the zip's redirects and asserting the final response allows the preview origin, and reports that as share.browserLoadable.",
+          "Check the artifact loads.",
       },
       open: {
         type: "boolean",
         default: false,
         description:
-          "Also open the deep link in a running session's browser, in a focus-safe background tab. Needs a live extension_dev/extension_start session.",
+          "Also open it in a live session.",
       },
       openIn: {
         type: "string",
         enum: REAL_BROWSERS,
         description:
-          "Which session's browser to open it in. Defaults to `browser`.",
+          "Session browser to open in.",
       },
       share: {
         type: "boolean",
         default: false,
         description:
-          "Upload the built dist and return a public link (share.previewUrl) that renders those exact bytes for anyone: no install, sign-in or dev server. Uploading is metered against your plan's allowance on extension.dev; left false, the result's share property says what the local deepLink needs, what share:true spends, and the exact call to get a shareable link. It also serves the build as a zip (share.zipUrl), so sharing hands over the code. Needs a token scoped to an extension.dev project (extension_auth or EXTENSION_DEV_TOKEN); without one you get a login hint and the local preview still succeeds. Live until share.expiresAt; DELETE share.revokeUrl to kill it sooner. Revocation is permanent, and re-sharing an unchanged build returns the same link unless it was revoked, so each share is also appended to the project's gitignored .extension.dev/shared-previews.json.",
+          "Upload for share.previewUrl; metered against your plan's allowance, and hands over the code.",
       },
     },
     required: ["projectPath"],

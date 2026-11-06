@@ -15,35 +15,35 @@ export const SAFARI_DEV_OPTION_SCHEMA = {
   appName: {
     type: "string",
     description:
-      "Safari targets only: name of the generated macOS app, which also names the Xcode scheme and the .app on disk. Defaults to the manifest name.",
+      "Safari: app name.",
   },
   bundleId: {
     type: "string",
     description:
-      "Safari targets only: a reverse-DNS bundle identifier you own, such as com.acme.readinglist. Without one the app is packaged under a generated dev.extensionjs.* identifier derived from the app name, which two projects with the same name share.",
+      "Safari: your reverse-DNS bundle id.",
   },
   developmentTeam: {
     type: "string",
     description:
-      "Safari targets only: an Apple Developer team id to sign the app with. Without it the app is ad-hoc signed, which Safari loads locally once unsigned extensions are allowed; an ad-hoc rebuild keeps the extension's storage.local (Safari keys the store on the extension's identifier). The answer's signing field reports what codesign reads from the built app (requested, identity team:<id> or ad-hoc, appPath), warns when the requested team was not honored (Xcode has no account for it), and says when the identity changed since the previous run, which makes Safari treat the app as a new extension that must be enabled again.",
+      "Safari: Apple team id; omitted, ad-hoc.",
   },
   macOsOnly: {
     type: "boolean",
     default: true,
     description:
-      "Safari targets only: generate a macOS-only Xcode project. Pass false for a universal project that also targets iOS and iPadOS.",
+      "Safari: false adds iOS and iPadOS.",
   },
   forceRegenerate: {
     type: "boolean",
     default: false,
     description:
-      "Safari targets only: regenerate the Xcode project even when the engine considers it up to date.",
+      "Safari: regenerate the Xcode project.",
   },
   enableExtension: {
     type: "boolean",
     default: false,
     description:
-      "Safari targets only: let Extension.js turn the extension on in Safari Settings and allow it on other websites after the app opens, instead of printing the one-time setup steps for the person to click through. It drives Safari through macOS Accessibility, which needs a one-time grant for the terminal app that runs this server (System Settings > Privacy & Security > Accessibility); without the grant the engine falls back to the manual steps and the session stays compiled-not-attached until they are done.",
+      "Safari: enable it in Settings (Accessibility grant).",
   },
 } as const;
 

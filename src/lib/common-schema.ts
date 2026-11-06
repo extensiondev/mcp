@@ -52,27 +52,28 @@ export const PROJECT_PATH = {
 export const SESSION_PROJECT_PATH = {
   type: "string",
   description:
-    "Extension project root (needs a running session: extension_dev or extension_start, or `npx extension dev` / `npx extension start` run by hand in the same project, since any run that writes dist/extension-js/<browser>/ready.json is adopted; by hand, --allow-control opens the control channel and --allow-eval the eval channel)",
+    "Project root of a running session: extension_dev, extension_start, or `npx extension dev|start` by hand",
 } as const;
 
 export const SESSION_BROWSER = {
   type: "string",
-  description: "Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one.",
+  description: "Session browser; required when several run.",
 } as const;
 
 export const CALL_TIMEOUT = {
   type: "number",
-  description: "Command timeout in ms. When omitted, the default depends on the route: 30000 through the dev session's control channel, 10000 over the Firefox debugger protocol, and 15000 per command over the Chromium debug port.",
+  description: "Timeout ms (default 30000; Firefox 10000; debug port 15000).",
 } as const;
 
 export const API_BASE = {
   type: "string",
   description:
-    "Platform base URL (default EXTENSION_DEV_API_URL, else https://www.extension.dev)",
+    "Platform URL; default EXTENSION_DEV_API_URL.",
 } as const;
 
 export const LAUNCH_BROWSER = {
   type: "string",
   enum: LAUNCHABLE_BROWSERS,
   default: "chrome",
+  description: "Target browser; *-based pairs with chromiumBinary or geckoBinary.",
 } as const;

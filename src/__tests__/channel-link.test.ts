@@ -141,8 +141,6 @@ describe("a private project's answers withhold the channel link and say why", ()
 describe("the tools tell an agent which link to send testers", () => {
   it.each([
     ["extension_publish", publishSchema.description],
-    ["extension_release_status", releaseStatusSchema.description],
-    ["extension_release_promote", promoteSchema.description],
     ["the server instructions", serverInstructions({ features: ["local", "platform"], noShip: false })],
   ])("%s", (_where, text) => {
     expect(text.toLowerCase()).toContain(SENTENCE);
@@ -178,8 +176,7 @@ describe("extension_release_status carries each channel's audience when the plat
   });
 
   it("says where a build link's validity is read today", () => {
-    expect(releaseStatusSchema.description).toMatch(/Settings, Share links section/);
-    expect(releaseStatusSchema.description).toMatch(/audience/);
+    expect(releaseStatusSchema.description).toMatch(/channels/);
   });
 });
 
@@ -198,7 +195,6 @@ describe("every channel link a tool spells is the one the urls package formats",
   it.each([
     ["the server instructions", () => serverInstructions({ features: ["local", "platform"], noShip: false }), undefined],
     ["extension_publish", () => publishSchema.description, undefined],
-    ["extension_release_status include", () => releaseStatusSchema.inputSchema.properties.include.description, "browser"],
   ])("%s", (_where, read, browser) => {
     const text = read();
 

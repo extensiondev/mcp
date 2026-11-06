@@ -22,7 +22,7 @@ describe("extension_add_feature's description is the trigger for a plain add-a-s
 
   it("says it plans the surface before the agent writes it, and that the agent writes what the plan says", () => {
     expect(schema.description).toMatch(/^Plan the surface before adding/);
-    expect(schema.description).toMatch(/write what the plan says/);
+    expect(schema.description).toMatch(/changes nothing; then validate the manifest/);
   });
 
   it("hands the follow-up to the manifest check and the dev session instead of leaving the agent to shell out", () => {

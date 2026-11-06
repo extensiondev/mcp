@@ -23,7 +23,7 @@ const COMMAND = "extension_analyze";
 export const schema = {
   name: "extension_analyze",
   description:
-    "Analyze a BUILT extension on disk: sizes, entry points, permissions, bundle composition, store-readiness checks, and manifestByBrowser, the emitted manifest per built browser with the resolved keys (background, action, sidebar, permissions, host_permissions, chrome_url_overrides, browser_specific_settings) that differ; other dist folders are named, not read as browsers. Static: it reads dist/<browser> only. A dist extension_dev rewrote is a development build: buildType says so, store checks are skipped, extension_build makes the build to analyze. extension_inspect reads a running extension.",
+    "Analyze a BUILT extension in dist/<browser>: sizes, entries, permissions, store checks (not on a dev build).",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -31,12 +31,13 @@ export const schema = {
       browser: {
         type: "string",
         default: "chrome",
-        description: "Browser build to analyze",
+        description: "Browser build to analyze.",
       },
       format: {
         type: "string",
         enum: ["summary", "tree", "json"],
         default: "summary",
+        description: "Answer shape.",
       },
     },
     required: ["projectPath"],

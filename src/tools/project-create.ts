@@ -76,84 +76,74 @@ const CREATE_STUCK_MINUTES = CREATE_STUCK_AFTER_SECONDS / 60;
 export const schema = {
   name: "extension_project_create",
   description:
-    `Create an extension.dev project for an extension that has none yet, without opening the console: right after extension_create and extension_build, once the source is pushed to a GitHub repository, and BEFORE extension_auth, which only logs in to a project that exists. Ask only for the project slug and the repo; the platform finds the GitHub App installation on the approving account, or returns a connect link. Two-phase, like login: the first call answers a code and a URL where a signed-in member of the workspace approves creating exactly this project; call again with that deviceCode and waitSeconds, which blocks (up to ${DEVICE_WAIT_MAX_SECONDS} s) until the owner approves and finishes the create; the same deviceCode re-reads the outcome without a second approval. It answers value.outcome, value.links, trackUrl (the console page), and in \`firstBuild\` whether the first build was dispatched and, when none was, why. A dispatched first build spends one build of the workspace's monthly allowance, as every push does; \`allowance\` says how many remained before the call when a stored login of the workspace could read its plan, and warns when few remain. Every build runs the stored build command per enabled browser exactly as stored and reads its outputDirectory. The same approval signs this machine in to the new project when the platform mints its token with the create (\`login\`, default true), so extension_publish is next; extension_auth (action: login) is needed only when value.login.stored is false. To create several projects in one workspace under one approval, pass \`projects\` instead of \`project\` and \`repo\`. One approval creates at most ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} projects, the cap the platform states in its login config because it creates at most ${PLATFORM_CREATES_PER_HOUR} per hour for one approving account; the next ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} can start in a new call once that limit allows. A longer list is refused before any approval, never split silently, as is any list on a platform that does not advertise batch onboarding.`,
+    `Create an extension.dev project from its GitHub repository, BEFORE extension_auth. The first call answers a URL a signed-in workspace member approves; call again with deviceCode and waitSeconds, and the login is stored too. The first build spends one build of the workspace's monthly allowance, running the build command exactly as stored. projects: up to ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} per approval, at most ${PLATFORM_CREATES_PER_HOUR} per hour, never split silently.`,
   inputSchema: {
     type: "object" as const,
     properties: {
       project: {
         type: "string",
-        description:
-          "Target project as '<workspace>/<project>'. The workspace is the GitHub login of the approving user for personal workspaces; the project slug is the new project's name and must not exist yet.",
+        description: "New '<workspace>/<project>'.",
       },
       repo: {
         type: "string",
-        description:
-          "Source GitHub repository as '<owner>/<repo>'. The extension's code must be pushed there, and the owner must be the same GitHub account that approves the device code.",
+        description: "Pushed GitHub '<owner>/<repo>'.",
       },
       installationId: {
         type: "string",
-        description:
-          "Optional override. Leave it out: the platform finds the extension.dev GitHub App installation on the approving account itself. Pass it only when an operator needs to name one explicitly, and it must still be an installation on that account or the platform refuses it.",
+        description: "Omit; the platform finds it or answers a connect link.",
       },
       displayName: {
         type: "string",
-        description: "Human name for the project. Defaults to the project slug. To rename a project that already exists, use extension_workspace (action: 'configure-project', settings: { displayName }), never a second create.",
+        description: "Human name; rename later with extension_workspace configure-project.",
       },
       description: {
         type: "string",
-        description:
-          "Short project description. Defaults to a generic sentence naming the repo.",
+        description: "Short description.",
       },
       installCommand: {
         type: "string",
         default: "npm install",
-        description: "Dependency install command the build runs first.",
+        description: "Install command.",
       },
       buildCommand: {
         type: "string",
         default: DEFAULT_BUILD_COMMAND,
-        description:
-          "Build command the platform runs for each enabled browser, as it is, then reads that browser's outputDirectory: the platform does not add --browser to a command stored through this tool (only its import and clone paths derive one), and `extension build` with no flag targets chromium and writes `dist/chromium`, which no browser's outputDirectory reads. The default therefore names the browser into `dist/<browser>`; `<browser>` in a command of your own becomes each enabled browser's name.",
+        description: "Run as it is per browser (does not add --browser); `<browser>` substituted.",
       },
       outputDirectory: {
         type: "string",
         default: "dist/chrome",
-        description:
-          "Directory the build writes the loadable extension into. With more than one browser, `<browser>` in the path becomes each browser's name (Extension.js writes `dist/<browser>` for the browser its --browser flag names; `extension build` with no flag targets chromium and writes `dist/chromium`, so a buildCommand that leaves the flag out never fills `dist/chrome`), and when it is left out every browser defaults to `dist/<browser>`.",
+        description: "Build output; `<browser>` substituted.",
       },
       browsers: {
         type: "array",
         items: { type: "string", enum: ["chrome", "edge", "firefox"] },
         default: ["chrome"],
-        description:
-          "Browsers the platform builds, each enabled with the same install and build command and its own output directory. Pass every browser the extension targets, for example [\"chrome\", \"edge\", \"firefox\"], so the project needs no console visit to go cross-browser.",
+        description: "Browsers to build.",
       },
       outputDirectories: {
         type: "object",
-        description:
-          "Per-browser output directory overrides, for example {\"edge\": \"build/manifestv3\"}. A browser named here wins over `outputDirectory`.",
+        description: "Per-browser outputDirectory overrides.",
       },
       projects: {
         type: "array",
         items: { type: "object" },
-        description: `Create several projects in one workspace under one approval, instead of \`project\` and \`repo\`. 1 to ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} entries (the platform's cap per approval; never more than ${MAX_BATCH_PROJECTS}), each { project: '<workspace>/<project>', repo: '<owner>/<repo>' }, all in the same workspace, each project named by its exact slug (lowercase letters and digits joined by single dashes, at most 48 characters), none twice and none existing yet. An entry may also carry displayName, description, installCommand, buildCommand, outputDirectory, browsers and outputDirectories for that project alone; the same inputs at the top level are the shared default for every entry that leaves them out. The answer carries one row per project: created and logged in, created with no token (run a batch extension_auth login), refused with the platform's code, or not attempted. A refusal on one project never hides the others.`,
+        description: `Instead of project and repo: 1 to ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} (max ${MAX_BATCH_PROJECTS}) { project, repo } of one workspace.`,
       },
       deviceCode: {
         type: "string",
-        description:
-          "Resume token from the prior call's `deviceCode`; omit on the first call. Pass it with waitSeconds so one call blocks until the owner approves. The approval mints a provisioning grant that lives minutes, can only create the named project or list, and is kept on this machine only while a create's outcome is unknown, in a file only this user can read beside the stored logins, so calling again with the same deviceCode and arguments reads that outcome (created, still creating, or refused) with no second approval, and a restarted server resumes a list the same way. A batch answers status 'creating' with the same deviceCode until every listed project has an answer, each call within about 45 seconds; each created project's 7-day token is stored as that project's login, so no extension_auth call is needed afterwards.",
+        description: "Resume token; reuse re-reads the outcome.",
       },
       waitSeconds: {
         type: "number",
         minimum: 0,
         maximum: DEVICE_WAIT_MAX_SECONDS,
-        description: deviceWaitDescription("extension_project_create", "created (the create runs on the grant at once)"),
+        description: deviceWaitDescription(),
       },
       login: {
         type: "boolean",
         default: true,
-        description:
-          "Store the project token the platform mints with the create as this machine's login for the new project (the owner who approved creating it under their account approved acting on it), so no extension_auth call follows. value.login answers {stored, project, expiresAt} or {stored: false, reason, message}: the platform answered no token (reason is its code), the create was a replay (a replay carries no token), the token could not be stored, or login was false. false discards any token the platform answered.",
+        description: "Store the minted login.",
       },
       api: API_BASE,
     },

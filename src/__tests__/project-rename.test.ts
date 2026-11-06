@@ -17,7 +17,7 @@ describe("an existing project is renamed through extension_workspace configure-p
 
     expect(schema.description).toContain("renames a project (displayName; slug and URLs stay)");
     expect(props.settings.description).toContain("displayName renames the project");
-    expect(createProps.displayName.description).toContain("extension_workspace (action: 'configure-project', settings: { displayName })");
+    expect(createProps.displayName.description).toContain("extension_workspace configure-project");
   });
 
   it("sends only the new name as a plain call and says what the rename changes and what it keeps", async () => {

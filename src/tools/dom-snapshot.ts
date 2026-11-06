@@ -70,49 +70,49 @@ const RDP_ACTOR_NOTE =
 export const schema = {
   name: "extension_dom_snapshot",
   description:
-    "Take a shallow structured DOM snapshot of one chosen surface: element counts, extension roots, open shadow roots, optional byte-capped HTML, and optional recent console lines. This is the SURFACE PICKER: the only tool that reads an open extension surface by name (`context`: popup, options, sidebar, devtools) or an override page, the only one that takes a numeric chrome.tabs id, and the only one that enumerates what is open (listTargets for targetIds, listTabs for numeric tab ids). Pass `targetId` (the target.targetId extension_open answers, or one from listTargets) to read that exact page over the debug port. Not for closed shadow roots, selector probes, navigation or a deep read of an open web page: that is extension_inspect. Not for the pixels: that is extension_screenshot. The snapshot rides the agent bridge (localhost only, on unless extension_dev was called with allowControl:false) and needs no CDP; listTargets and `tabUrl` resolution ask the browser directly and need the session's debug port.",
+    "Take a shallow DOM snapshot of one open surface or targetId, or list what is open (listTargets on the debug port, listTabs). Closed shadow roots and probes: extension_inspect.",
   inputSchema: {
     type: "object" as const,
     properties: {
       projectPath: SESSION_PROJECT_PATH,
-      tab: { type: "number", description: "Numeric chrome.tabs id, only to disambiguate when several tabs match. With neither `tab` nor `url`, content/page target the active tab." },
-      url: { type: "string", description: "content/page: pick the tab by url (match pattern, then substring). Preferred over `tab`." },
+      tab: { type: "number", description: "chrome.tabs id; else url, else the active tab." },
+      url: { type: "string", description: "content/page: the tab by url." },
       tabUrl: {
         type: "string",
         description:
-          "Pick the tab by url through the browser's own target list (needs the session's debug port: CDP page targets on Chromium, RDP tab descriptors on Firefox). One that matches several tabs showing the same page reads the most recently active one and warns; one that matches different pages returns the candidates, with their targetIds, instead of guessing.",
+          "The tab by url from the target list.",
       },
       targetId: TARGET_ID_PROPERTY,
       listTargets: {
         type: "boolean",
         default: false,
         description:
-          "Enumerate live page targets and return, ignoring the other args. The discovery path for `targetId` and `tabUrl`. Chromium: {targetId,url,title,type}. Firefox: RDP tab descriptors {targetId,actor,url,title,type}. Neither id is a numeric chrome.tabs id; for those use listTabs.",
+          "List page targets and return.",
       },
       listTabs: {
         type: "boolean",
         default: false,
         description:
-          "Enumerate open tabs as {tabId,url,title} and return, ignoring the other args. Use when you need a numeric tab id.",
+          "List tabs with ids and return.",
       },
       context: {
         type: "string",
         enum: ["content", "page", "popup", "options", "sidebar", "devtools", "newtab", "history", "bookmarks"],
         default: "content",
         description:
-          "content/page targets `url`, else the active tab; the rest (popup, options, sidebar, devtools, newtab, history, bookmarks) must already be OPEN, by extension_open. On Firefox, a surface or extension page the bridge cannot reach (an extension_start session's pages carry no relay) is read over the debugger protocol from the tab showing it.",
+          "Surfaces must already be open (extension_open).",
       },
       include: {
         type: "array",
         items: { type: "string", enum: ["summary", "html"] },
         default: ["summary"],
-        description: "What to include; html is byte-capped",
+        description: "What to include.",
       },
-      maxBytes: { type: "number", default: 262144 },
+      maxBytes: { type: "number", default: 262144, description: "Byte cap on the html." },
       withConsole: {
         type: ["number", "boolean"],
         description:
-          "Also include recent console lines. A number is how many; true means 50.",
+          "Console lines: a count, or true for 50.",
       },
       browser: SESSION_BROWSER,
       timeout: CALL_TIMEOUT,

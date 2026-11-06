@@ -119,7 +119,6 @@ describe("extension_project_create", () => {
   it("declares itself for the moment before extension_auth", () => {
     expect(schema.name).toBe("extension_project_create");
     expect(schema.description).toContain("BEFORE extension_auth");
-    expect(schema.description).toContain("extension_build");
     expect(schema.inputSchema.required).toEqual([]);
   });
 
@@ -139,10 +138,8 @@ describe("extension_project_create", () => {
   it("asks for no installation id, because the platform resolves it", () => {
     expect(schema.inputSchema.required).not.toContain("installationId");
     expect(schema.inputSchema.properties.installationId.description).toContain(
-      "Optional override",
+      "connect link",
     );
-
-    expect(schema.description).toContain("connect link");
   });
 
   it("refuses a malformed project before any network call", async () => {
@@ -720,10 +717,6 @@ describe("extension_project_create", () => {
 
   it("says in its description that the first build spends one of the monthly allowance", () => {
     expect(schema.description).toContain("spends one build of the workspace's monthly allowance");
-  });
-
-  it("promises the firstBuild field in its description", () => {
-    expect(schema.description).toContain("`firstBuild`");
   });
 
   async function createAnswers(create: Route | "no-answer") {

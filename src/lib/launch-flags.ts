@@ -10,40 +10,40 @@ export const LAUNCH_FLAG_SCHEMA = {
   profile: {
     type: "string",
     description:
-      'Profile path, or "false" to reuse the real user profile. Omit for a throwaway one.',
+      "Profile path; \"false\" reuses the real one.",
   },
   startingUrl: {
     type: "string",
-    description: "URL the browser opens on launch",
+    description: "URL opened on launch.",
   },
   chromiumBinary: {
     type: "string",
-    description: "Custom Chromium-based binary to launch; `browser` still names the target family the engine builds for (chromium-based when none is given).",
+    description: "Chromium binary; browser still names the target family.",
   },
   geckoBinary: {
     type: "string",
-    description: "Custom Gecko/Firefox binary to launch; `browser` still names the target family the engine builds for (gecko-based when none is given).",
+    description: "Gecko binary; browser still names the target family.",
   },
   host: {
     type: "string",
     description:
-      "Bind host, default 127.0.0.1. Use 0.0.0.0 in Docker or devcontainers.",
+      "Bind host (default 127.0.0.1).",
   },
   publicHost: {
     type: "string",
     description:
-      "Host the browser dials for HMR and reload when it differs from the bind host",
+      "Host the browser dials, if not host.",
   },
   extensions: {
     type: "array",
     items: { type: "string" },
     description:
-      "Extra extension paths or store URLs to load alongside the project",
+      "Extra extensions to load.",
   },
   headless: {
     type: "boolean",
     description:
-      "false opens a browser window the person can see, overriding EXTENSION_HEADLESS and any --headless in EXTENSION_BROWSER_FLAGS for this session only; pass it when the person wants to watch or try the extension. true forces headless. Omit to inherit the environment (headless when EXTENSION_HEADLESS=1 or EXTENSION_BROWSER_FLAGS carries --headless).",
+      "true: headless; false: a visible window; omitted: env decides.",
   },
 } as const;
 

@@ -211,7 +211,6 @@ describe("extension_project_create waits inside the call (ledger 292)", () => {
     expect(wait.minimum).toBe(0);
     expect(wait.maximum).toBe(900);
     expect(wait.description).toContain("blocks");
-    expect(createSchema.description).toContain("blocks (up to 900 s");
   });
 });
 
@@ -269,7 +268,6 @@ describe("extension_auth login waits inside the call (ledger 292)", () => {
     expect(wait.minimum).toBe(0);
     expect(wait.maximum).toBe(900);
     expect(wait.description).toContain("blocks");
-    expect(authSchema.description).toContain("blocks (up to 900 s");
   });
 });
 
@@ -334,6 +332,6 @@ describe("extension_project_create stores the login the create minted (ledger 29
   it("declares login as a boolean that defaults to true", () => {
     expect(createSchema.inputSchema.properties.login.type).toBe("boolean");
     expect(createSchema.inputSchema.properties.login.default).toBe(true);
-    expect(createSchema.description).toContain("extension_auth (action: login) is needed only when value.login.stored is false");
+    expect(createSchema.description).toContain("the login is stored too");
   });
 });

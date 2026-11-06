@@ -66,7 +66,7 @@ describe("whoami reports the stored token identity, not the cwd", () => {
   it("the tool description anchors identity to the stored token", () => {
     expect(auth.schema.description).toContain("extension.dev/device");
     expect(auth.schema.description).toMatch(
-      /does not change with the current working directory/i,
+      /Identity is the stored token, not the working directory/i,
     );
   });
 
@@ -214,9 +214,7 @@ describe("7-day token TTL disclosure", () => {
   });
 
   it("token-gated tools state the TTL wherever they point at Access tokens", async () => {
-    const submit = await import("../tools/submit");
     const promote = await import("../tools/release-promote");
-    expect(submit.schema.description).toContain("7 days");
     expect(promote.schema.description).toContain("7 days");
   });
 });

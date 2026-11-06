@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { handler, schema } from "../tools/release-promote";
+import { handler } from "../tools/release-promote";
 import { readPromoteOutcome } from "../lib/promote-outcome";
 import { promoteAnswer } from "./fixtures/platform-answers";
 
@@ -172,10 +172,6 @@ describe("extension_release_promote reads the platform's answer, not its status 
     expect(out.hint).toContain("extension_release_status");
   });
 
-  it("promises the partial and unconfirmed statuses in its description", () => {
-    expect(schema.description).toContain("promoted-partially");
-    expect(schema.description).toContain("promote-unconfirmed");
-  });
 });
 
 describe("readPromoteOutcome", () => {

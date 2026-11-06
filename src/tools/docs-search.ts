@@ -15,17 +15,17 @@ const COMMAND = "extension_docs_search";
 export const schema = {
   name: COMMAND,
   description:
-    "Find the docs page to cite before answering any question about a WebExtension API, a manifest key, a permission, or a difference between Chrome, Firefox, Edge and Safari. It searches the Extension.js and extension.dev docs (free, no login) and answers with the pages, each with its URL and an excerpt. Memory is the fallback only when it returns nothing.",
+    "Find the docs page to cite before answering about a WebExtension API, a manifest key, a permission or a browser difference. It searches the Extension.js and extension.dev docs (free) and answers pages with URLs. Memory is the fallback only when it returns nothing.",
   inputSchema: {
     type: "object" as const,
     properties: {
-      query: { type: "string", description: "What to look up, in a few words." },
+      query: { type: "string", description: "What to look up." },
       limit: {
         type: "number",
         minimum: 1,
         maximum: 8,
         default: 5,
-        description: "How many pages to return, 1 to 8.",
+        description: "Pages to return.",
       },
       api: API_BASE,
     },

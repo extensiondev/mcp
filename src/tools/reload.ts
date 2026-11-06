@@ -25,7 +25,7 @@ import {
 export const schema = {
   name: "extension_reload",
   description:
-    "Reload a running extension's background context, or a tab. Rides the dev session's control channel, on unless extension_dev was called with allowControl:false. A background reload answers once the engine's ready.json shows the new background attached to the dev server again (value.reattached, value.reattachedMs), so the next read or assertion meets the new generation and not the gap between them; if it has not come back within the budget (timeout, at most 5 seconds) the answer is status reloading with the contract's own stamps.",
+    "Reload the extension's background, or a tab, over the control channel (allowControl); a background reload waits up to 5 s.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -34,8 +34,9 @@ export const schema = {
         type: "string",
         enum: ["background", "content", "page"],
         default: "background",
+        description: "Background, or a content or page tab.",
       },
-      tab: { type: "number", description: "For content/page: a specific tab id" },
+      tab: { type: "number", description: "content/page: the tab id." },
       browser: SESSION_BROWSER,
       timeout: CALL_TIMEOUT,
     },

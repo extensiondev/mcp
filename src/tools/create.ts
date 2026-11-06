@@ -55,30 +55,30 @@ function detectPackageManager(projectPath: string): string {
 export const schema = {
   name: "extension_create",
   description:
-    "Create a browser extension project from a template in the extension.dev catalog; call extension_templates first to see what is available. The scaffolder may initialize a git repository in the new project (with a first commit), and it also writes store metadata and a .gitignore of its own; the result's defaultsApplied block reads those decisions back. The result's `scripts` lists every package.json script that runs the engine, with the browser it targets and the folder it writes: the scaffolder passes no --browser to `dev`, `start` and `build`, so `npm run build` writes dist/chromium while `build:chrome` writes dist/chrome; read the folder from that list instead of assuming one. A scaffold that answers `created` is verified (its manifest was found and read): it needs no build to prove it, so do not run `npm run build` to check it; the next step is extension_dev with the answered projectPath. Not for a project that exists: extension_dev runs it, extension_project_create puts it on extension.dev. After a successful scaffold this tool sends one telemetry event, draft_seeded (template slug, source and commit, a random install id, never a path or a name), to PostHog; the Telemetry section of this package's readme names the two environment variables that turn it off.",
+    "Create an extension project from a template (extension_templates); it may init git. It is verified, so the next step is extension_dev, not a build; `scripts` name the outputs (`npm run build` writes dist/chromium). Sends one draft_seeded event; the readme's Telemetry section turns it off.",
   inputSchema: {
     type: "object" as const,
     properties: {
       projectName: {
         type: "string",
         description:
-          "Name of the extension project (used as directory name). Alias: name.",
+          "Project directory name. Alias: name.",
       },
       parentDir: {
         type: "string",
         description:
-          "Directory to create the project inside. Defaults to the MCP server process cwd, NOT the caller's cwd, so pass it whenever you care where the project lands. Aliases: parent, into.",
+          "Where to create it; default the MCP server process cwd. Aliases: parent, into.",
       },
       template: {
         type: "string",
         default: "typescript",
         description:
-          "Template slug from the extension.dev catalog (e.g. 'react', 'ai-claude', 'content-vue'). extension_templates discovers them.",
+          "Catalog slug, e.g. 'react'.",
       },
       install: {
         type: "boolean",
         default: true,
-        description: "Install dependencies after creation",
+        description: "Install dependencies.",
       },
     },
     required: ["projectName"],

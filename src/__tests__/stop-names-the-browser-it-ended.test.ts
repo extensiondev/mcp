@@ -121,6 +121,6 @@ describe("extension_stop says what it ended, so 'close its browser' needs no she
   );
 
   it("tells the agent in the description that the answer carries the browser's state", () => {
-    expect(stop.schema.description).toMatch(/browser pid/i);
+    expect(stop.schema.description).toMatch(/browser pid it ended/i);
   });
 });

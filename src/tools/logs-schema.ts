@@ -17,7 +17,7 @@ import {
 export const schema = {
   name: "extension_logs",
   description:
-    "Read or stream logs from every context of a running dev session (service worker, content scripts, popup, options, sidebar, devtools, pages) in one ordered timeline. This reads the same agent-bridge plane as the `extension logs` CLI: a one-shot returns the most recent matching lines from logs.ndjson, and follow:true connects to the live control channel, replays the broker's recent ring (up to 5,000 events, value.replayed) and then the frames that arrive during followMs (value.live). The session may be extension_dev's or a `npx extension dev` run by hand (follow needs --allow-control there).",
+    "Read a dev session's logs from every context in one timeline, or follow:true for live frames after the replayed ring. Works on a `npx extension dev` run by hand (follow needs --allow-control there); not on extension_start.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -25,14 +25,14 @@ export const schema = {
       browser: {
         type: "string",
         description:
-          "Which dist/extension-js/<browser>/ to read. Defaults to this project's live session, else chrome. Required when the project runs sessions for more than one browser.",
+          "Session browser; default the live session, else chrome.",
       },
       level: {
         type: "string",
         enum: ["off", "error", "warn", "info", "debug", "trace", "all"],
         default: "all",
         description:
-          "Minimum severity; a level includes everything more severe.",
+          "Minimum severity.",
       },
       context: {
         type: "array",
@@ -50,47 +50,47 @@ export const schema = {
             "bookmarks",
           ],
         },
-        description: "Restrict to these contexts. Omit for all.",
+        description: "Only these contexts.",
       },
       signalsOnly: {
         type: "boolean",
         default: false,
         description:
-          "Only structured dx.signal diagnostics (code/status/remediation), no plain console lines.",
+          "Only dx.signal diagnostics.",
       },
       since: {
         type: "number",
         description:
-          "Only events with seq greater than this; the cursor for polling forward.",
+          "Only events after this seq (the polling cursor).",
       },
       url: {
         type: "string",
         description:
-          "Only events whose url/hostname matches (glob or substring), e.g. https://shop.example/*.",
+          "Only events whose url matches (glob or substring).",
       },
       tab: {
         type: "number",
-        description: "Only events from this tab id.",
+        description: "Only this tab id.",
       },
       match: {
         type: "string",
-        description: "Only lines whose text matches this case-insensitive regex or substring (alias grep); value.matched of value.total counts them.",
+        description: "Only lines matching this regex or substring.",
       },
       follow: {
         type: "boolean",
         default: false,
         description:
-          "Collect from the live control channel for a bounded window instead of reading the file.",
+          "Collect live frames.",
       },
       followMs: {
         type: "number",
         default: DEFAULT_FOLLOW_MS,
-        description: `How long to collect live frames when follow=true (clamped ${MIN_FOLLOW_MS}–${MAX_FOLLOW_MS}ms).`,
+        description: "ms to collect live frames (500 to 15000).",
       },
       limit: {
         type: "number",
         default: DEFAULT_LIMIT,
-        description: "How many of the most recent events to return.",
+        description: "How many recent events.",
       },
     },
     required: ["projectPath"],

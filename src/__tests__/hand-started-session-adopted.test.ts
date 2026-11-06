@@ -22,9 +22,7 @@ const sessionTools = tools.filter((tool) => {
 
 describe("the session tools say a run the person started by hand is adopted, since they read the same ready contract", () => {
   it("the shared projectPath names the run by hand, the contract it writes and the flags its channels need", () => {
-    expect(SESSION_PROJECT_PATH.description).toContain("`npx extension dev` / `npx extension start` run by hand in the same project");
-    expect(SESSION_PROJECT_PATH.description).toContain("dist/extension-js/<browser>/ready.json is adopted");
-    expect(SESSION_PROJECT_PATH.description).toContain("--allow-control opens the control channel and --allow-eval the eval channel");
+    expect(SESSION_PROJECT_PATH.description).toContain("`npx extension dev|start` by hand");
   });
 
   it("no session tool says the session must come from extension_dev", () => {
@@ -38,8 +36,8 @@ describe("the session tools say a run the person started by hand is adopted, sin
 
   it("extension_logs, extension_open, extension_eval and extension_screenshot name the run by hand beside the flag their route needs", () => {
     expect(described("extension_logs")).toContain("a `npx extension dev` run by hand (follow needs --allow-control there)");
-    expect(described("extension_open")).toContain("a `npx extension dev` run by hand needs --allow-control");
-    expect(described("extension_eval")).toContain("or `npx extension dev --allow-eval` by hand");
-    expect(described("extension_screenshot")).toContain("extension_dev, extension_start or the same run by hand");
+    expect(described("extension_open")).toContain("by hand: --allow-control");
+    expect(described("extension_eval")).toContain("by hand: --allow-eval");
+    expect(described("extension_screenshot")).toContain("in a live session");
   });
 });

@@ -266,7 +266,7 @@ describe("extension_auth login with projects: refusals before a device code is s
     expect(text).toContain("1 to 20");
     expect(text).toContain("at most 48 characters");
     expect(text).toContain("existing projects");
-    expect(schema.description).toContain("`projects`");
+    expect(String((schema.inputSchema.properties as Record<string, { description?: string }>).projects?.description)).toContain("1 to 20 existing projects");
   });
 });
 
