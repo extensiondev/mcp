@@ -1647,7 +1647,7 @@
           "name": "store",
           "type": "\"chrome\" | \"firefox\" | \"edge\" | \"safari\"",
           "required": false,
-          "description": "With listing, read this one store's listing instead of all four."
+          "description": "With listing or stores, read only this store, never all four."
         },
         {
           "name": "releaseId",
@@ -1666,6 +1666,12 @@
           "type": "string",
           "required": false,
           "description": "Project slug override (default: the stored login's)."
+        },
+        {
+          "name": "projectPath",
+          "type": "string",
+          "required": false,
+          "description": "Path to the extension project root, to read the project it names: the stored login whose project is its package.json name or GitHub origin, as extension_submit and extension_submit_check resolve it. A directory no stored login is for is refused with both names and nothing is read. Nothing local is read beyond that."
         },
         {
           "name": "api",

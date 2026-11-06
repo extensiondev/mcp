@@ -578,6 +578,7 @@ export async function readStores(args: {
   refresh?: string[];
   submissionId?: string;
   waitSeconds?: unknown;
+  store?: string;
   caller?: StatusCaller;
 }): Promise<string> {
   const ref = resolveProjectRef(args);
@@ -638,7 +639,7 @@ interface StoresRead {
 }
 
 async function answerStores(
-  args: { api?: string; submissionId?: string },
+  args: { api?: string; submissionId?: string; store?: string },
   ref: ProjectRef,
   named: boolean,
   refresh: Record<string, StoreRefreshView> | null,
@@ -730,6 +731,7 @@ async function answerStores(
     if (Object.keys(latest.run).length > 0) runsByStore[store] = latest.run;
   }
 
+  const onlyStore = (str(args.store) ?? "").toLowerCase();
   const stores = [
     ...KNOWN_STORES,
     ...Object.keys({ ...healthStores, ...submissionsByStore, ...status.reviews }).filter(
@@ -828,7 +830,8 @@ async function answerStores(
   const healthAbsent = !healthRes.ok && healthRes.status === 404;
   const submissionsKnown = submissionsRes.ok || submissionsRes.status === 404;
 
-  const summaryParts = rows.map((row) => {
+  const shown = onlyStore ? rows.filter((row) => row.store === onlyStore) : rows;
+  const summaryParts = shown.map((row) => {
     const store = String(row.store);
     const health = row.health as { ok: boolean; message?: string } | undefined;
     const submission = row.lastSubmission as SubmissionView | undefined;
@@ -958,8 +961,9 @@ async function answerStores(
       ? null
       : `the store releases could not be read from the platform: ${releases.message}`;
 
-  const pushOpen = listingPush.ok && listingPushOpen(listingPush.push) ? `${listingPush.push?.say}.` : null;
-  const pushUnread = !listingPush.ok && !listingPush.skipped ? `the Safari listing push could not be read from the platform, so whether it landed is unknown: ${listingPush.message}` : null;
+  const safariAsked = !onlyStore || onlyStore === "safari";
+  const pushOpen = safariAsked && listingPush.ok && listingPushOpen(listingPush.push) ? `${listingPush.push?.say}.` : null;
+  const pushUnread = safariAsked && !listingPush.ok && !listingPush.skipped ? `the Safari listing push could not be read from the platform, so whether it landed is unknown: ${listingPush.message}` : null;
 
   const render = (wait: RefreshWaitView | null): string => envelope({
     ok: true,
@@ -968,8 +972,8 @@ async function answerStores(
     value: {
       workspace: ref.workspace,
       project: ref.project,
-      stores: rows,
-      ...(status.lastSubmission
+      stores: shown,
+      ...(status.lastSubmission && (!onlyStore || str(status.lastSubmission.store) === onlyStore)
         ? { lastSubmission: status.lastSubmission }
         : {}),
       ...(status.lastPollAt ? { lastPollAt: status.lastPollAt } : {}),

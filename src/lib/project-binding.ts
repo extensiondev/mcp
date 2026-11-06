@@ -21,7 +21,7 @@ type Args = Record<string, unknown>;
 
 const UNBOUND = new Set(["extension_auth", "extension_workspace_create", "extension_project_create"]);
 const WORKSPACE_READS = new Set(["info", "projects", "usage"]);
-const PATH_NAMES_PROJECT = new Set(["extension_submit", "extension_shares", "extension_preview_web"]);
+const PATH_NAMES_PROJECT = new Set(["extension_submit", "extension_release_status", "extension_shares", "extension_preview_web"]);
 
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";

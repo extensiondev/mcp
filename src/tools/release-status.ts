@@ -52,7 +52,7 @@ export const schema = {
       store: {
         type: "string",
         enum: ["chrome", "firefox", "edge", "safari"],
-        description: "With listing, read this one store's listing instead of all four.",
+        description: "With listing or stores, read only this store, never all four.",
       },
       releaseId: {
         type: "string",
@@ -65,6 +65,11 @@ export const schema = {
       project: {
         type: "string",
         description: "Project slug override (default: the stored login's).",
+      },
+      projectPath: {
+        type: "string",
+        description:
+          "Path to the extension project root, to read the project it names: the stored login whose project is its package.json name or GitHub origin, as extension_submit and extension_submit_check resolve it. A directory no stored login is for is refused with both names and nothing is read. Nothing local is read beyond that.",
       },
       api: API_BASE,
     },
@@ -95,6 +100,7 @@ export async function handler(args: {
   releaseId?: string;
   workspace?: string;
   project?: string;
+  projectPath?: string;
   api?: string;
 }): Promise<string> {
   const releaseId = String(args.releaseId ?? "").trim();
@@ -112,7 +118,7 @@ export async function handler(args: {
 
   const [releases, stores, history, release, runs, rollout, cut, listing] = await Promise.all([
     include.includes("releases") ? readReleases(scope).then(parse) : null,
-    include.includes("stores") ? readStores({ ...scope, refresh: args.refresh, submissionId: args.submissionId, waitSeconds: args.waitSeconds }).then(parse) : null,
+    include.includes("stores") ? readStores({ ...scope, refresh: args.refresh, submissionId: args.submissionId, waitSeconds: args.waitSeconds, store: args.store }).then(parse) : null,
     include.includes("history") ? readReleaseHistory(scope).then(parse) : null,
     releaseId ? readOneRelease({ ...scope, releaseId }).then(parse) : null,
     include.includes("runs") ? readPromotionRuns({ ...scope, since: args.since }).then(parse) : null,
