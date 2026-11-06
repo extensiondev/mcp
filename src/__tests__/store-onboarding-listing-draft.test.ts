@@ -121,7 +121,8 @@ describe("extension_submit preflight drafts STORE.md from the code and leaves ev
     expect(byField("fullDescription")[0].limit).toContain("16,000 characters");
     expect(byField("fullDescription")[0].facts[0]).toBe('The manifest description reads "Counts the words on any page you open."');
     expect(byField("permissionJustifications")).toHaveLength(1);
-    expect(byField("permissionJustifications")[0]).toMatchObject({ section: "## Chrome Web Store", stores: ["chrome"] });
+    expect(byField("permissionJustifications")[0]).toMatchObject({ section: "## Chrome Web Store", stores: ["chrome", "edge"] });
+    expect(byField("singlePurpose").map((line: Row) => [line.section, line.stores])).toEqual([["## Chrome Web Store", ["chrome", "edge"]]]);
     expect(byField("permissionJustifications")[0].facts[0]).toBe("Write one bullet per entry, keyed as the manifest spells it: storage, activeTab, https://api.wordcount.example/*.");
     expect(byField("singlePurpose")[0].facts).toEqual(expect.arrayContaining(["The manifest declares a background script, a toolbar button, content scripts."]));
     expect(byField("reviewerNotes").map((line: Row) => [line.section, line.stores])).toEqual([["## Firefox Add-ons", ["firefox"]], ["## Safari", ["safari"]]]);
@@ -178,6 +179,12 @@ describe("extension_submit preflight drafts STORE.md from the code and leaves ev
     const draft = (await preflight(project(long), ["safari"])).listingDraft;
 
     expect(draft.agentWrites.map((line: Row) => line.field)).toContain("appStoreName");
+  });
+
+  it("asks Edge alone for its single purpose under its own section", async () => {
+    const draft = (await preflight(project(FILES), ["edge"])).listingDraft;
+
+    expect(draft.agentWrites.filter((line: Row) => line.field === "singlePurpose").map((line: Row) => [line.section, line.stores])).toEqual([["## Edge Add-ons", ["edge"]]]);
   });
 
   it("judges each store's screenshot folder by the store's own size and alpha rule, and names the capture for an empty one", async () => {

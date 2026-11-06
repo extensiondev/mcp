@@ -193,7 +193,8 @@ function groupedBySection(field: ListingField, stores: ListingStore[]): Array<{ 
   const groups = new Map<string, ListingStore[]>();
 
   for (const store of stores) {
-    const section = storeMdSectionOf(field, store).section;
+    const home = storeMdSectionOf(field, store);
+    const section = [...groups.keys()].find((existing) => home.alsoRead.includes(existing)) ?? home.section;
     groups.set(section, [...(groups.get(section) ?? []), store]);
   }
 
@@ -211,7 +212,8 @@ function draftText(name: string, lines: DraftLine[]): string {
  * declaration, App Privacy, the age rating and content rights. So the drafted
  * STORE.md carries the manifest's own name and summary and nothing else; the
  * prose fields go to agentWrites with the code facts to write them from, the
- * six decisions keep their own answer, and every declaration in
+ * six decisions keep their own answer, a field two stores read from one
+ * section is asked once there, and every declaration in
  * NEVER_PREFILLED goes to ownerAnswers with code facts alone: what the
  * manifest asks for, what the source calls, never a proposed answer. A line
  * STORE.md already carries is never drafted again.
