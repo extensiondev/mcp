@@ -27,7 +27,13 @@ const kept = (char: string): boolean => {
 
 const clean = (value: string): string => Array.from(value).filter(kept).join("").trim();
 
-type Bounded = { value: unknown } | { reason: string };
+export interface OverLimitMeasure {
+  length: number;
+  limit: number;
+  unit: "characters" | "bytes";
+}
+
+type Bounded = { value: unknown } | { reason: string; over?: OverLimitMeasure };
 
 export function bounded(field: string, value: unknown, skipped: string[], store: ListingStore): Bounded {
   if (typeof value === "string") {
@@ -35,13 +41,16 @@ export function bounded(field: string, value: unknown, skipped: string[], store:
     const limit = (LISTING_TEXT_LIMITS as Record<string, number>)[field];
 
     if (limit && text.length > limit) {
-      return { reason: `is ${text.length} characters, over the ${limit} the listing takes` };
+      return { reason: `is ${text.length} characters, over the ${limit} the listing takes`, over: { length: text.length, limit, unit: "characters" } };
     }
 
     const over = storeTextOverLimit(store, field, text);
 
     if (over) {
-      return { reason: `is ${over.length} ${over.unit}, over the ${over.max} ${over.unit} ${STORE_LABELS[store]} takes` };
+      return {
+        reason: `is ${over.length} ${over.unit}, over the ${over.max} ${over.unit} ${STORE_LABELS[store]} takes`,
+        over: { length: over.length, limit: over.max, unit: over.unit },
+      };
     }
 
     const emailField = field === "supportEmail" || field === "reviewContactEmail";
@@ -79,7 +88,7 @@ export function bounded(field: string, value: unknown, skipped: string[], store:
   const joined = items.join(",").length;
 
   if (joinedLimit && joined > joinedLimit) {
-    return { reason: `is ${joined} characters joined by commas, over the ${joinedLimit} the App Store keywords take` };
+    return { reason: `is ${joined} characters joined by commas, over the ${joinedLimit} the App Store keywords take`, over: { length: joined, limit: joinedLimit, unit: "characters" } };
   }
 
   const termsProblem = field === "searchTerms" ? storeSearchTermsProblem(store, items) : null;

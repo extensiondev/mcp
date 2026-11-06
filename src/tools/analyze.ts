@@ -16,6 +16,7 @@ import { readBuildType } from "../lib/build-type";
 import { reviewCoverageNotes, reviewRiskWarnings, reviewRisksReport } from "../lib/store-review";
 import { engineProjectRoot } from "../lib/session-paths";
 import { manifestByBrowser } from "../lib/manifest-by-browser";
+import { duplicateAssetSentence, duplicateOf, findDuplicateAssets } from "../lib/duplicate-assets";
 
 const COMMAND = "extension_analyze";
 
@@ -133,6 +134,7 @@ export async function handler(args: {
 
   const unreadable = files.filter((f) => f.type === "unreadable").map((f) => f.path);
   const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+  const duplicates = findDuplicateAssets(distPath, files);
 
   let manifest: Record<string, unknown> = {};
   const manifestPath = path.join(distPath, "manifest.json");
@@ -319,12 +321,18 @@ export async function handler(args: {
           largestFiles: files
             .sort((a, b) => b.size - a.size)
             .slice(0, 10)
-            .map((f) => ({
-              path: f.path,
-              size: f.size,
-              sizeFormatted: formatBytes(f.size),
-            })),
+            .map((f) => {
+              const twin = duplicateOf(duplicates, f.path);
+
+              return {
+                path: f.path,
+                size: f.size,
+                sizeFormatted: formatBytes(f.size),
+                ...(twin ? { duplicateOf: twin } : {}),
+              };
+            }),
         }),
+    duplicateFiles: duplicates,
     storeReadiness: development
       ? null
       : {
@@ -355,6 +363,7 @@ export async function handler(args: {
       ...(risks ? reviewRiskWarnings(risks) : []),
       ...(review ? reviewCoverageNotes(review) : []),
       ...sizeWarnings,
+      ...duplicates.map(duplicateAssetSentence),
       note,
       archiveNote,
       unreadable.length

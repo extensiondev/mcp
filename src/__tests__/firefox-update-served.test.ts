@@ -68,7 +68,7 @@ describe("the Firefox preflight says whether the update manifest is served, from
     expect(view).toMatchObject({ updateManifestUrl: UPDATES, served: false, reason: "channel-not-public", checkedAt: CHECKED });
     expect(view.say).toContain(NOT_SERVED);
     expect(view.say).not.toMatch(OWNER_STEP);
-    expect(out.hint).toContain(NOT_SERVED);
+    expect(out.value.sayToPerson).toContain(NOT_SERVED);
   });
 
   it("says served now with the time it was checked, once", async () => {
@@ -89,7 +89,7 @@ describe("the Firefox preflight says whether the update manifest is served, from
     expect(view.reason).toBeUndefined();
     expect(view.say).toContain(SERVED);
     expect(view.say.match(/served now/g)).toHaveLength(1);
-    expect(out.hint).toContain(SERVED);
+    expect(out.value.sayToPerson).toContain(SERVED);
   });
 
   it("keeps the platform's own served words verbatim when its check already carries them", async () => {

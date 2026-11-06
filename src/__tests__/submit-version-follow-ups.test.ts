@@ -313,6 +313,6 @@ describe("the preflight view keeps a locked check's lock and each store's block"
       approval: "Publish is queued behind version 0.2.0.7, which Partner Center is reviewing.",
     });
 
-    expect(out.hint).toContain("edge: the publish is locked until Microsoft finishes certifying 0.2.0.7 (InProgressSubmission)");
+    expect(out.value.sayToPerson).toContain("edge: the publish is locked until Microsoft finishes certifying 0.2.0.7 (InProgressSubmission)");
   });
 });

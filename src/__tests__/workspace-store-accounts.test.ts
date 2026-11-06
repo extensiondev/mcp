@@ -40,7 +40,7 @@ describe("a project the workspace's store account covers is never told to connec
     expect(out.value.stores.firefox.connectionSource).toBe("workspace");
     expect(out.value.stores.firefox.connection.source).toBe("workspace");
     expect(out.value.stores.edge.connectionSource).toBe("workspace");
-    expect(out.hint).toContain("Firefox AMO uses the workspace's account (user:1:2).");
+    expect(out.value.sayToPerson).toContain("Firefox AMO uses the workspace's account (user:1:2).");
     expect(out.value.nextStep?.kind).not.toBe("connect");
     expect(raw).not.toContain("?connect=");
     expect(raw).not.toMatch(/is not connected/);

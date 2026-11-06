@@ -185,11 +185,15 @@ describe("extension_submit preflight carries what each store asks for and says w
 
     expect(out.value.stores.edge.requirements.missingRequired).toBe(0);
 
-    const lead = `The App Store asks for 2 required inputs the project does not have yet: macOS screenshots (${SCREENSHOT_FORMAT}); Primary category (One App Store category on the app record; an upload without it is rejected with error 90242.).`;
+    const said = out.value.sayToPerson as string;
 
-    expect(out.value.sayToPerson.startsWith(lead)).toBe(true);
-    expect(out.value.sayToPerson).toContain("safari cannot be submitted yet");
-    expect(out.hint.startsWith(lead)).toBe(true);
+    expect(said.startsWith("Where an approved submit lands: safari: a TestFlight draft Apple does not review until you publish (")).toBe(true);
+    expect(said).toContain("Before the App Store reviews it, bring 2 required inputs.");
+    expect(said).toContain(`macOS screenshots (${SCREENSHOT_FORMAT}`);
+    expect(said).toContain("Primary category (One App Store category on the app record; an upload without it is rejected with error 90242.");
+    expect(said).not.toContain("The App Store asks for 2 required inputs");
+    expect(said).toContain("safari cannot be submitted yet");
+    expect(out.hint.startsWith("Say value.sayToPerson to the person as it is.")).toBe(true);
     expect(out.value.sayToPerson).not.toContain("Edge Add-ons asks for");
     expect(out.value.sayToPerson).not.toMatch(/generat/i);
     expect(out.value.sayToPerson).not.toContain("Subtitle");
@@ -245,17 +249,20 @@ describe("extension_submit preflight carries what each store asks for and says w
 
     expect(out.value.readiness.noStoreConnected).toBe(true);
     expect(out.value.sayToPerson.split("\n").slice(0, 4)).toEqual(out.value.readiness.summary);
-    expect(out.value.sayToPerson.split("\n").slice(4).join("\n").startsWith("The Chrome Web Store asks for 2 required inputs the project does not have yet: Screenshots (Screenshots as the store asks.); Chrome Web Store developer account connected (")).toBe(true);
-    expect(out.value.sayToPerson).toContain("From your build: Screenshots (Screenshots as the store asks.)");
-    expect(out.value.sayToPerson).toContain("You supply: Chrome Web Store developer account connected (");
-    expect(out.value.sayToPerson).toContain("The App Store asks for 1 required input the project does not have yet: App Store Connect API key (");
+    expect(out.value.sayToPerson.split("\n").slice(4).join("\n").startsWith("Where an approved submit lands: chrome: ")).toBe(true);
+    expect(out.value.sayToPerson).toContain("Before the Chrome Web Store reviews it, bring 2 required inputs. From your build: Screenshots (Screenshots as the store asks.). You supply: Chrome Web Store developer account connected (");
+    expect(out.value.sayToPerson).not.toContain("The Chrome Web Store asks for 2 required inputs");
+    expect(out.value.sayToPerson).toContain("Before the App Store reviews it, bring 1 required input.");
+    expect(out.value.sayToPerson).toContain("App Store Connect API key (");
+    expect(out.value.sayToPerson).not.toContain("The App Store asks for 1 required input");
     expect(out.value.sayToPerson).not.toContain("Title");
     expect(out.value.sayToPerson).not.toContain("App Review contact");
     expect(out.value.sayToPerson).not.toContain("not pushed");
     expect(out.value.stores.chrome.storeMd.notCovered.some((line: string) => line.startsWith("screenshots: STORE.md names 2 screenshots; sync-listing takes them as its screenshots argument"))).toBe(true);
-    expect(out.value.stores.chrome.storeMd.skipped).toEqual([
+    expect(out.value.stores.chrome.storeMd.skipped).toBeUndefined();
+    expect(out.value.screenshotsLine).toBe(
       'the `- Screenshots (1280x800, in this order):` line in STORE.md names 2 screenshots; sync-listing takes them as its screenshots argument, as PNG paths inside projectPath; extension_screenshot store:"<store>" writes them under store/screenshots/<store>/, which sync-listing reads on its own',
-    ]);
+    );
 
     expect(out.value.trackUrl ?? out.value.storesPageUrl).toBeTruthy();
     expect(JSON.stringify(out)).not.toMatch(/github\.com|actions\/runs/);
@@ -281,8 +288,10 @@ describe("extension_submit preflight carries what each store asks for and says w
 
     const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome", "firefox"], projectPath: root, api: API }));
 
-    expect(out.value.stores.firefox.storeMd.skipped).toEqual(['the `- Screenshots (1280x800, in this order):` line in STORE.md names 2 screenshots; sync-listing takes them as its screenshots argument, as PNG paths inside projectPath; extension_screenshot store:"<store>" writes them under store/screenshots/<store>/, which sync-listing reads on its own']);
-    expect(out.value.stores.chrome.storeMd.skipped).toEqual(out.value.stores.firefox.storeMd.skipped);
+    expect(out.value.screenshotsLine).toBe('the `- Screenshots (1280x800, in this order):` line in STORE.md names 2 screenshots; sync-listing takes them as its screenshots argument, as PNG paths inside projectPath; extension_screenshot store:"<store>" writes them under store/screenshots/<store>/, which sync-listing reads on its own');
+    expect(out.value.stores.firefox.storeMd).not.toHaveProperty("screenshotsLine");
+    expect(out.value.stores.chrome.storeMd).not.toHaveProperty("screenshotsLine");
+    expect(JSON.stringify(out.value.stores)).not.toContain("- Screenshots (1280x800, in this order):");
     expect(JSON.stringify(out.value.stores)).not.toMatch(/carries no screenshot|is retired|is not read/);
   });
 
@@ -337,7 +346,7 @@ describe("extension_submit preflight carries what each store asks for and says w
 
     expect(shots).toMatchObject({ status: "missing", satisfiedBy: "store-md: Screenshots", actual: "0 screenshots" });
     expect(out.value.stores.chrome.storeMd.notCovered).toContain(door);
-    expect(out.value.stores.chrome.storeMd.skipped[0]).toContain("the `- Screenshots (1280x800):` line in STORE.md names no screenshot file");
+    expect(out.value.screenshotsLine).toContain("the `- Screenshots (1280x800):` line in STORE.md names no screenshot file");
     expect(out.value.stores.chrome.failing[0].message).toBe("Add at least one screenshot.");
 
     expect(out.value.sayToPerson).toContain("Screenshots (Screenshots as the store asks.)");
@@ -355,8 +364,8 @@ describe("extension_submit preflight carries what each store asks for and says w
 
     expect(out.status).toBe("preflight-read");
     expect(out.value.stores.chrome.requirements).toBeUndefined();
-    expect(out.value.sayToPerson).toBe(out.hint);
-    expect(out.value.sayToPerson.startsWith("Every store read here is ready to submit.")).toBe(true);
+    expect(out.hint.startsWith("Say value.sayToPerson to the person as it is.")).toBe(true);
+    expect(out.value.sayToPerson).toContain("Every store read here is ready to submit.");
   });
 
   it("names, after a store is enabled through configure-store, how many required inputs the project still lacks when the platform answers them", async () => {

@@ -8,8 +8,10 @@
 
 import {
   BULLET_KEYS,
+  EDGE_FIELDS_READ_FROM_CHROME,
   LISTING_TEXT_LIMITS,
   STORE_FIELDS,
+  STORE_SECTIONS,
   SUBSECTION_KEYS,
   type ListingField,
   type ListingStore,
@@ -17,7 +19,7 @@ import {
   type PermissionJustification,
 } from "./store-md-declarations";
 import { resolveStoreCategories, storesNamingACategory, type CategoryRead } from "./store-categories";
-import { bounded } from "./store-md-bounded";
+import { bounded, type OverLimitMeasure } from "./store-md-bounded";
 import { bulletLine, storeOwnLinesBody } from "./store-md-bullets";
 import { safariTitle } from "./store-md-safari-title";
 import { screenshotFilesNamed } from "./store-md-screenshots";
@@ -46,10 +48,16 @@ export interface UnreadLine {
   reason: string;
 }
 
+export interface FieldOverLimit extends OverLimitMeasure {
+  field: ListingField;
+}
+
 export interface StoreListingRead {
   listing: ListingText;
   skipped: string[];
   unread: Partial<Record<ListingField, UnreadLine>>;
+  overLimit: FieldOverLimit[];
+  borrowed?: Partial<Record<ListingField, string>>;
   categories?: CategoryRead;
 }
 
@@ -466,8 +474,46 @@ export function derivedListingFields(store: ListingStore, listing: ListingText):
 const storeList = (stores: string[]): string =>
   stores.length > 1 ? `${stores.slice(0, -1).join(", ")} and ${stores[stores.length - 1]}` : stores[0] ?? "";
 
+const lineOf = (parsed: StoreMdListing, field: ListingField): string =>
+  SUBSECTION_KEYS.find((key) => key.field === field)?.heading ?? `- ${parsed.lines[field] ?? field}:`;
+
+/* @invariant EDGE READS THE CHROME SUBSECTIONS IT HAS NONE OF ITS OWN FOR.
+ * Partner Center's Privacy page asks the same single purpose statement and
+ * the same per-permission reasons the Chrome Web Store takes, and the
+ * platform's Edge rows say so; so when "## Edge Add-ons" carries no
+ * "### Single purpose" or "### Permissions justification", the sync sends
+ * the Chrome section's and names the section it read, instead of leaving
+ * Edge's rows missing after a sync that said it filled them (ledger 412).
+ * An Edge section with its own subsection wins, as every store's does.
+ */
+function borrowedFromChrome(parsed: StoreMdListing, store: ListingStore, merged: ListingText): Partial<Record<ListingField, string>> {
+  if (store !== "edge") return {};
+
+  const chrome = parsed.stores.chrome ?? {};
+  const borrowed: Partial<Record<ListingField, string>> = {};
+
+  for (const field of EDGE_FIELDS_READ_FROM_CHROME) {
+    if (merged[field] !== undefined || chrome[field] === undefined) continue;
+
+    (merged as Record<string, unknown>)[field] = chrome[field];
+    borrowed[field] = STORE_SECTIONS.chrome;
+  }
+
+  return borrowed;
+}
+
+/* @invariant A VALUE OVER A LIMIT IS NOT LEFT OUT QUIETLY; IT IS MEASURED
+ * AND REFUSED. A line the reader cannot take for its shape (an email that is
+ * not one, a phone that is not E.164) is skipped with its reason and the rest
+ * of the listing goes; a line over the listing's limit or the store's own
+ * limit is recorded in overLimit with its length, the limit and the unit, so
+ * sync-listing refuses that store before sending anything and the preflight
+ * names it, with the heading the owner wrote (ledger 413). The field stays
+ * in unread so it is never reported as a line not found.
+ */
 export function listingForStore(parsed: StoreMdListing, store: ListingStore): StoreListingRead {
   const merged: ListingText = { ...parsed.shared, ...(parsed.overrides[store] ?? {}), ...(parsed.stores[store] ?? {}) };
+  const borrowed = borrowedFromChrome(parsed, store, merged);
   const categories = resolveStoreCategories(parsed, store);
   if (categories) merged.categories = categories.categories;
   else delete merged.categories;
@@ -475,6 +521,7 @@ export function listingForStore(parsed: StoreMdListing, store: ListingStore): St
   const listing: ListingText = {};
   const skipped: string[] = [];
   const unread: Partial<Record<ListingField, UnreadLine>> = {};
+  const overLimit: FieldOverLimit[] = [];
 
   for (const field of STORE_FIELDS[store]) {
     if (merged[field] === undefined) continue;
@@ -482,8 +529,10 @@ export function listingForStore(parsed: StoreMdListing, store: ListingStore): St
     const read = bounded(field, merged[field], skipped, store);
 
     if ("reason" in read) {
-      skipped.push(`${field} in STORE.md ${read.reason}, so it was left out`);
-      unread[field] = { line: `- ${parsed.lines[field] ?? field}:`, reason: read.reason };
+      if (read.over) overLimit.push({ field, ...read.over });
+      else skipped.push(`${field} in STORE.md ${read.reason}, so it was left out`);
+
+      unread[field] = { line: lineOf(parsed, field), reason: read.reason };
     } else if (read.value !== undefined) {
       (listing as Record<string, unknown>)[field] = read.value;
     }
@@ -500,5 +549,12 @@ export function listingForStore(parsed: StoreMdListing, store: ListingStore): St
     };
   }
 
-  return { listing, skipped, unread, ...(categories && listing.categories ? { categories } : {}) };
+  return {
+    listing,
+    skipped,
+    unread,
+    overLimit,
+    ...(Object.keys(borrowed).length ? { borrowed } : {}),
+    ...(categories && listing.categories ? { categories } : {}),
+  };
 }

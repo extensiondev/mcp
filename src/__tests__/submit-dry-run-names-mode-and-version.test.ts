@@ -95,6 +95,6 @@ describe("a dry-run submit names the saved mode and the version the next upload 
     const out = await world.call("extension_submit", { action: "preflight", browsers: ["firefox"], api: WORLD_API });
 
     expect(out.value.storePreflight.firefox).toMatchObject({ nextVersion: "0.2.0.8", channel: "unlisted", retires: [], untouched: ["0.2.0.7"], landing: LANDING });
-    expect(out.hint).toContain(`firefox: ${LANDING}`);
+    expect(out.value.sayToPerson).toContain(`firefox: ${LANDING}`);
   });
 });

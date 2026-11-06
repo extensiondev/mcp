@@ -35,6 +35,9 @@ const STAYS: Record<string, string> = {
 
 const SENDS_TO_REVIEW = [/^Publish sends\b/, /\bAMO's listed channel for review\b/];
 
+const FIREFOX_LISTED_SENTENCE =
+  "Under Firefox AMO's saved channel \"listed\" this upload goes to Mozilla's review after it lands and is listed publicly when it passes; to upload unlisted instead, set the channel to unlisted in the console store settings before approving.";
+
 const shortName = (store: string): string => SHORT_NAMES[store] ?? store;
 
 function joined(names: string[]): string {
@@ -72,9 +75,10 @@ export function reviewPromiseOf(stores: string[], lines: ReviewLine[], modes: Mo
 
   const staying = named.filter((store) => !reviewing.includes(store)).map((store) => `${shortName(store)} ${STAYS[store] ?? "does not go to review"}`);
   const head = `${joined(reviewing.map(shortName))} ${reviewing.length > 1 ? "go" : "goes"} to review on approval`;
-  const advice = reviewing
-    .filter((store) => DRAFT_STORES.has(store) && !uploadStopsAtDraft(store, modes[store]))
-    .map((store) => broadModeSentence(store, String(modes[store])));
+  const advice = [
+    ...reviewing.filter((store) => DRAFT_STORES.has(store) && !uploadStopsAtDraft(store, modes[store])).map((store) => broadModeSentence(store, String(modes[store]))),
+    ...(reviewing.includes("firefox") ? [FIREFOX_LISTED_SENTENCE] : []),
+  ];
 
   return [`${head}${staying.length ? `; ${staying.join("; ")}` : ""}.`, ...advice].join(" ");
 }

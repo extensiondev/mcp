@@ -37,6 +37,7 @@ import { createReloader, handoverState, type ActiveBuild, type BuildImporter, ty
 import { markListStale, reloadedWarning, serverStamp, staleEnvelope, type ServerStampReader } from "./server-stamp";
 import { markStaleLocal, noLocalCarryReason, predatedChecks, predatesCheckEnvelope, type HeldLocal } from "./stale-local";
 import { shapeStoreAnswer } from "./store-answer";
+import { answeredAs } from "./submit-action-safety";
 import { annotate, frameText, refusedFrame, toolResultFrame } from "./tool-frames";
 import { attachTrack } from "./track-url";
 import {
@@ -254,7 +255,11 @@ export function createToolSurface(setup: ToolHandlerOptions): {
     if (actsAs) {
       const refusal = actsAs.refuse(aliasedArgs);
 
-      return refusal ? refused(refusal) : runAskingOnly(() => dispatch({ name: actsAs.tool, arguments: aliasedArgs }));
+      if (refusal) return refused(refusal);
+
+      const acted = await runAskingOnly(() => dispatch({ name: actsAs.tool, arguments: aliasedArgs }));
+
+      return { ...acted, content: acted.content.map((part) => ({ ...part, text: answeredAs(part.text, name, actsAs.tool) })) };
     }
 
     const untrusted = TOOL_POLICY[name]?.untrusted === true;

@@ -22,7 +22,6 @@ import { nextStep, type NextStep } from "./store-connection";
  */
 export function notReadyForReviewStep(
   notReady: string[],
-  inputsSay: string,
   edgeFirst: EdgeFirstSubmission | null,
   storesPageUrl: string,
   settingsUrl: string,
@@ -31,7 +30,7 @@ export function notReadyForReviewStep(
     return firstSubmissionStep(edgeFirst, settingsUrl);
   }
 
-  const say = `${notReady.join(", ")} ${notReady.length === 1 ? "is" : "are"} not ready for review yet.${inputsSay ? ` ${inputsSay}` : ""} Each missing input is named on the project's stores page at ${storesPageUrl}.`;
+  const say = `${notReady.join(", ")} ${notReady.length === 1 ? "is" : "are"} not ready for review yet; value.sayToPerson names each missing input with its format and who supplies it, and the project's stores page at ${storesPageUrl} lists them.`;
 
   return nextStep("configure", say, storesPageUrl);
 }

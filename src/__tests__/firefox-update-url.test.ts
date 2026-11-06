@@ -174,10 +174,10 @@ describe("extension_submit preflight: the firefox.update_url check names the pla
     expect(firefox.warnings.map((row: Row) => row.id)).not.toContain("firefox.update_url");
     expect(out.value.storePreflight.firefox.warnings).toEqual([]);
     expect(out.value.storePreflight.firefox.checks).toBeUndefined();
-    expect(out.hint).toContain(updateManifestSentence(UPDATES));
+    expect(out.value.sayToPerson).toContain(updateManifestSentence(UPDATES));
     expect(updateManifestSentence(UPDATES)).toMatch(/^Option for self-distributed builds: put browser_specific_settings\.gecko\.update_url: /);
-    expect(out.hint).toContain("Firefox will then check that address for updates from every install, a network request to extension.dev");
-    expect(out.hint).not.toContain(`Put browser_specific_settings.gecko.update_url: ${UPDATES} in the manifest for the firefox target;`);
+    expect(out.value.sayToPerson).toContain("Firefox will then check that address for updates from every install, a network request to extension.dev");
+    expect(out.value.sayToPerson).not.toContain(`Put browser_specific_settings.gecko.update_url: ${UPDATES} in the manifest for the firefox target;`);
     expect(out.value.sayToPerson).toContain(UPDATES);
     expect(JSON.stringify(out)).not.toMatch(DO_IT_YOURSELF);
     expect(namesRegistryOrToken(JSON.stringify(out))).toEqual([]);
@@ -193,7 +193,7 @@ describe("extension_submit preflight: the firefox.update_url check names the pla
 
     expect(firefox.updateManifest).toMatchObject({ manifestUpdateUrl: null, suggested: false, noNetworkPromise: "The extension makes no network requests at all.", say: expected });
     expect(expected).toContain("a network request to extension.dev");
-    expect(out.hint).toContain(expected);
+    expect(out.value.sayToPerson).toContain(expected);
     expect(out.hint).not.toContain("Option for self-distributed builds");
     expect(out.hint).not.toContain("Put browser_specific_settings");
     expect(firefox.warnings.map((row: Row) => row.id)).not.toContain("firefox.update_url");
@@ -209,7 +209,7 @@ describe("extension_submit preflight: the firefox.update_url check names the pla
     const firefox = out.value.stores.firefox;
 
     expect(firefox.updateManifest).toMatchObject({ manifestUpdateUrl: null, suggested: false, say: listed });
-    expect(out.hint).toContain(listed);
+    expect(out.value.sayToPerson).toContain(listed);
     expect(out.hint).not.toContain("Option for self-distributed builds");
     expect(out.value.storePreflight.firefox.warnings).toEqual([]);
   });
@@ -222,7 +222,7 @@ describe("extension_submit preflight: the firefox.update_url check names the pla
 
     expect(out.value.stores.firefox.updateManifest.say).toBe(hosted);
     expect(out.value.stores.firefox.updateManifest.manifestUpdateUrl).toBeNull();
-    expect(out.hint).toContain(hosted);
+    expect(out.value.sayToPerson).toContain(hosted);
   });
 
   it("echoes the manifest's update_url from the platform's passing check when no projectPath is given", async () => {

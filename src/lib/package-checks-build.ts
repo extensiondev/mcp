@@ -117,9 +117,33 @@ export function packageBuildViews(api: ProjectApi, projectPath: string, reports:
   return Promise.all(stores.map((store) => (reports[store] ? packageBuildView(projectPath, reports[store], store, shared, capOnce) : Promise.resolve(null))));
 }
 
+const STORE_PREFIX = /^([a-z]+): (.*)$/s;
+
+function storeList(stores: string[]): string {
+  return stores.length > 1 ? `${stores.slice(0, -1).join(", ")} and ${stores[stores.length - 1]}` : stores[0] ?? "";
+}
+
+/* @invariant A SENTENCE THAT HOLDS FOR EVERY STORE IS SAID ONCE. Each store's
+ * package checks name the build they read, and four stores reading the same
+ * build said the same sentence four times (ledger 407). The per-store view
+ * keeps its own sentence; the line the person reads groups the stores whose
+ * sentence is the same and names them together.
+ */
 export function packageBuildLine(views: Array<PackageBuildView | null>): string {
-  return views
-    .filter((view): view is PackageBuildView => view !== null)
-    .map((view) => view.say)
-    .join(" ");
+  const groups = new Map<string, string[]>();
+
+  for (const view of views) {
+    if (!view) continue;
+
+    const match = STORE_PREFIX.exec(view.say);
+    const rest = match ? match[2]! : view.say;
+    const store = match ? match[1]! : "";
+    const stores = groups.get(rest) ?? [];
+
+    if (store) stores.push(store);
+
+    groups.set(rest, stores);
+  }
+
+  return [...groups.entries()].map(([rest, stores]) => (stores.length ? `${storeList(stores)}: ${rest}` : rest)).join(" ");
 }

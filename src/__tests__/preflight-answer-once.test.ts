@@ -211,7 +211,7 @@ describe("the package checks name the build they read and say once when HEAD is 
 
     expect(out.status).toBe("preflight-read");
     expect(out.value.stores.chrome.packageBuild).toEqual({ read: ["154767e"], head: short, say });
-    expect(out.hint.split(say)).toHaveLength(2);
+    expect(out.hint).not.toContain(say);
     expect(out.value.sayToPerson.split(say)).toHaveLength(2);
     expect(JSON.stringify(out.value.stores.chrome.warnings).split("pending on the platform")).toHaveLength(1);
   });
@@ -261,7 +261,7 @@ describe("the package checks consult the push record before asking for a push", 
 
     expect(out.status).toBe("preflight-read");
     expect(out.value.stores.chrome.packageBuild).toEqual({ read: ["154767e"], head: short, headPush: { outcome: "DOCS_ONLY", receivedAt: "2026-10-30T21:11:41Z" }, say });
-    expect(out.hint.split(say)).toHaveLength(2);
+    expect(out.hint).not.toContain(say);
     expect(JSON.stringify(out)).not.toContain("push it");
     expect(platform.sent("GET", BUILDS)).toHaveLength(1);
     expect(platform.sent("GET", `${BUILDS}/${short}`)).toHaveLength(0);

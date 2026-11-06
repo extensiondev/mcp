@@ -48,7 +48,7 @@ Generated from the parser's own declarations in `src/lib/store-md-declarations.t
 
 ## edge (Edge Add-ons, `## Edge Add-ons`)
 
-9 fields.
+11 fields.
 
 | line | section | also read from | field | limit |
 | --- | --- | --- | --- | --- |
@@ -60,6 +60,8 @@ Generated from the parser's own declarations in `src/lib/store-md-declarations.t
 | `- Support email:` | `## Listing` | `## Edge Add-ons` | `supportEmail` | an email address, up to 200 characters |
 | `- Privacy policy URL:` | `## Privacy and data use` | `## Listing`, `## Edge Add-ons` | `privacyPolicyUrl` | an http or https URL, up to 2,000 characters |
 | `- Homepage:` | `## Listing` | `## Edge Add-ons` | `homepageUrl` | an http or https URL, up to 2,000 characters |
+| `### Single purpose` | `## Edge Add-ons` | `## Chrome Web Store` | `singlePurpose` | up to 1,000 characters |
+| `### Permissions justification` | `## Edge Add-ons` | `## Chrome Web Store` | `permissionJustifications` | one `- <permission>: <reason>` bullet each, a host pattern keyed as the manifest spells it (`- *://*/*: Asked for one site at a time when the user allows it; nothing at install.`), up to 50; a permission up to 200 characters, a reason up to 1,000 |
 | `### Certification notes` | `## Edge Add-ons` |  | `certificationNotes` | up to 8,000 characters |
 
 ## safari (App Store (Safari), `## Safari`)

@@ -33,6 +33,30 @@ import {
 } from "./approval-verify";
 import { SAFARI_RELEASE_ON_SALE } from "./safari-release-intent";
 
+function renderedArgs(args: Record<string, unknown>): string {
+  return `{${Object.entries(args)
+    .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
+    .join(", ")}}`;
+}
+
+/* @invariant THE NEXT CALL IS NAMED WITH ITS TOOL. An approval asked through
+ * a read-only alias such as extension_submit_check answered "call this tool
+ * again", which that alias refuses (ledger 410). The sentence names the tool
+ * whose handler ran, with the exact arguments when the caller gave them, and
+ * the read that tells whether the owner has approved.
+ */
+export function nextCallSentence(input: Pick<ApprovalGateInput, "command" | "nextCall">, approvalId: string): string {
+  return input.nextCall
+    ? `${input.nextCall.tool} ${renderedArgs({ ...input.nextCall.args, approvalId })}`
+    : `${input.command} with the same arguments and approvalId ${approvalId}`;
+}
+
+export function approvalLandedSentence(input: Pick<ApprovalGateInput, "nextCall">, approvalId: string): string {
+  const waits = input.nextCall?.waits ? `, and that ${input.nextCall.tool} call with waitSeconds waits for the approval before it runs` : "";
+
+  return `extension_approvals {action: "status", approvalId: "${approvalId}"} reads whether a workspace owner has approved it${waits}.`;
+}
+
 function unsaid(described: string, reason: string): string {
   const sentences = reason.split(/(?<=\.)\s+/);
   const onSaleSaid = SAFARI_RELEASE_ON_SALE.test(described);
@@ -231,7 +255,7 @@ async function requestApproval(params: {
       APPROVAL_REQUIRED_STATUS,
       "E_APPROVAL_REQUIRED",
       "ApprovalRequestUnconfirmed",
-      `A human must approve ${actionPhrase(input)} before it runs, and the platform answered the approval request (${res.status}) without an approval id, so no approval is known to exist. Nothing was executed; call this tool again to request one.`,
+      `A human must approve ${actionPhrase(input)} before it runs, and the platform answered the approval request (${res.status}) without an approval id, so no approval is known to exist. Nothing was executed; call ${input.command} again to request one.`,
       { action: input.action, fingerprint, description: input.description },
     );
   }
@@ -257,7 +281,7 @@ async function requestApproval(params: {
       APPROVAL_REQUIRED_STATUS,
       "E_APPROVAL_REQUIRED",
       "ApprovalRenewed",
-      `Approval ${renewing.approvalId} expired at ${expiredAt}, so nothing was executed. A fresh approval for the same act was requested: ${described} Open ${approvalUrl} to review and approve, then call this tool again with the same arguments and approvalId ${approvalId}.`,
+      `Approval ${renewing.approvalId} expired at ${expiredAt}, so nothing was executed. A fresh approval for the same act was requested: ${described} Open ${approvalUrl} to review and approve, then call ${nextCallSentence(input, approvalId)}. ${approvalLandedSentence(input, approvalId)}`,
       {
         action: input.action,
         fingerprint,
@@ -283,9 +307,7 @@ async function requestApproval(params: {
     "ApprovalRequired",
     `${described} ${unsaid(described, input.reason ?? (input.irreversible ? "This is irreversible, so a human must approve it first." : "A human must approve it first."))} Open ${
       approvalUrl || "the approval URL"
-    } to review and approve, then call this tool again with the same arguments and approvalId ${
-      approvalId || "<from the response>"
-    }. Nothing was executed.`,
+    } to review and approve, then call ${nextCallSentence(input, approvalId || "<from the response>")}. ${approvalLandedSentence(input, approvalId || "<from the response>")} Nothing was executed.`,
     {
       action: input.action,
       fingerprint,
@@ -299,7 +321,7 @@ async function requestApproval(params: {
       ...replaces,
     },
     approvalUrl
-      ? `Approve at ${approvalUrl}, then re-run with the same arguments and approvalId ${approvalId}.${lines.length > 1 ? " The page lists one line per store; a store unchecked there is left out." : ""}`
+      ? `Approve at ${approvalUrl}; then ${nextCallSentence(input, approvalId)} runs it. ${approvalLandedSentence(input, approvalId)}${lines.length > 1 ? " The page lists one line per store; a store unchecked there is left out." : ""}`
       : undefined,
   );
 }

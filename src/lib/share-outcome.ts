@@ -23,7 +23,7 @@ export function shareLinks(data: Row, track: { trackUrl: string; trackLinks?: st
       ...row,
       kind,
       url: typeof row.url === "string" ? row.url : "",
-      audience: "anyone with the link" as const,
+      audience: typeof row.audience === "string" && row.audience.trim() ? row.audience.trim() : ("anyone with the link" as const),
       expiresAt: typeof row.expiresAt === "string" ? row.expiresAt : null,
       made: (kind === "share" || (kind === "channel" && row.audience !== "public")) && made,
     };

@@ -274,6 +274,24 @@
         "limit": "an http or https URL, up to 2,000 characters"
       },
       {
+        "field": "singlePurpose",
+        "line": "### Single purpose",
+        "section": "## Edge Add-ons",
+        "alsoRead": [
+          "## Chrome Web Store"
+        ],
+        "limit": "up to 1,000 characters"
+      },
+      {
+        "field": "permissionJustifications",
+        "line": "### Permissions justification",
+        "section": "## Edge Add-ons",
+        "alsoRead": [
+          "## Chrome Web Store"
+        ],
+        "limit": "one `- <permission>: <reason>` bullet each, a host pattern keyed as the manifest spells it (`- *://*/*: Asked for one site at a time when the user allows it; nothing at install.`), up to 50; a permission up to 200 characters, a reason up to 1,000"
+      },
+      {
         "field": "certificationNotes",
         "line": "### Certification notes",
         "section": "## Edge Add-ons",

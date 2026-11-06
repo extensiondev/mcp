@@ -13,6 +13,8 @@ import { API_BASE } from "../lib/common-schema";
 import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
 import { buildName, buildNumberOf, buildState, isActiveState, isRow, text, type Row } from "../lib/builds-list-row";
 import { browserFigures } from "../lib/build-browser-figures";
+import { unrecordedBrowsers, unrecordedRowReason } from "../lib/build-health";
+import { usageValue } from "../lib/build-usage";
 import { artifactWithAddress } from "../lib/package-address";
 import { consoleProjectUrl } from "../lib/registry";
 import { envelope } from "../lib/envelope";
@@ -38,7 +40,7 @@ const COMMAND = "extension_builds";
 export const schema = {
   name: COMMAND,
   description:
-    "Read, download, rebuild and configure the platform's builds of the logged-in project on extension.dev: action list (the default), get, logs, download, recheck, rebuild, configure, create-channel, configure-channel and delete-channel. The three reads change nothing; download saves a build's package to disk through the platform, verified against its integrity report, for a store upload done by hand; the acts change the project, and every one of them answers what the platform recorded in value.outcome and the links it made or touched in value.links, waiting up to waitSeconds for the record and answering rebuild-dispatched or recheck-dispatched until it confirms. Every answer links the console page it is about in value.trackUrl; failure details (the failed step, annotations, last lines) come back as data, and the build page shows the rest. Not for reading channels, release history or store submissions: that is extension_release_status. Not for reading the build settings: that is extension_workspace action:'settings'. A rebuild spends the workspace's build allowance and is rate limited. Rebuild, recheck, configure, a private channel and a channel's fields are plain calls under the owner's own token, with this client's permission prompt as the gate; a public channel audience keeps the approve page, and a channel delete stays in the console. This uses the stored login for the project (extension_auth), against the server the call's api names.",
+    "Read, download, rebuild and configure the platform's builds of the logged-in project on extension.dev: action list (the default), get, logs, download, recheck, rebuild, configure, create-channel, configure-channel and delete-channel. The three reads change nothing; download saves a build's package to disk, verified against its integrity report, for a store upload by hand; the acts change the project, and every one of them answers what the platform recorded in value.outcome and the links it made or touched in value.links, waiting up to waitSeconds for the record and answering rebuild-dispatched or recheck-dispatched until it confirms. Every answer carries value.trackUrl, the console page it is about; failure details (failed step, annotations, last lines) come back as data. Channels, release history and store submissions are extension_release_status's to read; build settings are extension_workspace action:'settings'. A rebuild spends the workspace's build allowance and is rate limited; a push spends one only on the build branch when it changes the root directory (docs-only pushes and other branches spend nothing; list names each skipped push with its outcome). Rebuild, recheck, configure, a private channel and its fields are plain calls under the owner's token (this client's permission prompt is the gate); a public channel audience keeps the approve page; a channel delete stays in the console. Uses the project's stored login (extension_auth) against the server api names.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -260,29 +262,50 @@ async function getBuild(args: HandlerArgs): Promise<string> {
   }
 
   const wanted = text(args.browser).toLowerCase();
-  const browsers = (Array.isArray(detail.json.browsers) ? detail.json.browsers : [])
-    .map((b) => (isRow(b) ? text(b.name) || text(b.browser) : text(b)))
-    .filter((name) => name && (!wanted || name.toLowerCase() === wanted));
+  const recordRows = Array.isArray(detail.json.browsers) ? detail.json.browsers : [];
+  const recordNames = recordRows.map((b) => (isRow(b) ? text(b.name) || text(b.browser) : text(b))).filter(Boolean);
+  const inScope = (name: string) => !wanted || name.toLowerCase() === wanted;
+  const recorded = recordNames.filter(inScope);
 
   const state = buildState(detail.json.status, detail.json.conclusion);
   const unfinished = isActiveState(state);
-  const [usage, artifacts, integrity] = await Promise.all([
+  const integrityRoute = (browser: string) => projectApiGet(opened.api, `${route}/integrity/${encodeURIComponent(browser)}`);
+  const [usage, artifacts, recordedIntegrity] = await Promise.all([
     projectApiGet<Row>(opened.api, `${route}/usage`),
     unfinished ? null : projectApiGet<unknown[]>(opened.api, `${route}/artifacts`),
-    Promise.all(unfinished ? [] : browsers.map((browser) => projectApiGet(opened.api, `${route}/integrity/${encodeURIComponent(browser)}`))),
+    Promise.all(unfinished ? [] : recorded.map(integrityRoute)),
   ]);
+  const unrecorded = unrecordedBrowsers(recordNames, artifacts?.ok ? artifacts.json : []).filter(inScope);
+  const unrecordedIntegrity = await Promise.all(unrecorded.map(integrityRoute));
+  const browsers = [...recorded, ...unrecorded];
+  const integrity = [...recordedIntegrity, ...unrecordedIntegrity];
 
   const integrityByBrowser: Row = {};
   const integrityUnread: string[] = [];
+  const unchecked: Array<{ browser: string; reason: string }> = [];
 
   browsers.forEach((browser, i) => {
     const read = integrity[i];
     if (!read) return;
-    if (read.ok) integrityByBrowser[browser] = integritySummary(read.json);
-    else integrityUnread.push(`${browser} is ${readProblem(read)}`);
+
+    if (read.ok) {
+      integrityByBrowser[browser] = integritySummary(read.json);
+
+      return;
+    }
+
+    const problem = readProblem(read);
+
+    if (unrecorded.includes(browser)) {
+      unchecked.push({ browser, reason: `${unrecordedRowReason(browser)}, and its integrity result is ${problem}` });
+
+      return;
+    }
+
+    integrityUnread.push(`${browser} is ${problem}`);
+    unchecked.push({ browser, reason: `its integrity result is ${problem}` });
   });
 
-  const usageMarkdown = usage.ok ? text(usage.json?.markdown) : "";
   const canonical = text(detail.json.buildId) || buildId;
   const number = buildNumberOf(detail.json);
   const named = buildName(canonical, number, "build");
@@ -291,7 +314,16 @@ async function getBuild(args: HandlerArgs): Promise<string> {
   const failing = Object.entries(integrityByBrowser).filter(([, v]) => (v as Row).ok !== true).map(([k]) => k);
   const failures = buildFailures(detail.json);
   const buildPage = buildConsoleUrl(opened.api, canonical, args.api);
-  const figures = browserFigures(detail.json, canonical, artifacts?.ok ? artifacts.json : []);
+  const derivedRows = unrecorded.map((name) => ({ name, recorded: false }));
+  const figures = browserFigures(
+    derivedRows.length ? { ...detail.json, browsers: [...recordRows, ...derivedRows] } : detail.json,
+    canonical,
+    artifacts?.ok ? artifacts.json : [],
+  );
+  const verdict = [
+    failing.length ? `integrity checks failed for ${failing.join(", ")} (see integrity.<browser>.failed)` : null,
+    unchecked.length ? `integrity was not checked for ${unchecked.map((row) => row.browser).join(", ")} (see unchecked)` : null,
+  ].filter(Boolean);
   const waited = boundMs > 0 ? { seconds: Math.round((outcomeClock.now() - started) / 1000), settled: !unfinished } : null;
   const readAt = stampNow();
 
@@ -307,12 +339,9 @@ async function getBuild(args: HandlerArgs): Promise<string> {
       run: { ...runOf(detail.json), ...(text(detail.json.runUrl) ? { runUrl: buildPage } : {}) },
       artifacts: artifactRows,
       integrity: integrityByBrowser,
+      ...(unchecked.length ? { unchecked } : {}),
       ...(failures ? { failures: failures.value } : {}),
-      usage: usage.ok
-        ? usageMarkdown
-          ? { recorded: true, markdown: usageMarkdown, updatedAt: text(usage.json?.updatedAt) || null }
-          : { recorded: false }
-        : { recorded: "unknown" },
+      usage: usage.ok ? usageValue(usage.json) : { recorded: "unknown" },
     },
     hint: `${
       waited && !waited.settled
@@ -322,11 +351,9 @@ async function getBuild(args: HandlerArgs): Promise<string> {
       unfinished
         ? UNFINISHED_CLAUSE
         : browsers.length
-        ? failing.length
-          ? `; integrity checks failed for ${failing.join(", ")} (see integrity.<browser>.failed)`
-          : integrityUnread.length
-            ? ""
-            : "; every integrity check passed"
+        ? verdict.length
+          ? `; ${verdict.join("; ")}`
+          : "; every integrity check passed"
         : ""
     }.${failures ? ` ${failures.sentence}` : ""} Pass action:"logs" with this buildId for its log lines${
       artifactRows.some((row) => isRow(row) && row.download) ? `, or action:"${DOWNLOAD_ACTION}" with a browser to save its package to disk (artifacts[].download names the call)` : ""
@@ -335,6 +362,11 @@ async function getBuild(args: HandlerArgs): Promise<string> {
       !artifacts || artifacts.ok ? null : `The artifact list for ${named} is ${readProblem(artifacts)}.`,
       usage.ok ? null : `The usage report for ${named} is ${readProblem(usage)}.`,
       integrityUnread.length ? `Integrity for ${named} could not be read: ${integrityUnread.join("; ")}.` : null,
+      unrecorded.length
+        ? `The platform's record of ${named} has no row for ${unrecorded.join(", ")} while its artifact list carries ${unrecorded.length === 1 ? "a package for it" : "packages for them"}, so ${
+            unrecorded.length === 1 ? "that browser row is" : "those browser rows are"
+          } derived from the artifact with no build status.`
+        : null,
       ...figures.notes,
     ],
   });

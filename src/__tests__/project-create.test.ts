@@ -693,7 +693,7 @@ describe("extension_project_create", () => {
     expect(out.value.firstBuild).toEqual({ dispatched: true, spent: 1 });
     expect(out.value.allowance.remains).toBe("Before this call the workspace had 8 of 350 builds left this month; the first build spends one, leaving 7.");
     expect(out.value.allowance.remaining).toBe(7);
-    expect(out.value.allowance.warning).toBe("7 builds remain of 350 this month; each project creation and each push spends one.");
+    expect(out.value.allowance.warning).toBe("7 builds remain of 350 this month; each project creation spends one, and so does a push to the build branch that changes a file under the root directory; a push to another branch, or one that changes only docs or license files outside public/, spends nothing (extension_builds list names each skipped push with its outcome).");
 
     const planCall = calls.findIndex((c) => c.url.endsWith("/api/workspaces/acme/plan"));
     const createCall = calls.findIndex((c) => c.url.endsWith("/api/cli/projects/create"));

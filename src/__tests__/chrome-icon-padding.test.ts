@@ -100,7 +100,7 @@ describe("extension_submit carries the padding advice for Chrome (ledger 355)", 
       art: { width: 128, height: 128, padding: { left: 0, right: 0, top: 0, bottom: 0 }, shape: "square" },
     });
 
-    expect(out.hint).toContain("has square art 128x128 with 0 px of padding per side");
+    expect(out.value.sayToPerson).toContain("has square art 128x128 with 0 px of padding per side");
     expect(quiet.value.stores.chrome.iconPadding).toBeUndefined();
     expect(JSON.stringify(quiet)).not.toContain("the 128 px icon, has");
   });

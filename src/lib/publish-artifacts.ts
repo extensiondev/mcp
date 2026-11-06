@@ -12,6 +12,7 @@ import {
   everyArtifactFailed,
   integrityWasChecked,
   staleFailures,
+  unrecordedRowReason,
   type BuildHealth,
 } from "./build-health";
 import { trackUrl } from "./track-url";
@@ -46,6 +47,7 @@ export function artifactsValue(health: BuildHealth): Record<string, unknown> {
           ...(b.checkedRun ? { checkedRun: b.checkedRun } : {}),
           freshness: b.freshness,
           ...(b.failedChecks.length ? { failedChecks: b.failedChecks } : {}),
+          ...(b.recorded === false ? { recorded: false } : {}),
         },
       ]),
     ),
@@ -179,13 +181,25 @@ export function applyArtifactHealth(
   }
 
   if (health.unchecked.length > 0) {
-    return {
-      note: `Integrity was not checked for ${listed(health.unchecked)}: the platform reported no readable integrity result for ${
-        health.unchecked.length === 1 ? "that artifact" : "those artifacts"
-      }.`,
-      failed,
-    };
+    return { note: uncheckedNote(health), failed };
   }
 
   return { note: null, failed };
+}
+
+function uncheckedNote(health: Extract<BuildHealth, { checked: true }>): string {
+  const unrecorded = health.browsers.filter((b) => b.usable === null && b.recorded === false).map((b) => b.browser);
+  const recorded = health.unchecked.filter((browser) => !unrecorded.includes(browser));
+  const lines = [
+    recorded.length
+      ? `Integrity was not checked for ${listed(recorded)}: the platform reported no readable integrity result for ${recorded.length === 1 ? "that artifact" : "those artifacts"}.`
+      : null,
+    unrecorded.length
+      ? `Integrity was not checked for ${listed(unrecorded)}: ${unrecorded.map(unrecordedRowReason).join("; ")}, and no integrity result could be read for ${
+          unrecorded.length === 1 ? "it, so nothing here vouches for that package" : "them, so nothing here vouches for those packages"
+        }.`
+      : null,
+  ];
+
+  return lines.filter((line): line is string => Boolean(line)).join(" ");
 }

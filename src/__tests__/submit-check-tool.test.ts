@@ -44,7 +44,7 @@ describe("extension_submit_check takes the calls that only read or ask, under a 
     world.calls.length = 0;
     const direct = await world.call("extension_submit", { action: "preflight", browsers: ["chrome"], ...api });
 
-    expect(checked.command).toBe("extension_submit");
+    expect(checked.command).toBe("extension_submit_check");
     expect(checked.status).toBe(direct.status);
     expect(checkedCalls.length).toBeGreaterThan(0);
     expect(checkedCalls).toEqual(platformReads());

@@ -66,6 +66,18 @@ import { pushAnswer, pushSentence, readPushState, sendListing } from "../lib/sto
 import { firefoxCategoryCover } from "../lib/firefox-category-cover";
 import { iconPaddingView } from "../lib/chrome-icon-padding";
 import { STORE_MD_FILENAME } from "../lib/store-md";
+import { EDGE_STORE_LOGO_RECIPE } from "../lib/store-bring-list";
+import {
+  OVER_LIMIT_CODE,
+  overLimitHint,
+  overLimitRefusalMessage,
+  overLimitSentence,
+  overLimitSentences,
+  platformOverLimitOf,
+  storeMdOverLimitOf,
+  syncRetryCall,
+  type StoreMdOverLimit,
+} from "../lib/store-md-over-limit";
 import { reconcileChromeCheck } from "../lib/store-md-chrome-reconcile";
 import { requirementsView, type RequirementsView } from "../lib/store-requirements";
 import { linesNotFound, storeMdLineOf, storeMdSectionOf } from "../lib/store-md-fields";
@@ -73,6 +85,7 @@ import {
   LISTING_STORES,
   LISTING_TEXT_LIMITS,
   PRIVACY_SECTION,
+  STORE_SECTIONS,
   derivedListingFields,
   listingForStore,
   parseStoreMdListing,
@@ -104,6 +117,11 @@ import {
 const COMMAND = "extension_submit";
 const ACT = "sync-listing";
 const DONE_STATUSES = new Set(["synced", "unchanged", "icon-stale"]);
+const LANDED_STATUSES = new Set(["synced", "recorded", "unchanged", "icon-stale"]);
+const SETTLED_STATUSES = new Set([...LANDED_STATUSES, "nothing-to-sync", "approval-required", "left-out"]);
+const OWNER_FILE_CODES = new Set([OVER_LIMIT_CODE, "INVALID_LISTING"]);
+
+export { overLimitSentences };
 
 type Row = Record<string, unknown>;
 
@@ -134,6 +152,9 @@ export interface LocalListing {
   iconNote?: string;
   skipped: string[];
   unread: Partial<Record<ListingField, UnreadLine>>;
+  overLimit: StoreMdOverLimit[];
+  borrowed?: Partial<Record<ListingField, string>>;
+  screenshotsLine?: string;
   lines: Partial<Record<ListingField, string>>;
   privacy: StoreMdPrivacy;
   categories?: CategoryRead;
@@ -158,7 +179,19 @@ export const FIREFOX_METADATA_SENTENCE =
   "For firefox, the listing's categories, summary, description, homepage and support reach the AMO add-on with the next listed upload, in the same run, before the version is created; AMO's refusal of any of them fails that upload with AMO's own words in the submission record. An unlisted upload leaves the AMO listing untouched.";
 
 export const PLAIN_LISTING_SENTENCE =
-  "This listing sync was a plain act under the owner's own token (ruling 143), since every value is the owner's own STORE.md line; only a value the platform derives takes a workspace owner's approval.";
+  "This listing sync was a plain act under the owner's own token and asked for no approval, since every value is the owner's own STORE.md line; only a value the platform derives takes a workspace owner's approval.";
+
+export const EDGE_STORE_LOGO_SENTENCE = `For edge, the store logo is still open: ${EDGE_STORE_LOGO_RECIPE}.`;
+
+export function borrowedSentence(store: string, borrowed: Partial<Record<ListingField, string>>): string {
+  const fields = Object.keys(borrowed) as ListingField[];
+  if (!fields.length) return "";
+
+  const lines = fields.map((field) => `\`${storeMdLineOf(field)}\``);
+  const joined = lines.length > 1 ? `${lines.slice(0, -1).join(", ")} and ${lines[lines.length - 1]}` : lines[0];
+
+  return `For ${store}, ${joined} ${lines.length === 1 ? "was" : "were"} read from the \`${borrowed[fields[0]!]}\` section of ${STORE_MD_FILENAME}, since \`${STORE_SECTIONS[store as ListingStore]}\` has none of its own; Edge takes the same text Chrome does.`;
+}
 
 /* @invariant WITH NO APP STORE NAME LINE, THE APP STORE TITLE IS THE RECORD'S
  * OWN NAME. The credential test reads the app record's name from Apple for
@@ -206,8 +239,8 @@ export function readLocalListing(
   const { listing, skipped, unread } = withChromeVisibility(read, parsed.lines.visibility);
   const icon = localIcon(projectPath, store);
   const patch: ListingPatch = { listing };
+  const screenshotsLine = parsed.screenshotsLine && !screenshots?.length ? screenshotsLineSentence(parsed.screenshotsLine, parsed.screenshotFiles ?? 0) : "";
 
-  if (parsed.screenshotsLine && !screenshots?.length) skipped.push(screenshotsLineSentence(parsed.screenshotsLine, parsed.screenshotFiles ?? 0));
   if ("icon" in icon) patch.icons = [icon.icon];
   if (screenshots?.length) patch.screenshots = screenshots;
 
@@ -217,6 +250,9 @@ export function readLocalListing(
     patch,
     skipped,
     unread,
+    overLimit: read.overLimit.map(({ field, ...measure }) => storeMdOverLimitOf(store, field, measure, parsed.lines[field])),
+    ...(read.borrowed ? { borrowed: read.borrowed } : {}),
+    ...(screenshotsLine ? { screenshotsLine } : {}),
     lines: parsed.lines,
     privacy: parsed.privacy,
     ...(parsed.screenshotsLine ? { screenshotsNamed: parsed.screenshotFiles ?? 0 } : {}),
@@ -479,7 +515,37 @@ export function storeMdAdvisory(
     notCovered,
     ...(onListing.length ? { onListing } : {}),
     ...(skipped.length ? { skipped } : {}),
+    ...(local.overLimit.length ? { overLimit: overLimitRows(local.overLimit) } : {}),
+    ...(local.screenshotsLine ? { screenshotsLine: local.screenshotsLine } : {}),
   };
+}
+
+function overLimitRows(overs: StoreMdOverLimit[]): Row[] {
+  return overs.map((over) => ({ ...over, say: overLimitSentence(over) }));
+}
+
+/* @invariant ONE SENTENCE THAT HOLDS FOR EVERY STORE IS SAID ONCE. The
+ * screenshots line of STORE.md is one line, read the same way for each
+ * store, so its sentence is lifted out of every store's storeMd block into
+ * one screenshotsLine at the top of the answer (ledger 407), and the per
+ * store blocks keep only what differs between stores.
+ */
+export function screenshotsLineOnce(stores: Row): { stores: Row; screenshotsLine: string | null } {
+  let screenshotsLine: string | null = null;
+  const lifted: Row = {};
+
+  for (const [store, view] of Object.entries(stores)) {
+    if (!isRow(view) || !isRow(view.storeMd) || !text(view.storeMd.screenshotsLine)) {
+      lifted[store] = view;
+      continue;
+    }
+
+    const { screenshotsLine: line, ...storeMd } = view.storeMd;
+    screenshotsLine ??= text(line);
+    lifted[store] = { ...view, storeMd };
+  }
+
+  return { stores: lifted, screenshotsLine };
 }
 
 function filledFields(patch: ListingPatch): string[] {
@@ -497,23 +563,35 @@ interface StoreReadBack {
   screenshotsOnRecord: string | null;
 }
 
+/* @invariant WHAT STILL BLOCKS AFTER A WRITE IS EVERY ROW THE PLATFORM
+ * STILL CALLS MISSING, NOT ONLY THE listing.* CHECKS. The read back after
+ * the write carries the store's requirement rows too; a required row the
+ * platform reads missing (an Edge single purpose the sync did not send, a
+ * store logo nobody uploaded) is named in stillBlocking beside the failing
+ * checks, so a sync never answers "nothing still blocking" for a store the
+ * preflight calls not ready (ledger 412).
+ */
 function readBackOf(store: string, json: Row): StoreReadBack {
   const checks = (Array.isArray(json.checks) ? json.checks : []).filter(isRow);
   const requirements = requirementsView(json.requirements);
+  const missingRows = requirements ? requirements.items.filter((row) => row.required && row.status === "missing").map((row) => row.id) : [];
 
   return {
     ...(requirements ? { images: imageRows(store, requirements) } : {}),
     screenshotsOnRecord: screenshotsOnRecord(requirements),
-    blocking: checks
-      .filter(
-        (check) =>
-          text(check.id).startsWith("listing.") &&
-          (text(check.status) === "fail" || text(check.status) === "warn"),
-      )
-      .map(
-        (check) =>
-          `${text(check.id)}${text(check.status) === "warn" ? " (warning)" : ""}`,
-      ),
+    blocking: [
+      ...checks
+        .filter(
+          (check) =>
+            text(check.id).startsWith("listing.") &&
+            (text(check.status) === "fail" || text(check.status) === "warn"),
+        )
+        .map(
+          (check) =>
+            `${text(check.id)}${text(check.status) === "warn" ? " (warning)" : ""}`,
+        ),
+      ...missingRows,
+    ],
     dashboardUrl: text(json.dashboardUrl) || null,
   };
 }
@@ -545,6 +623,7 @@ async function stillBlocking(
 export interface ImageRows {
   clears: string[];
   remain: string[];
+  storeLogo?: "missing" | "unknown";
 }
 
 const IMAGE_ROW = /\.(screenshots|store_icon|icon|app_icon|store_logo)$/;
@@ -560,10 +639,18 @@ const IMAGE_ROW = /\.(screenshots|store_icon|icon|app_icon|store_logo)$/;
  */
 function imageRows(store: string, view: RequirementsView): ImageRows {
   const rows = view.items.filter((row) => IMAGE_ROW.test(row.id));
+  const logo = rows.find((row) => row.id.endsWith(".store_logo") && row.status !== "have");
 
   return {
     clears: rows.filter((row) => row.status === "have").map((row) => row.label),
-    remain: rows.filter((row) => row.status !== "have").map((row) => `${row.label} (${row.format})${row.status === "unknown" ? ", confirmed only on the store's dashboard" : ""}`),
+    remain: rows
+      .filter((row) => row.status !== "have")
+      .map((row) =>
+        row === logo
+          ? `${row.label} (${row.format}), not filled by the icon sync-listing sent: ${EDGE_STORE_LOGO_RECIPE}`
+          : `${row.label} (${row.format})${row.status === "unknown" ? ", confirmed only on the store's dashboard" : ""}`,
+      ),
+    ...(logo ? { storeLogo: logo.status === "unknown" ? "unknown" : "missing" } : {}),
   };
 }
 
@@ -840,13 +927,54 @@ async function syncOne(
   if (answered) return { out: answered };
 
   const platformWords = sent.code === "INVALID_LISTING" && isRow(sent.body) ? text(sent.body.message) : "";
+  const over = sent.code === OVER_LIMIT_CODE ? platformOverLimitOf(store, sent.body, (isRow(sent.body) ? text(sent.body.message) : "") || sent.message) : null;
 
   return {
     store,
     status: sent.code === "OWNER_REQUIRED" ? "needs-owner" : "refused",
     code: sent.code,
     message: platformWords || sent.message,
+    ...(over ? { overLimit: overLimitRows([over]) } : {}),
   };
+}
+
+function refusedByStoreMd(store: ListingStore, local: LocalListing): Row {
+  return {
+    store,
+    status: "refused",
+    code: OVER_LIMIT_CODE,
+    message: overLimitRefusalMessage(local.overLimit),
+    overLimit: overLimitRows(local.overLimit),
+    ...(linesNotFound(local).length ? { unread: linesNotFound(local) } : {}),
+  };
+}
+
+function overLimitOfRow(row: Row): StoreMdOverLimit[] {
+  return Array.isArray(row.overLimit) ? (row.overLimit as StoreMdOverLimit[]) : [];
+}
+
+/* @invariant A STORE THE OWNER'S FILE GOT WRONG IS A BAD REQUEST, AND A
+ * SYNC THAT LANDED ON SOME STORES IS NOT A FAILURE. A refusal for a STORE.md
+ * line over a store's limit (read here or by the platform) is answered as
+ * E_BAD_REQUEST with the line, the heading, the length, the limit and the
+ * one retry call for that store; E_PLATFORM is kept for a fault on the
+ * platform's side. When other stores of the same call landed, the answer is
+ * ok with status listing-partly-synced, lists what landed per store, and
+ * the hint names the refused store's fix and the retry for it alone, so
+ * the person never re-sends a listing that is already there (ledger 411).
+ */
+function refusalHint(row: Row, useBuild: string): string {
+  const overs = overLimitOfRow(row);
+  if (overs.length) return overLimitHint(overs, useBuild || undefined);
+  if (text(row.next)) return text(row.next);
+
+  return `${text(row.store)}: ${text(row.message) || text(row.code)}. Fix what it names, then call ${syncRetryCall(text(row.store), useBuild || undefined)}.`;
+}
+
+function landedPhrase(rows: Row[]): string {
+  const said = rows.filter((row) => LANDED_STATUSES.has(text(row.status))).map((row) => `${text(row.store)} ${text(row.status) === "icon-stale" ? "unchanged" : text(row.status)}`);
+
+  return said.length > 1 ? `${said.slice(0, -1).join(", ")} and ${said[said.length - 1]}` : said[0] ?? "";
 }
 
 /* @invariant SEVERAL LISTINGS THE PLATFORM ASKS AN OWNER FOR ARE ONE
@@ -1047,10 +1175,16 @@ export async function syncListing(args: ListingArgs): Promise<string> {
   const said: string[] = [];
   const categoryRows: StoreCategoryRow[] = [];
   const iconAdvice: string[] = [];
+  const screenshotsLine = [...locals.values()].map((local) => local.screenshotsLine).find(Boolean) ?? "";
 
   let plain = false;
 
   for (const [store, local] of locals) {
+    if (local.overLimit.length) {
+      stores[store] = refusedByStoreMd(store, local);
+      continue;
+    }
+
     if (store === "safari") await adoptAppRecordName(api, local);
 
     await adoptBuildIcon(builds, store, local);
@@ -1065,6 +1199,8 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       stores[store] = { store, status: "nothing-to-sync", ...unread };
       continue;
     }
+
+    if (local.borrowed) said.push(borrowedSentence(store, local.borrowed));
 
     const result = await syncOne(api, args, store, local.patch, undefined, versioned);
     if ("out" in result) return result.out as string;
@@ -1098,6 +1234,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
 
     if (record && onRecord) said.push(onRecordSentence(store, record, readBack?.images ?? null));
     else if (readBack?.images && (sentImages || readBack.images.clears.length)) said.push(imagesSentence(store, sentImages, readBack.images));
+    else if (store === "edge" && local.patch.icons && readBack?.images?.storeLogo) said.push(EDGE_STORE_LOGO_SENTENCE);
 
     if (paste) {
       if (result.status === "synced") result.status = "recorded";
@@ -1128,6 +1265,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       ...result,
       filled,
       ...unread,
+      ...(local.borrowed ? { borrowed: local.borrowed } : {}),
       ...(local.categories ? { categories: { sent: local.categories.categories, from: local.categories.from, ...(local.categories.mapped ? { mapped: local.categories.mapped } : {}) } } : {}),
       ...(local.patch.icons && local.icon ? { icon: local.icon } : {}),
       ...(local.iconMissing ? { iconMissing: local.iconMissing } : {}),
@@ -1165,12 +1303,8 @@ export async function syncListing(args: ListingArgs): Promise<string> {
 
   const say = said.join(" ");
   const approvals = rows.filter((row) => row.status === "approval-required");
-  const failed = rows.filter(
-    (row) =>
-      !["synced", "recorded", "unchanged", "icon-stale", "nothing-to-sync", "approval-required", "left-out"].includes(
-        text(row.status),
-      ),
-  );
+  const failed = rows.filter((row) => !SETTLED_STATUSES.has(text(row.status)));
+  const landed = rows.filter((row) => LANDED_STATUSES.has(text(row.status)));
   const project = `${api.ref.workspace}/${api.ref.project}`;
   const value: Row = {
     action: ACT,
@@ -1182,6 +1316,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       ConsoleProjectPage.stores,
       args.api,
     ),
+    ...(screenshotsLine ? { screenshotsLine } : {}),
     ...(lineRows.length ? { lines: lineRows } : {}),
     ...(say ? { sayToPerson: say } : {}),
   };
@@ -1228,26 +1363,39 @@ export async function syncListing(args: ListingArgs): Promise<string> {
   }
 
   if (failed.length) {
+    const useBuild = text(args.useBuild);
+    const ownerFile = failed.every((row) => OWNER_FILE_CODES.has(text(row.code)));
+    const message = failed.map((row) => `${text(row.store)}: ${text(row.message) || text(row.code)}`).join(" ");
+    const fixes = failed.map((row) => refusalHint(row, useBuild)).join(" ");
+
+    if (landed.length) {
+      const done = landedPhrase(rows);
+
+      return envelope({
+        ok: true,
+        command: COMMAND,
+        status: "listing-partly-synced",
+        value: {
+          ...value,
+          landed: landed.map((row) => text(row.store)),
+          refused: failed.map((row) => ({ store: text(row.store), code: text(row.code), message: text(row.message), ...(overLimitOfRow(row).length ? { overLimit: row.overLimit } : {}) })),
+        },
+        warnings: [`${failed.map((row) => text(row.store)).join(", ")} refused: ${message}`],
+        hint: `${done}; ${failed.map((row) => text(row.store)).join(", ")} refused and ${failed.length === 1 ? "was" : "were"} not written. ${fixes} ${landed.length === 1 ? "The store that landed needs" : "The stores that landed need"} no second call.${say ? ` ${say}` : ""}`,
+      });
+    }
+
     return envelope({
       ok: false,
       command: COMMAND,
       status: `${ACT}-refused`,
       value,
       error: {
-        code: "E_PLATFORM",
-        name: "ListingRefused",
-        message: failed
-          .map(
-            (row) =>
-              `${text(row.store)}: ${text(row.message) || text(row.code)}`,
-          )
-          .join(" "),
+        code: ownerFile ? "E_BAD_REQUEST" : "E_PLATFORM",
+        name: ownerFile ? "ListingFieldRefused" : "ListingRefused",
+        message,
       },
-      hint:
-        failed
-          .map((row) => text(row.next))
-          .filter(Boolean)
-          .join(" ") || undefined,
+      hint: fixes || undefined,
     });
   }
 

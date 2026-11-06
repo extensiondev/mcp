@@ -139,7 +139,7 @@ describe("preflight names the capture recipe for every store whose screenshots r
     const out = JSON.parse(await submit({ action: "preflight", browsers: ["firefox"], projectPath: root, api: API }));
     const recipe = 'Screenshots for firefox: extension_screenshot store:"firefox" on a Chromium dev session, one call per view, then sync-listing browsers:["firefox"] picks them up from store/screenshots/firefox/.';
 
-    expect(out.hint).toContain(recipe);
+    expect(out.value.sayToPerson).toContain(recipe);
     expect(out.value.sayToPerson).toContain(recipe);
     expect(out.value.nextStep).toMatchObject({ kind: "screenshot" });
     expect(out.value.nextStep.say).toContain(recipe);
@@ -162,7 +162,7 @@ describe("preflight names the capture recipe for every store whose screenshots r
 
     const out = JSON.parse(await submit({ action: "preflight", browsers: ["safari", "firefox"], projectPath: root, api: API }));
 
-    expect(out.hint).toContain('Screenshots for safari: extension_screenshot store:"safari" on a Safari dev session, one call per view, then sync-listing browsers:["safari"] picks them up from store/screenshots/safari/.');
+    expect(out.value.sayToPerson).toContain('Screenshots for safari: extension_screenshot store:"safari" on a Safari dev session, one call per view, then sync-listing browsers:["safari"] picks them up from store/screenshots/safari/.');
     expect(out.hint).not.toContain("Screenshots for firefox");
     expect(out.value.nextStep).toMatchObject({ kind: "screenshot" });
   });

@@ -76,8 +76,8 @@ describe("extension_submit preflight relays the Edge review the platform could n
     expect(edge.approval).toBe(APPROVAL);
     expect(out.value.stores.edge.failing).toEqual([]);
     expect(out.value.stores.edge.canSubmit).toBe(true);
-    expect(out.hint).toContain(`edge: a submission is in certification review and its state ${REASON}; the upload is queued until Edge Add-ons lists the product`);
-    expect(out.hint).toContain("never failed, and nothing here can call the product idle");
+    expect(out.value.sayToPerson).toContain(`edge: a submission is in certification review and its state ${REASON}; the upload is queued until Edge Add-ons lists the product`);
+    expect(out.value.sayToPerson).toContain("never failed, and nothing here can call the product idle");
     expect(JSON.stringify(out)).not.toContain("nothing is in certification review");
     expect(JSON.stringify(out)).not.toContain("nothing is in review");
   });

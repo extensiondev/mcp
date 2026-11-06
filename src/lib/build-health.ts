@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { buildNumberOf } from "./builds-list-row";
+import { isPackageArtifact, packageFileOf } from "./package-address";
 import { openProjectApi, projectApiGet } from "./project-api";
 
 type Row = Record<string, unknown>;
@@ -31,6 +32,7 @@ export interface BrowserHealth {
   checkedRun: string | null;
   freshness: Freshness;
   staleVerdict?: "passed" | "failed";
+  recorded?: false;
 }
 
 export interface BuildRun {
@@ -65,6 +67,39 @@ function text(value: unknown): string {
 
 function isRow(value: unknown): value is Row {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+const PACKAGE_NAME = /^([a-z]+)-extension\.(?:zip|xpi|crx)$/i;
+
+function packageBrowserOf(row: Row): string {
+  const named = text(row.browser) || PACKAGE_NAME.exec(text(row.name))?.[1] || packageFileOf(row.downloadUrl)?.browser || "";
+  const browser = named.toLowerCase();
+
+  return browser === "source" ? "" : browser;
+}
+
+export function packageBrowsersOf(artifacts: unknown): string[] {
+  const rows = Array.isArray(artifacts) ? artifacts.filter(isRow) : [];
+  const found: string[] = [];
+
+  for (const row of rows) {
+    if (!isPackageArtifact(row)) continue;
+
+    const browser = packageBrowserOf(row);
+    if (browser && !found.includes(browser)) found.push(browser);
+  }
+
+  return found;
+}
+
+export function unrecordedBrowsers(recorded: string[], artifacts: unknown): string[] {
+  const known = new Set(recorded.map((name) => name.toLowerCase()));
+
+  return packageBrowsersOf(artifacts).filter((browser) => !known.has(browser));
+}
+
+export function unrecordedRowReason(browser: string): string {
+  return `the platform's record of this build has no row for ${browser} yet, while its artifact list carries a ${browser} package`;
 }
 
 function failedChecksOf(body: Row): FailedCheck[] {
@@ -130,7 +165,7 @@ export function browserHealthOf(
   browser: string,
   status: string | null,
   read: { ok: true; json: unknown } | { ok: false; status: number; body: unknown },
-  context: { explicit?: IntegrityProvenance; run?: BuildRun } = {},
+  context: { explicit?: IntegrityProvenance; run?: BuildRun; recorded?: boolean } = {},
 ): BrowserHealth {
   let integrity: IntegrityVerdict;
   let failedChecks: FailedCheck[] = [];
@@ -168,6 +203,7 @@ export function browserHealthOf(
     checkedRun: checked.checkedRun,
     freshness,
     ...(staleVerdict ? { staleVerdict } : {}),
+    ...(context.recorded === false ? { recorded: false as const } : {}),
   };
 }
 
@@ -223,7 +259,7 @@ export function describeBrowserHealth(b: BrowserHealth): string {
           ? "no integrity report"
           : "integrity unreadable";
 
-  return `${b.browser}: ${b.status ? `build ${b.status}, ` : ""}${integrity}`;
+  return `${b.browser}: ${b.status ? `build ${b.status}, ` : b.recorded === false ? "no row in the build record, " : ""}${integrity}`;
 }
 
 function explicitProvenance(row: Row): IntegrityProvenance | undefined {
@@ -260,13 +296,21 @@ export async function readBuildHealth(args: {
 
   if (!detail.ok) return { checked: false, buildId, reason: detail.message, status: detail.status };
 
-  const rows = (Array.isArray(detail.json.browsers) ? detail.json.browsers : [])
+  const recorded = (Array.isArray(detail.json.browsers) ? detail.json.browsers : [])
     .map((b) =>
       isRow(b)
-        ? { browser: text(b.name) || text(b.browser), status: text(b.status) || null, explicit: explicitProvenance(b) }
-        : { browser: text(b), status: null, explicit: undefined },
+        ? { browser: text(b.name) || text(b.browser), status: text(b.status) || null, explicit: explicitProvenance(b), recorded: true }
+        : { browser: text(b), status: null, explicit: undefined, recorded: true },
     )
     .filter((row) => row.browser);
+  const artifacts = await projectApiGet<unknown[]>(opened.api, `${route}/artifacts`);
+  const rows = [
+    ...recorded,
+    ...unrecordedBrowsers(
+      recorded.map((row) => row.browser),
+      artifacts.ok ? artifacts.json : [],
+    ).map((browser) => ({ browser, status: null, explicit: undefined, recorded: false })),
+  ];
 
   if (rows.length === 0) {
     return { checked: false, buildId, reason: `the platform's record of build ${buildId} lists no browsers` };
@@ -280,7 +324,7 @@ export async function readBuildHealth(args: {
 
   return summarizeBuildHealth(
     text(detail.json.buildId) || buildId,
-    rows.map((row, i) => browserHealthOf(row.browser, row.status, reads[i], { explicit: row.explicit, run })),
+    rows.map((row, i) => browserHealthOf(row.browser, row.status, reads[i], { explicit: row.explicit, run, recorded: row.recorded })),
     run,
     buildNumberOf(detail.json),
   );

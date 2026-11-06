@@ -37,7 +37,8 @@ import { compactPreflightStores, PREFLIGHT_DETAIL_SENTENCE, preflightDetail } fr
 import { summaryAgreeingWithRows } from "../lib/preflight-summary";
 import { readinessAnswer, readinessLead, storeReadinessOf } from "../lib/store-onboarding";
 import { safariSigningOf, safariSigningSentence } from "../lib/safari-signing-expiry";
-import { submissionModeSentence, submissionModeView } from "../lib/submission-mode-view";
+import { submissionLandingLine } from "../lib/submission-landing";
+import { submissionModeView } from "../lib/submission-mode-view";
 import { consoleProjectUrl } from "../lib/registry";
 import { platformReleaseSentence, readSafariReleaseIntent, safariApprovalReleaseSentence } from "../lib/safari-release-intent";
 import { projectApiGet, projectApiReadFailure, projectApiSend } from "../lib/project-api";
@@ -75,12 +76,15 @@ import {
   submitStep,
   uploadStopsAtDraft,
   type ModeIds,
+  type NextStep,
 } from "../lib/store-connection";
 import {
-  missingRequirementsSentences,
+  chromeDashboardSentence,
+  missingRequiredSentence,
   requirementsView,
+  safariOfferSentences,
 } from "../lib/store-requirements";
-import { bringListOf, bringListSentences, screenshotDoor } from "../lib/store-bring-list";
+import { bringListOf, screenshotDoor } from "../lib/store-bring-list";
 import { captureRecipe } from "../lib/store-capture";
 import { notReadyForReviewStep, notReadyLine } from "../lib/store-not-ready";
 import { nextVersionOf, nextVersionSentence } from "../lib/store-readiness";
@@ -102,8 +106,10 @@ import {
   publishRefusedMessage,
 } from "../lib/edge-first-submission";
 import {
+  overLimitSentences,
   readLocalListing,
   reconciledWithStoreMd,
+  screenshotsLineOnce,
   storeMdAdvisory,
 } from "./store-listing";
 import { publishVersion } from "./store-publish-version";
@@ -657,19 +663,81 @@ export function storePreflightView(json: Row, store: string, local: LocalListing
 }
 
 
+const BUILD_NUMBER = /\bbuild (\d+)\b/;
+const VERSION_NUMBER = /\b(\d+\.\d+(?:\.\d+)*)\b/;
+const HOUR_MS = 3_600_000;
+
+function lockOf(block: Row): Row | null {
+  const lock = isRow(block.lock) ? block.lock : null;
+
+  return lock && text(lock.clearsWhen) ? lock : null;
+}
+
+function bumpedPatch(version: string): string {
+  const parts = version.split(".");
+  const last = Number(parts[parts.length - 1]);
+
+  return Number.isInteger(last) ? [...parts.slice(0, -1), String(last + 1)].join(".") : "";
+}
+
+function safariOnApproval(release: Row | null): string {
+  const type = release ? text(release.type).toUpperCase() : "";
+
+  if (type === "AFTER_APPROVAL") return "goes on sale the moment Apple approves it, which cannot be taken back from here";
+  if (type === "MANUAL") return 'stays held after Apple approves it until extension_submit {action: "release"} puts it on sale';
+  if (type === "SCHEDULED") return "goes on sale on the date set in App Store Connect once Apple approves it";
+  if (release && text(release.meaning)) return `is held as ${type}: ${text(release.meaning)}`;
+
+  return "waits for Apple's verdict";
+}
+
+/* @invariant A SAFARI LOCK IS ANSWERED AS THE OWNER'S DECISION. While Apple
+ * reviews a version, the choice is to let it go out and send the new build as
+ * the next version, or to withdraw it and send the new build as this one;
+ * "queued, never failed" said neither (ledger 414). The paragraph names the
+ * version and build in review (from the approval sentence and the lock), what
+ * Apple's approval does to it (from the release read), both ways out, when the
+ * lock clears on its own, and the age of a read older than an hour.
+ */
+export function safariLockSentences(block: Row, now = Date.now()): string {
+  const lock = lockOf(block);
+  if (!lock) return "";
+
+  const approval = text(block.approval);
+  const clears = text(lock.clearsWhen);
+  const build = BUILD_NUMBER.exec(approval)?.[1] ?? BUILD_NUMBER.exec(clears)?.[1] ?? "";
+  const version = VERSION_NUMBER.exec(clears)?.[1] ?? VERSION_NUMBER.exec(approval)?.[1] ?? "";
+  const next = text(block.nextVersion);
+  const later = version ? bumpedPatch(version) : "";
+  const subject = `${version ? `version ${version}` : "a version"}${build ? ` (build ${build})` : ""}`;
+  const readAt = text(lock.readAt);
+  const hours = readAt ? Math.floor((now - Date.parse(readAt)) / HOUR_MS) : 0;
+  const age =
+    readAt && Number.isFinite(hours) && hours >= 1
+      ? ` App Store Connect answered this ${hours} ${hours === 1 ? "hour" : "hours"} ago (${readAt}); extension_submit_check {action: "status", browsers: ["safari"], waitSeconds: 60} reads it fresh.`
+      : "";
+
+  return `safari: ${subject} is waiting for Apple (${text(lock.storeWord) || text(lock.kind)}) and ${safariOnApproval(isRow(block.release) ? block.release : null)}. Either let Apple finish and send the new build as ${later ? `${later} or higher` : "the next version"} afterward, since App Store Connect takes no new build on a version it has released, or withdraw it now with extension_submit {action: "cancel", store: "safari"} and send the new build as ${next || version || "this version"}. The lock clears when ${clears}.${age}`;
+}
+
 export function nextVersionSentences(storePreflight: Record<string, Row>): string {
   return Object.entries(storePreflight)
-    .map(([store, block]) => (text(block.nextVersion) ? nextVersionSentence(store, { nextVersion: text(block.nextVersion), landing: text(block.landing) || undefined }) : ""))
+    .map(([store, block]) => {
+      if (!text(block.nextVersion) || (store === "safari" && lockOf(block))) return "";
+
+      return nextVersionSentence(store, { nextVersion: text(block.nextVersion), landing: text(block.landing) || undefined });
+    })
     .filter(Boolean)
     .join(" ");
 }
 
-export function lockSentences(storePreflight: Record<string, Row>): string {
+export function lockSentences(storePreflight: Record<string, Row>, now = Date.now()): string {
   return Object.entries(storePreflight)
     .map(([store, block]) => {
-      const lock = isRow(block.lock) ? block.lock : null;
+      const lock = lockOf(block);
 
-      if (!lock || !text(lock.clearsWhen)) return "";
+      if (!lock) return "";
+      if (store === "safari") return safariLockSentences(block, now);
 
       if (text(lock.source) === "unreadable") {
         return `${store}: a submission is in certification review and its state ${text(lock.reason) || "could not be read from here"}; the ${text(block.act) || "act"} is queued until ${text(lock.clearsWhen)} (${text(lock.storeWord) || text(lock.kind)}), never failed, and nothing here can call the product idle.`;
@@ -682,6 +750,58 @@ export function lockSentences(storePreflight: Record<string, Row>): string {
 }
 
 const NAMED_BY_SUBMIT = new Set(["submission.build_selected"]);
+
+const PREFLIGHT_POINTER = "Say value.sayToPerson to the person as it is.";
+
+/* @invariant EACH STORE'S INPUTS ARE LISTED ONCE. The bring list already names
+ * every missing required input with its format and who supplies it, so the
+ * count sentence is said only for a store the platform gave no bring list
+ * (ledger 407); the Chrome dashboard-only inputs and the Safari offers are
+ * other facts and stay beside it.
+ */
+function inputsSentences(stores: Row): string {
+  return Object.entries(stores)
+    .map(([store, view]) => {
+      if (!isRow(view)) return "";
+
+      const requirements = isRow(view.requirements) ? requirementsView(view.requirements) : null;
+      const bring = isRow(view.bringList) ? text(view.bringList.say) : "";
+      const offers = store === "safari" ? safariOfferSentences(requirements) : "";
+      const dashboard = store === "chrome" ? chromeDashboardSentence(requirements) : "";
+
+      return [bring || missingRequiredSentence(store, requirements), offers, dashboard].filter(Boolean).join(" ");
+    })
+    .concat(overLimitSentences(stores))
+    .filter(Boolean)
+    .join(" ");
+}
+
+function partialSubmitStep(goes: string[], blocked: string[], modes: ModeIds): NextStep | null {
+  if (!goes.length) return null;
+
+  const step = submitStep(goes, modes);
+  const held = blocked.length ? `${blocked.join(", ")} ${blocked.length === 1 ? "stays" : "stay"} out until the failing checks pass. ` : "";
+
+  return { ...step, say: `${held}${step.say}` };
+}
+
+/* @invariant THE HINT CARRIES THE NEXT CALL, NEVER THE PARAGRAPH AGAIN. The
+ * person-facing text lives once in value.sayToPerson; hint points at it and
+ * names the call that follows (ledger 296, seen again in 407).
+ */
+function preflightHint(step: NextStep | null, goes: string[], blocked: string[], buildSha: string): string {
+  if (!step) {
+    return `${PREFLIGHT_POINTER} ${blocked.length ? `${blocked.join(", ")} cannot be submitted until the failing checks pass; fix what they name and call preflight again.` : "Call preflight again once every store answers."}`;
+  }
+
+  if (step.kind === "submit") {
+    const call = `extension_submit_check {action: "submit", browsers: [${goes.map((store) => `"${store}"`).join(", ")}], buildSha: ${buildSha ? `"${buildSha}"` : "<a sha extension_builds lists>"}, dryRun: false}`;
+
+    return `${PREFLIGHT_POINTER} Next: ${call} asks for the owner's approval and executes nothing; extension_submit with the same arguments and that approvalId submits.`;
+  }
+
+  return `${PREFLIGHT_POINTER} Next: value.nextStep.say (${step.kind}${step.url ? `, ${step.url}` : ""}).`;
+}
 
 function count(checks: Row[], status: string): number {
   return checks.filter((c) => text(c.status) === status).length;
@@ -873,11 +993,13 @@ export async function preflight(args: StoreActArgs): Promise<string> {
   const unread: string[] = [];
 
   const shown = (): Row => {
-    const compact = compactPreflightStores(stores, detail);
+    const lifted = screenshotsLineOnce(stores);
+    const compact = compactPreflightStores(lifted.stores, detail);
     const readiness = readinessAnswer(storeReadinessOf({ stores, asked, projectPath: text(args.projectPath) }));
 
     return {
       ...(readiness ? { readiness } : {}),
+      ...(lifted.screenshotsLine ? { screenshotsLine: lifted.screenshotsLine } : {}),
       ...(compact.trimmed ? { stores: compact.stores, detail: PREFLIGHT_DETAIL_SENTENCE } : { stores: compact.stores }),
       ...(Object.keys(storePreflight).length ? { storePreflight } : {}),
     };
@@ -953,21 +1075,13 @@ export async function preflight(args: StoreActArgs): Promise<string> {
   const buildLine = buildNamedLater
     ? " The submit call names the build; extension_builds lists the shas."
     : "";
-  const modeLine = Object.entries(stores)
-    .map(([store, view]) => {
-      const mode = isRow((view as Row).submissionMode)
-        ? ((view as Row).submissionMode as Row)
-        : null;
-
-      return mode ? submissionModeSentence(store, mode) : "";
-    })
-    .join("");
+  const landingLine = submissionLandingLine(stores);
   const firefoxView = isRow(stores.firefox) ? stores.firefox : null;
   const sourceLine = [
     firefoxView && isRow(firefoxView.sourceArchive) ? ` ${text(firefoxView.sourceArchive.say)}` : "",
     firefoxView && isRow(firefoxView.updateManifest) ? ` ${text(firefoxView.updateManifest.say)}` : "",
   ].join("");
-  const inputsSay = [missingRequirementsSentences(stores), bringListSentences(stores)].filter(Boolean).join(" ");
+  const inputsSay = inputsSentences(stores);
   const workspaceLine = Object.entries(stores)
     .filter(([, view]) => (view as Row).connectionSource === "workspace")
     .map(([store, view]) => {
@@ -986,7 +1100,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
   const packageSay = `${packageLine ? ` ${packageLine}` : ""}${iconSay ? ` ${iconSay}` : ""}${signingSay ? ` ${signingSay}` : ""}`;
   const readinessHint = blocked.length
     ? `${blocked.join(", ")} cannot be submitted yet; each failing check says what to fix.${syncLine}${sourceLine}${lockLine ? ` ${lockLine}` : ""}${versionLine ? ` ${versionLine}` : ""}${packageSay} This read wrote nothing.`
-    : `${notReady.length ? "Every store read here can take an upload." : "Every store read here is ready to submit."}${buildLine}${modeLine}${sourceLine}${workspaceLine}${lockLine ? ` ${lockLine}` : ""}${versionLine ? ` ${versionLine}` : ""}${packageSay} This read wrote nothing; extension_submit with dryRun:false submits.`;
+    : `${notReady.length ? "Every store read here can take an upload." : "Every store read here is ready to submit."}${buildLine}${sourceLine}${workspaceLine}${lockLine ? ` ${lockLine}` : ""}${versionLine ? ` ${versionLine}` : ""}${packageSay} This read wrote nothing; extension_submit with dryRun:false submits.`;
   const chrome = isRow(stores.chrome) ? stores.chrome : null;
   const connection =
     chrome && isRow(chrome.connection) ? chrome.connection : null;
@@ -1295,7 +1409,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       : "";
   const green = blocked.length === 0 && unread.length === 0;
   const notReadyStep = notReady.length
-    ? notReadyForReviewStep(notReady, inputsSay, edgeFirst, storesPageUrl, storeSettingsUrl(api.ref, args.api))
+    ? notReadyForReviewStep(notReady, edgeFirst, storesPageUrl, storeSettingsUrl(api.ref, args.api))
     : null;
   const captureStores = asked.filter((store) => screenshotsOwed(stores[store], store)) as ListingStore[];
   const captureLine = captureStores.map(captureRecipe).join(" ");
@@ -1320,6 +1434,14 @@ export async function preflight(args: StoreActArgs): Promise<string> {
         : undefined,
     ]),
   );
+  const goes = asked.filter((store) => isRow(stores[store]) && (stores[store] as Row).canSubmit === true && (stores[store] as Row).readyForReview !== false);
+  const step = reviewBlocks
+    ? nextStep("done", reviewSay, reviewUrl)
+    : captureStep && (!green || !notReadyStep)
+      ? captureStep
+      : green
+        ? notReadyStep ?? submitStep(asked, modeIds)
+        : partialSubmitStep(goes, blocked, modeIds);
 
   return envelope({
     ok: true,
@@ -1334,19 +1456,11 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       trackUrl: reviewing ? reviewUrl : storesPageUrl,
       sayToPerson: readinessLead(
         storeReadinessOf({ stores, asked, projectPath: text(args.projectPath) }),
-        [inputsSay, edgeFirstLine, reviewLine, notReadyLine(notReady, green), readinessHint, captureLine].filter(Boolean).join(" "),
+        [landingLine, inputsSay, edgeFirstLine, reviewLine, notReadyLine(notReady, green), readinessHint, captureLine].filter(Boolean).join(" "),
       ),
-      nextStep: reviewBlocks
-        ? nextStep("done", reviewSay, reviewUrl)
-        : captureStep && (!green || !notReadyStep)
-          ? captureStep
-          : green
-            ? notReadyStep ?? submitStep(asked, modeIds)
-            : null,
+      nextStep: step,
     },
-    hint: [inputsSay, edgeFirstLine, reviewLine, notReadyLine(notReady, green), readinessHint, captureLine]
-      .filter(Boolean)
-      .join(" "),
+    hint: preflightHint(step, green ? asked : goes, blocked, text(args.buildSha)),
     warnings: [unreadLine],
   });
 }

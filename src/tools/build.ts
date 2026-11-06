@@ -16,6 +16,7 @@ import { liveProjectSessions } from "../lib/session-browser";
 import { channelAwareBuildWarnings } from "../lib/amo-update-url";
 import { CARRIER_DIR_NAME, removeCarrier } from "../lib/carrier";
 import { readZipEntryNames } from "../lib/zip-entries";
+import { LARGE_ASSET_FLOOR, duplicateAssetSentence, findDuplicateAssets, largestFilesOf, listDistFiles } from "../lib/duplicate-assets";
 import {
   buildSummaryPath,
   readyContractPath,
@@ -132,6 +133,102 @@ interface EngineBuildSummary {
   warnings?: string[];
   safari?: EngineSafariSummary;
   zip_artifacts?: Array<{ kind?: string; path?: string; size?: number }>;
+  addon_lint?: EngineAddonLint;
+  toolchain?: EngineToolchain;
+}
+
+interface EngineAddonLint {
+  status?: string;
+  findings?: number;
+  reason?: string;
+}
+
+interface EngineToolchain {
+  node?: string;
+  extension_js?: string;
+  package_manager?: { name?: string; version?: string };
+}
+
+export const AMO_REVIEWER_NOTE = "amo-reviewer-note.md";
+
+export const ADDON_LINT_INSTALL = "npm install -D addons-linter";
+
+export interface AddonLintValue {
+  status: "linted" | "missing" | "failed" | "skipped";
+  findings?: number;
+  reason?: string;
+  reviewerNotePath?: string;
+  installHint?: string;
+}
+
+/* @invariant A SKIPPED AMO LINT IS AN ANSWER, NOT A SILENCE. The engine
+ * records summary.addon_lint on every build (linted with a count, missing
+ * when addons-linter is not installed, failed, or skipped by mode, browser
+ * or config) and prints the missing case as one info line that this tool
+ * never relayed; and its writer removes dist/amo-reviewer-note.md only when
+ * a lint ran and found nothing, so the missing path leaves an earlier run's
+ * note beside a new dist. A Firefox build therefore answered clean while a
+ * stale note sat there (ledger 425). The answer carries value.addonLint, a
+ * missing lint is a warning with the install line and the config key, and a
+ * note older than this build is named as stale. The toolchain the engine
+ * writes beside it (node, package manager, Extension.js) is answered as
+ * value.toolchain instead of being a sentence the person is told to copy
+ * into a reviewer note by hand (ledger 424). */
+export function addonLintFrame(summary: EngineBuildSummary | null, distRoot: string, since: number): { value: AddonLintValue | null; warnings: string[] } {
+  const lint = summary?.addon_lint;
+  const status = typeof lint?.status === "string" ? lint.status : "";
+  if (!lint || !["linted", "missing", "failed", "skipped"].includes(status)) return { value: null, warnings: [] };
+
+  const notePath = path.join(distRoot, AMO_REVIEWER_NOTE);
+  let noteWrittenAt: number | null = null;
+
+  try {
+    noteWrittenAt = fs.statSync(notePath).mtimeMs;
+  } catch {
+  }
+
+  const noteIsCurrent = noteWrittenAt !== null && noteWrittenAt >= since - COARSE_MTIME_CLOCK_SLACK_MS;
+  const warnings: string[] = [];
+
+  if (status === "missing") {
+    warnings.push(
+      `The addons.mozilla.org lint did not run: addons-linter is not installed in this project, so this answer carries no AMO findings for the package. Install it (${ADDON_LINT_INSTALL}) and build again, or set commands.build.addonLint to false in extension.config.js (the --no-addon-lint flag) to skip it on purpose.`,
+    );
+  }
+
+  if (status === "failed") {
+    warnings.push(`The addons.mozilla.org lint failed to run${lint.reason ? ` (${lint.reason})` : ""}, so this answer carries no AMO findings for the package.`);
+  }
+
+  if (noteWrittenAt !== null && !noteIsCurrent && status !== "linted") {
+    warnings.push(
+      `${notePath} was written by an earlier build (${new Date(noteWrittenAt).toISOString()}), not by this one: the lint that writes it did not run now, so its findings are stale and do not describe this package.`,
+    );
+  }
+
+  return {
+    value: {
+      status: status as AddonLintValue["status"],
+      ...(typeof lint.findings === "number" ? { findings: lint.findings } : {}),
+      ...(lint.reason ? { reason: lint.reason } : {}),
+      ...(noteIsCurrent ? { reviewerNotePath: notePath } : {}),
+      ...(status === "missing" ? { installHint: ADDON_LINT_INSTALL } : {}),
+    },
+    warnings,
+  };
+}
+
+export function toolchainValue(summary: EngineBuildSummary | null): { node: string; extensionJs?: string; packageManager?: { name: string; version: string } } | null {
+  const chain = summary?.toolchain;
+  if (!chain || typeof chain.node !== "string" || !chain.node) return null;
+
+  const pm = chain.package_manager;
+
+  return {
+    node: chain.node,
+    ...(typeof chain.extension_js === "string" && chain.extension_js ? { extensionJs: chain.extension_js } : {}),
+    ...(pm && typeof pm.name === "string" && typeof pm.version === "string" ? { packageManager: { name: pm.name, version: pm.version } } : {}),
+  };
 }
 
 interface PersistedSummary {
@@ -191,6 +288,38 @@ function readEngineOutput(stdout: string, stderr: string): EngineOutput {
     .join("\n");
 
   return { frame, narration };
+}
+
+export type BuildMode = "development" | "production" | "none";
+
+const BUILD_MODES = new Set<string>(["development", "production", "none"]);
+
+const NARRATED_MODE = /built for (development|production)\b/i;
+
+/* @invariant THE ANSWER NAMES THE MODE THE ENGINE BUILT, NOT THE ONE ASKED
+ * FOR. extension build --output json records `value.mode` as the mode the
+ * build resolved to (production when no --mode was passed), and its narration
+ * says "Extension built for <mode> in dist/<browser>"; a development and a
+ * production build of one browser land in the same dist/<browser> unless
+ * outDir separates them, so after two builds nothing else says which one is
+ * there (ledger 419). The frame's word comes first, the narration second, and
+ * only an engine that says neither is taken at the argument's word. */
+export function builtMode(frame: Envelope | null, narration: string, requested: BuildMode | undefined): BuildMode {
+  const recorded = (frame?.value as { mode?: unknown } | null | undefined)?.mode;
+  if (typeof recorded === "string" && BUILD_MODES.has(recorded)) return recorded as BuildMode;
+
+  const said = NARRATED_MODE.exec(narration)?.[1]?.toLowerCase();
+  if (said === "development" || said === "production") return said;
+
+  return requested ?? "production";
+}
+
+export function modeSentence(mode: BuildMode): string {
+  if (mode === "development") {
+    return "This is a development build (readable code, source maps, NODE_ENV=development), the one Playwright and e2e harnesses load; a store takes the production build, which extension_build makes without mode.";
+  }
+
+  return mode === "none" ? "This build ran with the bundler's mode unset (mode: \"none\")." : "";
 }
 
 function engineSummaries(frame: Envelope | null): EngineBuildSummary[] {
@@ -455,7 +584,7 @@ function locateSourceZip(
 export const schema = {
   name: "extension_build",
   description:
-    "Build a browser extension for production. This tool always passes --browser (chrome unless you set it), so the output lands in dist/<browser>/ (dist/chrome by default; <outDir>/<browser>/ with outDir, and a build over a live dev session's dist is refused and names outDir), and the answer's outputPath names the folder that was written, with zipPath beside it when a zip was asked for: read those paths instead of assuming one. To know what is in the build (sizes, entry points, the checks a store reviewer runs) call extension_analyze on the same projectPath and browser instead of listing or reading the output folder by hand; the answer's hint says so. A scaffolded project's own `npm run build` runs `extension build` with no --browser, which the engine defaults to chromium, so that script writes dist/chromium/ instead. Pass zip:true to also package a .zip for store submission. With browser:'safari' the build converts the extension into a macOS app through Xcode, and bundleId sets the identifier it ships under. The build refuses a manifest with build-blocking errors unless you pass skipValidation:true, because such a manifest yields a broken bundle the bundler itself never flags.",
+    "Build a browser extension for production, or for development with mode:'development' (readable code, source maps, NODE_ENV=development: the build Playwright and e2e harnesses load; with outDir it lands beside the production one). The answer's value.mode names the mode built. This tool always passes --browser (chrome unless you set it), so the output lands in dist/<browser>/ (<outDir>/<browser>/ with outDir; a build over a live dev session's dist is refused and names outDir), and the answer's outputPath names the folder written, with zipPath beside it when a zip was asked for: read those paths instead of assuming one. To know what is in the build (sizes, entry points, store checks) call extension_analyze on the same projectPath and browser instead of reading the folder by hand. A scaffolded project's own `npm run build` passes no --browser, so the engine writes dist/chromium/ instead. Pass zip:true to also package a .zip for store submission. With browser:'safari' the build converts the extension into a macOS app through Xcode, and bundleId sets the identifier it ships under. The build refuses a manifest with build-blocking errors unless you pass skipValidation:true, because such a manifest yields a broken bundle the bundler itself never flags.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -489,7 +618,8 @@ export const schema = {
         type: "string",
         enum: ["development", "production", "none"],
         default: "production",
-        description: "Bundler mode override (also sets NODE_ENV)",
+        description:
+          "Bundler mode, which also sets NODE_ENV. production (the default) is the minified store build. development keeps readable code and source maps with NODE_ENV=development: the build Playwright and e2e harnesses load; give it its own outDir to keep it beside the production one, since both land in dist/<browser> otherwise. none leaves the bundler's mode unset. The answer's value.mode names the mode the engine built.",
       },
       skipValidation: {
         type: "boolean",
@@ -764,6 +894,7 @@ export async function handler(args: {
         ? `This build reported no summary of its own, and no summary from this run was found on disk either, so the byte totals and the engine's structured warnings are missing from the result below. The extension that was built is unaffected. ${sessionPathHint(persisted.file)}`
         : null;
     const status = engine.frame?.status;
+    const mode = builtMode(engine.frame, out, args.mode);
     const buildWarnings = await channelAwareBuildWarnings(
       engineSummary?.warnings?.length ? engineSummary.warnings : [],
       browser,
@@ -893,6 +1024,13 @@ export async function handler(args: {
       );
     }
 
+    const distFiles = listDistFiles(distDir);
+    const duplicates = findDuplicateAssets(distDir, distFiles);
+    const largestFiles = largestFilesOf(distFiles, duplicates);
+    const largestFilesInline = (largestFiles[0]?.size ?? 0) >= LARGE_ASSET_FLOOR || duplicates.length > 0 ? largestFiles : null;
+    const addonLint = addonLintFrame(engineSummary, distRoot, start);
+    const toolchain = toolchainValue(engineSummary);
+
     const divergence = manifestDivergence(args.projectPath, browser);
     const safariIdentity = safari ? (engineSummary?.safari ?? null) : null;
     const derivedBundleIdNote =
@@ -919,6 +1057,7 @@ export async function handler(args: {
       status: "built",
       value: {
         browser,
+        mode,
         ...(safariIdentity ? { safariApp: safariIdentity } : {}),
         ...(signingFrame ? { signing: signingFrame.signing } : {}),
         outputPath: distDir,
@@ -932,6 +1071,10 @@ export async function handler(args: {
           ? { largestAssetBytes: engineSummary.largest_asset_bytes }
           : {}),
         ...(status ? { engineBuildStatus: status } : {}),
+        ...(largestFilesInline ? { largestFiles: largestFilesInline } : {}),
+        ...(duplicates.length ? { duplicateFiles: duplicates } : {}),
+        ...(addonLint.value ? { addonLint: addonLint.value } : {}),
+        ...(toolchain ? { toolchain } : {}),
         ...(engineRefusedJsonOutput ? { engineRejectedJsonOutput: true } : {}),
         ...(entrypoints.length ? { entrypoints } : {}),
         ...(risks.length ? { reviewRisks: risks } : {}),
@@ -952,6 +1095,8 @@ export async function handler(args: {
         ...reviewRiskWarnings(risks),
         ...reviewCoverageNotes(review),
         ...zipNotes,
+        ...duplicates.map(duplicateAssetSentence),
+        ...addonLint.warnings,
         uncheckedNote,
         derivedBundleIdNote,
         safariIdentityMissingNote,
@@ -959,7 +1104,7 @@ export async function handler(args: {
         ...(signingFrame?.warnings ?? []),
         ...(signingFrame?.hints ?? []),
       ],
-      hint: `The build is in ${distDir}. To read what is in it, call extension_analyze with this projectPath and browser "${browser}": it answers the sizes, the entry points and the store checks a reviewer runs, plus the emitted manifest of every built browser and the resolved keys that differ between them (manifestByBrowser), so there is no need to list or grep the folder by hand or to read dist/<browser>/manifest.json.${zipPath ? ` The store zip is ${zipPath}.` : ""}${platformListed() ? " To send the extension to someone, extension_publish gives the project's build on extension.dev a page with a download and a run command for each browser (the platform builds from the pushed source)." : ""}`,
+      hint: `The ${mode === "none" ? "" : `${mode} `}build is in ${distDir}.${modeSentence(mode) ? ` ${modeSentence(mode)}` : ""} To read what is in it, call extension_analyze with this projectPath and browser "${browser}": it answers the sizes, the entry points and the store checks a reviewer runs, plus the emitted manifest of every built browser and the resolved keys that differ between them (manifestByBrowser), so there is no need to list or grep the folder by hand or to read dist/<browser>/manifest.json.${zipPath ? ` The store zip is ${zipPath}.` : ""}${platformListed() ? " To send the extension to someone, extension_publish gives the project's build on extension.dev a page with a download and a run command for each browser (the platform builds from the pushed source)." : ""}`,
     });
   }
 

@@ -249,7 +249,7 @@ describe("the Chrome Web Store goal walks from not connected to submitted with a
 
     expect(out.value.stores.chrome.failing).toEqual([]);
     expect(out.value.stores.chrome.namedBySubmit).toEqual(["build"]);
-    expect(out.hint).toContain("The submit call names the build");
+    expect(out.value.sayToPerson).toContain("The submit call names the build");
     const sent = world.calls.find((call) =>
       PREFLIGHT.test(`${call.method} ${call.path}`),
     );

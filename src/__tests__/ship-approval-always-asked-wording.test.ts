@@ -25,7 +25,7 @@ describe("a token promote and a real submission always ask a human", () => {
   });
 
   it("says a real submission needs an owner's approval every time", () => {
-    expect(submit.description).toContain("and a workspace owner's approval of that exact submission, every time");
+    expect(submit.description).toContain("a workspace owner's token and approval of that exact submission, every time");
     expect(approvalIdOf(submit)).toContain("needs a workspace owner's approval every time");
   });
 });

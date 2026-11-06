@@ -74,9 +74,11 @@ export const STORE_OWN_LINES: Partial<Record<ListingStore, ListingField[]>> = {
 export const STORE_FIELDS: Record<ListingStore, ListingField[]> = {
   chrome: ["title", "shortDescription", "fullDescription", "categories", "supportEmail", "privacyPolicyUrl", "homepageUrl", "singlePurpose", "permissionJustifications", "visibility"],
   firefox: ["title", "shortDescription", "fullDescription", "categories", "supportEmail", "privacyPolicyUrl", "homepageUrl", "license", "reviewerNotes", "releaseNotes"],
-  edge: ["title", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "certificationNotes"],
+  edge: ["title", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "singlePurpose", "permissionJustifications", "certificationNotes"],
   safari: ["title", "appStoreName", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone", "supportUrl", "releaseMode"],
 };
+
+export const EDGE_FIELDS_READ_FROM_CHROME: ListingField[] = ["singlePurpose", "permissionJustifications"];
 
 export type BulletField = Exclude<ListingField, "permissionJustifications">;
 

@@ -231,7 +231,7 @@ describe("the Firefox answers say whether the platform attaches the AMO source a
     expect(out.value.stores.firefox.sourceArchive).toMatchObject({ attached: false, setting: "none" });
     expect(out.value.stores.firefox.sourceArchive.say).toMatch(/^Firefox source archive: no source archive is configured; Mozilla requires matching sources for a bundled build/);
     expect(out.value.stores.firefox.sourceArchive.say).toMatch(/turn on Source archive with extension_submit action:"configure-store" store:"firefox" storeSettings:\{sourceArchive:"repository"\} \(a plain call under your own token\) or in the console's Firefox store settings at http.*\/project-settings\/stores\?connect=firefox\.$/);
-    expect(out.hint).toContain(out.value.stores.firefox.sourceArchive.say);
+    expect(out.value.sayToPerson).toContain(out.value.stores.firefox.sourceArchive.say);
     expect(out.value.stores.firefox.warnings.map((c: { id: string }) => c.id)).toEqual(["store.firefox_source_archive"]);
   });
 
@@ -244,7 +244,7 @@ describe("the Firefox answers say whether the platform attaches the AMO source a
     const out = JSON.parse(await submit({ action: "preflight", browsers: ["firefox"], buildSha: "603fc8a", api: API }));
 
     expect(out.value.stores.firefox.sourceArchive).toMatchObject({ attached: true, setting: "repository" });
-    expect(out.hint).toContain("Firefox source archive: the platform will attach the source repository at the built commit to the upload for Mozilla's reviewers.");
+    expect(out.value.sayToPerson).toContain("Firefox source archive: the platform will attach the source repository at the built commit to the upload for Mozilla's reviewers.");
   });
 
   it("submit says sources attached when the platform's submission record carries the archive", async () => {

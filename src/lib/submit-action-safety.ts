@@ -8,7 +8,7 @@
 
 import { APPROVAL_GATE_ENV, approvalGateEnabled } from "./approval-gate";
 import { approvalVerdict } from "./approval-policy";
-import { envelope } from "./envelope";
+import { envelope, isEnvelope } from "./envelope";
 import { STORE_SETTINGS_ACTION } from "./store-settings";
 
 type Args = Record<string, unknown>;
@@ -102,4 +102,27 @@ export function submitCheckRefused(args: Args): string | null {
   const reason = submitCheckRefusal(args);
 
   return reason ? checkRefused(actionOf(args), reason) : null;
+}
+
+/* @invariant AN ANSWER NAMES THE TOOL THAT WAS CALLED. The check tool runs
+ * extension_submit's handler, whose envelopes carry extension_submit as the
+ * command, so an approval asked through extension_submit_check read as an
+ * answer of the other tool (ledger 410). The command is rewritten to the tool
+ * the client named; the sentences inside already name extension_submit as
+ * the call that spends the approval.
+ */
+export function answeredAs(out: string, calledAs: string, actedAs: string): string {
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(out);
+  } catch {
+    return out;
+  }
+
+  if (!isEnvelope(parsed) || parsed.command !== actedAs) return out;
+
+  const { schema: _schema, ...frame } = parsed;
+
+  return envelope({ ...frame, command: calledAs });
 }

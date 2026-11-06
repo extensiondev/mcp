@@ -68,8 +68,8 @@ describe("the preflight names every way a store can go public, and who chose the
 
     expect(pre.value.stores.safari.submissionMode.fromHere).toBe(SAFARI_DRAFT_FROM_HERE);
     expect(pre.value.stores.safari.submissionMode.release).toBe(SAFARI_RELEASE_LINE_SENTENCE);
-    expect(pre.hint).toContain('submissionMode: "review"');
-    expect(pre.hint).toContain("`- Release: after approval`");
+    expect(pre.value.sayToPerson).toContain("safari: a TestFlight draft Apple does not review until you publish (saved mode draft)");
+    expect(pre.hint).not.toContain('submissionMode: "review"');
   });
 
   it("preflight names the owner who set Chrome public instead of leaving it unexplained", async () => {
@@ -81,6 +81,7 @@ describe("the preflight names every way a store can go public, and who chose the
     const pre = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], buildSha: "6b393ca", api: API }));
 
     expect(pre.value.stores.chrome.submissionMode.setBy.approvalId).toBe("apr_iA1Z");
-    expect(pre.hint).toContain("The workspace owner set this mode on 2026-11-01 under approval apr_iA1Z, so it is intended.");
+    expect(pre.value.stores.chrome.submissionMode.setBySay).toBe("The workspace owner set this mode on 2026-11-01 under approval apr_iA1Z, so it is intended.");
+    expect(pre.value.sayToPerson).toContain("chrome: public once Google's review passes (saved mode public, set by the owner on 2026-11-01)");
   });
 });

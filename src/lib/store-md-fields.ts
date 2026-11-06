@@ -8,6 +8,7 @@
 
 import {
   BULLET_KEYS,
+  EDGE_FIELDS_READ_FROM_CHROME,
   LISTING_LIST_LIMITS,
   LISTING_SECTION,
   LISTING_TEXT_LIMITS,
@@ -56,13 +57,17 @@ export function storeMdLineOf(field: StoreMdField): string {
  * in "## Privacy and data use" and is also read under "## Listing" or a
  * store section, the App Store's review contact lines in "## Safari" and
  * also under "## Listing", every other bullet, "- Category:" included, in
- * "## Listing" and also in the store's own section). A field
+ * "## Listing" and also in the store's own section; Edge's single purpose
+ * and permission justifications in "## Edge Add-ons" and also under
+ * "## Chrome Web Store", since Partner Center asks the same text Chrome
+ * takes, ledger 412). A field
  * the reader learns to take appears here the same hour, and the platform's
  * requirements name the same labels in satisfiedBy "store-md: <line>", so
  * both sides read one table. Screenshots have no row: STORE.md carries no
  * image, and the listing record takes them through sync-listing.
  */
 export function storeMdSectionOf(field: StoreMdField, store: ListingStore): StoreMdFieldHome {
+  if (store === "edge" && EDGE_FIELDS_READ_FROM_CHROME.includes(field)) return { section: STORE_SECTIONS.edge, alsoRead: [STORE_SECTIONS.chrome] };
   if (SUBSECTION_KEYS.some((key) => key.field === field)) return { section: STORE_SECTIONS[store], alsoRead: [] };
   if (field === "privacyPolicyUrl") return { section: PRIVACY_SECTION, alsoRead: [LISTING_SECTION, STORE_SECTIONS[store]] };
   if (field === "categories") return { section: LISTING_SECTION, alsoRead: [STORE_SECTIONS[store]] };

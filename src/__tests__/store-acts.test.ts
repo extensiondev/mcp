@@ -296,7 +296,7 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
     expect(out.value.stores.chrome.warnings).toEqual([{ id: "privacy", label: "Privacy policy URL", severity: "advisory", message: "No privacy policy URL." }]);
     expect(out.value.stores.firefox.canSubmit).toBe(true);
     expect(JSON.stringify(out)).not.toContain("A long user-written text");
-    expect(out.hint).toContain("chrome");
+    expect(out.value.sayToPerson).toContain("chrome");
     expect(out.value.stores.chrome.submissionMode).toMatchObject({ id: "draft-until-public", label: "Draft until published" });
     expect(out.value.stores.chrome.submissionMode.fromHere).toBe("An upload from here stops at the draft under this mode.");
   });
@@ -309,8 +309,9 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
 
     const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], buildSha: "603fc8a", api: API }));
 
-    expect(out.hint).toContain("chrome submission mode: Draft until published (draft-until-public)");
-    expect(out.hint).toContain("An upload from here stops at the draft under this mode.");
+    expect(out.value.sayToPerson).toContain("chrome: a draft Google does not review until you publish (saved mode draft-until-public)");
+    expect(out.value.stores.chrome.submissionMode.fromHere).toBe("An upload from here stops at the draft under this mode.");
+    expect(out.hint).not.toContain("draft-until-public");
     expect(out.value.nextStep.say).toContain("I upload it as a store draft");
   });
 
@@ -379,7 +380,7 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
     expect(out.value.stores.chrome.canSubmit).toBe(true);
     expect(out.value.chromeReview).toMatchObject({ submissionId: SUBMISSION, storeState: "PENDING_REVIEW" });
     expect(out.value.nextStep.kind).toBe("submit");
-    expect(out.hint).toContain("enters no review");
+    expect(out.value.sayToPerson).toContain("enters no review");
     expect(out.hint).not.toContain("already reviewing");
   });
 
@@ -427,7 +428,7 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
     expect(out.value.nextStep.say).toContain("already reviewing");
     expect(out.value.nextStep.say).toContain("sync-listing");
     expect(out.value.nextStep.url).toContain("/submissions/chrome");
-    expect(out.hint).toContain("already reviewing");
+    expect(out.value.sayToPerson).toContain("already reviewing");
     expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
   });
 

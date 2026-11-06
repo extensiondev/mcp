@@ -330,9 +330,10 @@ describe("STORE.md fills the store listing", () => {
 
     expect(long.listing).not.toHaveProperty("subtitle");
     expect(long.listing).not.toHaveProperty("searchTerms");
-    expect(long.skipped).toEqual([
-      "subtitle in STORE.md is 37 characters, over the 30 the listing takes, so it was left out",
-      "searchTerms in STORE.md is 121 characters joined by commas, over the 100 the App Store keywords take, so it was left out",
+    expect(long.skipped).toEqual([]);
+    expect(long.overLimit).toEqual([
+      { field: "subtitle", length: 37, limit: 30, unit: "characters" },
+      { field: "searchTerms", length: 121, limit: 100, unit: "characters" },
     ]);
 
     expect(long.unread.subtitle).toEqual({ line: "- Subtitle:", reason: "is 37 characters, over the 30 the listing takes" });
@@ -359,9 +360,9 @@ describe("STORE.md fills the store listing", () => {
     expect(safari.unread.fullDescription?.reason).toBe(`is ${length} characters, over the 4000 characters the App Store takes`);
     expect(firefox.listing.fullDescription).toHaveLength(length);
     expect(firefox.listing).not.toHaveProperty("releaseNotes");
-    expect(firefox.skipped).toContain(
-      "releaseNotes in STORE.md is 3001 characters, over the 3000 characters Firefox Add-ons takes, so it was left out",
-    );
+    expect(firefox.skipped).toEqual([]);
+    expect(firefox.overLimit).toEqual([{ field: "releaseNotes", length: 3_001, limit: 3_000, unit: "characters" }]);
+    expect(firefox.unread.releaseNotes).toEqual({ line: "### Release notes", reason: "is 3001 characters, over the 3000 characters Firefox Add-ons takes" });
   });
 
   it("names the App Store subtitle the platform derives from a short Summary, and nothing when the Summary is long or a Subtitle line exists", () => {
@@ -490,10 +491,10 @@ describe("STORE.md fills the store listing", () => {
     if ("problem" in local) throw new Error(local.problem);
 
     expect(local.patch.screenshots).toBeUndefined();
-    expect(local).not.toHaveProperty("screenshotsLine");
-    expect(local.skipped).toEqual([
+    expect(local.skipped).toEqual([]);
+    expect(local.screenshotsLine).toBe(
       'the `- Screenshots (1280x800, in this order):` line in STORE.md names 1 screenshot; sync-listing takes it as its screenshots argument, as PNG paths inside projectPath; extension_screenshot store:"<store>" writes them under store/screenshots/<store>/, which sync-listing reads on its own',
-    ]);
+    );
 
     expect(local.lines.title).toBe("Name");
 
@@ -765,10 +766,10 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     const fields = again.value.stores.firefox.unread.map((row: { field: string }) => row.field);
 
     expect(fields).toEqual(["privacyPolicyUrl", "homepageUrl", "license", "releaseNotes"]);
-    expect(again.value.stores.firefox.skipped).toEqual([
-      "supportEmail in STORE.md is not an email address, so it was left out",
+    expect(again.value.stores.firefox.skipped).toEqual(["supportEmail in STORE.md is not an email address, so it was left out"]);
+    expect(again.value.screenshotsLine).toBe(
       'the `- Screenshots:` line in STORE.md names 1 screenshot; sync-listing takes it as its screenshots argument, as PNG paths inside projectPath; extension_screenshot store:"<store>" writes them under store/screenshots/<store>/, which sync-listing reads on its own',
-    ]);
+    );
   });
 
   it("sends no file a Screenshots line names, and answers which image rows the screenshots argument cleared, read back from the platform", async () => {
@@ -798,7 +799,8 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     expect(bare.status).toBe("listing-recorded");
     expect(put.media?.screenshots).toBeUndefined();
     expect(bare.value.stores.chrome.filled).not.toContain("screenshots");
-    expect(bare.value.stores.chrome.skipped[0]).toContain("names 1 screenshot; sync-listing takes it as its screenshots argument");
+    expect(bare.value.stores.chrome).not.toHaveProperty("skipped");
+    expect(bare.value.screenshotsLine).toContain("names 1 screenshot; sync-listing takes it as its screenshots argument");
     expect(bare.value.stores.chrome.images).toEqual({ clears: [], remain: ["Store icon (128x128 px PNG.), confirmed only on the store's dashboard", "Screenshots (1 to 5 images, 1280x800 or 640x400 px, JPEG or 24-bit PNG with no alpha.)"] });
     expect(bare.value.sayToPerson).not.toContain("clear");
 
@@ -1068,9 +1070,7 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
       expect(unchanged.status).toBe("listing-synced");
       expect(unchanged.value.outcome.status).toBe("unchanged");
       expect(unchanged.value.stores.safari).toEqual({
-        store: "safari",
-        skipped: [SCREENSHOTS_SKIPPED],
-        status: "unchanged",
+        store: "safari",        status: "unchanged",
         appStoreConnect: { status: "unchanged", resend: "refused", trackUrl: SUBMISSIONS },
         filled: ["title", "shortDescription", "fullDescription", "icons"],
         icon: { from: "dist", file: "dist/chrome/icons/128.png" },
@@ -1169,7 +1169,7 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
       "privacy policy URL: STORE.md has no `- Privacy policy URL:` under `## Privacy and data use`",
     );
 
-    expect(out.hint).toContain('action:"sync-listing"');
+    expect(out.value.sayToPerson).toContain('action:"sync-listing"');
   });
 
   it("names the policy URL STORE.md carries on the covers line and on the platform's privacy warning", async () => {
@@ -1332,10 +1332,9 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     ]);
 
     expect(firefox.warnings[0].message).toBe(`${email}.`);
-    expect(firefox.storeMd.skipped).toEqual([
-      "supportEmail in STORE.md is not an email address, so it was left out",
-      SCREENSHOTS_SKIPPED,
-    ]);
+    expect(firefox.storeMd.skipped).toEqual(["supportEmail in STORE.md is not an email address, so it was left out"]);
+    expect(firefox.storeMd).not.toHaveProperty("screenshotsLine");
+    expect(out.value.screenshotsLine).toBe(SCREENSHOTS_SKIPPED);
   });
 
   it("replaces a failing check's fix text with the coverage fact when STORE.md or the built icon carries the value", async () => {
@@ -1589,9 +1588,7 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
     expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
     expect(refused.status).toBe("sync-listing-refused");
     expect(refused.value.stores.safari).toEqual({
-      store: "safari",
-        skipped: [SCREENSHOTS_SKIPPED],
-      status: "refused",
+      store: "safari",      status: "refused",
       code: "LISTING_DIGEST_MISMATCH",
       message: "The platform did not name the fields it hashes; update the platform or this server.",
       trackUrl: SUBMISSIONS,
@@ -1648,9 +1645,7 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
     expect(withId[0]!.body.approvalId).toBe("apr_d");
     expect(written.status).toBe("listing-synced");
     expect(written.value.stores.safari).toEqual({
-      store: "safari",
-        skipped: [SCREENSHOTS_SKIPPED],
-      status: "synced",
+      store: "safari",      status: "synced",
       changes: ['title: "" -> "PII Shield"'],
       filled: ["title", "subtitle", "shortDescription", "fullDescription", "searchTerms", "reviewContactPhone", "icons"],
       icon: { from: "dist", file: "dist/chrome/icons/128.png" },
@@ -1710,9 +1705,7 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
     expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
     expect(refused.status).toBe("sync-listing-refused");
     expect(refused.value.stores.safari).toEqual({
-      store: "safari",
-        skipped: [SCREENSHOTS_SKIPPED],
-      status: "refused",
+      store: "safari",      status: "refused",
       code: "LISTING_DIGEST_MISMATCH",
       message:
         "The platform hashes this listing differently from this server even after leaving out subtitle, searchTerms and reviewContactPhone: this server declares appStoreName, subtitle, searchTerms, reviewerNotes, reviewContactName, reviewContactEmail, reviewContactPhone, supportUrl and releaseMode, which the platform does not hash, so this server is newer than the platform's build. No approval was requested. Say sync-listing again after the platform updates.",

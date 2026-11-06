@@ -55,6 +55,16 @@ export function readBuildAllowance(plan: unknown): BuildAllowance | null {
   return { used, limit, remaining, low: buildsRunLow(remaining, limit) };
 }
 
+/* @invariant THE PUSH COST IS SAID WITH ITS FILTERS. The platform builds a
+ * push only on the project's build branch, only when it changes a file under
+ * the root directory, and never when it changes only documentation or license
+ * notices outside public/ (the webhook's BRANCH_FILTERED, PATH_FILTERED and
+ * DOCS_ONLY outcomes); "each push spends one" read as a blanket rule and
+ * became a project rule that had an agent ask the owner before every push
+ * (ledger 426). */
+export const PUSH_COST_SENTENCE =
+  "each project creation spends one, and so does a push to the build branch that changes a file under the root directory; a push to another branch, or one that changes only docs or license files outside public/, spends nothing (extension_builds list names each skipped push with its outcome).";
+
 function buildsWord(count: number): string {
   return count === 1 ? "1 build remains" : `${count} builds remain`;
 }
@@ -62,7 +72,7 @@ function buildsWord(count: number): string {
 export function buildAllowanceWarning(allowance: BuildAllowance): string | null {
   if (!allowance.low) return null;
 
-  return `${buildsWord(allowance.remaining)} of ${allowance.limit} this month; each project creation and each push spends one.`;
+  return `${buildsWord(allowance.remaining)} of ${allowance.limit} this month; ${PUSH_COST_SENTENCE}`;
 }
 
 export function buildAllowanceValue(allowance: BuildAllowance): BuildAllowanceValue {

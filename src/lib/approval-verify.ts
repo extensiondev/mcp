@@ -36,11 +36,18 @@ export {
 
 export type ApprovalScope = Record<string, string | string[]>;
 
+export interface ApprovalNextCall {
+  tool: string;
+  args: Record<string, unknown>;
+  waits?: boolean;
+}
+
 export interface ApprovalGateInput {
   command: string;
   action: string;
   scope: ApprovalScope;
   description: string;
+  nextCall?: ApprovalNextCall;
   approvalId?: string;
   token: string;
   api?: string;

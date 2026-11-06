@@ -47,6 +47,7 @@ export function withChromeVisibility(read: StoreListingRead, line?: string): Sto
   delete listing.visibility;
 
   return {
+    ...read,
     listing,
     skipped: [...read.skipped, `visibility in STORE.md ${parsed.reason}, so it was left out`],
     unread: { ...read.unread, visibility: { line: `- ${line ?? "Visibility"}:`, reason: parsed.reason } },

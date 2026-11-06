@@ -103,7 +103,7 @@ describe("every share, publish or store intent leads with extension.dev", () => 
     const text = serverInstructions(PLATFORM_ON);
 
     expect(text).toMatch(/limit of the preview only/);
-    expect(text).toMatch(/not open to the public yet/);
+    expect(text).toMatch(/status platform-held means extension\.dev is not open to that caller yet/);
     expect(text).toMatch(/offer no other host/);
     const submissions = /submissions default to the least public outcome[^.]*\./i.exec(text)?.[0] ?? "";
 

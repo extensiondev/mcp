@@ -89,7 +89,7 @@ describe("the package checks say they still hold when HEAD changes nothing the b
     expect(out.status).toBe("preflight-read");
     expect(out.value.stores.chrome.packageBuild).toEqual({ read: [builtShort], head: short, holds: { build: builtShort, changed: ["STORE.md"] }, say });
     expect(out.value.stores.edge.packageBuild.say).toBe(say.replace("chrome:", "edge:"));
-    expect(out.hint.split(say)).toHaveLength(2);
+    expect(out.hint).not.toContain(say);
     expect(JSON.stringify(out)).not.toContain("push it");
     expect(platform.sent("GET", PLAN)).toHaveLength(0);
   });
@@ -145,7 +145,7 @@ describe("a push the platform refused over the build cap is named as refused, wi
 
     expect(out.value.stores.chrome.packageBuild).toEqual({ read: ["154767e"], head: short, headPush: { outcome: "QUOTA_EXCEEDED", receivedAt: "2026-10-30T21:11:41Z" }, say });
     expect(out.value.stores.edge.packageBuild.say).toBe(say.replace("chrome:", "edge:"));
-    expect(out.hint.split(say)).toHaveLength(2);
+    expect(out.hint).not.toContain(say);
     expect(JSON.stringify(out)).not.toContain("push it");
     expect(platform.sent("GET", PLAN)).toHaveLength(1);
     expect(platform.sent("GET", BUILDS)).toHaveLength(1);

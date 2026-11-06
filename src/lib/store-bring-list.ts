@@ -49,7 +49,15 @@ const DASHBOARD_NAMES: Record<string, string> = {
   safari: "App Store Connect",
 };
 
-export const DERIVED_SUFFIXES = ["screenshots", "store_icon", "icon", "app_icon", "store_logo", "source_archive", "package_contents"];
+export const DERIVED_SUFFIXES = ["screenshots", "store_icon", "icon", "app_icon", "source_archive", "package_contents"];
+
+export const EDGE_STORE_LOGO_RECIPE =
+  "resize the largest icon the manifest names to 300x300 px on this machine and upload it on the Partner Center Store listings page; the 128 px icon sync-listing sends is the package icon, not the store logo";
+
+const EDGE_SYNC_SUBSECTIONS: Record<string, string> = {
+  single_purpose: "### Single purpose",
+  permission_justifications: "### Permissions justification",
+};
 
 const DECIDE_ONCE = new Set(["firefox.add_on_id", "safari.bundle_identifiers", "safari.name", "safari.app_record", "chrome.item", "edge.product"]);
 
@@ -79,9 +87,10 @@ function clearedBy(row: RequirementRow, store: string): string {
   const satisfied = row.satisfiedBy;
 
   if (suffix === "screenshots") return screenshotDoor(store);
+  if (suffix === "store_logo") return EDGE_STORE_LOGO_RECIPE;
+  if (store === "edge" && EDGE_SYNC_SUBSECTIONS[suffix]) return `the \`${EDGE_SYNC_SUBSECTIONS[suffix]}\` subsection under \`## Edge Add-ons\` in ${STORE_MD_FILENAME}, or the one under \`## Chrome Web Store\` when Edge has none; sync-listing sends it`;
 
   if (DERIVED_SUFFIXES.includes(suffix)) {
-    if (suffix === "store_logo") return "resize the largest icon the manifest names to 300x300 px on this machine and upload it on the Partner Center Store listings page";
     if (suffix === "store_icon") return "the 128 px icon the manifest names, taken from the build; sync-listing records it and the dashboard's Store listing tab takes the upload";
     if (suffix === "app_icon") return "the macOS build stamps the wrapper's 1024x1024 icon from the largest icon the manifest names";
     if (suffix === "source_archive") return "the Firefox store setting Source archive; the platform cuts it from the repository at the built commit";
@@ -120,7 +129,12 @@ export function supplyOf(row: Pick<RequirementRow, "id">): Supply {
  * (a field only the store's dashboard holds, which the platform cannot read
  * from here) is said as not readable, with its page and the dashboard
  * address, never as an input to bring (ledger 316); readyForReview is true
- * only when the platform's own list has no required row missing.
+ * only when the platform's own list has no required row missing, and with a
+ * required row unknown the sentence says "every required input this
+ * platform can read", never "every required input" (ledger 409). "From your
+ * build" names only what the build or this machine actually makes: the Edge
+ * 300 px store logo is nothing the build holds, so it is "you supply" with
+ * the resize recipe (ledger 408).
  */
 export function bringListOf(store: string, view: RequirementsView | null, canSubmitForReview = true): BringList | null {
   if (!view) return null;
@@ -172,11 +186,14 @@ export function bringListSentence(store: string, rows: BringRow[], readyForRevie
   const build = open.filter((row) => row.supply === "from your build");
   const owner = open.filter((row) => row.supply === "you supply");
   const optional = rows.filter((row) => !row.required && row.status === "missing");
+  const unknown = rows.filter((row) => row.required && row.status === "unknown");
   const parts: string[] = [];
+  const title = name ? `${name[0]!.toUpperCase()}${name.slice(1)}` : name;
 
-  if (readyForReview) parts.push(`${name[0]!.toUpperCase()}${name.slice(1)} has every required input on file.`);
+  if (readyForReview && unknown.length) parts.push(`${title} has every required input this platform can read on file${store === "chrome" ? `; the ${unknown.length} required input${unknown.length === 1 ? "" : "s"} only ${DASHBOARD_NAMES.chrome} holds ${unknown.length === 1 ? "stays" : "stay"} unknown from here, named above with ${unknown.length === 1 ? "its" : "their"} tab` : ""}.`);
+  else if (readyForReview) parts.push(`${title} has every required input on file.`);
   else if (open.length) parts.push(`Before ${name} reviews it, bring ${open.length} required input${open.length === 1 ? "" : "s"}.`);
-  else parts.push(`${name[0]!.toUpperCase()}${name.slice(1)} has every required input this platform can read on file.`);
+  else parts.push(`${title} has every required input this platform can read on file.`);
 
   if (build.length) parts.push(`From your build: ${build.map(rowPhrase).join("; ")}.`);
   if (owner.length) parts.push(`You supply: ${owner.map(rowPhrase).join("; ")}.`);

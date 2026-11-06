@@ -87,7 +87,7 @@ describe("a blocking Firefox rule holds canSubmit when no build is named (Hands-
     expect(firefox.summary.blockingFailures).toBe(1);
     expect(firefox.summary.review).toMatchObject({ blockingFailures: 0, canSubmitForReview: false });
     expect(out.value.storePreflight.firefox.blocking).toEqual([RULE]);
-    expect(out.hint).toContain("firefox cannot be submitted yet");
+    expect(out.value.sayToPerson).toContain("firefox cannot be submitted yet");
   });
 
   it("answers canSubmit true for the same report without the rule, since only the build is deferred to submit", async () => {
@@ -100,7 +100,7 @@ describe("a blocking Firefox rule holds canSubmit when no build is named (Hands-
     expect(firefox.summary.namedBySubmit).toEqual(["submission.build_selected"]);
     expect(firefox.canSubmit).toBe(true);
     expect(firefox.summary).toMatchObject({ canSubmit: true, blockingFailures: 0, integration: { blockingFailures: 0, canQueue: true } });
-    expect(out.hint).toContain("Every store read here is ready to submit.");
+    expect(out.value.sayToPerson).toContain("Every store read here is ready to submit.");
   });
 
   it("folds the rule into the recounted summary the way the platform folds it into its own", () => {

@@ -71,7 +71,7 @@ describe("a never-submitted Edge product is named before any approval", () => {
 
     expect(out.status).toBe("preflight-read");
     expect(out.value.stores.edge.firstSubmission).toMatchObject({ state: EDGE_FIRST_SUBMISSION_STATE, partnerCenterUrl: PRODUCT_URL, blocksSubmit: false });
-    expect(out.hint).toContain(`Open the product at ${PRODUCT_URL}.`);
+    expect(out.value.sayToPerson).toContain(`Open the product at ${PRODUCT_URL}.`);
     expect(out.value.nextStep?.kind).toBe("submit");
   });
 
@@ -94,7 +94,7 @@ describe("a never-submitted Edge product is named before any approval", () => {
     expect(out.value.nextStep).toMatchObject({ kind: "dashboard", url: PRODUCT_URL });
     expect(out.value.nextStep.say).toContain('extension_submit action:"configure-store" store:"edge" storeSettings:{firstSubmitted:true}');
     expect(out.value.trackUrl).toMatch(/\/acme\/widget\/submissions$/);
-    expect(out.hint).toContain("not ready for review");
+    expect(out.value.sayToPerson).toContain("not ready for review");
     expect(JSON.stringify(out.value.nextStep)).not.toMatch(/Every check for/);
     expect(out.hint).not.toMatch(/Every store read here is ready to submit/);
     expect(JSON.stringify(out)).not.toMatch(/extension-user-land|\/actions\/runs\//);
@@ -123,7 +123,7 @@ describe("a never-submitted Edge product is named before any approval", () => {
 
     expect(out.value.nextStep.kind).toBe("configure");
     expect(out.value.nextStep.url).toMatch(/\/acme\/widget\/submissions$/);
-    expect(out.value.nextStep.say).toContain("edge is not ready for review yet.");
+    expect(out.value.nextStep.say).toContain("edge is not ready for review yet");
   });
 
   it("a dry-run submit under the review mode answers the state as its verdict with the dashboard as the next step", async () => {

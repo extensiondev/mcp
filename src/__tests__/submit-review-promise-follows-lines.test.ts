@@ -14,6 +14,8 @@ import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes"
 
 const ID = `apr_${"R".repeat(32)}`;
 const SHA = "6b393ca";
+const FIREFOX_LISTED =
+  "Under Firefox AMO's saved channel \"listed\" this upload goes to Mozilla's review after it lands and is listed publicly when it passes; to upload unlisted instead, set the channel to unlisted in the console store settings before approving.";
 
 const line = (store: string, act: string, sentence: string) => ({ id: `${store}:${act}`, store, act, state: "pending", line: sentence });
 
@@ -44,7 +46,7 @@ describe("the submit approval's review sentence follows the per-store lines it s
     const expected = "Chrome, Edge and Firefox go to review on approval; Safari stays a TestFlight draft.";
 
     expect(out.status).toBe("approval-required");
-    expect(out.value.reviewPromise).toBe(expected);
+    expect(out.value.reviewPromise).toBe(`${expected} ${FIREFOX_LISTED}`);
     expect(out.value.nextStep.say).toContain(expected);
     expect(out.hint).toContain(expected);
     expect(JSON.stringify(out)).not.toContain("Nothing goes to review");
@@ -72,7 +74,7 @@ describe("the submit approval's review sentence follows the per-store lines it s
   });
 
   it("reads a store's saved mode when its line carries no sentence", () => {
-    expect(reviewPromiseOf(["firefox", "edge"], [], { firefox: "listed", edge: "draft" })).toBe("Firefox goes to review on approval; Edge stays a draft.");
+    expect(reviewPromiseOf(["firefox", "edge"], [], { firefox: "listed", edge: "draft" })).toBe(`Firefox goes to review on approval; Edge stays a draft. ${FIREFOX_LISTED}`);
     expect(reviewPromiseOf(["safari"], [{ store: "safari", act: "upload", line: "" }, { store: "safari", act: "publish", line: "" }])).toBe("Safari goes to review on approval.");
     expect(reviewPromiseOf(["firefox"], [], { firefox: "unlisted" })).toBe("");
   });
