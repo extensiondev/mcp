@@ -79,6 +79,7 @@ import {
   stageListingImages,
   stagedImageGuard,
   stagedSentence,
+  stagedPatch,
   stagedWriteBody,
   type StagedImage,
 } from "../lib/listing-image-stage";
@@ -129,6 +130,7 @@ import {
   screenshotRefusal,
   screenshotRule,
   writeBody,
+  type ListingDigestPatch,
   type ListingImage,
   type ListingPatch,
 } from "../lib/store-listing-media";
@@ -763,7 +765,7 @@ const LINE_REFUSALS = new Set([
   "APPROVAL_SCOPE_MISMATCH",
 ]);
 
-async function askListing(api: ProjectApi, args: ListingArgs, store: ListingStore, patch: ListingPatch, scope: ApprovalScope): Promise<Row> {
+async function askListing(api: ProjectApi, args: ListingArgs, store: ListingStore, patch: ListingDigestPatch, scope: ApprovalScope): Promise<Row> {
   const expected = derivedListingFields(store, patch.listing);
   const derivedAct =
     approvalVerdict(STORE_LISTING_ACTION, { derived: expected.length > 0 }) === "approval";
@@ -835,7 +837,7 @@ async function syncOne(
 
   if (!approvalId && askingOnly()) {
     if (!derivedListingFields(store, patch.listing).length) return { out: checkRefused(ACT, plainListingAsk(store)) };
-    if (versioned) return { store, status: "approval-wanted" };
+    if (versioned) return { store, status: "approval-wanted", digestPatch: patch };
 
     return askListing(api, args, store, patch, { store, listingDigest: listingDigest(patch) });
   }
@@ -856,7 +858,8 @@ async function syncOne(
 
   const staged = staging.mode === "staged" ? staging.images : null;
   const stagedRow = staged ? { staged } : { imagesDoor: "single-body" };
-  const body = { ...(staged ? stagedWriteBody(patch, staged) : writeBody(patch)), ...(approvalId ? { approvalId } : {}) };
+  const sentPatch: ListingDigestPatch = staged ? stagedPatch(patch, staged) : patch;
+  const body = { ...(staged ? stagedWriteBody(sentPatch) : writeBody(patch)), ...(approvalId ? { approvalId } : {}) };
   const bodyBytes = measureListingBody(body);
 
   if (bodyBytes > PLATFORM_REQUEST_BODY_LIMIT_BYTES) return { out: listingTooLarge(store, patch, bodyBytes, false) };
@@ -920,7 +923,7 @@ async function syncOne(
   }
 
   if (!approvalId && sent.code === "APPROVAL_REQUIRED") {
-    const scope = { store, listingDigest: listingDigest(patch) };
+    const scope = { store, listingDigest: listingDigest(sentPatch) };
     const asked =
       isRow(sent.body) && isRow((sent.body as Row).approvalRequest)
         ? ((sent.body as Row).approvalRequest as Row)
@@ -942,9 +945,9 @@ async function syncOne(
       };
     }
 
-    if (versioned) return { store, status: "approval-wanted" };
+    if (versioned) return { store, status: "approval-wanted", digestPatch: sentPatch };
 
-    return askListing(api, args, store, patch, scope);
+    return askListing(api, args, store, sentPatch, scope);
   }
 
   const lines = readLines(isRow(sent.body) ? sent.body.lines : null);
@@ -1043,9 +1046,9 @@ async function mintListingVersion(
   api: ProjectApi,
   args: ListingArgs,
   stores: ListingStore[],
-  locals: Map<ListingStore, LocalListing>,
+  sentPatches: Map<ListingStore, ListingDigestPatch>,
 ): Promise<Row> {
-  const patches = stores.map((store) => [store, locals.get(store)!.patch] as const);
+  const patches = stores.map((store) => [store, sentPatches.get(store)!] as const);
   const asking = JSON.parse(
     await requestApprovalAfterRefusal({
       command: COMMAND,
@@ -1232,6 +1235,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
 
   let plain = false;
   const stagedImages: Row[] = [];
+  const sentPatches = new Map<ListingStore, ListingDigestPatch>();
 
   for (const [store, local] of locals) {
     if (local.overLimit.length) {
@@ -1266,8 +1270,11 @@ export async function syncListing(args: ListingArgs): Promise<string> {
 
     if (result.imagesDoor === "single-body" && (local.patch.screenshots?.length || local.patch.icons?.length)) deferWarning(IMAGES_DOOR_MISSING_WARNING);
 
+    if (result.digestPatch) sentPatches.set(store, result.digestPatch as ListingDigestPatch);
+
     delete result.staged;
     delete result.imagesDoor;
+    delete result.digestPatch;
 
     if (result.status === "approval-wanted") {
       stores[store] = result;
@@ -1347,7 +1354,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
   const wanted = (Object.values(stores) as Row[]).filter((row) => row.status === "approval-wanted");
 
   if (wanted.length) {
-    const minted = await mintListingVersion(api, args, wanted.map((row) => text(row.store) as ListingStore), locals);
+    const minted = await mintListingVersion(api, args, wanted.map((row) => text(row.store) as ListingStore), sentPatches);
 
     for (const row of wanted) stores[text(row.store)] = { ...row, ...minted };
   }

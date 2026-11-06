@@ -10,7 +10,7 @@ import { envelope } from "./envelope";
 import { LISTING_TOO_LARGE_STATUS } from "./listing-body-limit";
 import { projectApiSend, type ProjectApi, type ProjectApiRefusal } from "./project-api";
 import { isRow, text } from "./ship-act";
-import { MAX_SCREENSHOT_MASTER_BYTES, type ListingImage, type ListingPatch } from "./store-listing-media";
+import { MAX_SCREENSHOT_MASTER_BYTES, type ListingDigestPatch, type ListingImage, type ListingPatch } from "./store-listing-media";
 
 import type { ListingStore } from "./store-md-listing";
 
@@ -94,7 +94,7 @@ export function stagedImageGuard(store: ListingStore, patch: ListingPatch): stri
 
 function stagedOf(raw: unknown, kind: ImageKind, image: ListingImage): StagedImage | null {
   const answered = isRow(raw) && isRow(raw.image) ? raw.image : null;
-  const sha256 = answered ? text(answered.sha256) : "";
+  const sha256 = answered ? text(answered.sha256).trim().toLowerCase() : "";
   if (!answered || !sha256) return null;
 
   const width = Number(answered.width) || image.width;
@@ -158,14 +158,22 @@ export async function stageListingImages(api: ProjectApi, store: ListingStore, p
   return { mode: "staged", images };
 }
 
-export function stagedWriteBody(patch: ListingPatch, images: StagedImage[]): Record<string, unknown> {
+export function stagedPatch(patch: ListingPatch, images: StagedImage[]): ListingDigestPatch {
   const view = (kind: ImageKind) =>
     images.filter((image) => image.kind === kind).map(({ sha256, width, height }) => ({ sha256, width, height }));
-  const media: Record<string, unknown> = {};
-  if (patch.icons) media.icons = view("icons");
-  if (patch.screenshots) media.screenshots = view("screenshots");
+  const staged: ListingDigestPatch = { listing: patch.listing };
+  if (patch.icons) staged.icons = view("icons");
+  if (patch.screenshots) staged.screenshots = view("screenshots");
 
-  return { listing: patch.listing, ...(Object.keys(media).length ? { media } : {}) };
+  return staged;
+}
+
+export function stagedWriteBody(staged: ListingDigestPatch): Record<string, unknown> {
+  const media: Record<string, unknown> = {};
+  if (staged.icons) media.icons = staged.icons;
+  if (staged.screenshots) media.screenshots = staged.screenshots;
+
+  return { listing: staged.listing, ...(Object.keys(media).length ? { media } : {}) };
 }
 
 export function stagedSentence(store: string, images: StagedImage[]): string {

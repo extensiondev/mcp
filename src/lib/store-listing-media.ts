@@ -62,6 +62,18 @@ export interface ListingPatch {
   screenshots?: ListingImage[];
 }
 
+export interface ListingImageView {
+  sha256: string;
+  width: number;
+  height: number;
+}
+
+export interface ListingDigestPatch {
+  listing: ListingText;
+  icons?: ListingImageView[];
+  screenshots?: ListingImageView[];
+}
+
 export function readPngSize(bytes: Buffer): { width: number; height: number } | null {
   if (bytes.length < 24 || !bytes.subarray(0, 8).equals(PNG_SIGNATURE)) return null;
   if (bytes.subarray(12, 16).toString("ascii") !== "IHDR") return null;
@@ -272,9 +284,9 @@ export function screenshotRefusal(store: ListingStore, screenshots: ListingImage
   return null;
 }
 
-const imageView = (image: ListingImage) => ({ sha256: image.sha256, width: image.width, height: image.height });
+const imageView = (image: ListingImageView) => ({ sha256: image.sha256, width: image.width, height: image.height });
 
-export function listingDigest(patch: ListingPatch): string {
+export function listingDigest(patch: ListingDigestPatch): string {
   const listing: Record<string, unknown> = {};
 
   for (const field of [...LISTING_TEXT_FIELDS, "categories", "searchTerms", "permissionJustifications"] as const) {
@@ -297,7 +309,7 @@ export function writeBody(patch: ListingPatch): Record<string, unknown> {
   return { listing: patch.listing, ...(Object.keys(media).length ? { media } : {}) };
 }
 
-export function approvalBody(store: ListingStore, patch: ListingPatch): Record<string, unknown> {
+export function approvalBody(store: ListingStore, patch: ListingDigestPatch): Record<string, unknown> {
   const media: Record<string, unknown> = {};
   if (patch.icons) media.icons = patch.icons.map(imageView);
   if (patch.screenshots) media.screenshots = patch.screenshots.map(imageView);
