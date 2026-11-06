@@ -303,18 +303,20 @@ export function createToolSurface(setup: ToolHandlerOptions): {
      * THE SAME CALL WOULD HAVE ANSWERED FOR. Validation runs before the
      * project is bound, so the refusal is bound the way a valid call is
      * (project-binding.ts): a project it settles is the page it links, and a
-     * call whose binding would be refused links none. On 2026-11-06 an
-     * extension_release_status refused for projectPath on a machine holding
-     * several logins handed out soccer-analysis, the newest login, to a
-     * caller asking about pii-shield (ledger 443).
+     * call whose binding settles none or would be refused links none, never
+     * the stored login's default. On 2026-11-06 an extension_release_status
+     * refused for projectPath on a machine holding several logins handed out
+     * soccer-analysis, the newest login, to a caller asking about pii-shield
+     * (ledger 443), and a call refused for an argument the tool does not take
+     * still did (ledger 448).
      */
     if (issues.length) {
       const refusal = inputValidationError(name, issues, tool.schema.inputSchema, tool.invalidArgumentsHint?.(issues));
       const scoped = platform ? bindCallProject(name, normalizedArgs, tool.schema.inputSchema, options) : null;
 
-      if (scoped && "refused" in scoped) return refused(refusal);
+      if (!scoped || "refused" in scoped || !scoped.answeredFor) return refused(refusal);
 
-      return refusedAct(refusal, scoped?.answeredFor ? { ...scoped.args, project: scoped.answeredFor } : normalizedArgs);
+      return refusedAct(refusal, { ...scoped.args, project: scoped.answeredFor });
     }
 
     const predated = held ? predatedChecks(name, normalizedArgs, held) : [];

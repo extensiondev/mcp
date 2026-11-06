@@ -378,7 +378,7 @@ export function attachTrack(command: string, args: Row, result: string): string 
   const value = isRow(frame.value) ? frame.value : {};
   const unreached = frame.ok === false && UNREACHED_CODES.has(String(frame.error?.code ?? ""));
   const refusal = frame.ok !== true && !APPROVAL_STATUSES.has(String(frame.status)) && !unreached;
-  if (refusal && text(value.trackUrl)) return result;
+  if (refusal && (text(value.trackUrl) || frame.error?.code === "E_NO_LOGIN_FOR_PROJECT")) return result;
 
   const ambiguous = frame.error?.code === "E_PROJECT_AMBIGUOUS";
   const fields = ambiguous

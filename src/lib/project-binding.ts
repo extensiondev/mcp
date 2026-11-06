@@ -111,7 +111,6 @@ export function bindCallProject(
 
   const sessionProject = name === "extension_submit" ? connectSessionProject(args.connectSession) : null;
   if (sessionProject) return { args: { ...args, project: sessionProject }, answeredFor: sessionProject };
-  if (args.projects !== undefined && args.projects !== null) return { args, answeredFor: null };
   if (options.project || pinnedProject() || requestCredential() || envToken()) return { args, answeredFor: resolvedRef(api) };
 
   const logins = serverLogins(api);
@@ -153,11 +152,13 @@ export function bindCallProject(
       };
     }
 
+    const unbound = text(args.projectPath) ? "the folder at projectPath names no project this server could bind" : "the call named neither project nor projectPath";
+
     return {
       refused: refusal(
         name,
         "project-ambiguous",
-        `This machine holds ${logins.live.length} logins for this server (${logins.live.join(", ")}) and the call named neither project nor projectPath, so it was not sent: the newest login could be another agent's project.`,
+        `This machine holds ${logins.live.length} logins for this server (${logins.live.join(", ")}) and ${unbound}, so it was not sent: the newest login could be another agent's project.`,
         `Pass project: one of ${quoted(logins.live)}${PATH_NAMES_PROJECT.has(name) || takesPath(inputSchema) ? ", or projectPath for the extension's directory" : ""}.`,
         { logins: logins.live },
       ),
