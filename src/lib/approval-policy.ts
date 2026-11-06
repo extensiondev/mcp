@@ -45,6 +45,10 @@ export type ApprovalVerdict = "plain" | "approval" | "console";
  * A browser capture set (extension_publish sync-captures) keeps the page:
  * the files land on the public build pages for anyone who opens them, so a
  * workspace owner sees the set as the platform computed it before it shows.
+ * A Safari signing mint (extension_store.mint) keeps the page every time
+ * (Cezar, 2026-11-06): it registers the app id and its .extension id with
+ * Apple under the team, an act outside extension.dev that a later mint
+ * cannot undo.
  * The platform holds the same table in www src/services/registry/approval-policy.ts;
  * a row changed on one side is changed on both.
  */
@@ -75,6 +79,7 @@ export const APPROVAL_POLICY = {
   "extension_project.visibility-public": "approval",
   "extension_store.listing-derived": "approval",
   "extension_browsers.captures": "approval",
+  "extension_store.mint": "approval",
   "extension_store.disconnect": "console",
   "extension_builds.delete-channel": "console",
   "extension_project.delete": "console",
