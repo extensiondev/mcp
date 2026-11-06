@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { decisionsOf, type Decision } from "./store-onboarding-decisions";
+import { listingDraftOf, type ListingDraft } from "./store-listing-draft";
 import { connectedStoresOf, readinessRowsOf, type ReadinessGroups } from "./store-onboarding-suppliers";
 
 type Row = Record<string, unknown>;
@@ -23,6 +24,7 @@ export interface StoreReadiness {
   connected: string[];
   notConnected: string[];
   noStoreConnected: boolean;
+  listingDraft: ListingDraft | null;
   summary: string[];
 }
 
@@ -88,6 +90,7 @@ export function storeReadinessOf(args: { stores: Row; asked: readonly string[]; 
     connected: links.connected,
     notConnected: links.notConnected,
     noStoreConnected: links.connected.length === 0 && links.notConnected.length > 0,
+    listingDraft: listingDraftOf({ projectPath: args.projectPath, asked, statusById: rows.statusById }),
   };
 
   return { ...view, summary: summaryLines(view) };
@@ -114,6 +117,7 @@ export function readinessAnswer(readiness: StoreReadiness): Row | null {
     ...(readiness.connected.length ? { connected: readiness.connected } : {}),
     ...(readiness.notConnected.length ? { notConnected: readiness.notConnected } : {}),
     noStoreConnected: readiness.noStoreConnected,
+    ...(readiness.listingDraft ? { listingDraft: readiness.listingDraft } : {}),
   };
 }
 
