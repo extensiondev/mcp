@@ -113,22 +113,25 @@ describe("a stored login whose project was renamed on the platform", () => {
     expect(drain()).toEqual([]);
   });
 
-  it("answers the old name once more through the alias, then drops it", async () => {
+  it("answers the old name through the alias on every call and says the move each time", async () => {
     storedLogin();
     whoamiAnswers("rebeccat");
     await openProjectApi({ command: "extension_builds", project: "cezaraugusto/pii-shield", api: API });
     drain();
 
-    const aliased = readCredentials({ project: "cezaraugusto/pii-shield", api: API });
-    expect(aliased).toMatchObject({ projectSlug: "rebeccat", movedFrom: "cezaraugusto/pii-shield" });
+    for (let read = 0; read < 3; read += 1) {
+      const aliased = readCredentials({ project: "cezaraugusto/pii-shield", api: API });
+      expect(aliased).toMatchObject({ projectSlug: "rebeccat", movedFrom: "cezaraugusto/pii-shield" });
 
-    const resolved = resolveCredential({ project: "cezaraugusto/pii-shield", api: API });
-    expect(resolved.ref).toEqual({ workspace: "cezaraugusto", project: "rebeccat" });
-    expect(resolved.note).toBe(SENTENCE);
-    expect(drain()).toEqual([SENTENCE]);
+      const resolved = resolveCredential({ project: "cezaraugusto/pii-shield", api: API });
+      expect(resolved.token).toBe(token);
+      expect(resolved.ref).toEqual({ workspace: "cezaraugusto", project: "rebeccat" });
+      expect(resolved.note).toBe(SENTENCE);
+      expect(drain()).toEqual([SENTENCE]);
+    }
 
-    expect(readCredentials({ project: "cezaraugusto/pii-shield", api: API })).toBeNull();
     expect(readCredentials({ project: "cezaraugusto/rebeccat", api: API })?.token).toBe(token);
+    expect(listCredentials().map((entry) => entry.projectSlug)).toEqual(["rebeccat"]);
   });
 
   it("records the project id on a login whose slug did not change", async () => {

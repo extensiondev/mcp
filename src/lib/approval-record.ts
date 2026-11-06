@@ -12,9 +12,10 @@ import path from "node:path";
 import { APPROVAL_REJECTED_STATUS } from "./approval-outcome";
 import { targetServer } from "./credential-server";
 import { loginIdOf, readTokenClaims, splitRef } from "./credential-source";
-import { credentialsPath, readCredentials } from "./credentials";
+import { credentialsPath } from "./credentials";
 import { envelope } from "./envelope";
 import { withFileLock, writePrivateJson } from "./private-file";
+import { currentProjectName, movedNameNote, resolveProjectIdentity, sameStoredProject, tokenProjectIdentity } from "./project-identity";
 
 export interface MintedApproval {
   approvalId: string;
@@ -46,12 +47,24 @@ export function approvalRecordPath(): string {
 
 export function storedProjectId(api: string | undefined, ref: string): string {
   try {
-    const id = trimmed(readCredentials({ project: ref, api })?.projectId);
-
-    return id.startsWith("prj_") ? id : "";
+    return resolveProjectIdentity(api, ref)?.projectId ?? "";
   } catch {
     return "";
   }
+}
+
+export function mintedProjectMatches(
+  api: string | undefined,
+  minted: Pick<MintedApproval, "workspace" | "project" | "projectId">,
+  ref: string,
+): boolean {
+  const mintedRef = `${minted.workspace}/${minted.project}`.toLowerCase();
+  const named = ref.trim().toLowerCase();
+  if (!named) return false;
+  if (named === mintedRef) return true;
+  if (minted.projectId && storedProjectId(api, named) === minted.projectId) return true;
+
+  return sameStoredProject(api, mintedRef, named);
 }
 
 export function renameNote(from: string, to: string): string {
@@ -111,9 +124,14 @@ function prune(file: ApprovalFile, now: number): ApprovalFile {
  * bound by its prj_ id, read from the stored login the token belongs to,
  * because a rename moves the slug and not the project: the platform keeps
  * answering the approval to the same project under its new name, so a retry
- * that names the new slug is the same act, not another project's. The login
- * itself is named by the token's own id (a fingerprint when the claims carry
- * none, never the token), so the retry is made with the login that asked.
+ * that names the new slug is the same act, not another project's. The slugs
+ * recorded are the project's current ones on this machine, not the token's
+ * claims: a token minted under a slug the project has since left keeps that
+ * slug in its claims for good, and a record written from them named an
+ * approval minted under the new name "for" the old one and refused the retry
+ * under the new name (ledger 459). The login itself is named by the token's
+ * own id (a fingerprint when the claims carry none, never the token), so the
+ * retry is made with the login that asked.
  */
 export function rememberMintedApproval(args: {
   api?: string;
@@ -135,12 +153,14 @@ export function rememberMintedApproval(args: {
   const expiresAt = Number.isFinite(Date.parse(trimmed(args.expiresAt)))
     ? new Date(Date.parse(trimmed(args.expiresAt))).toISOString()
     : new Date(now + LONGEST_APPROVAL_TTL_SECONDS * 1000).toISOString();
-  const projectId = trimmed(args.projectId) || storedProjectId(args.api, `${claims.workspace}/${claims.project}`);
+  const identity = tokenProjectIdentity(args.api, args.token, `${claims.workspace}/${claims.project}`);
+  const [workspace = claims.workspace, project = claims.project] = identity?.current ? identity.current.split("/") : [];
+  const projectId = trimmed(args.projectId) || identity?.projectId || "";
   const loginId = loginIdOf(args.token);
   const record: MintedApproval = {
     approvalId,
-    workspace: claims.workspace,
-    project: claims.project,
+    workspace,
+    project,
     ...(projectId ? { projectId } : {}),
     ...(loginId ? { loginId } : {}),
     action: args.action,
@@ -158,7 +178,7 @@ export function rememberMintedApproval(args: {
       const kept = prune(readFile(), now);
       const onServer = { ...(kept[server] ?? {}) };
       const replaced = Object.values(onServer)
-        .filter((older) => older.approvalId !== approvalId && !older.replacedBy && sameAct(older, record))
+        .filter((older) => older.approvalId !== approvalId && !older.replacedBy && sameAct(older, record, args.api))
         .map((older) => older.approvalId);
 
       for (const id of replaced) onServer[id] = { ...onServer[id]!, replacedBy: approvalId };
@@ -174,14 +194,14 @@ export function rememberMintedApproval(args: {
   }
 }
 
-function sameProject(a: MintedApproval, b: MintedApproval): boolean {
+function sameProject(a: MintedApproval, b: MintedApproval, api: string | undefined): boolean {
   if (a.projectId && b.projectId) return a.projectId === b.projectId;
 
-  return a.workspace === b.workspace && a.project === b.project;
+  return mintedProjectMatches(api, a, `${b.workspace}/${b.project}`);
 }
 
-function sameAct(a: MintedApproval, b: MintedApproval): boolean {
-  return sameProject(a, b) && a.action === b.action && a.fingerprint === b.fingerprint;
+function sameAct(a: MintedApproval, b: MintedApproval, api: string | undefined): boolean {
+  return a.action === b.action && a.fingerprint === b.fingerprint && sameProject(a, b, api);
 }
 
 export function mintedApproval(api: string | undefined, approvalId: string, now = Date.now()): MintedApproval | null {
@@ -193,14 +213,6 @@ export function mintedApproval(api: string | undefined, approvalId: string, now 
   return record && typeof record === "object" && retained(record, now) ? record : null;
 }
 
-function namesProject(named: string, record: MintedApproval): boolean {
-  const ref = splitRef(named);
-
-  if (ref) return ref.workspace === record.workspace && ref.project === record.project;
-
-  return named.toLowerCase() === record.project.toLowerCase();
-}
-
 function namedRef(named: string, record: MintedApproval): string {
   const ref = splitRef(named);
 
@@ -209,14 +221,17 @@ function namedRef(named: string, record: MintedApproval): string {
 
 /* @invariant A CALL THAT CARRIES AN APPROVAL ID THIS MACHINE MINTED IS MADE
  * AS THE PROJECT IT WAS MINTED FOR. With no project named, the minted project
- * is filled in before the login is picked; a project named that is not the
- * minted one is refused before the platform is asked, naming both, because the
- * platform would answer unknown and the agent would read that as a lost
- * approval. The project is the prj_ id first and the slug second: a named
- * slug whose stored login carries the minted id is the minted project under
- * a new name, so the call goes through and says the project was renamed; a
- * slug with another id, or none this machine knows, is another project. An
- * id this machine did not mint is left to the platform.
+ * is filled in by its current name before the login is picked; a project
+ * named that is not the minted one is refused before the platform is asked,
+ * naming both, because the platform would answer unknown and the agent would
+ * read that as a lost approval. The named project is the minted one when it
+ * is the same slug, when this machine's login store resolves both names to
+ * one entry (the old slug stays an alias of the new one), or when the stored
+ * login under that name carries the minted prj_ id: a call under the old
+ * name is made as the current one and told the move, a call under the new
+ * name for a record that kept the old one is told the rename; a slug this
+ * machine resolves to another project, or to none, is another project. An id
+ * this machine did not mint is left to the platform.
  */
 export function bindApprovalProject(
   name: string,
@@ -232,13 +247,17 @@ export function bindApprovalProject(
   const ref = `${minted.workspace}/${minted.project}`;
   const named = trimmed(args.project);
 
-  if (!named) return { args: { ...args, project: ref } };
-  if (namesProject(named, minted)) return { args };
+  if (!named) return { args: { ...args, project: currentProjectName(api, ref) } };
 
-  const current = namedRef(named, minted);
+  const wanted = namedRef(named, minted);
+  if (wanted === ref) return { args };
 
-  if (minted.projectId && storedProjectId(api, current) === minted.projectId) {
-    return { args, note: renameNote(ref, current) };
+  if (mintedProjectMatches(api, minted, wanted)) {
+    const current = currentProjectName(api, wanted);
+
+    if (current === wanted) return { args, note: renameNote(ref, current) };
+
+    return { args: { ...args, project: current }, note: movedNameNote(wanted, current) };
   }
 
   return {

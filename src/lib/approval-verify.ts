@@ -15,9 +15,10 @@ import {
 } from "./approval-outcome";
 import { loginRefusedOnApproval } from "./approval-login";
 import { pageTraceSentence, readPageTrace } from "./approval-page-trace";
-import { storedProjectId } from "./approval-record";
+import { mintedProjectMatches } from "./approval-record";
 import { linesSentence, readLines } from "./approval-lines";
 import { readTokenClaims } from "./credential-source";
+import { tokenProjectIdentity } from "./project-identity";
 import { envelope } from "./envelope";
 import { parseJsonObject } from "./json-object";
 import { platformHoldEnvelope, sawPlatformHold } from "./platform-hold";
@@ -267,8 +268,9 @@ export async function verifyApproval(params: {
   if (res.status === 404 && (platformCode === "APPROVAL_UNKNOWN" || platformCode === "APPROVAL_NOT_FOUND")) {
     const mintedFor = minted ? `${minted.workspace}/${minted.project}` : "";
     const claims = readTokenClaims(input.token);
-    const resolved = claims ? `${claims.workspace}/${claims.project}` : "";
-    const renamed = Boolean(resolved && resolved !== mintedFor && minted?.projectId && storedProjectId(input.api, resolved) === minted.projectId);
+    const claimed = claims ? `${claims.workspace}/${claims.project}` : "";
+    const resolved = claims ? tokenProjectIdentity(input.api, input.token, claimed)?.current ?? claimed.toLowerCase() : "";
+    const renamed = Boolean(resolved && resolved !== mintedFor && minted && mintedProjectMatches(input.api, minted, resolved));
     const known = !mintedFor
       ? `The platform does not know approval ${approvalId}; it may have been minted for another server or project.`
       : resolved && resolved !== mintedFor && !renamed

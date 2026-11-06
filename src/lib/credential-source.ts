@@ -12,7 +12,6 @@ import { approvalLogin } from "./approval-scope";
 import { envToken } from "./credential-scope";
 import {
   defaultLoginDrift,
-  dropLoginAlias,
   expiredStoredLogin,
   loginDriftSentence,
   loginMoveSentence,
@@ -123,11 +122,7 @@ export function resolveCredential(options: { project?: string; api?: string } = 
         ? loginMoveSentence(creds.movedFrom, `${creds.workspaceSlug}/${creds.projectSlug}`.toLowerCase())
         : null;
 
-      if (moved && creds.movedFrom) {
-        const [workspace = "", project = ""] = creds.movedFrom.split("/");
-        deferWarning(moved);
-        dropLoginAlias({ workspaceSlug: workspace, projectSlug: project, api });
-      }
+      if (moved) deferWarning(moved);
 
       return {
         token: String(creds.token).trim(),

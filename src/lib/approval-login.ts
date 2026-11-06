@@ -12,6 +12,7 @@ import { loginKey, serverOf, targetServer } from "./credential-server";
 import { loginIdOf, readTokenClaims } from "./credential-source";
 import { readCredentialStore, type StoredCredentials } from "./credentials";
 import { envelope } from "./envelope";
+import { currentProjectName, tokenProjectIdentity } from "./project-identity";
 import { trackUrl } from "./track-url";
 
 import type { ApprovalGateInput } from "./approval-verify";
@@ -29,7 +30,10 @@ const trimmed = (value: unknown): string => (typeof value === "string" ? value.t
  * the approval to any token of the project. A record whose project has no
  * stored login left is answered here, before the platform is asked, with the
  * sign-in sentence, never with the platform's 401 for a token of another
- * project. A hosted request carries its own token and is not rebound.
+ * project. The slug the record names is read through the login store's
+ * aliases, so a record that kept a slug the project has since left still
+ * finds the login under the current one. A hosted request carries its own
+ * token and is not rebound.
  */
 export function storedLoginFor(
   record: Pick<MintedApproval, "loginId" | "workspace" | "project" | "projectId">,
@@ -45,7 +49,8 @@ export function storedLoginFor(
   );
   const byId = record.loginId ? live.find(([, entry]) => loginIdOf(entry.token) === record.loginId) : undefined;
   const byProjectId = record.projectId ? live.find(([, entry]) => entry.projectId === record.projectId) : undefined;
-  const key = loginKey(record.workspace, record.project, server);
+  const [workspace = record.workspace, project = record.project] = currentProjectName(api, `${record.workspace}/${record.project}`).split("/");
+  const key = loginKey(workspace, project, server);
   const bySlug = live.find(([name]) => name === key);
 
   return (byId ?? byProjectId ?? bySlug)?.[1] ?? null;
@@ -65,7 +70,7 @@ export function bindApprovalLogin(
   const login = storedLoginFor(minted, api);
   if (login) return { login };
 
-  const ref = `${minted.workspace}/${minted.project}`;
+  const ref = currentProjectName(api, `${minted.workspace}/${minted.project}`);
 
   return {
     refused: envelope({
@@ -89,10 +94,14 @@ export function bindApprovalLogin(
   };
 }
 
-function loginRef(token: string): string {
+function loginRef(token: string, api?: string): string {
   const claims = readTokenClaims(token);
 
-  return claims ? `${claims.workspace}/${claims.project}` : "";
+  if (!claims) return "";
+
+  const claimed = `${claims.workspace}/${claims.project}`;
+
+  return tokenProjectIdentity(api, token, claimed)?.current ?? claimed.toLowerCase();
 }
 
 function loginPage(ref: string, api?: string): string {
@@ -117,7 +126,7 @@ export function loginRefusedBeforeApproval(
   status: number,
   reason: string,
 ): { blocked: true; envelope: string } {
-  const ref = loginRef(input.token);
+  const ref = loginRef(input.token, input.api);
   const who = ref ? `the login this call used for ${ref}` : "the login this call used";
 
   return {
@@ -153,7 +162,7 @@ export function loginRefusedOnApproval(args: {
   minted?: MintedApproval | null;
 }): { blocked: true; envelope: string } {
   const { input, approvalId, minted } = args;
-  const ref = loginRef(input.token) || (minted ? `${minted.workspace}/${minted.project}` : "");
+  const ref = loginRef(input.token, input.api) || (minted ? `${minted.workspace}/${minted.project}` : "");
   const kept = minted?.expiresAt ? ` until ${minted.expiresAt}` : "";
 
   return {

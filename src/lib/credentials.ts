@@ -20,11 +20,15 @@ import { keepLogin, keptLogin, moveKeptLogin, releaseLogin, releaseStore } from 
  * project id; the slugs are the address the token was asked for. A project
  * renamed in the console keeps its id and its tokens, so the login follows it:
  * the entry is rewritten under the new `<workspace>/<project>` key and the old
- * key stays behind as an alias (`movedTo`) that resolves to the new entry for
- * one answer, so the call that still names the old slug completes and is told
- * the new one. `projectId` is recorded when the platform answers it (the token
- * response or whoami) and is how a move is recognized as the same project.
- * `movedFrom` is never stored; it marks a selection that followed an alias.
+ * key stays behind as an alias (`movedTo`) that resolves to the new entry on
+ * every call, so a call that still names the old slug completes and is told
+ * the new one each time, never refused. The alias stays until a login is made
+ * under the old slug again, which is a new project taking the name. On
+ * 2026-11-06 the alias answered once and was dropped, so the second read under
+ * the old name said no login was stored (ledger 459). `projectId` is recorded
+ * when the platform answers it (the token response or whoami) and is how a
+ * move is recognized as the same project. `movedFrom` is never stored; it
+ * marks a selection that followed an alias.
  */
 export interface StoredCredentials {
   version: 1;
@@ -424,23 +428,6 @@ export function moveLogin(args: {
       from: `${entry.workspaceSlug}/${entry.projectSlug}`.toLowerCase(),
       to: `${entry.workspaceSlug}/${args.toProjectSlug}`.toLowerCase(),
     };
-  });
-}
-
-export function dropLoginAlias(args: { workspaceSlug: string; projectSlug: string; api?: string }): boolean {
-  if (requestCredential()) return false;
-
-  const key = credentialKey(args.workspaceSlug, args.projectSlug, args.api);
-
-  return withStoreLock(() => {
-    const existing = storeForWrite();
-    if (!existing?.entries[key]?.movedTo) return false;
-
-    const entries = { ...existing.entries };
-    delete entries[key];
-    writeStore({ ...existing, entries });
-
-    return true;
   });
 }
 

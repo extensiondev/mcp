@@ -8,6 +8,7 @@
 
 import { PROJECT_PIN_ENV, isProjectRef, pinnedProject, sameProject } from "./credentials";
 import { envelope } from "./envelope";
+import { sameStoredProject } from "./project-identity";
 import { submitCheckRefused, submitShips } from "./submit-action-safety";
 
 export type FeatureGroup = "local" | "platform";
@@ -389,6 +390,9 @@ export function pinProjectArgs(
   const pinned = options.project ? pinnedProject() || options.project : "";
   if (!pinned) return { args };
 
+  const api = typeof args.api === "string" ? args.api : undefined;
+  const isPinned = (entry: string): boolean => sameProject(entry, pinned) || sameStoredProject(api, entry, pinned);
+
   if (args.projects !== undefined && args.projects !== null) {
     const entries = Array.isArray(args.projects) ? args.projects : [args.projects];
     const names = entries.map((entry) =>
@@ -399,7 +403,7 @@ export function pinProjectArgs(
           : "",
     );
     const others = names.filter(
-      (entry) => !entry.includes("/") || !sameProject(entry, pinned),
+      (entry) => !entry.includes("/") || !isPinned(entry),
     );
 
     if (others.length > 0 || entries.length === 0) {
@@ -427,7 +431,7 @@ export function pinProjectArgs(
 
   const named = typeof args.project === "string" ? args.project : "";
 
-  if (named && !sameProject(named, pinned)) {
+  if (named && !isPinned(named)) {
     return {
       refused: envelope({
         ok: false,

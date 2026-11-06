@@ -16,6 +16,7 @@ import {
 import { consoleBase } from "./console-urls";
 import { resolveCredential } from "./credential-source";
 import { envelope, isEnvelope, type Envelope } from "./envelope";
+import { resolveProjectIdentity } from "./project-identity";
 
 type Row = Record<string, unknown>;
 
@@ -294,6 +295,16 @@ function splitPair(value: string): { workspace: string; project: string } | null
 }
 
 function refOf(call: TrackCall): TrackTarget {
+  const ref = namedRefOf(call);
+  if (!ref.workspace || !ref.project) return ref;
+
+  const current = resolveProjectIdentity(text(call.args.api) || undefined, `${ref.workspace}/${ref.project}`)?.current;
+  const [workspace = ref.workspace, project = ref.project] = current && current !== `${ref.workspace}/${ref.project}`.toLowerCase() ? current.split("/") : [];
+
+  return { ...ref, workspace, project };
+}
+
+function namedRefOf(call: TrackCall): TrackTarget {
   const v = call.value;
   const a = call.args;
   const [pair] = [text(v.project), text(a.project)].map(splitPair).filter(Boolean) as Array<{ workspace: string; project: string }>;
