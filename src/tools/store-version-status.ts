@@ -12,6 +12,7 @@ import { approvalRefundOf, approvalRefundSentence, type ApprovalRefund } from ".
 import { envelope, isEnvelope } from "../lib/envelope";
 import { AMO_FILE_STATUS_LABEL, SIGNED_STATE_SENTENCE, type StoreReleaseView } from "../lib/platform-store-releases";
 import { storeUploadOf } from "../lib/platform-submissions";
+import { runCauseOf } from "../lib/submit-run-cause";
 import { AMO_SIGNED_STATUS } from "../lib/review-beside-submission";
 import { consoleProjectUrl } from "../lib/registry";
 import { readsBeforeDispatch } from "../lib/store-read-landed";
@@ -37,6 +38,7 @@ export interface StoreVersionStatus extends ApprovalRefund {
   status: string | null;
   state: string | null;
   storeMessage?: string;
+  failureReason?: string;
   readAt: string | null;
   source: string | null;
   releaseType: string | null;
@@ -121,7 +123,7 @@ function dryRunAfterRelease(submission: Row, release: StoreReleaseView): boolean
   return Number.isFinite(dryAt) && Number.isFinite(releaseAt) && dryAt > releaseAt;
 }
 
-function statusOfRow(row: Row): StoreVersionStatus {
+function statusOfRow(row: Row, trackUrl = ""): StoreVersionStatus {
   const submission: Row = isRow(row.lastSubmission) ? row.lastSubmission : {};
   const dryRun = DRY_RUN_STATUSES.has(text(submission.status));
   const unrecorded = !text(submission.status) && !text(submission.version);
@@ -133,22 +135,27 @@ function statusOfRow(row: Row): StoreVersionStatus {
   const upload = storeUploadOf(submission.storeUpload);
   const storeVersion: Row = isRow(submission.storeVersion) ? submission.storeVersion : {};
   const buildNumber = typeof storeVersion.buildNumber === "number" ? storeVersion.buildNumber : null;
+  const run: Row = isRow(row.submissionRun) ? row.submissionRun : {};
+  const cause = runCauseOf(text(row.store), submission, run, trackUrl || null);
+  const overridden = cause.failed && text(submission.status) !== "failed";
+  const ownStep = !uploadRefused(upload) && isRow(row.nextStep) ? (row.nextStep as unknown as NextStep) : null;
 
   return {
     store: text(row.store),
     submissionId: text(submission.id) || null,
     version: text(storeVersion.packaged) || text(submission.version) || null,
     buildNumber,
-    status: text(submission.status) || null,
-    state: text(read.storeWord) || upload?.state || text(review.state) || null,
+    status: cause.failed ? "failed" : text(submission.status) || null,
+    state: overridden ? upload?.state || null : text(read.storeWord) || upload?.state || text(review.state) || null,
     ...(upload?.message ? { storeMessage: upload.message } : {}),
-    readAt: text(read.readAt) || upload?.checkedAt || text(review.checkedAt) || null,
-    source: text(read.source) || upload?.source || null,
+    ...(cause.failureReason ? { failureReason: cause.failureReason } : {}),
+    readAt: overridden ? null : text(read.readAt) || upload?.checkedAt || text(review.checkedAt) || null,
+    source: overridden ? "run" : text(read.source) || upload?.source || null,
     releaseType: text(submission.releaseType) || null,
     ...releaseChangeOfRow(submission),
     ...approvalRefundOf(submission),
     ...(isRow(row.listingPush) ? { listingPush: row.listingPush as unknown as ListingPushView } : {}),
-    nextStep: !uploadRefused(upload) && isRow(row.nextStep) ? (row.nextStep as unknown as NextStep) : null,
+    nextStep: cause.nextStep ?? (cause.failed ? null : ownStep),
   };
 }
 
@@ -182,10 +189,11 @@ function submissionSentence(entry: StoreVersionStatus, refresh: Row | null, wait
   const change = releaseChangeSentence(entry);
   const release = entry.releaseType ? `, release type ${entry.releaseType}${meaning ? ` (${meaning})` : ""}${change ? `, ${change}` : ""}` : "";
   const refund = approvalRefundSentence(entry);
+  const reason = entry.failureReason && !refused ? `: ${entry.failureReason.replace(/\.$/, "")}` : "";
   const next = entry.nextStep ? `. Next: ${entry.nextStep.say}` : "";
   const dry = entry.newerDryRun ? `; ${newerDryRunSentence(entry.newerDryRun)}` : "";
 
-  return `${entry.store} ${entry.version ?? ""}${build}: ${status}${state}${read}${release}${refund ? `; ${refund}` : ""}${dry}${next}`;
+  return `${entry.store} ${entry.version ?? ""}${build}: ${status}${reason}${state}${read}${release}${refund ? `; ${refund}` : ""}${dry}${next}`;
 }
 
 function newerDryRunSentence(dry: NewerDryRun): string {
@@ -256,7 +264,8 @@ export async function storeVersionStatus(args: {
   const picked = wanted.length
     ? wanted.map((store) => rows.find((row) => row.store === store) ?? { store })
     : rows.filter((row) => row.configured === true || isRow(row.lastSubmission));
-  const stores = picked.map(statusOfRow);
+  const ref = text(value.workspace) && text(value.project) ? { workspace: text(value.workspace), project: text(value.project) } : null;
+  const stores = picked.map((row) => statusOfRow(row, ref ? consoleProjectUrl(ref, ConsoleProjectPage.submissionsStore(text(row.store)), args.api) : ""));
   const step = overallStep(stores);
   const wait = isRow(value.refreshWait) ? value.refreshWait : null;
   const refresh = isRow(value.refresh) ? value.refresh : null;
@@ -265,7 +274,6 @@ export async function storeVersionStatus(args: {
       ? `The store check this call asked for landed within ${String(wait.waitedSeconds)} s, so these are the states it read. `
       : `The store check this call asked for had not landed after ${String(wait.waitedSeconds)} s, so these are the states before it${readsBeforeDispatch(stores, refresh)}. `
     : "";
-  const ref = text(value.workspace) && text(value.project) ? { workspace: text(value.workspace), project: text(value.project) } : null;
   const trackUrl = stores.length === 1 && ref ? consoleProjectUrl(ref, ConsoleProjectPage.submissionsStore(stores[0].store), args.api) : text(value.consoleStoresUrl);
 
   return envelope({

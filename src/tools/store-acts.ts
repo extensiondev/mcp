@@ -117,6 +117,7 @@ import {
 } from "./store-listing";
 import { publishVersion } from "./store-publish-version";
 import { iconPaddingSentences, iconPaddingView } from "../lib/chrome-icon-padding";
+import { firefoxListingCheck, safariDescriptionCheck, withLocalChecks } from "../lib/store-preflight-local";
 
 import type { PackageScope } from "../lib/package-address";
 import type { ListingStore } from "../lib/store-md-listing";
@@ -978,9 +979,12 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       ),
     ),
   );
-  const records = text(args.projectPath)
-    ? await Promise.all(asked.map((store) => projectApiGet<Row>(api, `stores/${store}/listing`).catch(() => null)))
-    : [];
+  const listings = await Promise.all(
+    asked.map((store) =>
+      text(args.projectPath) || store === "firefox" ? projectApiGet<Row>(api, `stores/${store}/listing`).catch(() => null) : Promise.resolve(null),
+    ),
+  );
+  const records = text(args.projectPath) ? listings : [];
   const firstRefusal = reads.find((read) => !read.ok);
 
   if (firstRefusal && !firstRefusal.ok && reads.every((read) => !read.ok)) {
@@ -1015,7 +1019,8 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     const read = reads[i];
     if (read.ok) {
       const updateManifest = store === "firefox" ? firefoxUpdateManifestOf(read.json, api.ref, text(args.projectPath), args.api) : null;
-      const json = relayFirefoxUpdateUrl(read.json, updateManifest);
+      const local = store === "safari" ? [safariDescriptionCheck(text(args.projectPath))] : store === "firefox" ? [firefoxListingCheck(listings[i])] : [];
+      const json = withLocalChecks(relayFirefoxUpdateUrl(read.json, updateManifest), local);
       reports[store] = json;
 
       const block = storePreflightView(json, store, text(args.projectPath) ? readLocalListing(text(args.projectPath), store as ListingStore) : null);
