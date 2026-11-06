@@ -10,7 +10,7 @@ import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
 import { approvalRefundOf, approvalRefundSentence, type ApprovalRefund } from "../lib/approval-refund-words";
 import { envelope, isEnvelope } from "../lib/envelope";
-import { AMO_FILE_STATUS_LABEL, SIGNED_STATE_SENTENCE } from "../lib/platform-store-releases";
+import { AMO_FILE_STATUS_LABEL, SIGNED_STATE_SENTENCE, type StoreReleaseView } from "../lib/platform-store-releases";
 import { storeUploadOf } from "../lib/platform-submissions";
 import { AMO_SIGNED_STATUS } from "../lib/review-beside-submission";
 import { consoleProjectUrl } from "../lib/registry";
@@ -43,7 +43,14 @@ export interface StoreVersionStatus extends ApprovalRefund {
   releaseTypeChanged?: ReleaseTypeChange;
   releaseTypeChangeRefused?: ReleaseTypeChangeRefused;
   listingPush?: ListingPushView;
+  newerDryRun?: NewerDryRun;
   nextStep: NextStep | null;
+}
+
+export interface NewerDryRun {
+  submissionId: string | null;
+  version: string | null;
+  submittedAt: string | null;
 }
 
 type Row = Record<string, unknown>;
@@ -60,8 +67,49 @@ function wantedStores(args: { browsers?: unknown; store?: unknown }): string[] |
   return named.filter((store, index) => named.indexOf(store) === index);
 }
 
+const DRY_RUN_STATUSES: ReadonlySet<string> = new Set(["dry_run", "dry-run"]);
+const HEADLINE_STATES: ReadonlySet<string> = new Set(["live", "in-review", "approved", "signed"]);
+
+function headlineRelease(row: Row): StoreReleaseView | null {
+  const found = [row.release, row.liveRelease].find((release) => isRow(release) && HEADLINE_STATES.has(text(release.state)));
+
+  return found ? (found as unknown as StoreReleaseView) : null;
+}
+
+/* @invariant A DRY RUN NEVER HEADLINES A STORE THAT HOLDS A REAL RELEASE.
+ * A dry run sends nothing to the store, so on Rebeccat (2026-11-06) the
+ * status read "chrome 0.3.0: dry_run" while Chrome served 0.3.0.9 as
+ * PUBLISHED and Apple held Safari 0.3.0 in WAITING_FOR_REVIEW (ledger 442).
+ * When the newest submission record is a dry run and the store row carries
+ * a live, in-review, approved or signed release, the entry is that release
+ * with the store's word, and the dry run follows it as newerDryRun.
+ */
+function releaseEntryOf(row: Row, release: StoreReleaseView, submission: Row): StoreVersionStatus {
+  return {
+    store: text(row.store),
+    submissionId: text(release.submissionId) || null,
+    version: text(release.storeVersion?.packaged) || text(release.version) || null,
+    buildNumber: typeof release.storeVersion?.buildNumber === "number" ? release.storeVersion.buildNumber : null,
+    status: text(release.state) || null,
+    state: text(release.storeWord) || null,
+    readAt: text(release.readAt) || null,
+    source: text(release.source) || null,
+    releaseType: text(release.releaseType) || null,
+    ...(isRow(row.listingPush) ? { listingPush: row.listingPush as unknown as ListingPushView } : {}),
+    newerDryRun: {
+      submissionId: text(submission.id) || null,
+      version: text(isRow(submission.storeVersion) ? submission.storeVersion.packaged : "") || text(submission.version) || null,
+      submittedAt: text(submission.submittedAt) || null,
+    },
+    nextStep: isRow(row.nextStep) ? (row.nextStep as unknown as NextStep) : null,
+  };
+}
+
 function statusOfRow(row: Row): StoreVersionStatus {
   const submission: Row = isRow(row.lastSubmission) ? row.lastSubmission : {};
+  const release = DRY_RUN_STATUSES.has(text(submission.status)) ? headlineRelease(row) : null;
+  if (release) return releaseEntryOf(row, release, submission);
+
   const read: Row = isRow(submission.statusRead) ? submission.statusRead : {};
   const review: Row = isRow(submission.storeReview) ? submission.storeReview : {};
   const upload = storeUploadOf(submission.storeUpload);
@@ -117,8 +165,13 @@ function submissionSentence(entry: StoreVersionStatus, refresh: Row | null, wait
   const release = entry.releaseType ? `, release type ${entry.releaseType}${meaning ? ` (${meaning})` : ""}${change ? `, ${change}` : ""}` : "";
   const refund = approvalRefundSentence(entry);
   const next = entry.nextStep ? `. Next: ${entry.nextStep.say}` : "";
+  const dry = entry.newerDryRun ? `; ${newerDryRunSentence(entry.newerDryRun)}` : "";
 
-  return `${entry.store} ${entry.version ?? ""}${build}: ${status}${state}${read}${release}${refund ? `; ${refund}` : ""}${next}`;
+  return `${entry.store} ${entry.version ?? ""}${build}: ${status}${state}${read}${release}${refund ? `; ${refund}` : ""}${dry}${next}`;
+}
+
+function newerDryRunSentence(dry: NewerDryRun): string {
+  return `a newer dry run${dry.version ? ` of ${dry.version}` : ""}${dry.submittedAt ? ` at ${dry.submittedAt}` : ""} sent nothing to the store`;
 }
 
 const STEP_ORDER = ["release", "watch"];
