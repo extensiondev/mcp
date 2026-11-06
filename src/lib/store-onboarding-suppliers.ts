@@ -37,6 +37,11 @@ const BUILD = [
   "safari.distribution_certificates",
   "safari.provisioning_profiles",
   "safari.app_icon",
+  "chrome.browser_builds",
+  "edge.browser_builds",
+  "firefox.browser_builds",
+  "safari.browser_builds",
+  "safari.bundle_id_registered",
 ];
 
 const AGENT_DRAFTS = [

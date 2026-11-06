@@ -22,6 +22,7 @@ export const BUNDLE_IDS_ROW = "safari.bundle_identifiers";
 export const BUNDLE_IDS_CHECK = "store.safari_bundle_identifiers";
 export const SIGNING_ASSETS_ROUTE = "POST /api/projects/<projectId>/stores/safari/signing-assets";
 export const NEW_APP_URL = "https://appstoreconnect.apple.com/apps";
+export const MINT_CALL = 'extension_submit {action: "mint-signing", store: "safari"}';
 
 export type BundleRegistration = "registered" | "unconfirmed" | "unsaved";
 
@@ -39,7 +40,7 @@ export interface AppRecordValues {
 export interface SafariAppRecordStep {
   registration: BundleRegistration;
   bundleIds: { app: string; extension: string } | null;
-  mint: { console: string; route: string; mcpAction: null };
+  mint: { console: string; route: string; mcpAction: string };
   newAppUrl: string;
   values: AppRecordValues;
   say: string;
@@ -102,7 +103,7 @@ export function safariAppRecordStep(args: { requirements: RequirementsView | nul
     primaryLanguage: null,
     primaryLanguageFrom: LANGUAGE_FROM,
   };
-  const mintDoor = `Mint signing assets on the project's Safari store settings page (${settings}) registers both ${bundleIds ? `${bundleIds.app} and ${bundleIds.extension}` : "the app id and its .extension id"} with your Apple team along with the certificates and profiles; no extension_submit action runs that mint yet, since it takes the owner's browser session on ${SIGNING_ASSETS_ROUTE}.`;
+  const mintDoor = `Mint signing assets on the project's Safari store settings page (${settings}) registers both ${bundleIds ? `${bundleIds.app} and ${bundleIds.extension}` : "the app id and its .extension id"} with your Apple team along with the certificates and profiles, and ${MINT_CALL} runs the same mint under one owner approval.`;
   const lead =
     registration === "registered"
       ? `App record: both bundle ids are registered with your Apple team (${bundleIds!.app} and ${bundleIds!.extension}, by Mint signing assets), so App Store Connect lists the bundle id;`
@@ -113,7 +114,7 @@ export function safariAppRecordStep(args: { requirements: RequirementsView | nul
   return {
     registration,
     bundleIds,
-    mint: { console: settings, route: SIGNING_ASSETS_ROUTE, mcpAction: null },
+    mint: { console: settings, route: SIGNING_ASSETS_ROUTE, mcpAction: MINT_CALL },
     newAppUrl: NEW_APP_URL,
     values,
     say: `${lead} ${valuesSentence(values)}`,

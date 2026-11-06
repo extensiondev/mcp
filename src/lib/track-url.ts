@@ -167,7 +167,7 @@ function submitPlan(call: TrackCall): TrackPlan {
     return { track: { page: submissionId ? "submission" : "store", target: { store: "safari", submissionId } } };
   }
 
-  if (action === "configure-store") return { track: { page: "store-settings" } };
+  if (action === "configure-store" || action === "mint-signing") return { track: { page: "store-settings" } };
 
   if (action === "publish" || action === "review") {
     const submissionId = text(call.value.submissionId) || text(call.args.submissionId);

@@ -16,7 +16,8 @@ import {
   stampNow,
 } from "../lib/act-outcome";
 import { lineId, readLines } from "../lib/approval-lines";
-import { browserBuildStep, browserBuildVerdicts, withBrowserBuildVerdict } from "../lib/browser-builds";
+import { browserBuildStep, withBrowserBuildVerdict } from "../lib/browser-builds";
+import { readBuildReadiness, withBuildReadinessRows } from "../lib/store-build-readiness";
 import { approvalSubjectPhrase, subjectOf } from "../lib/approval-subject";
 import { envelope, isEnvelope } from "../lib/envelope";
 import {
@@ -1050,15 +1051,17 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     } else unread.push(`${store}: ${read.message}`);
   });
 
-  const [packageBuilds, buildVerdicts] = await Promise.all([
+  const [packageBuilds, buildReadiness] = await Promise.all([
     packageBuildViews(api, text(args.projectPath), reports, asked),
-    browserBuildVerdicts(api, asked.filter((store) => isRow(stores[store])), text(args.buildSha), { ref: api.ref, api: args.api }),
+    readBuildReadiness(api, asked.filter((store) => isRow(stores[store])), text(args.buildSha), { ref: api.ref, api: args.api }),
   ]);
+  const buildVerdicts = buildReadiness.verdicts;
 
   asked.forEach((store, i) => {
     const view = packageBuilds[i];
     if (view && isRow(stores[store])) stores[store] = { ...(stores[store] as Row), packageBuild: view };
     if (buildVerdicts[store] && isRow(stores[store])) stores[store] = withBrowserBuildVerdict(stores[store] as Row, buildVerdicts[store]);
+    if (isRow(stores[store])) stores[store] = withBuildReadinessRows(stores[store] as Row, buildReadiness.rows[store]);
   });
 
   const buildVerdict = asked.map((store) => buildVerdicts[store]).find(Boolean) ?? null;

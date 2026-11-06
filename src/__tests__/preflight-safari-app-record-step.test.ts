@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { LANGUAGE_FROM, SIGNING_ASSETS_ROUTE, SKU_FROM } from "../lib/safari-app-record-step";
+import { LANGUAGE_FROM, MINT_CALL, SKU_FROM } from "../lib/safari-app-record-step";
 import { handler as submit } from "../tools/submit";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
@@ -66,7 +66,7 @@ describe("the Safari preflight's app record step names the registration and the 
     expect(row.clearedBy).toMatch(/^App record: com\.acme\.widget is not confirmed registered with Apple/);
     expect(row.clearedBy).toContain("New App form lists only registered bundle ids, so register it first");
     expect(row.clearedBy).toContain("registers both com.acme.widget and com.acme.widget.extension with your Apple team");
-    expect(row.clearedBy).toContain(`no extension_submit action runs that mint yet, since it takes the owner's browser session on ${SIGNING_ASSETS_ROUTE}`);
+    expect(row.clearedBy).toContain(`${MINT_CALL} runs the same mint under one owner approval`);
 
     const register = row.clearedBy.indexOf("register it first");
     const mint = row.clearedBy.indexOf("Mint signing assets");

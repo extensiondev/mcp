@@ -17,7 +17,7 @@ export const SUBMIT_CHECK_TOOL = "extension_submit_check";
 
 export const SUBMIT_READ_ACTIONS = ["preflight", "status"] as const;
 
-export const SUBMIT_SHIP_ACTIONS = ["publish", "review", "cancel", "rollout", "release", "sync-listing"] as const;
+export const SUBMIT_SHIP_ACTIONS = ["publish", "review", "cancel", "rollout", "release", "sync-listing", "mint-signing"] as const;
 
 export const SUBMIT_SETTING_ACTIONS = ["configure-store"] as const;
 

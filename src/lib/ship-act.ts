@@ -16,6 +16,7 @@ import {
 import {
   OWNER_REQUIRED_CODE,
   openProjectApi,
+  platformApiGet,
   projectApiOpenFailure,
   projectApiReadFailure,
   projectApiSend,
@@ -44,6 +45,8 @@ export interface ShipAct {
   act: string;
   action: string;
   route: string;
+  path?: string;
+  hints?: (code: string, retryAfterSeconds?: number) => string | undefined;
   method?: "POST" | "PUT";
   body: Row;
   approvalBody?: Row;
@@ -209,7 +212,7 @@ function storeStateFields(code: string, body: Row): Row {
 function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string {
   const body = isRow(read.body) ? read.body : {};
   const before = body.refusedBeforeApproval === true;
-  const hint = shipRefusalHint(read.code, read.retryAfterSeconds, text(act.value?.store), read.body);
+  const hint = act.hints?.(read.code, read.retryAfterSeconds) ?? shipRefusalHint(read.code, read.retryAfterSeconds, text(act.value?.store), read.body);
   const upgradeUrl = pricedRefusal(read.code, read.body)?.upgradeUrl;
   const ownerOnly = read.code === OWNER_REQUIRED_CODE;
   const status = ownerOnly
@@ -358,7 +361,8 @@ export async function openShipApi(command: string, args: { project?: string; api
 
 export async function runShipAct(act: ShipAct, api: ProjectApi): Promise<{ ok: true; json: Row } | { ok: false; out: string }> {
   const approvalId = text(act.approvalId);
-  const sent = await projectApiSend<Row>(api, act.method ?? "POST", act.route, { ...act.body, ...(approvalId ? { approvalId } : {}) });
+  const body = { ...act.body, ...(approvalId ? { approvalId } : {}) };
+  const sent = act.path ? await platformApiGet<Row>(api, act.path, undefined, { method: act.method ?? "POST", body }) : await projectApiSend<Row>(api, act.method ?? "POST", act.route, body);
   if (sent.ok) return { ok: true, json: isRow(sent.json) ? sent.json : {} };
 
   const context = { workspace: api.ref.workspace, project: `${api.ref.workspace}/${api.ref.project}` };
