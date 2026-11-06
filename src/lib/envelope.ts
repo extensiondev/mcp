@@ -8,6 +8,7 @@
 
 import { meterComposedDashboardUrls } from "./dashboard-url-meter";
 import { takeDeferredWarnings } from "./deferred-warnings";
+import { deadEngineOverrideLine } from "./engine-override-warning";
 
 export const ENVELOPE_SCHEMA = 1 as const;
 
@@ -287,7 +288,7 @@ export function envelopeObject(init: EnvelopeInit): Envelope {
     status: init.status,
     value: init.value === undefined ? null : plainText(init.value),
     error: init.error ? plainText(init.error) : null,
-    warnings: collectWarnings([...(init.warnings ?? []), ...takeDeferredWarnings()].map(plainText)),
+    warnings: collectWarnings([...(init.warnings ?? []), ...takeDeferredWarnings(), deadEngineOverrideLine()].map(plainText)),
   };
   if (init.truncated !== undefined) frame.truncated = init.truncated;
   if (typeof init.hint === "string" && init.hint) frame.hint = stripTerminalEscapes(init.hint);

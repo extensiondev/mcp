@@ -48,6 +48,7 @@ import { readIdentity } from "./tools/whoami";
 import { clearLocalCredentials } from "./tools/logout";
 import { watchClientRoots } from "./lib/client-roots";
 import { requestDeviceCode, pollDeviceToken } from "./lib/device-flow";
+import { deadEngineOverrideInstruction } from "./lib/engine-override-warning";
 import {
   fetchLoginConfig,
   resolveApiBase,
@@ -202,7 +203,9 @@ export function serverInstructions(
       ]
     : [PLATFORM_OFF];
 
-  return [...INSTRUCTIONS_HEAD, ...SESSION_RULES, ...platform, ...INSTRUCTIONS_TAIL].join("\n");
+  const engine = deadEngineOverrideInstruction();
+
+  return [...INSTRUCTIONS_HEAD, ...SESSION_RULES, ...(engine ? [engine] : []), ...platform, ...INSTRUCTIONS_TAIL].join("\n");
 }
 
 export const SERVER_INSTRUCTIONS = serverInstructions(DEFAULT_SERVER_OPTIONS);
