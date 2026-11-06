@@ -2066,7 +2066,7 @@
           "name": "projectPath",
           "type": "string",
           "required": false,
-          "description": "Extension project root"
+          "description": "Extension project root. Optional when exactly one project has a live session: that session is stopped and named in the answer (projectPath, browser, pid). When sessions for two or more projects are live the call is refused with them listed under value.sessions; with none live it answers no-session."
         },
         {
           "name": "browser",

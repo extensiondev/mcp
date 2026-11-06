@@ -83,12 +83,12 @@ afterEach(() => {
 });
 
 describe("extension_stop", () => {
-  it("requires projectPath unless all=true", async () => {
+  it("answers no-session, not bad-request, when nothing is live and no projectPath is named", async () => {
     const result = JSON.parse(await stop.handler({}));
     expect(result.ok).toBe(false);
-    expect(result.status).toBe("bad-request");
-    expect(result.error.code).toBe("E_BAD_REQUEST");
-    expect(result.error.message).toMatch(/projectPath is required/);
+    expect(result.status).toBe("no-session");
+    expect(result.error.code).toBe("E_NO_SESSION");
+    expect(result.value.sessions).toEqual([]);
   });
 
   it("reports when no session is known", async () => {

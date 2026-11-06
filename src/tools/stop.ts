@@ -37,6 +37,7 @@ import { contractBrowserPid, describeEnded, endedProcesses } from "../lib/stop-e
 import { sweepCarriers, type CarrierSweepEntry } from "../lib/carrier-exit";
 import { readRememberedCarriers } from "../lib/carrier-registry";
 import { envelope } from "../lib/envelope";
+import { describeGroups, groupByProject, onlyLiveSession } from "../lib/only-live-session";
 import { killWindowsTree } from "../lib/exec";
 import { trackUrl } from "../lib/track-url";
 
@@ -49,7 +50,11 @@ export const schema = {
   inputSchema: {
     type: "object" as const,
     properties: {
-      projectPath: PROJECT_PATH,
+      projectPath: {
+        ...PROJECT_PATH,
+        description:
+          "Extension project root. Optional when exactly one project has a live session: that session is stopped and named in the answer (projectPath, browser, pid). When sessions for two or more projects are live the call is refused with them listed under value.sessions; with none live it answers no-session.",
+      },
       browser: {
         type: "string",
         description:
@@ -450,30 +455,6 @@ export async function stopOne(
   };
 }
 
-interface SessionGroup {
-  projectPath: string;
-  sessions: Array<{ browser: string; pid: number; mode: ProcessInfo["command"] }>;
-}
-
-function groupByProject(sessions: Iterable<ProcessInfo>): SessionGroup[] {
-  const groups = new Map<string, SessionGroup>();
-
-  for (const s of sessions) {
-    const key = path.resolve(s.projectPath);
-    const group = groups.get(key) ?? { projectPath: s.projectPath, sessions: [] };
-    group.sessions.push({ browser: s.browser, pid: s.pid, mode: s.command });
-    groups.set(key, group);
-  }
-
-  return [...groups.values()];
-}
-
-function describeGroups(groups: SessionGroup[]): string {
-  return groups
-    .map((g) => `${g.projectPath}: ${g.sessions.map((s) => `${s.browser} pid ${s.pid} (${s.mode})`).join(", ")}`)
-    .join("; ");
-}
-
 export async function handler(args: {
   projectPath?: string;
   browser?: string;
@@ -585,25 +566,54 @@ export async function handler(args: {
     });
   }
 
-  if (!args.projectPath) {
-    return envelope({
-      ok: false,
-      command: schema.name,
-      status: "bad-request",
-      error: {
-        code: "E_BAD_REQUEST",
-        message:
-          "projectPath is required unless all=true. Pass the same projectPath used with extension_dev/extension_start.",
-      },
-      value: { trackUrl: consolePage },
-    });
+  let projectPath = args.projectPath;
+  const unreadWarnings: Array<string | null> = [];
+
+  if (!projectPath) {
+    const only = onlyLiveSession();
+    const unreadable = only.unreadable
+      ? `Session markers could not be fully read: ${only.unreadable}; a session recorded there may still be running.`
+      : null;
+
+    if (only.kind === "none") {
+      return envelope({
+        ok: false,
+        command: schema.name,
+        status: "no-session",
+        error: {
+          code: "E_NO_SESSION",
+          message: "No live session is known to this server, so there is nothing to stop without a projectPath.",
+        },
+        value: { sessions: [], trackUrl: consolePage },
+        warnings: [unreadable],
+        hint: "Nothing was stopped. Pass the projectPath used with extension_dev or extension_start to stop a session this server did not record, or all: true to sweep every marker on disk.",
+      });
+    }
+
+    if (only.kind === "many") {
+      return envelope({
+        ok: false,
+        command: schema.name,
+        status: "bad-request",
+        error: {
+          code: "E_BAD_REQUEST",
+          message: `projectPath is required because sessions for ${only.sessions.length} projects are live: ${describeGroups(only.sessions)}.`,
+        },
+        value: { sessions: only.sessions, trackUrl: consolePage },
+        warnings: [unreadable],
+        hint: `Nothing was stopped. Call extension_stop again with projectPath set to one of: ${only.sessions.map((g) => g.projectPath).join(", ")}; or pass all: true with confirm: true to end them all.`,
+      });
+    }
+
+    projectPath = only.projectPath;
+    unreadWarnings.push(unreadable);
   }
 
-  const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
+  const ambiguous = ambiguousSessionRefusal(schema.name, projectPath, args.browser);
   if (ambiguous) return ambiguous;
 
-  const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
-  const outcome = await stopOne(args.projectPath, browser);
+  const { browser } = resolveSessionBrowser(projectPath, args.browser);
+  const outcome = await stopOne(projectPath, browser);
 
   return envelope({
     ok: outcome.stopped,
@@ -615,6 +625,6 @@ export async function handler(args: {
           ? "stopped"
           : "still-alive",
     value: { ...outcome, trackUrl: consolePage },
-    warnings: [outcome.stopped ? null : outcome.detail],
+    warnings: [...unreadWarnings, outcome.stopped ? null : outcome.detail],
   });
 }
