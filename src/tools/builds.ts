@@ -121,7 +121,7 @@ function buildConsoleUrl(api: ProjectApi, buildId: string, apiHint?: string): st
 }
 
 async function open(args: HandlerArgs) {
-  return openProjectApi({ command: COMMAND, project: args.project, api: args.api });
+  return openProjectApi({ command: COMMAND, project: args.project, api: args.api, renew: true });
 }
 
 function integritySummary(json: unknown): Row {

@@ -13,6 +13,7 @@ import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
 import { API_BASE } from "../lib/common-schema";
 import { resolveCredential } from "../lib/credential-source";
+import { expiredLoginRefusal } from "../lib/login-expired";
 import { chromeItemLeftOf } from "../lib/chrome-item-left";
 import { linkItemAnswer } from "../lib/link-item-answer";
 import { approvalRefundOf, approvalRefundSentence } from "../lib/approval-refund-words";
@@ -649,6 +650,10 @@ async function answer(args: SubmitToolArgs): Promise<string> {
     api: args.api,
   });
   const token = credential.token;
+
+  if (!token && credential.expired) {
+    return expiredLoginRefusal({ command: "extension_submit", expired: credential.expired, api: args.api, extra: { action: "submit" } });
+  }
 
   if (!token && args.project) {
     return fail(

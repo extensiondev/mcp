@@ -139,7 +139,7 @@ async function open(args: HandlerArgs, action: Action) {
   const picked = pickLogin(args);
   if ("refused" in picked) return { refused: picked.refused };
 
-  const opened = await openProjectApi({ command: COMMAND, project: picked.project, api: args.api });
+  const opened = await openProjectApi({ command: COMMAND, project: picked.project, api: args.api, renew: true });
 
   if (!opened.ok) {
     return {

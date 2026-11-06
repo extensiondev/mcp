@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { openProjectApi, projectApiGet } from "./project-api";
+import { loginMissing, openProjectApi, projectApiGet } from "./project-api";
 import { spokenDate } from "./publish-link";
 import { lockedSentence, readPushState, type OwedField, type PushState } from "./store-listing-push";
 
@@ -110,7 +110,7 @@ export async function readSafariListingPush(args: {
   });
 
   if (!opened.ok) {
-    return { ok: false, skipped: opened.reason === "no-login" || opened.reason === "other-project", message: opened.message };
+    return { ok: false, skipped: loginMissing(opened) || opened.reason === "other-project", message: opened.message };
   }
 
   const read = await projectApiGet<Row>(opened.api, "stores/safari/listing", { push: 1 });

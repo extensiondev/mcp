@@ -350,7 +350,7 @@ async function askForApproval(act: ShipAct, read: ProjectApiRefusal, api: Projec
 }
 
 export async function openShipApi(command: string, args: { project?: string; api?: string }, value: Row): Promise<{ api: ProjectApi } | { refused: string }> {
-  const opened = await openProjectApi({ command, project: args.project, api: args.api });
+  const opened = await openProjectApi({ command, project: args.project, api: args.api, renew: true });
   if (!opened.ok) return { refused: projectApiOpenFailure(command, opened, { api: args.api, name: "Ship", value }) };
 
   return { api: opened.api };

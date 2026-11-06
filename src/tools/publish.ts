@@ -15,6 +15,7 @@ import {
 } from "../lib/act-outcome";
 import { API_BASE } from "../lib/common-schema";
 import { resolveCredential } from "../lib/credential-source";
+import { expiredLoginRefusal } from "../lib/login-expired";
 import { shareLinks, shareOutcome } from "../lib/share-outcome";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { spendNarration } from "../lib/allowance";
@@ -205,6 +206,10 @@ export async function handler(args: {
     api: args.api,
   });
   const token = credential.token;
+
+  if (!token && credential.expired) {
+    return expiredLoginRefusal({ command: "extension_publish", expired: credential.expired, api: args.api, extra: { action: "publish" } });
+  }
 
   if (!token && args.project) {
     return fail(

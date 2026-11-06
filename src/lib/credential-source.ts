@@ -10,7 +10,16 @@ import crypto from "node:crypto";
 
 import { approvalLogin } from "./approval-scope";
 import { envToken } from "./credential-scope";
-import { defaultLoginDrift, dropLoginAlias, loginDriftSentence, loginMoveSentence, pinnedProject, readValidCredentials } from "./credentials";
+import {
+  defaultLoginDrift,
+  dropLoginAlias,
+  expiredStoredLogin,
+  loginDriftSentence,
+  loginMoveSentence,
+  pinnedProject,
+  readValidCredentials,
+  type ExpiredLogin,
+} from "./credentials";
 import { deferWarning } from "./deferred-warnings";
 
 export interface CredentialRef {
@@ -80,6 +89,7 @@ export interface ResolvedCredential {
   refSource: "stored" | "named" | "env-claims" | "none";
   mismatch: { env: CredentialRef; stored: CredentialRef } | null;
   note: string | null;
+  expired: ExpiredLogin | null;
 }
 
 export function resolveCredential(options: { project?: string; api?: string } = {}): ResolvedCredential {
@@ -95,6 +105,7 @@ export function resolveCredential(options: { project?: string; api?: string } = 
       refSource: "stored",
       mismatch: null,
       note: null,
+      expired: null,
     };
   }
 
@@ -125,10 +136,12 @@ export function resolveCredential(options: { project?: string; api?: string } = 
         refSource: "stored",
         mismatch: null,
         note: moved,
+        expired: null,
       };
     }
 
     const wantedRef = splitRef(wanted);
+    const expired = expiredStoredLogin({ project: wanted, api });
 
     if (named) {
       return {
@@ -137,7 +150,8 @@ export function resolveCredential(options: { project?: string; api?: string } = 
         ref: wantedRef,
         refSource: "named",
         mismatch: null,
-        note: `No stored login for ${named}. Run extension_auth (action: login) for it.`,
+        note: expired ? `The stored login for ${expired.project} expired at ${expired.expiresAt}.` : `No stored login for ${named}. Run extension_auth (action: login) for it.`,
+        expired,
       };
     }
 
@@ -153,10 +167,11 @@ export function resolveCredential(options: { project?: string; api?: string } = 
         note: mismatch
           ? `This server is pinned to ${wantedRef!.workspace}/${wantedRef!.project}, which has no stored login, and EXTENSION_DEV_TOKEN belongs to ${envRef!.workspace}/${envRef!.project} per its claims; the call is made as the token's project.`
           : null,
+        expired: null,
       };
     }
 
-    return { token: "", source: "none", ref: wantedRef, refSource: "named", mismatch: null, note: null };
+    return { token: "", source: "none", ref: wantedRef, refSource: "named", mismatch: null, note: null, expired };
   }
 
   if (env) {
@@ -180,6 +195,7 @@ export function resolveCredential(options: { project?: string; api?: string } = 
         : mismatch
           ? `EXTENSION_DEV_TOKEN belongs to ${envRef!.workspace}/${envRef!.project} per its claims while the active stored login is ${storedRef!.workspace}/${storedRef!.project}; this call is made as, and reports facts for, the token's project.`
           : null,
+      expired: null,
     };
   }
 
@@ -195,10 +211,13 @@ export function resolveCredential(options: { project?: string; api?: string } = 
       refSource: "stored",
       mismatch: null,
       note: drift ? loginDriftSentence(drift) : null,
+      expired: null,
     };
   }
 
-  return { token: "", source: "none", ref: null, refSource: "none", mismatch: null, note: null };
+  const expired = expiredStoredLogin({ api });
+
+  return { token: "", source: "none", ref: null, refSource: "none", mismatch: null, note: null, expired };
 }
 
 export function laneClosedByServer(err: unknown, code: string): boolean {

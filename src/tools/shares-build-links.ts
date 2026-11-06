@@ -44,7 +44,7 @@ export function namesBuildLink(args: { kind?: string; tokenId?: string; url?: st
 }
 
 async function openLinks(args: BuildLinkArgs, action: string): Promise<{ api: ProjectApi } | { out: string }> {
-  const opened = await openProjectApi({ command: COMMAND, project: text(args.project) || undefined, api: args.api });
+  const opened = await openProjectApi({ command: COMMAND, project: text(args.project) || undefined, api: args.api, renew: true });
 
   if (!opened.ok) {
     return { out: projectApiOpenFailure(COMMAND, opened, { api: args.api, name: "BuildLinks", value: { action, kind: "build-link" } }) };

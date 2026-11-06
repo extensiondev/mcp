@@ -194,7 +194,7 @@ export async function configureProject(args: ConfigureProjectArgs): Promise<stri
   const read = readSettingsChange(args.settings);
   if ("problem" in read) return badRequest("ProjectSettingsInputError", `${read.problem} Nothing was sent.`, read.code ? { platformCode: read.code } : {});
 
-  const opened = await openProjectApi({ command: COMMAND, project: args.project, api: args.api });
+  const opened = await openProjectApi({ command: COMMAND, project: args.project, api: args.api, renew: true });
   if (!opened.ok) return projectApiOpenFailure(COMMAND, opened, { api: args.api, name: "ProjectSettings", value: { action: CONFIGURE_PROJECT } });
 
   const api = opened.api;
@@ -316,7 +316,7 @@ export async function configureProject(args: ConfigureProjectArgs): Promise<stri
 const BROWSERS = ["chrome", "edge", "firefox", "safari"] as const;
 
 export async function readProjectSettings(args: { project?: string; api?: string }): Promise<string> {
-  const opened = await openProjectApi({ command: COMMAND, project: text(args.project) || undefined, api: args.api });
+  const opened = await openProjectApi({ command: COMMAND, project: text(args.project) || undefined, api: args.api, renew: true });
   if (!opened.ok) return projectApiOpenFailure(COMMAND, opened, { api: args.api, name: "Workspace", value: { action: "settings" } });
 
   const api = opened.api;

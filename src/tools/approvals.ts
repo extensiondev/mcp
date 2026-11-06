@@ -15,7 +15,8 @@ import { LOGIN_STEPS, PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/cred
 import { envelope } from "../lib/envelope";
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
 import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
-import { resolveToken } from "../lib/publish";
+import { resolveCredential } from "../lib/credential-source";
+import { expiredLoginRefusal } from "../lib/login-expired";
 
 const COMMAND = "extension_approvals";
 const APPROVAL_ID = /^apr_[A-Za-z0-9_-]{32}$/;
@@ -125,7 +126,12 @@ export async function handler(args: { action?: string; approvalId?: string; proj
     );
   }
 
-  const token = resolveToken({ project: args.project, api: args.api });
+  const credential = resolveCredential({ project: args.project, api: args.api });
+  const token = credential.token;
+
+  if (!token && credential.expired) {
+    return expiredLoginRefusal({ command: COMMAND, expired: credential.expired, api: args.api, extra: value });
+  }
 
   if (!token) {
     return refused(

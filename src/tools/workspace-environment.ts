@@ -192,7 +192,7 @@ export async function setEnvironment(args: SetEnvironmentArgs): Promise<string> 
     return secretConsoleOnly(read.secret, environmentPage(resolveCredential({ project: args.project, api: args.api }).ref, args.api));
   }
 
-  const opened = await openProjectApi({ command: COMMAND, project: args.project, api: args.api });
+  const opened = await openProjectApi({ command: COMMAND, project: args.project, api: args.api, renew: true });
   if (!opened.ok) return projectApiOpenFailure(COMMAND, opened, { api: args.api, name: "Environment", value: { action: SET_ENVIRONMENT } });
 
   const api = opened.api;

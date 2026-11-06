@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { openProjectApi, projectApiGet } from "./project-api";
+import { loginMissing, openProjectApi, projectApiGet } from "./project-api";
 import { releaseTypeMeaning } from "./store-row-sources";
 
 export const STORE_RELEASE_STATES = ["uploaded", "in-review", "approved", "live", "signed", "rejected", "withdrawn", "superseded", "failed"] as const;
@@ -308,7 +308,7 @@ export async function readPlatformStoreReleases(args: {
   });
 
   if (!opened.ok) {
-    if (opened.reason === "no-login" || opened.reason === "other-project") return { ok: false, skipped: true };
+    if (loginMissing(opened) || opened.reason === "other-project") return { ok: false, skipped: true };
 
     return { ok: false, skipped: false, held: opened.reason === "held", body: opened.body, message: opened.message };
   }

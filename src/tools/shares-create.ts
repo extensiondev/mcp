@@ -90,7 +90,7 @@ export async function createShareFromBuild(args: {
     );
   }
 
-  const opened = await openProjectApi({ command: COMMAND, project: args.project, api: args.api });
+  const opened = await openProjectApi({ command: COMMAND, project: args.project, api: args.api, renew: true });
   if (!opened.ok) return projectApiOpenFailure(COMMAND, opened, { api: args.api, name: "Shares", value });
 
   const api = opened.api;

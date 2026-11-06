@@ -647,6 +647,28 @@ export function readValidCredentials(
   return creds;
 }
 
+export interface ExpiredLogin {
+  project: string;
+  expiresAt: string;
+  expiredForSeconds: number;
+  hosted: boolean;
+}
+
+export function expiredLoginOf(creds: StoredCredentials | null, nowSeconds: number = Math.floor(Date.now() / 1000)): ExpiredLogin | null {
+  if (!creds?.expiresAt || creds.expiresAt > nowSeconds) return null;
+
+  return {
+    project: `${creds.workspaceSlug}/${creds.projectSlug}`.toLowerCase(),
+    expiresAt: new Date(creds.expiresAt * 1000).toISOString(),
+    expiredForSeconds: nowSeconds - creds.expiresAt,
+    hosted: Boolean(requestCredential()),
+  };
+}
+
+export function expiredStoredLogin(selector?: CredentialSelector, nowSeconds?: number): ExpiredLogin | null {
+  return expiredLoginOf(readCredentials(selector), nowSeconds);
+}
+
 export const PROJECT_TOKEN_INPUT = {
   type: "string",
   description:

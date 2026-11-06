@@ -12,6 +12,7 @@ import { WAIT_SECONDS_INPUT, dispatchedHint, madeSentence, stampNow, text as pla
 import { API_BASE } from "../lib/common-schema";
 import { awaitPromoteRecord, promoteLinks, releasesPage, unknownBuildEnrichment } from "../lib/promote-record";
 import { resolveCredential } from "../lib/credential-source";
+import { expiredLoginRefusal } from "../lib/login-expired";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
@@ -151,6 +152,10 @@ export async function handler(args: ReleaseActArgs & {
 
   const credential = resolveCredential({ project: args.project, api: args.api });
   const token = credential.token;
+
+  if (!token && credential.expired) {
+    return expiredLoginRefusal({ command: "extension_release_promote", expired: credential.expired, api: args.api, extra: { action: "promote" } });
+  }
 
   if (!token && args.project) {
     return fail("PromoteAuthError", noStoredLoginHint(args.project), "auth-required", "E_AUTH_REQUIRED");

@@ -13,6 +13,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { writeCredentials } from "../lib/credentials";
+import { forgetLoginRenewals } from "../lib/login-expired";
 import { fetchRegistryJson } from "../lib/registry";
 import { RegistryAccessTokens } from "../lib/registry-access";
 import { handler as releaseStatus } from "../tools/release-status";
@@ -24,6 +25,8 @@ const NOW = Math.floor(Date.now() / 1000);
 const EXPIRED_AT = NOW - 34119;
 const EXPIRED_ISO = new Date(EXPIRED_AT * 1000).toISOString();
 const LOGIN_CALL = 'extension_auth {action: "login", project: "acme/widget"}';
+const RENEW = { tool: "extension_auth", args: { action: "login", project: "acme/widget" } };
+const RENEWAL_ATTEMPT = [`${API}/api/cli/login/config`];
 const ENV_KEYS = ["XDG_CONFIG_HOME", "EXTENSION_DEV_API_URL", "EXTENSION_DEV_TOKEN", "EXTENSION_DEV_PROJECT"];
 const READ_AT = "2026-10-31T11:15:45.000Z";
 
@@ -89,6 +92,7 @@ describe("a store status read under an expired login names the expiry instead of
     prevFetch = global.fetch;
     calls = [];
     global.fetch = serve(calls);
+    forgetLoginRenewals();
     login(EXPIRED_AT);
   });
 
@@ -116,14 +120,14 @@ describe("a store status read under an expired login names the expiry instead of
     expect(out.error.message).toContain("this server drops an expired token instead of sending it, and the platform would have read the call as missing-token");
     expect(out.error.message).not.toMatch(/no stores configured|slugs may be wrong|StoreStatusNotFound/);
     const elapsed = Math.floor(Date.now() / 1000) - NOW;
-    expect(out.value.login).toEqual({ project: "acme/widget", expiresAt: EXPIRED_ISO, expiredForSeconds: 34119 + elapsed, sent: false });
+    expect(out.value.login).toEqual({ project: "acme/widget", expiresAt: EXPIRED_ISO, expiredForSeconds: 34119 + elapsed, sent: false, renew: RENEW });
     expect(out.value.nextStep.kind).toBe("login");
     expect(out.value.nextStep.say).toContain(`Sign in again with ${LOGIN_CALL}, then call this again`);
     expect(out.value.trackUrl).toBe("https://console.extension.dev/acme/widget/submissions/safari");
     expect(out.value.nextStep.url).toBe(out.value.trackUrl);
     expect(out.hint).toContain(out.value.trackUrl);
     expect(out.hint).toContain(LOGIN_CALL);
-    expect(calls).toEqual([]);
+    expect(calls).toEqual(RENEWAL_ATTEMPT);
   });
 
   it("extension_release_status include stores answers the same refusal in its stores section and reads nothing", async () => {
@@ -138,7 +142,7 @@ describe("a store status read under an expired login names the expiry instead of
     expect(stores.error.message).toContain(`expired at ${EXPIRED_ISO}`);
     expect(stores.value.trackUrl).toBe("https://console.extension.dev/acme/widget/submissions");
     expect(stores.value.nextStep.say).toContain(LOGIN_CALL);
-    expect(calls).toEqual([]);
+    expect(calls).toEqual(RENEWAL_ATTEMPT);
   });
 
   it("with no project named, the default login's own expiry is the one refused", async () => {
@@ -148,7 +152,7 @@ describe("a store status read under an expired login names the expiry instead of
 
     expect(out.status).toBe("not-signed-in");
     expect(out.error.message).toContain("The login for acme/widget expired at");
-    expect(calls).toEqual([]);
+    expect(calls).toEqual(RENEWAL_ATTEMPT);
   });
 
   it("EXTENSION_DEV_TOKEN covering the project lets the read go on", async () => {

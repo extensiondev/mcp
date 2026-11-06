@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { openProjectApi, projectApiGet } from "./project-api";
+import { loginMissing, openProjectApi, projectApiGet } from "./project-api";
 
 export type ProjectVisibility = "public" | "private";
 
@@ -34,7 +34,7 @@ export async function readPlatformVisibility(args: {
   });
 
   if (!opened.ok) {
-    if (opened.reason === "no-login" || opened.reason === "other-project") return { ok: false, skipped: true };
+    if (loginMissing(opened) || opened.reason === "other-project") return { ok: false, skipped: true };
 
     return { ok: false, skipped: false, held: opened.reason === "held", body: opened.body, message: opened.message };
   }

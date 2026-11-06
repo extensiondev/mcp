@@ -12,8 +12,9 @@ import { ASK_ONLY_CODE, askOnlyBlocks } from "./ask-only";
 import { resolveCredential, type CredentialRef } from "./credential-source";
 import { envelope, type ErrorCode } from "./envelope";
 import { resolveApiBase, safeApiBase } from "./login-flow";
-import { loginMoveSentence, moveLogin, noStoredLoginHint, rememberLoginProjectId } from "./credentials";
+import { loginMoveSentence, moveLogin, noStoredLoginHint, rememberLoginProjectId, type ExpiredLogin } from "./credentials";
 import { deferWarning } from "./deferred-warnings";
+import { expiredLoginDetail, expiredLoginPage, loginExpiredRefusal, startLoginRenewal, type DeviceRenewal } from "./login-expired";
 import {
   platformHoldEnvelope,
   readPlatformCode,
@@ -53,10 +54,16 @@ export type ProjectApiOpen =
   | { ok: true; api: ProjectApi }
   | {
       ok: false;
-      reason: "no-login" | "other-project" | "bad-api" | "refused" | "unreachable" | "held";
+      reason: "no-login" | "login-expired" | "other-project" | "bad-api" | "refused" | "unreachable" | "held";
       message: string;
       body?: unknown;
+      expired?: ExpiredLogin;
+      renewal?: DeviceRenewal | null;
     };
+
+export function loginMissing(open: Extract<ProjectApiOpen, { ok: false }>): boolean {
+  return open.reason === "no-login" || open.reason === "login-expired";
+}
 
 const projectIds = new Map<string, string>();
 const PROJECT_ID_CACHE_LIMIT = 512;
@@ -130,8 +137,19 @@ export async function openProjectApi(args: {
   project?: string;
   api?: string;
   expect?: CredentialRef;
+  renew?: boolean;
 }): Promise<ProjectApiOpen> {
   const credential = resolveCredential({ project: args.project, api: args.api });
+
+  if (!credential.token && credential.expired) {
+    return {
+      ok: false,
+      reason: "login-expired",
+      message: expiredLoginDetail(credential.expired),
+      expired: credential.expired,
+      renewal: args.renew ? await startLoginRenewal(credential.expired, args.api) : null,
+    };
+  }
 
   if (!credential.token) {
     return {
@@ -369,6 +387,17 @@ export function projectApiOpenFailure(
       body: open.body,
       api: options.api,
       value: options.value,
+    });
+  }
+
+  if (open.reason === "login-expired" && open.expired) {
+    return loginExpiredRefusal({
+      command,
+      expired: open.expired,
+      trackUrl: expiredLoginPage(open.expired, options.api),
+      extra: options.value,
+      device: open.renewal ?? null,
+      pageWord: "project page",
     });
   }
 

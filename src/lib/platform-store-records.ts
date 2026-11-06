@@ -7,7 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { repairEdgeStoreUrl } from "./edge-listing";
-import { openProjectApi, projectApiGet } from "./project-api";
+import { loginMissing, openProjectApi, projectApiGet } from "./project-api";
 import { storeReviewOfRow } from "./review-beside-submission";
 
 import type { StoreReview } from "./platform-submissions";
@@ -250,7 +250,7 @@ export async function readPlatformStoreRecords(args: {
   });
 
   if (!opened.ok) {
-    if (opened.reason === "no-login" || opened.reason === "other-project") return { ok: false, skipped: true };
+    if (loginMissing(opened) || opened.reason === "other-project") return { ok: false, skipped: true };
 
     return { ok: false, skipped: false, held: opened.reason === "held", body: opened.body, message: opened.message };
   }

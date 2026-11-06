@@ -34,7 +34,7 @@ export interface ListArgs {
 }
 
 export async function listBuilds(command: string, args: ListArgs): Promise<string> {
-  const opened = await openProjectApi({ command, project: args.project, api: args.api });
+  const opened = await openProjectApi({ command, project: args.project, api: args.api, renew: true });
   if (!opened.ok) return projectApiOpenFailure(command, opened, { api: args.api, name: "Builds", value: { action: "list" } });
 
   const limit = Math.min(Math.max(Math.floor(Number(args.limit) || DEFAULT_LIMIT), 1), MAX_LIMIT);

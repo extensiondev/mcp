@@ -92,7 +92,7 @@ export async function setVisibility(args: VisibilityArgs): Promise<string> {
     return badRequest(`set-visibility needs visibility: private or public${visibility ? `; got "${text(args.visibility)}"` : ""}. Nothing was changed.`);
   }
 
-  const opened = await openProjectApi({ command: COMMAND, project: text(args.project) || undefined, api: args.api });
+  const opened = await openProjectApi({ command: COMMAND, project: text(args.project) || undefined, api: args.api, renew: true });
 
   if (!opened.ok) {
     return projectApiOpenFailure(COMMAND, opened, { api: args.api, name: "Visibility", value: { action: ACTION, visibility } });

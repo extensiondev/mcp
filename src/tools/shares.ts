@@ -24,6 +24,8 @@ import {
 import { envelope } from "../lib/envelope";
 import { createShareFromBuild } from "./shares-create";
 import { listBuildLinkShares, namesBuildLink, revokeBuildLinkShare, withBuildLinks } from "./shares-build-links";
+import { resolveCredential } from "../lib/credential-source";
+import { expiredLoginRefusal } from "../lib/login-expired";
 import { resolveToken } from "../lib/publish";
 import { LOGIN_STEPS, PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
 import {
@@ -445,7 +447,13 @@ async function revokeShare(args: {
     });
   }
 
-  const token = resolveToken({ project: args.project, api: args.api });
+  const credential = resolveCredential({ project: args.project, api: args.api });
+  const token = credential.token;
+
+  if (!token && credential.expired) {
+    return expiredLoginRefusal({ command: "extension_shares", expired: credential.expired, api: args.api, extra: { action: "revoke", artifactId: ref } });
+  }
+
   const gateInput = {
     command: "extension_shares",
     action: "extension_shares.revoke",

@@ -68,6 +68,7 @@ export async function openFor(scope: Scope, name: string): Promise<{ ok: true; a
     project: named ? `${ref.workspace}/${ref.project}` : undefined,
     api: scope.api,
     expect: { workspace: ref.workspace, project: ref.project },
+    renew: true,
   });
 
   if (!opened.ok) {

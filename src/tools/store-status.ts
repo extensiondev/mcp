@@ -17,7 +17,7 @@ import {
 } from "../lib/registry";
 import { listingPushOpen, readSafariListingPush, type ListingPushView } from "../lib/safari-listing-push-read";
 import { envelope, type ErrorCode } from "../lib/envelope";
-import { expiredLoginFor, loginExpiredRefusal } from "../lib/login-expired";
+import { expiredLoginFor, loginExpiredRefusal, startLoginRenewal } from "../lib/login-expired";
 import { platformHoldEnvelope } from "../lib/platform-hold";
 import {
   queuedActSentence,
@@ -600,6 +600,7 @@ export async function readStores(args: {
       command: "extension_release_status",
       expired,
       trackUrl: consoleProjectUrl(ref, ConsoleProjectPage.submissions, args.api),
+      device: await startLoginRenewal(expired, args.api),
     });
   }
 

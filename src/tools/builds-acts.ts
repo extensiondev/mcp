@@ -124,7 +124,7 @@ export function actRefusal(read: ProjectApiRefusal, action: string, api: Project
 }
 
 export async function openFor(args: ActArgs, action: string, value: Row = {}): Promise<{ api: ProjectApi } | { refused: string }> {
-  const opened = await openProjectApi({ command: COMMAND, project: args.project, api: args.api });
+  const opened = await openProjectApi({ command: COMMAND, project: args.project, api: args.api, renew: true });
 
   if (!opened.ok) {
     return { refused: projectApiOpenFailure(COMMAND, opened, { api: args.api, name: "Builds", value: { action, ...value } }) };
