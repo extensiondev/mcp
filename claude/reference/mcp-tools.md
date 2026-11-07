@@ -96,17 +96,17 @@ Build the extension on this machine into dist/<browser>/; never for sharing (ext
 
 ## extension_builds
 
-Read, download, rebuild and configure the project's platform builds. Channels: extension_release_status. A rebuild spends build allowance; a push spends one only on the build branch when it changes the root directory ([skip build] pushes, docs-only and other branches spend nothing).
+Read, download, rebuild and configure platform builds. list/get rows: env is the build environment, channels the pins holding it now. A rebuild spends allowance; a push, only on the build branch when it changes the root directory ([skip build] pushes, docs-only, other branches spend nothing).
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `action` | "list" \| "get" \| "logs" \| "download" \| "rebuild" \| "recheck" \| "configure" \| "create-channel" \| "configure-channel" \| "delete-channel" | no | `"list"` | list: recent builds, lastPush; get: one build; logs; download: a verified package; recheck: rerun integrity; rebuild; configure: buildSettings; create-, configure-channel; delete-channel: console only. |
 | `buildId` | string | no |  | Commit sha, never the build number; required for get, logs, download, recheck. |
 | `buildEnv` | "staging" \| "production" | no |  | rebuild: staging (default, Preview) or production (Stable, stores). |
-| `buildSettings` | object | no |  | configure: what changes per browser, e.g. { firefox: { buildCommand: 'pnpm build' } }. |
+| `buildSettings` | object | no |  | configure: per-browser changes, e.g. { firefox: { buildCommand: 'pnpm build' } }. |
 | `approvalId` | string | no |  | Approved approval id. |
-| `channel` | string | no |  | Channel name, up to 40 characters. |
-| `description` | string | no |  | Channel description, up to 200 characters. |
+| `channel` | string | no |  | Channel name, max 40 chars. |
+| `description` | string | no |  | Channel description, max 200 chars. |
 | `color` | string | no |  | Channel color, #rrggbb. |
 | `audience` | "public" \| "private" | no |  | private, or public (owner approval); default the project's visibility. |
 | `browser` | string | no |  | chrome, edge, firefox, safari; download requires it and takes source. |

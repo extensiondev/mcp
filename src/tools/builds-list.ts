@@ -13,9 +13,11 @@ import {
   buildNumberOf,
   headLagView,
   isRow,
+  channelsOf,
   lastPushView,
   listRow,
   oneStampWarning,
+  pinsWords,
   rowWords,
   text,
 } from "../lib/builds-list-row";
@@ -58,6 +60,7 @@ export async function listBuilds(command: string, args: ListArgs): Promise<strin
   const spoken = [...(headLag ? [text(headLag.message)] : []), ...cancelledSentences];
   const noted = [push.sentence, browsersPendingSentence(rows)].filter((s): s is string => Boolean(s));
   const latest = rows[0];
+  const latestPins = latest ? pinsWords(channelsOf(latest)) : null;
 
   return envelope({
     ok: true,
@@ -79,7 +82,7 @@ export async function listBuilds(command: string, args: ListArgs): Promise<strin
     },
     hint: `${headLag ? `${text(headLag.message)} ` : ""}${
       latest
-        ? `${rows.length} recent build${rows.length === 1 ? "" : "s"} of ${project}, newest first; the latest is ${rowWords(latest, text(latest.status) || "status unknown")}. Pass action:"get" or action:"logs" with a buildId to read one.${
+        ? `${rows.length} recent build${rows.length === 1 ? "" : "s"} of ${project}, newest first; the latest is ${rowWords(latest, text(latest.status) || "status unknown")}${latestPins ? `, ${latestPins}` : ""}. Pass action:"get" or action:"logs" with a buildId to read one.${
             rows.some((row) => row.status === "partial") ? " A partial build finished with at least one browser failed; failedBrowsers names them." : ""
           }${cancelledSentences.length ? ` ${cancelledSentences.join(" ")}` : ""}${noted.length ? ` ${noted.join(" ")}` : ""}`
         : `No builds are recorded for ${project} yet.${noted.length ? ` ${noted.join(" ")}` : ""} Push a commit to produce one, then check ${buildsPageUrl}.`

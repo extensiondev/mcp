@@ -127,6 +127,26 @@ function withTimes(out: Row, item: Row, active: boolean): void {
   if (duration) out.duration = duration;
 }
 
+export type Pin = { channel: string; browsers: string[] };
+
+export function channelsOf(item: Row | null | undefined): Pin[] | null {
+  if (!item || !Array.isArray(item.channels)) return null;
+
+  return item.channels.filter(isRow).flatMap((pin) => {
+    const channel = text(pin.channel);
+    if (!channel) return [];
+
+    return [{ channel, browsers: Array.isArray(pin.browsers) ? pin.browsers.map(text).filter(Boolean) : [] }];
+  });
+}
+
+export function pinsWords(pins: Pin[] | null): string | null {
+  if (!pins) return null;
+  if (!pins.length) return "held by no pin";
+
+  return `held by ${pins.map((pin) => `${pin.channel}${pin.browsers.length ? ` for ${pin.browsers.join(", ")}` : ""}`).join(" and ")}`;
+}
+
 export function listRow(item: Row, consoleUrl: (buildId: string) => string): Row {
   const buildId = text(item.buildId) || text(item.shortSha) || text(item.id);
   const state = buildState(item.status, item.conclusion);
@@ -140,7 +160,6 @@ export function listRow(item: Row, consoleUrl: (buildId: string) => string): Row
     ["sha", item.commit],
     ["status", state],
     ["env", item.buildEnv],
-    ["channel", item.channel],
     ["version", item.version],
     ["branch", item.branch],
     ["message", item.message],
@@ -150,6 +169,9 @@ export function listRow(item: Row, consoleUrl: (buildId: string) => string): Row
     const v = text(value);
     if (v) out[key] = v;
   }
+
+  const pins = channelsOf(item);
+  if (pins) out.channels = pins;
 
   withTimes(out, item, active);
   if (text(item.deploymentId)) out.deploymentId = text(item.deploymentId);

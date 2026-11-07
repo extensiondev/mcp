@@ -370,4 +370,40 @@ describe("extension_builds answers one truth per build", () => {
     expect(fresh.value.lastPush.newerBuild).toBeUndefined();
     expect(fresh.hint).not.toContain("stale");
   });
+
+  it("ledger 465: relays the pins holding a build as channels and never answers a channel field", async () => {
+    body = { items: [{ ...ONE_STAMP, buildEnv: "production", channels: [{ channel: "stable", browsers: ["firefox"] }] }] };
+
+    const out = await list();
+    const row = out.value.builds[0];
+
+    expect(row.channels).toEqual([{ channel: "stable", browsers: ["firefox"] }]);
+    expect(row.env).toBe("production");
+    expect(row).not.toHaveProperty("channel");
+    expect(out.hint).toContain("held by stable for firefox");
+  });
+
+  it("ledger 465: an empty channels list says no pin holds the build", async () => {
+    body = { items: [{ ...ONE_STAMP, channels: [] }] };
+
+    const out = await list();
+
+    expect(out.value.builds[0].channels).toEqual([]);
+    expect(out.hint).toContain("held by no pin");
+  });
+
+  it("ledger 465: a row without channels answers neither channels nor channel, and a legacy channel is never a pin", async () => {
+    body = { items: [ONE_STAMP, TWO_STAMPS] };
+
+    const out = await list();
+
+    for (const row of out.value.builds) {
+      expect(row).not.toHaveProperty("channels");
+      expect(row).not.toHaveProperty("channel");
+    }
+
+    expect(out.value.builds[0].env).toBe("staging");
+    expect(out.hint).not.toContain("preview");
+    expect(out.hint).not.toContain("held by");
+  });
 });

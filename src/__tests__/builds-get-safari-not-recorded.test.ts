@@ -93,7 +93,7 @@ beforeEach(() => {
     [`${BUILD_ROUTE}/artifacts`]: { body: ALL.flatMap(artifactRows) },
     ...Object.fromEntries(ALL.map((name) => [`${BUILD_ROUTE}/integrity/${name}`, { body: PASSED }])),
     [`${PROJECT_ROUTE}/builds`]: {
-      body: { items: [{ buildId: SHA, commit: COMMIT, status: "success", buildEnv: "production", channel: "stable" }] },
+      body: { items: [{ buildId: SHA, commit: COMMIT, status: "success", buildEnv: "production", channel: "preview", channels: [{ channel: "stable", browsers: ["firefox"] }] }] },
     },
   };
 
@@ -183,23 +183,39 @@ describe("460: extension_builds get never sums a build with an unrecorded browse
     ]);
   });
 
-  it("surfaces env and channel from the build record when the record carries them, without reading the list", async () => {
+  it("ledger 465: surfaces env and the pins from the build record when the record carries them, without reading the list", async () => {
     if (process.platform === "win32") return;
 
-    routes[BUILD_ROUTE] = { body: detail(ALL.map((name) => recordRow(name)), { buildEnv: "staging", channel: "preview" }) };
+    routes[BUILD_ROUTE] = { body: detail(ALL.map((name) => recordRow(name)), { buildEnv: "staging", channels: [] }) };
     const out = await get();
 
-    expect(out.value.build).toMatchObject({ env: "staging", channel: "preview" });
+    expect(out.value.build).toMatchObject({ env: "staging", channels: [] });
+    expect(out.value.build).not.toHaveProperty("channel");
+    expect(out.hint).toContain("It is held by no pin.");
     expect(calls).not.toContain(`${PROJECT_ROUTE}/builds`);
   });
 
-  it("fills env and channel from the build's list row when the detail record carries neither", async () => {
+  it("ledger 465: fills env and the pins from the build's list row and never relays its legacy channel", async () => {
     if (process.platform === "win32") return;
 
     const out = await get();
 
-    expect(out.value.build).toMatchObject({ env: "production", channel: "stable" });
+    expect(out.value.build).toMatchObject({ env: "production", channels: [{ channel: "stable", browsers: ["firefox"] }] });
+    expect(out.value.build).not.toHaveProperty("channel");
+    expect(out.hint).toContain("It is held by stable for firefox.");
     expect(calls).toContain(`${PROJECT_ROUTE}/builds`);
+  });
+
+  it("ledger 465: answers neither channels nor channel when no source carries the pins", async () => {
+    if (process.platform === "win32") return;
+
+    routes[`${PROJECT_ROUTE}/builds`] = { body: { items: [{ buildId: SHA, commit: COMMIT, status: "success", buildEnv: "production", channel: "preview" }] } };
+    const out = await get();
+
+    expect(out.value.build.env).toBe("production");
+    expect(out.value.build).not.toHaveProperty("channels");
+    expect(out.value.build).not.toHaveProperty("channel");
+    expect(out.hint).not.toContain("held by");
   });
 
   it("keeps the every integrity check passed wording when all four browsers are recorded and passed", async () => {

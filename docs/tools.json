@@ -374,7 +374,7 @@
       "name": "extension_builds",
       "tier": "platform",
       "group": "platform",
-      "description": "Read, download, rebuild and configure the project's platform builds. Channels: extension_release_status. A rebuild spends build allowance; a push spends one only on the build branch when it changes the root directory ([skip build] pushes, docs-only and other branches spend nothing).",
+      "description": "Read, download, rebuild and configure platform builds. list/get rows: env is the build environment, channels the pins holding it now. A rebuild spends allowance; a push, only on the build branch when it changes the root directory ([skip build] pushes, docs-only, other branches spend nothing).",
       "gate": "the server started with --features=local,platform, and a login; a public channel audience needs a workspace owner's approval; delete-channel stays in the console",
       "samplePrompt": "Why did the last build fail? Show me the Firefox log",
       "readOnly": false,
@@ -406,7 +406,7 @@
           "name": "buildSettings",
           "type": "object",
           "required": false,
-          "description": "configure: what changes per browser, e.g. { firefox: { buildCommand: 'pnpm build' } }."
+          "description": "configure: per-browser changes, e.g. { firefox: { buildCommand: 'pnpm build' } }."
         },
         {
           "name": "approvalId",
@@ -418,13 +418,13 @@
           "name": "channel",
           "type": "string",
           "required": false,
-          "description": "Channel name, up to 40 characters."
+          "description": "Channel name, max 40 chars."
         },
         {
           "name": "description",
           "type": "string",
           "required": false,
-          "description": "Channel description, up to 200 characters."
+          "description": "Channel description, max 200 chars."
         },
         {
           "name": "color",

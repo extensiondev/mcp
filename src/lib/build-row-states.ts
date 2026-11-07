@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { buildState, isActiveState, isRow, text, type Row } from "./builds-list-row";
+import { buildState, channelsOf, isActiveState, isRow, text, type Row } from "./builds-list-row";
 
 const SIGNED_AT_SUBMIT = new Set(["safari"]);
 
@@ -89,9 +89,9 @@ export function runningClause(rows: Array<{ name: string; status: string }>): st
 export function envChannelOf(record: Row, listItem: Row | null): Row {
   const out: Row = {};
   const env = text(record.buildEnv) || text(record.env) || text(listItem?.buildEnv) || text(listItem?.env);
-  const channel = text(record.channel) || text(listItem?.channel);
+  const pins = channelsOf(record) ?? channelsOf(listItem);
   if (env) out.env = env;
-  if (channel) out.channel = channel;
+  if (pins) out.channels = pins;
 
   return out;
 }

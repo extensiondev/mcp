@@ -11,7 +11,7 @@ import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 import { WAIT_SECONDS_INPUT, WAIT_SECONDS_MAX, outcomeClock, stampNow } from "../lib/act-outcome";
 import { API_BASE } from "../lib/common-schema";
 import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
-import { buildName, buildNumberOf, buildState, isActiveState, isRow, text, type Row } from "../lib/builds-list-row";
+import { buildName, buildNumberOf, buildState, channelsOf, isActiveState, isRow, pinsWords, text, type Row } from "../lib/builds-list-row";
 import { browserFigures } from "../lib/build-browser-figures";
 import { unrecordedBrowsers, unrecordedRowReason } from "../lib/build-health";
 import { envChannelOf, listItemFor, rowNameOf, runningBrowsers, runningClause, runningReason, unrecordedClause, unrecordedRow } from "../lib/build-row-states";
@@ -42,7 +42,7 @@ const COMMAND = "extension_builds";
 export const schema = {
   name: COMMAND,
   description:
-    "Read, download, rebuild and configure the project's platform builds. Channels: extension_release_status. A rebuild spends build allowance; a push spends one only on the build branch when it changes the root directory ([skip build] pushes, docs-only and other branches spend nothing).",
+    "Read, download, rebuild and configure platform builds. list/get rows: env is the build environment, channels the pins holding it now. A rebuild spends allowance; a push, only on the build branch when it changes the root directory ([skip build] pushes, docs-only, other branches spend nothing).",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -66,7 +66,7 @@ export const schema = {
       buildSettings: {
         type: "object",
         description:
-          "configure: what changes per browser, e.g. { firefox: { buildCommand: 'pnpm build' } }.",
+          "configure: per-browser changes, e.g. { firefox: { buildCommand: 'pnpm build' } }.",
       },
       approvalId: {
         type: "string",
@@ -75,11 +75,11 @@ export const schema = {
       },
       channel: {
         type: "string",
-        description: "Channel name, up to 40 characters.",
+        description: "Channel name, max 40 chars.",
       },
       description: {
         type: "string",
-        description: "Channel description, up to 200 characters.",
+        description: "Channel description, max 200 chars.",
       },
       color: {
         type: "string",
@@ -271,7 +271,7 @@ async function getBuild(args: HandlerArgs): Promise<string> {
   const unfinished = isActiveState(state);
   const integrityRoute = (browser: string) => projectApiGet(opened.api, `${route}/integrity/${encodeURIComponent(browser)}`);
   const running = runningBrowsers(recordRows, unfinished, inScope);
-  const needsList = !text(detail.json.buildEnv) && !text(detail.json.env) && !text(detail.json.channel);
+  const needsList = (!text(detail.json.buildEnv) && !text(detail.json.env)) || !Array.isArray(detail.json.channels);
   const [usage, artifacts, recordedIntegrity, listed] = await Promise.all([
     projectApiGet<Row>(opened.api, `${route}/usage`),
     unfinished ? null : projectApiGet<unknown[]>(opened.api, `${route}/artifacts`),
@@ -339,6 +339,7 @@ async function getBuild(args: HandlerArgs): Promise<string> {
     ...stateClauses,
   ].filter(Boolean);
   const envChannel = envChannelOf(detail.json, listed?.ok ? listItemFor(listed.json, canonical) : null);
+  const pinned = pinsWords(channelsOf(envChannel));
   const waited = boundMs > 0 ? { seconds: Math.round((outcomeClock.now() - started) / 1000), settled: !unfinished } : null;
   const readAt = stampNow();
 
@@ -370,7 +371,7 @@ async function getBuild(args: HandlerArgs): Promise<string> {
           ? `; ${verdict.join("; ")}`
           : "; every integrity check passed"
         : ""
-    }.${failures ? ` ${failures.sentence}` : ""} Pass action:"logs" with this buildId for its log lines${
+    }.${pinned ? ` It is ${pinned}.` : ""}${failures ? ` ${failures.sentence}` : ""} Pass action:"logs" with this buildId for its log lines${
       artifactRows.some((row) => isRow(row) && row.download) ? `, or action:"${DOWNLOAD_ACTION}" with a browser to save its package to disk (artifacts[].download names the call)` : ""
     }.`,
     warnings: [

@@ -177,7 +177,6 @@ describe("extension_builds reads the platform's builds with the project's own to
       sha: BUILD_ROW.commit,
       status: "success",
       env: "production",
-      channel: "preview",
       browsers: ["chrome", "firefox"],
       timestamp: "2026-10-11T16:45:37Z",
       duration: "1m 6s",
@@ -185,6 +184,7 @@ describe("extension_builds reads the platform's builds with the project's own to
     });
 
     expect(out.value.builds[0].createdAt).toBeUndefined();
+    expect(out.value.builds[0]).not.toHaveProperty("channel");
 
     expect(out.value.builds[0].consoleUrl).toContain("/acme/widget/builds/603fc8a");
     expect(calls.every((call) => call.url.startsWith(API))).toBe(true);
