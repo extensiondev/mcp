@@ -8,7 +8,7 @@
 
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
-import { OUTCOME_POLL_MS, WAIT_SECONDS_INPUT, WAIT_SECONDS_MAX, outcomeClock, stampNow } from "../lib/act-outcome";
+import { WAIT_SECONDS_INPUT, WAIT_SECONDS_MAX, outcomeClock, stampNow } from "../lib/act-outcome";
 import { API_BASE } from "../lib/common-schema";
 import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
 import { buildName, buildNumberOf, buildState, isActiveState, isRow, text, type Row } from "../lib/builds-list-row";
@@ -31,6 +31,7 @@ import { configure } from "./builds-configure";
 import { createChannel } from "./builds-create-channel";
 import { CONFIGURE_CHANNEL, DELETE_CHANNEL, configureChannel, deleteChannelConsoleOnly } from "./builds-channel";
 import { DOWNLOAD_ACTION, download, type DownloadArgs } from "./builds-download";
+import { notRecordedYet, readBuildWaiting } from "./builds-get-wait";
 import { DEFAULT_LIMIT, MAX_LIMIT, listBuilds } from "./builds-list";
 import { buildFailures, readLogs } from "./builds-logs";
 import { rebuild } from "./builds-rebuild";
@@ -109,7 +110,7 @@ export const schema = {
       project: PROJECT_TOKEN_INPUT,
       waitSeconds: {
         ...WAIT_SECONDS_INPUT,
-        description: `${WAIT_SECONDS_INPUT.description} get waits for the build to settle.`,
+        description: `${WAIT_SECONDS_INPUT.description} get waits for a push's verdict.`,
       },
       api: API_BASE,
     },
@@ -244,13 +245,11 @@ async function getBuild(args: HandlerArgs): Promise<string> {
 
   const route = `builds/${encodeURIComponent(buildId)}`;
   const boundMs = getWaitBoundMs(args.waitSeconds);
-  const started = outcomeClock.now();
-  const settled = (build: Row) => !isActiveState(buildState(build.status, build.conclusion));
-  let detail = await projectApiGet<Row>(opened.api, route);
+  const waitedRead = await readBuildWaiting(opened.api, buildId, boundMs);
+  const { detail, started } = waitedRead;
 
-  while (detail.ok && !settled(detail.json) && outcomeClock.now() - started < boundMs) {
-    await outcomeClock.sleep(Math.min(OUTCOME_POLL_MS, Math.max(0, boundMs - (outcomeClock.now() - started))));
-    detail = await projectApiGet<Row>(opened.api, route);
+  if (waitedRead.naming) {
+    return notRecordedYet(COMMAND, buildId, waitedRead, boundMs, consoleProjectUrl(opened.api.ref, ConsoleProjectPage.builds, args.api));
   }
 
   if (!detail.ok) {

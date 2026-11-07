@@ -346,6 +346,62 @@ describe("extension_builds reads the platform's builds with the project's own to
     }
   });
 
+  it("keeps waiting through a 404 while lastPush names the sha, then answers the verdict once the record appears", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+
+    const route = `/api/projects/${PROJECT_ID}/builds/603fc8a`;
+    const listRoute = `/api/projects/${PROJECT_ID}/builds`;
+    routes[route] = { body: { message: "Build not found" }, status: 404 };
+    routes[listRoute] = { body: { items: [], lastPush: { commit: BUILD_ROW.commit, outcome: "DISPATCHED", dispatched: true } } };
+
+    const sleep = outcomeClock.sleep;
+    let slept = 0;
+
+    outcomeClock.sleep = async () => {
+      slept += 1;
+      routes[route] = { body: slept === 1 ? { ...DETAIL, status: "building" } : DETAIL };
+    };
+
+    try {
+      const out = JSON.parse(await builds({ action: "get", buildId: "603fc8a", waitSeconds: 240, api: API }));
+
+      expect(slept).toBe(2);
+      expect(out.value.build.status).toBe("success");
+      expect(out.value.waited).toMatchObject({ settled: true });
+      expect(calls.filter((call) => new URL(call.url).pathname === listRoute).length).toBeLessThanOrEqual(2);
+    } finally {
+      outcomeClock.sleep = sleep;
+    }
+  });
+
+  it("answers not-recorded-yet naming the push when the wait bound ends before the record appears", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+    routes[`/api/projects/${PROJECT_ID}/builds/603fc8a`] = { body: { message: "Build not found" }, status: 404 };
+    routes[`/api/projects/${PROJECT_ID}/builds`] = { body: { items: [], lastPush: { commit: BUILD_ROW.commit, outcome: "DISPATCHED", receivedAt: "2026-11-06T12:00:00Z" } } };
+
+    const { sleep, now } = outcomeClock;
+    let clock = 0;
+
+    outcomeClock.now = () => clock;
+    outcomeClock.sleep = async (ms: number) => void (clock += ms);
+
+    try {
+      const out = JSON.parse(await builds({ action: "get", buildId: "603fc8a", waitSeconds: 20, api: API }));
+
+      expect(out.status).toBe("not-recorded-yet");
+      expect(out.value.lastPush).toMatchObject({ commit: BUILD_ROW.commit, outcome: "DISPATCHED" });
+      expect(out.value.waited).toEqual({ seconds: 20, settled: false });
+      expect(out.hint).toContain("DISPATCHED");
+    } finally {
+      outcomeClock.sleep = sleep;
+      outcomeClock.now = now;
+    }
+  });
+
   it("reads the logs of one browser, keeping the tail of a long log and saying it cut it", async () => {
     if (process.platform === "win32") return;
 
@@ -376,16 +432,29 @@ describe("extension_builds reads the platform's builds with the project's own to
     expect(calls).toHaveLength(0);
   });
 
-  it("says a build the platform does not know is not found", async () => {
+  it("says a build neither lastPush nor the list names is not found at once, even with waitSeconds", async () => {
     if (process.platform === "win32") return;
 
     login();
     routes[`/api/projects/${PROJECT_ID}/builds/deadbee`] = { body: { message: "Build not found" }, status: 404 };
+    routes[`/api/projects/${PROJECT_ID}/builds`] = { body: { items: [BUILD_ROW], lastPush: { commit: BUILD_ROW.commit, outcome: "DISPATCHED" } } };
 
-    const out = JSON.parse(await builds({ action: "get", buildId: "deadbee", api: API }));
+    const sleep = outcomeClock.sleep;
+    let slept = 0;
 
-    expect(out.ok).toBe(false);
-    expect(out.error.code).toBe("E_BUILD_NOT_FOUND");
+    outcomeClock.sleep = async () => {
+      slept += 1;
+    };
+
+    try {
+      const out = JSON.parse(await builds({ action: "get", buildId: "deadbee", waitSeconds: 240, api: API }));
+
+      expect(slept).toBe(0);
+      expect(out.ok).toBe(false);
+      expect(out.error.code).toBe("E_BUILD_NOT_FOUND");
+    } finally {
+      outcomeClock.sleep = sleep;
+    }
   });
 
   it("answers the platform hold with the hold envelope, not a generic failure", async () => {

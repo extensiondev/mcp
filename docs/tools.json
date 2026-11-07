@@ -472,7 +472,7 @@
           "name": "waitSeconds",
           "type": "number",
           "required": false,
-          "description": "Seconds to wait for the result, 0 to 600 (default 180), and with approvalId for the approval. get waits for the build to settle."
+          "description": "Seconds to wait for the result, 0 to 600 (default 180), and with approvalId for the approval. get waits for a push's verdict."
         },
         {
           "name": "api",
