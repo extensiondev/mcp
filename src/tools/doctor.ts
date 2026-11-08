@@ -50,8 +50,20 @@ import {
   productionSessionChecks,
   spliceProductionLegs,
 } from "../lib/doctor-production";
+import { readLastServerExit, serverLogPath, type LastServerExit } from "../lib/server-crash-log";
 
 import type { ReadyContract } from "../lib/types";
+
+function serverLogRead(): { path: string; lastExit: LastServerExit | null } {
+  return { path: serverLogPath(), lastExit: readLastServerExit() };
+}
+
+function lastExitSentence(serverLog: { path: string; lastExit: LastServerExit | null }): string {
+  const last = serverLog.lastExit;
+  if (!last) return "";
+
+  return ` The previous server (pid ${last.pid}, ${last.version}) ended at ${last.at}: ${last.reason} Its record is in ${serverLog.path}.`;
+}
 
 function readContractForDiagnosis(
   projectPath: string,
@@ -184,13 +196,14 @@ async function environmentPreflight(): Promise<string> {
   }
 
   const healthy = checks.every((c) => c.status !== "fail");
+  const serverLog = serverLogRead();
 
   return envelope({
     ok: healthy,
     command: schema.name,
     status: healthy ? "healthy" : "unhealthy",
-    value: { mode: "environment", checks },
-    hint: "Pass projectPath to diagnose a live session (extension_dev or extension_start) end-to-end.",
+    value: { mode: "environment", checks, serverLog },
+    hint: `Pass projectPath to diagnose a live session (extension_dev or extension_start) end-to-end.${lastExitSentence(serverLog)}`,
   });
 }
 
@@ -564,6 +577,7 @@ export async function handler(args: {
         ...(capabilitiesRead.capabilities
           ? {}
           : { capabilitiesReason: capabilitiesRead.reason }),
+        serverLog: serverLogRead(),
       },
       ...(wording
         ? { hint: wording.hint }

@@ -19,6 +19,7 @@ import { bindApprovalProject } from "./approval-record";
 import { withAnsweredProject, withApprovalLogin } from "./approval-scope";
 import { withCallWaits } from "./call-waits";
 import { envelope } from "./envelope";
+import { crashAnswerFields, watchCall } from "./server-crash-log";
 import { resolveApiBase } from "./login-flow";
 import {
   TOOL_POLICY,
@@ -328,7 +329,7 @@ export function createToolSurface(setup: ToolHandlerOptions): {
     if ("refused" in login) return refusedAct(login.refused, normalizedArgs);
 
     try {
-      const result = await withCallApi(normalizedArgs.api, () =>
+      const result = await watchCall(name, () => withCallApi(normalizedArgs.api, () =>
         withApprovalLogin(login.login, () =>
         run(
           async () => {
@@ -352,7 +353,7 @@ export function createToolSurface(setup: ToolHandlerOptions): {
           normalizedArgs,
         ),
         ),
-      );
+      ));
 
       return toolResultFrame(held ? markStaleLocal(result, stamp.stamp(), held) : stamp.brand(result), untrusted);
     } catch (err) {
@@ -367,6 +368,7 @@ export function createToolSurface(setup: ToolHandlerOptions): {
               name: err instanceof Error ? err.name : "Error",
               message: err instanceof Error ? err.message : String(err),
             },
+            ...(crashAnswerFields(err) ?? {}),
           }),
         ),
         untrusted,

@@ -67,6 +67,7 @@ import { provideRebuiltDispatch, provideRebuiltList, type BuildImporter } from "
 import { type ServerStampReader } from "./lib/server-stamp";
 import { createToolDispatcher, installToolHandlers, listedTools, type ToolModule } from "./lib/tool-dispatch";
 import { isProjectRef } from "./lib/credentials";
+import { installCrashGuard } from "./lib/server-crash-guard";
 
 import { version } from "../package.json";
 
@@ -251,6 +252,7 @@ export async function startServer(
     ...(setup.importBuild ? { importBuild: setup.importBuild } : {}),
   });
   watchClientRoots(server);
+  installCrashGuard({ version, server });
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
