@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 10.22.0
 
 - Ledger 472. An approval requested under a project's new name by a login whose token still claims the old slug is recorded for the project the call was answered for, with the `prj_` id of that project's stored login, when that login is the one whose token minted it, instead of the claims' old slug with no id. The retry under the new name with `approvalId` is no longer refused as `ApprovalOtherProject`: a named project whose stored login is the login that minted the approval is the same project, so records already written under the old slug are accepted too (`src/lib/approval-record.ts`).
 - Ledger 368. The MCP's bundled engine moves from Extension.js 4.1.36 to 4.1.39 (`extension-create`, `extension-develop` and `extension-install`), whose Firefox dev session turns ready only once it knows its debugger port, with `rdpPort` or with `rdpPortError` naming why Firefox opened none. `extension_wait` therefore answers its ports from the ready contract as read, with no 3 s re-read of ready.json for a late `rdpPort`. A Gecko contract that carries `rdpPortError` answers `debugPortNote` with the engine's own reason and says the debugger tools have nothing to connect to on that run, and one with neither field says it comes from an engine older than 4.1.39 (naming its `toolchainVersion`), which stamps `rdpPort` after ready, and that moving the project's extension dependency to 4.1.39 or later makes ready carry it.
