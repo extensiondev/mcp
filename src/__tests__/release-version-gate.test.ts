@@ -91,6 +91,54 @@ describe("the release rails fail closed", () => {
     expect(timeout * 60).toBeGreaterThan(attempts * seconds);
   });
 
+  it("tags the commit npm published on a resumed release and names what main gained since", () => {
+    const yml = read(".github/workflows/release.yml");
+    const resolveAt = yml.indexOf("name: Check out the commit npm published");
+    expect(resolveAt).toBeGreaterThan(yml.indexOf("name: Check published version"));
+    expect(resolveAt).toBeLessThan(yml.indexOf("name: Update package version"));
+    expect(resolveAt).toBeLessThan(yml.indexOf("name: Extract release notes from CHANGELOG.md"));
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-release-commit-"));
+    const bin = path.join(dir, "bin");
+    fs.mkdirSync(bin);
+    fs.writeFileSync(path.join(bin, "npm"), "#!/bin/sh\n[ -n \"$FAKE_GITHEAD\" ] && echo \"$FAKE_GITHEAD\"\nexit 0\n", { mode: 0o755 });
+    const git = (...args: string[]) =>
+      spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], { cwd: dir, encoding: "utf8" }).stdout.trim();
+    const script = fileURLToPath(new URL("../../scripts/release-commit.sh", import.meta.url));
+    const run = (env: Record<string, string>) =>
+      spawnSync(script, [], {
+        cwd: dir,
+        encoding: "utf8",
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, PKG: "@x/y", VERSION: "1.0.0", MAIN_REF: "main", GITHUB_OUTPUT: "", GITHUB_STEP_SUMMARY: "", RELEASE_COMMIT: "", FAKE_GITHEAD: "", ...env },
+      });
+
+    try {
+      git("init", "-q", "-b", "main");
+      git("commit", "-q", "--allow-empty", "-m", "Built into the tarball");
+      const built = git("rev-parse", "HEAD");
+      git("commit", "-q", "--allow-empty", "-m", "Landed after staging");
+      const later = git("rev-parse", "--short", "HEAD");
+
+      const fromGitHead = run({ FAKE_GITHEAD: built });
+      expect(fromGitHead.status, fromGitHead.stderr).toBe(0);
+      expect(fromGitHead.stdout).toContain(`commit=${built}`);
+      expect(fromGitHead.stdout).toContain(`${later} Landed after staging`);
+
+      expect(run({ RELEASE_COMMIT: built }).stdout).toContain(`commit=${built}`);
+
+      const neither = run({});
+      expect(neither.status).not.toBe(0);
+      expect(neither.stderr).toMatch(/release_commit/);
+      expect(neither.stderr).toMatch(/gitHead/);
+
+      const disagree = run({ FAKE_GITHEAD: built, RELEASE_COMMIT: later });
+      expect(disagree.status).not.toBe(0);
+      expect(disagree.stderr).toMatch(/different commits/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("fails the README width step when nothing was replaced", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-readme-width-"));
     const readme = path.join(dir, "README.md");

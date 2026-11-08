@@ -12,6 +12,10 @@ on:
         description: Exact version. Plain semver for stable (for example 0.1.1); a -canary.* version or empty for an automatic canary version.
         required: false
         type: string
+      release_commit:
+        description: Only for a stable rerun after a version was staged and approved by hand. The commit its tarball was built from, as scripts/stage-release.sh printed it; empty reads the gitHead npm recorded.
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -98,6 +102,56 @@ jobs:
             echo "dist_tag=latest"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Read package metadata
+        id: meta
+        shell: bash
+        run: |
+          echo "name=$(node -p 'require("./package.json").name')" >> "$GITHUB_OUTPUT"
+          echo "publish_access=$(node -p 'require("./package.json").publishConfig?.access || "public"')" >> "$GITHUB_OUTPUT"
+
+      # npm view answers E404 for a version that is not on the registry and
+      # anything else (network, auth, a 5xx) for a read that did not happen;
+      # only the first means "not published yet". A version that IS published
+      # while its tag is absent is the stranded shape a failed push leaves
+      # behind, and the rerun finishes the tag instead of refusing.
+      - name: Check published version
+        id: published
+        shell: bash
+        env:
+          RELEASE_COMMIT: ${{ inputs.release_commit }}
+        run: |
+          PKG="${{ steps.meta.outputs.name }}"
+          VER="${{ steps.validate.outputs.version }}"
+          set +e
+          OUT="$(npm view "$PKG@$VER" version --registry https://registry.npmjs.org/ 2>&1)"
+          STATUS=$?
+          set -e
+          if [ "$STATUS" -eq 0 ]; then
+            echo "$PKG@$VER is already on npm and its tag is absent: the publish went through on an earlier run and the push did not; this run tags and releases it without publishing again"
+            echo "already=true" >> "$GITHUB_OUTPUT"
+          elif echo "$OUT" | grep -q "E404"; then
+            if [ -n "$(echo "$RELEASE_COMMIT" | xargs)" ]; then
+              echo "release_commit is only for a rerun after $PKG@$VER was staged and approved by hand, and npm does not have $VER; run again without it to publish from main" >&2
+              exit 1
+            fi
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Could not read the registry for $PKG@$VER (exit $STATUS): $OUT" >&2
+            exit 1
+          fi
+
+      - name: Check out the commit npm published
+        if: inputs.channel == 'stable' && steps.published.outputs.already == 'true'
+        id: source
+        shell: bash
+        env:
+          PKG: ${{ steps.meta.outputs.name }}
+          VERSION: ${{ steps.validate.outputs.version }}
+          RELEASE_COMMIT: ${{ inputs.release_commit }}
+        run: |
+          ./scripts/release-commit.sh
+          git checkout --detach "$(sed -n 's/^commit=//p' "$GITHUB_OUTPUT" | tail -n 1)"
+
       - name: Extract release notes from CHANGELOG.md
         if: inputs.channel == 'stable'
         id: notes
@@ -119,64 +173,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      - name: Read package metadata
-        id: meta
-        shell: bash
-        run: |
-          echo "name=$(node -p 'require("./package.json").name')" >> "$GITHUB_OUTPUT"
-          echo "publish_access=$(node -p 'require("./package.json").publishConfig?.access || "public"')" >> "$GITHUB_OUTPUT"
-
-      # npm view answers E404 for a version that is not on the registry and
-      # anything else (network, auth, a 5xx) for a read that did not happen;
-      # only the first means "not published yet". A version that IS published
-      # while its tag is absent is the stranded shape a failed push leaves
-      # behind, and the rerun finishes the tag instead of refusing.
-      - name: Check published version
-        id: published
-        shell: bash
-        run: |
-          PKG="${{ steps.meta.outputs.name }}"
-          VER="${{ steps.validate.outputs.version }}"
-          set +e
-          OUT="$(npm view "$PKG@$VER" version --registry https://registry.npmjs.org/ 2>&1)"
-          STATUS=$?
-          set -e
-          if [ "$STATUS" -eq 0 ]; then
-            echo "$PKG@$VER is already on npm and its tag is absent: the publish went through on an earlier run and the push did not; this run tags and releases it without publishing again"
-            echo "already=true" >> "$GITHUB_OUTPUT"
-          elif echo "$OUT" | grep -q "E404"; then
-            echo "already=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "Could not read the registry for $PKG@$VER (exit $STATUS): $OUT" >&2
-            exit 1
-          fi
-
       # The version bump must precede the build: rslib inlines package.json
       # into dist, and publish runs with --ignore-scripts, so a post-build
       # bump ships a server that reports the previous release's version.
       - name: Update package version
         env:
           VERSION: ${{ steps.validate.outputs.version }}
-        run: |
-          node -e "
-            const fs = require('fs');
-            const v = process.env.VERSION;
-            const write = (p, mutate) => {
-              if (!fs.existsSync(p)) return;
-              const j = JSON.parse(fs.readFileSync(p, 'utf8'));
-              mutate(j);
-              fs.writeFileSync(p, JSON.stringify(j, null, 2) + '\n');
-            };
-            write('package.json', (j) => { j.version = v; });
-            write('server.json', (j) => {
-              j.version = v;
-              for (const pkg of j.packages || []) pkg.version = v;
-            });
-            write('.claude-plugin/plugin.json', (j) => { j.version = v; });
-            write('.claude-plugin/marketplace.json', (j) => {
-              for (const p of j.plugins || []) p.version = v;
-            });
-          "
+        run: node scripts/set-release-version.mjs "$VERSION"
 
       # docs/tools.json and docs/clients.json carry the package version and
       # the suite asserts the files on disk are the current rendering, so the
@@ -261,11 +264,12 @@ jobs:
           VERSION: ${{ steps.validate.outputs.version }}
           DIST_TAG: ${{ steps.validate.outputs.dist_tag }}
         run: |
-          NEXT="nothing else is needed for a canary"
+          BUILT_FROM="$(git rev-parse HEAD)"
           if [ "$CHANNEL" = "stable" ]; then
-            NEXT="then run this workflow again with the same inputs: it sees the version on npm, skips the publish, and commits, tags, releases and lists it. Do not bump, tag or push the release by hand: the rerun refuses an existing tag, and a hand bump leaves server.json, the GitHub release and the MCP registry listing behind (10.15.0 to 10.18.1)"
+            echo "::error::npm refused the trusted publish. While npm/cli#9969 is open, stage $VERSION from a clean checkout of $BUILT_FROM, the commit this run built from: git checkout $BUILT_FROM && scripts/stage-release.sh $VERSION (it bumps, builds, writes gitHead $BUILT_FROM and stages with --provenance=false), then npm stage approve with a one-time code. Then run this workflow again with the same inputs and release_commit $BUILT_FROM: it sees the version on npm, skips the publish, and commits, tags, releases and lists that commit, naming in its summary any commit main gained since. Do not bump, tag or push the release by hand: the rerun refuses an existing tag, and a hand bump leaves server.json, the GitHub release and the MCP registry listing behind (10.15.0 to 10.18.1)."
+          else
+            echo "::error::npm refused the trusted publish. While npm/cli#9969 is open, publish $VERSION from a machine (npm stage publish with --provenance=false --tag $DIST_TAG, then npm stage approve with a one-time code); nothing else is needed for a canary."
           fi
-          echo "::error::npm refused the trusted publish. While npm/cli#9969 is open, publish $VERSION from a machine (npm stage publish with --provenance=false --tag $DIST_TAG, then npm stage approve with a one-time code); $NEXT."
 
       # The tag and the bump are pushed only once npm serves the tarball: a
       # publish that fails after the push left vX.Y.Z tagged and main bumped
@@ -275,14 +279,28 @@ jobs:
         env:
           VERSION: ${{ steps.validate.outputs.version }}
           TAG: ${{ steps.validate.outputs.tag }}
+          MAIN_MOVED: ${{ steps.source.outputs.main_moved }}
         run: |
-          git add package.json pnpm-lock.yaml server.json .claude-plugin docs/tools.json docs/clients.json
+          git add package.json pnpm-lock.yaml server.json .claude-plugin docs/tools.json docs/clients.json docs/store-md-fields.json
           if ! git diff --cached --quiet; then
             git commit -m "Release v$VERSION"
           fi
           git tag -a "$TAG" --cleanup=whitespace -F "${{ steps.notes.outputs.file }}"
-          git push
-          git push origin "$TAG"
+          if [ "$MAIN_MOVED" = "true" ]; then
+            git push origin "$TAG"
+            git fetch origin main
+            git checkout --detach origin/main
+            node scripts/set-release-version.mjs "$VERSION"
+            git add package.json server.json .claude-plugin docs/tools.json docs/clients.json docs/store-md-fields.json
+            if ! git diff --cached --quiet; then
+              git commit -m "Release v$VERSION"
+            fi
+            git push origin HEAD:refs/heads/main
+            echo "main moved past the published commit: $TAG is cut there, and main's own Release v$VERSION commit carries the version bump" >> "$GITHUB_STEP_SUMMARY"
+          else
+            git push origin HEAD:refs/heads/main
+            git push origin "$TAG"
+          fi
 
       - name: Create GitHub release
         if: inputs.channel == 'stable'
