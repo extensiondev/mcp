@@ -14,7 +14,7 @@ import { envelope } from "../lib/envelope";
 import { noSessionEnvelope } from "../lib/production-receipt";
 import { ambiguousSessionRefusal, resolveSessionBrowser } from "../lib/session-browser";
 import { isChromiumFamily, isGeckoFamily, WEBKIT_FAMILY } from "../lib/browser-family";
-import { CDP_PORT_MISSING_HINT, RDP_PORT_MISSING_HINT, resolveCdpPort, resolveRdpPort } from "../lib/cdp-port";
+import { CDP_PORT_MISSING_HINT, rdpPortMissingHint, resolveCdpPort, resolveRdpPort } from "../lib/cdp-port";
 import { listDocumentTargets, listPageTargets, matchTargetsByUrl, type PageTarget } from "../lib/cdp-targets";
 import { readExtensionPageTargets } from "../lib/cdp-extension-page";
 import { rdpListTabs, type RdpTab } from "../lib/rdp";
@@ -524,7 +524,7 @@ async function onChromium(args: Args, browser: string, context: string, timeoutM
 
 async function onGecko(args: Args, browser: string, context: string, timeoutMs: number): Promise<string> {
   const resolved = await resolveRdpPort(args.projectPath, browser, { waitMs: Math.min(timeoutMs, 5_000), graceMs: 1_000 });
-  if (!resolved) return refuse("no-session", "E_NO_SESSION", `No live ${browser} session with a debugger server (RDP) for this project, so there is no browser to ask for pixels. Start extension_dev and extension_wait for ready.`, RDP_PORT_MISSING_HINT);
+  if (!resolved?.port) return refuse("no-session", "E_NO_SESSION", `No live ${browser} session with a debugger server (RDP) for this project, so there is no browser to ask for pixels. Start extension_dev and extension_wait for ready.`, rdpPortMissingHint(resolved));
 
   let tabs: RdpTab[];
 

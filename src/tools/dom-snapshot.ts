@@ -29,7 +29,7 @@ import {
   resolveCdpPort,
   resolveRdpPort,
   CDP_PORT_MISSING_HINT,
-  RDP_PORT_MISSING_HINT,
+  rdpPortMissingHint,
 } from "../lib/cdp-port";
 import {
   listDocumentTargets,
@@ -214,7 +214,7 @@ async function snapshotExtensionPageOverProtocol(
     graceMs: target.extensionDocument ? 1_000 : 500,
   });
 
-  if (!resolved) {
+  if (!resolved?.port) {
     const production = target.extensionDocument ? productionSessionCommand(args.projectPath, browser) : null;
 
     return production ? extensionPageUnreachable(schema.name, browser, production, target.label) : null;
@@ -332,12 +332,12 @@ async function snapshotByTargetId(
   if (isGeckoFamily(browser)) {
     const resolved = await resolveRdpPort(args.projectPath, browser);
 
-    if (!resolved) {
+    if (!resolved?.port) {
       return envelope({
         ok: false,
         command: schema.name,
         status: "no-session",
-        error: { code: "E_NO_SESSION", name: "NoSession", message: `No active dev session with a Firefox debugger server (RDP) for ${browser}, so targetId has no browser to ask. ${RDP_PORT_MISSING_HINT}` },
+        error: { code: "E_NO_SESSION", name: "NoSession", message: `No active dev session with a Firefox debugger server (RDP) for ${browser}, so targetId has no browser to ask. ${rdpPortMissingHint(resolved)}` },
       });
     }
 
@@ -445,7 +445,7 @@ export async function handler(
     if (isGeckoFamily(browser)) {
       const resolved = await resolveRdpPort(args.projectPath, browser);
 
-      if (!resolved) {
+      if (!resolved?.port) {
         return envelope({
           ok: false,
           command: schema.name,
@@ -453,7 +453,7 @@ export async function handler(
           error: {
             code: "E_NO_SESSION",
             name: "NoSession",
-            message: `No active dev session with a Firefox debugger server (RDP) for ${browser}, so listTargets has no browser to ask. Start extension_dev and extension_wait for ready. ${RDP_PORT_MISSING_HINT}`,
+            message: `No active dev session with a Firefox debugger server (RDP) for ${browser}, so listTargets has no browser to ask. Start extension_dev and extension_wait for ready. ${rdpPortMissingHint(resolved)}`,
           },
         });
       }

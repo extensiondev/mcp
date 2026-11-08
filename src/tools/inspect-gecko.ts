@@ -9,7 +9,8 @@
 import { runActVerb } from "../lib/act";
 import { envelope } from "../lib/envelope";
 import { listBridgeTabs, navigateToUrlViaBridge } from "../lib/bridge-tabs";
-import { resolveRdpPort } from "../lib/cdp-port";
+import { rdpPortMissingHint, resolveRdpPort } from "../lib/cdp-port";
+import { RDP_READY_FLOOR } from "../lib/rdp-port-notes";
 import {
   probeSelectorsScript,
   PAGE_HTML_SCRIPT,
@@ -231,13 +232,13 @@ async function collectGeckoConsole(
   result: Record<string, unknown>,
   notes: string[],
 ): Promise<void> {
-  const fallbackNote = `Console capture on ${browser} rides the RDP watcher replay and needs a session whose ready contract publishes rdpPort (extension.js 4.0.15+); extension_logs streams the extension's own console either way.`;
+  const fallbackNote = `Console capture on ${browser} rides the RDP watcher replay and needs a session whose ready contract publishes rdpPort (Extension.js ${RDP_READY_FLOOR} or later carries it at ready); extension_logs streams the extension's own console either way.`;
   const resolved = await resolveRdpPort(args.projectPath, browser, {
     waitMs: 5_000,
   });
 
-  if (!resolved) {
-    notes.push(fallbackNote);
+  if (!resolved?.port) {
+    notes.push(resolved ? `Console capture over RDP did not run: ${rdpPortMissingHint(resolved)}` : fallbackNote);
 
     return;
   }
@@ -264,7 +265,7 @@ async function readTabByTargetId(
 ): Promise<{ value: unknown; target: TargetRef } | string> {
   const resolved = await resolveRdpPort(projectPath, browser, { waitMs: 3_000 });
 
-  if (!resolved) {
+  if (!resolved?.port) {
     return envelope({
       ok: false,
       command: TOOL,
@@ -274,6 +275,7 @@ async function readTabByTargetId(
         name: "NoSession",
         message: `No live ${browser} session with a debugger server (RDP) for this project, so targetId has no browser to ask. Start extension_dev and extension_wait for ready.`,
       },
+      ...(resolved ? { hint: rdpPortMissingHint(resolved) } : {}),
     });
   }
 

@@ -167,6 +167,23 @@ describe("extension_open surface action on Firefox and the user gesture its list
     expect(warnings).toContain("did not run");
   }, 20_000);
 
+  it("answers the engine's rdpPortError and the next step at once when Firefox opened no debug port", async () => {
+    const dir = project(MV2);
+    const ready = readyContractPath(dir, "firefox");
+    fs.mkdirSync(path.dirname(ready), { recursive: true });
+    fs.writeFileSync(ready, JSON.stringify(attachedDevContract("firefox", { cdpPort: undefined, pid: process.pid, rdpPortError: "Firefox did not open its remote debugging port 6000 within 30000ms" })));
+    engineOpen = replayedWithoutGesture;
+
+    const started = Date.now();
+    const result = JSON.parse(await open.handler({ projectPath: dir, browser: "firefox", surface: "action", timeout: 15000 }));
+    const warnings = result.warnings.join("\n");
+
+    expect(Date.now() - started).toBeLessThan(3_000);
+    expect(warnings).toContain("the engine says Firefox did not open its remote debugging port 6000 within 30000ms");
+    expect(warnings).toContain("extension_logs shows the launcher's last lines, and extension_dev with replace: true starts a new session");
+    expect(warnings).not.toContain("records no debugger (RDP) port");
+  }, 20_000);
+
   it("still names the missing gesture on a build without a sidebar_action, and leaves the engine's replay in place", async () => {
     const fake = await firefox();
     const { sidebar_action: _drop, ...plain } = MV2;

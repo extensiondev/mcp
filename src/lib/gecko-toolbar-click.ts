@@ -8,7 +8,7 @@
 
 import fs from "node:fs";
 
-import { resolveRdpPort } from "./cdp-port";
+import { rdpPortMissingReason, resolveRdpPort } from "./cdp-port";
 import { envelope } from "./envelope";
 import { ADDON_UNNAMED, addonPolicyExpression, geckoAddonIdentity, type GeckoAddonIdentity } from "./gecko-sidebar";
 import { manifestCandidates } from "./project-manifest";
@@ -83,7 +83,7 @@ export async function replayToolbarClick(
   timeout?: number,
 ): Promise<string | null> {
   const resolved = await resolveRdpPort(projectPath, browser, { waitMs: 3_000, graceMs: 1_000 });
-  if (!resolved) return "the session's ready contract records no debugger (RDP) port";
+  if (!resolved?.port) return rdpPortMissingReason(resolved);
 
   const identity = await geckoAddonIdentity(projectPath, browser, timeout);
   if (!identity) return ADDON_UNNAMED;

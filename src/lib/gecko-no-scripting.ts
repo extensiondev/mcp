@@ -10,7 +10,7 @@ import fs from "node:fs";
 
 import { listBridgeTabs } from "./bridge-tab-list";
 import { isGeckoFamily } from "./browser-family";
-import { resolveRdpPort } from "./cdp-port";
+import { rdpPortMissingHint, resolveRdpPort, type RdpPortAnswer } from "./cdp-port";
 import { envelope } from "./envelope";
 import { productionSessionCommand } from "./extension-surfaces";
 import { matchPatternCovers } from "./match-patterns";
@@ -150,7 +150,7 @@ export function contentWorldUnreachable(tool: string, projectPath: string, brows
   });
 }
 
-export function noDebuggerForTab(tool: string, projectPath: string, browser: string, what: string): string {
+export function noDebuggerForTab(tool: string, projectPath: string, browser: string, what: string, miss: RdpPortAnswer = null): string {
   return envelope({
     ok: false,
     command: tool,
@@ -160,7 +160,9 @@ export function noDebuggerForTab(tool: string, projectPath: string, browser: str
       name: "PageUnreachable",
       message: `${what} was not read: ${noScriptingReason(projectPath, browser)}, and this session's contract records no debugger (RDP) port to read the tab over instead.`,
     },
-    hint: `Run extension_dev with browser: "${browser}" to read web pages on Firefox, or restart this session and confirm it with extension_wait so its contract publishes the debugger port.`,
+    hint: miss?.port === null
+      ? rdpPortMissingHint(miss)
+      : `Run extension_dev with browser: "${browser}" to read web pages on Firefox, or restart this session and confirm it with extension_wait so its contract publishes the debugger port.`,
   });
 }
 
@@ -178,7 +180,7 @@ export async function readGeckoTabWithoutScripting(
   if ("error" in pick) return pick;
 
   const resolved = await resolveRdpPort(args.projectPath, browser, { waitMs: 3_000, graceMs: 1_000 });
-  if (!resolved) return { error: noDebuggerForTab(tool, args.projectPath, browser, pick.label) };
+  if (!resolved?.port) return { error: noDebuggerForTab(tool, args.projectPath, browser, pick.label, resolved) };
 
   let outcome: Awaited<ReturnType<typeof rdpEvaluateInTab>>;
 

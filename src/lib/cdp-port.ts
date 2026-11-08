@@ -12,6 +12,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { noteCallWait } from "./call-waits";
 import { readyContractPath } from "./session-paths";
 import { pidState } from "./process-identity";
+import { rdpPortErrorReason } from "./rdp-port-notes";
 import { landingRun, type LandingRun } from "./start-landing";
 
 import type { ReadyContract } from "./types";
@@ -25,6 +26,10 @@ export interface PortWaitOptions {
 type PortField = "cdpPort" | "rdpPort";
 
 type PortContract = ReadyContract & { cdpPort?: number; rdpPort?: number; pid?: number };
+
+export type RdpPortMiss = { port: null; rdpPortError: string };
+
+export type RdpPortAnswer = { port: number; source: "contract" } | RdpPortMiss | null;
 
 function readContract(readyPath: string): PortContract | null {
   try {
@@ -46,7 +51,7 @@ async function resolveContractPort(
   field: PortField,
   options: PortWaitOptions | undefined,
   landingAllowed: boolean,
-): Promise<{ port: number | null; contractSeen: boolean }> {
+): Promise<{ port: number | null; contractSeen: boolean; portError?: string }> {
   const waitMs = options?.waitMs ?? 20_000;
   const graceMs = options?.graceMs ?? 2_500;
   const landingWaitMs = landingAllowed ? Math.max(options?.timeoutMs ?? waitMs, 0) : 0;
@@ -73,6 +78,9 @@ async function resolveContractPort(
 
         return { port: contract[field] as number, contractSeen };
       }
+
+      const portError = field === "rdpPort" && !engineGone ? rdpPortErrorReason(contract.rdpPortError) : "";
+      if (portError) return { port: null, contractSeen, portError };
 
       landing = landingWaitMs > 0 ? landingRun(projectPath, browser, now) : null;
       if (engineGone && !landing) return { port: null, contractSeen };
@@ -114,8 +122,8 @@ export async function resolveRdpPort(
   projectPath: string,
   browser: string,
   options?: PortWaitOptions,
-): Promise<{ port: number; source: "contract" } | null> {
-  const { port } = await resolveContractPort(
+): Promise<RdpPortAnswer> {
+  const { port, portError } = await resolveContractPort(
     projectPath,
     browser,
     "rdpPort",
@@ -123,11 +131,12 @@ export async function resolveRdpPort(
     false,
   );
 
-  return port != null ? { port, source: "contract" } : null;
+  if (port != null) return { port, source: "contract" };
+
+  return portError ? { port: null, rdpPortError: portError } : null;
 }
 
 export const CDP_PORT_MISSING_HINT =
   "The session's ready contract has no CDP port (the browser may still be binding its debug port, or was launched without one). Confirm the session with extension_wait, give it a moment, and retry.";
 
-export const RDP_PORT_MISSING_HINT =
-  "The session's ready contract has no rdpPort. Firefox sessions publish one from extension.js 4.0.15 on; upgrade the project's extension dependency (or remove the local install so the MCP's pinned CLI drives the session) and restart the dev session.";
+export { RDP_PORT_MISSING_HINT, rdpPortMissingHint, rdpPortMissingReason } from "./rdp-port-notes";

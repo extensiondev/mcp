@@ -8,7 +8,7 @@
 
 import { resolveBridgeBaseUrl } from "./bridge-tabs";
 import { geckoAddonId } from "./gecko-addon";
-import { resolveRdpPort } from "./cdp-port";
+import { rdpPortMissingReason, resolveRdpPort } from "./cdp-port";
 import { envelope } from "./envelope";
 import { rdpEvaluateInParentProcess } from "./rdp";
 
@@ -87,7 +87,7 @@ export async function geckoSidebarPanel(
   options: { open: boolean; timeout?: number },
 ): Promise<{ panel: GeckoSidebarPanel } | { reason: string }> {
   const resolved = await resolveRdpPort(projectPath, browser, { waitMs: 3_000, graceMs: 1_000 });
-  if (!resolved) return { reason: "the session's ready contract records no debugger (RDP) port" };
+  if (!resolved?.port) return { reason: rdpPortMissingReason(resolved) };
 
   const identity = await geckoAddonIdentity(projectPath, browser, options.timeout);
   if (!identity) return { reason: ADDON_UNNAMED };

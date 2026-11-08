@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Ledger 471. The Gecko debugger paths (`extension_eval`, `extension_screenshot`, `extension_dom_snapshot`, `extension_inspect`, `extension_list_extensions`, and `extension_open`'s Firefox toolbar click and sidebar controller) answer at once on a session whose ready.json carries `rdpPortError`, instead of polling 3 s plus a second of grace for an `rdpPort` that will not come: `resolveRdpPort` returns `{port: null, rdpPortError}` on the first read, and each refusal quotes the engine's reason with the next step `extension_wait` gives (`extension_logs` for the launcher's last lines, then `extension_dev` with `replace: true`). The generic no-port hint names Extension.js 4.1.39 as the floor and the two older eras (rdpPort stamped after ready from 4.0.15, never before), sharing its wording with `extension_wait` through `src/lib/rdp-port-notes.ts`.
+
 ## 10.22.0
 
 - Ledger 472. An approval requested under a project's new name by a login whose token still claims the old slug is recorded for the project the call was answered for, with the `prj_` id of that project's stored login, when that login is the one whose token minted it, instead of the claims' old slug with no id. The retry under the new name with `approvalId` is no longer refused as `ApprovalOtherProject`: a named project whose stored login is the login that minted the approval is the same project, so records already written under the old slug are accepted too (`src/lib/approval-record.ts`).

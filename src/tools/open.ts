@@ -40,7 +40,7 @@ import {
 } from "../lib/tab-foreground";
 import { withNavigatedTabForward } from "../lib/tab-foreground-by-id";
 import { CDPClient } from "../lib/cdp";
-import { resolveCdpPort, resolveRdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
+import { resolveCdpPort, resolveRdpPort, rdpPortMissingReason, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
 import { noSessionEnvelope } from "../lib/production-receipt";
 import { rdpListTabs, type RdpTab } from "../lib/rdp";
 import {
@@ -1004,7 +1004,7 @@ async function confirmGeckoSurfaceTab(
   unconfirmed: (why: string) => string,
 ): Promise<string> {
   const resolved = await resolveRdpPort(projectPath, browser, { waitMs: 1_000, graceMs: 500 });
-  if (!resolved) return unconfirmed("this session's contract records no debugger (RDP) port, which is how a Firefox tab list is read");
+  if (!resolved?.port) return unconfirmed(resolved ? rdpPortMissingReason(resolved) : "this session's contract records no debugger (RDP) port, which is how a Firefox tab list is read");
 
   const wanted = doc.replace(/^\.?\//, "");
 

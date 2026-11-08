@@ -57,9 +57,11 @@ import { manifestCandidates } from "../lib/project-manifest";
 import {
   resolveCdpPort,
   resolveRdpPort,
+  rdpPortMissingHint,
   CDP_PORT_MISSING_HINT,
 } from "../lib/cdp-port";
 import { rdpEvaluateInTab, rdpListTabs, type RdpTab } from "../lib/rdp";
+import type { RdpPortRead } from "../lib/rdp-port-notes";
 import { matchPatternCovers } from "../lib/match-patterns";
 import {
   evaluateOnExtensionPage,
@@ -1020,7 +1022,7 @@ async function evaluateInGeckoTab(
     waitMs: 3_000,
     graceMs: 1_000,
   });
-  if (!resolved) return null;
+  if (!resolved?.port) return resolved ? noRdpPort(browser, resolved) : null;
 
   let outcome: Awaited<ReturnType<typeof rdpEvaluateInTab>>;
 
@@ -1118,7 +1120,7 @@ async function evaluateExtensionPageOverProtocol(
 
   const resolved = await resolveRdpPort(args.projectPath, browser, { waitMs: 1_000, graceMs: 500 });
 
-  if (!resolved) {
+  if (!resolved?.port) {
     const production = extensionDocument ? productionSessionCommand(args.projectPath, browser) : null;
 
     return production ? extensionPageUnreachable(schema.name, browser, production, target) : raw;
@@ -1222,7 +1224,7 @@ async function evaluateExtensionTabBeforeInjection(
   }
 
   const resolved = await resolveRdpPort(args.projectPath, browser, { waitMs: 1_000, graceMs: 500 });
-  if (!resolved) return null;
+  if (!resolved?.port) return null;
 
   let tabs: RdpTab[];
 
@@ -1395,6 +1397,16 @@ function evalDisabled(): string {
   });
 }
 
+function noRdpPort(browser: string, miss: RdpPortRead): string {
+  return envelope({
+    ok: false,
+    command: schema.name,
+    status: "no-session",
+    error: { code: "E_NO_SESSION", name: "NoSession", message: `Nothing was evaluated: this ${browser} session has no debugger (RDP) port to run the expression over.` },
+    hint: rdpPortMissingHint(miss),
+  });
+}
+
 function noDebugPort(projectPath: string, browser: string, protocol: string): string {
   return noSessionEnvelope({
     command: schema.name,
@@ -1442,7 +1454,7 @@ async function evaluateByTargetId(
     if (!isOneExpression(args.expression)) return notOneExpression();
 
     const resolved = await resolveRdpPort(args.projectPath, browser, { waitMs: 3_000, graceMs: 1_000 });
-    if (!resolved) return noDebugPort(args.projectPath, browser, "RDP");
+    if (!resolved?.port) return resolved ? noRdpPort(browser, resolved) : noDebugPort(args.projectPath, browser, "RDP");
 
     let tabs: RdpTab[];
 

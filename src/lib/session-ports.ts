@@ -8,6 +8,7 @@
 
 import { isGeckoFamily, WEBKIT_FAMILY } from "./browser-family";
 import { PRODUCTION_DEBUG_PORT_FLOOR, productionDebugPortOutlook } from "./production-launch";
+import { olderGeckoEngineNote, RDP_PORT_ERROR_NEXT_STEP, RDP_READY_FLOOR, rdpPortErrorReason } from "./rdp-port-notes";
 
 import type { ReadyContract } from "./types";
 
@@ -60,18 +61,16 @@ function webdriverState(contract: ReadyContract): Pick<SessionPorts, "webdriver"
   };
 }
 
-const RDP_READY_FLOOR = "4.1.39";
-
 function geckoNoDebugPortNote(contract: ReadyContract): string {
-  const reason = String(contract.rdpPortError ?? "").trim().replace(/\.+$/, "");
+  const reason = rdpPortErrorReason(contract.rdpPortError);
 
   if (reason) {
-    return `This ${contract.browser} session has no rdpPort: the engine says ${reason}. Firefox serves the Remote Debugging Protocol (RDP), not CDP, so the debugger tools (extension_eval over the protocol, extension_screenshot, page reads) have nothing to connect to on this run; extension_logs shows the launcher's last lines, and extension_dev with replace: true starts a new session.`;
+    return `This ${contract.browser} session has no rdpPort: the engine says ${reason}. Firefox serves the Remote Debugging Protocol (RDP), not CDP, so the debugger tools (extension_eval over the protocol, extension_screenshot, page reads) have nothing to connect to on this run; ${RDP_PORT_ERROR_NEXT_STEP}.`;
   }
 
   const engine = typeof contract.toolchainVersion === "string" && contract.toolchainVersion ? ` (Extension.js ${contract.toolchainVersion})` : "";
 
-  return `This ${contract.browser} session names no rdpPort: Firefox serves the Remote Debugging Protocol (RDP), not CDP. From Extension.js ${RDP_READY_FLOOR} a Firefox dev session turns ready only with rdpPort or rdpPortError, so this contract comes from an older engine${engine}, which stamps rdpPort after ready (4.0.15 on) or never (before 4.0.15). The debugger tools wait for it on their own and extension_wait reads it again; moving the project's extension dependency to ${RDP_READY_FLOOR} or later makes ready carry it.`;
+  return `This ${contract.browser} session names no rdpPort: Firefox serves the Remote Debugging Protocol (RDP), not CDP. ${olderGeckoEngineNote(engine)}. The debugger tools wait for it on their own and extension_wait reads it again; moving the project's extension dependency to ${RDP_READY_FLOOR} or later makes ready carry it.`;
 }
 
 function noDebugPortNote(contract: ReadyContract): string {

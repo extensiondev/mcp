@@ -21,7 +21,7 @@ import {
   resolveCdpPort,
   resolveRdpPort,
   CDP_PORT_MISSING_HINT,
-  RDP_PORT_MISSING_HINT,
+  rdpPortMissingHint,
 } from "../lib/cdp-port";
 import { rdpListAddons } from "../lib/rdp";
 import {
@@ -382,7 +382,7 @@ async function listGeckoExtensions(
 ): Promise<string> {
   const resolved = await resolveRdpPort(projectPath, browser);
 
-  if (!resolved) {
+  if (!resolved?.port) {
     return envelope({
       ok: false,
       command: schema.name,
@@ -392,7 +392,7 @@ async function listGeckoExtensions(
         message:
           "No active dev session with a Firefox debugger server (RDP) found.",
       },
-      hint: `Start a dev session first with extension_dev, then use extension_wait to confirm it is ready. ${RDP_PORT_MISSING_HINT}`,
+      hint: `Start a dev session first with extension_dev, then use extension_wait to confirm it is ready. ${rdpPortMissingHint(resolved)}`,
     });
   }
 
