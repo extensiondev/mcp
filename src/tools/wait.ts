@@ -16,7 +16,7 @@ import { pidState } from "../lib/process-identity";
 import { readyContractPath } from "../lib/session-paths";
 import { productionLaunchEvidence, readLoadOverDebugPort } from "../lib/production-launch";
 import { productionWaitHint } from "../lib/production-wait-words";
-import { sessionPorts, settledSessionPorts } from "../lib/session-ports";
+import { sessionPorts } from "../lib/session-ports";
 import { envelope, sessionCommandSinceEnvelopeOwnsCommand } from "../lib/envelope";
 import { verifyGuestLoaded } from "../lib/guest-load-oracle";
 import { detachedVerdictFrame, readDetachedVerdict } from "../lib/background-liveness";
@@ -335,7 +335,7 @@ export async function handler(args: {
             ...(guestCheck.checked ? { guestIds: guestCheck.guestIds } : { guestLoadNote: guestCheck.reason }),
             ...sessionCommandSinceEnvelopeOwnsCommand(contract),
             browser: contract.browser,
-            ...(await settledSessionPorts(args.projectPath, contract)),
+            ...sessionPorts(contract),
             pid: contract.pid,
             distPath: contract.distPath,
             manifestPath: contract.manifestPath,

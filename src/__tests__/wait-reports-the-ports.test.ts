@@ -61,31 +61,30 @@ describe("extension_wait names every port the session bound, so 'tell me the por
     expect(out.value.debugPortNote).toBeUndefined();
   }, 10_000);
 
-  it("reads a gecko session's rdpPort stamped after the ready contract instead of saying no port was opened", async () => {
+  it("names the engine's rdpPortError when Firefox never opened its debug port", async () => {
     const dir = project();
-    contract(dir, "firefox", attachedDevContract("firefox", { cdpPort: undefined }));
-    const stamp = setTimeout(() => contract(dir, "firefox", attachedDevContract("firefox", { cdpPort: undefined, rdpPort: 9533 })), 700);
-
-    try {
-      const out = JSON.parse(await wait({ projectPath: dir, browser: "firefox", timeoutMs: 1500 }));
-
-      expect(out.status).toBe("ready");
-      expect(out.value.rdpPort).toBe(9533);
-      expect(out.value.debugPortNote).toBeUndefined();
-    } finally {
-      clearTimeout(stamp);
-    }
-  }, 10_000);
-
-  it("says a gecko session's rdpPort is not stamped yet, naming RDP, when it never lands", async () => {
-    const dir = project();
-    contract(dir, "firefox", attachedDevContract("firefox", { cdpPort: undefined }));
+    contract(dir, "firefox", attachedDevContract("firefox", { cdpPort: undefined, rdpPortError: "Firefox did not open its remote debugging port 6000 within 30000ms" }));
 
     const out = JSON.parse(await wait({ projectPath: dir, browser: "firefox", timeoutMs: 1500 }));
 
     expect(out.status).toBe("ready");
-    expect(out.value.debugPortNote).toMatch(/names no rdpPort yet/);
+    expect(out.value.rdpPort).toBeUndefined();
+    expect(out.value.debugPortNote).toMatch(/the engine says Firefox did not open its remote debugging port 6000 within 30000ms\./);
+    expect(out.value.debugPortNote).not.toMatch(/extension_wait reads it again/);
+  }, 10_000);
+
+  it("answers a gecko contract with neither rdpPort nor rdpPortError at once, naming the older engine and the 4.1.39 floor", async () => {
+    const dir = project();
+    contract(dir, "firefox", attachedDevContract("firefox", { cdpPort: undefined }));
+
+    const started = Date.now();
+    const out = JSON.parse(await wait({ projectPath: dir, browser: "firefox", timeoutMs: 1500 }));
+
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(out.status).toBe("ready");
     expect(out.value.debugPortNote).toMatch(/Remote Debugging Protocol/);
+    expect(out.value.debugPortNote).toMatch(/older engine \(Extension\.js 4\.1\.32\)/);
+    expect(out.value.debugPortNote).toMatch(/4\.1\.39 or later/);
     expect(out.value.debugPortNote).not.toMatch(/opened no browser debug port/i);
   }, 10_000);
 

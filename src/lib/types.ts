@@ -85,6 +85,7 @@ export interface ReadyContract {
   instanceId?: string;
   cdpPort?: number;
   rdpPort?: number;
+  rdpPortError?: string;
   webdriverPort?: number;
   webdriverSessionId?: string;
   webdriverUnavailableReason?: string;
