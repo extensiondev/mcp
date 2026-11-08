@@ -102,14 +102,30 @@ describe("extension_publish build pin enrichment", () => {
     expect(out.ok).toBe(true);
     expect(out.value.buildSha).toBe(OLD_SHA);
     expect(out.value.version).toBe("1.0.0");
-    expect(out.value.channel).toBe("stable");
     expect(out.value.builtAt).toBe("2026-07-01T00:00:00.000Z");
   });
 
   it("matches a short pin against a full-length index sha", async () => {
     const out = JSON.parse(await handler({ buildSha: OLD_SHA.slice(0, 7) }));
     expect(out.value.version).toBe("1.0.0");
-    expect(out.value.channel).toBe("stable");
+  });
+
+  it("ledger 471: never names a channel from the stored build-index field, pinned or unpinned", async () => {
+    const pinned = JSON.parse(await handler({ buildSha: OLD_SHA }));
+    const unpinned = JSON.parse(await handler({}));
+
+    expect(pinned.value.version).toBe("1.0.0");
+    expect(pinned.value.channel).toBeUndefined();
+    expect(unpinned.value.buildSha).toBe(NEW_SHA);
+    expect(unpinned.value.channel).toBeUndefined();
+  });
+
+  it("ledger 471: keeps the channel the platform answered for the link", async () => {
+    platform.result = { ok: true, data: { shareUrl: "https://preview.extension.dev/?preview=gen_x", visibility: "private", channel: "preview" } };
+
+    const out = JSON.parse(await handler({}));
+
+    expect(out.value.channel).toBe("preview");
   });
 
   it("never attributes the newest build's metadata to an unresolved pin", async () => {

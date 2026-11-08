@@ -349,7 +349,6 @@ export function parseChannels(json: unknown): ChannelEntry[] {
 export interface BuildIndexItem {
   sha: string;
   commit?: string;
-  channel?: string;
   buildEnv?: string;
   status?: string;
   summaryStatus?: string;
@@ -386,7 +385,6 @@ export function parseBuildIndex(json: unknown): BuildIndexItem[] {
 
     const entry: BuildIndexItem = { sha };
     if (row.commit) entry.commit = String(row.commit);
-    if (row.channel) entry.channel = String(row.channel);
     if (row.buildEnv) entry.buildEnv = String(row.buildEnv);
     if (row.status) entry.status = String(row.status);
     if (row.summaryStatus) entry.summaryStatus = String(row.summaryStatus);

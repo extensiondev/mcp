@@ -43,7 +43,6 @@ export async function fillFromBuildIndex(data: Row, pinnedSha: string | undefine
       if (data.buildSha == null) data.buildSha = pinned.sha;
       if (data.builtAt == null && pinned.timestamp) data.builtAt = pinned.timestamp;
       if (data.version == null && pinned.version) data.version = pinned.version;
-      if (data.channel == null && pinned.channel) data.channel = pinned.channel;
 
       data.registryUrl = buildsUrl;
 
@@ -54,7 +53,7 @@ export async function fillFromBuildIndex(data: Row, pinnedSha: string | undefine
 
     data.registryUrl = buildsUrl;
 
-    return `buildSha ${pinnedSha} is pinned but was not found in the project's registry build index, so builtAt/version/channel are not filled in from another build. The platform accepted the pin without reading its own index (it echoes the sha when the index is unreadable), so whether a build with that sha exists was not verified here.`;
+    return `buildSha ${pinnedSha} is pinned but was not found in the project's registry build index, so builtAt and version are not filled in from another build. The platform accepted the pin without reading its own index (it echoes the sha when the index is unreadable), so whether a build with that sha exists was not verified here.`;
   }
 
   const newestSuccess = items.filter(isSuccessfulBuild).sort((a, b) => String(b.timestamp ?? "").localeCompare(String(a.timestamp ?? "")))[0];
@@ -67,7 +66,6 @@ export async function fillFromBuildIndex(data: Row, pinnedSha: string | undefine
     if (data.buildSha == null) data.buildSha = served.sha;
     if (data.builtAt == null && served.timestamp) data.builtAt = served.timestamp;
     if (data.version == null && served.version) data.version = served.version;
-    if (data.channel == null && served.channel) data.channel = served.channel;
 
     data.registryUrl = buildsUrl;
 
