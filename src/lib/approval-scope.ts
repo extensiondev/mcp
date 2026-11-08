@@ -19,3 +19,15 @@ export function withApprovalLogin<T>(login: StoredCredentials | null, run: () =>
 export function approvalLogin(): StoredCredentials | null {
   return scope.getStore() ?? null;
 }
+
+const answered = new AsyncLocalStorage<string>();
+
+export function withAnsweredProject<T>(ref: string | null | undefined, run: () => T): T {
+  const project = String(ref ?? "").trim();
+
+  return project ? answered.run(project, run) : run();
+}
+
+export function answeredProject(): string {
+  return answered.getStore() ?? "";
+}

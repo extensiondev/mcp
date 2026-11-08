@@ -10,9 +10,10 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { APPROVAL_REJECTED_STATUS } from "./approval-outcome";
+import { answeredProject } from "./approval-scope";
 import { targetServer } from "./credential-server";
 import { loginIdOf, readTokenClaims, splitRef } from "./credential-source";
-import { credentialsPath } from "./credentials";
+import { credentialsPath, readCredentials } from "./credentials";
 import { envelope } from "./envelope";
 import { withFileLock, writePrivateJson } from "./private-file";
 import { currentProjectName, movedNameNote, resolveProjectIdentity, sameStoredProject, tokenProjectIdentity } from "./project-identity";
@@ -53,9 +54,26 @@ export function storedProjectId(api: string | undefined, ref: string): string {
   }
 }
 
+function storedLogin(api: string | undefined, ref: string): { current: string; projectId: string; loginId: string } | null {
+  try {
+    const stored = readCredentials({ project: ref, api });
+    if (!stored?.workspaceSlug || !stored.projectSlug || !stored.token) return null;
+
+    const projectId = String(stored.projectId ?? "").trim();
+
+    return {
+      current: `${stored.workspaceSlug}/${stored.projectSlug}`.toLowerCase(),
+      projectId: projectId.startsWith("prj_") ? projectId : "",
+      loginId: loginIdOf(stored.token),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function mintedProjectMatches(
   api: string | undefined,
-  minted: Pick<MintedApproval, "workspace" | "project" | "projectId">,
+  minted: Pick<MintedApproval, "workspace" | "project" | "projectId" | "loginId">,
   ref: string,
 ): boolean {
   const mintedRef = `${minted.workspace}/${minted.project}`.toLowerCase();
@@ -63,6 +81,7 @@ export function mintedProjectMatches(
   if (!named) return false;
   if (named === mintedRef) return true;
   if (minted.projectId && storedProjectId(api, named) === minted.projectId) return true;
+  if (minted.loginId && storedLogin(api, named)?.loginId === minted.loginId) return true;
 
   return sameStoredProject(api, mintedRef, named);
 }
@@ -129,9 +148,15 @@ function prune(file: ApprovalFile, now: number): ApprovalFile {
  * claims: a token minted under a slug the project has since left keeps that
  * slug in its claims for good, and a record written from them named an
  * approval minted under the new name "for" the old one and refused the retry
- * under the new name (ledger 459). The login itself is named by the token's
- * own id (a fingerprint when the claims carry none, never the token), so the
- * retry is made with the login that asked.
+ * under the new name (ledger 459). The project the call was answered for
+ * names the record first, with the prj_ id of its stored login, whenever that
+ * login is the one whose token minted the approval: on 2026-11-08 a promote
+ * answered for cezaraugusto/visionario was recorded as hands-free with no id,
+ * because the token still claimed hands-free and the login store kept no
+ * alias of it, and the owner-approved retry was refused (ledger 472). The
+ * login itself is named by the token's own id (a fingerprint when the claims
+ * carry none, never the token), so the retry is made with the login that
+ * asked.
  */
 export function rememberMintedApproval(args: {
   api?: string;
@@ -143,6 +168,7 @@ export function rememberMintedApproval(args: {
   approvalUrl: string;
   expiresAt?: string;
   description?: string;
+  answeredFor?: string;
   now?: number;
 }): MintedApproval | null {
   const claims = readTokenClaims(args.token);
@@ -153,10 +179,15 @@ export function rememberMintedApproval(args: {
   const expiresAt = Number.isFinite(Date.parse(trimmed(args.expiresAt)))
     ? new Date(Date.parse(trimmed(args.expiresAt))).toISOString()
     : new Date(now + LONGEST_APPROVAL_TTL_SECONDS * 1000).toISOString();
-  const identity = tokenProjectIdentity(args.api, args.token, `${claims.workspace}/${claims.project}`);
+  const loginId = loginIdOf(args.token);
+  const answeredFor = trimmed(args.answeredFor) || answeredProject();
+  const answered = answeredFor ? storedLogin(args.api, answeredFor) : null;
+  const identity =
+    answered && answered.loginId === loginId
+      ? answered
+      : tokenProjectIdentity(args.api, args.token, `${claims.workspace}/${claims.project}`);
   const [workspace = claims.workspace, project = claims.project] = identity?.current ? identity.current.split("/") : [];
   const projectId = trimmed(args.projectId) || identity?.projectId || "";
-  const loginId = loginIdOf(args.token);
   const record: MintedApproval = {
     approvalId,
     workspace,
@@ -195,6 +226,7 @@ export function rememberMintedApproval(args: {
 }
 
 function sameProject(a: MintedApproval, b: MintedApproval, api: string | undefined): boolean {
+  if (a.loginId && a.loginId === b.loginId) return true;
   if (a.projectId && b.projectId) return a.projectId === b.projectId;
 
   return mintedProjectMatches(api, a, `${b.workspace}/${b.project}`);
@@ -227,7 +259,9 @@ function namedRef(named: string, record: MintedApproval): string {
  * read that as a lost approval. The named project is the minted one when it
  * is the same slug, when this machine's login store resolves both names to
  * one entry (the old slug stays an alias of the new one), or when the stored
- * login under that name carries the minted prj_ id: a call under the old
+ * login under that name carries the minted prj_ id or is the very login
+ * that minted it (one login is one project, whatever slug its token's claims
+ * still carry, ledger 472): a call under the old
  * name is made as the current one and told the move, a call under the new
  * name for a record that kept the old one is told the rename; a slug this
  * machine resolves to another project, or to none, is another project. An id

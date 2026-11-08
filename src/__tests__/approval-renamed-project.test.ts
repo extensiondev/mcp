@@ -13,6 +13,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { bindApprovalProject, mintedApproval, rememberMintedApproval, renameNote } from "../lib/approval-record";
+import { withAnsweredProject } from "../lib/approval-scope";
 import { verifyApproval } from "../lib/approval-verify";
 import { moveLogin, writeCredentials } from "../lib/credentials";
 import { envelope } from "../lib/envelope";
@@ -166,6 +167,72 @@ describe("an approval is bound to the project by its id, not by the slug the tok
     expect(out.error.name).toBe("ApprovalUnknown");
     expect(out.error.message).toContain("for acme/leon (now acme/lion), the project this machine minted it for");
     expect(out.error.message).not.toContain("this call resolved");
+  });
+});
+
+describe("an approval minted by a login whose token still claims the old slug binds to the project the call answered for", () => {
+  const VISIONARIO_ID = "prj_23de01c2";
+  const LOGIN_ID = "sUWbAgLEiBY";
+
+  function claimedToken(exp: number): string {
+    return `${Buffer.from(JSON.stringify({ u: "acme", p: "hands-free", n: LOGIN_ID, exp })).toString("base64url")}.sig`;
+  }
+
+  function visionarioLogin(): void {
+    writeCredentials({
+      version: 1,
+      token: claimedToken(4_000_000_000),
+      workspaceSlug: "acme",
+      projectSlug: "visionario",
+      projectId: VISIONARIO_ID,
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      api: API,
+      provider: "extensiondev",
+    });
+  }
+
+  function mintAs(answeredFor?: string) {
+    const record = () =>
+      rememberMintedApproval({
+        api: API,
+        token: claimedToken(4_000_000_001),
+        approvalId: APPROVAL_ID,
+        action: "extension_release.promote",
+        fingerprint: "f".repeat(64),
+        approvalUrl: `${API}/device/approve/${APPROVAL_ID}`,
+        expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+      });
+
+    return answeredFor ? withAnsweredProject(answeredFor, record) : record();
+  }
+
+  it("records the project the call answered for with its prj_ id and accepts the retry under that name", () => {
+    visionarioLogin();
+
+    expect(mintAs("acme/visionario")).toMatchObject({ workspace: "acme", project: "visionario", projectId: VISIONARIO_ID, loginId: LOGIN_ID });
+
+    const args = { approvalId: APPROVAL_ID, project: "acme/visionario", api: API };
+
+    expect(bindApprovalProject("extension_release_promote", args)).toEqual({ args });
+  });
+
+  it("accepts the retry for a record kept under the old slug when the named project's login is the one that minted it", () => {
+    visionarioLogin();
+    mintAs();
+
+    expect(mintedApproval(API, APPROVAL_ID)).toMatchObject({ project: "hands-free", loginId: LOGIN_ID });
+
+    const bound = bindApprovalProject("extension_release_promote", { approvalId: APPROVAL_ID, project: "acme/visionario", api: API });
+
+    expect("refused" in bound).toBe(false);
+  });
+
+  it("does not take the answered project's name when its stored login is another login", () => {
+    storedLogin("rebeccat", REBECCAT_ID);
+
+    expect(mintAs("acme/rebeccat")).toMatchObject({ project: "hands-free" });
+    expect(mintedApproval(API, APPROVAL_ID)).not.toHaveProperty("projectId");
+    expect("refused" in bindApprovalProject("extension_release_promote", { approvalId: APPROVAL_ID, project: "acme/rebeccat", api: API })).toBe(true);
   });
 });
 

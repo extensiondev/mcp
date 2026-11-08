@@ -16,7 +16,7 @@ import { runAskingOnly } from "./ask-only";
 import { openApprovalOnce } from "./approval-open";
 import { answerOnceDecided } from "./approval-wait";
 import { bindApprovalProject } from "./approval-record";
-import { withApprovalLogin } from "./approval-scope";
+import { withAnsweredProject, withApprovalLogin } from "./approval-scope";
 import { withCallWaits } from "./call-waits";
 import { envelope } from "./envelope";
 import { resolveApiBase } from "./login-flow";
@@ -339,8 +339,8 @@ export function createToolSurface(setup: ToolHandlerOptions): {
             if ("refused" in scoped) return stamp.apply(attachTrack(name, normalizedArgs, scoped.refused));
 
             const callArgs = scoped.args;
-            const answered = await answerOnceDecided(callArgs, tool.handler);
-            const followed = await followedOnce(answered, callArgs, tool.handler);
+            const answered = await withAnsweredProject(scoped.answeredFor, () => answerOnceDecided(callArgs, tool.handler));
+            const followed = await withAnsweredProject(scoped.answeredFor, () => followedOnce(answered, callArgs, tool.handler));
             const answer = annotate(annotate(followed, { note: bound.note }), { note: scoped.note });
             const shaped = stamp.apply(
               scrubRunAnswer(attachTrack(name, callArgs, shapeStoreAnswer(name, callArgs, stampAnsweredFor(answer, scoped.answeredFor)))),
