@@ -297,3 +297,41 @@ describe("ledger 391: the client's own repository names the one login its origin
     expect(sent).toEqual([]);
   });
 });
+
+describe("ledger 467: every tool that takes projectPath binds the project the folder names", () => {
+  it("refuses a builds list whose folder names a project with no login, naming that project and its login", async () => {
+    otherProcessesSignIn("hands-free", "rebeccat");
+
+    const out = await call("extension_builds", { action: "list", limit: 3, projectPath: extensionDir("visionario", "visionario"), api: API });
+
+    expect(out.error.code).toBe("E_NO_LOGIN_FOR_PROJECT");
+    expect(out.error.message).toContain("cezaraugusto/visionario");
+    expect(out.error.message).not.toContain("cezaraugusto/visionario or cezaraugusto/visionario");
+    expect(out.hint).toContain("extension_auth (action: login, project: 'cezaraugusto/visionario')");
+    expect(JSON.stringify(out)).not.toContain("hands-free");
+    expect(sent).toEqual([]);
+  });
+
+  it("binds a builds list to the folder's project once its login is stored", async () => {
+    otherProcessesSignIn("visionario", "hands-free", "rebeccat");
+
+    const out = await call("extension_builds", { action: "list", limit: 3, projectPath: extensionDir("visionario", "visionario"), api: API });
+
+    expect(out.value.answeredFor).toBe("cezaraugusto/visionario");
+    expect(out.value.note).toContain("the project at projectPath");
+    expect(sent.length).toBeGreaterThan(0);
+    expect(sent.every((req) => req.auth === "Bearer visionario.sig")).toBe(true);
+  });
+
+  it("keeps the ambiguous refusal for a folder with no remote and no package name", async () => {
+    otherProcessesSignIn("hands-free", "rebeccat");
+    const dir = path.join(tmp, "bare");
+    fs.mkdirSync(dir, { recursive: true });
+
+    const out = await call("extension_builds", { action: "list", limit: 3, projectPath: dir, api: API });
+
+    expect(out.error.code).toBe("E_PROJECT_AMBIGUOUS");
+    expect(out.value.logins).toEqual(["cezaraugusto/hands-free", "cezaraugusto/rebeccat"]);
+    expect(sent).toEqual([]);
+  });
+});

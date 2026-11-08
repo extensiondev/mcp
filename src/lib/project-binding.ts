@@ -21,7 +21,6 @@ type Args = Record<string, unknown>;
 
 const UNBOUND = new Set(["extension_auth", "extension_workspace_create", "extension_project_create"]);
 const WORKSPACE_READS = new Set(["info", "projects", "usage"]);
-const PATH_NAMES_PROJECT = new Set(["extension_submit", "extension_release_status", "extension_shares", "extension_preview_web"]);
 
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -114,7 +113,7 @@ export function bindCallProject(
   if (options.project || pinnedProject() || requestCredential() || envToken()) return { args, answeredFor: resolvedRef(api) };
 
   const logins = serverLogins(api);
-  const projectPath = PATH_NAMES_PROJECT.has(name) ? text(args.projectPath) : "";
+  const projectPath = takesPath(inputSchema) ? text(args.projectPath) : "";
   const fallback = logins.kept ?? (logins.live.length === 1 ? (logins.live[0] ?? null) : null);
 
   if (projectPath) {
@@ -159,7 +158,7 @@ export function bindCallProject(
         name,
         "project-ambiguous",
         `This machine holds ${logins.live.length} logins for this server (${logins.live.join(", ")}) and ${unbound}, so it was not sent: the newest login could be another agent's project.`,
-        `Pass project: one of ${quoted(logins.live)}${PATH_NAMES_PROJECT.has(name) || takesPath(inputSchema) ? ", or projectPath for the extension's directory" : ""}.`,
+        `Pass project: one of ${quoted(logins.live)}${takesPath(inputSchema) ? ", or projectPath for the extension's directory" : ""}.`,
         { logins: logins.live },
       ),
     };
