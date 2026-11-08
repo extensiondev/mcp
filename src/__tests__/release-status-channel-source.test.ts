@@ -51,15 +51,15 @@ afterEach(() => {
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-function stubRegistry(channels: Record<string, unknown>) {
+function stubRegistry(channels: Record<string, unknown> | null, builds: unknown[] = []) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: any) => {
       const pathname = new URL(String(url)).pathname;
 
-      if (pathname.endsWith("/channels.json")) return jsonResponse(channels);
+      if (pathname.endsWith("/channels.json")) return channels ? jsonResponse(channels) : jsonResponse({ message: "not found" }, 404);
       if (pathname.endsWith("/meta.json")) return jsonResponse({ name: "Widget", visibility: "private" });
-      if (pathname.endsWith("/builds/index.json")) return jsonResponse({ items: [] });
+      if (pathname.endsWith("/builds/index.json")) return jsonResponse({ items: builds });
 
       return jsonResponse({ message: "not found" }, 404);
     }),
@@ -118,6 +118,55 @@ describe("extension_release_status says how each channel fills (ledger 444)", ()
     expect(channelSource("firefox-preview")).toBe("environment");
     expect(channelSource("stable")).toBe("promotion");
     expect(channelSource("chrome-beta")).toBe("promotion");
+  });
+});
+
+describe("extension_release_status recentBuilds answer the pins that hold each build (ledger 469)", () => {
+  const BUILDS = [
+    { shortSha: "0c7471e", sha: STABLE_SHA, channel: "preview", status: "success", timestamp: "2026-11-08T03:00:00Z" },
+    { shortSha: "70d148e", sha: PREVIEW_SHA, channel: "preview", status: "success", timestamp: "2026-11-08T02:00:00Z" },
+    { shortSha: "6fb8b3e", channel: "preview", status: "success", timestamp: "2026-11-08T01:00:00Z" },
+  ];
+
+  it("reads channels.json by sha, stable first, browsers from prefixed keys, and drops the stored channel", async () => {
+    stubRegistry(
+      {
+        preview: { sha: STABLE_SHA, buildId: "0c7471e" },
+        "chrome-preview": { sha: STABLE_SHA },
+        "firefox-stable": { sha: "", buildId: "0c7471e" },
+        "edge-stable": { sha: STABLE_SHA },
+        "chrome-beta": { sha: PREVIEW_SHA },
+      },
+      BUILDS,
+    );
+
+    const out = JSON.parse(await readReleases({ workspace: "acme", project: "widget" }));
+    const rows = out.value.recentBuilds as Array<Record<string, unknown>>;
+
+    expect(rows.map((row) => row.channels)).toEqual([
+      [
+        { channel: "stable", browsers: ["edge", "firefox"] },
+        { channel: "preview", browsers: ["chrome"] },
+      ],
+      [{ channel: "beta", browsers: ["chrome"] }],
+      [],
+    ]);
+
+    for (const row of rows) expect(row).not.toHaveProperty("channel");
+  });
+
+  it("leaves channels absent when channels.json cannot be read, and never relays the stored channel", async () => {
+    stubRegistry(null, BUILDS);
+
+    const out = JSON.parse(await readReleases({ workspace: "acme", project: "widget" }));
+    const rows = out.value.recentBuilds as Array<Record<string, unknown>>;
+
+    expect(rows).toHaveLength(3);
+
+    for (const row of rows) {
+      expect(row).not.toHaveProperty("channels");
+      expect(row).not.toHaveProperty("channel");
+    }
   });
 });
 

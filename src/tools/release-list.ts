@@ -8,7 +8,7 @@
 
 import { UserlandProjectPage } from "@extension.dev/urls/userland";
 
-import { CHANNEL_LINK_ADVICE, channelLinkFields, channelSource, channelUrl, splitChannelKey } from "../lib/channel-link";
+import { CHANNEL_LINK_ADVICE, channelLinkFields, channelSource, channelUrl, pinsHolding, splitChannelKey } from "../lib/channel-link";
 import {
   consoleProjectUrl,
   fetchRegistryJson,
@@ -157,14 +157,16 @@ export async function readReleases(args: {
     : platform.skipped
       ? null
       : `The platform's visibility record could not be read (${platform.message}), so projectVisibility comes from the registry's meta.json${registryVisibility ? "" : ", which could not be read either"}.`;
-  const buildsWithUrls = recentBuilds.map((b) => ({
-    ...b,
-    publicUrl: userlandProjectUrl(
-      ref,
-      UserlandProjectPage.build(b.sha),
-      args.api,
-    ),
-  }));
+  const buildsWithUrls = recentBuilds.map((b) => {
+    const row: Record<string, unknown> = { ...b };
+    delete row.channel;
+
+    return {
+      ...row,
+      ...(channelsRes.ok ? { channels: pinsHolding(channels, b.sha) } : {}),
+      publicUrl: userlandProjectUrl(ref, UserlandProjectPage.build(b.sha), args.api),
+    };
+  });
 
   const publicUrlNote = publicProjectUrl
     ? isPrivate

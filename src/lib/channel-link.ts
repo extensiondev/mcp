@@ -12,6 +12,8 @@ import { REAL_BROWSERS } from "./common-schema";
 import { mcpOrigins } from "./origins";
 import { fetchRegistryJson, parseChannels, registryFileUrl, type ChannelEntry, type ProjectRef } from "./registry";
 
+import type { Pin } from "./builds-list-row";
+
 export const CHANNEL_LINK_ADVICE =
   "On a public project, or a public channel, send testers the channel link: it always opens the channel's newest build and never expires. A build link opens one build, and on a private project it expires.";
 
@@ -24,6 +26,32 @@ export function splitChannelKey(key: string): { browser?: string; channel: strin
   const match = BROWSER_CHANNEL.exec(key);
 
   return match ? { browser: match[1], channel: match[2] } : { channel: key };
+}
+
+/* @invariant A BUILD'S CHANNELS ARE THE PINS THAT HOLD IT NOW (David, ruled
+ * 2026-11-06, Cezar agreed), the same derivation www answers on builds list
+ * rows: channels.json matched by 7-character sha, stable first, a browser key
+ * adding its browser and a project-level key its channel with no browsers.
+ */
+export function pinsHolding(entries: ChannelEntry[], sha: string): Pin[] {
+  const wanted = sha.trim().slice(0, 7).toLowerCase();
+  if (!wanted) return [];
+
+  const pins = new Map<string, Set<string>>();
+
+  for (const entry of entries) {
+    if ((entry.sha || entry.buildId || "").trim().slice(0, 7).toLowerCase() !== wanted) continue;
+
+    const { browser, channel } = splitChannelKey(entry.channel);
+    const browsers = pins.get(channel) ?? new Set<string>();
+    if (browser) browsers.add(browser);
+
+    pins.set(channel, browsers);
+  }
+
+  return Array.from(pins, ([channel, browsers]) => ({ channel, browsers: Array.from(browsers).sort() })).sort(
+    (a, b) => Number(a.channel !== "stable") - Number(b.channel !== "stable") || a.channel.localeCompare(b.channel),
+  );
 }
 
 export const ENVIRONMENT_CHANNELS: readonly string[] = ["preview"];
