@@ -203,12 +203,39 @@ describe("extension_submit preflight drafts STORE.md from the code and leaves ev
     expect(of("edge").say).toContain('extension_screenshot store:"edge"');
     expect(of("firefox")).toMatchObject({ ready: true, shots: [{ clears: true }] });
     expect(of("safari").ready).toBe(false);
-    expect(of("safari").say).toContain('extension_screenshot store:"safari"');
+    expect(of("safari")).toMatchObject({ source: "none", say: expect.stringContaining('extension_screenshot store:"safari"') });
 
     const alpha = project({ ...FILES, "store/screenshots/chrome/01.png": rgbaPng(1280, 800) });
     const chromeAlpha = ((await preflight(alpha, ["chrome"])).listingDraft.gallery as Row[])[0]!;
 
     expect(chromeAlpha).toMatchObject({ ready: false, shots: [{ clears: false, reason: "the Chrome Web Store refuses an alpha channel" }] });
+  });
+
+  it("measures the files STORE.md's Screenshots line names when a store's folder is empty, and offers no capture", async () => {
+    const storeMd = "# Word Count\n\n## Listing\n\n- Screenshots: store/shot-1.png, store/shot-2.png\n";
+    const gallery: Row[] = (await preflight(project({ ...FILES, "STORE.md": storeMd, "store/shot-1.png": solidPng(1280, 800), "store/shot-2.png": solidPng(1280, 800) }))).listingDraft.gallery;
+
+    for (const entry of gallery) {
+      expect(entry).toMatchObject({ source: "store-md", shots: [{ file: "store/shot-1.png", size: "1280x800" }, { file: "store/shot-2.png", size: "1280x800" }] });
+      expect(entry.say).not.toContain("extension_screenshot");
+    }
+
+    expect(gallery.filter((entry) => entry.ready).map((entry) => entry.store)).toEqual(["chrome", "firefox", "edge", "safari"]);
+  });
+
+  it("names a STORE.md screenshot that is not on disk in say and does not count it", async () => {
+    const storeMd = "# Word Count\n\n## Listing\n\n- Screenshots: store/shot-1.png, store/gone.png\n";
+    const chrome: Row = ((await preflight(project({ ...FILES, "STORE.md": storeMd, "store/shot-1.png": solidPng(1280, 800) }), ["chrome"])).listingDraft.gallery as Row[])[0]!;
+
+    expect(chrome).toMatchObject({ source: "store-md", ready: true, shots: [{ file: "store/shot-1.png" }] });
+    expect(chrome.say).toContain("Not found: store/gone.png");
+  });
+
+  it("keeps the store's own folder ahead of the files STORE.md names", async () => {
+    const storeMd = "# Word Count\n\n## Listing\n\n- Screenshots: store/shot-1.png\n";
+    const chrome: Row = ((await preflight(project({ ...FILES, "STORE.md": storeMd, "store/shot-1.png": solidPng(1280, 800), "store/screenshots/chrome/01.png": solidPng(640, 400) }), ["chrome"])).listingDraft.gallery as Row[])[0]!;
+
+    expect(chrome).toMatchObject({ source: "folder", shots: [{ file: "store/screenshots/chrome/01.png" }] });
   });
 
   it("answers no draft without a projectPath", async () => {

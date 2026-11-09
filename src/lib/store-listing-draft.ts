@@ -260,7 +260,7 @@ export function listingDraftOf(args: { projectPath: string; asked: readonly stri
     .filter((id) => stores.includes(id.split(".")[0] as ListingStore) && id in args.statusById && args.statusById[id] !== "have")
     .map((id) => ownerAnswerOf(id, facts));
 
-  const gallery = storeGalleryOf(projectPath, stores);
+  const gallery = storeGalleryOf(projectPath, stores, parsed?.screenshotPaths);
   const written = fromCode.length ? `${raw === null ? "storeMd is a STORE.md to save as it is" : `add ${fromCode.map((line) => `"${line.line}"`).join(" and ")} under "${LISTING_SECTION}"`}, read from the manifest; ` : "";
   const say = `${written}${agentWrites.length ? `write ${agentWrites.length} ${agentWrites.length === 1 ? "line" : "lines"} in agentWrites from the facts beside each, inside its limit; ` : ""}the decisions write their own lines once answered${ownerAnswers.length ? `; ${ownerAnswers.length} data-use and privacy ${ownerAnswers.length === 1 ? "answer is" : "answers are"} the owner's alone (ownerAnswers): quote the code facts, propose no answer` : ""}. Then show the person the whole file for review; nothing is sent until sync-listing.`;
 

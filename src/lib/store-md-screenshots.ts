@@ -16,8 +16,8 @@ const screenshotsArgument = (named: number): string =>
 
 const IMAGE_PATH = /[^\s`'"()[\]<>,:]+\.(?:png|jpe?g|webp)\b/gi;
 
-export function screenshotFilesNamed(value: string): number {
-  return new Set(value.match(IMAGE_PATH) ?? []).size;
+export function screenshotFilesListed(value: string): string[] {
+  return [...new Set(value.match(IMAGE_PATH) ?? [])];
 }
 
 export function screenshotsAdvice(named: number | undefined): string {

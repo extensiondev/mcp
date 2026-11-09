@@ -22,7 +22,7 @@ import { resolveStoreCategories, storesNamingACategory, type CategoryRead } from
 import { bounded, type OverLimitMeasure } from "./store-md-bounded";
 import { bulletLine, storeOwnLinesBody } from "./store-md-bullets";
 import { safariTitle } from "./store-md-safari-title";
-import { screenshotFilesNamed } from "./store-md-screenshots";
+import { screenshotFilesListed } from "./store-md-screenshots";
 
 export * from "./store-md-declarations";
 
@@ -41,6 +41,7 @@ export interface StoreMdListing {
   lines: Partial<Record<ListingField, string>>;
   screenshotsLine?: string;
   screenshotFiles?: number;
+  screenshotPaths?: string[];
 }
 
 export interface UnreadLine {
@@ -343,7 +344,8 @@ function readBullets(result: StoreMdListing, body: string, into: ListingText, ow
   for (const { key, value } of bullets(body)) {
     if (!ownSection && SCREENSHOTS_KEY.test(key.toLowerCase())) {
       result.screenshotsLine = key;
-      result.screenshotFiles = screenshotFilesNamed(value);
+      result.screenshotPaths = screenshotFilesListed(value);
+      result.screenshotFiles = result.screenshotPaths.length;
 
       continue;
     }
