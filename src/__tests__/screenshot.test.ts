@@ -399,13 +399,14 @@ describe("extension_screenshot store captures at the store's preset as a 24-bit 
     expect(chrome.methods.filter((m) => m === "Page.captureScreenshot")).toHaveLength(0);
   });
 
-  it("crops the Firefox tab to 1280x800 at 1x into store/screenshots/firefox/01.png and answers the row it clears", async () => {
-    const firefox = await fakeFirefox([{ url: "https://example.com/", selected: true }]);
+  it("crops the Firefox site tab, not the selected about: page, to 1280x800 at 1x into store/screenshots/firefox/01.png and answers the row it clears", async () => {
+    const firefox = await fakeFirefox([{ url: "about:addons", selected: true }, { url: "https://example.com/" }]);
     const dir = project("firefox", readyContract("dev", "firefox", { rdpPort: firefox.port }));
 
     const out = await run({ projectPath: dir, browser: "firefox", store: "firefox" });
 
     expect(out.ok).toBe(true);
+    expect(out.value.url).toBe("https://example.com/");
     expect(firefox.captures[0]).toMatchObject({ rect: { left: 0, top: 0, width: 1280, height: 800 }, snapshotScale: 1 });
     expect(out.value.path).toBe(path.join(dir, "store", "screenshots", "firefox", "01.png"));
     expect(pngSize(out.value.path)).toEqual({ width: 1280, height: 800 });

@@ -56,8 +56,10 @@ import {
 import { flattenPngAlpha, pngHeader } from "../lib/png-flat";
 import { clearsStoreRow, STORE_SCREENSHOT_SPECS, storeSizeSentence } from "../lib/store-screenshot-sizes";
 import {
+  browserPageStoreRefusal,
   capturePlan,
   expectedPixels,
+  isBrowserPageUrl,
   isStoreChoice,
   nextStoreScreenshotPath,
   PRESET_SENTENCE,
@@ -445,6 +447,17 @@ function chooseTarget<T>(
 
 const pageRef = (t: PageTarget): TargetRef => ({ targetId: t.targetId, url: t.url });
 
+function storeTargets<T>(args: Args, matches: T[], url: (t: T) => string): T[] | string {
+  if (!storeChoiceOf(args)) return matches;
+
+  const sites = matches.filter((t) => !isBrowserPageUrl(url(t)));
+  if (sites.length || !matches.length) return sites;
+
+  const why = browserPageStoreRefusal(matches.map(url));
+
+  return refuse("no-target", "E_NO_TARGET", why.message, why.hint);
+}
+
 async function onChromium(args: Args, browser: string, context: string, timeoutMs: number): Promise<string> {
   const resolved = await resolveCdpPort(args.projectPath, browser, { waitMs: Math.min(timeoutMs, 5_000), graceMs: 1_000, timeoutMs });
 
@@ -472,10 +485,12 @@ async function onChromium(args: Args, browser: string, context: string, timeoutM
     const found = all.find((t) => t.targetId === args.targetId);
     if (!found) return targetNotFound(COMMAND, args.targetId, all.map(pageRef), { projectPath: args.projectPath, browser });
 
-    chosen = { target: found, warning: null };
+    const kept = storeTargets(args, [found], (t) => t.url);
+    chosen = typeof kept === "string" ? kept : { target: found, warning: null };
   } else if (context === "page" && !isExtensionUrl(args.url)) {
     const pages = await listPageTargets(resolved.port).catch(() => [] as PageTarget[]);
-    chosen = chooseTarget(args.url ? matchTargetsByUrl(pages, args.url) : pages.filter((t) => !isExtensionUrl(t.url)), args.url ?? "any open tab", pageRef, "chromium");
+    const matches = storeTargets(args, args.url ? matchTargetsByUrl(pages, args.url) : pages.filter((t) => !isExtensionUrl(t.url)), (t) => t.url);
+    chosen = typeof matches === "string" ? matches : chooseTarget(matches, args.url ?? "any open tab", pageRef, "chromium");
   } else {
     let wanted = args.url as string;
 
@@ -548,8 +563,12 @@ async function onGecko(args: Args, browser: string, context: string, timeoutMs: 
     return chosen.target;
   };
 
+  const tabUrl = (t: RdpTab): string => String(t.url ?? "");
+
   if (args.targetId) {
-    tab = findGeckoTab(tabs, args.targetId) ?? targetNotFound(COMMAND, args.targetId, tabs.map(geckoTabRef));
+    const found = findGeckoTab(tabs, args.targetId);
+    const kept = found ? storeTargets(args, [found], tabUrl) : [];
+    tab = typeof kept === "string" ? kept : (found ?? targetNotFound(COMMAND, args.targetId, tabs.map(geckoTabRef)));
   } else if (context !== "page") {
     const doc = surfaceDocumentOrRefusal(args, browser, context);
     if ("refusal" in doc) return doc.refusal;
@@ -569,8 +588,8 @@ async function onGecko(args: Args, browser: string, context: string, timeoutMs: 
     tab = choose(geckoExtensionTabsByUrl(tabs, args.url), args.url);
   } else {
     const wanted = args.url?.toLowerCase();
-    const matches = wanted ? tabs.filter((t) => String(t.url ?? "").toLowerCase().includes(wanted)) : tabs;
-    tab = choose(matches, args.url ?? "any open tab", (t) => t.selected === true);
+    const matches = storeTargets(args, wanted ? tabs.filter((t) => tabUrl(t).toLowerCase().includes(wanted)) : tabs, tabUrl);
+    tab = typeof matches === "string" ? matches : choose(matches, args.url ?? "any open tab", (t) => t.selected === true);
   }
 
   if (typeof tab === "string") return tab;
@@ -634,7 +653,12 @@ async function onWebKit(args: Args, browser: string, context: string, timeoutMs:
       current = await client.currentUrl();
     }
 
-    if (storeChoiceOf(args)) return capturedForStores(args, browser, "page", "webkit", shoot, current ?? "", "webdriver", warnings);
+    if (storeChoiceOf(args)) {
+      const kept = storeTargets(args, [current ?? ""], (url) => url);
+      if (typeof kept === "string") return kept;
+
+      return capturedForStores(args, browser, "page", "webkit", shoot, current ?? "", "webdriver", warnings);
+    }
 
     const capturedIn = args.browserCapture && isCaptureBrowser(browser) ? await capturedInWebKit(client, browser, timeoutMs) : null;
 

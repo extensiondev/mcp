@@ -108,6 +108,30 @@ export function captureRecipe(store: ListingStore): string {
   return `Screenshots for ${store}: extension_screenshot store:"${store}" on a ${store === "safari" ? "Safari" : "Chromium"} dev session, one call per view, then sync-listing browsers:["${store}"] picks them up from ${storeScreenshotsFolder(store)}/.`;
 }
 
+const BROWSER_PAGE_SCHEMES = new Set(["about", "chrome", "edge", "brave", "opera", "vivaldi", "devtools", "chrome-untrusted", "chrome-search", "chrome-error", "chrome-native", "view-source"]);
+
+export function isBrowserPageUrl(url: unknown): boolean {
+  const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(String(url ?? "").trim())?.[1];
+
+  return !scheme || BROWSER_PAGE_SCHEMES.has(scheme.toLowerCase());
+}
+
+/* @invariant A STORE LISTING SCREENSHOT SHOWS THE EXTENSION AT WORK, NEVER
+ * THE BROWSER'S OWN PAGES. A fresh session opens on chrome://extensions or
+ * about:blank, and a store capture that picked such a tab filed the
+ * browser's management page as store/screenshots/<store>/01.png, which
+ * sync-listing then shipped to the store; so a store capture refuses a
+ * browser page target before any pixel is asked for and writes nothing. */
+export function browserPageStoreRefusal(urls: string[]): { message: string; hint: string } {
+  const named = urls.map((url) => url || "a blank tab");
+  const shown = named.length === 1 ? `${named[0]} is a browser page` : `The open tabs show only browser pages (${named.join(", ")})`;
+
+  return {
+    message: `${shown}, not the extension at work, so it is not a store listing screenshot; nothing was written under ${STORE_SCREENSHOTS_DIR}/.`,
+    hint: 'Open a site the extension works on first with extension_open {url: "https://..."}, or capture one of its own surfaces (context: "popup" or "options"), then retry with store.',
+  };
+}
+
 export function listStoreScreenshots(projectPath: string, store: ListingStore): string[] {
   const dir = storeScreenshotsDir(projectPath, store);
 

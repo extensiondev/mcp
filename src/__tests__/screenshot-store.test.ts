@@ -26,10 +26,10 @@ function pngSize(file: string): { width: number; height: number } {
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
-async function chromium(): Promise<void> {
+async function chromium(targets: Array<{ id: string; type: string; url: string }> = [PAGE]): Promise<void> {
   let metrics: { width: number; height: number; deviceScaleFactor: number } | null = null;
 
-  chrome = await startFakeChrome([PAGE], (command) => {
+  chrome = await startFakeChrome(targets, (command) => {
     if (command.method === "Emulation.setDeviceMetricsOverride") metrics = command.params as typeof metrics;
     if (command.method === "Emulation.clearDeviceMetricsOverride") metrics = null;
     if (command.method === "Page.getLayoutMetrics") return { cssLayoutViewport: { clientWidth: 640, clientHeight: 480 } };
@@ -134,6 +134,41 @@ describe("extension_screenshot store captures at the store's preset and files it
     expect(sized.error.code).toBe("E_BAD_REQUEST");
     expect(sized.error.message).toContain("omit width, height and deviceScaleFactor with store");
     expect(fs.readdirSync(path.join(dir, "store", "screenshots", "chrome"))).toEqual(["01.png", "02.png"]);
+  });
+
+  it("refuses a browser page as a store target and writes nothing, picks a site tab over one, and still captures a browser page without store", async () => {
+    await chromium([
+      { id: "EXT", type: "page", url: "chrome://extensions/" },
+      { id: "BLANK", type: "page", url: "about:blank" },
+    ]);
+
+    const refused = await run({ projectPath: dir, browser: "chrome", store: "chrome" });
+
+    expect(refused.ok).toBe(false);
+    expect(refused.status).toBe("no-target");
+    expect(refused.error.message).toBe("The open tabs show only browser pages (chrome://extensions/, about:blank), not the extension at work, so it is not a store listing screenshot; nothing was written under store/screenshots/.");
+    expect(refused.hint).toContain('extension_open {url: "https://..."}');
+    expect(fs.existsSync(path.join(dir, "store"))).toBe(false);
+
+    const named = await run({ projectPath: dir, browser: "chrome", url: "chrome://extensions", store: "chrome" });
+
+    expect(named.status).toBe("no-target");
+    expect(named.error.message).toContain("chrome://extensions/ is a browser page");
+    expect(chrome!.commands.filter((c) => c.method === "Page.captureScreenshot")).toHaveLength(0);
+
+    const plain = await run({ projectPath: dir, browser: "chrome", url: "chrome://extensions" });
+
+    expect(plain.ok).toBe(true);
+    expect(plain.value.url).toBe("chrome://extensions/");
+    expect(plain.value.path.includes(path.join("store", "screenshots"))).toBe(false);
+
+    chrome!.targets.push(PAGE);
+
+    const site = await run({ projectPath: dir, browser: "chrome", store: "chrome" });
+
+    expect(site.ok).toBe(true);
+    expect(site.value.url).toBe(PAGE.url);
+    expect(site.value.path).toBe(path.join(dir, "store", "screenshots", "chrome", "01.png"));
   });
 
   it("safari on a Chromium session renders 1440x900 at 2x into a 2880x1800 file and warns that Apple wants Safari", async () => {
