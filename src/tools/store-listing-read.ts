@@ -87,7 +87,7 @@ export async function readListing(scope: Scope & { store?: string }): Promise<st
       listings: views,
       consoleUrl: consoleProjectUrl(api.ref, ConsoleProjectPage.submissions, scope.api),
     },
-    hint: `${views.map(listingSentence).join(". ")}. This is the listing saved on extension.dev, which the platform sends to a store only on publish; extension_submit (action: "sync-listing") fills it from STORE.md and the built icon under an owner's approval, and extension_submit_check (action: "preflight") says which listing checks still fail.`,
+    hint: `${views.map(listingSentence).join(". ")}. This is the listing saved on extension.dev, which the platform sends to a store only on publish; extension_submit (action: "sync-listing") records STORE.md and the built icon here under the owner's own token with no approval (only a value the platform derives asks a workspace owner), the Chrome Web Store dashboard fields are pasted by the owner from this saved listing, and extension_submit_check (action: "preflight") says which listing checks still fail.`,
     warnings: [unread.length ? `Listings not read for ${unread.join("; ")}.` : null],
   });
 }

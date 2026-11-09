@@ -114,6 +114,17 @@ describe("extension_release_status include listing", () => {
     expect(props.store.enum).toEqual(["chrome", "firefox", "edge", "safari"]);
   });
 
+  it("477: says sync-listing records the listing with no approval and that the owner pastes Chrome's dashboard fields", async () => {
+    if (process.platform === "win32") return;
+
+    const out = JSON.parse(await releaseStatus({ include: ["listing"], store: "chrome", api: API }));
+    const hint: string = out.value.listing.hint;
+
+    expect(hint).toContain('extension_submit (action: "sync-listing") records STORE.md and the built icon here under the owner\'s own token with no approval');
+    expect(hint).toContain("the Chrome Web Store dashboard fields are pasted by the owner from this saved listing");
+    expect(hint).not.toContain("under an owner's approval");
+  });
+
   it("reads one store's saved listing and says what it lacks", async () => {
     if (process.platform === "win32") return;
 
