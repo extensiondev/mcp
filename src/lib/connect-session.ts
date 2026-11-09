@@ -10,6 +10,7 @@ import { consoleProjectUrl } from "./console-urls";
 import { composedDashboardUrl } from "./dashboard-url-meter";
 import { AMO_API_KEY_PAGE } from "./firefox-store";
 import { isRow, text } from "./ship-act";
+import { withStoreKeyPageNote } from "./store-key-page-notes";
 
 import type { ProjectRef } from "./registry";
 
@@ -140,7 +141,7 @@ export function pendingSentences(args: {
   const other = `On another device, open ${args.codeUrl} and enter the code ${args.session.userCode}${args.session.actor ? `, signed in as ${args.session.actor}` : ""}.`;
   const refused = args.session.refusal ? ` The store refused the last key with: ${args.session.refusal.message}` : "";
 
-  return `${where} There, ${handoffSentence(args.store, args.savedProduct)}. ${other} The key goes from your clipboard or file straight to extension.dev, never through this chat, and is saved only after the store accepts it.${refused}`;
+  return `${withStoreKeyPageNote(args.store, `${where} There, ${handoffSentence(args.store, args.savedProduct)}.`)} ${other} The key goes from your clipboard or file straight to extension.dev, never through this chat, and is saved only after the store accepts it.${refused}`;
 }
 
 export function connectedSentence(store: ConnectStore, session: ConnectSession): string {

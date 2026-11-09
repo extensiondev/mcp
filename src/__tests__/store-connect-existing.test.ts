@@ -93,7 +93,7 @@ describe("extension_submit connect recognizes a store that already has a working
     expect(platform.sent("POST", SESSION("firefox"))).toHaveLength(0);
     expect(opened).toEqual([]);
     expect(out.value.sayToPerson).toBe(
-      `Firefox Add-ons is already connected as user:17:42, and the store accepted the saved key when it was checked just now, ${NOW}. No connect page was opened and nothing was replaced. Say preflight and I read the store's readiness now. To put a different key in its place, ask for it and I call extension_submit {action: "connect", store: "firefox", replace: true}.`,
+      `Firefox Add-ons is already connected as user:17:42, and the store accepted the saved key when it was checked just now, ${NOW}. No connect page was opened and nothing was replaced. Say preflight and I read the store's readiness now. To put a different key in its place, ask for it and I call extension_submit {action: "connect", store: "firefox", replace: true}. AMO shows the JWT secret only when it generates the pair; if you do not hold it in a password manager, the button to press on the key page is "Revoke and regenerate credentials", which voids the pair every other tool holds, and the new pair must be pasted into the connect page right away.`,
     );
 
     expect(JSON.stringify(out)).not.toContain(SECRET);
@@ -158,6 +158,7 @@ describe("extension_submit connect recognizes a store that already has a working
     expect(out.value.checkedNow).toBe(false);
     expect(out.value.checkedAt).toBe(BEFORE);
     expect(out.value.sayToPerson).toContain(`at its last check, ${BEFORE}; a new check could not run now: Project tokens are not accepted here.`);
+    expect(out.value.sayToPerson).toMatch(/replace: true}\.$/);
     expect(platform.sent("POST", SESSION("chrome"))).toHaveLength(0);
   });
 

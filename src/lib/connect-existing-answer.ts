@@ -10,6 +10,7 @@ import { openPagesForPerson } from "./approval-open";
 import { CONNECT_ACTION, CONNECT_STORE_NAMES, accountPhrase, type ConnectStore } from "./connect-session";
 import { envelope } from "./envelope";
 import { failedCheckSentence, nextStep, storeSettingsUrl, workspaceReconnectSentences, workspaceStoreAccountsUrl } from "./store-connection";
+import { withStoreKeyPageNote } from "./store-key-page-notes";
 
 import type { ConnectionCheck, SavedConnection } from "./connect-existing";
 import type { ProjectApi } from "./project-api";
@@ -35,7 +36,7 @@ export function replaceCall(store: ConnectStore): string {
 }
 
 function replaceSentence(store: ConnectStore): string {
-  return `To put a different key in its place, ask for it and I call ${replaceCall(store)}.`;
+  return withStoreKeyPageNote(store, `To put a different key in its place, ask for it and I call ${replaceCall(store)}.`);
 }
 
 export function passingSentence(store: ConnectStore, check: ConnectionCheck): string {

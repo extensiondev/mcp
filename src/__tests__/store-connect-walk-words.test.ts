@@ -148,6 +148,13 @@ describe("the 2026-11-02 connect walk: what each store names, what is on file, a
     expect(firefox.value.sayToPerson).toContain(`A working key is already on file: Firefox Add-ons reads connected with this project's key as ${AMO}`);
     expect(firefox.value.nextStep.thenCall.args.browsers).toEqual(["firefox"]);
     expect(safari.value.keyOnFile).toBeUndefined();
+
+    expect(safari.value.sayToPerson).toContain(
+      `On the App Store key page, press the "+" beside "Active" (not Edit, which only revokes keys), name the key, give it App Manager access and use "Download API Key" in that dialog, because the .p8 is offered once; the Issuer ID is at the top of that page and the Key ID is in the new row.`,
+    );
+
+    expect(safari.value.sayToPerson).not.toContain("Revoke and regenerate");
+    expect(firefox.value.sayToPerson).not.toContain("Download API Key");
     expect(safari.value.nextStep.thenCall.args.browsers).toEqual(["safari"]);
   });
 

@@ -81,6 +81,7 @@ describe("extension_submit connect hands a store key from the person's browser t
     expect(shut.value.openedNote).toBe("No page was opened: EXTENSION_HEADLESS=1 is set in this server's environment. Hand the person the urls in this answer instead of calling again for a window.");
     expect(shut.hint).toContain(shut.value.openedNote);
     expect(shut.value.sayToPerson).toContain(`Open ${shut.value.connectUrl} to connect Firefox Add-ons`);
+    expect(shut.value.sayToPerson).toContain(`AMO shows the JWT secret only when it generates the pair; if you do not hold it in a password manager, the button to press on the key page is "Revoke and regenerate credentials"`);
     expect(opened).toEqual([]);
 
     vi.stubEnv("EXTENSION_HEADLESS", "");
@@ -91,6 +92,7 @@ describe("extension_submit connect hands a store key from the person's browser t
     expect(open.value.opened).toBe(true);
     expect(open.value.openedNote).toBeUndefined();
     expect(open.value.sayToPerson).toContain("is open in your browser");
+    expect(open.value.sayToPerson).toContain("and the new pair must be pasted into the connect page right away.");
     expect(opened).toEqual(["https://addons.mozilla.org/developers/addon/api/key/", open.value.connectUrl]);
     vi.unstubAllEnvs();
   });
