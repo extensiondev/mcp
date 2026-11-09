@@ -96,6 +96,9 @@ import {
   fallbackConnectUrl,
   itemLinkUrls,
   nextStep,
+  runPublishRefusedStep,
+  runPublishesAfterUpload,
+  runPublishesStep,
   storeSettingsUrl,
   uploadedStepFailedStep,
   uploadStopsAtDraft,
@@ -446,11 +449,37 @@ export function storeOutcomes(args: {
   );
 }
 
+const PACKAGE_HELD_STATUSES = new Set(["draft", "uploaded"]);
+
+function runStillGoing(record: PlatformSubmission): boolean {
+  const status = String(record.run?.status ?? "").trim().toLowerCase();
+
+  return Boolean(status) && status !== "completed" && record.run?.settled !== true;
+}
+
+/* @invariant A DRAFT UNDER A SAVED MODE THAT PUBLISHES IS NOT A SETTLED
+ * RECORD. store.yml records the upload before its publish step runs, so under
+ * Chrome's "public" mode the record reads draft for the seconds between the
+ * two (ledger 480, 2026-11-09: answered at one second, published at thirty).
+ * While the call still has waitSeconds, a draft or uploaded record of a store
+ * whose saved mode sends the upload on, with no publish answer and no failed
+ * step yet, is waited on like a pending one; a record whose run the platform
+ * still reports as running is waited on the same way.
+ */
+export function awaitsRunPublish(store: string, record: PlatformSubmission | undefined, modes: ModeIds): boolean {
+  if (!record || !runPublishesAfterUpload(store, modes)) return false;
+
+  const status = String(record.status ?? "").trim().toLowerCase();
+
+  return PACKAGE_HELD_STATUSES.has(status) && !record.publish && !record.failure && !uploadRefused(record.storeUpload);
+}
+
 function judgeSubmit(
   byStore: Record<string, PlatformSubmission>,
   stores: string[],
   ids: Record<string, string>,
   retried: Record<string, StoreRetry> = {},
+  modes: ModeIds = {},
 ): Verdict {
   const settled: Array<{
     store: string;
@@ -484,6 +513,16 @@ function judgeSubmit(
       SUBMIT_PENDING.has(status)
     ) {
       waiting.push(`${store}: ${status || "no record yet"}`);
+      continue;
+    }
+
+    if (awaitsRunPublish(store, record, modes)) {
+      waiting.push(`${store}: ${status}, the run goes on to publish it under the saved mode "${String(modes[store])}"`);
+      continue;
+    }
+
+    if (!FAILED_STATUSES.has(status) && runStillGoing(record)) {
+      waiting.push(`${store}: ${status}, the run is still going`);
       continue;
     }
 
@@ -1407,7 +1446,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
           token,
           command: "extension_submit",
         }),
-      judge: (byStore) => judgeSubmit(byStore, outcome.stores, ids, retried),
+      judge: (byStore) => judgeSubmit(byStore, outcome.stores, ids, retried, modes),
     });
     const retries = Object.entries(retried).map(([store, row]) => ({
       store,
@@ -1459,8 +1498,16 @@ async function answer(args: SubmitToolArgs): Promise<string> {
               Boolean(row.record?.failure?.step),
           )
       : [];
+    const awaitingPublish = outcome.stores.filter((store) => awaitsRunPublish(store, waited.record?.[store], modes));
+    const publishRefusals = waited.outcome.recorded
+      ? outcome.stores
+          .filter((store) => runPublishesAfterUpload(store, modes) && String(waited.record?.[store]?.publish?.status ?? "").toLowerCase() === "failed")
+          .map((store) => ({ store, message: String(waited.record?.[store]?.publish?.storeMessage ?? "") }))
+      : [];
     const judgedStep = !waited.outcome.recorded
-      ? dispatchedStep(outcome.stores, firstPage)
+      ? awaitingPublish.length
+        ? runPublishesStep(awaitingPublish, modes, false, firstPage)
+        : dispatchedStep(outcome.stores, firstPage)
       : failedStores.length
         ? submitFailedStep(failureLines, firstPage)
         : uploadedFailures.length
@@ -1469,14 +1516,17 @@ async function answer(args: SubmitToolArgs): Promise<string> {
               uploadedFailures.map((row) => String(row.record?.failure?.step)).join("; "),
               firstPage,
             )
-          : withSafariPublishStep(
-              doneStep(
-                outcome.stores,
-                itemUrl,
-                outcome.stores.filter((store) => uploadTaken(waited.record?.[store]?.storeUpload)),
-              ),
-              { stores: outcome.stores, approvalId: coveredApproval, statusRead },
-            );
+          : publishRefusals.length
+            ? runPublishRefusedStep(publishRefusals, firstPage)
+            : withSafariPublishStep(
+                doneStep(
+                  outcome.stores,
+                  itemUrl,
+                  outcome.stores.filter((store) => uploadTaken(waited.record?.[store]?.storeUpload)),
+                  modes,
+                ),
+                { stores: outcome.stores, approvalId: coveredApproval, statusRead },
+              );
     const refundLine = failedStores
       .map((store) => ({ store, sentence: approvalRefundSentence(waited.record?.[store]) }))
       .filter((row) => row.sentence)

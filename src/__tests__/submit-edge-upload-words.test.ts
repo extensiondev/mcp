@@ -116,6 +116,20 @@ describe("the Edge package operation reaches the record with its source and mess
     expect(doneStep(["chrome"], "").kind).toBe("publish");
   });
 
+  it("480: never offers the publish step for a store whose saved mode sends the upload on to review", () => {
+    const published = doneStep(["chrome"], "", [], { chrome: "public" });
+    const mixed = doneStep(["chrome", "edge"], "", ["edge"], { chrome: "public" });
+
+    expect(published.kind).toBe("done");
+    expect(published.say).toContain('under the Chrome Web Store\'s saved mode "public", the same run sent it on to review; no publish approval is needed');
+    expect(published.say).toContain("extension_release_status (include: ['stores'])");
+    expect(published.say).not.toContain(PUBLISH_SENTENCE);
+    expect(mixed.kind).toBe("done");
+    expect(mixed.say).toContain("Edge Add-ons holds its upload as a draft, not published and not in review");
+    expect(mixed.say).not.toContain(PUBLISH_SENTENCE);
+    expect(doneStep(["chrome"], "", [], { chrome: "draft-until-public" }).kind).toBe("publish");
+  });
+
   it("answers Microsoft's words in the per-store outcome", () => {
     const byStore = { edge: toSubmission({ id: "sub_edge", store: "edge", ...FAILED })! };
     const out = storeOutcomes({ stores: ["edge"], byStore, ids: { edge: "sub_edge" }, checkedAt: CHECKED_AT, trackUrl: () => "https://console.test/edge" });

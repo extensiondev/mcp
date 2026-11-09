@@ -190,12 +190,58 @@ export function submitFailedStep(failures: string[], trackUrl: string): NextStep
   );
 }
 
-export function doneStep(stores: string[], itemUrl: string, taken: string[] = []): NextStep {
+export function runPublishesAfterUpload(store: string, modes: ModeIds = {}): boolean {
+  return DRAFT_STORES.has(store) && !uploadStopsAtDraft(store, modes[store]);
+}
+
+export const STORES_STATUS_READ = "extension_release_status (include: ['stores'])";
+
+function savedModeClause(stores: string[], modes: ModeIds): string {
+  return stores.map((store) => `${STORE_NAMES[store] ?? store}'s saved mode "${String(modes[store])}"`).join(" and ");
+}
+
+/* @invariant UNDER A SAVED MODE THAT PUBLISHES, "SAY PUBLISH" IS NEVER THE
+ * NEXT STEP. On 2026-11-09 a Chrome submit under the saved mode "public"
+ * answered one second into the run that the item was a draft and that
+ * sending it to review was one more approval, while the same run published
+ * it thirty seconds later and the store read PENDING_REVIEW (ledger 480). The
+ * run publishes under that mode, so the step says so and points at the
+ * store's word; the publish sentence belongs to a draft mode alone.
+ */
+export function runPublishesStep(stores: string[], modes: ModeIds, confirmed: boolean, trackUrl?: string): NextStep {
+  const landed = `${storeNames(stores)} took the build`;
+  const say = confirmed
+    ? `${landed} and, under ${savedModeClause(stores, modes)}, the same run sent it on to review; no publish approval is needed and "publish" is not a next step. Read the store's word with ${STORES_STATUS_READ}.`
+    : `${landed} as a draft; under ${savedModeClause(stores, modes)} the run sends it on to review next, and the record had not confirmed that when this call stopped waiting. Read the store's word with ${STORES_STATUS_READ}; do not submit again and do not ask for a publish approval.`;
+
+  return nextStep(confirmed ? "done" : "watch", say, trackUrl);
+}
+
+export function runPublishRefusedStep(refusals: Array<{ store: string; message: string }>, trackUrl: string): NextStep {
+  const lines = refusals.map((row) => `${row.store}: ${row.message || "no reason given"}`).join("; ");
+
+  return nextStep(
+    "watch",
+    `The upload landed as a draft, and the run's own publish step was refused by the store (${lines}); nothing is in review. Fix the cause, then say publish for that draft; ${trackUrl} holds the store's words.`,
+    trackUrl,
+  );
+}
+
+export function doneStep(stores: string[], itemUrl: string, taken: string[] = [], modes: ModeIds = {}): NextStep {
+  const publishing = stores.filter((store) => runPublishesAfterUpload(store, modes));
+  if (publishing.length > 0 && publishing.length === stores.length) return runPublishesStep(publishing, modes, true);
+
   const drafts = stores.length > 0 && stores.every((store) => DRAFT_STORES.has(store));
   const grounded = stores.includes("chrome") || taken.some((store) => stores.includes(store));
   const uploaded = `The build is uploaded to ${storeNames(stores)} as a draft, recorded as uploaded and not public.`;
   const testers =
     "A store draft cannot be installed from the store, but testers can already install this same build from its extension.dev build link (extension_publish shares it) while the store review has not run.";
+
+  if (publishing.length > 0) {
+    const held = stores.filter((store) => !publishing.includes(store));
+
+    return nextStep("done", `${runPublishesStep(publishing, modes, true).say} ${storeNames(held)} holds its upload as a draft, not published and not in review.`);
+  }
 
   if (drafts && grounded) {
     return nextStep("publish", `${uploaded} ${testers} ${PUBLISH_SENTENCE}`);
