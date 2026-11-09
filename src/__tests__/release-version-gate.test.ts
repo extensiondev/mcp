@@ -69,6 +69,31 @@ describe("the release rails fail closed", () => {
     }
   });
 
+  it("keeps a refused publish from tagging and reports it in the summary while the run stays red", () => {
+    const yml = read(".github/workflows/release.yml");
+
+    const step = (name: string) => {
+      const start = yml.indexOf(`- name: ${name}\n`);
+      expect(start).toBeGreaterThan(-1);
+      const next = yml.indexOf("\n      - name: ", start + 1);
+
+      return yml.slice(start, next === -1 ? undefined : next);
+    };
+
+    expect(step("Publish to npm with provenance")).toContain("continue-on-error: true");
+    expect(step("Commit and tag release")).toContain("steps.publish.outcome != 'failure'");
+    expect(step("Create GitHub release")).toContain("steps.tag.outcome == 'success'");
+    expect(step("Create GitHub release")).toContain('gh release view "$TAG" >/dev/null 2>&1 || gh release create');
+    expect(step("Publish the listing to the MCP registry")).toContain("steps.tag.outcome == 'success'");
+
+    const report = step("Report the npm publish");
+    expect(yml.indexOf("name: Report the npm publish")).toBeGreaterThan(yml.indexOf("name: Publish the listing to the MCP registry"));
+    expect(report).toContain("npm publish refused (npm/cli#9969)");
+    expect(report).toContain("scripts/stage-release.sh $VERSION");
+    expect(report).toContain("release_commit=$BUILT_FROM");
+    expect(report).toMatch(/exit 1\s*$/);
+  });
+
   it("reads E404 as not published and every other npm view failure as unknown", () => {
     const yml = read(".github/workflows/release.yml");
     expect(yml).toMatch(/grep -q "E404"/);

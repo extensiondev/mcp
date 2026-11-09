@@ -251,31 +251,15 @@ jobs:
       - name: Publish to npm with provenance
         id: publish
         if: steps.published.outputs.already != 'true'
+        continue-on-error: true
         run: npm publish --provenance --access ${{ steps.meta.outputs.publish_access }} --tag ${{ steps.validate.outputs.dist_tag }} --ignore-scripts
-
-      # extensiondev/mcp was recreated on 2026-10-11, after GitHub started giving
-      # new repositories an immutable OIDC subject, and npm trusted publishing
-      # does not match that subject yet (npm/cli#9969). Until it does, the
-      # exchange answers "package not found" and the publish ends in E404.
-      - name: Explain a refused trusted publish
-        if: failure() && steps.publish.outcome == 'failure'
-        env:
-          CHANNEL: ${{ inputs.channel }}
-          VERSION: ${{ steps.validate.outputs.version }}
-          DIST_TAG: ${{ steps.validate.outputs.dist_tag }}
-        run: |
-          BUILT_FROM="$(git rev-parse HEAD)"
-          if [ "$CHANNEL" = "stable" ]; then
-            echo "::error::npm refused the trusted publish. While npm/cli#9969 is open, stage $VERSION from a clean checkout of $BUILT_FROM, the commit this run built from: git checkout $BUILT_FROM && scripts/stage-release.sh $VERSION (it bumps, builds, writes gitHead $BUILT_FROM and stages with --provenance=false), then npm stage approve with a one-time code. Then run this workflow again with the same inputs and release_commit $BUILT_FROM: it sees the version on npm, skips the publish, and commits, tags, releases and lists that commit, naming in its summary any commit main gained since. Do not bump, tag or push the release by hand: the rerun refuses an existing tag, and a hand bump leaves server.json, the GitHub release and the MCP registry listing behind (10.15.0 to 10.18.1)."
-          else
-            echo "::error::npm refused the trusted publish. While npm/cli#9969 is open, publish $VERSION from a machine (npm stage publish with --provenance=false --tag $DIST_TAG, then npm stage approve with a one-time code); nothing else is needed for a canary."
-          fi
 
       # The tag and the bump are pushed only once npm serves the tarball: a
       # publish that fails after the push left vX.Y.Z tagged and main bumped
       # while npm served nothing, and the rerun was refused by the tag check.
       - name: Commit and tag release
-        if: inputs.channel == 'stable'
+        id: tag
+        if: inputs.channel == 'stable' && steps.publish.outcome != 'failure'
         env:
           VERSION: ${{ steps.validate.outputs.version }}
           TAG: ${{ steps.validate.outputs.tag }}
@@ -303,13 +287,13 @@ jobs:
           fi
 
       - name: Create GitHub release
-        if: inputs.channel == 'stable'
+        if: inputs.channel == 'stable' && steps.tag.outcome == 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.validate.outputs.version }}
           TAG: ${{ steps.validate.outputs.tag }}
         run: |
-          gh release create "$TAG" \
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" \
             --verify-tag \
             --title "v$VERSION" \
             --notes-file "${{ steps.notes.outputs.file }}"
@@ -329,5 +313,59 @@ jobs:
       # io.github.<owner>/* off the OIDC token's repository_owner claim, and
       # this repository is owned by extensiondev.
       - name: Publish the listing to the MCP registry
-        if: inputs.channel == 'stable'
+        if: inputs.channel == 'stable' && steps.tag.outcome == 'success'
         run: ./scripts/publish-mcp-registry.sh
+
+      # extensiondev/mcp was recreated on 2026-10-11, after GitHub started giving
+      # new repositories an immutable OIDC subject, and npm trusted publishing
+      # does not match that subject yet (npm/cli#9969). Until it does, the
+      # exchange answers "package not found" and the publish ends in E404. The
+      # tag, the GitHub release and the listing wait for npm, so a refused
+      # publish leaves only the staged rerun below, and the run stays red.
+      - name: Report the npm publish
+        if: ${{ !cancelled() && (steps.publish.outcome == 'success' || steps.publish.outcome == 'failure') }}
+        env:
+          PKG: ${{ steps.meta.outputs.name }}
+          ACCESS: ${{ steps.meta.outputs.publish_access }}
+          CHANNEL: ${{ inputs.channel }}
+          VERSION: ${{ steps.validate.outputs.version }}
+          DIST_TAG: ${{ steps.validate.outputs.dist_tag }}
+          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+        run: |
+          if [ "$PUBLISH_OUTCOME" = "success" ]; then
+            echo "npm: $PKG@$VERSION published with provenance" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          BUILT_FROM="$(git rev-parse HEAD)"
+          {
+            echo "### npm publish refused (npm/cli#9969)"
+            echo
+            if [ "$CHANNEL" = "stable" ]; then
+              echo "Nothing was committed, tagged, released or listed. Stage $VERSION from $BUILT_FROM, the commit this run built from, approve it, then run this workflow again with release_commit: it sees the version on npm, skips the publish, and commits, tags, releases and lists that commit."
+              echo
+              echo '```sh'
+              echo "git clone git@github.com:${{ github.repository }}.git && cd mcp  # or, in an existing clean checkout: git fetch origin"
+              echo "git checkout $BUILT_FROM"
+              echo "pnpm install --frozen-lockfile"
+              echo "scripts/stage-release.sh $VERSION"
+              echo "npm stage approve <stage-id>  # asks for a one-time code"
+              echo "gh workflow run release.yml -R ${{ github.repository }} -f channel=stable -f version=$VERSION -f release_commit=$BUILT_FROM"
+              echo '```'
+              echo
+              echo "Do not bump, tag or push the release by hand: the rerun refuses an existing tag, and a hand bump leaves server.json, the GitHub release and the MCP registry listing behind (10.15.0 to 10.18.1)."
+            else
+              echo "Publish the canary from a machine; nothing else is needed for a canary."
+              echo
+              echo '```sh'
+              echo "git clone git@github.com:${{ github.repository }}.git && cd mcp  # or, in an existing clean checkout: git fetch origin"
+              echo "git checkout $BUILT_FROM"
+              echo "pnpm install --frozen-lockfile"
+              echo "node scripts/set-release-version.mjs $VERSION && pnpm compile"
+              echo "node scripts/readme-logo-width.mjs npm"
+              echo "npm publish --access $ACCESS --tag $DIST_TAG --ignore-scripts --provenance=false --otp=<code>"
+              echo "git checkout -- ."
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::npm refused the trusted publish of $PKG@$VERSION (npm/cli#9969); the run summary lists the commands that finish the release from a machine"
+          exit 1
