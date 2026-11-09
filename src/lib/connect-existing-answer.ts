@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { canAutoOpen, openUrl } from "./approval-open";
+import { openPagesForPerson } from "./approval-open";
 import { CONNECT_ACTION, CONNECT_STORE_NAMES, accountPhrase, type ConnectStore } from "./connect-session";
 import { envelope } from "./envelope";
 import { failedCheckSentence, nextStep, storeSettingsUrl, workspaceReconnectSentences, workspaceStoreAccountsUrl } from "./store-connection";
@@ -147,18 +147,18 @@ export function uncheckedAnswer(api: ProjectApi, store: ConnectStore, check: Con
 
 export function workspaceFailingAnswer(api: ProjectApi, store: ConnectStore, check: ConnectionCheck, apiHint?: string): string {
   const accountsUrl = workspaceStoreAccountsUrl(api.ref, apiHint);
-  const opened = canAutoOpen({ noShip: false }) ? openUrl(accountsUrl) : false;
+  const opening = openPagesForPerson([accountsUrl]);
   const reason = check.connection.reason;
   const told = check.connection.reconnect
     ? workspaceReconnectSentences(reason, accountsUrl)
-    : `${failedCheckSentence(reason, store, "workspace")} The workspace's Store accounts page is ${accountsUrl}${opened ? " and is open in your browser" : ""}.`;
+    : `${failedCheckSentence(reason, store, "workspace")} The workspace's Store accounts page is ${accountsUrl}${opening.opened ? " and is open in your browser" : ""}.`;
   const say = `${told} No project connect page was opened. To give this project a key of its own instead, ask for it and I call ${replaceCall(store)}.`;
 
   return envelope({
     ok: true,
     command: COMMAND,
     status: "workspace-account-failing",
-    value: { ...baseValue(api, store, check, apiHint), storeRefusal: storeRefusalOf(check), accountsUrl, opened, sayToPerson: say, nextStep: nextStep("connect", say, accountsUrl) },
-    hint: say,
+    value: { ...baseValue(api, store, check, apiHint), storeRefusal: storeRefusalOf(check), accountsUrl, opened: opening.opened, ...(opening.note ? { openedNote: opening.note } : {}), sayToPerson: say, nextStep: nextStep("connect", say, accountsUrl) },
+    hint: [say, opening.note].filter(Boolean).join(" "),
   });
 }

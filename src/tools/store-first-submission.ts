@@ -8,7 +8,7 @@
 
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
-import { canAutoOpen, openUrl } from "../lib/approval-open";
+import { openPagesForPerson, type PageOpening } from "../lib/approval-open";
 import { consoleProjectUrl } from "../lib/console-urls";
 import { envelope } from "../lib/envelope";
 import { projectApiGet, projectApiReadFailure, type ProjectApi } from "../lib/project-api";
@@ -128,15 +128,16 @@ function route(store: FirstSubmissionStore): string {
   return `stores/${store}/first-submission`;
 }
 
-function openPages(pageUrl: string, dashboardUrl: string): boolean {
-  if (!canAutoOpen({ noShip: false })) return false;
-
-  if (dashboardUrl) openUrl(dashboardUrl);
-
-  return openUrl(pageUrl);
+function openPages(pageUrl: string, dashboardUrl: string): PageOpening {
+  return openPagesForPerson(dashboardUrl ? [dashboardUrl, pageUrl] : [pageUrl]);
 }
 
-function answer(api: ProjectApi, args: FirstSubmissionArgs, read: FirstSubmissionAnswer, opened: boolean): string {
+const WAITED_OPENING: PageOpening = { opened: false, note: "No page was opened: this call waited on the platform's read; a call with waitSeconds: 0 opens the console page and the store dashboard." };
+
+const DONE_OPENING: PageOpening = { opened: false, note: "No page was opened: the first submission is done, so nothing is left to finish on the console page." };
+
+function answer(api: ProjectApi, args: FirstSubmissionArgs, read: FirstSubmissionAnswer, pageOpened: PageOpening): string {
+  const opening = read.state === "done" ? DONE_OPENING : pageOpened;
   const project = `${api.ref.workspace}/${api.ref.project}`;
   const pageUrl = read.pageUrl || consoleProjectUrl(api.ref, ConsoleProjectPage.submissionsStore(read.store), args.api);
   const value = {
@@ -153,7 +154,8 @@ function answer(api: ProjectApi, args: FirstSubmissionArgs, read: FirstSubmissio
     pageUrl,
     dashboardUrl: read.dashboardUrl || null,
     ...(read.packageUrl ? { packageUrl: read.packageUrl } : {}),
-    opened,
+    opened: opening.opened,
+    ...(opening.note ? { openedNote: opening.note } : {}),
     trackUrl: pageUrl,
     sayToPerson: read.sayToPerson,
   };
@@ -164,7 +166,7 @@ function answer(api: ProjectApi, args: FirstSubmissionArgs, read: FirstSubmissio
       command: COMMAND,
       status: "first-submission-done",
       value: { ...value, nextStep: nextStep("preflight", read.sayToPerson) },
-      hint: read.sayToPerson,
+      hint: `${read.sayToPerson} ${opening.note}`,
     });
   }
 
@@ -175,7 +177,7 @@ function answer(api: ProjectApi, args: FirstSubmissionArgs, read: FirstSubmissio
     command: COMMAND,
     status: read.state === "to-do" ? "first-submission-to-do" : "first-submission-waiting",
     value: { ...value, nextStep: nextStep("dashboard", read.sayToPerson, read.state === "to-do" ? pageUrl : read.dashboardUrl || pageUrl) },
-    hint: `${read.sayToPerson} ${resume}`,
+    hint: [read.sayToPerson, opening.note, resume].filter(Boolean).join(" "),
   });
 }
 
@@ -212,7 +214,7 @@ export async function openFirstSubmission(args: FirstSubmissionArgs): Promise<st
   const pageOpened =
     waiting === 0 && current.state !== "done"
       ? openPages(current.pageUrl || consoleProjectUrl(api.ref, ConsoleProjectPage.submissionsStore(store), args.api), current.dashboardUrl)
-      : false;
+      : WAITED_OPENING;
   const deadline = Date.now() + waiting * 1000;
 
   while (current.state !== "done" && Date.now() < deadline) {

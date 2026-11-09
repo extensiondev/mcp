@@ -102,14 +102,37 @@ export function approvalBatchUrl(approvalUrl: string, now: number = Date.now()):
   return { url: `${parsed.origin}/device/approve?ids=${ids.join(",")}`, count: ids.length };
 }
 
-export function canAutoOpen(options: { noShip: boolean }, env: Env = process.env, platform: NodeJS.Platform = process.platform): boolean {
-  if (options.noShip) return false;
-  if (truthy(env[NO_AUTO_OPEN_ENV])) return false;
-  if (truthy(env.CI)) return false;
-  if (envIsHeadless(env)) return false;
-  if (platform === "linux" && !text(env.DISPLAY) && !text(env.WAYLAND_DISPLAY)) return false;
+export function autoOpenBlock(options: { noShip: boolean }, env: Env = process.env, platform: NodeJS.Platform = process.platform): string {
+  if (options.noShip) return "this server runs with --no-ship";
+  if (truthy(env[NO_AUTO_OPEN_ENV])) return `${NO_AUTO_OPEN_ENV} is set in this server's environment`;
+  if (truthy(env.CI)) return "CI is set in this server's environment";
+  if (text(env.SSH_CONNECTION) || text(env.SSH_TTY) || text(env.SSH_CLIENT)) return "this server runs in an SSH session, away from the person's screen";
+  if (/^(1|true)$/i.test(env.EXTENSION_HEADLESS ?? "")) return "EXTENSION_HEADLESS=1 is set in this server's environment";
+  if (envIsHeadless(env)) return "EXTENSION_BROWSER_FLAGS asks for a headless browser in this server's environment";
+  if (platform === "linux" && !text(env.DISPLAY) && !text(env.WAYLAND_DISPLAY)) return "this server sees neither DISPLAY nor WAYLAND_DISPLAY on Linux";
 
-  return true;
+  return "";
+}
+
+export function canAutoOpen(options: { noShip: boolean }, env: Env = process.env, platform: NodeJS.Platform = process.platform): boolean {
+  return autoOpenBlock(options, env, platform) === "";
+}
+
+export interface PageOpening {
+  opened: boolean;
+  note: string;
+}
+
+export const notOpenedNote = (why: string): string => `No page was opened: ${why}. Hand the person the urls in this answer instead of calling again for a window.`;
+
+export function openPagesForPerson(urls: string[], env: Env = process.env, platform: NodeJS.Platform = process.platform): PageOpening {
+  const block = autoOpenBlock({ noShip: false }, env, platform);
+  if (block) return { opened: false, note: notOpenedNote(block) };
+
+  const wanted = urls.filter(Boolean);
+  if (wanted.length && wanted.map((url) => opener(url)).every(Boolean)) return { opened: true, note: "" };
+
+  return { opened: false, note: notOpenedNote(`the ${osOpenCommand("", platform)[0]} command did not start`) };
 }
 
 export function openApprovalOnce(result: string, options: { noShip: boolean }, env: Env = process.env, platform: NodeJS.Platform = process.platform): string {

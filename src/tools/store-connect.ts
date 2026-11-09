@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { canAutoOpen, openUrl } from "../lib/approval-open";
+import { openPagesForPerson, type PageOpening } from "../lib/approval-open";
 import { checkSavedConnection, readSavedConnection } from "../lib/connect-existing";
 import {
   alreadyConnectedAnswer,
@@ -110,7 +110,7 @@ interface Before {
 
 const NOTHING_BEFORE: Before = { prelude: "", storeRefusal: null, connectionUnread: "", keyOnFile: null, savedProduct: "" };
 
-function answer(api: ProjectApi, args: StoreConnectArgs, store: ConnectStore, session: ConnectSession, opened: boolean, before: Before = NOTHING_BEFORE): string {
+function answer(api: ProjectApi, args: StoreConnectArgs, store: ConnectStore, session: ConnectSession, opening: PageOpening, before: Before = NOTHING_BEFORE): string {
   const project = `${api.ref.workspace}/${api.ref.project}`;
   const trackUrl = storeSettingsUrl(api.ref, args.api);
 
@@ -141,7 +141,7 @@ function answer(api: ProjectApi, args: StoreConnectArgs, store: ConnectStore, se
     });
   }
 
-  const say = [before.prelude, pendingSentences({ store, project, session, ...urls, opened, savedProduct: before.savedProduct })].filter(Boolean).join(" ");
+  const say = [before.prelude, pendingSentences({ store, project, session, ...urls, opened: opening.opened, savedProduct: before.savedProduct })].filter(Boolean).join(" ");
   const resume = `When they say it is done, call ${COMMAND} {action: "connect", store: "${store}", project: "${project}", connectSession: "${session.id}", waitSeconds: 120}; it answers what the store named and when, never the key.`;
 
   return envelope({
@@ -158,7 +158,8 @@ function answer(api: ProjectApi, args: StoreConnectArgs, store: ConnectStore, se
       codeUrl: urls.codeUrl,
       storeKeyUrl: STORE_KEY_PAGES[store],
       expiresAt: session.expiresAt,
-      opened,
+      opened: opening.opened,
+      ...(opening.note ? { openedNote: opening.note } : {}),
       ...(session.refusal ? { lastRefusal: session.refusal } : {}),
       ...(before.storeRefusal ? { storeRefusal: before.storeRefusal } : {}),
       ...(before.connectionUnread ? { connectionUnread: before.connectionUnread } : {}),
@@ -168,18 +169,17 @@ function answer(api: ProjectApi, args: StoreConnectArgs, store: ConnectStore, se
       sayToPerson: say,
       nextStep: nextStep("connect", say, urls.connectUrl),
     },
-    hint: `${say} ${resume}`,
+    hint: [say, opening.note, resume].filter(Boolean).join(" "),
   });
 }
 
-function openPages(store: ConnectStore, connectUrl: string): boolean {
-  if (!canAutoOpen({ noShip: false })) return false;
-
+function openPages(store: ConnectStore, connectUrl: string): PageOpening {
   const keyPage = STORE_KEY_PAGES[store];
-  if (keyPage) openUrl(keyPage);
 
-  return openUrl(connectUrl);
+  return openPagesForPerson(keyPage ? [keyPage, connectUrl] : [connectUrl]);
 }
+
+const resumedOpening = (sessionId: string): PageOpening => ({ opened: false, note: `No page was opened: this call resumed connect session ${sessionId}, whose page opened when the session began.` });
 
 async function existingConnection(api: ProjectApi, args: StoreConnectArgs, store: ConnectStore): Promise<{ answered: string } | Before> {
   const saved = await readSavedConnection(api, store);
@@ -238,7 +238,7 @@ export async function connectStoreAccount(args: StoreConnectArgs): Promise<strin
 
   rememberConnectSession(session.id, `${api.ref.workspace}/${api.ref.project}`);
 
-  const pageOpened = resumed ? false : openPages(store, connectPageUrls(api.ref, session, args.api).connectUrl);
+  const opening = resumed ? resumedOpening(session.id) : openPages(store, connectPageUrls(api.ref, session, args.api).connectUrl);
   const deadline = Date.now() + waitBound(args.waitSeconds) * 1000;
 
   while (session.status === "pending" && Date.now() < deadline) {
@@ -252,5 +252,5 @@ export async function connectStoreAccount(args: StoreConnectArgs): Promise<strin
 
   const before = found ?? (session.status === "pending" ? await keyOnFileBefore(api, store) : NOTHING_BEFORE);
 
-  return answer(api, args, store, session, pageOpened, before);
+  return answer(api, args, store, session, opening, before);
 }

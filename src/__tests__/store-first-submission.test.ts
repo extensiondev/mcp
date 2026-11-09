@@ -45,6 +45,7 @@ describe("extension_submit first-submission opens the console page beside the st
     vi.stubEnv("EXTENSION_HEADLESS", "");
     vi.stubEnv("EXTENSION_BROWSER_FLAGS", "");
     vi.stubEnv(NO_AUTO_OPEN_ENV, "");
+    for (const key of ["SSH_CONNECTION", "SSH_TTY", "SSH_CLIENT"]) vi.stubEnv(key, "");
     vi.stubEnv("DISPLAY", ":0");
     restoreOpener = setApprovalOpener((url) => {
       opened.push(url);
@@ -74,7 +75,34 @@ describe("extension_submit first-submission opens the console page beside the st
     expect(out.value.nextStep).toEqual({ kind: "dashboard", say: WAITING_SENTENCE, url: DASHBOARD });
     expect(opened).toEqual([DASHBOARD, PAGE]);
     expect(out.value.opened).toBe(true);
+    expect(out.value.openedNote).toBeUndefined();
     expect(platform.calls.filter((call) => call.method !== "GET")).toHaveLength(0);
+  });
+
+  it("says why no page opened: a headless server names its variable, and a call that waited points at waitSeconds: 0", async () => {
+    platform.login();
+    platform.routes[`GET ${ROUTE}`] = () => page("waiting", { pollSeconds: 2 });
+    vi.stubEnv("EXTENSION_HEADLESS", "1");
+
+    const shut = JSON.parse(await submit({ action: "first-submission", store: "chrome", api: API }));
+
+    expect(shut.status).toBe("first-submission-waiting");
+    expect(shut.value.opened).toBe(false);
+    expect(shut.value.openedNote).toBe("No page was opened: EXTENSION_HEADLESS=1 is set in this server's environment. Hand the person the urls in this answer instead of calling again for a window.");
+    expect(shut.hint).toContain(shut.value.openedNote);
+
+    vi.stubEnv("EXTENSION_HEADLESS", "");
+    vi.useFakeTimers();
+
+    const call = submit({ action: "first-submission", store: "chrome", waitSeconds: 5, api: API });
+    await vi.advanceTimersByTimeAsync(6_000);
+    const waited = JSON.parse(await call);
+
+    vi.useRealTimers();
+    expect(waited.status).toBe("first-submission-waiting");
+    expect(waited.value.opened).toBe(false);
+    expect(waited.value.openedNote).toBe("No page was opened: this call waited on the platform's read; a call with waitSeconds: 0 opens the console page and the store dashboard.");
+    expect(opened).toEqual([]);
   });
 
   it("names what is missing while the page reads to-do and points at the console page first", async () => {
@@ -107,6 +135,7 @@ describe("extension_submit first-submission opens the console page beside the st
     expect(out.value.read).toEqual(DONE.read);
     expect(out.value.sayToPerson).toBe(DONE.sayToPerson);
     expect(out.value.nextStep.kind).toBe("preflight");
+    expect(out.value.openedNote).toBe("No page was opened: the first submission is done, so nothing is left to finish on the console page.");
     expect(opened).toEqual([]);
   });
 

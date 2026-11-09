@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NO_AUTO_OPEN_ENV, setApprovalOpener } from "../lib/approval-open";
 import { findSecretArguments } from "../lib/secret-arguments";
@@ -63,7 +63,36 @@ describe("extension_submit connect hands a store key from the person's browser t
     expect(out.value.sayToPerson).toContain("enter the code ABCD-EFGH");
     expect(out.value.sayToPerson).toContain("never through this chat");
     expect(out.value.opened).toBe(false);
+    expect(out.value.openedNote).toBe(`No page was opened: ${NO_AUTO_OPEN_ENV} is set in this server's environment. Hand the person the urls in this answer instead of calling again for a window.`);
+    expect(out.hint).toContain(out.value.openedNote);
     expect(opened).toEqual([]);
+  });
+
+  it("names the variable that kept the pages shut on a headless server, and opens the store's key page then the console page on a desktop", async () => {
+    platform.login();
+    platform.routes[`POST ${SESSION_ROUTE}`] = () => pending();
+    for (const key of [NO_AUTO_OPEN_ENV, "CI", "SSH_CONNECTION", "SSH_TTY", "SSH_CLIENT", "EXTENSION_BROWSER_FLAGS"]) vi.stubEnv(key, "");
+    vi.stubEnv("EXTENSION_HEADLESS", "1");
+
+    const shut = JSON.parse(await submit({ action: "connect", store: "firefox", api: API }));
+
+    expect(shut.status).toBe("connect-pending");
+    expect(shut.value.opened).toBe(false);
+    expect(shut.value.openedNote).toBe("No page was opened: EXTENSION_HEADLESS=1 is set in this server's environment. Hand the person the urls in this answer instead of calling again for a window.");
+    expect(shut.hint).toContain(shut.value.openedNote);
+    expect(shut.value.sayToPerson).toContain(`Open ${shut.value.connectUrl} to connect Firefox Add-ons`);
+    expect(opened).toEqual([]);
+
+    vi.stubEnv("EXTENSION_HEADLESS", "");
+    vi.stubEnv("DISPLAY", ":0");
+
+    const open = JSON.parse(await submit({ action: "connect", store: "firefox", api: API }));
+
+    expect(open.value.opened).toBe(true);
+    expect(open.value.openedNote).toBeUndefined();
+    expect(open.value.sayToPerson).toContain("is open in your browser");
+    expect(opened).toEqual(["https://addons.mozilla.org/developers/addon/api/key/", open.value.connectUrl]);
+    vi.unstubAllEnvs();
   });
 
   it("waits on the platform's record and answers only who the store named and when, dropping anything else the record carries", async () => {
@@ -98,6 +127,7 @@ describe("extension_submit connect hands a store key from the person's browser t
     expect(refused.status).toBe("connect-pending");
     expect(refused.value.lastRefusal.message).toBe("Invalid JWT issuer or secret.");
     expect(refused.value.sayToPerson).toContain("The store refused the last key with: Invalid JWT issuer or secret.");
+    expect(refused.value.openedNote).toBe("No page was opened: this call resumed connect session cs_123, whose page opened when the session began.");
 
     platform.routes[`GET ${SESSION_ROUTE}`] = () => ({ status: 404, body: { code: "CONNECT_SESSION_NOT_FOUND", message: "No such connect session." } });
 
