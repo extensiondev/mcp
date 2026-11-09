@@ -210,6 +210,20 @@ export function doneStep(stores: string[], itemUrl: string, taken: string[] = []
   );
 }
 
+/* @invariant THE APPROVE STEP NAMES THE CALL THAT SPENDS THE APPROVAL. On
+ * 2026-11-09 an agent read an approve step that named only the approval
+ * page, re-called extension_submit without the approvalId once the owner had
+ * approved, and the platform minted a replacement that voided the owner's
+ * click (ledger 478). The step says the follow-up call with its id in so
+ * many words, and says that a fresh approval is never requested while this
+ * one stands.
+ */
+export function afterApprovalSentence(command: string, approvalId: string): string {
+  const tool = command === "extension_submit_check" ? "extension_submit" : command;
+
+  return `Once approved, call ${tool} again with the same arguments plus approvalId "${approvalId}"; never request a fresh approval while this one stands.`;
+}
+
 export function withApproveStep(out: string, reviewSentence: boolean | string): string {
   const closing = reviewSentence === true ? REVIEW_PROMISE : reviewSentence === false ? "" : reviewSentence;
   let parsed: unknown;
@@ -220,7 +234,7 @@ export function withApproveStep(out: string, reviewSentence: boolean | string): 
     return out;
   }
 
-  if (!isEnvelope(parsed) || parsed.status !== "approval-required") return out;
+  if (!isEnvelope(parsed) || (parsed.status !== "approval-required" && parsed.status !== "approval-pending")) return out;
 
   const value = isRow(parsed.value) ? parsed.value : {};
   const approvalUrl = text(value.approvalUrl);
@@ -229,10 +243,15 @@ export function withApproveStep(out: string, reviewSentence: boolean | string): 
   const expiresAt = text(value.expiresAt);
   const phrase = approvalSubjectPhrase(subjectOf(value));
   const lines = Array.isArray(value.lines) ? value.lines.length : 0;
+  const approvalId = text(value.approvalId);
+  const pending = parsed.status === "approval-pending";
   const say = [
-    `Approve ${phrase ? `submitting ${phrase}` : "the submission"} at ${approvalUrl}${expiresAt ? ` before ${expiresAt}` : ""}.`,
-    lines > 1 ? `The page lists ${lines} stores; uncheck one to leave it out.` : "",
-    closing,
+    pending
+      ? `Approval ${approvalId} is still waiting for a workspace owner at ${approvalUrl}.`
+      : `Approve ${phrase ? `submitting ${phrase}` : "the submission"} at ${approvalUrl}${expiresAt ? ` before ${expiresAt}` : ""}.`,
+    lines > 1 && !pending ? `The page lists ${lines} stores; uncheck one to leave it out.` : "",
+    approvalId ? afterApprovalSentence(parsed.command, approvalId) : "",
+    pending ? "" : closing,
   ]
     .filter(Boolean)
     .join(" ");
@@ -241,7 +260,7 @@ export function withApproveStep(out: string, reviewSentence: boolean | string): 
     ok: parsed.ok,
     command: parsed.command,
     status: parsed.status,
-    value: { ...value, nextStep: nextStep("approve", say, approvalUrl) },
+    value: { ...value, sayToPerson: say, nextStep: nextStep("approve", say, approvalUrl) },
     error: parsed.error,
     warnings: parsed.warnings,
     ...(parsed.truncated !== undefined ? { truncated: parsed.truncated } : {}),

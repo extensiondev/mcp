@@ -12,13 +12,14 @@ import { readLines } from "./approval-lines";
 import { loginRefusedBeforeApproval } from "./approval-login";
 import { approvalUrlFor } from "./approval-outcome";
 import { verdictOfAction } from "./approval-policy";
-import { mintedApproval, rememberMintedApproval } from "./approval-record";
+import { mintedApproval, rememberMintedApproval, standingApprovalForAct } from "./approval-record";
 import { readApprovalSubject } from "./approval-subject";
 import { envelope } from "./envelope";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { platformHoldEnvelope, readUpgradeUrl, sawPlatformHold } from "./platform-hold";
 import {
   APPROVAL_EXPIRED_STATUS,
+  APPROVAL_PENDING_STATUS,
   APPROVAL_REJECTED_STATUS,
   APPROVAL_REQUIRED_STATUS,
   actionPhrase,
@@ -55,6 +56,16 @@ export function approvalLandedSentence(input: Pick<ApprovalGateInput, "nextCall"
   const waits = input.nextCall?.waits ? `, and that ${input.nextCall.tool} call with waitSeconds waits for the approval before it runs` : "";
 
   return `extension_approvals {action: "status", approvalId: "${approvalId}"} reads whether a workspace owner has approved it${waits}.`;
+}
+
+function statusOf(out: string): string {
+  try {
+    const parsed = JSON.parse(out) as { status?: unknown };
+
+    return typeof parsed.status === "string" ? parsed.status : "";
+  } catch {
+    return "";
+  }
 }
 
 function unsaid(described: string, reason: string): string {
@@ -107,17 +118,34 @@ export async function requestApprovalAfterRefusal(
     platformAsked: true,
   });
 
-  return gate.blocked
-    ? gate.envelope
-    : envelope({
-        ok: false,
-        command: input.command,
-        status: APPROVAL_REQUIRED_STATUS,
-        error: {
-          code: "E_APPROVAL_REQUIRED",
-          message: "The platform requires an approval for this action.",
-        },
-      });
+  if (gate.blocked) return gate.envelope;
+
+  if (gate.approvalId) {
+    const approvalUrl = mintedApproval(input.api, gate.approvalId)?.approvalUrl || approvalUrlFor(gate.approvalId, input.api);
+
+    return envelope({
+      ok: false,
+      command: input.command,
+      status: APPROVAL_REQUIRED_STATUS,
+      value: { action: input.action, description: input.description, approvalId: gate.approvalId, approvalUrl },
+      error: {
+        code: "E_APPROVAL_REQUIRED",
+        name: "ApprovalAlreadyGranted",
+        message: `Approval ${gate.approvalId} for this exact act is already approved and unspent, and this call did not carry it, so nothing was executed. Call ${nextCallSentence(input, gate.approvalId)} to run it.`,
+      },
+      hint: `Approval ${gate.approvalId} stands approved; ${nextCallSentence(input, gate.approvalId)} runs it. Do not request a fresh approval.`,
+    });
+  }
+
+  return envelope({
+    ok: false,
+    command: input.command,
+    status: APPROVAL_REQUIRED_STATUS,
+    error: {
+      code: "E_APPROVAL_REQUIRED",
+      message: "The platform requires an approval for this action.",
+    },
+  });
 }
 
 function canonicalScope(scope: ApprovalScope): string {
@@ -363,6 +391,14 @@ export async function evaluateApproval(
     }
 
     if (verdict === "plain" && !input.platformAsked) return { blocked: false };
+
+    const standing = standingApprovalForAct({ api: input.api, token: input.token, action: input.action, fingerprint, now: input.now });
+
+    if (standing) {
+      const held = await verifyApproval({ base: apiCheck.base, fingerprint, input: { ...input, approvalId: standing.approvalId }, doFetch, minted: standing });
+      if (!held.blocked) return { blocked: false, approvalId: standing.approvalId };
+      if (statusOf(held.envelope) === APPROVAL_PENDING_STATUS) return held;
+    }
 
     return requestApproval({ base: apiCheck.base, fingerprint, input, doFetch });
   }

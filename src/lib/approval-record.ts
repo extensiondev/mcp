@@ -236,6 +236,40 @@ function sameAct(a: MintedApproval, b: MintedApproval, api: string | undefined):
   return a.action === b.action && a.fingerprint === b.fingerprint && sameProject(a, b, api);
 }
 
+function ownIdentity(api: string | undefined, token: string): Pick<MintedApproval, "workspace" | "project" | "projectId" | "loginId"> | null {
+  const claims = readTokenClaims(token);
+  if (!claims) return null;
+
+  const identity = tokenProjectIdentity(api, token, `${claims.workspace}/${claims.project}`);
+  const [workspace = claims.workspace, project = claims.project] = identity?.current ? identity.current.split("/") : [];
+  const loginId = loginIdOf(token);
+
+  return { workspace, project, ...(identity?.projectId ? { projectId: identity.projectId } : {}), ...(loginId ? { loginId } : {}) };
+}
+
+/* @invariant A STANDING APPROVAL OF THE SAME ACT IS FOUND BEFORE A FRESH ONE
+ * IS MINTED. On 2026-11-09 an agent re-called extension_submit without the
+ * approvalId while the owner's approval of that exact act stood approved and
+ * unconsumed; the mint marked it replaced and the owner's click was spent on
+ * nothing (ledger 478). The newest live record of the same act for the same
+ * login or project, not yet replaced and not past its expiry, is answered
+ * here so the gate can ask the platform about it first and mint only when it
+ * is no longer pending or approved.
+ */
+export function standingApprovalForAct(args: { api?: string; token: string; action: string; fingerprint: string; now?: number }): MintedApproval | null {
+  const own = ownIdentity(args.api, args.token);
+  if (!own) return null;
+
+  const now = args.now ?? Date.now();
+  const records = Object.values(readFile()[targetServer(args.api)] ?? {});
+  const standing = records
+    .filter((record) => record && typeof record === "object" && !record.replacedBy && record.action === args.action && record.fingerprint === args.fingerprint)
+    .filter((record) => Date.parse(record.expiresAt) > now && sameProject(record, own as MintedApproval, args.api))
+    .sort((a, b) => Date.parse(b.mintedAt) - Date.parse(a.mintedAt));
+
+  return standing[0] ?? null;
+}
+
 export function mintedApproval(api: string | undefined, approvalId: string, now = Date.now()): MintedApproval | null {
   const id = trimmed(approvalId);
   if (!id) return null;

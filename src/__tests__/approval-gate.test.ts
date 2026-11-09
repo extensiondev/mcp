@@ -4,7 +4,7 @@ import fs from "node:fs";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { actionFingerprint, evaluateApproval } from "../lib/approval-gate";
+import { actionFingerprint, evaluateApproval, requestApprovalAfterRefusal } from "../lib/approval-gate";
 import { handler as submitHandler } from "../tools/submit";
 import { handler as promoteHandler, schema as promoteSchema } from "../tools/release-promote";
 import { handler as sharesHandler } from "../tools/shares";
@@ -720,5 +720,115 @@ describe("an approval the caller presents travels even with the local gate off",
 
       fs.rmSync(isolated, { recursive: true, force: true });
     }
+  });
+});
+
+describe("478: a standing approval of the same act is reused before a fresh one is minted", () => {
+  const API_BASE = "https://www.extension.dev";
+  const token = `${Buffer.from(JSON.stringify({ u: "acme", p: "widget" })).toString("base64url")}.sig`;
+  const scope = { browsers: ["chrome"], buildSha: "93ea0f1" };
+  const fingerprint = actionFingerprint("extension_submit", scope);
+  let isolated = "";
+  let previousXdg: string | undefined;
+  let previousFetch: typeof fetch;
+  let calls: Call[];
+  let minted: string[];
+  let read: Record<string, unknown>;
+
+  beforeEach(() => {
+    isolated = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-standing-approval-"));
+    previousXdg = process.env.XDG_CONFIG_HOME;
+    process.env.XDG_CONFIG_HOME = isolated;
+    previousFetch = global.fetch;
+    calls = [];
+    minted = [];
+    read = { status: "pending" };
+    global.fetch = router(calls, {
+      "POST /api/cli/approvals": () => {
+        const approvalId = `apr_standing_${minted.length + 1}`;
+        minted.push(approvalId);
+
+        return jsonResponse({ approvalId, approvalUrl: `${API_BASE}/device/approve/${approvalId}`, expiresAt: new Date(Date.now() + 600_000).toISOString() });
+      },
+      "GET /api/cli/approvals/": () => jsonResponse({ fingerprint, used: false, expiresAt: new Date(Date.now() + 600_000).toISOString(), ...read }),
+    });
+  });
+
+  afterEach(() => {
+    global.fetch = previousFetch;
+    if (previousXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = previousXdg;
+
+    fs.rmSync(isolated, { recursive: true, force: true });
+  });
+
+  const ask = () =>
+    evaluateApproval({
+      command: "extension_submit",
+      action: "extension_submit",
+      scope,
+      description: "Submit build 93ea0f1 to chrome for store review.",
+      token,
+      api: API_BASE,
+      enabled: true,
+      fetchImpl: global.fetch,
+    });
+  const mints = () => calls.filter((call) => call.key === "POST /api/cli/approvals").length;
+
+  it("answers the approval it minted earlier while the owner has not decided, names the call with its id and mints nothing", async () => {
+    const first = JSON.parse((await ask() as { envelope: string }).envelope);
+    const again = JSON.parse((await ask() as { envelope: string }).envelope);
+
+    expect(first.status).toBe("approval-required");
+    expect(first.value.approvalId).toBe("apr_standing_1");
+    expect(again.status).toBe("approval-pending");
+    expect(again.value.approvalId).toBe("apr_standing_1");
+    expect(again.hint).toContain("call again with the same arguments and approvalId apr_standing_1");
+    expect(again.value.replaces).toBeUndefined();
+    expect(mints()).toBe(1);
+  });
+
+  it("runs the act under the approval the owner already granted instead of replacing it", async () => {
+    await ask();
+    read = { status: "approved" };
+
+    expect(await ask()).toEqual({ blocked: false, approvalId: "apr_standing_1" });
+    expect(mints()).toBe(1);
+  });
+
+  it("names the granted approval, not a bare refusal, when the platform's own refusal re-asks for one", async () => {
+    await ask();
+    read = { status: "approved" };
+
+    const out = JSON.parse(
+      await requestApprovalAfterRefusal({
+        command: "extension_submit",
+        action: "extension_submit",
+        scope,
+        description: "Submit build 93ea0f1 to chrome for store review.",
+        token,
+        api: API_BASE,
+        fetchImpl: global.fetch,
+      }),
+    );
+
+    expect(out.status).toBe("approval-required");
+    expect(out.error.name).toBe("ApprovalAlreadyGranted");
+    expect(out.value.approvalId).toBe("apr_standing_1");
+    expect(out.value.approvalUrl).toBe(`${API_BASE}/device/approve/apr_standing_1`);
+    expect(out.hint).toContain("extension_submit with the same arguments and approvalId apr_standing_1 runs it");
+    expect(mints()).toBe(1);
+  });
+
+  it("mints a fresh approval, marked as the replacement, once the standing one was declined", async () => {
+    await ask();
+    read = { status: "denied" };
+
+    const out = JSON.parse((await ask() as { envelope: string }).envelope);
+
+    expect(out.status).toBe("approval-required");
+    expect(out.value.approvalId).toBe("apr_standing_2");
+    expect(out.value.replaces).toEqual(["apr_standing_1"]);
+    expect(mints()).toBe(2);
   });
 });

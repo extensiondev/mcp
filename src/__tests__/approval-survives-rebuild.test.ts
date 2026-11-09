@@ -109,6 +109,7 @@ const saved: Record<string, string | undefined> = {};
 let tmp: string;
 let calls: Call[];
 let mints: number;
+let firstDecision = "pending";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -181,7 +182,7 @@ function platform(url: string, init?: RequestInit): Response {
   ) {
     return who.projectId === PROJECTS.leon.projectId
       ? json({
-          status: "pending",
+          status: pathname.endsWith(APPROVAL_ID) ? firstDecision : "pending",
           fingerprint: FINGERPRINT,
           expiresAt: LIVE_EXPIRES_AT,
           used: false,
@@ -246,6 +247,7 @@ beforeEach(() => {
   delete process.env.EXTENSION_DEV_TOKEN;
   calls = [];
   mints = 0;
+  firstDecision = "pending";
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: any, init?: RequestInit) => platform(String(url), init)),
@@ -461,7 +463,7 @@ describe("an approval this machine minted is presented as the project that minte
     });
   });
 
-  it("marks the older approval of the same act replaced by a fresh mint, and refuses the older id before the platform is asked", async () => {
+  it("answers the standing approval while it waits, mints a replacement once it was declined, and refuses the older id before the platform is asked", async () => {
     if (process.platform === "win32") return;
 
     await login("leon");
@@ -469,13 +471,23 @@ describe("an approval this machine minted is presented as the project that minte
       action: "configure",
       buildSettings: { firefox: { enabled: true } },
     });
-    const second = await call(await freshServer(), "extension_builds", {
+    const waiting = await call(await freshServer(), "extension_builds", {
       action: "configure",
       buildSettings: { firefox: { enabled: true } },
     });
 
     expect(first.value.approvalId).toBe(APPROVAL_ID);
     expect(first.value.replaces).toBeUndefined();
+    expect(waiting.status).toBe("approval-pending");
+    expect(waiting.value.approvalId).toBe(APPROVAL_ID);
+    expect(mints).toBe(1);
+
+    firstDecision = "denied";
+    const second = await call(await freshServer(), "extension_builds", {
+      action: "configure",
+      buildSettings: { firefox: { enabled: true } },
+    });
+
     expect(second.value.approvalId).toBe(SECOND_ID);
     expect(second.value.replaces).toEqual([APPROVAL_ID]);
 
