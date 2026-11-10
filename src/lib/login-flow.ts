@@ -10,6 +10,8 @@ import { PROD_ORIGINS } from "@extension.dev/urls/origins";
 
 import { requestCredential } from "./credential-scope";
 import {
+  MEMBER_PROJECT,
+  memberProjects,
   writeCredentialBatch,
   writeCredentials,
   type StoredCredentials,
@@ -226,6 +228,44 @@ function readTokenEntries(
   });
 }
 
+/* @invariant A LOGIN THE PLATFORM CALLS A MEMBER LOGIN IS STORED AS ONE
+ * ENTRY, NOT AS ONE PER PROJECT. The wildcard login answers both shapes: the
+ * member token under tokenKind with the projects it lists, and tokens[] with
+ * a token per project for the client that predates it. A client that reads
+ * the kind keeps the one login the person approved, the way one `eas login`
+ * is one credential, and a platform that answers no kind is stored the old
+ * way, one token per listed project.
+ */
+function readMemberLogin(apiBase: string, data: Record<string, unknown>): StoredCredentials | null {
+  if (String(data.tokenKind ?? "").trim().toLowerCase() !== "member") return null;
+
+  const token = String(data.token || "").trim();
+  const workspaceSlug = String(data.workspaceSlug || "").trim();
+  const member: StoredCredentials = {
+    version: 1,
+    token,
+    workspaceSlug,
+    projectSlug: MEMBER_PROJECT,
+    expiresAt: tokenExpiry(data.expiresAt),
+    api: apiBase,
+    provider: "extensiondev",
+    kind: "member",
+    projectSlugs: Array.isArray(data.projectSlugs) ? data.projectSlugs.map((slug) => String(slug ?? "").trim().toLowerCase()) : [],
+  };
+
+  if (!token || !workspaceSlug || memberProjects(member).length === 0) {
+    throw new Error(
+      "The platform answered this login with a member token that names no workspace or no project; nothing was stored. Run extension_auth (action: login) again.",
+    );
+  }
+
+  return member;
+}
+
+function memberRefs(member: StoredCredentials): string[] {
+  return memberProjects(member).map((project) => `${member.workspaceSlug}/${project}`);
+}
+
 function refsOf(batch: StoredCredentials[]): string[] {
   return batch.map((creds) => `${creds.workspaceSlug}/${creds.projectSlug}`);
 }
@@ -239,6 +279,22 @@ export function persistBatchTokenResponse(args: {
   projects: string[];
   data: Record<string, unknown>;
 }): StoredCredentials[] {
+  const member = readMemberLogin(args.apiBase, args.data);
+
+  if (member) {
+    const listed = memberRefs(member);
+
+    if (!sameProjectSet(args.projects, listed)) {
+      throw new Error(
+        `The batch login returned a member login for [${listed.join(", ")}], not the requested [${args.projects.join(", ")}]; nothing was stored. Run extension_auth (action: login) again with the intended projects.`,
+      );
+    }
+
+    writeCredentials(member);
+
+    return [member];
+  }
+
   const batch = readTokenEntries(args.apiBase, args.data);
   const returned = refsOf(batch);
 
@@ -265,9 +321,23 @@ export function persistWorkspaceTokenResponse(args: {
   workspace: string;
   data: Record<string, unknown>;
 }): StoredCredentials[] {
+  const wanted = args.workspace.toLowerCase();
+  const member = readMemberLogin(args.apiBase, args.data);
+
+  if (member) {
+    if (member.workspaceSlug.toLowerCase() !== wanted) {
+      throw new Error(
+        `The workspace login for ${args.workspace} returned a member login for ${member.workspaceSlug}, another workspace; nothing was stored. Run extension_auth (action: login, workspace, projects: "*") again.`,
+      );
+    }
+
+    writeCredentials(member);
+
+    return [member];
+  }
+
   const batch = readTokenEntries(args.apiBase, args.data);
   const returned = refsOf(batch);
-  const wanted = args.workspace.toLowerCase();
   const foreign = batch.filter((creds) => creds.workspaceSlug.toLowerCase() !== wanted);
 
   if (batch.length === 0 || foreign.length > 0 || hasDuplicate(returned)) {

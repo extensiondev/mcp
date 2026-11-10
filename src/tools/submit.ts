@@ -26,6 +26,7 @@ import {
 } from "../lib/firefox-store";
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
 import { platformFetch } from "../lib/platform-fetch";
+import { bearerHeaders } from "../lib/request-fetch";
 import { identityHeaders } from "../lib/session-identity";
 import { REFUNDED_SAY, REFUNDED_STEP } from "../lib/ship-act";
 import { STORE_MD_FILENAME, parseStoreMd } from "../lib/store-md";
@@ -783,6 +784,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       },
       approvalId: args.approvalId,
       token,
+      ref: credential.ref,
       api: args.api,
       refusedStatus: "submit-failed",
       irreversible: true,
@@ -829,7 +831,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
     {
       method: "POST",
       headers: {
-        authorization: `Bearer ${token}`,
+        ...bearerHeaders(token, credential.ref),
         "content-type": "application/json",
         ...identityHeaders("extension_submit"),
       },

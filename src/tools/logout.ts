@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { clearCredentials, readCredentials } from "../lib/credentials";
+import { clearCredentials, isMemberLogin, memberLabel, memberProjects, readCredentials } from "../lib/credentials";
 import { envelope } from "../lib/envelope";
 import { consoleProjectUrl } from "../lib/registry";
 
@@ -32,7 +32,9 @@ export async function clearLocalCredentials(project?: string, api?: string): Pro
 
   const result = clearCredentials({ ...(wanted ? { project: wanted } : {}), api });
   const scope = wanted
-    ? `the login for ${creds ? `${creds.workspaceSlug}/${creds.projectSlug}` : wanted}`
+    ? creds && isMemberLogin(creds)
+      ? `the member login for ${creds.workspaceSlug} (${memberLabel(creds)}, which read ${memberProjects(creds).join(", ")})`
+      : `the login for ${creds ? `${creds.workspaceSlug}/${creds.projectSlug}` : wanted}`
     : result.removed.length > 1
       ? `all ${result.removed.length} stored logins`
       : "the stored login";

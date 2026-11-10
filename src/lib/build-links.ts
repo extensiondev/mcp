@@ -9,6 +9,7 @@
 import { platformFetch } from "./platform-fetch";
 import { readPlatformCode, readPlatformMessage, sawPlatformHold } from "./platform-hold";
 import { projectApiGet, type ProjectApi, type ProjectApiRead } from "./project-api";
+import { bearerHeaders } from "./request-fetch";
 import { identityHeaders } from "./session-identity";
 import { isRow, text } from "./ship-act";
 
@@ -124,7 +125,7 @@ export async function revokeBuildLink(
     {
       method: "DELETE",
       headers: {
-        authorization: `Bearer ${api.token}`,
+        ...bearerHeaders(api.token, api.ref),
         accept: "application/json",
         ...(approvalId ? { "x-extensiondev-approval": approvalId } : {}),
         ...identityHeaders(api.command),

@@ -8,6 +8,7 @@
 
 import { platformFetch } from "./platform-fetch";
 import { readPlatformCode, readPlatformMessage, sawPlatformHold } from "./platform-hold";
+import { bearerHeaders } from "./request-fetch";
 import { identityHeaders } from "./session-identity";
 
 import type { ProjectApi, ProjectApiRefusal } from "./project-api";
@@ -38,7 +39,7 @@ export async function projectApiBytes(
     url,
     {
       headers: {
-        authorization: `Bearer ${api.token}`,
+        ...bearerHeaders(api.token, api.ref),
         accept: "application/zip, application/json",
         ...identityHeaders(api.command),
       },

@@ -7,10 +7,14 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import {
+  MEMBER_PROJECT,
   credentialStoreProblem,
   defaultLoginDrift,
+  isMemberLogin,
   listCredentials,
   loginDriftSentence,
+  memberLabel,
+  memberProjects,
   readCredentials,
 } from "../lib/credentials";
 import { envelope } from "../lib/envelope";
@@ -68,10 +72,52 @@ function describeServer(check: ServerCheck, api: string) {
   };
 }
 
+interface LoginRow {
+  project: string;
+  server: string;
+  active: boolean;
+  expiresAt: string | null;
+  expired: boolean;
+  kind?: "member";
+  projects?: string[];
+}
+
+/* @invariant A MEMBER LOGIN IS ONE ROW WITH ITS PROJECT LIST. The store reads
+ * it as one login per project it lists so that every tool finds it under the
+ * project it names, but the person signed in once, so the report shows one
+ * login for the workspace and the projects it reads, never a row per project.
+ */
+function loginRows(now: number): LoginRow[] {
+  const rows = new Map<string, LoginRow>();
+
+  for (const entry of listCredentials()) {
+    const ref = `${entry.workspaceSlug}/${entry.projectSlug}`;
+    const member = isMemberLogin(entry);
+    const key = `${entry.server} ${entry.key}`;
+    const known = rows.get(key);
+
+    if (known && member) {
+      known.projects?.push(ref);
+      continue;
+    }
+
+    rows.set(key, {
+      project: member ? memberLabel(entry) : ref,
+      server: entry.server,
+      active: entry.active,
+      expiresAt: entry.expiresAt ? new Date(entry.expiresAt * 1000).toISOString() : null,
+      expired: Boolean(entry.expiresAt && entry.expiresAt <= now),
+      ...(member ? { kind: "member" as const, projects: [ref] } : {}),
+    });
+  }
+
+  return [...rows.values()];
+}
+
 function elsewhereNote(server: string): { note: string; logins: Array<{ project: string; server: string }> } | null {
-  const logins = listCredentials()
+  const logins = loginRows(Math.floor(Date.now() / 1000))
     .filter((entry) => entry.server !== server)
-    .map((entry) => ({ project: `${entry.workspaceSlug}/${entry.projectSlug}`, server: entry.server }));
+    .map((entry) => ({ project: entry.project, server: entry.server }));
   if (logins.length === 0) return null;
 
   return {
@@ -80,14 +126,8 @@ function elsewhereNote(server: string): { note: string; logins: Array<{ project:
   };
 }
 
-function storedLogins(target: string, now: number) {
-  return listCredentials().map((entry) => ({
-    project: `${entry.workspaceSlug}/${entry.projectSlug}`,
-    server: entry.server,
-    active: entry.active && entry.server === target,
-    expiresAt: entry.expiresAt ? new Date(entry.expiresAt * 1000).toISOString() : null,
-    expired: Boolean(entry.expiresAt && entry.expiresAt <= now),
-  }));
+function storedLogins(target: string, now: number): LoginRow[] {
+  return loginRows(now).map((row) => ({ ...row, active: row.active && row.server === target }));
 }
 
 function notSignedIn(project: string, target: string, now: number): string {
@@ -168,6 +208,11 @@ export async function readIdentity(deps?: {
 
   const now = Math.floor(Date.now() / 1000);
   const expired = Boolean(creds.expiresAt && creds.expiresAt <= now);
+  const member = isMemberLogin(creds);
+  const listed = memberProjects(creds).map((slug) => `${creds.workspaceSlug}/${slug}`.toLowerCase());
+  const namedProject = creds.projectSlug !== MEMBER_PROJECT ? creds.projectSlug : "";
+  const askFor = namedProject || memberProjects(creds)[0] || "";
+  const askRef = askFor ? { workspace: creds.workspaceSlug, project: askFor } : null;
 
   const recordedApi = String(creds.api || "").trim();
   const effectiveDefaultApi = resolveApiBase(api);
@@ -188,6 +233,7 @@ export async function readIdentity(deps?: {
       ? await askServerIdentity({
           apiBase: safe.base,
           token: creds.token,
+          ref: askRef,
           fetchImpl: deps?.fetchImpl,
         })
       : { kind: "unavailable", detail: safe.message };
@@ -196,25 +242,33 @@ export async function readIdentity(deps?: {
   const server = describeServer(check, askApi);
 
   const hosted = Boolean(requestCredential());
-  const slugs = `${creds.workspaceSlug}/${creds.projectSlug}`;
+  const slugs = member && !namedProject ? memberLabel(creds) : `${creds.workspaceSlug}/${creds.projectSlug}`;
+  const memberRenew = `extension_auth (action: login, workspace: "${creds.workspaceSlug}", projects: "*")`;
   const identityNote = hosted
     ? expired
       ? "This connection's token has expired. Sign in again from your MCP client."
       : `Signed in as ${slugs} through this connection's OAuth token, which scopes every call.`
-    : wanted
+    : member
       ? expired
-        ? `The stored login for ${slugs} has expired. Run extension_auth (action: login, project: "${slugs}") to refresh it.`
-        : `This is the login stored for ${slugs}, the one a token-scoped tool sends when it names project: "${slugs}"; the default login for unnamed calls may be another one.`
-      : expired
-        ? "The stored token has expired. Run extension_auth (action: login) to refresh it."
-        : `Logged in as ${slugs}, per the token extension_auth stored on this machine. That token is what scopes the identity: it does not follow the current working directory or project folder.`;
+        ? `The member login for ${creds.workspaceSlug} has expired. Run ${memberRenew} to refresh it.`
+        : namedProject
+          ? `${slugs} is read by the member login for ${creds.workspaceSlug}, one login that reads ${listed.join(", ")}; a token-scoped tool naming project: "${slugs}" sends it for that project.`
+          : `Logged in to ${creds.workspaceSlug} as a member: one login reads ${listed.join(", ")}. It is sent for the project a call names with project (or projectPath); no project is assumed.`
+      : wanted
+        ? expired
+          ? `The stored login for ${slugs} has expired. Run extension_auth (action: login, project: "${slugs}") to refresh it.`
+          : `This is the login stored for ${slugs}, the one a token-scoped tool sends when it names project: "${slugs}"; the default login for unnamed calls may be another one.`
+        : expired
+          ? "The stored token has expired. Run extension_auth (action: login) to refresh it."
+          : `Logged in as ${slugs}, per the token extension_auth stored on this machine. That token is what scopes the identity: it does not follow the current working directory or project folder.`;
   const resolved = resolveCredential({ api });
   const envTokenNote = envTokenSet
     ? `EXTENSION_DEV_TOKEN is set: an unnamed call sends it${resolved.ref ? ` (per its claims it belongs to ${resolved.ref.workspace}/${resolved.ref.project})` : " (its claims could not be read)"}, while a call naming a project, or a server pinned to one, sends that project's stored login first; this report describes only the stored login.`
     : null;
+  const expectedLogin = askRef ? `${askRef.workspace}/${askRef.project}`.toLowerCase() : slugs.toLowerCase();
   const serverIdentityMismatch =
-    check.kind === "confirmed" && check.login.toLowerCase() !== `${creds.workspaceSlug}/${creds.projectSlug}`.toLowerCase()
-      ? `The server resolves this token to ${check.login}, not to the ${creds.workspaceSlug}/${creds.projectSlug} the stored file claims; the file's slugs are stale or were edited. Log in again to refresh them.`
+    check.kind === "confirmed" && check.login.toLowerCase() !== expectedLogin
+      ? `The server resolves this token to ${check.login}, not to the ${expectedLogin} the stored file claims; the file's slugs are stale or were edited. Log in again to refresh them.`
       : null;
   const logins = wanted ? [] : storedLogins(target, now);
   const loginsNote =
@@ -241,7 +295,8 @@ export async function readIdentity(deps?: {
     status: expired ? "expired" : server.status,
     value: {
       workspaceSlug: creds.workspaceSlug,
-      projectSlug: creds.projectSlug,
+      projectSlug: namedProject || null,
+      ...(member ? { kind: "member", projects: listed } : {}),
       projectId: creds.projectId ?? null,
       ...(recordedApi ? { apiRecordedAtLogin: recordedApi } : {}),
       apiDefault: effectiveDefaultApi,
@@ -256,7 +311,7 @@ export async function readIdentity(deps?: {
     },
     hint: message,
     warnings: [
-      tokenTtlNote(creds.workspaceSlug, creds.projectSlug, creds.api),
+      tokenTtlNote(creds.workspaceSlug, namedProject || undefined, creds.api),
       server.warning,
       serverIdentityMismatch,
       envTokenNote,

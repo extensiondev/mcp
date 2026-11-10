@@ -41,6 +41,43 @@ export interface StoredCredentials {
   projectId?: string;
   movedTo?: string;
   movedFrom?: string;
+  kind?: "member";
+  projectSlugs?: string[];
+}
+
+export const MEMBER_PROJECT = "*";
+
+export function isMemberLogin(entry: Pick<StoredCredentials, "kind"> | null | undefined): boolean {
+  return entry?.kind === "member";
+}
+
+export function memberProjects(entry: Pick<StoredCredentials, "kind" | "projectSlugs"> | null | undefined): string[] {
+  return isMemberLogin(entry) ? slugList(entry?.projectSlugs) : [];
+}
+
+export function memberLabel(entry: Pick<StoredCredentials, "workspaceSlug">): string {
+  return `${entry.workspaceSlug}/${MEMBER_PROJECT}`.toLowerCase();
+}
+
+function slugList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+
+  const out: string[] = [];
+
+  for (const value of raw) {
+    const slug = String(value ?? "").trim().toLowerCase();
+    if (slug && slug !== MEMBER_PROJECT && !out.includes(slug)) out.push(slug);
+  }
+
+  return out;
+}
+
+function memberView(entry: StoredCredentials, project: string): StoredCredentials {
+  return { ...entry, projectSlug: project };
+}
+
+function liveAt(entry: Pick<StoredCredentials, "expiresAt">, nowSeconds: number): boolean {
+  return !entry.expiresAt || entry.expiresAt > nowSeconds;
 }
 
 export function credentialsPath(): string {
@@ -74,10 +111,52 @@ export function credentialKey(workspaceSlug: string, projectSlug: string, api?: 
   return loginKey(workspaceSlug, projectSlug, api);
 }
 
+export function storeKey(entry: Pick<StoredCredentials, "workspaceSlug" | "projectSlug" | "api" | "kind">): string {
+  return credentialKey(entry.workspaceSlug, isMemberLogin(entry) ? MEMBER_PROJECT : entry.projectSlug, entry.api);
+}
+
 function keyOf(entry: StoredCredentials, fallback: string): string {
-  return entry.workspaceSlug && entry.projectSlug
-    ? credentialKey(entry.workspaceSlug, entry.projectSlug, entry.api)
-    : fallback.toLowerCase();
+  return entry.workspaceSlug && entry.projectSlug ? storeKey(entry) : fallback.toLowerCase();
+}
+
+/* @invariant A MEMBER LOGIN IS STORED ONCE AND READ AS ONE VIEW PER PROJECT
+ * IT LISTS. The platform mints it for the person and the workspace with the
+ * projects the approver saw signed into it, so the store keeps one entry
+ * under `<workspace>/*`, and every reader that picks a login for a project
+ * sees it as a login for each listed project, keyed like a login minted for
+ * that project alone. A login minted for one project and a member login that
+ * lists it are the same key; the one still live wins, then the newer. The
+ * views are never written back: a rename, a recorded project id or a logout
+ * address the one stored entry, so a member login is never rewritten under
+ * one of its projects.
+ */
+export function loginEntries(
+  store: CredentialStore,
+  nowSeconds: number = Math.floor(Date.now() / 1000),
+): Array<[string, StoredCredentials]> {
+  const out = new Map<string, StoredCredentials>();
+
+  const place = (key: string, entry: StoredCredentials): void => {
+    const held = out.get(key);
+
+    if (held && liveAt(held, nowSeconds) && !liveAt(entry, nowSeconds)) return;
+
+    out.delete(key);
+    out.set(key, entry);
+  };
+
+  for (const [key, entry] of Object.entries(store.entries)) {
+    if (!isMemberLogin(entry)) {
+      place(key, entry);
+      continue;
+    }
+
+    for (const project of memberProjects(entry)) {
+      place(credentialKey(entry.workspaceSlug, project, entry.api), memberView(entry, project));
+    }
+  }
+
+  return [...out];
 }
 
 function readEntry(data: unknown): StoredCredentials | null {
@@ -92,17 +171,21 @@ function readEntry(data: unknown): StoredCredentials | null {
   const provider = entry.provider === "extensiondev" ? entry.provider : undefined;
   const projectId = String(entry.projectId || "").trim();
   const movedTo = String(entry.movedTo || "").trim();
+  const member = isMemberLogin(entry);
+  const projectSlugs = member ? slugList(entry.projectSlugs) : [];
+  if (member && projectSlugs.length === 0) return null;
 
   return {
     version: 1,
     token,
     workspaceSlug: String(entry.workspaceSlug || ""),
-    projectSlug: String(entry.projectSlug || ""),
+    projectSlug: member ? MEMBER_PROJECT : String(entry.projectSlug || ""),
     expiresAt: Number(entry.expiresAt || 0),
     api: String(entry.api || ""),
     ...(provider ? { provider } : {}),
-    ...(projectId.startsWith("prj_") ? { projectId } : {}),
-    ...(movedTo ? { movedTo } : {}),
+    ...(projectId.startsWith("prj_") && !member ? { projectId } : {}),
+    ...(movedTo && !member ? { movedTo } : {}),
+    ...(member ? { kind: "member" as const, projectSlugs } : {}),
   };
 }
 
@@ -310,10 +393,10 @@ function selectEntry(
 ): StoredCredentials | null {
   const wanted = (String(selector?.project ?? "").trim() || pinnedProject()).toLowerCase();
   const server = targetServer(selector?.api);
-  const onServer = Object.entries(store.entries).filter(([, entry]) => serverOf(entry.api) === server);
+  const stored = Object.entries(store.entries).filter(([, entry]) => serverOf(entry.api) === server);
 
   if (!wanted) {
-    const live = onServer.filter(([, entry]) => !entry.movedTo);
+    const live = stored.filter(([, entry]) => !entry.movedTo);
     const file = requestCredential() ? "" : credentialsPath();
     const held = file ? keptLogin(file, server) : null;
     const session = held ? live.find(([key]) => key === held) : undefined;
@@ -321,20 +404,48 @@ function selectEntry(
 
     if (chosen && file && !session && live.length === 1) keepLogin(file, server, chosen[0]);
 
-    return chosen?.[1] ?? null;
+    const entry = chosen?.[1] ?? null;
+    const listed = memberProjects(entry);
+
+    return entry && listed.length === 1 ? memberView(entry, listed[0] as string) : entry;
   }
+
+  const onServer = loginEntries(store).filter(([, entry]) => serverOf(entry.api) === server);
 
   if (wanted.includes("/")) {
     const [workspace = "", project = ""] = wanted.split("/");
     const key = credentialKey(workspace, project, server);
+    const rows = project === MEMBER_PROJECT ? stored : onServer;
 
-    return followAlias(store, key, onServer.find(([name]) => name === key)?.[1] ?? null);
+    return followAlias(store, key, rows.find(([name]) => name === key)?.[1] ?? null);
   }
 
   const bySlug = onServer.filter(([, entry]) => entry.projectSlug.toLowerCase() === wanted);
   const [found] = bySlug;
 
   return bySlug.length === 1 && found ? followAlias(store, found[0], found[1]) : null;
+}
+
+export function memberLoginFor(
+  workspace: string,
+  api?: string,
+  nowSeconds: number = Math.floor(Date.now() / 1000),
+): StoredCredentials | null {
+  const store = readCredentialStore();
+  if (!store) return null;
+
+  const server = targetServer(api);
+  const wanted = workspace.trim().toLowerCase();
+
+  return (
+    Object.values(store.entries).find(
+      (entry) =>
+        isMemberLogin(entry) &&
+        serverOf(entry.api) === server &&
+        entry.workspaceSlug.toLowerCase() === wanted &&
+        liveAt(entry, nowSeconds),
+    ) ?? null
+  );
 }
 
 export function readCredentials(selector?: CredentialSelector): StoredCredentials | null {
@@ -349,11 +460,12 @@ export function listCredentials(): Array<StoredCredentials & { key: string; acti
 
   const file = requestCredential() ? "" : credentialsPath();
 
-  return Object.entries(store.entries)
+  return loginEntries(store)
     .filter(([, entry]) => !entry.movedTo)
-    .map(([key, entry]) => {
+    .map(([, entry]) => {
       const server = serverOf(entry.api);
       const held = file ? keptLogin(file, server) : null;
+      const key = storeKey(entry);
 
       return {
         ...entry,
@@ -395,7 +507,7 @@ export function defaultLoginDrift(api?: string): { kept: string; newest: string 
   if (!held || held === store.active || !newest || newest.movedTo || serverOf(newest.api) !== server) return null;
 
   const current = store.entries[held];
-  if (!current || current.movedTo) return null;
+  if (!current || current.movedTo || isMemberLogin(current) || isMemberLogin(newest)) return null;
 
   return {
     kept: `${current.workspaceSlug}/${current.projectSlug}`.toLowerCase(),
@@ -493,7 +605,7 @@ function storeForWrite(): CredentialStore | null {
 export function writeCredentials(creds: StoredCredentials): string {
   if (requestCredential()) throw new Error(REQUEST_STORE_REFUSAL);
 
-  const key = credentialKey(creds.workspaceSlug, creds.projectSlug, creds.api);
+  const key = storeKey(creds);
 
   return withStoreLock(() => {
     const existing = storeForWrite();
@@ -515,16 +627,13 @@ export function writeCredentialBatch(batch: StoredCredentials[]): string | null 
     const entries = { ...(existing?.entries ?? {}) };
 
     for (const creds of batch) {
-      const key = credentialKey(creds.workspaceSlug, creds.projectSlug, creds.api);
+      const key = storeKey(creds);
       delete entries[key];
       entries[key] = storable(creds);
     }
 
     const first = batch[0] as StoredCredentials;
-    const active =
-      existing?.active && entries[existing.active]
-        ? existing.active
-        : credentialKey(first.workspaceSlug, first.projectSlug, first.api);
+    const active = existing?.active && entries[existing.active] ? existing.active : storeKey(first);
     const chosen = entries[active];
     if (chosen) keepLogin(credentialsPath(), serverOf(chosen.api), active);
 
@@ -547,7 +656,7 @@ export function clearCredentials(selector?: CredentialSelector): {
   const wanted = String(selector?.project ?? "").trim();
   const describe = (err: unknown): string =>
     String((err as NodeJS.ErrnoException)?.code || (err as Error)?.message || err);
-  const stillThere = (): string[] => listCredentials().map((entry) => entry.key);
+  const stillThere = (): string[] => [...new Set(listCredentials().map((entry) => entry.key))];
   const server = targetServer(selector?.api);
   const serverKeys = store
     ? Object.entries(store.entries)
@@ -594,7 +703,7 @@ export function clearCredentials(selector?: CredentialSelector): {
   if (!store) return { cleared: false, path: file, removed: [], remaining: [] };
 
   const entry = wanted ? selectEntry(store, { project: wanted, api: selector?.api }) : null;
-  const keys = entry ? [credentialKey(entry.workspaceSlug, entry.projectSlug, entry.api)] : wanted ? [] : serverKeys;
+  const keys = entry ? [storeKey(entry)] : wanted ? [] : serverKeys;
 
   if (keys.length === 0) {
     return { cleared: false, path: file, removed: [], remaining: Object.keys(store.entries) };

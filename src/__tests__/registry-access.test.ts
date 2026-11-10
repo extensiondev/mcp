@@ -191,6 +191,50 @@ describe("private projects", () => {
     expect(calls[2]).toContain("t=short-lived-token");
   });
 
+  it("a member login minted through workspace acme reads private acme/other with the project header, and the acme/widget project token is not sent for it", async () => {
+    writeCredentials({
+      version: 1,
+      token: "member-login-token",
+      workspaceSlug: "acme",
+      projectSlug: "*",
+      kind: "member",
+      projectSlugs: ["widget", "other"],
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      api: "https://www.extension.dev",
+    });
+
+    const grants: Array<{ authorization: string; project: string; body: unknown }> = [];
+    const fetchImpl = vi.fn(async (url: any, init?: any) => {
+      const href = String(url);
+
+      if (href.includes("/api/access-grant")) {
+        grants.push({
+          authorization: String(init?.headers?.authorization ?? ""),
+          project: String(init?.headers?.["x-extensiondev-project"] ?? ""),
+          body: JSON.parse(String(init?.body)),
+        });
+
+        return jsonResponse({ token: "short-lived-token", expiresAt: Math.floor(Date.now() / 1000) + 600 });
+      }
+
+      if (href.includes("t=short-lived-token")) return jsonResponse({ "chrome-stable": { sha: "abc1234" } });
+
+      return jsonResponse({ error: "unauthorized", reason: "missing-token" }, 401);
+    });
+
+    const res = await fetchRegistryJson("https://registry.extension.land/acme/other/_extension-dev/channels.json", fetchImpl as any, {
+      ref: { workspace: "acme", project: "other" },
+      tokens: new RegistryAccessTokens({ fetchImpl: fetchImpl as any }),
+    });
+
+    expect(res.ok).toBe(true);
+    expect(grants).toEqual([
+      { authorization: "Bearer member-login-token", project: "acme/other", body: { workspaceSlug: "acme", projectSlug: "other" } },
+    ]);
+
+    expect(JSON.stringify(fetchImpl.mock.calls)).not.toContain("stored-long-lived-token");
+  });
+
   it("never puts the long-lived stored token in a URL", async () => {
     const calls: string[] = [];
     const fetchImpl = vi.fn(async (url: any) => {

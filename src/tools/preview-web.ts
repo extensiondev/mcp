@@ -13,7 +13,7 @@ import { PROJECT_PATH, REAL_BROWSERS } from "../lib/common-schema";
 import * as build from "./build";
 import { navigateToUrl } from "./open";
 import { ZIP_URL_REDIRECT_NOTE } from "../lib/artifacts-api";
-import { resolveToken } from "../lib/publish";
+import { resolveCredential } from "../lib/credential-source";
 import { LOGIN_STEPS, PROJECT_TOKEN_INPUT } from "../lib/credentials";
 import { uploadPreview } from "../lib/preview-upload";
 import { spendNarration, ALLOWANCE_PHRASE  } from "../lib/allowance";
@@ -185,11 +185,13 @@ async function buildShare(
   verifyInBrowserTerms: boolean,
   project?: string,
 ): Promise<Record<string, unknown>> {
+  const credential = resolveCredential({ ...(project ? { project } : {}) });
   const result = await uploadPreview({
     distDir,
     manifest,
     browser,
-    ...(project ? { token: resolveToken({ project }) } : {}),
+    ...(project ? { token: credential.token } : {}),
+    ref: credential.ref,
   });
 
   if (!result.ok) {

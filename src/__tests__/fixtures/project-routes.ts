@@ -11,7 +11,7 @@ export const PROJECT_ID = "prj_probe";
 export const PROJECT_ROUTE = `/api/projects/${PROJECT_ID}`;
 
 export type Reply = { body: unknown; status?: number; headers?: Record<string, string>; bytes?: Buffer };
-export type Call = { url: string; path: string; method: string; auth: string; body: any };
+export type Call = { url: string; path: string; method: string; auth: string; project: string; body: any };
 
 function reply({ body, status = 200, headers = {}, bytes }: Reply): Response {
   const lower = Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]));
@@ -85,6 +85,7 @@ export function useProjectRoutes(prefix: string): ProjectRoutes {
         path: pathname,
         method,
         auth: String(headers.authorization ?? ""),
+        project: String(headers["x-extensiondev-project"] ?? ""),
         body: init?.body ? JSON.parse(String(init.body)) : undefined,
       };
       state.calls.push(call);

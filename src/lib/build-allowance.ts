@@ -104,7 +104,7 @@ export async function readWorkspaceBuildAllowance(args: {
   if (!login) return null;
 
   const read = await platformApiGet<Row>(
-    { base, token: login.token, command: args.command },
+    { base, token: login.token, command: args.command, ref: { workspace: login.workspaceSlug, project: login.projectSlug } },
     `/api/workspaces/${encodeURIComponent(workspace)}/plan`,
   );
 

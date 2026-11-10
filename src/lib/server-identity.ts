@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { bearerHeaders } from "./request-fetch";
+
 export type ServerIdentityAnswer =
   | { kind: "confirmed"; login: string; live: boolean }
   | { kind: "refused" }
@@ -16,6 +18,7 @@ const DEFAULT_TIMEOUT_MS = 5000;
 export async function askServerIdentity(args: {
   apiBase: string;
   token: string;
+  ref?: { workspace: string; project: string } | null;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
 }): Promise<ServerIdentityAnswer> {
@@ -31,7 +34,7 @@ export async function askServerIdentity(args: {
       `${args.apiBase.replace(/\/+$/, "")}/api/cli/whoami`,
       {
         headers: {
-          authorization: `Bearer ${args.token}`,
+          ...bearerHeaders(args.token, args.ref),
           accept: "application/json",
         },
         signal: controller.signal,

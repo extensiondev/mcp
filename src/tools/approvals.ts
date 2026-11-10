@@ -16,6 +16,7 @@ import { envelope } from "../lib/envelope";
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
 import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
 import { resolveCredential } from "../lib/credential-source";
+import { bearerHeaders } from "../lib/request-fetch";
 import { expiredLoginRefusal } from "../lib/login-expired";
 
 const COMMAND = "extension_approvals";
@@ -66,11 +67,11 @@ function refused(status: string, name: string, message: string, value: Record<st
   });
 }
 
-async function ask(base: string, path: string, method: "GET" | "POST", token: string): Promise<Read> {
+async function ask(base: string, path: string, method: "GET" | "POST", token: string, ref?: { workspace: string; project: string } | null): Promise<Read> {
   try {
     const res = await fetch(`${base}${path}`, {
       method,
-      headers: { authorization: `Bearer ${token}`, accept: "application/json" },
+      headers: { ...bearerHeaders(token, ref), accept: "application/json" },
     });
     const data = await readJson(res);
 
@@ -156,7 +157,7 @@ export async function handler(args: { action?: string; approvalId?: string; proj
     platformHoldEnvelope({ command: COMMAND, name: "ApprovalsHeld", body: read.data, api: args.api, value });
 
   if (action === "status") {
-    const read = await ask(api.base, path, "GET", token);
+    const read = await ask(api.base, path, "GET", token, credential.ref);
 
     if ("error" in read) return unreachable(read.error, "unavailable");
     if (read.held) return held(read);
@@ -184,7 +185,7 @@ export async function handler(args: { action?: string; approvalId?: string; proj
     });
   }
 
-  const sent = await ask(api.base, `${path}/revoke`, "POST", token);
+  const sent = await ask(api.base, `${path}/revoke`, "POST", token, credential.ref);
 
   if ("error" in sent) return unreachable(sent.error, "revoke-unconfirmed");
   if (sent.held) return held(sent);
@@ -206,7 +207,7 @@ export async function handler(args: { action?: string; approvalId?: string; proj
     );
   }
 
-  const check = await ask(api.base, path, "GET", token);
+  const check = await ask(api.base, path, "GET", token, credential.ref);
   const recorded = !("error" in check) && !check.held && text(check.data.code) === "APPROVAL_REVOKED";
   const outcome = {
     recorded,

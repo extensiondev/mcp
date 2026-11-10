@@ -5,7 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { resolveCredential } from "../lib/credential-source";
-import { listCredentials, readCredentials, writeCredentials } from "../lib/credentials";
+import { listCredentials, readCredentialStore, readCredentials, writeCredentials } from "../lib/credentials";
 import { envelope } from "../lib/envelope";
 import { openProjectApi, projectApiReadFailure } from "../lib/project-api";
 import { loginToProject } from "../tools/login";
@@ -132,6 +132,50 @@ describe("a stored login whose project was renamed on the platform", () => {
 
     expect(readCredentials({ project: "cezaraugusto/rebeccat", api: API })?.token).toBe(token);
     expect(listCredentials().map((entry) => entry.projectSlug)).toEqual(["rebeccat"]);
+  });
+
+  it("a member login is sent with the project header and is never rewritten under one project when whoami answers a renamed slug", async () => {
+    writeCredentials({
+      version: 1,
+      token: "member.sig",
+      workspaceSlug: "cezaraugusto",
+      projectSlug: "*",
+      kind: "member",
+      projectSlugs: ["pii-shield", "leon"],
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      api: API,
+      provider: "extensiondev",
+    });
+
+    const headers: Array<[string, string]> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: unknown, init?: RequestInit) => {
+        const sent = (init?.headers ?? {}) as Record<string, string>;
+        headers.push([String(sent.authorization ?? ""), String(sent["x-extensiondev-project"] ?? "")]);
+
+        if (new URL(String(url)).pathname === "/api/cli/whoami") {
+          return jsonResponse({ login: "cezaraugusto/rebeccat", live: true, projectId: PROJECT_ID, workspaceSlug: "cezaraugusto", projectSlug: "rebeccat" });
+        }
+
+        return jsonResponse({ message: "not found" }, 404);
+      }),
+    );
+
+    const opened = await openProjectApi({ command: "extension_builds", project: "cezaraugusto/pii-shield", api: API });
+
+    expect(opened.ok).toBe(true);
+    expect(opened.ok && opened.api.projectId).toBe(PROJECT_ID);
+    expect(opened.ok && opened.api.ref).toEqual({ workspace: "cezaraugusto", project: "pii-shield" });
+    expect(headers).toEqual([["Bearer member.sig", "cezaraugusto/pii-shield"]]);
+
+    const store = readCredentialStore();
+    const key = `${API} cezaraugusto/*`;
+    expect(Object.keys(store?.entries ?? {})).toEqual([key]);
+    expect(store?.entries[key]).toMatchObject({ kind: "member", projectSlug: "*", projectSlugs: ["pii-shield", "leon"] });
+    expect(store?.entries[key]?.projectId).toBeUndefined();
+    expect(listCredentials().map((entry) => `${entry.workspaceSlug}/${entry.projectSlug}`)).toEqual(["cezaraugusto/pii-shield", "cezaraugusto/leon"]);
+    expect(drain()).toEqual([]);
   });
 
   it("records the project id on a login whose slug did not change", async () => {

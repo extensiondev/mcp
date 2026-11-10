@@ -118,6 +118,7 @@ export async function publishVersion(args: PublishVersionArgs, stores: string[])
     description: `Send the ${stores.join(", ")} drafts of build ${buildSha}${version ? ` (version ${version})` : ""} to each store's review under one approval, one line per store that the owner can leave out. Nothing changes for current users until each store approves its draft.`,
     approvalId: args.approvalId,
     token: api.token,
+    ref: api.ref,
     api: args.api,
     refusedStatus: "publish-failed",
     irreversible: true,

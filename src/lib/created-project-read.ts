@@ -46,7 +46,7 @@ export async function findProjectByStoredLogin(args: {
   const base = args.apiBase.replace(/\/+$/, "");
 
   for (const login of loginsOfWorkspace(base, workspace, project)) {
-    const api = { base, token: login.token, command: args.command };
+    const api = { base, token: login.token, command: args.command, ref: { workspace: login.workspaceSlug, project: login.projectSlug } };
     const readWith = `${login.workspaceSlug}/${login.projectSlug}`.toLowerCase();
 
     if (login.projectSlug.toLowerCase() === project) {

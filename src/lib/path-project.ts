@@ -11,7 +11,7 @@ import path from "node:path";
 
 import { requestCredential } from "./credential-scope";
 import { serverOf, targetServer } from "./credential-server";
-import { credentialsPath, readCredentialStore, type StoredCredentials } from "./credentials";
+import { credentialsPath, loginEntries, readCredentialStore, storeKey, type StoredCredentials } from "./credentials";
 import { keptLogin } from "./session-login";
 
 export interface PathIdentity {
@@ -119,7 +119,7 @@ export function loginForPath(projectPath: string, api?: string): PathLogin {
 
   const store = readCredentialStore();
   const server = targetServer(api);
-  const entries = store ? Object.entries(store.entries).filter(([, entry]) => serverOf(entry.api) === server) : [];
+  const entries = store ? loginEntries(store).filter(([, entry]) => serverOf(entry.api) === server) : [];
 
   const resolve = (entry: StoredCredentials): StoredCredentials | null => {
     if (!entry.movedTo) return entry;
@@ -157,7 +157,9 @@ export function loginForOrigin(dir: string, api?: string): { project: string; ow
   const store = readCredentialStore();
   const server = targetServer(api);
   const matches = store
-    ? Object.values(store.entries).filter((entry) => serverOf(entry.api) === server && !entry.movedTo && refOf(entry) === `${owner}/${repo}`)
+    ? loginEntries(store)
+        .map(([, entry]) => entry)
+        .filter((entry) => serverOf(entry.api) === server && !entry.movedTo && refOf(entry) === `${owner}/${repo}`)
     : [];
 
   return matches.length === 1 && matches[0] ? { project: refOf(matches[0]), owner, repo } : null;
@@ -172,10 +174,11 @@ export function serverLogins(api?: string): ServerLogins {
   const store = readCredentialStore();
   const server = targetServer(api);
   const live = store
-    ? Object.entries(store.entries).filter(([, entry]) => serverOf(entry.api) === server && !entry.movedTo)
+    ? loginEntries(store).filter(([, entry]) => serverOf(entry.api) === server && !entry.movedTo)
     : [];
   const held = requestCredential() ? null : keptLogin(credentialsPath(), server);
-  const kept = held ? live.find(([key]) => key === held)?.[1] : undefined;
+  const named = held ? live.filter(([, entry]) => storeKey(entry) === held) : [];
+  const kept = named.length === 1 ? named[0]?.[1] : undefined;
 
   return { live: live.map(([, entry]) => refOf(entry)), kept: kept ? refOf(kept) : null };
 }

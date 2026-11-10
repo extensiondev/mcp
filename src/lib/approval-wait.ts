@@ -12,6 +12,7 @@ import { resolveCredential } from "./credential-source";
 import { envelope, isEnvelope, type Envelope } from "./envelope";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { platformFetch } from "./platform-fetch";
+import { bearerHeaders } from "./request-fetch";
 
 type Args = Record<string, unknown>;
 
@@ -40,14 +41,15 @@ type ApprovalPoll = { state: "pending" | "decided" } | { state: "missed"; proble
 
 async function pollApproval(approvalId: string, args: Args): Promise<ApprovalPoll> {
   const api = text(args.api) || undefined;
-  const token = resolveCredential({ project: text(args.project) || undefined, api }).token;
+  const credential = resolveCredential({ project: text(args.project) || undefined, api });
+  const token = credential.token;
   const check = safeApiBase(resolveApiBase(api), api);
   if (!token || !check.ok) return { state: "decided" };
 
   const url = `${check.base}/api/cli/approvals/${encodeURIComponent(approvalId)}`;
   const sent = await platformFetch(
     url,
-    { method: "GET", headers: { authorization: `Bearer ${token}`, accept: "application/json" } },
+    { method: "GET", headers: { ...bearerHeaders(token, credential.ref), accept: "application/json" } },
     { kind: "read" },
   );
   if (!sent.ok) return { state: "missed", problem: sent.unreached.message };

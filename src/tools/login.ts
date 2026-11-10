@@ -43,7 +43,7 @@ import {
   parseWorkspaceSlug,
 } from "../lib/project-batch";
 import { consoleBase } from "../lib/registry";
-import { isProjectRef } from "../lib/credentials";
+import { isMemberLogin, isProjectRef, memberLabel, memberProjects } from "../lib/credentials";
 import { followProjectMove, followSentence, readProjectMove } from "../lib/project-move";
 import { projectPresence, sameSlugElsewhere, type ProjectPresence } from "../lib/project-on-server";
 
@@ -842,6 +842,27 @@ export async function loginToWorkspace(args: {
       "login-failed",
       "E_AUTH_FAILED",
     );
+  }
+
+  const member = stored.find((creds) => isMemberLogin(creds));
+
+  if (member) {
+    const projects = memberProjects(member);
+    const expiresAt = member.expiresAt ? new Date(member.expiresAt * 1000).toISOString() : null;
+
+    return envelope({
+      ok: true,
+      command: "extension_auth",
+      status: "logged-in",
+      value: {
+        workspaceSlug: workspace,
+        projects: WORKSPACE_WILDCARD,
+        login: { kind: "member", project: memberLabel(member), projects: projects.map((project) => `${workspace}/${project}`), expiresAt },
+        logins: [{ project: memberLabel(member), kind: "member", workspaceSlug: workspace, projects: projects.map((project) => `${workspace}/${project}`), expiresAt }],
+      },
+      hint: `Logged in to ${workspace} as a member: one stored login reads its ${projects.length} project${projects.length === 1 ? "" : "s"} (${projects.join(", ")}), each call naming the project it is for with \`project\` (or projectPath), and extension_workspace reads the workspace with it. A project created later is not covered: run this login again to add it. The login expires ${expiresAt ?? "within 7 days"}.`,
+      warnings: [tokenTtlNote(undefined, undefined, apiBase)],
+    });
   }
 
   const logins = stored.map((creds) => ({

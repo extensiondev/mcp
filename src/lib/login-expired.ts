@@ -11,8 +11,8 @@ import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 import { approvalLogin } from "./approval-scope";
 import { consoleProjectUrl } from "./console-urls";
 import { envToken, requestCredential } from "./credential-scope";
-import { readTokenClaims, splitRef } from "./credential-source";
-import { expiredStoredLogin, noStoredLoginHint, workspaceLogins, type ExpiredLogin } from "./credentials";
+import { claimsCover, readTokenClaims, splitRef } from "./credential-source";
+import { expiredStoredLogin, memberLoginFor, memberProjects, noStoredLoginHint, workspaceLogins, type ExpiredLogin } from "./credentials";
 import { requestDeviceCode } from "./device-flow";
 import { codeExpiryFromStart, rememberCodeExpiry } from "./device-wait";
 import { envelope } from "./envelope";
@@ -46,17 +46,13 @@ const RENEWAL_BOUND_MS = 8_000;
 const RENEWAL_REUSE_MARGIN_MS = 30_000;
 const renewals = new Map<string, DeviceRenewal>();
 
-function sameSlugs(a: ProjectSlugs, b: ProjectSlugs): boolean {
-  return a.workspace.toLowerCase() === b.workspace.toLowerCase() && a.project.toLowerCase() === b.project.toLowerCase();
-}
-
 function envTokenCovers(ref: ProjectSlugs): boolean {
   const env = envToken();
   if (!env) return false;
 
   const claims = readTokenClaims(env);
 
-  return !claims || sameSlugs(claims, ref);
+  return !claims || claimsCover(claims, ref);
 }
 
 export function expiredLoginFor(ref: ProjectSlugs, api?: string, nowSeconds: number = Math.floor(Date.now() / 1000)): ExpiredLogin | null {
@@ -139,16 +135,18 @@ export function loginNeededDetail(ref: ProjectSlugs, api?: string): string {
   const project = `${workspace}/${ref.project.toLowerCase()}`;
   if (requestCredential()) return noStoredLoginHint(project);
 
+  const member = memberLoginFor(workspace, api);
   const held = workspaceLogins(workspace, api);
-  const others =
-    held.length === 0
+  const others = member
+    ? `, and the member login stored for ${workspace} lists ${memberProjects(member).join(", ")} and not it (a project added after that login needs it minted again)`
+    : held.length === 0
       ? ""
       : held.length === 1
         ? `, and the login stored for ${workspace} (${held[0]}) does not read it`
         : `, and the ${held.length} logins stored for ${workspace} (${held.join(", ")}) do not read it`;
   const env = envToken();
   const claims = env ? readTokenClaims(env) : null;
-  const envNote = claims && !sameSlugs(claims, ref) ? ` (EXTENSION_DEV_TOKEN names ${claims.workspace}/${claims.project} and was not sent)` : "";
+  const envNote = claims && !claimsCover(claims, ref) ? ` (EXTENSION_DEV_TOKEN names ${claims.workspace}/${claims.project} and was not sent)` : "";
 
   return `No stored login covers ${project}: a login is minted per project${others}${envNote}, so run ${loginCall(project)}, or ${workspaceLoginCall(workspace)} to cover every project of the workspace in one approval.`;
 }

@@ -14,10 +14,12 @@ import { missedRead, type RecordRead } from "./act-outcome";
 import { platformFetch } from "./platform-fetch";
 import { platformApiGet, type ProjectApi } from "./project-api";
 import { releaseChangeOfRow, type ReleaseTypeChange, type ReleaseTypeChangeRefused } from "./release-type-change";
+import { bearerHeaders } from "./request-fetch";
 import { identityHeaders } from "./session-identity";
 import { STORE_LABELS } from "./store-categories";
-import type { ListingStore } from "./store-md-declarations";
 import { storeReadsOf, type StoreReadView } from "./store-reads";
+
+import type { ListingStore } from "./store-md-declarations";
 
 export const RETRIED_SENTENCE = "GitHub canceled the run before upload; the platform started it again.";
 
@@ -541,7 +543,7 @@ export async function readPlatformSubmissions(args: {
   const url = `${apiCheck.base}/api/cli/stores/submissions`;
   const sent = await platformFetch(url, {
     headers: {
-      authorization: `Bearer ${credential.token}`,
+      ...bearerHeaders(credential.token, credential.ref),
       ...identityHeaders("extension_release_status"),
     },
   });

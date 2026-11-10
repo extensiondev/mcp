@@ -266,6 +266,7 @@ async function listShares(args: {
     ...(args.limit != null ? { limit: args.limit } : {}),
     ...(args.api ? { api: args.api } : {}),
     ...(args.project ? { token: resolveToken({ project: args.project, api: args.api }) } : {}),
+    ref: resolveCredential({ project: args.project, api: args.api }).ref,
   });
 
   if (!listing.ok) {
@@ -461,6 +462,7 @@ async function revokeShare(args: {
     description: `Permanently revoke share ${ref}, killing the link for everyone with no way to restore it.`,
     approvalId: args.approvalId,
     token: token || "",
+    ref: credential.ref,
     api: args.api,
     refusedStatus: "revoke-failed",
     irreversible: true,
@@ -493,6 +495,7 @@ async function revokeShare(args: {
   const result = await revokeArtifact({
     artifactId: ref,
     token,
+    ref: credential.ref,
     ...(args.approvalId ? { approvalId: args.approvalId } : {}),
     ...(args.api ? { api: args.api } : {}),
   });

@@ -194,7 +194,51 @@ describe("extension_auth login to every project of a workspace with projects: \"
     expect(listCredentials()).toHaveLength(0);
   });
 
-  it("stores every token the platform returns for the workspace and names the projects", async () => {
+  it("stores one member login when the platform answers tokenKind member beside tokens[], and every listed project reads through it", async () => {
+    const list = ["alpha", "beta", "gamma"];
+    const h = harness({
+      token: [
+        {
+          status: 200,
+          body: {
+            token: "member-login-token",
+            tokenKind: "member",
+            workspaceSlug: "acme",
+            projectSlugs: list,
+            expiresAt: 1_900_000_000,
+            ttlSeconds: 604800,
+            tokens: list.map((slug) => entry(slug)),
+          },
+        },
+      ],
+    });
+    const text = await handler({ action: "login", workspace: "acme", projects: "*", deviceCode: "dev-code" } as never);
+    const out = JSON.parse(text);
+
+    expect(out.ok).toBe(true);
+    expect(out.status).toBe("logged-in");
+    expect(out.value.login).toEqual({
+      kind: "member",
+      project: "acme/*",
+      projects: ["acme/alpha", "acme/beta", "acme/gamma"],
+      expiresAt: new Date(1_900_000_000 * 1000).toISOString(),
+    });
+
+    expect(out.value.logins).toHaveLength(1);
+    expect(out.hint).toContain("as a member");
+    expect(text).not.toContain("login-token-for-");
+    expect(text).not.toContain("member-login-token");
+    expect(h.to("/api/cli/device/code")).toHaveLength(0);
+
+    for (const slug of list) {
+      expect(readCredentials({ project: `acme/${slug}` })).toMatchObject({ token: "member-login-token", kind: "member", projectSlug: slug, api: API });
+    }
+
+    expect(readCredentials({ project: "acme/delta" })).toBeNull();
+    expect(new Set(listCredentials().map((login) => login.key))).toEqual(new Set([`${API} acme/*`]));
+  });
+
+  it("stores one login per project when the platform answers only tokens[], the shape before member logins", async () => {
     const h = harness({ token: [tokens(["alpha", "beta", "gamma", "delta"])] });
     const text = await handler({ action: "login", workspace: "acme", projects: "*", deviceCode: "dev-code" } as never);
     const out = JSON.parse(text);

@@ -149,7 +149,7 @@ export async function createShareFromBuild(args: {
       return failure("share-failed", "SharesBuildManifestMissing", `Build ${buildId}'s ${browser} package has no readable manifest.json at its root. Nothing was uploaded.`, value);
     }
 
-    const uploaded = await uploadPreview({ distDir, manifest, browser, api: args.api, token: api.token, command: COMMAND });
+    const uploaded = await uploadPreview({ distDir, manifest, browser, api: args.api, token: api.token, ref: api.ref, command: COMMAND });
 
     if (!uploaded.ok) {
       if (uploaded.held) {

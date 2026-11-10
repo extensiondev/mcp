@@ -12,6 +12,7 @@ import path from "node:path";
 import { NO_TOKEN_MESSAGE } from "./credentials";
 import { resolveToken } from "./publish";
 import { resolveApiBase, safeApiBase } from "./login-flow";
+import { bearerHeaders } from "./request-fetch";
 import { identityHeaders } from "./session-identity";
 import { wwwRevokeUrl } from "./artifacts-api";
 import { platformHoldMessage, sawPlatformHold } from "./platform-hold";
@@ -106,6 +107,7 @@ export async function uploadPreview(options: {
   browser: string;
   api?: string;
   token?: string;
+  ref?: { workspace: string; project: string } | null;
   fetchImpl?: FetchImpl;
   command?: string;
 }): Promise<PreviewUploadOutcome> {
@@ -206,7 +208,7 @@ export async function uploadPreview(options: {
     res = await doFetch(`${apiCheck.base}/api/artifacts`, {
       method: "POST",
       headers: {
-        authorization: `Bearer ${token}`,
+        ...bearerHeaders(token, options.ref),
         "content-type": "application/json",
         "x-extensiondev-origin": "mcp",
         ...identityHeaders(options.command ?? "extension_preview_web"),

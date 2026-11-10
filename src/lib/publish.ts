@@ -6,8 +6,9 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { resolveCredential } from "./credential-source";
+import { resolveCredential, type CredentialRef } from "./credential-source";
 import { resolveApiBase, safeApiBase } from "./login-flow";
+import { bearerHeaders } from "./request-fetch";
 import { identityHeaders } from "./session-identity";
 import { platformHoldMessage, sawPlatformHold } from "./platform-hold";
 
@@ -23,6 +24,7 @@ export interface PublishOptions {
   channel?: string;
   api?: string;
   token?: string;
+  ref?: CredentialRef | null;
   fetchImpl?: FetchImpl;
 }
 
@@ -74,7 +76,7 @@ export async function publish(
     res = await doFetch(url, {
       method: "POST",
       headers: {
-        authorization: `Bearer ${token}`,
+        ...bearerHeaders(token, options.ref),
         "content-type": "application/json",
         ...identityHeaders("extension_publish"),
       },

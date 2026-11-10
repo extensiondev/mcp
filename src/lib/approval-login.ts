@@ -10,7 +10,7 @@ import { mintedApproval, type MintedApproval } from "./approval-record";
 import { requestCredential } from "./credential-scope";
 import { loginKey, serverOf, targetServer } from "./credential-server";
 import { loginIdOf, readTokenClaims } from "./credential-source";
-import { readCredentialStore, type StoredCredentials } from "./credentials";
+import { isMemberLogin, loginEntries, readCredentialStore, type StoredCredentials } from "./credentials";
 import { envelope } from "./envelope";
 import { currentProjectName, tokenProjectIdentity } from "./project-identity";
 import { trackUrl } from "./track-url";
@@ -44,13 +44,14 @@ export function storedLoginFor(
   if (!store) return null;
 
   const server = targetServer(api);
-  const live = Object.entries(store.entries).filter(
+  const live = loginEntries(store, nowSeconds).filter(
     ([, entry]) => serverOf(entry.api) === server && !entry.movedTo && !(entry.expiresAt && entry.expiresAt <= nowSeconds),
   );
-  const byId = record.loginId ? live.find(([, entry]) => loginIdOf(entry.token) === record.loginId) : undefined;
-  const byProjectId = record.projectId ? live.find(([, entry]) => entry.projectId === record.projectId) : undefined;
   const [workspace = record.workspace, project = record.project] = currentProjectName(api, `${record.workspace}/${record.project}`).split("/");
   const key = loginKey(workspace, project, server);
+  const sameId = record.loginId ? live.filter(([, entry]) => loginIdOf(entry.token) === record.loginId) : [];
+  const byId = sameId.find(([name]) => name === key) ?? sameId.find(([, entry]) => !isMemberLogin(entry));
+  const byProjectId = record.projectId ? live.find(([, entry]) => entry.projectId === record.projectId) : undefined;
   const bySlug = live.find(([name]) => name === key);
 
   return (byId ?? byProjectId ?? bySlug)?.[1] ?? null;
@@ -97,7 +98,7 @@ export function bindApprovalLogin(
 function loginRef(token: string, api?: string): string {
   const claims = readTokenClaims(token);
 
-  if (!claims) return "";
+  if (!claims || claims.member) return "";
 
   const claimed = `${claims.workspace}/${claims.project}`;
 

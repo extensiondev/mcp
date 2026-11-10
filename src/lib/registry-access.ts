@@ -7,9 +7,10 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { envToken } from "./credential-scope";
-import { readTokenClaims } from "./credential-source";
+import { claimsCover, readTokenClaims } from "./credential-source";
 import { readValidCredentials } from "./credentials";
 import { resolveApiBase, safeApiBase } from "./login-flow";
+import { bearerHeaders } from "./request-fetch";
 import { identityHeaders } from "./session-identity";
 
 import type { ProjectRef } from "./registry";
@@ -106,7 +107,7 @@ export class RegistryAccessTokens {
 
       if (env) {
         const claims = readTokenClaims(env);
-        if (!claims || sameAs(claims.workspace, claims.project)) token = env;
+        if (!claims || claimsCover(claims, ref)) token = env;
       }
     }
 
@@ -121,7 +122,7 @@ export class RegistryAccessTokens {
       res = await (this.fetchImpl ?? fetch)(`${check.base}/api/access-grant`, {
         method: "POST",
         headers: {
-          authorization: `Bearer ${token}`,
+          ...bearerHeaders(token, ref),
           "content-type": "application/json",
           ...identityHeaders("extension_registry_access"),
         },

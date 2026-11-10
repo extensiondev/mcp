@@ -128,6 +128,7 @@ export async function revokeBuildLinkShare(args: BuildLinkArgs): Promise<string>
     description: `Permanently revoke build link ${tokenId}, killing it for everyone holding it with no way to restore it.`,
     approvalId: text(args.approvalId) || undefined,
     token: api.token,
+    ref: api.ref,
     api: args.api,
     refusedStatus: "revoke-failed",
     irreversible: true,

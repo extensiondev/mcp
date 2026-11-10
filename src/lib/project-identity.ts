@@ -7,7 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { serverOf, targetServer } from "./credential-server";
-import { readCredentialStore, readCredentials } from "./credentials";
+import { loginEntries, readCredentialStore, readCredentials } from "./credentials";
 
 export interface ProjectIdentity {
   current: string;
@@ -47,16 +47,17 @@ export function tokenProjectIdentity(api: string | undefined, token: string, cla
   const held = String(token ?? "").trim();
   const store = held ? readCredentialStore() : null;
   const server = targetServer(api);
-  const entry = store
-    ? Object.values(store.entries).find(
-        (row) => !row.movedTo && serverOf(row.api) === server && String(row.token ?? "").trim() === held,
-      )
-    : undefined;
+  const claim = String(claimed ?? "").trim().toLowerCase();
+  const rows = store
+    ? loginEntries(store)
+        .map(([, row]) => row)
+        .filter((row) => !row.movedTo && serverOf(row.api) === server && String(row.token ?? "").trim() === held)
+    : [];
+  const entry = rows.find((row) => `${row.workspaceSlug}/${row.projectSlug}`.toLowerCase() === claim) ?? (rows.length === 1 ? rows[0] : undefined);
 
   if (entry?.workspaceSlug && entry.projectSlug) {
     const projectId = String(entry.projectId ?? "").trim();
     const current = `${entry.workspaceSlug}/${entry.projectSlug}`.toLowerCase();
-    const claim = String(claimed ?? "").trim().toLowerCase();
 
     return {
       current,

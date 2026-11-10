@@ -295,6 +295,7 @@ export async function handler(args: {
     ...(channelArg ? { channel: channelArg } : {}),
     api: args.api,
     token,
+    ref: credential.ref,
   });
 
   if (!result.ok) {

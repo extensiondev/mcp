@@ -22,7 +22,9 @@ const REBECCAT = "rebeccat.token.sig";
 const REBECCAT_ID = "prj_a017a32f-4159-42aa-8ee8-d79d35db47c3";
 const REBECCAT_EXPIRES = NOW + 6 * 24 * 3600;
 const PII = "pii.token.sig";
-const TOKENS = [LEON, REBECCAT, PII];
+const MEMBER = "member.token.sig";
+const MEMBER_EXPIRES = NOW + 7 * 24 * 3600;
+const TOKENS = [LEON, REBECCAT, PII, MEMBER];
 
 function entry(projectSlug: string, token: string, expiresAt: number, api: string, projectId?: string) {
   return {
@@ -49,7 +51,9 @@ function whoamiByToken(call: Call) {
       ? { slug: "leon", id: LEON_ID }
       : call.auth === `Bearer ${REBECCAT}`
         ? { slug: "rebeccat", id: REBECCAT_ID }
-        : null;
+        : call.auth === `Bearer ${MEMBER}` && call.project.startsWith(`${WORKSPACE}/`)
+          ? { slug: call.project.slice(WORKSPACE.length + 1), id: `prj_${call.project.slice(WORKSPACE.length + 1)}` }
+          : null;
 
   return who
     ? { body: { login: `${WORKSPACE}/${who.slug}`, live: true, projectId: who.id, workspaceSlug: WORKSPACE, projectSlug: who.slug } }
@@ -119,6 +123,62 @@ describe("extension_auth status honors project like every token-scoped tool", ()
     expect(out.hint).toContain("3 logins are stored on this machine");
     expect(out.value.trackUrl).toContain(`/${WORKSPACE}/rebeccat`);
     carriesNoToken(out);
+  });
+
+  it("a member login is one row with its project list, verified for its first project, and a project it lists is read through it", async () => {
+    if (process.platform === "win32") return;
+
+    writeCredentials(entry("leon", LEON, LEON_EXPIRES, API, LEON_ID));
+    writeCredentials({
+      version: 1 as const,
+      token: MEMBER,
+      workspaceSlug: WORKSPACE,
+      projectSlug: "*",
+      kind: "member",
+      projectSlugs: ["visionario", "pii-shield"],
+      expiresAt: MEMBER_EXPIRES,
+      api: API,
+      provider: "extensiondev" as const,
+    });
+
+    platform.routes["GET /api/cli/whoami"] = whoamiByToken;
+
+    const out = await status({});
+
+    expect(out.status).toBe("logged-in");
+    expect(out.value.kind).toBe("member");
+    expect(out.value.projectSlug).toBeNull();
+    expect(out.value.projects).toEqual([`${WORKSPACE}/visionario`, `${WORKSPACE}/pii-shield`]);
+    expect(out.value.server).toEqual({ verdict: "confirmed", api: API, login: `${WORKSPACE}/visionario`, live: true });
+    expect(out.value.logins).toEqual([
+      { project: `${WORKSPACE}/leon`, server: API, active: false, expiresAt: new Date(LEON_EXPIRES * 1000).toISOString(), expired: false },
+      {
+        project: `${WORKSPACE}/*`,
+        kind: "member",
+        projects: [`${WORKSPACE}/visionario`, `${WORKSPACE}/pii-shield`],
+        server: API,
+        active: true,
+        expiresAt: new Date(MEMBER_EXPIRES * 1000).toISOString(),
+        expired: false,
+      },
+    ]);
+
+    expect(out.hint).toContain("as a member");
+    expect(out.warnings.join(" ")).not.toContain("stale");
+
+    const named = await status({ project: `${WORKSPACE}/pii-shield` });
+
+    expect(named.status).toBe("logged-in");
+    expect(named.value.projectSlug).toBe("pii-shield");
+    expect(named.value.kind).toBe("member");
+    expect(named.value.server.login).toBe(`${WORKSPACE}/pii-shield`);
+    expect(platform.sent("GET", "/api/cli/whoami").map((call) => [call.auth, call.project])).toEqual([
+      [`Bearer ${MEMBER}`, `${WORKSPACE}/visionario`],
+      [`Bearer ${MEMBER}`, `${WORKSPACE}/pii-shield`],
+    ]);
+
+    carriesNoToken(out);
+    carriesNoToken(named);
   });
 
   it("a project with no stored login answers not-signed-in with the login call and never reaches the platform", async () => {

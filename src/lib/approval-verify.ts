@@ -18,6 +18,7 @@ import { pageTraceSentence, readPageTrace } from "./approval-page-trace";
 import { mintedProjectMatches } from "./approval-record";
 import { linesSentence, readLines } from "./approval-lines";
 import { readTokenClaims } from "./credential-source";
+import { bearerHeaders } from "./request-fetch";
 import { tokenProjectIdentity } from "./project-identity";
 import { envelope } from "./envelope";
 import { parseJsonObject } from "./json-object";
@@ -51,6 +52,7 @@ export interface ApprovalGateInput {
   nextCall?: ApprovalNextCall;
   approvalId?: string;
   token: string;
+  ref?: { workspace: string; project: string } | null;
   api?: string;
   fetchImpl?: typeof fetch;
   enabled?: boolean;
@@ -202,7 +204,7 @@ export async function verifyApproval(params: {
     res = await doFetch(url, {
       method: "GET",
       headers: {
-        authorization: `Bearer ${input.token}`,
+        ...bearerHeaders(input.token, input.ref),
         accept: "application/json",
       },
     });

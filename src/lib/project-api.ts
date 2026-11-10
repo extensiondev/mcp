@@ -23,6 +23,7 @@ import {
 } from "./platform-hold";
 import { PROJECT_MOVED_STATUS, readProjectMove, type ProjectMove } from "./project-move";
 import { platformFetch } from "./platform-fetch";
+import { bearerHeaders } from "./request-fetch";
 import { identityHeaders } from "./session-identity";
 import { tokenRefusal } from "./token-refusal";
 
@@ -97,13 +98,14 @@ async function getJson(
   token: string,
   command: string,
   send?: { method: string; body: unknown },
+  ref?: CredentialRef | null,
 ): Promise<{ res: Response | null; body: unknown; error?: string }> {
   const sent = await platformFetch(
     url,
     {
       ...(send ? { method: send.method, body: JSON.stringify(send.body) } : {}),
       headers: {
-        authorization: `Bearer ${token}`,
+        ...bearerHeaders(token, ref),
         accept: "application/json",
         ...(send ? { "content-type": "application/json" } : {}),
         ...identityHeaders(command),
@@ -157,7 +159,7 @@ export async function openProjectApi(args: {
       reason: "no-login",
       message: args.project
         ? noStoredLoginHint(args.project)
-        : "No login for this server. Run extension_auth (action: login), or set EXTENSION_DEV_TOKEN.",
+        : credential.note ?? "No login for this server. Run extension_auth (action: login), or set EXTENSION_DEV_TOKEN.",
     };
   }
 
@@ -180,7 +182,7 @@ export async function openProjectApi(args: {
 
   if (!projectId) {
     const url = `${base}/api/cli/whoami`;
-    const { res, body, error } = await getJson(url, credential.token, args.command);
+    const { res, body, error } = await getJson(url, credential.token, args.command, undefined, credential.ref);
 
     if (!res) return { ok: false, reason: "unreachable", message: error ?? `could not reach ${url}` };
 
@@ -317,7 +319,7 @@ function retryAfterOf(res: Response, body: unknown): number | undefined {
 }
 
 export async function platformApiGet<T = unknown>(
-  api: Pick<ProjectApi, "base" | "token" | "command">,
+  api: Pick<ProjectApi, "base" | "token" | "command"> & { ref?: CredentialRef | null },
   path: string,
   query?: Record<string, string | number | undefined>,
   send?: { method: "POST" | "PUT" | "PATCH"; body: unknown },
@@ -335,7 +337,7 @@ export async function platformApiGet<T = unknown>(
     return { ok: false, status: 0, code: ASK_ONLY_CODE, message: `extension_submit_check only reads and asks for approvals, so the ${send.method} to ${url.split("?")[0]} was not sent. Nothing was executed.`, held: false, body: null };
   }
 
-  const { res, body, error } = await getJson(url, api.token, api.command, send);
+  const { res, body, error } = await getJson(url, api.token, api.command, send, api.ref);
 
   if (!res) {
     return { ok: false, status: 0, code: "", message: error ?? `could not reach ${url}`, held: false, body: null };

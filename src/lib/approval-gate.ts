@@ -17,6 +17,7 @@ import { readApprovalSubject } from "./approval-subject";
 import { envelope } from "./envelope";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { platformHoldEnvelope, readUpgradeUrl, sawPlatformHold } from "./platform-hold";
+import { bearerHeaders } from "./request-fetch";
 import {
   APPROVAL_EXPIRED_STATUS,
   APPROVAL_PENDING_STATUS,
@@ -187,7 +188,7 @@ async function requestApproval(params: {
     res = await doFetch(url, {
       method: "POST",
       headers: {
-        authorization: `Bearer ${input.token}`,
+        ...bearerHeaders(input.token, input.ref),
         "content-type": "application/json",
       },
       body: JSON.stringify({

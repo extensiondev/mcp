@@ -175,6 +175,7 @@ function gateFor(api: ProjectApi, args: ActArgs, scope: { commit: string; buildE
     scope,
     description: `Rebuild ${api.ref.workspace}/${api.ref.project} at ${scope.commit.slice(0, 7)} for ${scope.buildEnv}.`,
     token: api.token,
+    ref: api.ref,
     api: args.api,
     refusedStatus: "rebuild-refused",
     body: { commitSha: scope.commit, buildEnv: scope.buildEnv },

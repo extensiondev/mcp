@@ -12,6 +12,7 @@ import { WAIT_SECONDS_INPUT, dispatchedHint, madeSentence, stampNow, text as pla
 import { API_BASE } from "../lib/common-schema";
 import { awaitPromoteRecord, promoteLinks, releasesPage, unknownBuildEnrichment } from "../lib/promote-record";
 import { resolveCredential } from "../lib/credential-source";
+import { bearerHeaders } from "../lib/request-fetch";
 import { expiredLoginRefusal } from "../lib/login-expired";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
@@ -218,6 +219,7 @@ export async function handler(args: ReleaseActArgs & {
     description: `Release build ${buildId} to the ${channel} channel.`,
     approvalId: args.approvalId,
     token,
+    ref: credential.ref,
     api: args.api,
     refusedStatus: "promote-failed",
     refusalHint: promoteRefusalHint,
@@ -246,7 +248,7 @@ export async function handler(args: ReleaseActArgs & {
     {
       method: "POST",
       headers: {
-        authorization: `Bearer ${token}`,
+        ...bearerHeaders(token, credential.ref),
         "content-type": "application/json",
       },
       body: JSON.stringify(body),

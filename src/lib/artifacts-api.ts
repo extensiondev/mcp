@@ -9,6 +9,7 @@
 import { NO_TOKEN_MESSAGE } from "./credentials";
 import { resolveToken } from "./publish";
 import { resolveApiBase, safeApiBase } from "./login-flow";
+import { bearerHeaders } from "./request-fetch";
 import { identityHeaders } from "./session-identity";
 import { platformHoldMessage, sawPlatformHold } from "./platform-hold";
 
@@ -165,6 +166,7 @@ export async function listArtifacts(options: {
   liveOnly?: boolean;
   api?: string;
   token?: string;
+  ref?: { workspace: string; project: string } | null;
   fetchImpl?: FetchImpl;
 } = {}): Promise<ArtifactsOutcome<ArtifactListing>> {
   const token = options.token ?? resolveToken({ api: options.api });
@@ -189,7 +191,7 @@ export async function listArtifacts(options: {
   try {
     res = await doFetch(url.toString(), {
       headers: {
-        authorization: `Bearer ${token}`,
+        ...bearerHeaders(token, options.ref),
         accept: "application/json",
         ...identityHeaders("extension_shares"),
       },
@@ -266,6 +268,7 @@ export async function revokeArtifact(options: {
   artifactId: string;
   api?: string;
   token?: string;
+  ref?: { workspace: string; project: string } | null;
   approvalId?: string;
   fetchImpl?: FetchImpl;
 }): Promise<ArtifactsOutcome<ArtifactRevocation>> {
@@ -292,7 +295,7 @@ export async function revokeArtifact(options: {
     res = await doFetch(url, {
       method: "DELETE",
       headers: {
-        authorization: `Bearer ${token}`,
+        ...bearerHeaders(token, options.ref),
         accept: "application/json",
         ...(approvalId ? { "x-extensiondev-approval": approvalId } : {}),
         ...identityHeaders("extension_shares"),
