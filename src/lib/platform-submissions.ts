@@ -15,6 +15,8 @@ import { platformFetch } from "./platform-fetch";
 import { platformApiGet, type ProjectApi } from "./project-api";
 import { releaseChangeOfRow, type ReleaseTypeChange, type ReleaseTypeChangeRefused } from "./release-type-change";
 import { identityHeaders } from "./session-identity";
+import { STORE_LABELS } from "./store-categories";
+import type { ListingStore } from "./store-md-declarations";
 import { storeReadsOf, type StoreReadView } from "./store-reads";
 
 export const RETRIED_SENTENCE = "GitHub canceled the run before upload; the platform started it again.";
@@ -189,9 +191,11 @@ export interface QueuedStoreActView {
   act: string;
   store: string;
   buildSha?: string;
+  version?: string;
   status: string;
   storeWord: string;
   clearsWhen: string;
+  behind?: string;
   readAt?: string;
   source?: string;
   reason?: string;
@@ -236,6 +240,8 @@ export function queuedActOf(raw: unknown): QueuedStoreActView | undefined {
   const fields: Array<[keyof QueuedStoreActView, unknown]> = [
     ["id", row.id],
     ["buildSha", row.buildSha],
+    ["version", row.version],
+    ["behind", lock.behind],
     ["readAt", lock.readAt],
     ["source", lock.source],
     ["reason", lock.reason],
@@ -272,6 +278,45 @@ export function queuedActsOf(raw: unknown): Record<string, QueuedStoreActView> {
 
 export function queuedActSentence(act: Pick<QueuedStoreActView, "storeWord" | "lastCheckedAt">): string {
   return `Queued behind ${act.storeWord}, sends when it clears (checked ${act.lastCheckedAt})`;
+}
+
+export interface QueuedBehindView {
+  version?: string;
+  buildSha: string;
+  behind?: string;
+  storeWord: string;
+  since: string;
+  sendsWhen: string;
+  checkedAt: string;
+}
+
+/* @invariant A STATUS ROW NAMES THE RELEASE THE STORE IS HOLDING BACK. A
+ * person who released after a store took another version into review reads
+ * the store stuck on the older one unless the row says which version waits
+ * behind it, since when, and what sends it (ledger 485: Rebeccat's 0.3.1 sat
+ * queued behind Edge 0.3.0.11 while the status showed only 0.3.0.11). The
+ * held version is the lock's own `behind`; a lock without one falls back to
+ * the store's word and its clearsWhen sentence, never to a guess from the
+ * records.
+ */
+export function queuedBehindOf(act: QueuedStoreActView): QueuedBehindView {
+  return {
+    ...(act.version ? { version: act.version } : {}),
+    buildSha: act.buildSha || "unknown",
+    ...(act.behind ? { behind: act.behind } : {}),
+    storeWord: act.storeWord,
+    since: act.queuedAt || act.lastCheckedAt,
+    sendsWhen: act.behind ? `when the store answers ${act.behind}` : `once ${act.clearsWhen}`,
+    checkedAt: act.lastCheckedAt,
+  };
+}
+
+export function queuedBehindSentence(queued: QueuedBehindView): string {
+  return `${queued.version ?? `build ${queued.buildSha}`} is queued behind ${queued.behind ?? queued.storeWord} since ${queued.since}; it sends on its own ${queued.sendsWhen}`;
+}
+
+export function queuedBehindLine(store: string, queued: QueuedBehindView): string {
+  return `${STORE_LABELS[store as ListingStore] ?? store}: ${queuedBehindSentence(queued)}.`;
 }
 
 function str(value: unknown): string | undefined {

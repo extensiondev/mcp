@@ -383,6 +383,90 @@ describe("store-status reader", () => {
     expect(JSON.stringify(out)).not.toMatch(/actions\/runs|mirror/i);
   });
 
+  it("names the release a store's review holds back on the store's row and in one line to say, and never hides it behind the older submission", async () => {
+    if (process.platform === "win32") return;
+
+    writeCredentials({
+      version: 1,
+      token: "claims.sig",
+      workspaceSlug: "acme",
+      projectSlug: "widget",
+      projectId: "prj_1",
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      api: "https://www.extension.dev",
+    });
+
+    const certifying = {
+      id: "sub_edge_0_3_0_11",
+      store: "edge",
+      channel: "stable",
+      buildId: "a1f6d2c",
+      version: "0.3.0.11",
+      status: "submitted",
+      submittedAt: "2026-11-06T13:10:00.000Z",
+      statusRead: { word: "submitted", readAt: "2026-11-06T13:12:00.000Z", source: "inferred" },
+      run: null,
+    };
+    const queuedEdge = {
+      id: "qact_e7804736",
+      act: "publish",
+      store: "edge",
+      buildSha: "93ea0f1",
+      version: "0.3.1",
+      status: "queued",
+      lock: {
+        kind: "review-in-progress",
+        source: "store",
+        storeWord: "InProgressSubmission",
+        clearsWhen: "Partner Center ends its certification of version 0.3.0.11 sent 2026-11-06",
+        behind: "0.3.0.11",
+        readAt: "2026-11-09T18:20:00.000Z",
+      },
+      queuedAt: "2026-11-09T18:21:07.000Z",
+      lastCheckedAt: "2026-11-09T23:40:00.000Z",
+    };
+    const queuedSafari = {
+      id: "qact_2",
+      act: "publish",
+      store: "safari",
+      buildSha: "93ea0f1",
+      status: "queued",
+      lock: { kind: "app-review", storeWord: "WAITING_FOR_REVIEW", clearsWhen: 'extension_submit action:"cancel", store:"safari"', readAt: "2026-11-09T18:20:00.000Z" },
+      queuedAt: "2026-11-09T18:21:09.000Z",
+      lastCheckedAt: "2026-11-09T23:40:00.000Z",
+    };
+
+    global.fetch = fetchByFile({
+      "stores/health.json": HEALTH,
+      "/api/cli/stores/submissions": { ok: true, projectId: "prj_1", submissions: [certifying], queued: [queuedEdge, queuedSafari] },
+    });
+
+    const out = JSON.parse(await handler({ workspace: "acme", project: "widget" }));
+    const byStore = Object.fromEntries(out.value.stores.map((row: { store: string }) => [row.store, row]));
+
+    expect(byStore.edge.lastSubmission.version).toBe("0.3.0.11");
+    expect(byStore.edge.queued).toEqual({
+      version: "0.3.1",
+      buildSha: "93ea0f1",
+      behind: "0.3.0.11",
+      storeWord: "InProgressSubmission",
+      since: "2026-11-09T18:21:07.000Z",
+      sendsWhen: "when the store answers 0.3.0.11",
+      checkedAt: "2026-11-09T23:40:00.000Z",
+    });
+
+    expect(byStore.safari.queued).toMatchObject({ buildSha: "93ea0f1", since: "2026-11-09T18:21:09.000Z", sendsWhen: 'once extension_submit action:"cancel", store:"safari"' });
+    expect("behind" in byStore.safari.queued).toBe(false);
+    expect("queuedAct" in byStore.edge).toBe(false);
+    expect(out.value.sayToPerson).toBe(
+      "Edge: 0.3.1 is queued behind 0.3.0.11 since 2026-11-09T18:21:07.000Z; it sends on its own when the store answers 0.3.0.11. Safari: build 93ea0f1 is queued behind WAITING_FOR_REVIEW since 2026-11-09T18:21:09.000Z; it sends on its own once extension_submit action:\"cancel\", store:\"safari\".",
+    );
+
+    expect(out.hint).toContain("last submission v0.3.0.11 submitted");
+    expect(out.hint).toContain("0.3.1 is queued behind 0.3.0.11 since 2026-11-09T18:21:07.000Z; it sends on its own when the store answers 0.3.0.11");
+    expect(JSON.stringify(out)).not.toMatch(/apr_/);
+  });
+
   it("relays what Edge Add-ons serves from an Edge refresh, and never relays an Edge link keyed by the product id", async () => {
     if (process.platform === "win32") return;
 

@@ -20,12 +20,14 @@ import { envelope, type ErrorCode } from "../lib/envelope";
 import { expiredLoginFor, loginExpiredRefusal, startLoginRenewal } from "../lib/login-expired";
 import { platformHoldEnvelope } from "../lib/platform-hold";
 import {
-  queuedActSentence,
+  queuedBehindLine,
+  queuedBehindOf,
+  queuedBehindSentence,
   readPlatformSubmissions,
   retryNote,
   statusReadOf,
   storeUploadOf,
-  type QueuedStoreActView,
+  type QueuedBehindView,
   type StoreStatusRead,
   type SubmissionRun,
 } from "../lib/platform-submissions";
@@ -818,7 +820,7 @@ async function answerStores(
     }
 
     const queuedAct = platform.ok ? platform.queued[store] : undefined;
-    if (queuedAct) row.queuedAct = queuedAct;
+    if (queuedAct) row.queued = queuedBehindOf(queuedAct);
 
     if (store === "safari" && listingPush.ok && listingPush.push) row.listingPush = listingPush.push;
 
@@ -925,14 +927,14 @@ async function answerStores(
     if (channelReleases.length) tail.push(...channelReleases.map((entry) => `release: ${storeReleaseSentence(entry)}`));
     else if (release) tail.push(`release: ${storeReleaseSentence(release)}`);
 
-    const queuedAct = row.queuedAct as QueuedStoreActView | undefined;
-
-    if (queuedAct) {
-      tail.push(`${queuedAct.act} of build ${queuedAct.buildSha || "unknown"} ${queuedActSentence(queuedAct)}; it sends on its own once ${queuedAct.clearsWhen}`);
-    }
+    const queued = row.queued as QueuedBehindView | undefined;
+    if (queued) tail.push(queuedBehindSentence(queued));
 
     return tail.length > 0 ? `${head}; ${tail.join("; ")}` : head;
   });
+  const queuedLines = shown
+    .filter((row): row is Record<string, unknown> & { queued: QueuedBehindView } => Boolean(row.queued))
+    .map((row) => queuedBehindLine(String(row.store), row.queued));
 
   const healthUnavailable = healthRes.ok ? null : storeRecordUnread("health", healthRes, `both start from the console Submissions page: ${consoleStoresUrl}`);
   const statusUnavailable = statusRes.ok ? null : storeRecordUnread("status", statusRes, "extension_submit runs one");
@@ -974,6 +976,7 @@ async function answerStores(
       workspace: ref.workspace,
       project: ref.project,
       stores: shown,
+      ...(queuedLines.length ? { sayToPerson: queuedLines.join(" ") } : {}),
       ...(status.lastSubmission && (!onlyStore || str(status.lastSubmission.store) === onlyStore)
         ? { lastSubmission: status.lastSubmission }
         : {}),
