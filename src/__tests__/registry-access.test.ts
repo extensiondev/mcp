@@ -264,18 +264,30 @@ describe("private projects", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  it("explains what to do when no credential covers the project", async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse({}, 401));
-    const res = await fetchRegistryJson(
-      "https://registry.extension.land/someone/else/_extension-dev/channels.json",
-      fetchImpl as any,
-      {
-        ref: { workspace: "someone", project: "else" },
-        tokens: new RegistryAccessTokens({ fetchImpl: fetchImpl as any }),
-      },
-    );
+  it.each([
+    {
+      ref: { workspace: "acme", project: "other" },
+      detail:
+        'No stored login covers acme/other: a login is minted per project, and the login stored for acme (acme/widget) does not read it, so run extension_auth {action: "login", project: "acme/other"}, or extension_auth {action: "login", workspace: "acme", projects: "*"} to cover every project of the workspace in one approval.',
+    },
+    {
+      ref: { workspace: "someone", project: "else" },
+      detail:
+        'No stored login covers someone/else: a login is minted per project, so run extension_auth {action: "login", project: "someone/else"}, or extension_auth {action: "login", workspace: "someone", projects: "*"} to cover every project of the workspace in one approval.',
+    },
+  ])("a read of $ref.workspace/$ref.project with no login for it names the exact login call in one sentence", async ({ ref, detail }) => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ error: "unauthorized", reason: "missing-token" }, 401));
+    const url = `https://registry.extension.land/${ref.workspace}/${ref.project}/_extension-dev/channels.json`;
+    const res = await fetchRegistryJson(url, fetchImpl as any, {
+      ref,
+      tokens: new RegistryAccessTokens({ fetchImpl: fetchImpl as any }),
+    });
     expect(res.ok).toBe(false);
-    expect((res as { message: string }).message).toContain("extension_auth");
+    const message = (res as { message: string }).message;
+    expect(message.startsWith(`${url} returned 401`)).toBe(true);
+    expect(message.endsWith(` ${detail}`)).toBe(true);
+    expect((res as { loginNeeded?: string }).loginNeeded).toBe(detail);
+    expect((res as { message: string }).message).not.toContain("set EXTENSION_DEV_TOKEN");
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 

@@ -364,6 +364,25 @@ export function listCredentials(): Array<StoredCredentials & { key: string; acti
     });
 }
 
+export function workspaceLogins(
+  workspace: string,
+  api?: string,
+  nowSeconds: number = Math.floor(Date.now() / 1000),
+): string[] {
+  const server = targetServer(api);
+  const wanted = workspace.trim().toLowerCase();
+
+  return listCredentials()
+    .filter(
+      (entry) =>
+        entry.server === server &&
+        entry.workspaceSlug.toLowerCase() === wanted &&
+        (!entry.expiresAt || entry.expiresAt > nowSeconds),
+    )
+    .sort((a, b) => b.expiresAt - a.expiresAt)
+    .map((entry) => `${entry.workspaceSlug}/${entry.projectSlug}`.toLowerCase());
+}
+
 export function defaultLoginDrift(api?: string): { kept: string; newest: string } | null {
   if (requestCredential()) return null;
 

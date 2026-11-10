@@ -16,7 +16,7 @@ import {
   type RegistryAccessTokens,
 } from "./registry-access";
 import { readCredentials } from "./credentials";
-import { expiredLoginDetail, expiredLoginFor } from "./login-expired";
+import { expiredLoginDetail, expiredLoginFor, loginNeededDetail } from "./login-expired";
 import { mcpOrigins } from "./origins";
 import {
   platformHoldMessage,
@@ -107,6 +107,7 @@ export interface RegistryFetchRefusal {
   code?: string;
   held?: boolean;
   body?: unknown;
+  loginNeeded?: string;
 }
 
 export type RegistryFetchResult<T> = { ok: true; json: T } | RegistryFetchRefusal;
@@ -230,17 +231,18 @@ async function fetchRegistry(
 
   if (grant.status !== "ok") {
     const expired = grant.status === "no-credential" ? expiredLoginFor(ref, options?.api) : null;
+    const loginNeeded = grant.status === "no-credential" && !expired ? loginNeededDetail(ref, options?.api) : "";
     const detail =
       grant.status === "no-credential"
         ? expired
           ? expiredLoginDetail(expired)
-          : "This project is private. Run extension_auth (action: login) for it, or set EXTENSION_DEV_TOKEN."
+          : loginNeeded
         : grant.status === "public"
           ? "The platform reports this project is public, but the registry refused the read."
           : grant.message;
     const carried = refusalResult(url, res, refusal);
 
-    return { ...carried, message: `${carried.message} ${detail}` };
+    return { ...carried, message: `${carried.message} ${detail}`, ...(loginNeeded ? { loginNeeded } : {}) };
   }
 
   let retried: Response;

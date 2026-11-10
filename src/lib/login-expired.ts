@@ -12,7 +12,7 @@ import { approvalLogin } from "./approval-scope";
 import { consoleProjectUrl } from "./console-urls";
 import { envToken, requestCredential } from "./credential-scope";
 import { readTokenClaims, splitRef } from "./credential-source";
-import { expiredStoredLogin, type ExpiredLogin } from "./credentials";
+import { expiredStoredLogin, noStoredLoginHint, workspaceLogins, type ExpiredLogin } from "./credentials";
 import { requestDeviceCode } from "./device-flow";
 import { codeExpiryFromStart, rememberCodeExpiry } from "./device-wait";
 import { envelope } from "./envelope";
@@ -128,6 +128,29 @@ export function expiredLoginDetail(expired: ExpiredLogin): string {
   return expired.hosted
     ? `${sentence} Sign in again from your MCP client.`
     : `${sentence} Run ${loginCall(expired.project)} to refresh it.`;
+}
+
+export function workspaceLoginCall(workspace: string): string {
+  return `extension_auth {action: "login", workspace: "${workspace}", projects: "*"}`;
+}
+
+export function loginNeededDetail(ref: ProjectSlugs, api?: string): string {
+  const workspace = ref.workspace.toLowerCase();
+  const project = `${workspace}/${ref.project.toLowerCase()}`;
+  if (requestCredential()) return noStoredLoginHint(project);
+
+  const held = workspaceLogins(workspace, api);
+  const others =
+    held.length === 0
+      ? ""
+      : held.length === 1
+        ? `, and the login stored for ${workspace} (${held[0]}) does not read it`
+        : `, and the ${held.length} logins stored for ${workspace} (${held.join(", ")}) do not read it`;
+  const env = envToken();
+  const claims = env ? readTokenClaims(env) : null;
+  const envNote = claims && !sameSlugs(claims, ref) ? ` (EXTENSION_DEV_TOKEN names ${claims.workspace}/${claims.project} and was not sent)` : "";
+
+  return `No stored login covers ${project}: a login is minted per project${others}${envNote}, so run ${loginCall(project)}, or ${workspaceLoginCall(workspace)} to cover every project of the workspace in one approval.`;
 }
 
 function renewSentence(expired: ExpiredLogin, device: DeviceRenewal | null): string {

@@ -17,7 +17,7 @@ import {
 } from "../lib/registry";
 import { listingPushOpen, readSafariListingPush, type ListingPushView } from "../lib/safari-listing-push-read";
 import { envelope, type ErrorCode } from "../lib/envelope";
-import { expiredLoginFor, loginExpiredRefusal, startLoginRenewal } from "../lib/login-expired";
+import { expiredLoginFor, loginExpiredRefusal, renewCall, startLoginRenewal } from "../lib/login-expired";
 import { platformHoldEnvelope } from "../lib/platform-hold";
 import {
   queuedBehindLine,
@@ -690,6 +690,22 @@ async function answerStores(
       body: heldRead && !heldRead.ok ? heldRead.body : heldRecords?.body,
       api: args.api,
       value: { workspace: ref.workspace, project: ref.project },
+    });
+  }
+
+  const unsigned = [healthRes, statusRes, submissionsRes].find(
+    (res) => !res.ok && Boolean(res.loginNeeded),
+  );
+
+  if (unsigned && !unsigned.ok && unsigned.loginNeeded && !platform.ok && !records.ok) {
+    const project = `${ref.workspace}/${ref.project}`.toLowerCase();
+
+    return fail("LoginRequired", unsigned.loginNeeded, "auth-required", "E_AUTH_REQUIRED", {
+      workspace: ref.workspace,
+      project: ref.project,
+      login: { project, sent: false, renew: renewCall(project) },
+      nextStep: { kind: "login", say: `${unsigned.loginNeeded} Then call this again.`, url: consoleStoresUrl },
+      trackUrl: consoleStoresUrl,
     });
   }
 

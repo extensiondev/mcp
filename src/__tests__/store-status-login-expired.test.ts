@@ -155,6 +155,23 @@ describe("a store status read under an expired login names the expiry instead of
     expect(calls).toEqual(RENEWAL_ATTEMPT);
   });
 
+  it("a private project with no login of its own answers the exact login call in one sentence, never three guesses", async () => {
+    if (process.platform === "win32") return;
+
+    login(NOW + 3600);
+    const out = JSON.parse(await readStores({ project: "acme/other" }));
+    const sentence =
+      'No stored login covers acme/other: a login is minted per project, and the login stored for acme (acme/widget) does not read it, so run extension_auth {action: "login", project: "acme/other"}, or extension_auth {action: "login", workspace: "acme", projects: "*"} to cover every project of the workspace in one approval.';
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("auth-required");
+    expect(out.error).toEqual({ code: "E_AUTH_REQUIRED", name: "LoginRequired", message: sentence });
+    expect(out.value.login).toEqual({ project: "acme/other", sent: false, renew: { tool: "extension_auth", args: { action: "login", project: "acme/other" } } });
+    expect(out.value.nextStep).toEqual({ kind: "login", say: `${sentence} Then call this again.`, url: "https://console.extension.dev/acme/other/submissions" });
+    expect(out.value.trackUrl).toBe("https://console.extension.dev/acme/other/submissions");
+    expect(JSON.stringify(out)).not.toMatch(/no stores configured|slugs may be wrong|StoreStatusNotFound|set EXTENSION_DEV_TOKEN/);
+  });
+
   it("EXTENSION_DEV_TOKEN covering the project lets the read go on", async () => {
     if (process.platform === "win32") return;
 
