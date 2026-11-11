@@ -119,6 +119,16 @@ describe("a person can ask to see the browser (headless input)", () => {
     expect(spawnCalls[0]?.env).toEqual({ EXTENSION_HEADLESS: "0", EXTENSION_BROWSER_FLAGS: "--window-size=1280,800" });
     expect(out.status, JSON.stringify(out).slice(0, 600)).toBe("started");
     expect(out.value.headless).toBe(false);
+    expect(out.value.hiddenBrowserUi).toEqual([
+      {
+        flag: "--silent-debugger-extension-api",
+        hides: "the \"started debugging this browser\" bar Chrome shows above the page while the extension holds chrome.debugger.attach, with its Cancel button",
+        showAgain: 'set browser.chrome.excludeBrowserFlags: ["--silent-debugger-extension-api"] in extension.config.js and call extension_dev again with replace: true',
+      },
+    ]);
+
+    expect(out.hint).toContain("--silent-debugger-extension-api");
+    expect(out.hint).toContain("excludeBrowserFlags");
     expect(sessionIsHeadless(projectPath, "chrome")).toBe(false);
     expect(sessionIsHeadless()).toBe(true);
     removeSession(projectPath, "chrome");
@@ -130,8 +140,10 @@ describe("a person can ask to see the browser (headless input)", () => {
 
     expect(spawnCalls[0]?.env).toBeUndefined();
     expect(out.value.headless).toBe(true);
+    expect(out.value).not.toHaveProperty("hiddenBrowserUi");
     expect(out.hint).toMatch(/not visible to the person/);
     expect(out.hint).toMatch(/headless: false/);
+    expect(out.hint).not.toContain("--silent-debugger-extension-api");
     removeSession(projectPath, "chrome");
   }, 15_000);
 });

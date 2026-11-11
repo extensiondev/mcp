@@ -34,11 +34,14 @@ import { readyContractPath } from "../lib/session-paths";
 import { readTabView, tabViewSentence } from "../lib/tab-view";
 import {
   bringTabForward,
+  confirmWindowRaised,
   foregroundSentence,
   foregroundUnsupported,
+  sessionBrowserPid,
   type Foreground,
 } from "../lib/tab-foreground";
 import { withNavigatedTabForward } from "../lib/tab-foreground-by-id";
+import { menuItemNeedsAction, replayMenuItem } from "./open-menu-item";
 import { CDPClient } from "../lib/cdp";
 import { resolveCdpPort, resolveRdpPort, rdpPortMissingReason, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
 import { noSessionEnvelope } from "../lib/production-receipt";
@@ -530,12 +533,12 @@ export async function navigateToUrl(
     }
 
     rememberExtensionTarget(settled.id, settled.url);
+    const headless = sessionIsHeadless(projectPath, browser);
     const foreground: Foreground | null = options.foreground
-      ? await bringTabForward(cdp, settled.id)
+      ? confirmWindowRaised(await bringTabForward(cdp, settled.id), { headless, browserPid: sessionBrowserPid(projectPath, browser) })
       : null;
     const view = await readTabView(cdp, settled.id);
     const viewSentence = tabViewSentence(view);
-    const headless = sessionIsHeadless(projectPath, browser);
 
     return envelope({
       ok: true,
@@ -1142,7 +1145,7 @@ async function confirmSurfaceTarget(
 export const schema = {
   name: "extension_open",
   description:
-    "Open an extension surface or a url, or replay the toolbar action or a shortcut, over the control channel (by hand: --allow-control). A url opens in a background tab and answers target.targetId for extension_screenshot and the readers. A replay carries no user gesture.",
+    "Open an extension surface or a url, or replay the toolbar action, a context menu item or a shortcut, over the control channel (by hand: --allow-control). A url opens in a background tab and answers target.targetId for extension_screenshot and the readers. A replay carries no user gesture.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -1156,6 +1159,10 @@ export const schema = {
       name: {
         type: "string",
         description: "command: the chrome.commands name.",
+      },
+      menuItemId: {
+        type: "string",
+        description: "action: replay contextMenus.onClicked for this menu item id instead of the toolbar click (Chromium, over the debug port; no gesture).",
       },
       panel: {
         type: "string",
@@ -1193,7 +1200,7 @@ export const schema = {
       tab: {
         type: "number",
         description:
-          "With url: navigate this chrome.tabs id (not a tab position; from dom_snapshot listTabs: true).",
+          "With url: navigate this chrome.tabs id (not a tab position; from dom_snapshot listTabs: true); with menuItemId: the tab the click is for (default the active tab).",
       },
       asTab: {
         type: "boolean",
@@ -1339,6 +1346,7 @@ function tabIdRefusal(tab: unknown): string {
 type OpenArgs = ActArgs & {
   surface?: string;
   name?: string;
+  menuItemId?: string;
   panel?: string;
   waitMs?: number;
   reload?: boolean;
@@ -1396,6 +1404,12 @@ async function openOnce(args: OpenArgs): Promise<string> {
 
   if (args.surface === "devtools") {
     return openDevToolsSurface(args, browser);
+  }
+
+  if (typeof args.menuItemId === "string" && args.menuItemId.length > 0) {
+    if (args.surface !== "action") return menuItemNeedsAction(args.surface);
+
+    return replayMenuItem({ projectPath: args.projectPath, menuItemId: args.menuItemId, tab: args.tab, timeout: args.timeout }, browser);
   }
 
   if (args.url) {

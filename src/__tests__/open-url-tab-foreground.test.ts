@@ -21,6 +21,9 @@ import type * as ActModule from "../lib/act";
 
 const SITE = "https://rebeccat.example/";
 let tabActive = false;
+let frontmost: { app: string; pid: number | null } | { unavailable: string } = { app: "Google Chrome", pid: 4242 };
+
+vi.mock("../lib/frontmost-window", () => ({ readFrontmostApp: () => frontmost }));
 
 vi.mock("../lib/act", async (importOriginal) => {
   const actual = await importOriginal<typeof ActModule>();
@@ -62,7 +65,7 @@ async function browser(targets = [PAGE, WORKER], windowRefused = false): Promise
   vi.stubGlobal("fetch", onlyFakeChromeFetch(() => chrome!.port));
   const file = readyContractPath(dir, "chrome");
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(readyContract("dev", "chrome", { extensionId: EXTENSION_ID, cdpPort: chrome.port, distPath: path.join(dir, "dist", "chrome") })));
+  fs.writeFileSync(file, JSON.stringify(readyContract("dev", "chrome", { extensionId: EXTENSION_ID, cdpPort: chrome.port, distPath: path.join(dir, "dist", "chrome"), browserPid: 4242 })));
 }
 
 beforeEach(() => {
@@ -71,6 +74,7 @@ beforeEach(() => {
   fs.writeFileSync(path.join(dir, "src", "manifest.json"), JSON.stringify({ manifest_version: 3, name: "R" }));
   chrome = null;
   tabActive = false;
+  frontmost = { app: "Google Chrome", pid: 4242 };
   vi.stubEnv("EXTENSION_HEADLESS", "0");
   vi.stubEnv("EXTENSION_BROWSER_FLAGS", "");
   vi.stubGlobal("fetch", () => {
@@ -102,6 +106,17 @@ describe("extension_open {url, tab, foreground: true} brings the tab it navigate
     expect(ran).toHaveLength(1);
     expect(ran[0]!.sessionId).toBe("S-SW1");
     expect(String(ran[0]!.params.expression)).toContain("chrome.windows.update(tab.windowId, { focused: true })");
+  }, 20_000);
+
+  it("answers windowRaised: false naming the app in front when the OS shows another app frontmost after chrome.windows.update", async () => {
+    await browser();
+    frontmost = { app: "Cursor", pid: 681 };
+
+    const result = JSON.parse(await open.handler({ projectPath: dir, url: SITE, tab: 7, foreground: true }));
+
+    expect(result.value.foreground).toMatchObject({ activated: true, windowRaised: false, frontmost: { app: "Cursor", pid: 681 } });
+    expect(result.value.foreground.reason).toContain("Cursor");
+    expect(result.hint).toContain("bring the dev browser window to the front");
   }, 20_000);
 
   it("says the tab is active but the window was not raised when chrome.windows.update refuses", async () => {

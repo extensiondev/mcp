@@ -29,6 +29,9 @@ vi.mock("../lib/cdp-port", async (importOriginal) => {
   return { ...actual, resolveCdpPort: async () => ({ port: 9222, source: "contract" as const }) };
 });
 
+let frontmost: { app: string; pid: number | null } | { unavailable: string } = { app: "Google Chrome", pid: 4242 };
+vi.mock("../lib/frontmost-window", () => ({ readFrontmostApp: () => frontmost }));
+
 let cdpTargets: Array<{ id: string; type: string; url: string; title?: string }> = [];
 const commands: Array<{ method: string; params: Record<string, unknown>; sessionId?: string }> = [];
 let refuse = new Set<string>();
@@ -88,7 +91,7 @@ function project(): string {
   fs.mkdirSync(readyDir, { recursive: true });
   fs.writeFileSync(
     path.join(readyDir, "ready.json"),
-    JSON.stringify(readyContract("dev", "chrome", { distPath: path.join(dir, "dist", "chrome") })),
+    JSON.stringify(readyContract("dev", "chrome", { distPath: path.join(dir, "dist", "chrome"), browserPid: 4242 })),
   );
 
   return dir;
@@ -105,6 +108,7 @@ afterEach(() => {
   commands.length = 0;
   refuse = new Set();
   shown = new Set();
+  frontmost = { app: "Google Chrome", pid: 4242 };
   vi.unstubAllEnvs();
   for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
 });
@@ -176,12 +180,54 @@ describe("extension_open foreground: true brings a page the person must act on f
     expect(result.warnings.join(" ")).toContain("NOT brought forward");
   });
 
-  it("says no one can see the tab in a headless session", async () => {
+  it("answers windowRaised: false with the app in front when the OS says another app is frontmost after the raise", async () => {
+    vi.stubEnv("EXTENSION_HEADLESS", "0");
+    vi.stubEnv("EXTENSION_BROWSER_FLAGS", "");
+    frontmost = { app: "Cursor", pid: 681 };
+
+    const result = JSON.parse(await open.handler({ projectPath: project(), url: SIGN_IN, foreground: true }));
+
+    expect(result.ok).toBe(true);
+    expect(sent("Page.bringToFront")).toHaveLength(1);
+    expect(result.value.foreground).toMatchObject({ activated: true, windowRaised: false, frontmost: { app: "Cursor", pid: 681 } });
+    expect(result.value.foreground.reason).toContain("Cursor");
+    expect(result.hint).toContain("bring the dev browser window to the front");
+    expect(result.hint).not.toContain("brought forward as asked");
+  });
+
+  it("answers windowRaised: unconfirmed when the OS cannot say what is frontmost", async () => {
+    vi.stubEnv("EXTENSION_HEADLESS", "0");
+    vi.stubEnv("EXTENSION_BROWSER_FLAGS", "");
+    frontmost = { unavailable: "this server reads the frontmost app on macOS only" };
+
+    const result = JSON.parse(await open.handler({ projectPath: project(), url: SIGN_IN, foreground: true }));
+
+    expect(result.value.foreground).toMatchObject({ activated: true, windowRaised: "unconfirmed" });
+    expect(result.value.foreground.reason).toContain("macOS only");
+    expect(result.hint).toContain("could not confirm");
+    expect(result.hint).toContain("may need to bring the dev browser window to the front");
+  });
+
+  it("confirms by the app family when the contract carries no browser pid", async () => {
+    vi.stubEnv("EXTENSION_HEADLESS", "0");
+    vi.stubEnv("EXTENSION_BROWSER_FLAGS", "");
+    frontmost = { app: "Chromium", pid: 9 };
+    const dir = project();
+    const file = path.join(dir, "dist", "extension-js", "chrome", "ready.json");
+    fs.writeFileSync(file, JSON.stringify(readyContract("dev", "chrome", { distPath: path.join(dir, "dist", "chrome") })));
+
+    const result = JSON.parse(await open.handler({ projectPath: dir, url: SIGN_IN, foreground: true }));
+
+    expect(result.value.foreground).toEqual({ requested: true, activated: true, windowRaised: true });
+  });
+
+  it("says no one can see the tab in a headless session, and that no window was raised", async () => {
     vi.stubEnv("EXTENSION_HEADLESS", "1");
 
     const result = JSON.parse(await open.handler({ projectPath: project(), url: SIGN_IN, foreground: true }));
 
     expect(result.value.foreground.activated).toBe(true);
+    expect(result.value.foreground.windowRaised).toBe(false);
     expect(result.hint).toContain("this session is headless, so no one can see it");
     expect(result.hint).toContain("headless: false and replace: true");
   });

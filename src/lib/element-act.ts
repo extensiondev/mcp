@@ -9,8 +9,12 @@
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { CDPClient } from "./cdp";
+import { INPUT_ACTIONS, isInputAction, sendInput, type InputOutcome, type InputRequest } from "./element-input";
+import { unresolved, type ElementSummary, type NotEditableReason, type PageRead } from "./element-types";
 
-export const ELEMENT_ACTIONS = ["click", "fill", "text", "wait"] as const;
+export type { ElementSummary, NotEditableReason, Point } from "./element-types";
+
+export const ELEMENT_ACTIONS = ["click", "fill", "text", "wait", ...INPUT_ACTIONS] as const;
 
 export type ElementAction = (typeof ELEMENT_ACTIONS)[number];
 
@@ -19,22 +23,6 @@ export const WAIT_MIN_MS = 500;
 export const WAIT_MAX_MS = 30_000;
 export const WAIT_POLL_MS = 250;
 export const TEXT_CAP = 4_000;
-
-export interface ElementSummary {
-  tag: string;
-  id?: string;
-  name?: string;
-  type?: string;
-  role?: string;
-  text: string;
-  disabled: boolean;
-  readOnly: boolean;
-  editable: boolean;
-  visible: boolean;
-  rect: { x: number; y: number; width: number; height: number };
-}
-
-export type NotEditableReason = "disabled" | "read-only" | "not-a-field" | "no-such-option";
 
 export type ElementOutcome =
   | { kind: "acted"; action: "click" | "fill"; element: ElementSummary; input: "mouse" | "dom"; note?: string }
@@ -45,13 +33,8 @@ export type ElementOutcome =
   | { kind: "not-editable"; element: ElementSummary; reason: NotEditableReason }
   | { kind: "timeout"; matches: number; element?: ElementSummary; polls: number; elapsedMs: number }
   | { kind: "bad-selector"; message: string }
-  | { kind: "failed"; message: string; timedOut: boolean };
-
-type PageRead =
-  | { invalidSelector: string }
-  | { matches: 0 }
-  | { matches: number; elements: ElementSummary[] }
-  | { matches: 1; element: ElementSummary; text?: string; truncated?: boolean; notEditable?: NotEditableReason; point?: { x: number; y: number }; covered?: boolean; filled?: boolean; clicked?: boolean };
+  | { kind: "failed"; message: string; timedOut: boolean }
+  | InputOutcome;
 
 const SUMMARY_SOURCE = `function summary(el) {
   var rect = el.getBoundingClientRect();
@@ -122,6 +105,14 @@ export function pointScript(selector: string): string {
   );
 }
 
+export function focusScript(selector: string): string {
+  return script(
+    selector,
+    `if (typeof el.focus === "function") el.focus();
+  return { matches: 1, element: summary(el), focused: document.activeElement === el };`,
+  );
+}
+
 export function domClickScript(selector: string): string {
   return script(selector, "el.click(); return { matches: 1, element: found.element, clicked: true };");
 }
@@ -153,9 +144,9 @@ export function fillScript(selector: string, value: string): string {
   );
 }
 
-export interface ElementRequest {
+export interface ElementRequest extends Omit<InputRequest, "action"> {
   action: ElementAction;
-  selector: string;
+  selector?: string;
   value?: string;
   timeoutMs?: number;
 }
@@ -171,7 +162,7 @@ type EvaluateResponse = {
   exceptionDetails?: { text?: string; exception?: { description?: string } };
 };
 
-class PageSession {
+export class PageSession {
   private readonly cdp = new CDPClient();
   private sessionId = "";
 
@@ -206,6 +197,10 @@ class PageSession {
     return value as PageRead;
   }
 
+  async send(method: string, params: Record<string, unknown>): Promise<void> {
+    await this.cdp.sendCommand(method, params, this.sessionId, this.commandTimeoutMs);
+  }
+
   async mouseClick(point: { x: number; y: number }): Promise<void> {
     const at = { x: Math.round(point.x), y: Math.round(point.y) };
 
@@ -233,14 +228,6 @@ class PageSession {
   }
 }
 
-function unresolved(read: PageRead): ElementOutcome | null {
-  if ("invalidSelector" in read) return { kind: "bad-selector", message: read.invalidSelector };
-  if (read.matches === 0) return { kind: "no-match" };
-  if (read.matches > 1 && "elements" in read) return { kind: "ambiguous", matches: read.matches, elements: read.elements };
-
-  return null;
-}
-
 async function waitVisible(page: PageSession, request: ElementRequest, clock = { now: () => Date.now(), sleep }): Promise<ElementOutcome> {
   const budgetMs = waitBudget(request.timeoutMs);
   const started = clock.now();
@@ -249,7 +236,7 @@ async function waitVisible(page: PageSession, request: ElementRequest, clock = {
 
   for (;;) {
     polls += 1;
-    last = await page.read(locateScript(request.selector));
+    last = await page.read(locateScript(request.selector ?? ""));
     if ("invalidSelector" in last) return { kind: "bad-selector", message: last.invalidSelector };
 
     if (last.matches === 1 && "element" in last && last.element.visible) {
@@ -295,7 +282,7 @@ async function clickOnce(page: PageSession, selector: string): Promise<ElementOu
 }
 
 async function fillOnce(page: PageSession, request: ElementRequest): Promise<ElementOutcome> {
-  const filled = await page.read(fillScript(request.selector, request.value ?? ""));
+  const filled = await page.read(fillScript(request.selector ?? "", request.value ?? ""));
   const refused = unresolved(filled);
   if (refused) return refused;
   if (!("element" in filled)) return { kind: "no-match" };
@@ -324,11 +311,12 @@ export async function actOnElement(
   try {
     await page.open();
 
+    if (isInputAction(request.action)) return await sendInput(page, { ...request, action: request.action }, { point: pointScript, focus: focusScript });
     if (request.action === "wait") return await waitVisible(page, request);
-    if (request.action === "click") return await clickOnce(page, request.selector);
+    if (request.action === "click") return await clickOnce(page, request.selector ?? "");
     if (request.action === "fill") return await fillOnce(page, request);
 
-    return await textOnce(page, request.selector);
+    return await textOnce(page, request.selector ?? "");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 

@@ -200,14 +200,23 @@ Take a shallow DOM snapshot of one open surface or targetId, or list what is ope
 
 ## extension_element
 
-Click, fill, read the text of, or wait for one element by CSS selector in an open surface, a page by url, or a targetId. Runs no caller code, so no allowEval; Chromium only; the selector must match one element.
+Click, fill, read or wait for one element by CSS selector, or send trusted mouse and key input (move, press, release, type, key, scroll) in an open surface, a page by url or a targetId. Runs no caller code, so no allowEval; Chromium only.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
-| `action` | "click" \| "fill" \| "text" \| "wait" | yes |  | click (a real mouse press), fill, text, wait (until visible). |
-| `selector` | string | yes |  | CSS selector matching exactly one element. |
+| `action` | "click" \| "fill" \| "text" \| "wait" \| "move" \| "press" \| "release" \| "type" \| "key" \| "scroll" | yes |  | click (a real mouse press), fill, text, wait (until visible); move, press, release, type, key, scroll send trusted input. |
+| `selector` | string | no |  | CSS selector matching exactly one element (the point for input actions; focused before type and key). |
 | `value` | string | no |  | fill: the value to set. |
+| `x` | number | no |  | press, release, scroll: the point's x in CSS pixels of the viewport, when no selector. |
+| `y` | number | no |  | The point's y, with x. |
+| `points` | array of object | no |  | move: the path, one trusted mousemove per point; a selector's center goes first. |
+| `button` | "left" \| "middle" \| "right" | no |  | press, release: the mouse button (default left). |
+| `text` | string | no |  | type: the characters, one key down and up each; a newline is Enter. |
+| `key` | string | no |  | key: a key name (Enter, Escape, Tab, ArrowDown, F5) or one character. |
+| `modifiers` | array of "Alt" \| "Control" \| "Meta" \| "Shift" | no |  | Modifiers held during the input. |
+| `deltaX` | number | no |  | scroll: wheel delta in CSS pixels (positive scrolls right). |
+| `deltaY` | number | no |  | scroll: wheel delta in CSS pixels (positive scrolls down). |
 | `context` | "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" | no |  | An open surface (extension_open first). |
 | `url` | string | no |  | A web page's tab by url. |
 | `targetId` | string | no |  | A page's targetId (extension_open, or dom_snapshot listTargets); overrides url. |
@@ -304,20 +313,21 @@ Stub a network response on a Chromium session: add a rule (method, URL or glob, 
 
 ## extension_open
 
-Open an extension surface or a url, or replay the toolbar action or a shortcut, over the control channel (by hand: --allow-control). A url opens in a background tab and answers target.targetId for extension_screenshot and the readers. A replay carries no user gesture.
+Open an extension surface or a url, or replay the toolbar action, a context menu item or a shortcut, over the control channel (by hand: --allow-control). A url opens in a background tab and answers target.targetId for extension_screenshot and the readers. A replay carries no user gesture.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
 | `surface` | "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" \| "action" \| "command" | no |  | Surface to open; action and command replay; devtools is Chromium only. |
 | `name` | string | no |  | command: the chrome.commands name. |
+| `menuItemId` | string | no |  | action: replay contextMenus.onClicked for this menu item id instead of the toolbar click (Chromium, over the debug port; no gesture). |
 | `panel` | string | no |  | devtools: panel title. |
 | `waitMs` | number | no |  | devtools: ms to wait (default 15000). |
 | `reload` | boolean | no | `false` | devtools: reload the inspected tab. |
 | `url` | string | no |  | Url to open (a path resolves to the extension). |
 | `foreground` | boolean | no | `false` | Raise the tab; only for a page the person must act on. |
 | `newTab` | boolean | no | `false` | New tab even if one shows the url. |
-| `tab` | number | no |  | With url: navigate this chrome.tabs id (not a tab position; from dom_snapshot listTabs: true). |
+| `tab` | number | no |  | With url: navigate this chrome.tabs id (not a tab position; from dom_snapshot listTabs: true); with menuItemId: the tab the click is for (default the active tab). |
 | `asTab` | boolean | no | `false` | Render the surface in a tab. |
 | `observe` | boolean \| string | no | `false` | true also answers value.observation: the surface's elements once it loaded and settled; a surface name (popup, options, sidebar...) reads that one. |
 | `browser` | string | no |  | Session browser; required when several run. |

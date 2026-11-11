@@ -33,7 +33,7 @@ vi.mock("../lib/cdp-port", async (importOriginal) => {
 });
 
 type Target = { id: string; type: string; url: string; title: string };
-type ScriptKind = "locate" | "point" | "dom-click" | "fill" | "text";
+type ScriptKind = "locate" | "point" | "dom-click" | "fill" | "text" | "focus";
 let cdpTargets: Target[] = [];
 const evaluations: Array<{ kind: ScriptKind; expression: string; sessionId?: string }> = [];
 const mouse: Array<Record<string, unknown>> = [];
@@ -46,6 +46,7 @@ function scriptKind(expression: string): ScriptKind {
   if (expression.includes("el.click()")) return "dom-click";
   if (expression.includes('new Event("input"')) return "fill";
   if (expression.includes("truncated: full.length")) return "text";
+  if (expression.includes("focused:")) return "focus";
 
   return "locate";
 }
@@ -88,7 +89,7 @@ vi.mock("../lib/cdp", () => {
 });
 
 const element = await import("../tools/element");
-const { locateScript, pointScript, domClickScript, fillScript, textScript, ELEMENT_ACTIONS } = await import("../lib/element-act");
+const { locateScript, pointScript, domClickScript, fillScript, textScript, focusScript, ELEMENT_ACTIONS } = await import("../lib/element-act");
 const { tools } = await import("../index");
 const { TOOL_POLICY, isToolListed, DEFAULT_SERVER_OPTIONS } = await import("../lib/tool-policy");
 
@@ -144,13 +145,13 @@ afterEach(() => {
 });
 
 describe("extension_element is registered as a local act that needs no eval gate", () => {
-  it("is listed in the local group with four bounded actions and an untrusted fence", () => {
+  it("is listed in the local group with ten bounded actions and an untrusted fence", () => {
     expect(tools.map((t) => t.schema.name)).toContain("extension_element");
     expect(isToolListed("extension_element", DEFAULT_SERVER_OPTIONS)).toBe(true);
     expect(TOOL_POLICY.extension_element).toMatchObject({ group: "local", untrusted: true });
     expect(TOOL_POLICY.extension_element.annotations.readOnlyHint).toBe(false);
-    expect(ELEMENT_ACTIONS).toEqual(["click", "fill", "text", "wait"]);
-    expect(element.schema.inputSchema.required).toEqual(["projectPath", "action", "selector"]);
+    expect(ELEMENT_ACTIONS).toEqual(["click", "fill", "text", "wait", "move", "press", "release", "type", "key", "scroll"]);
+    expect(element.schema.inputSchema.required).toEqual(["projectPath", "action"]);
     expect(element.schema.description).not.toMatch(/allowEval: true/);
   });
 
@@ -158,7 +159,7 @@ describe("extension_element is registered as a local act that needs no eval gate
     const selector = 'button[data-x="1"]';
     const value = '"); alert(1); ("';
 
-    for (const source of [locateScript(selector), pointScript(selector), domClickScript(selector), fillScript(selector, value), textScript(selector)]) {
+    for (const source of [locateScript(selector), pointScript(selector), domClickScript(selector), fillScript(selector, value), textScript(selector), focusScript(selector)]) {
       expect(() => new vm.Script(source)).not.toThrow();
       expect(source).toContain(JSON.stringify(selector));
     }
@@ -466,6 +467,23 @@ describe("extension_element picks its target the way extension_eval and extensio
 
     expect(result.status).toBe("no-session");
     expect(result.error.code).toBe("E_NO_SESSION");
+    expect(attached).toBe(0);
+  });
+});
+
+describe("extension_element sends trusted input over the debug port", () => {
+  it("answers sent with trusted: true on the picked page, warns when the point is covered, and refuses a bad request before attaching", async () => {
+    const p = project(MV3);
+    cdpTargets = [popupOpen(p.id)];
+    pageAnswer = () => ({ matches: 1, element: button, point: { x: 50, y: 35 }, covered: true });
+    const sent = JSON.parse(await element.handler({ projectPath: p.dir, context: "popup", action: "move", selector: "#save", points: [{ x: 60, y: 40 }] }));
+    expect(sent).toMatchObject({ ok: true, status: "sent", value: { action: "move", trusted: true, path: [{ x: 50, y: 35 }, { x: 60, y: 40 }] } });
+    expect(mouse.map((m) => [m.type, m.sessionId])).toEqual([["mouseMoved", "session-pop"], ["mouseMoved", "session-pop"]]);
+    expect(sent.hint).toContain("isTrusted: true");
+    expect(sent.warnings.join(" ")).toContain("covers");
+    attached = 0;
+    const refused = JSON.parse(await element.handler({ projectPath: p.dir, context: "popup", action: "key", key: "Hyperspace" }));
+    expect(refused).toMatchObject({ ok: false, status: "bad-request" });
     expect(attached).toBe(0);
   });
 });

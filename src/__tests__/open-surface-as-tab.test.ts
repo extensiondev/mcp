@@ -20,6 +20,8 @@ let windowResizeHonored = true;
 let windowBounds: { width?: number; height?: number } = {};
 const evaluatedExpressions: string[] = [];
 const createdTabs: Array<{ url: string; background: boolean }> = [];
+const workerEvaluations: Array<{ expression: string; sessionId: string }> = [];
+let workerAnswer: Record<string, unknown> = { outcome: "dispatched" };
 
 vi.mock("../lib/cdp-port", async (importOriginal) => {
   const actual = await importOriginal<typeof CdpPortModule>();
@@ -77,6 +79,12 @@ vi.mock("../lib/cdp", () => {
 
       if (method === "Browser.getWindowForTarget") return { windowId: 7 };
 
+      if (method === "Runtime.evaluate" && attachedId.startsWith("sw")) {
+        workerEvaluations.push({ expression: String(params?.expression), sessionId: "session-1" });
+
+        return { result: { type: "object", value: workerAnswer } };
+      }
+
       if (method === "Browser.setWindowBounds") {
         if (windowResizeHonored) {
           windowBounds = { ...(params?.bounds as Record<string, number>) };
@@ -128,6 +136,8 @@ function project(
 
 afterEach(() => {
   navigations.length = 0;
+  workerEvaluations.length = 0;
+  workerAnswer = { outcome: "dispatched" };
   cdpPort = { port: 9222, source: "contract" };
   cdpTargets = [];
   navigationLands = true;
@@ -676,5 +686,95 @@ describe("436: a surface rendered as a tab never takes over a tab opened by url"
     expect(options.value.reused).toBe(true);
     expect(options.value.replaced).toBe(`chrome-extension://${p.id}/popup.html`);
     expect(createdTabs).toHaveLength(1);
+  });
+});
+
+describe("extension_open surface: action with menuItemId replays contextMenus.onClicked in the service worker", () => {
+  const MENU_MV3 = { manifest_version: 3, name: "F", action: {}, permissions: ["contextMenus"] };
+
+  it("dispatches the click for the named item on the active tab over the debug port and says it carried no gesture", async () => {
+    const p = project(MENU_MV3);
+    cdpTargets = [
+      { id: "t1", type: "page", url: "https://example.com" },
+      { id: "sw1", type: "service_worker", url: `chrome-extension://${p.id}/background.js` },
+    ];
+
+    workerAnswer = { outcome: "dispatched", tab: { id: 7, url: "https://example.com/", title: "Example" }, info: { menuItemId: "cat-idle", editable: false, pageUrl: "https://example.com/" } };
+
+    const result = JSON.parse(await open.handler({ projectPath: p.dir, surface: "action", menuItemId: "cat-idle" }));
+
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe("replayed");
+    expect(result.value).toMatchObject({ surface: "action", replayed: "contextMenus.onClicked", menuItemId: "cat-idle", gesture: false, trusted: false, route: "debug-port", tab: { id: 7 } });
+    expect(workerEvaluations).toHaveLength(1);
+    expect(workerEvaluations[0].expression).toContain('"cat-idle"');
+    expect(workerEvaluations[0].expression).toContain("chrome.tabs.query");
+    expect(workerEvaluations[0].expression).toContain("event.dispatch(info, tab");
+    expect(navigations).toEqual([]);
+    expect(result.hint).toContain("no user gesture");
+    expect(result.hint).toContain("not checked against the registered items");
+  });
+
+  it("reads the tab by id when tab is given and refuses a tab the browser does not know", async () => {
+    const p = project(MENU_MV3);
+    cdpTargets = [{ id: "sw1", type: "service_worker", url: `chrome-extension://${p.id}/background.js` }];
+    workerAnswer = { outcome: "no-tab", message: "No tab with id: 99." };
+
+    const result = JSON.parse(await open.handler({ projectPath: p.dir, surface: "action", menuItemId: "cat-idle", tab: 99 }));
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("tab-not-found");
+    expect(result.error.code).toBe("E_TAB_NOT_FOUND");
+    expect(workerEvaluations[0].expression).toContain("chrome.tabs.get(99)");
+  });
+
+  it("answers no-listener, no-context-menus and no-dispatch as fixed statuses", async () => {
+    const p = project(MENU_MV3);
+    cdpTargets = [{ id: "sw1", type: "service_worker", url: `chrome-extension://${p.id}/background.js` }];
+
+    for (const [outcome, status, code] of [
+      ["no-listener", "no-listener", "E_NO_LISTENER"],
+      ["no-api", "no-context-menus", "E_NO_CONTEXT_MENUS"],
+      ["no-dispatch", "unsupported-browser", "E_UNSUPPORTED_BROWSER"],
+    ]) {
+      workerAnswer = { outcome };
+
+      const result = JSON.parse(await open.handler({ projectPath: p.dir, surface: "action", menuItemId: "cat-idle" }));
+
+      expect(result.ok, outcome).toBe(false);
+      expect(result.status, outcome).toBe(status);
+      expect(result.error.code, outcome).toBe(code);
+    }
+  });
+
+  it("names the missing background when no service worker of the extension runs, refuses on Firefox before any port, and refuses a menuItemId without surface: action", async () => {
+    const p = project(MENU_MV3);
+    cdpTargets = [{ id: "t1", type: "page", url: "https://example.com" }];
+
+    const none = JSON.parse(await open.handler({ projectPath: p.dir, surface: "action", menuItemId: "cat-idle" }));
+
+    expect(none.ok).toBe(false);
+    expect(none.status).toBe("no-background");
+    expect(none.error.code).toBe("E_NO_BACKGROUND");
+
+    const gecko = project(MENU_MV3, { browser: "firefox" });
+    const refused = JSON.parse(await open.handler({ projectPath: gecko.dir, surface: "action", menuItemId: "cat-idle", browser: "firefox" }));
+
+    expect(refused.ok).toBe(false);
+    expect(refused.status).toBe("unsupported-browser");
+    expect(refused.error.message).toContain("control channel");
+
+    const misplaced = JSON.parse(await open.handler({ projectPath: p.dir, surface: "popup", menuItemId: "cat-idle" }));
+
+    expect(misplaced).toMatchObject({ ok: false, status: "bad-request" });
+    expect(misplaced.error.message).toContain("surface: \"action\"");
+    expect(workerEvaluations).toEqual([]);
+  });
+
+  it("lists menuItemId on the schema beside the action surface", () => {
+    const props = open.schema.inputSchema.properties as Record<string, { description: string }>;
+
+    expect(props.menuItemId.description).toContain("contextMenus.onClicked");
+    expect(props.tab.description).toContain("menuItemId");
   });
 });

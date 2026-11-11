@@ -9,8 +9,6 @@
 import { SESSION_BROWSER, SESSION_PROJECT_PATH } from "../lib/common-schema";
 import { isChromiumFamily } from "../lib/browser-family";
 import { CDP_PORT_MISSING_HINT, resolveCdpPort } from "../lib/cdp-port";
-import { readExtensionPageTargets } from "../lib/cdp-extension-page";
-import { listPageTargets, matchTargetsByUrl, TARGET_ID_NOTE } from "../lib/cdp-targets";
 import {
   actOnElement,
   ELEMENT_ACTIONS,
@@ -20,28 +18,18 @@ import {
   type ElementAction,
   type ElementOutcome,
 } from "../lib/element-act";
+import { inputRequestRefusal, isInputAction, MODIFIERS, MOUSE_BUTTONS, type InputOutcome } from "../lib/element-input";
 import { envelope, type EnvelopeInit } from "../lib/envelope";
-import { EXTENSION_PAGE_CONTEXTS, distinctUrls } from "../lib/extension-surfaces";
+import { EXTENSION_PAGE_CONTEXTS } from "../lib/extension-surfaces";
 import { noSessionEnvelope } from "../lib/production-receipt";
 import { ambiguousSessionRefusal, resolveSessionBrowser } from "../lib/session-browser";
-import {
-  AMBIGUOUS_TARGET_HINT,
-  identicalPickWarning,
-  pickTarget,
-  TARGET_ID_PROPERTY,
-  targetNotFound,
-  type TargetRef,
-} from "../lib/target-pick";
-import { resolveExtensionId, surfaceDocument, SURFACE_MANIFEST_KEYS } from "./open";
-
-const BROWSER_ERROR_PAGE = /^(chrome|edge)-error:\/\//;
-
-const isBrowserErrorPage = (url: string): boolean => BROWSER_ERROR_PAGE.test(url);
+import { TARGET_ID_PROPERTY } from "../lib/target-pick";
+import { pickTargetFor, type Picked } from "./element-target";
 
 export const schema = {
   name: "extension_element",
   description:
-    "Click, fill, read the text of, or wait for one element by CSS selector in an open surface, a page by url, or a targetId. Runs no caller code, so no allowEval; Chromium only; the selector must match one element.",
+    "Click, fill, read or wait for one element by CSS selector, or send trusted mouse and key input (move, press, release, type, key, scroll) in an open surface, a page by url or a targetId. Runs no caller code, so no allowEval; Chromium only.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -49,10 +37,23 @@ export const schema = {
       action: {
         type: "string",
         enum: [...ELEMENT_ACTIONS],
-        description: "click (a real mouse press), fill, text, wait (until visible).",
+        description: "click (a real mouse press), fill, text, wait (until visible); move, press, release, type, key, scroll send trusted input.",
       },
-      selector: { type: "string", description: "CSS selector matching exactly one element." },
+      selector: { type: "string", description: "CSS selector matching exactly one element (the point for input actions; focused before type and key)." },
       value: { type: "string", description: "fill: the value to set." },
+      x: { type: "number", description: "press, release, scroll: the point's x in CSS pixels of the viewport, when no selector." },
+      y: { type: "number", description: "The point's y, with x." },
+      points: {
+        type: "array",
+        items: { type: "object", properties: { x: { type: "number", description: "CSS pixels." }, y: { type: "number", description: "CSS pixels." } }, required: ["x", "y"] },
+        description: "move: the path, one trusted mousemove per point; a selector's center goes first.",
+      },
+      button: { type: "string", enum: [...MOUSE_BUTTONS], description: "press, release: the mouse button (default left)." },
+      text: { type: "string", description: "type: the characters, one key down and up each; a newline is Enter." },
+      key: { type: "string", description: "key: a key name (Enter, Escape, Tab, ArrowDown, F5) or one character." },
+      modifiers: { type: "array", items: { type: "string", enum: [...MODIFIERS] }, description: "Modifiers held during the input." },
+      deltaX: { type: "number", description: "scroll: wheel delta in CSS pixels (positive scrolls right)." },
+      deltaY: { type: "number", description: "scroll: wheel delta in CSS pixels (positive scrolls down)." },
       context: {
         type: "string",
         enum: [...EXTENSION_PAGE_CONTEXTS],
@@ -63,15 +64,24 @@ export const schema = {
       browser: SESSION_BROWSER,
       timeout: { type: "number", description: `Timeout ms; wait polls until it (default ${WAIT_DEFAULT_MS}, max ${WAIT_MAX_MS}).` },
     },
-    required: ["projectPath", "action", "selector"],
+    required: ["projectPath", "action"],
   },
 };
 
 export interface ElementArgs {
   projectPath: string;
   action: ElementAction;
-  selector: string;
+  selector?: string;
   value?: string;
+  x?: number;
+  y?: number;
+  points?: Array<{ x: number; y: number }>;
+  button?: string;
+  text?: string;
+  key?: string;
+  modifiers?: string[];
+  deltaX?: number;
+  deltaY?: number;
   context?: string;
   url?: string;
   targetId?: string;
@@ -80,173 +90,6 @@ export interface ElementArgs {
 }
 
 const refuse = (init: Omit<EnvelopeInit, "ok" | "command">): string => envelope({ ok: false, command: schema.name, ...init });
-
-const pageRef = (t: { targetId: string; url: string }): TargetRef => ({ targetId: t.targetId, url: t.url });
-
-type Picked = { target: TargetRef; where: string; warnings: Array<string | null> };
-
-async function pickByTargetId(port: number, args: ElementArgs, browser: string, targetId: string): Promise<Picked | string> {
-  let live: TargetRef[];
-
-  try {
-    live = (await listPageTargets(port)).map(pageRef);
-  } catch (err) {
-    return targetsUnreadable(err instanceof Error ? err.message : String(err));
-  }
-
-  const target = live.find((t) => t.targetId === targetId);
-  if (!target) return targetNotFound(schema.name, targetId, live, { projectPath: args.projectPath, browser });
-
-  return { target, where: `${target.url} (targetId ${targetId})`, warnings: [] };
-}
-
-async function pickByUrl(port: number, url: string): Promise<Picked | string> {
-  let matches: Array<{ targetId: string; url: string; title: string }>;
-
-  try {
-    matches = matchTargetsByUrl(await listPageTargets(port), url).filter((t) => !isBrowserErrorPage(t.url));
-  } catch (err) {
-    return targetsUnreadable(err instanceof Error ? err.message : String(err));
-  }
-
-  if (matches.length === 0) {
-    return refuse({
-      status: "no-matching-target",
-      error: {
-        code: "E_NO_MATCHING_TARGET",
-        name: "NoMatchingTarget",
-        message: `No open page's url (or title) matches "${url}", so there is no document to act in.`,
-      },
-      hint: `Open the page first with extension_open (url), or pass a url that matches one open tab; extension_dom_snapshot with listTargets: true lists what is open. ${TARGET_ID_NOTE}`,
-    });
-  }
-
-  const pick = pickTarget(matches, pageRef);
-
-  if (pick.kind === "different") {
-    return refuse({
-      status: "ambiguous-target",
-      error: {
-        code: "E_AMBIGUOUS_TARGET",
-        name: "AmbiguousTabUrl",
-        message: `url: ${url} matches ${matches.length} open tabs that show different pages (${distinctUrls(matches).join(", ")}); refusing to guess which one you mean, so nothing was done.`,
-      },
-      value: { matchingTargets: matches.map(pageRef) },
-      hint: AMBIGUOUS_TARGET_HINT,
-    });
-  }
-
-  const target = pick.kind === "one" ? pick.target : matches[0];
-
-  return {
-    target: pageRef(target),
-    where: `${target.url} (targetId ${target.targetId})`,
-    warnings: [pick.kind === "one" ? identicalPickWarning(pageRef(target), pick.others.map(pageRef), "chromium") : null],
-  };
-}
-
-async function pickSurface(port: number, args: ElementArgs, browser: string, context: string): Promise<Picked | string> {
-  const document = surfaceDocument(args.projectPath, browser, context);
-
-  if (!document) {
-    const key = SURFACE_MANIFEST_KEYS[context] ?? context;
-
-    return refuse({
-      status: "no-surface",
-      error: {
-        code: "E_NO_SURFACE_DOCUMENT",
-        name: "NoSurfaceDocument",
-        message: `This extension declares no ${context}: nothing in its manifest sets ${key}, so there is no ${context} page to act in.`,
-      },
-      hint: `To add one, set ${key} in the manifest and rebuild.`,
-    });
-  }
-
-  const extensionId = await resolveExtensionId(args.projectPath, browser);
-
-  if (!extensionId) {
-    return refuse({
-      status: "no-extension-id",
-      error: {
-        code: "E_NO_EXTENSION_ID",
-        name: "NoExtensionId",
-        message: "Could not resolve the extension id from the live session's CDP targets.",
-      },
-      hint: `Confirm the session is ready (extension_wait). ${CDP_PORT_MISSING_HINT}`,
-    });
-  }
-
-  const wanted = `chrome-extension://${extensionId}/${document}`;
-  const read = await readExtensionPageTargets(port, wanted);
-  if ("unreadable" in read) return targetsUnreadable(read.unreadable);
-
-  const targets = read.targets.filter((t) => !isBrowserErrorPage(t.url));
-
-  if (targets.length === 0) {
-    return refuse({
-      status: "no-target",
-      error: {
-        code: "E_NO_TARGET",
-        name: "NoTarget",
-        message: `No open page at ${wanted}, so there is no ${context} to act in; a surface has a target only while it is open.`,
-      },
-      value: { wanted },
-      hint: `Open it first with extension_open surface: "${context}", then call extension_element again. extension_dom_snapshot with listTargets: true lists what is open.`,
-    });
-  }
-
-  const target = targets[0];
-
-  return {
-    target: pageRef(target),
-    where: `the ${context} (${target.url}, targetId ${target.targetId})`,
-    warnings: [identicalPickWarning(pageRef(target), targets.slice(1).map(pageRef), "chromium")],
-  };
-}
-
-function targetsUnreadable(why: string): string {
-  return refuse({
-    status: "targets-unreadable",
-    error: {
-      code: "E_CDP",
-      name: "TargetsUnreadable",
-      message: `Could not list the session's CDP targets: ${why}. Nothing was done.`,
-    },
-    hint: "The session's debug port did not answer. extension_doctor says whether the browser is still up; if it is, retry.",
-  });
-}
-
-async function pickTargetFor(port: number, args: ElementArgs, browser: string): Promise<Picked | string> {
-  if (args.targetId) return pickByTargetId(port, args, browser, args.targetId);
-
-  const context = args.context ?? (args.url ? "page" : undefined);
-
-  if (context === "page") {
-    if (args.url) return pickByUrl(port, args.url);
-
-    return refuse({
-      status: "bad-request",
-      error: {
-        code: "E_BAD_REQUEST",
-        name: "BadRequest",
-        message: 'context: "page" needs the tab named: pass url (a substring or * glob of its address) or targetId.',
-      },
-      hint: "extension_dom_snapshot with listTargets: true lists the open pages with their targetId.",
-    });
-  }
-
-  if (context && EXTENSION_PAGE_CONTEXTS.includes(context)) return pickSurface(port, args, browser, context);
-
-  return refuse({
-    status: "bad-request",
-    error: {
-      code: "E_BAD_REQUEST",
-      name: "BadRequest",
-      message: "No element target named: pass context (an open surface such as popup or options), url for a web page, or targetId.",
-    },
-    hint: `Surfaces: ${EXTENSION_PAGE_CONTEXTS.join(", ")}. extension_dom_snapshot with listTargets: true lists what is open.`,
-  });
-}
 
 function unsupportedBrowser(browser: string): string {
   return refuse({
@@ -262,11 +105,64 @@ function unsupportedBrowser(browser: string): string {
 
 const NEXT_READ = "Read what changed with extension_element action: \"text\" on the element you expect to update, or extension_dom_snapshot on the same context.";
 
+const TRUSTED_NOTE =
+  "The events are trusted: they enter through the browser's input pipeline over the debug port (Input.dispatchMouseEvent, Input.dispatchKeyEvent), so page handlers see isTrusted: true and a user gesture, which nothing extension_eval dispatches can give.";
+
+const at = (point: { x: number; y: number }): string => `(${point.x}, ${point.y})`;
+
+function sentSentence(outcome: Extract<InputOutcome, { kind: "input" }>, where: string): string {
+  switch (outcome.action) {
+    case "move":
+      return `${outcome.events} trusted mousemove event${outcome.events === 1 ? "" : "s"} went along the path in ${where}, ending at ${at(outcome.path![outcome.path!.length - 1]!)}.`;
+    case "press":
+      return `A trusted ${outcome.button} button press was sent at ${at(outcome.at!)} in ${where}; the button stays held until action: "release" at a point lets it go, so a press and a release at different points make a drag.`;
+    case "release":
+      return `A trusted ${outcome.button} button release was sent at ${at(outcome.at!)} in ${where}.`;
+    case "scroll":
+      return `A trusted wheel scroll of ${at(outcome.delta!)} was sent at ${at(outcome.at!)} in ${where}.`;
+    case "type":
+      return `${outcome.characters} character${outcome.characters === 1 ? "" : "s"} were typed as trusted key down and up events into the focused element of ${where}.`;
+    default:
+      return `A trusted ${outcome.key} key press (down and up${outcome.modifiers.length ? `, with ${outcome.modifiers.join("+")}` : ""}) was sent to the focused element of ${where}.`;
+  }
+}
+
+function sentAnswer(args: ElementArgs, picked: Picked, outcome: Extract<InputOutcome, { kind: "input" }>): string {
+  const { kind, ...sent } = outcome;
+
+  return envelope({
+    ok: true,
+    command: schema.name,
+    status: "sent",
+    value: { ...sent, selector: args.selector, target: picked.target },
+    warnings: [
+      ...picked.warnings,
+      outcome.covered ? "Another element covers the center of the one the selector names, so the input landed on whatever covers it (an overlay, a modal), the way a person's would." : null,
+      outcome.focused === false ? "The element did not take focus (document.activeElement stayed elsewhere after focus()), so the keys went to whatever has focus in the page." : null,
+    ],
+    hint: `${sentSentence(outcome, picked.where)} ${TRUSTED_NOTE} ${NEXT_READ}`,
+  });
+}
+
 function answer(args: ElementArgs, picked: Picked, outcome: ElementOutcome): string {
   const base = { action: args.action, selector: args.selector, target: picked.target };
   const warnings = picked.warnings;
 
   switch (outcome.kind) {
+    case "input":
+      return sentAnswer(args, picked, outcome);
+    case "no-box":
+      return refuse({
+        status: "no-visible-box",
+        error: {
+          code: "E_ELEMENT_NOT_VISIBLE",
+          name: "ElementNotVisible",
+          message: `The ${outcome.element.tag} matching ${JSON.stringify(args.selector)} in ${picked.where} has no visible box (it is hidden or empty), so there is no point to send input at; nothing was done.`,
+        },
+        value: { ...base, element: outcome.element },
+        warnings,
+        hint: 'Wait for it with action: "wait", pick an element that renders, or pass x and y for a point of the viewport.',
+      });
     case "acted":
       return envelope({
         ok: true,
@@ -404,6 +300,20 @@ export async function handler(args: ElementArgs): Promise<string> {
     });
   }
 
+  const refusal = isInputAction(args.action)
+    ? inputRequestRefusal({ ...args, action: args.action })
+    : typeof args.selector !== "string" || args.selector.trim() === ""
+      ? `action: "${args.action}" needs selector, a CSS selector matching exactly one element.`
+      : null;
+
+  if (refusal) {
+    return refuse({
+      status: "bad-request",
+      error: { code: "E_BAD_REQUEST", name: "BadRequest", message: refusal },
+      hint: "Nothing was sent. extension_dom_snapshot (include: [\"elements\"]) lists the page's elements with a selector each, and their rect gives points in CSS pixels.",
+    });
+  }
+
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
   if (!isChromiumFamily(browser)) return unsupportedBrowser(browser);
 
@@ -428,7 +338,21 @@ export async function handler(args: ElementArgs): Promise<string> {
   const outcome = await actOnElement(
     resolved.port,
     picked.target.targetId,
-    { action: args.action, selector: args.selector, value: args.value, timeoutMs: args.timeout },
+    {
+      action: args.action,
+      selector: args.selector,
+      value: args.value,
+      timeoutMs: args.timeout,
+      points: args.points,
+      x: args.x,
+      y: args.y,
+      button: args.button,
+      text: args.text,
+      key: args.key,
+      modifiers: args.modifiers,
+      deltaX: args.deltaX,
+      deltaY: args.deltaY,
+    },
     args.action === "wait" ? undefined : args.timeout,
   );
 

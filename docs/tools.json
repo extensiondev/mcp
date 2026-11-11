@@ -857,7 +857,7 @@
       "name": "extension_element",
       "tier": "act",
       "group": "local",
-      "description": "Click, fill, read the text of, or wait for one element by CSS selector in an open surface, a page by url, or a targetId. Runs no caller code, so no allowEval; Chromium only; the selector must match one element.",
+      "description": "Click, fill, read or wait for one element by CSS selector, or send trusted mouse and key input (move, press, release, type, key, scroll) in an open surface, a page by url or a targetId. Runs no caller code, so no allowEval; Chromium only.",
       "gate": "a live Chromium dev or start session with its debug port; no allowEval",
       "samplePrompt": "Click the Save button in the popup, then read the status line",
       "readOnly": false,
@@ -874,21 +874,75 @@
         },
         {
           "name": "action",
-          "type": "\"click\" | \"fill\" | \"text\" | \"wait\"",
+          "type": "\"click\" | \"fill\" | \"text\" | \"wait\" | \"move\" | \"press\" | \"release\" | \"type\" | \"key\" | \"scroll\"",
           "required": true,
-          "description": "click (a real mouse press), fill, text, wait (until visible)."
+          "description": "click (a real mouse press), fill, text, wait (until visible); move, press, release, type, key, scroll send trusted input."
         },
         {
           "name": "selector",
           "type": "string",
-          "required": true,
-          "description": "CSS selector matching exactly one element."
+          "required": false,
+          "description": "CSS selector matching exactly one element (the point for input actions; focused before type and key)."
         },
         {
           "name": "value",
           "type": "string",
           "required": false,
           "description": "fill: the value to set."
+        },
+        {
+          "name": "x",
+          "type": "number",
+          "required": false,
+          "description": "press, release, scroll: the point's x in CSS pixels of the viewport, when no selector."
+        },
+        {
+          "name": "y",
+          "type": "number",
+          "required": false,
+          "description": "The point's y, with x."
+        },
+        {
+          "name": "points",
+          "type": "array of object",
+          "required": false,
+          "description": "move: the path, one trusted mousemove per point; a selector's center goes first."
+        },
+        {
+          "name": "button",
+          "type": "\"left\" | \"middle\" | \"right\"",
+          "required": false,
+          "description": "press, release: the mouse button (default left)."
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "required": false,
+          "description": "type: the characters, one key down and up each; a newline is Enter."
+        },
+        {
+          "name": "key",
+          "type": "string",
+          "required": false,
+          "description": "key: a key name (Enter, Escape, Tab, ArrowDown, F5) or one character."
+        },
+        {
+          "name": "modifiers",
+          "type": "array of \"Alt\" | \"Control\" | \"Meta\" | \"Shift\"",
+          "required": false,
+          "description": "Modifiers held during the input."
+        },
+        {
+          "name": "deltaX",
+          "type": "number",
+          "required": false,
+          "description": "scroll: wheel delta in CSS pixels (positive scrolls right)."
+        },
+        {
+          "name": "deltaY",
+          "type": "number",
+          "required": false,
+          "description": "scroll: wheel delta in CSS pixels (positive scrolls down)."
         },
         {
           "name": "context",
@@ -1311,7 +1365,7 @@
       "name": "extension_open",
       "tier": "act",
       "group": "local",
-      "description": "Open an extension surface or a url, or replay the toolbar action or a shortcut, over the control channel (by hand: --allow-control). A url opens in a background tab and answers target.targetId for extension_screenshot and the readers. A replay carries no user gesture.",
+      "description": "Open an extension surface or a url, or replay the toolbar action, a context menu item or a shortcut, over the control channel (by hand: --allow-control). A url opens in a background tab and answers target.targetId for extension_screenshot and the readers. A replay carries no user gesture.",
       "gate": "a dev session, which carries control unless started with allowControl: false",
       "samplePrompt": "Open the side panel, then trigger the action button",
       "readOnly": false,
@@ -1337,6 +1391,12 @@
           "type": "string",
           "required": false,
           "description": "command: the chrome.commands name."
+        },
+        {
+          "name": "menuItemId",
+          "type": "string",
+          "required": false,
+          "description": "action: replay contextMenus.onClicked for this menu item id instead of the toolbar click (Chromium, over the debug port; no gesture)."
         },
         {
           "name": "panel",
@@ -1381,7 +1441,7 @@
           "name": "tab",
           "type": "number",
           "required": false,
-          "description": "With url: navigate this chrome.tabs id (not a tab position; from dom_snapshot listTabs: true)."
+          "description": "With url: navigate this chrome.tabs id (not a tab position; from dom_snapshot listTabs: true); with menuItemId: the tab the click is for (default the active tab)."
         },
         {
           "name": "asTab",

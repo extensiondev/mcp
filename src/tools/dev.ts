@@ -47,6 +47,8 @@ import {
   LAUNCH_FLAG_SCHEMA,
   headlessHint,
   headlessLaunch,
+  hiddenBrowserUi,
+  hiddenBrowserUiHint,
   launchFlagArgs,
   type LaunchFlagArgs,
 } from "../lib/launch-flags";
@@ -399,6 +401,7 @@ export async function handler(
   };
 
   const boundPort = contractBoundPort(args.projectPath, browser, spawnedAt);
+  const hiddenUi = args.noBrowser ? null : hiddenBrowserUi(visibility.headless, browser);
 
   if ((boundPort !== null && boundPort !== args.port) || profileReused !== carryover.reused) {
     markerWarning = registerSession({
@@ -512,6 +515,7 @@ export async function handler(
       projectPath: args.projectPath,
       ...(replaced.length > 0 ? { replacedSession: replaced[0] } : {}),
       ...(args.noBrowser ? {} : { headless: visibility.headless }),
+      ...(hiddenUi ? { hiddenBrowserUi: hiddenUi } : {}),
       idleMinutes,
       ...(signingFrame ? { signing: signingFrame.signing } : {}),
       ...(safariEnable ? { safari: safariEnable.safari } : {}),
@@ -532,7 +536,7 @@ export async function handler(
     ],
     hint: args.noBrowser
       ? "Build-only session (noBrowser: true): no browser will launch, so no runtime will ever attach. extension_wait returns as soon as the first compile lands (compiled: true, browserAttached: false) instead of waiting out its budget; do not wait for a browser. The control verbs (storage/reload/open/dom_snapshot/eval) need a live browser and will not work against this session. When you are done, call extension_stop to shut down the dev server."
-      : `${nextStep} ${readiness?.ready.status === "compiled-not-attached" && !isSafariTarget(browser) ? `${REBUILD_NOT_REACHING_NOTE} ` : ""}${signingFrame?.hints.length ? `${signingFrame.hints.join(" ")} ` : ""}${headlessHint(visibility.headless)} ${
+      : `${nextStep} ${readiness?.ready.status === "compiled-not-attached" && !isSafariTarget(browser) ? `${REBUILD_NOT_REACHING_NOTE} ` : ""}${signingFrame?.hints.length ? `${signingFrame.hints.join(" ")} ` : ""}${headlessHint(visibility.headless)} ${hiddenUi ? `${hiddenBrowserUiHint(hiddenUi)} ` : ""}${
         allowControl
           ? controlBound
             ? `Control channel is ON (port ${control.port} per ready.json): extension_${controlVerbs.split(", ").join("/extension_")}${args.allowEval ? "/extension_eval" : ""} will work against this session.`

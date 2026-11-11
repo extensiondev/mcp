@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { isChromiumFamily } from "./browser-family";
+
 export const LAUNCH_FLAG_SCHEMA = {
   profile: {
     type: "string",
@@ -79,6 +81,35 @@ export function headlessLaunch(
   }
 
   return { headless: envIsHeadless(env) };
+}
+
+export interface HiddenBrowserUi {
+  flag: string;
+  hides: string;
+  showAgain: string;
+}
+
+const SILENT_DEBUGGER_FLAG = "--silent-debugger-extension-api";
+
+export function hiddenBrowserUi(headless: boolean, browser: string): HiddenBrowserUi[] | null {
+  if (headless || !isChromiumFamily(browser)) return null;
+
+  return [
+    {
+      flag: SILENT_DEBUGGER_FLAG,
+      hides: 'the "started debugging this browser" bar Chrome shows above the page while the extension holds chrome.debugger.attach, with its Cancel button',
+      showAgain: `set browser.${browser}.excludeBrowserFlags: ["${SILENT_DEBUGGER_FLAG}"] in extension.config.js and call extension_dev again with replace: true`,
+    },
+  ];
+}
+
+export function hiddenBrowserUiHint(hidden: HiddenBrowserUi[]): string {
+  return hidden
+    .map(
+      (ui) =>
+        `The engine launches this headed browser with ${ui.flag}, which hides ${ui.hides}, so an extension that depends on that bar cannot be exercised or read here; to show it, ${ui.showAgain}.`,
+    )
+    .join(" ");
 }
 
 export function headlessHint(headless: boolean): string {

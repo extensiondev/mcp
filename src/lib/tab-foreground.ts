@@ -6,15 +6,77 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import fs from "node:fs";
+
+import { readFrontmostApp } from "./frontmost-window";
+import { readyContractPath } from "./session-paths";
+
 import type { CDPClient } from "./cdp";
 
 const FOREGROUND_COMMAND_MS = 3_000;
 
+const CHROMIUM_APP = /chrome|chromium|edge|brave|opera|vivaldi|yandex|arc/i;
+
+export type WindowRaised = boolean | "unconfirmed";
+
 export interface Foreground {
   requested: true;
   activated: boolean;
-  windowRaised: boolean;
+  windowRaised: WindowRaised;
   reason?: string;
+  frontmost?: { app: string; pid: number | null };
+}
+
+export function sessionBrowserPid(projectPath: string, browser: string): number | null {
+  try {
+    const contract = JSON.parse(fs.readFileSync(readyContractPath(projectPath, browser), "utf8")) as { browserPid?: unknown };
+
+    return typeof contract.browserPid === "number" && contract.browserPid > 0 ? contract.browserPid : null;
+  } catch {
+    return null;
+  }
+}
+
+const withReason = (foreground: Foreground, reason: string): string => (foreground.reason ? `${foreground.reason}; ${reason}` : reason);
+
+export function confirmWindowRaised(foreground: Foreground, context: { headless: boolean; browserPid: number | null }): Foreground {
+  if (foreground.windowRaised !== true) return foreground;
+
+  if (context.headless) {
+    return { ...foreground, windowRaised: false, reason: withReason(foreground, "the session is headless, so there is no window to raise") };
+  }
+
+  const read = readFrontmostApp();
+
+  if ("unavailable" in read) {
+    return { ...foreground, windowRaised: "unconfirmed", reason: withReason(foreground, `the browser answered the raise, but ${read.unavailable}`) };
+  }
+
+  const named = `${read.app}${read.pid !== null ? ` (pid ${read.pid})` : ""}`;
+
+  if (context.browserPid === null) {
+    if (CHROMIUM_APP.test(read.app)) return foreground;
+
+    return { ...foreground, windowRaised: false, frontmost: read, reason: withReason(foreground, `the browser answered the raise, but the frontmost app afterward is ${named}, not the dev browser`) };
+  }
+
+  if (read.pid === context.browserPid) return foreground;
+
+  if (CHROMIUM_APP.test(read.app)) {
+    return {
+      ...foreground,
+      windowRaised: "unconfirmed",
+      frontmost: read,
+      reason: withReason(foreground, `the browser answered the raise, but the frontmost app afterward is ${named}, which is not the dev browser's process (pid ${context.browserPid}), so it may be another window of the same browser`),
+    };
+  }
+
+  return {
+    ...foreground,
+    windowRaised: false,
+    frontmost: read,
+    reason: withReason(foreground, `the browser answered the raise, but the frontmost app afterward is ${named}, not the dev browser (pid ${context.browserPid})`),
+  };
 }
 
 function said(error: unknown): string {
@@ -66,7 +128,13 @@ export function foregroundSentence(foreground: Foreground, headless: boolean): s
     return "The tab was made the active tab of its window as asked, but this session is headless, so no one can see it: for a page the person must act on, call extension_dev again with headless: false and replace: true, then open it again with foreground: true.";
   }
 
-  return foreground.windowRaised
-    ? "The tab was brought forward as asked: it is the active tab and its browser window was raised in front of the person's other windows, so they can act on it now. Tell them it is waiting for them."
-    : `The tab is the active tab of its window, but the window was not raised (${foreground.reason ?? "the browser did not say why"}), so it may sit behind other windows: tell the person which browser window to look at.`;
+  if (foreground.windowRaised === true) {
+    return "The tab was brought forward as asked: it is the active tab and its browser window was raised in front of the person's other windows, so they can act on it now. Tell them it is waiting for them.";
+  }
+
+  if (foreground.windowRaised === "unconfirmed") {
+    return `The tab is the active tab of its window and the browser answered the raise, but this server could not confirm the window is frontmost (${foreground.reason ?? "the OS did not say what is in front"}), so the person may need to bring the dev browser window to the front themselves: tell them which window to look for.`;
+  }
+
+  return `The tab is the active tab of its window, but the window was not raised (${foreground.reason ?? "the browser did not say why"}), so it sits behind other windows: ask the person to bring the dev browser window to the front and tell them which window to look at.`;
 }

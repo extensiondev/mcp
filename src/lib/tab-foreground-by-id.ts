@@ -10,7 +10,7 @@ import { actFrameJson, addWarning, patchValue } from "./act";
 import { evaluateOnExtensionPage } from "./cdp-extension-page";
 import { resolveCdpPort } from "./cdp-port";
 import { parseFrameObject } from "./frame-json";
-import { foregroundSentence, foregroundUnsupported, type Foreground } from "./tab-foreground";
+import { confirmWindowRaised, foregroundSentence, foregroundUnsupported, sessionBrowserPid, type Foreground } from "./tab-foreground";
 import { tabViewFields, tabViewSentence } from "./tab-view";
 import { tabsWorker } from "./tab-switch-worker";
 
@@ -52,7 +52,10 @@ export async function withNavigatedTabForward(
   const tabId = typeof value.tabId === "number" ? value.tabId : requestedTab;
   const resolved = await resolveCdpPort(session.projectPath, session.browser, { timeoutMs: session.timeout });
   const foreground = resolved
-    ? await bringTabIdForward(resolved.port, tabId, session)
+    ? confirmWindowRaised(await bringTabIdForward(resolved.port, tabId, session), {
+        headless: session.headless,
+        browserPid: sessionBrowserPid(session.projectPath, session.browser),
+      })
     : foregroundUnsupported("the session has no debug port to reach the extension background that switches tabs");
   const sentence = foregroundSentence(foreground, session.headless);
 
