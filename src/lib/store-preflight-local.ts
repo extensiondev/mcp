@@ -128,16 +128,22 @@ export function withLocalChecks(json: Row, rows: Array<Row | null>): Row {
   const summary = isRow(json.summary) ? json.summary : {};
   const integration = isRow(summary.integration) ? summary.integration : null;
   const count = (value: unknown) => (typeof value === "number" ? value : 0);
+  const failing = added.filter((row) => text(row.status) !== "warn").length;
+  const warned = added.length - failing;
+  const warnings = warned ? { warn: count(summary.warn) + warned } : {};
+
+  if (!failing) return { ...json, checks: [...checks, ...added], summary: { ...summary, ...warnings } };
 
   return {
     ...json,
     checks: [...checks, ...added],
     summary: {
       ...summary,
-      fail: count(summary.fail) + added.length,
-      blockingFailures: count(summary.blockingFailures) + added.length,
+      ...warnings,
+      fail: count(summary.fail) + failing,
+      blockingFailures: count(summary.blockingFailures) + failing,
       ...(integration
-        ? { integration: { ...integration, fail: count(integration.fail) + added.length, blockingFailures: count(integration.blockingFailures) + added.length, canQueue: false } }
+        ? { integration: { ...integration, fail: count(integration.fail) + failing, blockingFailures: count(integration.blockingFailures) + failing, canQueue: false } }
         : {}),
       canSubmit: false,
     },

@@ -6,7 +6,8 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 
 import { ENGINE_BIN_ENV, ENGINE_DIR_ENV } from "../lib/engine-override";
 import { PINNED_COMMIT } from "../lib/template-artifact-source";
-
+import { parseStoreMd } from "../lib/store-md";
+import { reviewerNoteBuildLine } from "../lib/store-md-toolchain";
 import { scaffoldScripts } from "./fixtures/scaffolder-answers";
 
 let scaffoldTarget = "";
@@ -14,6 +15,32 @@ let withGit = false;
 let withScripts = false;
 let recordRef: string | null = null;
 let refSeen: string | undefined;
+let withStoreMd = false;
+
+const SAMPLE_STORE_MD = `# Store metadata
+
+## Listing
+
+- Name: javascript
+
+## Firefox Add-ons
+
+### Reviewer notes
+
+TODO the steps a reviewer follows to exercise the extension, with test
+credentials when sign-in is required. Keep the build paragraph below: AMO
+wants a reproducible build for a bundled package.
+
+Build from source with Node 22.12.0 and npm 10.9.0 (replace both with the
+output of node --version and npm --version on the machine that built the
+upload): run npm install, then npx extension build --browser firefox. The
+upload is dist/firefox, byte for byte. Upload the repository at the built
+commit as the source archive.
+
+### Release notes
+
+TODO what changed for users in this version, in their words.
+`;
 
 vi.mock("extension-create", () => ({
   extensionCreate: vi.fn(async (_input: string, opts: { template: string }) => {
@@ -22,6 +49,7 @@ vi.mock("extension-create", () => ({
     fs.mkdirSync(manifestDir, { recursive: true });
     fs.writeFileSync(path.join(manifestDir, "manifest.json"), "{}");
     if (withGit) fs.mkdirSync(path.join(scaffoldTarget, ".git"));
+    if (withStoreMd) fs.writeFileSync(path.join(scaffoldTarget, "STORE.md"), SAMPLE_STORE_MD);
 
     refSeen = process.env.EXTENSION_CREATE_TEMPLATE_REF;
 
@@ -35,7 +63,11 @@ vi.mock("extension-create", () => ({
     if (withScripts) {
       fs.writeFileSync(
         path.join(scaffoldTarget, "package.json"),
-        JSON.stringify({ name: path.basename(scaffoldTarget), scripts: scaffoldScripts(opts.template) }),
+        JSON.stringify({
+          name: path.basename(scaffoldTarget),
+          scripts: scaffoldScripts(opts.template),
+          ...(withStoreMd ? { devDependencies: { extension: "^4.1.39" } } : {}),
+        }),
       );
 
       if (monorepo) {
@@ -87,6 +119,8 @@ afterEach(() => {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
+
+  withStoreMd = false;
 
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -177,6 +211,35 @@ describe("extension_create defaultsApplied", () => {
     const byName = Object.fromEntries(result.value.scripts.map((s: { name: string }) => [s.name, s]));
     expect(byName.build).toMatchObject({ command: "extension build packages/extension", browser: "chromium", writes: "packages/extension/dist/chromium" });
     expect(byName["build:chrome"]).toMatchObject({ browser: "chrome", writes: "packages/extension/dist/chrome" });
+  });
+
+  it("writes the Node, package manager and Extension.js versions it runs on and the scaffold's Firefox build script into the STORE.md reviewer note, with no replace-both instruction (ledger 506)", async () => {
+    withScripts = true;
+    withStoreMd = true;
+    scaffoldTarget = path.join(tmpDir(), "probe");
+    const node = process.version.slice(1);
+
+    const result = JSON.parse(await create.handler({ projectName: "probe" }));
+    const storeMd = fs.readFileSync(path.join(scaffoldTarget, "STORE.md"), "utf8");
+    const note = result.value.reviewerNoteToolchain;
+
+    expect(storeMd).not.toContain("replace both");
+    expect(storeMd).not.toContain("22.12.0");
+    expect(storeMd).not.toContain("npx extension build --browser firefox");
+    expect(note).toMatchObject({ node, extensionJs: "4.1.39", buildCommand: "bun run build:firefox", file: path.join(scaffoldTarget, "STORE.md") });
+    expect(note.packageManager.name).toBe("bun");
+    expect(note.sentence).toMatch(new RegExp(`^Build from source with Node ${node.replace(/\./g, "\\.")}, bun( \\d+\\.\\d+\\.\\d+)? and Extension\\.js 4\\.1\\.39: run bun install, then bun run build:firefox\\.$`));
+    expect(storeMd.replace(/\s+/g, " ")).toContain(`${note.sentence} The upload is dist/firefox, byte for byte.`);
+    expect(storeMd.split("\n").every((line) => line.length <= 76)).toBe(true);
+    expect(reviewerNoteBuildLine(parseStoreMd(storeMd).firefox!.approvalNotes!)).toMatchObject({ sample: false, node, extensionJs: "4.1.39", packageManager: { name: "bun" } });
+  });
+
+  it("answers no reviewerNoteToolchain when the scaffold wrote no STORE.md", async () => {
+    scaffoldTarget = path.join(tmpDir(), "probe");
+
+    const result = JSON.parse(await create.handler({ projectName: "probe" }));
+
+    expect(result.value.reviewerNoteToolchain).toBeUndefined();
   });
 
   it("admits when the scaffolder initialized a git repository", async () => {

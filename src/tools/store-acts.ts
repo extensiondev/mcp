@@ -118,6 +118,7 @@ import {
 } from "./store-listing";
 import { publishVersion } from "./store-publish-version";
 import { iconPaddingSentences, iconPaddingView } from "../lib/chrome-icon-padding";
+import { builtToolchainFor, reviewerNoteToolchainCheck } from "../lib/store-md-toolchain";
 import { firefoxListingCheck, safariDescriptionCheck, withLocalChecks } from "../lib/store-preflight-local";
 
 import type { PackageScope } from "../lib/package-address";
@@ -636,6 +637,10 @@ function checkView(check: Row, withLabel: boolean): Row {
     if (text(check[key])) out[key] = text(check[key]);
   }
 
+  for (const key of ["write", "built"]) {
+    if (isRow(check[key])) out[key] = check[key];
+  }
+
   const lock = lockView(check.lock);
 
   if (text(check.status) === "locked") out.status = "locked";
@@ -988,6 +993,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     ),
   );
   const records = text(args.projectPath) ? listings : [];
+  const builtToolchain = asked.includes("firefox") && text(args.projectPath) ? await builtToolchainFor(api, text(args.projectPath), text(args.buildSha)) : null;
   const firstRefusal = reads.find((read) => !read.ok);
 
   if (firstRefusal && !firstRefusal.ok && reads.every((read) => !read.ok)) {
@@ -1022,7 +1028,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     const read = reads[i];
     if (read.ok) {
       const updateManifest = store === "firefox" ? firefoxUpdateManifestOf(read.json, api.ref, text(args.projectPath), args.api) : null;
-      const local = store === "safari" ? [safariDescriptionCheck(text(args.projectPath))] : store === "firefox" ? [firefoxListingCheck(listings[i])] : [];
+      const local = store === "safari" ? [safariDescriptionCheck(text(args.projectPath))] : store === "firefox" ? [firefoxListingCheck(listings[i]), reviewerNoteToolchainCheck(text(args.projectPath), builtToolchain)] : [];
       const json = withLocalChecks(relayFirefoxUpdateUrl(read.json, updateManifest), local);
       reports[store] = json;
 

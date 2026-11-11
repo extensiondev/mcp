@@ -18,6 +18,7 @@ import { pinnedTemplateCommit, templateCatalogUrl } from "../lib/template-artifa
 import { envelope } from "../lib/envelope";
 import { shellPath } from "../lib/publish-link";
 import { scaffoldScripts } from "../lib/scaffold-scripts";
+import { detectPackageManager, writeScaffoldToolchainNote } from "../lib/store-md-toolchain";
 
 const COMMAND = "extension_create";
 
@@ -70,22 +71,6 @@ function scaffoldEnginePin(projectPath: string): string | null {
   } catch {
     return null;
   }
-}
-
-function detectPackageManager(projectPath: string): string {
-  const byLockfile: Array<[string, string]> = [
-    ["bun.lock", "bun"],
-    ["bun.lockb", "bun"],
-    ["pnpm-lock.yaml", "pnpm"],
-    ["yarn.lock", "yarn"],
-    ["package-lock.json", "npm"],
-  ];
-
-  for (const [lockfile, pm] of byLockfile) {
-    if (fs.existsSync(path.join(projectPath, lockfile))) return pm;
-  }
-
-  return "npm";
 }
 
 export const schema = {
@@ -298,6 +283,7 @@ export async function handler(args: {
     (result.depsInstalled ? detectPackageManager(result.projectPath) : "npm");
   const runDev = `${packageManager} run dev`;
   const scripts = scaffoldScripts(result.projectPath, packageManager);
+  const reviewerNoteToolchain = await writeScaffoldToolchainNote(result.projectPath, packageManager);
   const addDev = (spec: string): string =>
     packageManager === "npm"
       ? `npm i -D ${spec}`
@@ -371,6 +357,7 @@ export async function handler(args: {
         gitInit,
       },
       scripts,
+      ...(reviewerNoteToolchain ? { reviewerNoteToolchain } : {}),
       manualAlternative: `Outside an agent only: cd ${shellPath(result.projectPath)} && ${runDev}`,
       duration: Date.now() - start,
       nextSteps: [

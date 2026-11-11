@@ -12,6 +12,8 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { buildSummaryPath } from "../lib/session-paths";
+import { REVIEWER_NOTE_TOOLCHAIN_CHECK, reviewerNoteBuildLine, toolchainDifferences, toolchainSentence } from "../lib/store-md-toolchain";
 import { FIREFOX_LISTING_CHECK, SAFARI_DESCRIPTION_CHECK, SAFARI_DESCRIPTION_MAX } from "../lib/store-preflight-local";
 import { LOCAL_CHECK_FAILED_STATE, SAFARI_DESCRIPTION_UNCHECKED } from "../lib/submit-local-precheck";
 import { handler as submit } from "../tools/submit";
@@ -124,5 +126,123 @@ describe("a real submit runs the preflight's two local checks before the approva
     expect(out.status).toBe("approval-required");
     expect(out.warnings).toContain(SAFARI_DESCRIPTION_UNCHECKED);
     expect(platform.sent("POST", APPROVALS)).toHaveLength(1);
+  });
+});
+
+const TOOLCHAIN = { node: "v24.18.1", extensionJs: "4.1.39", packageManager: { name: "npm", version: "12.0.2" } };
+const SAMPLE_NOTE =
+  "Build from source with Node 22.12.0 and npm 10.9.0 (replace both with the\noutput of node --version and npm --version on the machine that built the\nupload): run npm install, then npx extension build --browser firefox. The\nupload is dist/firefox, byte for byte.";
+const WRITTEN = "Build from source with Node 24.18.1, npm 12.0.2 and Extension.js 4.1.39: run npm install, then npx extension build --browser firefox.";
+
+function storeMd(root: string, note: string): void {
+  fs.writeFileSync(
+    path.join(root, "STORE.md"),
+    `# Store metadata\n\n## Listing\n\n- Name: Widget\n\n## Firefox Add-ons\n\n### Reviewer notes\n\nClick the toolbar button.\n\n${note}\n\n### Release notes\n\nFirst release.\n`,
+  );
+}
+
+describe("506: the preflight compares the Firefox reviewer note's build line with the toolchain that built the upload", () => {
+  const platform = useProjectRoutes("extdev-506-");
+
+  function firefox(toolchain: Row | null): void {
+    platform.login();
+    platform.routes[PREFLIGHT("firefox")] = () => ({ body: report("firefox") });
+    platform.routes[LISTING("firefox")] = () => ({ body: { store: "firefox", listing: { title: "Widget" }, media: {}, updatedAt: "2026-11-06T23:19:00.000Z" } });
+    platform.routes[SETTINGS] = () => ({ body: { enabledBrowsers: { firefox: true } } });
+    platform.routes[BUILD] = () => ({ body: { id: SHA, status: "success", browsers: [{ name: "firefox", status: "success" }], ...(toolchain ? { toolchain } : {}) } });
+    platform.routes[`POST ${APPROVALS}`] = () => ({ status: 201, body: { approvalId: "apr_506", approvalUrl: `${API}/device/approve/apr_506` } });
+  }
+
+  async function preflight(extra: Row): Promise<Row> {
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["firefox"], api: API, ...extra }));
+
+    return out.value.stores.firefox;
+  }
+
+  const warningOf = (view: Row): Row | undefined => (view.warnings as Row[]).find((row) => row.id === REVIEWER_NOTE_TOOLCHAIN_CHECK);
+
+  it("names the template's sample line against the platform build's toolchain, with the exact sentence to write, as a warning that does not block", async () => {
+    firefox(TOOLCHAIN);
+    const projectPath = project("Blurs names");
+    storeMd(projectPath, SAMPLE_NOTE);
+
+    const view = await preflight({ projectPath, buildSha: SHA });
+    const warning = warningOf(view)!;
+
+    expect(warning).toMatchObject({
+      severity: "advisory",
+      actual: "Node 22.12.0 and npm 10.9.0",
+      expected: WRITTEN,
+      built: { from: `build ${SHA} on extension.dev`, node: "24.18.1", extensionJs: "4.1.39", packageManager: { name: "npm", version: "12.0.2" } },
+      write: { file: "STORE.md", section: "## Firefox Add-ons", heading: "### Reviewer notes", with: WRITTEN },
+    });
+
+    expect(warning.write.replace).toMatch(/^Build from source with Node 22\.12\.0[\s\S]*--browser firefox\.$/);
+    expect(warning.message).toContain('with the "replace both" instruction');
+    expect(warning.message).toContain(`build ${SHA} on extension.dev ran Node 24.18.1, npm 12.0.2 and Extension.js 4.1.39`);
+    expect(warning.message).toContain(`Replace the sentence under \`### Reviewer notes\` in \`## Firefox Add-ons\` of STORE.md with: ${WRITTEN}`);
+    expect(view.canSubmit).toBe(true);
+    expect(view.summary.warn).toBe(1);
+    expect((view.failing as Row[]).map((row) => row.id)).not.toContain(REVIEWER_NOTE_TOOLCHAIN_CHECK);
+  });
+
+  it("falls back to the local build's recorded toolchain when the platform build names none, and a real submit carries the same finding as a warning", async () => {
+    firefox(null);
+    const projectPath = project("Blurs names");
+    storeMd(projectPath, "Build from source with Node 22.12.0 and pnpm 9.0.0: run pnpm install, then pnpm run build:firefox.");
+    fs.writeFileSync(path.join(projectPath, "pnpm-lock.yaml"), "");
+    const summary = buildSummaryPath(projectPath, "firefox");
+    fs.mkdirSync(path.dirname(summary), { recursive: true });
+    fs.writeFileSync(summary, JSON.stringify({ browser: "firefox", toolchain: { node: "v24.18.1", extension_js: "4.1.39", package_manager: { name: "pnpm", version: "10.19.0" } } }));
+    const expected = "Build from source with Node 24.18.1, pnpm 10.19.0 and Extension.js 4.1.39: run pnpm install, then pnpm exec extension build --browser firefox.";
+
+    const warning = warningOf(await preflight({ projectPath, buildSha: SHA }))!;
+
+    expect(warning).toMatchObject({ built: { from: "the local firefox build (extension_build)" }, write: { with: expected } });
+    expect(warning.message).toContain("says Node 22.12.0 and pnpm 9.0.0, and the local firefox build (extension_build) ran Node 24.18.1, pnpm 10.19.0 and Extension.js 4.1.39");
+
+    const out = JSON.parse(await submit({ action: "submit", browsers: ["firefox"], buildSha: SHA, dryRun: false, api: API, projectPath }));
+
+    expect(out.status).toBe("approval-required");
+    expect((out.warnings as string[]).some((line) => line.includes(expected))).toBe(true);
+  });
+
+  it("says nothing when the note names what the build ran, or when no build toolchain is known and the note is not the sample", async () => {
+    firefox(TOOLCHAIN);
+    const matching = project("Blurs names");
+    storeMd(matching, WRITTEN);
+    const unread = project("Blurs names");
+    storeMd(unread, "Build from source with Node 24.18.1 and npm 12.0.2: run npm install, then npx extension build --browser firefox.");
+
+    expect(warningOf(await preflight({ projectPath: matching, buildSha: SHA }))).toBeUndefined();
+    expect(warningOf(await preflight({ projectPath: unread }))).toBeUndefined();
+  });
+
+  it("flags the sample line even with no build toolchain read, pointing at buildSha or one local build", async () => {
+    firefox(null);
+    const projectPath = project("Blurs names");
+    storeMd(projectPath, SAMPLE_NOTE);
+
+    const warning = warningOf(await preflight({ projectPath }))!;
+
+    expect(warning.message).toContain("No build toolchain was read to fill it");
+    expect(warning.write.with).toBeUndefined();
+    expect(warning.built).toBeUndefined();
+  });
+
+  it("parses the note's build line, renders the sentence a reviewer expects and compares only the versions both sides name", () => {
+    expect(reviewerNoteBuildLine(SAMPLE_NOTE)).toMatchObject({ sample: true, node: "22.12.0", packageManager: { name: "npm", version: "10.9.0" } });
+    expect(reviewerNoteBuildLine("Click the toolbar button.")).toBeNull();
+    expect(toolchainSentence({ node: "24.18.1", packageManager: { name: "bun" } }, { install: "bun install", build: "bun run build:firefox" })).toBe(
+      "Build from source with Node 24.18.1 and bun: run bun install, then bun run build:firefox.",
+    );
+
+    expect(toolchainDifferences({ node: "24.18.1", packageManager: { name: "npm" } }, { node: "24.18.1", packageManager: { name: "npm", version: "12.0.2" } })).toEqual([]);
+    expect(
+      toolchainDifferences(
+        { node: "22.12.0", packageManager: { name: "npm", version: "10.9.0" }, extensionJs: "4.1.36" },
+        { node: "24.18.1", packageManager: { name: "npm", version: "12.0.2" }, extensionJs: "4.1.39" },
+      ),
+    ).toEqual(["node", "packageManager", "extensionJs"]);
   });
 });

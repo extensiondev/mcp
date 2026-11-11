@@ -11,6 +11,7 @@ import { projectApiGet, type ProjectApi } from "./project-api";
 import { type ProjectRef } from "./registry";
 import { text } from "./ship-act";
 import { nextStep } from "./store-connection";
+import { builtToolchainFor, reviewerNoteToolchainCheck } from "./store-md-toolchain";
 import { FIREFOX_LISTING_CHECK, SAFARI_DESCRIPTION_CHECK, SAFARI_DESCRIPTION_MAX, firefoxListingCheck, safariDescriptionCheck } from "./store-preflight-local";
 import { trackUrl as consoleTrackUrl } from "./track-url";
 
@@ -82,9 +83,13 @@ function refusal(rows: Array<{ store: string; row: Row }>, args: LocalPrecheckAr
 export async function localSubmitPrecheck(args: LocalPrecheckArgs): Promise<{ refused: string | null; warnings: string[] }> {
   const projectPath = text(args.projectPath);
   const safari = args.browsers.includes("safari");
+  const wantsFirefox = args.browsers.includes("firefox");
   const warnings = safari && !projectPath ? [SAFARI_DESCRIPTION_UNCHECKED] : [];
   const safariRow = safari && projectPath ? safariDescriptionCheck(projectPath) : null;
-  const firefox = args.browsers.includes("firefox") ? await firefoxRow(args.api) : null;
+  const firefox = wantsFirefox ? await firefoxRow(args.api) : null;
+  const toolchain = wantsFirefox && projectPath ? reviewerNoteToolchainCheck(projectPath, await builtToolchainFor(args.api, projectPath, args.buildSha)) : null;
+  if (toolchain) warnings.push(text(toolchain.message));
+
   const rows = [
     ...(safariRow ? [{ store: "safari", row: safariRow }] : []),
     ...(firefox ? [{ store: "firefox", row: firefox }] : []),
