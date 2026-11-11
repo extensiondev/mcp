@@ -9,6 +9,7 @@ import { storeMdFieldRows } from "../lib/store-md-fields";
 import { LISTING_TEXT_FIELDS, listingForStore, parseStoreMdListing } from "../lib/store-md-listing";
 import { PLAIN_LISTING_SENTENCE } from "../tools/store-listing";
 import { handler as submit } from "../tools/submit";
+import { storeMdNamedForPerson } from "../lib/store-md-words";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 const LEON = [
@@ -119,7 +120,7 @@ describe("sync-listing's App Store title (ledger 160)", () => {
     expect(answer.status).toBe("listing-synced");
     expect(sent[0]).toMatchObject({ title: "Leon: Blur Faces" });
     expect(answer.value.stores.safari).not.toHaveProperty("skipped");
-    expect(answer.value.sayToPerson).toContain(PLAIN_LISTING_SENTENCE);
+    expect(answer.value.sayToPerson).toContain(storeMdNamedForPerson(PLAIN_LISTING_SENTENCE));
   });
 
   it("sends no title over 30 characters when no record name is known", async () => {

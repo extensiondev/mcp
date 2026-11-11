@@ -18,6 +18,8 @@ import { pinnedTemplateCommit, templateCatalogUrl } from "../lib/template-artifa
 import { envelope } from "../lib/envelope";
 import { shellPath } from "../lib/publish-link";
 import { scaffoldScripts } from "../lib/scaffold-scripts";
+import { STORE_MD_FILENAME } from "../lib/store-md";
+import { STORE_MD_DRAFT_SENTENCE } from "../lib/store-md-words";
 import { detectPackageManager, writeScaffoldToolchainNote } from "../lib/store-md-toolchain";
 
 const COMMAND = "extension_create";
@@ -307,6 +309,7 @@ export async function handler(args: {
     : process.cwd();
   const gitInit = !gitBefore && fs.existsSync(path.join(result.projectPath, ".git"));
 
+  const storeMdWritten = fs.existsSync(path.join(result.projectPath, STORE_MD_FILENAME));
   const catalogUrl = templateCatalogUrl(result.template, "mcp-create");
   const catalogCommit = pinnedTemplateCommit();
   const sourceCommit = scaffoldSourceCommit(result) ?? requestedRef;
@@ -358,6 +361,7 @@ export async function handler(args: {
       },
       scripts,
       ...(reviewerNoteToolchain ? { reviewerNoteToolchain } : {}),
+      ...(storeMdWritten ? { sayToPerson: STORE_MD_DRAFT_SENTENCE } : {}),
       manualAlternative: `Outside an agent only: cd ${shellPath(result.projectPath)} && ${runDev}`,
       duration: Date.now() - start,
       nextSteps: [
@@ -366,6 +370,7 @@ export async function handler(args: {
           ? []
           : [`Dependencies were not installed: run \`${packageManager} install\` in ${result.projectPath} first.`]),
         openStep,
+        ...(storeMdWritten ? ["Say value.sayToPerson to the person as it is, once; the file's own header says the rest when they open it."] : []),
         `To ship: extension_create scaffolds and runs locally, it does not host. When the person wants it on extension.dev, call extension_project_create (project: '<workspace>/${result.projectName}', projectPath: '${result.projectPath}') straight from this folder, no GitHub push needed; it answers an approval URL first, uploads the folder as it is and the platform builds the upload. A pushed GitHub repository works too (repo: '<owner>/<repo>' instead of projectPath). The www /new?template link makes an unrelated project from the pristine template, so never offer it as shipping this one.`,
       ],
     },

@@ -88,6 +88,7 @@ import { firefoxCategoryCover } from "../lib/firefox-category-cover";
 import { iconPaddingView } from "../lib/chrome-icon-padding";
 import { CHROMEWEBSTORE_MD_FILENAME, CHROMEWEBSTORE_MD_PREFILL_CALL, chromeWebStoreHeld, chromeWebStoreHeldSentence, readChromeWebStoreMd, type ChromeWebStoreHeld } from "../lib/chromewebstore-md";
 import { STORE_MD_FILENAME } from "../lib/store-md";
+import { blockingWords, withStoreMdNamedForPerson } from "../lib/store-md-words";
 import { EDGE_STORE_LOGO_RECIPE } from "../lib/store-bring-list";
 import {
   OVER_LIMIT_CODE,
@@ -1101,6 +1102,10 @@ async function mintListingVersion(
 }
 
 export async function syncListing(args: ListingArgs): Promise<string> {
+  return withStoreMdNamedForPerson(await syncListingRun(args));
+}
+
+async function syncListingRun(args: ListingArgs): Promise<string> {
   const asked = (
     Array.isArray(args.browsers) && args.browsers.length
       ? args.browsers
@@ -1417,7 +1422,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     )
     .map(
       (row) =>
-        `${text(row.store)} still lacks ${(row.stillBlocking as string[]).join(", ")}`,
+        `${text(row.store)} still lacks ${blockingWords(row.stillBlocking as string[])}`,
     )
     .join("; ");
 

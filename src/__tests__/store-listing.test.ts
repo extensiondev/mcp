@@ -714,7 +714,9 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
       "listing.privacy_policy_present (warning)",
     ]);
 
-    expect(written.hint).toContain("chrome still lacks");
+    expect(written.hint).toContain("chrome still lacks screenshots and a privacy policy URL (a warning, not a blocker)");
+    expect(written.hint).not.toMatch(/\b[a-z]+\.[a-z_]+_(present|set|ok|missing)\b/);
+    expect(JSON.stringify(written.value.sayToPerson ?? "")).not.toMatch(/\b[a-z]+\.[a-z_]+_(present|set|ok|missing)\b/);
 
     const paste = written.value.stores.chrome.pasteInDashboard;
 
@@ -940,7 +942,7 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
 
     const nexts: Array<[string, string]> = [
       ["The App Store Connect key was refused (401).", "Connect the App Store in the console store settings, then say sync-listing again."],
-      ["The description is over the listing's limit.", "Fix STORE.md, then say sync-listing again."],
+      ["The description is over the listing's limit.", "Fix your store listing (STORE.md), then say sync-listing again."],
       ["The runner was lost.", "Say sync-listing again."],
     ];
 
@@ -1808,7 +1810,7 @@ describe("sync-listing points at CHROMEWEBSTORE.md for a Chrome line STORE.md la
     expect(chrome.status).toBe("nothing-to-sync");
     expect(unread).toEqual({ field: "singlePurpose", line: "### Single purpose", section: "## Chrome Web Store", heldBy: "CHROMEWEBSTORE.md **Single Purpose**", prefill: CHROMEWEBSTORE_MD_PREFILL_CALL });
     expect((chrome.unread as Array<Record<string, unknown>>).find((row) => row.field === "visibility")).toEqual({ field: "visibility", line: "- Visibility:", section: "## Chrome Web Store" });
-    expect(out.value.sayToPerson).toContain(`For chrome, STORE.md has no \`### Single purpose\`, and CHROMEWEBSTORE.md holds it (**Single Purpose**); run ${CHROMEWEBSTORE_MD_PREFILL_CALL}`);
+    expect(out.value.sayToPerson).toContain(`For chrome, your store listing (STORE.md) has no \`### Single purpose\`, and CHROMEWEBSTORE.md holds it (**Single Purpose**); run ${CHROMEWEBSTORE_MD_PREFILL_CALL}`);
     expect(platform.sent("PUT", LISTING("chrome"))).toHaveLength(0);
   });
 

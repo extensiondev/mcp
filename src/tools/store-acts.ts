@@ -37,7 +37,8 @@ import {
 } from "../lib/platform-submissions";
 import { compactPreflightStores, PREFLIGHT_DETAIL_SENTENCE, preflightDetail } from "../lib/preflight-detail";
 import { summaryAgreeingWithRows } from "../lib/preflight-summary";
-import { readinessAnswer, readinessLead, storeReadinessOf } from "../lib/store-onboarding";
+import { decisionsSentence, readinessAnswer, readinessLead, storeReadinessOf } from "../lib/store-onboarding";
+import { withStoreMdNamedForPerson } from "../lib/store-md-words";
 import { releaseLoopOf } from "../lib/store-release-loop";
 import { safariSigningOf, safariSigningSentence } from "../lib/safari-signing-expiry";
 import { submissionLandingLine } from "../lib/submission-landing";
@@ -952,6 +953,10 @@ function readinessView(
  * out of the answer: it is the project's own words, not a readiness fact.
  */
 export async function preflight(args: StoreActArgs): Promise<string> {
+  return withStoreMdNamedForPerson(await preflightRead(args));
+}
+
+async function preflightRead(args: StoreActArgs): Promise<string> {
   const asked = (
     Array.isArray(args.browsers) && args.browsers.length
       ? args.browsers
@@ -1521,6 +1526,10 @@ export async function preflight(args: StoreActArgs): Promise<string> {
         ? notReadyStep ?? submitStep(asked, modeIds)
         : partialSubmitStep(goes, blocked, modeIds) ?? agreementStep ?? (buildVerdict ? browserBuildStep(buildVerdict) : null);
 
+  const readinessRead = storeReadinessOf({ stores, asked, projectPath: text(args.projectPath) });
+  const askLine = decisionsSentence(readinessRead, stores);
+  const saidLines = [buildsLine, landingLine, inputsSay, edgeFirstLine, reviewLine, notReadyLine(notReady, green), readinessHint, captureLine];
+
   return envelope({
     ok: true,
     command: COMMAND,
@@ -1533,8 +1542,8 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       ...(reviewing ? { chromeReview: reviewing } : {}),
       trackUrl: reviewing ? reviewUrl : storesPageUrl,
       sayToPerson: readinessLead(
-        storeReadinessOf({ stores, asked, projectPath: text(args.projectPath) }),
-        [buildsLine, landingLine, inputsSay, edgeFirstLine, reviewLine, notReadyLine(notReady, green), readinessHint, captureLine].filter(Boolean).join(" "),
+        readinessRead,
+        (blocked.length ? [...saidLines, askLine] : [askLine, ...saidLines]).filter(Boolean).join(" "),
       ),
       nextStep: step,
     },

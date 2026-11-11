@@ -242,6 +242,24 @@ describe("extension_create defaultsApplied", () => {
     expect(result.value.reviewerNoteToolchain).toBeUndefined();
   });
 
+  it("tells the person in one sentence what STORE.md is, and says nothing of it when the scaffold wrote none (ledger 533)", async () => {
+    withStoreMd = true;
+    scaffoldTarget = path.join(tmpDir(), "probe");
+
+    const withFile = JSON.parse(await create.handler({ projectName: "probe" }));
+
+    expect(withFile.value.sayToPerson).toBe("I also wrote a store listing draft (STORE.md). It is only used when you submit to a store and never ships in the extension.");
+    expect(withFile.value.nextSteps.join(" ")).toContain("Say value.sayToPerson to the person as it is");
+
+    withStoreMd = false;
+    scaffoldTarget = path.join(tmpDir(), "probe");
+
+    const without = JSON.parse(await create.handler({ projectName: "probe" }));
+
+    expect(without.value.sayToPerson).toBeUndefined();
+    expect(JSON.stringify(without.value.nextSteps)).not.toContain("STORE.md");
+  });
+
   it("admits when the scaffolder initialized a git repository", async () => {
     withGit = true;
     scaffoldTarget = path.join(tmpDir(), "probe");

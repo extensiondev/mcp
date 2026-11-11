@@ -51,6 +51,44 @@ function project(files: Record<string, string>): string {
   return root;
 }
 
+const TEMPLATE_STORE_MD = `# Store metadata
+
+Starter file generated from this template's manifest.
+
+## Listing
+
+- Name: Widget
+- Summary: Reads the page.
+- Subtitle: TODO a 30 character App Store subtitle
+- Description:
+
+  TODO two or three short paragraphs of user benefits.
+
+- Category: TODO one per store
+- Language: en
+- License: MIT
+- Support email: TODO the address users and reviewers write to
+- Homepage: TODO the project or company site URL
+- Screenshots:
+  1. TODO screenshots/01.png
+
+## Privacy and data use
+
+- Privacy policy URL: TODO (Apple requires one on every app)
+- Data collected: none
+
+## Chrome Web Store
+
+### Single purpose
+
+Reads the page.
+`;
+
+const CHECK_ID = /\b[a-z]+\.[a-z_]+_(present|set|ok|missing)\b/;
+const FILE_LINE = /set `- [^`]+` under `## [^`]+`/;
+const FIVE_QUESTIONS =
+  "Five answers are only needed before a public listing, not for this unlisted upload: which support email, which homepage, where your privacy policy lives, which category (default Other), and who can find it and at what price (default Firefox unlisted). Tell me and I write them down.";
+
 const PACKAGE = JSON.stringify({ name: "widget", homepage: "https://widget.example", license: "MIT", bugs: { email: "help@widget.example" } });
 
 describe("extension_submit preflight answers one readiness list and one decisions step across four stores", () => {
@@ -153,5 +191,60 @@ describe("extension_submit preflight answers one readiness list and one decision
     expect(readiness.decisions.map((decision: Row) => decision.id)).toEqual(["homepage", "privacy-policy", "category", "distribution"]);
     expect(readiness.summary[3]).toBe("Connected: the Chrome Web Store.");
     expect(out.value.sayToPerson.startsWith(readiness.summary[0])).toBe(false);
+  });
+
+  it("leads with the open decisions as questions, each with its default and whether it blocks now, on a template STORE.md with no listing answers (ledger 533)", async () => {
+    serve(freshReports(["firefox"]));
+
+    const root = project({ "package.json": JSON.stringify({ name: "widget" }), "STORE.md": TEMPLATE_STORE_MD });
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["firefox"], projectPath: root, api: API }));
+    const decisions: Row[] = out.value.readiness.decisions;
+
+    expect(out.value.sayToPerson.startsWith(FIVE_QUESTIONS)).toBe(true);
+    expect(decisions.map((decision) => [decision.id, decision.blocksNow])).toEqual([["support-email", false], ["homepage", false], ["privacy-policy", false], ["category", false], ["distribution", false]]);
+    expect(decisions.filter((decision) => decision.writes.length).map((decision) => decision.writes[0].line)).toEqual(["- Support email:", "- Homepage:", "- Privacy policy URL:", "- Category:"]);
+    expect(FIVE_QUESTIONS).not.toMatch(/`|##|STORE\.md/);
+  });
+
+  it("says which answers this upload needs when a blocking check names one, and lets the blocker lead (ledger 533)", async () => {
+    const reports = freshReports(["firefox"]);
+    const firefox = reports.firefox!;
+
+    firefox.checks = [...firefox.checks, { id: "listing.firefox_privacy_policy_present", status: "fail", severity: "blocking", stage: "integration", message: "privacy policy URL: not set; add `- Privacy policy URL: <address>` under `## Privacy and data use` in STORE.md." }];
+    firefox.summary = { ...firefox.summary, fail: 1, blockingFailures: 1, canSubmit: false, integration: { ...firefox.summary.integration, fail: 1, blockingFailures: 1, canQueue: false } };
+    serve(reports);
+
+    const root = project({ "package.json": JSON.stringify({ name: "widget" }), "STORE.md": TEMPLATE_STORE_MD });
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["firefox"], projectPath: root, api: API }));
+    const byId = Object.fromEntries((out.value.readiness.decisions as Row[]).map((decision) => [decision.id, decision]));
+
+    expect(byId["privacy-policy"].blocksNow).toBe(true);
+    expect(byId["support-email"].blocksNow).toBe(false);
+    expect(out.value.sayToPerson.startsWith("One answer")).toBe(false);
+    expect(out.value.sayToPerson).toContain(
+      "One answer is needed before this upload: where your privacy policy lives. Four more are only needed before a public listing: which support email, which homepage, which category (default Other), and who can find it and at what price (default Firefox unlisted). Tell me and I write them down.",
+    );
+
+    expect(out.value.sayToPerson).not.toMatch(CHECK_ID);
+    expect(out.hint).not.toMatch(CHECK_ID);
+  });
+
+  it("calls the file your store listing (STORE.md) on its first mention to the person, and keeps check ids and file lines out of sayToPerson and hint (ledger 533)", async () => {
+    for (const browsers of [["chrome"], ["firefox"], [...STORES]]) {
+      serve(freshReports(browsers));
+
+      const root = project({ "package.json": JSON.stringify({ name: "widget" }), "STORE.md": TEMPLATE_STORE_MD });
+      const out = JSON.parse(await submit({ action: "preflight", browsers, projectPath: root, api: API }));
+      const say: string = out.value.sayToPerson;
+      const first = say.indexOf("STORE.md");
+
+      if (first >= 0) expect(say.slice(0, first + "STORE.md".length)).toMatch(/store listing \(STORE\.md$/);
+
+      expect(say).not.toMatch(CHECK_ID);
+      expect(say).not.toMatch(FILE_LINE);
+      expect(out.hint).not.toMatch(CHECK_ID);
+      expect(out.hint).not.toMatch(FILE_LINE);
+      expect(out.value.nextStep.say).not.toMatch(CHECK_ID);
+    }
   });
 });

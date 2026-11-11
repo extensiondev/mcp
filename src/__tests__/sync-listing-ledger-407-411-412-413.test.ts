@@ -8,6 +8,7 @@ import { STORE_FIELDS, listingForStore, parseStoreMdListing } from "../lib/store
 import { storeMdSectionOf } from "../lib/store-md-fields";
 import { EDGE_STORE_LOGO_SENTENCE, PLAIN_LISTING_SENTENCE, readLocalListing } from "../tools/store-listing";
 import { handler as submit } from "../tools/submit";
+import { storeMdNamedForPerson } from "../lib/store-md-words";
 import { solidPng } from "./fixtures/png";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
@@ -108,7 +109,7 @@ describe("413: a Firefox reviewer note over AMO's 3,000 characters is refused he
       { store: "firefox", field: "reviewerNotes", line: "### Reviewer notes", section: "## Firefox Add-ons", length: 3_100, limit: 3_000, unit: "characters", say: OVER },
     ]);
 
-    expect(out.value.sayToPerson).toContain(`${OVER}; sync-listing refuses the firefox listing until it fits. Shorten \`### Reviewer notes\` under \`## Firefox Add-ons\` in STORE.md to 3,000 characters or fewer.`);
+    expect(out.value.sayToPerson).toContain(storeMdNamedForPerson(`${OVER}; sync-listing refuses the firefox listing until it fits. Shorten \`### Reviewer notes\` under \`## Firefox Add-ons\` in STORE.md to 3,000 characters or fewer.`));
     expect(out.value.stores.firefox.storeMd.skipped).toBeUndefined();
   });
 
@@ -244,11 +245,11 @@ describe("412: Edge takes the single purpose and the permission justifications, 
     expect(out.value.stores.edge.filled).toEqual(expect.arrayContaining(["singlePurpose", "permissionJustifications"]));
     expect(out.value.stores.edge.borrowed).toEqual({ singlePurpose: "## Chrome Web Store", permissionJustifications: "## Chrome Web Store" });
     expect(out.value.sayToPerson).toContain(
-      "For edge, `### Single purpose` and `### Permissions justification` were read from the `## Chrome Web Store` section of STORE.md, since `## Edge Add-ons` has none of its own; Edge takes the same text Chrome does.",
+      "For edge, `### Single purpose` and `### Permissions justification` were read from the `## Chrome Web Store` section of your store listing (STORE.md), since `## Edge Add-ons` has none of its own; Edge takes the same text Chrome does.",
     );
 
     expect(out.value.stores.edge.stillBlocking).toEqual(["edge.single_purpose", "edge.permission_justifications"]);
-    expect(out.hint).toContain("edge still lacks edge.single_purpose, edge.permission_justifications");
+    expect(out.hint).toContain("edge still lacks a single purpose statement and permission justifications");
   });
 
   it("an Edge section with its own subsections wins and borrows nothing", async () => {

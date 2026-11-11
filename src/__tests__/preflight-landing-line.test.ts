@@ -90,7 +90,8 @@ describe("415: the preflight leads with where an approved submit lands under eac
     const out = JSON.parse(await submit({ action: "preflight", browsers: [...STORES], api: API }));
     const said = out.value.sayToPerson as string;
 
-    expect(said.startsWith("Where an approved submit lands: chrome: public once Google's review passes")).toBe(true);
+    expect(said).toContain("Tell me and I write them down. Where an approved submit lands: chrome: public once Google's review passes");
+    expect(said.indexOf("Where an approved submit lands")).toBeLessThan(said.indexOf("Every store read here"));
     expect(said).not.toContain("submission mode: Public publish");
     expect(out.value.stores.chrome.submissionMode).toMatchObject({ id: "public", label: "Public publish" });
   });

@@ -15,6 +15,7 @@ import { describe, expect, it } from "vitest";
 
 import { LANGUAGE_FROM, MINT_CALL, SKU_FROM } from "../lib/safari-app-record-step";
 import { handler as submit } from "../tools/submit";
+import { storeMdNamedForPerson } from "../lib/store-md-words";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 type Row = Record<string, any>;
@@ -75,7 +76,7 @@ describe("the Safari preflight's app record step names the registration and the 
     expect(register).toBeGreaterThan(-1);
     expect(mint).toBeGreaterThan(register);
     expect(connect).toBeGreaterThan(mint);
-    expect(out.value.sayToPerson).toContain(row.clearedBy);
+    expect(out.value.sayToPerson).toContain(storeMdNamedForPerson(row.clearedBy));
     expect(out.value.sayToPerson.split("App record:")).toHaveLength(2);
   });
 

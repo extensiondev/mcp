@@ -6,11 +6,15 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { decisionsOf, type Decision } from "./store-onboarding-decisions";
+import { isRow, text } from "./ship-act";
+import { uploadStopsAtDraft } from "./store-connection";
+import { decisionsOf, type Decision, type DecisionId } from "./store-onboarding-decisions";
 import { listingDraftOf, type ListingDraft } from "./store-listing-draft";
 import { connectedStoresOf, readinessRowsOf, type ReadinessGroups } from "./store-onboarding-suppliers";
 
 type Row = Record<string, unknown>;
+
+export type OpenDecision = Decision & { blocksNow: boolean };
 
 export interface StoreReadiness {
   stores: string[];
@@ -19,7 +23,7 @@ export interface StoreReadiness {
   personDecides: ReadinessGroups["person-decides"];
   onFile: number;
   notOnFile: number;
-  decisions: Decision[];
+  decisions: OpenDecision[];
   decisionsNeeded: number;
   connected: string[];
   notConnected: string[];
@@ -73,11 +77,56 @@ function summaryLines(view: Omit<StoreReadiness, "summary">): string[] {
   ];
 }
 
+const CHECK_OF_DECISION: Record<DecisionId, RegExp> = {
+  "support-email": /support_(email|contact)/,
+  homepage: /homepage|website|support_url|marketing_url/,
+  "privacy-policy": /privacy_policy/,
+  category: /categor/,
+  distribution: /visibility|distribution|pricing/,
+  license: /license/,
+};
+
+const storeOf = (id: string): string => id.split(".")[0] ?? "";
+
+function uploadEntersReview(store: string, view: unknown): boolean {
+  const mode = isRow(view) && isRow(view.submissionMode) ? text(view.submissionMode.id) : "";
+
+  if (store === "firefox") return mode === "listed";
+  if (store === "safari") return mode === "review";
+
+  return !uploadStopsAtDraft(store, mode);
+}
+
+function blockingCheckIds(view: unknown): string[] {
+  const failing = isRow(view) && Array.isArray(view.failing) ? view.failing : [];
+
+  return failing.filter(isRow).filter((check) => text(check.severity) !== "warning" && text(check.severity) !== "info").map((check) => text(check.id));
+}
+
+/* @invariant A DECISION BLOCKS NOW ONLY WHEN THIS UPLOAD CANNOT GO WITHOUT
+ * IT. A required row blocks the upload when the store's saved mode sends the
+ * upload on to review (a listed Firefox channel, a Safari review mode, a
+ * Chrome or Edge mode past the draft); under the least public defaults the
+ * same row is only needed before a public listing, and a blocking check the
+ * platform already fails for the field blocks on any mode (ledger 533).
+ */
+function withBlocksNow(decisions: Decision[], stores: Row, rows: ReturnType<typeof readinessRowsOf>): OpenDecision[] {
+  const required = new Set([...rows.groups.build.required, ...rows.groups["agent-drafts"].required, ...rows.groups["person-decides"].required]);
+  const failing = Object.values(stores).flatMap(blockingCheckIds);
+
+  return decisions.map((decision) => ({
+    ...decision,
+    blocksNow:
+      !decision.onFile &&
+      (decision.settles.some((id) => required.has(id) && uploadEntersReview(storeOf(id), stores[storeOf(id)])) || failing.some((id) => CHECK_OF_DECISION[decision.id].test(id))),
+  }));
+}
+
 export function storeReadinessOf(args: { stores: Row; asked: readonly string[]; projectPath: string }): StoreReadiness {
   const asked = args.asked.filter((store) => STORE_NAMES[store]);
   const rows = readinessRowsOf(args.stores, asked);
   const links = connectedStoresOf(rows, asked);
-  const decisions = decisionsOf({ asked, statusById: rows.statusById, projectPath: args.projectPath });
+  const decisions = withBlocksNow(decisionsOf({ asked, statusById: rows.statusById, projectPath: args.projectPath }), args.stores, rows);
   const view: Omit<StoreReadiness, "summary"> = {
     stores: asked,
     build: rows.groups.build,
@@ -123,4 +172,69 @@ export function readinessAnswer(readiness: StoreReadiness): Row | null {
 
 export function readinessLead(readiness: StoreReadiness, say: string): string {
   return readiness.noStoreConnected && readiness.onFile + readiness.notOnFile > 0 ? `${readiness.summary.join("\n")}\n${say}` : say;
+}
+
+const COUNT_WORDS = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine"];
+
+const countWord = (n: number): string => COUNT_WORDS[n] ?? String(n);
+
+const answers = (n: number): string => `${countWord(n)} answer${n === 1 ? " is" : "s are"}`;
+
+const more = (n: number): string => `${countWord(n)} more ${n === 1 ? "is" : "are"}`;
+
+function questionList(words: string[]): string {
+  if (words.length <= 2) return words.join(" and ");
+
+  return `${words.slice(0, -1).join(", ")}, and ${words[words.length - 1]}`;
+}
+
+function categoryDefault(value: string): string {
+  const pairs = value.split(", ").map((pair) => /^(.+) \((.+)\)$/.exec(pair));
+
+  if (pairs.length === 1 && pairs[0]) return pairs[0][1] ?? value;
+
+  return pairs.map((pair, i) => (pair ? `${pair[1]} on ${pair[2]}` : value.split(", ")[i] ?? "")).join(", ");
+}
+
+function questionOf(decision: OpenDecision): string {
+  const fallback = decision.default ? ` (default ${decision.default})` : "";
+
+  if (decision.id === "support-email") return `which support email${fallback}`;
+  if (decision.id === "homepage") return `which homepage${fallback}`;
+  if (decision.id === "privacy-policy") return `where your privacy policy lives${fallback}`;
+  if (decision.id === "category") return `which category${decision.default ? ` (default ${categoryDefault(decision.default)})` : ""}`;
+  if (decision.id === "distribution") return `who can find it and at what price${decision.default ? ` (default ${decision.default.replace(/ \([^)]*\)/g, "")})` : ""}`;
+
+  return `which license${fallback}`;
+}
+
+const UPLOAD_WORDS: Record<string, string> = { chrome: "draft", edge: "draft", firefox: "unlisted", safari: "TestFlight" };
+
+function uploadPhrase(readiness: StoreReadiness, stores: Row): string {
+  if (readiness.stores.length !== 1) return "these uploads";
+
+  const store = readiness.stores[0]!;
+
+  return uploadEntersReview(store, stores[store]) ? "this upload" : `this ${UPLOAD_WORDS[store] ?? "draft"} upload`;
+}
+
+/* @invariant AN OPEN DECISION REACHES THE PERSON AS ITS QUESTION. The file
+ * line and the section a decision writes stay in readiness.decisions[].writes
+ * for the agent; the person hears which answer is asked, its default and
+ * whether this upload waits on it, and is told the agent writes it down
+ * (ledger 533).
+ */
+export function decisionsSentence(readiness: StoreReadiness, stores: Row): string {
+  const open = readiness.decisions.filter((decision) => !decision.onFile);
+  if (!open.length) return "";
+
+  const now = open.filter((decision) => decision.blocksNow);
+  const later = open.filter((decision) => !decision.blocksNow);
+  const close = "Tell me and I write them down.";
+
+  if (!now.length) return `${answers(later.length)} only needed before a public listing, not for ${uploadPhrase(readiness, stores)}: ${questionList(later.map(questionOf))}. ${close}`;
+
+  const first = `${answers(now.length)} needed before this upload: ${questionList(now.map(questionOf))}.`;
+
+  return later.length ? `${first} ${more(later.length)} only needed before a public listing: ${questionList(later.map(questionOf))}. ${close}` : `${first} ${close}`;
 }

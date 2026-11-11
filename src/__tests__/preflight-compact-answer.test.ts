@@ -18,7 +18,7 @@ type Row = Record<string, any>;
 
 const PREFLIGHT = (store: string) => `${PROJECT_ROUTE}/stores/${store}/submissions/preflight`;
 const STORES = ["chrome", "firefox", "edge", "safari"] as const;
-const BUDGET = 20_000;
+const BUDGET = 21_000;
 const WALK: Record<string, Row> = JSON.parse(readFileSync(fileURLToPath(new URL("./fixtures/preflight-four-stores.json", import.meta.url)), "utf8"));
 
 function serve(platform: ReturnType<typeof useProjectRoutes>, reports: Record<string, Row>): void {

@@ -20,6 +20,7 @@ import { noNetworkPromiseOf } from "../lib/store-md-network";
 import { handler as publish } from "../tools/publish";
 import { handler as promote } from "../tools/release-promote";
 import { handler as submit } from "../tools/submit";
+import { storeMdNamedForPerson } from "../lib/store-md-words";
 import { promoteAnswer, publishAnswer } from "./fixtures/platform-answers";
 
 type Row = Record<string, unknown>;
@@ -193,7 +194,7 @@ describe("extension_submit preflight: the firefox.update_url check names the pla
 
     expect(firefox.updateManifest).toMatchObject({ manifestUpdateUrl: null, suggested: false, noNetworkPromise: "The extension makes no network requests at all.", say: expected });
     expect(expected).toContain("a network request to extension.dev");
-    expect(out.value.sayToPerson).toContain(expected);
+    expect(out.value.sayToPerson).toContain(storeMdNamedForPerson(expected));
     expect(out.hint).not.toContain("Option for self-distributed builds");
     expect(out.hint).not.toContain("Put browser_specific_settings");
     expect(firefox.warnings.map((row: Row) => row.id)).not.toContain("firefox.update_url");
