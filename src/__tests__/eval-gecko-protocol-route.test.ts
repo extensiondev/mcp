@@ -329,6 +329,7 @@ describe("a page inside the extension that the manifest declares as no surface",
     expect(result.error.code).toBe("E_RDP");
     expect(result.error.message).toContain("ECONNREFUSED");
     expect(result.error.message).not.toContain("matches none");
+    expect(result.error.retry).toBe("safe");
   });
 
   it("keeps the no-surface answer when the session publishes no debugger port", async () => {
@@ -399,6 +400,7 @@ describe("a web page whose own policy forbids eval, on a Gecko build with no tab
     );
     expect(lost.status).toBe("eval-lost");
     expect(lost.hint).toMatch(/may have run in part/);
+    expect(lost.error.retry).toBe("after-read");
     rdpAnswer = () => ({ ok: false, name: "Unsupported", message: "no console actor" });
     const unsupported = JSON.parse(
       await evalTool.handler({ projectPath: dir, browser: "firefox", context: "page", url: "http://127.0.0.1:8765/csp.html", expression: "1" }),

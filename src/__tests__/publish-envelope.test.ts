@@ -53,6 +53,7 @@ describe("extension_publish envelope compatibility", () => {
           name: "PublishAuthError",
           message:
             "No token. Run extension_auth (action: login), or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard). An extension with no extension.dev project yet starts with extension_project_create, which makes one from its GitHub repository, then extension_auth.",
+          retry: "no",
         },
         warnings: [],
       }),
@@ -76,6 +77,7 @@ describe("extension_publish envelope compatibility", () => {
           name: "PublishConfigError",
           message:
             "Refusing to send the access token to http://evil.example.com: use https (http is allowed only for localhost).",
+          retry: "no",
         },
         warnings: [],
       }),

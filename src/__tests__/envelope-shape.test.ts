@@ -117,3 +117,41 @@ describe("envelope() and envelopeObject() are the only serializers allowed to pr
     }
   });
 });
+
+describe("513: every failed frame says in error.retry whether repeating the call is safe", () => {
+  const failed = (command: string, error: { code: string; retry?: "safe" | "after-read" | "no"; platformCode?: string }) =>
+    envelopeObject({ ok: false, command, status: "failed", error: { code: error.code, message: "x", ...(error.retry ? { retry: error.retry } : {}), ...(error.platformCode ? { platformCode: error.platformCode } : {}) } }).error as Record<string, unknown>;
+
+  it("answers one of safe, after-read and no for every declared code, on a read and on an act", () => {
+    for (const code of ERROR_CODES) {
+      for (const command of ["extension_templates", "extension_publish"]) {
+        expect(["safe", "after-read", "no"], `${code} on ${command}`).toContain(failed(command, { code }).retry);
+      }
+    }
+  });
+
+  it("a transient failure is safe on a read, after-read on an act, and safe on an act whose repeat changes nothing", () => {
+    expect(failed("extension_templates", { code: "E_NETWORK" }).retry).toBe("safe");
+    expect(failed("extension_publish", { code: "E_NETWORK" }).retry).toBe("after-read");
+    expect(failed("extension_screenshot", { code: "E_CDP" }).retry).toBe("safe");
+    expect(failed("extension_eval", { code: "E_WAIT_TIMEOUT" }).retry).toBe("after-read");
+    expect(validateAgainstSchema(envelopeObject({ ok: false, command: "extension_publish", status: "failed", error: { code: "E_NETWORK", message: "x" } }), schema)).toEqual([]);
+  });
+
+  it("a refusal that waits on a change is no, whether the tool reads or acts, and so is a code the table does not know", () => {
+    expect(failed("extension_templates", { code: "E_BAD_REQUEST" }).retry).toBe("no");
+    expect(failed("extension_eval", { code: "E_NO_SESSION" }).retry).toBe("no");
+    expect(failed("extension_submit", { code: "E_APPROVAL_REQUIRED" }).retry).toBe("no");
+    expect(failed("extension_builds", { code: "E_TOOL_DISABLED" }).retry).toBe("no");
+    expect(failed("extension_act", { code: "E_CONTROL_DENIED" }).retry).toBe("no");
+    expect(failed("extension_publish", { code: "E_PLATFORM", platformCode: "CHANNEL_NOT_FOUND" }).retry).toBe("no");
+    expect(failed("extension_publish", { code: "E_PLATFORM" }).retry).toBe("after-read");
+  });
+
+  it("keeps a builder's own verdict, reads a refunded approval as safe, and puts nothing on a success", () => {
+    expect(failed("extension_templates", { code: "E_BAD_REQUEST", retry: "after-read" }).retry).toBe("after-read");
+    const refunded = envelopeObject({ ok: false, command: "extension_submit", status: "platform-unavailable", value: { approvalRefunded: true }, error: { code: "E_PLATFORM", message: "x" } });
+    expect(refunded.error?.retry).toBe("safe");
+    expect(envelopeObject({ ok: true, command: "extension_templates", status: "ok", value: {} }).error).toBeNull();
+  });
+});

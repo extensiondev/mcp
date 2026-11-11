@@ -43,6 +43,16 @@ describe("the initialize result carries instructions, the one field a search-fir
     expect(SERVER_INSTRUCTIONS).toMatch(/CDP or Playwright/);
   });
 
+  it("513: the retry doctrine names error.retry and its three values once", () => {
+    const text = serverInstructions({ features: ["local", "platform"], noShip: false });
+    const doctrine = text.split("\n").find((line) => line.startsWith("Try again is idempotent")) ?? "";
+
+    expect(doctrine).toMatch(/error\.retry: safe \(/);
+    expect(doctrine).toContain("after-read (");
+    expect(doctrine).toContain("or no (");
+    expect(text.match(/error\.retry/g)).toHaveLength(1);
+  });
+
   it("only names tools the server really registers", () => {
     const registered = new Set(tools.map((t) => t.schema.name));
     const named = SERVER_INSTRUCTIONS.match(/\bextension_[a-z_]+/g) ?? [];

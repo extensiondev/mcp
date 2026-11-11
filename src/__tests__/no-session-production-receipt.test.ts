@@ -214,7 +214,7 @@ describe("the no-session answer reads the start receipt before choosing its word
     expect(noSessionWords(empty, "chrome", { ...DEV, hint: CDP_PORT_MISSING_HINT })).toEqual({ ...DEV, hint: CDP_PORT_MISSING_HINT });
 
     const envelope = JSON.parse(noSessionEnvelope({ command: "extension_open", projectPath: empty, browser: "chrome", need: "so nothing opens", dev: DEV, name: "NoSession" }));
-    expect(envelope.error).toEqual({ code: "E_NO_SESSION", name: "NoSession", message: DEV.message });
+    expect(envelope.error).toEqual({ code: "E_NO_SESSION", name: "NoSession", message: DEV.message, retry: "no" });
     expect(envelope.hint).toBeUndefined();
   });
 });

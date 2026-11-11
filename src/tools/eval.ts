@@ -222,6 +222,7 @@ function targetsUnreadable(why: string): string {
       code: "E_CDP",
       name: "TargetsUnreadable",
       message: `Could not list the session's CDP targets: ${why}. Whether the page or worker is open is unknown.`,
+      retry: "safe",
     },
     hint: "The session's debug port did not answer. extension_doctor says whether the browser is still up; if it is, retry.",
   });
@@ -1041,6 +1042,7 @@ async function evaluateInGeckoTab(
         code: "E_RDP",
         name: "RdpFailed",
         message: `The ${browser} remote-debugging port ${resolved.port} did not answer: ${err instanceof Error ? err.message : String(err)}. The tab's documents were not read.`,
+        retry: "safe",
       },
       hint: "extension_doctor says whether the browser is still up; if it is, retry.",
     });
@@ -1086,7 +1088,7 @@ async function evaluateInGeckoTab(
     ok: false,
     command: schema.name,
     status: lost ? "eval-lost" : unsupported ? "eval-unsupported" : "eval-failed",
-    error: { code: "E_EVAL", name: outcome.name, message: outcome.message },
+    error: { code: "E_EVAL", name: outcome.name, message: outcome.message, retry: lost ? "after-read" : "no" },
     hint: lost
       ? "The document navigated or closed before the expression answered, so it may have run in part; read the page's state before repeating it."
       : unsupported

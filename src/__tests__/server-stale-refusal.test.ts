@@ -118,7 +118,7 @@ describe("a server that knows it was rebuilt and has no loader refuses platform 
     expect(isError).toBe(true);
     expect(out.ok).toBe(false);
     expect(out.status).toBe("server-stale");
-    expect(out.error).toEqual({ code: "E_SERVER_STALE", name: "ServerStale", message: staleSentence("2026-10-23T15:17:33.978Z") });
+    expect(out.error).toEqual({ code: "E_SERVER_STALE", name: "ServerStale", message: staleSentence("2026-10-23T15:17:33.978Z"), retry: "no" });
     expect(out.error.message).toBe("This server was rebuilt at 2026-10-23T15:17:33.978Z; run /mcp and pick extension-dev, then call again.");
     expect(out.value.server).toEqual({ version, commit: null, startedAt: expect.any(String), pid: process.pid, builtAt: "2026-10-23T14:19:47.654Z" });
     expect(out.value.action).toBe("list");

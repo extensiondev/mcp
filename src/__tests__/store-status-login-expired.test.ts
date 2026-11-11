@@ -165,7 +165,7 @@ describe("a store status read under an expired login names the expiry instead of
 
     expect(out.ok).toBe(false);
     expect(out.status).toBe("auth-required");
-    expect(out.error).toEqual({ code: "E_AUTH_REQUIRED", name: "LoginRequired", message: sentence });
+    expect(out.error).toEqual({ code: "E_AUTH_REQUIRED", name: "LoginRequired", message: sentence, retry: "no" });
     expect(out.value.login).toEqual({ project: "acme/other", sent: false, renew: { tool: "extension_auth", args: { action: "login", project: "acme/other" } } });
     expect(out.value.nextStep).toEqual({ kind: "login", say: `${sentence} Then call this again.`, url: "https://console.extension.dev/acme/other/submissions" });
     expect(out.value.trackUrl).toBe("https://console.extension.dev/acme/other/submissions");

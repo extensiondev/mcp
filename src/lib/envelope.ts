@@ -9,6 +9,9 @@
 import { meterComposedDashboardUrls } from "./dashboard-url-meter";
 import { takeDeferredWarnings } from "./deferred-warnings";
 import { deadEngineOverrideLine } from "./engine-override-warning";
+import { withRetry, type RetryVerdict } from "./retry";
+
+export type { RetryVerdict } from "./retry";
 
 export const ENVELOPE_SCHEMA = 1 as const;
 
@@ -202,6 +205,7 @@ export interface EnvelopeError {
   name?: string;
   engine?: string | null;
   hint?: string;
+  retry?: RetryVerdict;
   [key: string]: unknown;
 }
 
@@ -287,7 +291,7 @@ export function envelopeObject(init: EnvelopeInit): Envelope {
     command: init.command,
     status: init.status,
     value: init.value === undefined ? null : plainText(init.value),
-    error: init.error ? plainText(init.error) : null,
+    error: init.error ? plainText(withRetry(init.error, init.command, init.value)) : null,
     warnings: collectWarnings([...(init.warnings ?? []), ...takeDeferredWarnings(), deadEngineOverrideLine()].map(plainText)),
   };
   if (init.truncated !== undefined) frame.truncated = init.truncated;

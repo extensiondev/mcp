@@ -372,6 +372,7 @@ export async function handler(args: {
         code: "E_PLATFORM",
         name: result.error.name,
         message: result.error.message,
+        ...(result.error.name === "PublishConfigError" ? { retry: "no" as const } : {}),
       },
       ...(projectMissing
         ? {

@@ -48,6 +48,18 @@ describe("wave 1: extension_eval says where and what it ran", () => {
     expect(out.error.message).toMatch(/may have acted/);
   });
 
+  it("513: says the verb may have acted as error.retry after-read, and a refusal the engine answered as no", async () => {
+    exec.result = { code: null as unknown as number, stdout: "", stderr: "", timedOut: true, signal: "SIGTERM" };
+    expect(JSON.parse(await runActVerb(["storage", "set", "/p"], "/p", 1000, "extension_storage")).error.retry).toBe("after-read");
+    exec.result = { code: 0, stdout: "progress: done\n", stderr: "", timedOut: false, signal: null };
+    expect(JSON.parse(await runActVerb(["open", "popup", "/p"], "/p", 1000, "extension_open")).error.retry).toBe("after-read");
+    exec.result = { code: 1, stdout: JSON.stringify({ ok: false, error: { name: "NoSession", message: "no session" } }), stderr: "", timedOut: false, signal: null };
+    expect(JSON.parse(await runActVerb(["storage", "get", "/p"], "/p", 1000, "extension_storage")).error.retry).toBe("no");
+    const engineFrame = { schema: 1, ok: false, command: "open", status: "no-session", value: null, error: { code: "E_NO_SESSION", message: "no session" }, warnings: [] };
+    exec.result = { code: 1, stdout: JSON.stringify(engineFrame), stderr: "", timedOut: false, signal: null };
+    expect(JSON.parse(await runActVerb(["open", "popup", "/p"], "/p", 1000, "extension_open")).error.retry).toBe("no");
+  });
+
   it("values JSON cannot carry are named", () => {
     expect(remoteValueNote({ type: "number", unserializableValue: "NaN" })).toMatch(/NaN.*string "NaN"/);
     expect(remoteValueNote({ type: "bigint", unserializableValue: "12n" })).toMatch(/BigInt/);

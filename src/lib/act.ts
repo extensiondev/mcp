@@ -25,6 +25,7 @@ import {
   isEnvelope,
   type ErrorCode,
 } from "./envelope";
+import { withRetry } from "./retry";
 
 export function toMcpSpeak(text: string): string {
   return (
@@ -247,6 +248,7 @@ export async function runActVerb(
         code: "E_CLI",
         name: "CliTimeout",
         message: `This server stopped the extension CLI after ${timeoutMs ?? 30_000} ms (${signal ?? "a signal"}) before it answered. The ${args[0]} verb may already have acted; read the state it changes before repeating it.`,
+        retry: "after-read",
       },
     });
   }
@@ -269,6 +271,7 @@ export async function runActVerb(
       if (isEnvelope(frame)) {
         frame.command = command;
         if (!Array.isArray(frame.warnings)) frame.warnings = [];
+        if (frame.error) frame.error = withRetry(frame.error, command, frame.value);
 
         return JSON.stringify(frame);
       }
@@ -303,6 +306,7 @@ export async function runActVerb(
         code: "E_CLI",
         name: "CliUnreadable",
         message: `The extension CLI exited 0 but its answer could not be read as JSON (${out.slice(0, 200)}). The ${args[0]} verb may have acted; read the state it changes before repeating it.`,
+        retry: "after-read",
       },
     });
   }

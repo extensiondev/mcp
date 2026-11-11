@@ -276,9 +276,24 @@ describe("eval over CDP", () => {
     );
     expect(out.status).toBe("targets-unreadable");
   });
+
+  it("513: is safe to repeat, since nothing was evaluated", async () => {
+    const p = chromeProject({ manifest_version: 3, name: "F", background: { service_worker: "background.js" } });
+    cdp.discoverThrows = "ECONNREFUSED 127.0.0.1:9222";
+    const out = JSON.parse(await evalTool.handler({ projectPath: p.dir, context: "background", expression: "1" }));
+    expect(out.error.retry).toBe("safe");
+  });
 });
 
 describe("open by url over CDP", () => {
+  it("513: is safe to repeat when nothing was navigated", async () => {
+    const p = chromeProject({ manifest_version: 3, name: "F" });
+    cdp.discoverThrows = "socket hang up";
+    const out = JSON.parse(await open.handler({ projectPath: p.dir, url: "https://a.test/", timeout: 500 }));
+    expect(out.status).toBe("targets-unreadable");
+    expect(out.error.retry).toBe("safe");
+  });
+
   it("says the target list could not be read before navigating, and that nothing was navigated", async () => {
     const p = chromeProject({ manifest_version: 3, name: "F" });
     cdp.discoverThrows = "socket hang up";

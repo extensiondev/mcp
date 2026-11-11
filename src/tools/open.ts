@@ -348,6 +348,7 @@ export async function navigateToUrl(
           code: "E_CDP",
           name: "TargetsUnreadable",
           message: `The session's target list could not be read before navigating to ${url}: ${err instanceof Error ? err.message : String(err)}. Nothing was navigated.`,
+          retry: "safe",
         },
         hint: "The session's debug port did not answer. extension_doctor says whether the browser is still up; if it is, retry.",
       });
