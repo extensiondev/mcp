@@ -13,8 +13,10 @@ import { storeMdFieldRows } from "../lib/store-md-fields";
 import { LISTING_STORES, STORE_FIELDS } from "../lib/store-md-listing";
 import { TOOL_DOCS } from "../lib/docs-meta";
 import { validateToolInput } from "../lib/validate-input";
-import { TOOL_POLICY } from "../lib/tool-policy";
-import { REAL_BROWSERS } from "../lib/common-schema";
+import { DEFAULT_SERVER_OPTIONS, FEATURES_ENV, NO_SHIP_ENV, TOOL_POLICY, isServerFlag, resolveServerOptions } from "../lib/tool-policy";
+import { PROJECT_PIN_ENV } from "../lib/credentials";
+import { NO_AUTO_OPEN_ENV } from "../lib/approval-open";
+import { NO_TELEMETRY_ENV } from "../lib/session-identity";
 
 const require = createRequire(import.meta.url);
 const read = (rel: string) => fs.readFileSync(fileURLToPath(new URL(`../../${rel}`, import.meta.url)), "utf8");
@@ -189,24 +191,103 @@ describe("the docs say what the code does", () => {
     expect(read("claude/README.md")).not.toMatch(/^MIT$/m);
   });
 
-  it("quotes the code's own numbers", () => {
+  it("quotes the engine's own Node floor", () => {
     const pkg = require("../../package.json") as { engines: { node: string } };
     const engine = require("extension-develop/package.json") as { engines: { node: string } };
     expect(pkg.engines.node).toBe(engine.engines.node);
-    const server = require("../../server.json") as { description: string };
-    expect(server.description).toContain(`${tools.length} tools, ${REAL_BROWSERS.length} browsers`);
     expect(read("README.md")).toContain("`--features=local,platform`");
   });
 
-  it("lists the registry entry at the version package.json ships", () => {
+  it("describes the package in under 200 characters with no count, and keeps the store and client keywords", () => {
+    const pkg = require("../../package.json") as { description: string; keywords: string[] };
+    expect(pkg.description.length).toBeLessThan(200);
+    expect(pkg.description).not.toMatch(/\d/);
+
+    for (const keyword of ["chrome-web-store", "publish", "edge-add-ons", "firefox-add-ons", "safari", "browser-extension", "extension.js", "codex", "github-copilot", "mcp-server"]) {
+      expect(pkg.keywords, keyword).toContain(keyword);
+    }
+
+    expect(new Set(pkg.keywords).size).toBe(pkg.keywords.length);
+  });
+
+  it("lists the registry entry on the current schema, at the version package.json ships, with the flags and variables the launcher reads", () => {
     const { version } = require("../../package.json") as { version: string };
     const server = require("../../server.json") as {
+      $schema: string;
+      title?: string;
+      description: string;
       version: string;
-      packages: Array<{ identifier: string; version: string }>;
+      repository: { url: string; source: string; id?: string };
+      packages: Array<{
+        identifier: string;
+        version: string;
+        transport: { type: string };
+        packageArguments?: Array<{ type: string; name?: string; choices?: string[]; default?: string }>;
+        environmentVariables?: Array<{ name: string; choices?: string[]; format?: string }>;
+      }>;
+      remotes?: Array<{ type: string; url: string }>;
     };
+
+    expect(server.$schema).toBe("https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json");
+    expect(server.title?.trim().length).toBeGreaterThan(0);
+    expect(server.title?.length).toBeLessThanOrEqual(100);
+    expect(server.description.length).toBeLessThanOrEqual(100);
+    expect(server.description).not.toMatch(/\d/);
+    expect(server.repository).toMatchObject({ url: "https://github.com/extensiondev/mcp", source: "github" });
     expect(server.version).toBe(version);
     expect(server.packages.map((p) => `${p.identifier}@${p.version}`)).toEqual([
       `@extension.dev/mcp@${version}`,
     ]);
+
+    const [pkg] = server.packages;
+    expect(pkg.transport.type).toBe("stdio");
+
+    const named = (pkg.packageArguments ?? []).filter((arg) => arg.type === "named");
+    expect(named.map((arg) => arg.name)).toEqual(["--features", "--project"]);
+    for (const arg of named) expect(isServerFlag(arg.name!), arg.name).toBe(true);
+    const features = named.find((arg) => arg.name === "--features")!;
+    expect(features.choices).toEqual(["local", "local,platform"]);
+    expect(features.default).toBe(DEFAULT_SERVER_OPTIONS.features.join(","));
+
+    for (const choice of features.choices!) {
+      expect(resolveServerOptions([`--features=${choice}`], {}).ok, choice).toBe(true);
+    }
+
+    const env = pkg.environmentVariables ?? [];
+    expect(env.map((v) => v.name).sort()).toEqual(
+      [FEATURES_ENV, NO_SHIP_ENV, PROJECT_PIN_ENV, NO_AUTO_OPEN_ENV, NO_TELEMETRY_ENV].sort(),
+    );
+
+    expect(env.find((v) => v.name === FEATURES_ENV)?.choices).toEqual(features.choices);
+
+    for (const name of [NO_SHIP_ENV, NO_AUTO_OPEN_ENV, NO_TELEMETRY_ENV]) {
+      expect(env.find((v) => v.name === name)?.format, name).toBe("boolean");
+    }
+
+    expect(resolveServerOptions([], { [FEATURES_ENV]: "local,platform", [NO_SHIP_ENV]: "1" })).toMatchObject({
+      ok: true,
+      options: { features: ["local", "platform"], noShip: true },
+    });
+
+    expect(server.remotes).toEqual([{ type: "streamable-http", url: "https://mcp.extension.dev/mcp" }]);
+  });
+
+  it("claims the Glama listing with the same name and sentence the registry carries, under three categories", () => {
+    const glama = require("../../glama.json") as {
+      $schema: string;
+      maintainers: string[];
+      name: string;
+      description: string;
+      categories: string[];
+    };
+    const server = require("../../server.json") as { title: string; description: string };
+
+    expect(glama.$schema).toBe("https://glama.ai/mcp/schemas/server.json");
+    expect(glama.maintainers.length).toBeGreaterThan(0);
+    for (const login of glama.maintainers) expect(login).toMatch(/^[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}$/i);
+    expect(glama.name).toBe(server.title);
+    expect(glama.description).toBe(server.description);
+    expect(glama.categories).toHaveLength(3);
+    expect(new Set(glama.categories).size).toBe(3);
   });
 });

@@ -1,10 +1,12 @@
 {
-  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.extensiondev/mcp",
-  "description": "Build, run, inspect, and publish browser extensions from any MCP client. 38 tools, 13 browsers.",
+  "title": "extension.dev Browser Extensions",
+  "description": "Build, run, debug, test and ship Chrome, Firefox, Edge and Safari extensions from your AI agent.",
   "repository": {
     "url": "https://github.com/extensiondev/mcp",
-    "source": "github"
+    "source": "github",
+    "id": "1413830001"
   },
   "websiteUrl": "https://extension.dev",
   "version": "10.22.0",
@@ -17,7 +19,62 @@
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
-      }
+      },
+      "packageArguments": [
+        {
+          "type": "named",
+          "name": "--features",
+          "description": "Tool groups to expose. local is everything that runs on this machine; local,platform adds the extension.dev tools that share, release and submit to the stores, which need a login.",
+          "default": "local",
+          "choices": [
+            "local",
+            "local,platform"
+          ]
+        },
+        {
+          "type": "named",
+          "name": "--project",
+          "description": "Pin the server to one extension.dev project, so only that project's login is used.",
+          "placeholder": "<workspace>/<project>"
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "EXTENSION_DEV_FEATURES",
+          "description": "Same as --features: the tool groups to expose.",
+          "default": "local",
+          "choices": [
+            "local",
+            "local,platform"
+          ]
+        },
+        {
+          "name": "EXTENSION_DEV_NO_SHIP",
+          "description": "Set to 1 to refuse every call that puts something in front of other people: publish, promote, a real store submit, a share link or a share revoke. The --no-ship flag does the same.",
+          "format": "boolean"
+        },
+        {
+          "name": "EXTENSION_DEV_PROJECT",
+          "description": "Same as --project: pin the server to one extension.dev project.",
+          "placeholder": "<workspace>/<project>"
+        },
+        {
+          "name": "EXTENSION_DEV_NO_AUTO_OPEN",
+          "description": "Set to 1 to stop the server from opening the approval page in the default browser when a platform act needs a human approval.",
+          "format": "boolean"
+        },
+        {
+          "name": "EXTENSION_DEV_NO_TELEMETRY",
+          "description": "Set to 1 to send no telemetry (the one scaffold event and the per-install id header). DO_NOT_TRACK=1 does the same.",
+          "format": "boolean"
+        }
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.extension.dev/mcp"
     }
   ]
 }

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://glama.ai/mcp/schemas/server.json",
+  "maintainers": [
+    "cezaraugusto"
+  ],
+  "name": "extension.dev Browser Extensions",
+  "description": "Build, run, debug, test and ship Chrome, Firefox, Edge and Safari extensions from your AI agent.",
+  "categories": [
+    "Developer Tools",
+    "Browser Automation",
+    "Testing & QA Tools"
+  ]
+}

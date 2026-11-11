@@ -43,6 +43,8 @@ export function installIdentityPath(): string {
   return path.join(installIdentityDir(), "install.json");
 }
 
+export const NO_TELEMETRY_ENV = "EXTENSION_DEV_NO_TELEMETRY";
+
 export function telemetryDisabled(): boolean {
   const off = (value: string | undefined) => {
     const raw = String(value || "")
@@ -53,7 +55,7 @@ export function telemetryDisabled(): boolean {
   };
 
   return (
-    off(process.env.EXTENSION_DEV_NO_TELEMETRY) || off(process.env.DO_NOT_TRACK)
+    off(process.env[NO_TELEMETRY_ENV]) || off(process.env.DO_NOT_TRACK)
   );
 }
 

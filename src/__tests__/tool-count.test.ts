@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { tools as ALL_TOOLS } from "../index";
+import { TOOL_POLICY } from "../lib/tool-policy";
 
 const packageRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -17,6 +18,10 @@ const read = (relative: string): string =>
 
 const registeredNames = ALL_TOOLS.map((t) => t.schema.name).sort();
 const count = ALL_TOOLS.length;
+const platformCount = ALL_TOOLS.filter(
+  (t) => TOOL_POLICY[t.schema.name]?.group === "platform",
+).length;
+const localCount = count - platformCount;
 
 const RETIRED_TOOL_NAMES = [
   "extension_deploy",
@@ -36,22 +41,39 @@ const RETIRED_TOOL_NAMES = [
   "extension_preview",
 ];
 
-const COUNT_BEARING_FILES = ["package.json", "server.json"];
-const TOOL_NAMING_FILES = [...COUNT_BEARING_FILES, "README.md"];
+const COUNT_FREE_FILES = ["package.json", "server.json", "glama.json"];
+const TOOL_NAMING_FILES = [...COUNT_FREE_FILES, "README.md"];
 
-const countsIn = (text: string): number[] =>
-  [...text.matchAll(/(\d+)\s+(?:MCP\s+)?tools\b/g)].map((m) => Number(m[1]));
+const NUMBER_WORDS: Record<string, number> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17,
+  eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50,
+};
+
+const COUNT_PATTERN = new RegExp(
+  `\\b(\\d+|${Object.keys(NUMBER_WORDS).join("|")})\\+?\\s+(?:(MCP|platform|local)\\s+)?tools\\b`,
+  "gi",
+);
+
+type StatedCount = { stated: number; expected: number; text: string };
+
+const countsIn = (text: string): StatedCount[] =>
+  [...text.matchAll(COUNT_PATTERN)].map((m) => {
+    const word = m[1].toLowerCase();
+    const qualifier = (m[2] || "").toLowerCase();
+    const expected = qualifier === "platform" ? platformCount : qualifier === "local" ? localCount : count;
+
+    return { stated: word in NUMBER_WORDS ? NUMBER_WORDS[word] : Number(word), expected, text: m[0] };
+  });
 
 describe("the tool count is derived, never typed", () => {
   it("has a registry with no duplicate names", () => {
     expect(new Set(registeredNames).size).toBe(count);
   });
 
-  for (const file of COUNT_BEARING_FILES) {
-    it(`states the registry size, and only the registry size, in ${file}`, () => {
-      const stated = countsIn(read(file));
-      expect(stated.length).toBeGreaterThan(0);
-      expect(stated).toEqual(stated.map(() => count));
+  for (const file of COUNT_FREE_FILES) {
+    it(`states no tool count in ${file}, which every catalog copies and none refreshes`, () => {
+      expect(countsIn(read(file))).toEqual([]);
     });
   }
 
