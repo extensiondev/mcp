@@ -121,6 +121,7 @@ export interface ProcessInfo {
   profileReused?: boolean;
   serverPid?: number;
   headless?: boolean;
+  idleMinutes?: number | null;
   allowControl?: boolean;
   enableExtension?: boolean;
   developmentTeam?: string;

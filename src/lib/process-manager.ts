@@ -57,6 +57,10 @@ function markerPath(projectPath: string, browser: string): string {
   return path.join(markerDir(), `${markerDigest(projectPath, browser)}.json`);
 }
 
+export function sessionMarkerPath(projectPath: string, browser: string): string {
+  return markerPath(projectPath, browser);
+}
+
 export function sessionSidecarPath(projectPath: string, browser: string, name: string): string {
   return path.join(markerDir(), `${markerDigest(projectPath, browser)}.${name}.json`);
 }
@@ -76,9 +80,11 @@ export function removeSessionMarker(
     }
   }
 
-  try {
-    fs.rmSync(file, { force: true });
-  } catch {
+  for (const target of [file, sessionSidecarPath(projectPath, browser, "idle")]) {
+    try {
+      fs.rmSync(target, { force: true });
+    } catch {
+    }
   }
 }
 
