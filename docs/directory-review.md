@@ -21,7 +21,7 @@ hints of every hosted tool.
 Every tool lists its title twice, as the tool's `title` (MCP 2025-06-18) and as
 `annotations.title`, and every hint is an explicit boolean (`listedToolEntry` in
 `src/lib/tool-dispatch.ts`). A hosted projection with fewer actions than its module names its own
-title and hints in `src/hosted.ts`; the rest come from `src/lib/tool-policy.ts`. The `download`
+title and hints in `src/hosted.ts`; the rest come from the table in `src/lib/tool-annotations.ts` through `src/lib/tool-policy.ts`. The `download`
 action and its `to` input are not served hosted: they save a package to the caller's disk, which
 a hosted server does not have.
 
