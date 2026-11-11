@@ -198,6 +198,22 @@ Take a shallow DOM snapshot of one open surface or targetId, or list what is ope
 | `browser` | string | no |  | Session browser; required when several run. |
 | `timeout` | number | no |  | Timeout ms (default 30000; Firefox 10000; debug port 15000). |
 
+## extension_element
+
+Click, fill, read the text of, or wait for one element by CSS selector in an open surface, a page by url, or a targetId. Runs no caller code, so no allowEval; Chromium only; the selector must match one element.
+
+| input | type | required | default | description |
+| --- | --- | --- | --- | --- |
+| `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
+| `action` | "click" \| "fill" \| "text" \| "wait" | yes |  | click (a real mouse press), fill, text, wait (until visible). |
+| `selector` | string | yes |  | CSS selector matching exactly one element. |
+| `value` | string | no |  | fill: the value to set. |
+| `context` | "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" | no |  | An open surface (extension_open first). |
+| `url` | string | no |  | A web page's tab by url. |
+| `targetId` | string | no |  | A page's targetId (extension_open, or dom_snapshot listTargets); overrides url. |
+| `browser` | string | no |  | Session browser; required when several run. |
+| `timeout` | number | no |  | Timeout ms; wait polls until it (default 10000, max 30000). |
+
 ## extension_eval
 
 Evaluate JavaScript in a running extension's background, surface, content script, page or targetId. Needs allowEval:true at start (by hand: --allow-eval) on every route, the debug port included, whose runs carry a user gesture. Safari: pages only; extension_logs reads the background.

@@ -854,6 +854,75 @@
       ]
     },
     {
+      "name": "extension_element",
+      "tier": "act",
+      "group": "local",
+      "description": "Click, fill, read the text of, or wait for one element by CSS selector in an open surface, a page by url, or a targetId. Runs no caller code, so no allowEval; Chromium only; the selector must match one element.",
+      "gate": "a live Chromium dev or start session with its debug port; no allowEval",
+      "samplePrompt": "Click the Save button in the popup, then read the status line",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": false,
+      "untrusted": true,
+      "inputs": [
+        {
+          "name": "projectPath",
+          "type": "string",
+          "required": true,
+          "description": "Project root of a running session: extension_dev, extension_start, or `npx extension dev|start` by hand"
+        },
+        {
+          "name": "action",
+          "type": "\"click\" | \"fill\" | \"text\" | \"wait\"",
+          "required": true,
+          "description": "click (a real mouse press), fill, text, wait (until visible)."
+        },
+        {
+          "name": "selector",
+          "type": "string",
+          "required": true,
+          "description": "CSS selector matching exactly one element."
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "required": false,
+          "description": "fill: the value to set."
+        },
+        {
+          "name": "context",
+          "type": "\"popup\" | \"options\" | \"sidebar\" | \"devtools\" | \"newtab\" | \"history\" | \"bookmarks\"",
+          "required": false,
+          "description": "An open surface (extension_open first)."
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "required": false,
+          "description": "A web page's tab by url."
+        },
+        {
+          "name": "targetId",
+          "type": "string",
+          "required": false,
+          "description": "A page's targetId (extension_open, or dom_snapshot listTargets); overrides url."
+        },
+        {
+          "name": "browser",
+          "type": "string",
+          "required": false,
+          "description": "Session browser; required when several run."
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "required": false,
+          "description": "Timeout ms; wait polls until it (default 10000, max 30000)."
+        }
+      ]
+    },
+    {
       "name": "extension_eval",
       "tier": "act",
       "group": "local",
