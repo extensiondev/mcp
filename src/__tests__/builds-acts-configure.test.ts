@@ -129,6 +129,89 @@ describe(SUITE, () => {
     expect(world.calls.some((call) => call.url.endsWith("/api/cli/approvals"))).toBe(false);
   });
 
+  it("ledger 501: a 5xx on the write reads the settings back, says nothing was saved, and allows one retry after a wait", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+    world.routes[`PUT ${SETTINGS_ROUTE}`] = () => ({ status: 500, body: { message: "Internal server error" } });
+
+    const out = JSON.parse(await builds({ action: "configure", buildSettings: { firefox: { buildCommand: "pnpm build" } }, api: API }));
+    const reads = world.calls.filter((call) => call.method === "GET" && call.url.endsWith("/settings/build"));
+
+    expect(reads).toHaveLength(2);
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("unavailable");
+    expect(out.error.code).toBe("E_PLATFORM");
+    expect(out.error.message).toContain("answered 500: Internal server error");
+    expect(out.value).toMatchObject({ saved: "no", attempt: 1, retryAfterSeconds: 10 });
+    expect(out.value.trackUrl).toContain("/acme/widget/");
+    expect(out.hint).toContain("nothing was saved");
+    expect(out.hint).toContain("call again with the same arguments, once");
+  });
+
+  it("ledger 501: the second 5xx for the same change says to stop, and names the console page and where to report it", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+    world.routes[`PUT ${SETTINGS_ROUTE}`] = () => ({ status: 502, body: { message: "Bad gateway" } });
+
+    await builds({ action: "configure", buildSettings: { edge: { enabled: true } }, api: API });
+    const out = JSON.parse(await builds({ action: "configure", buildSettings: { edge: { enabled: true } }, api: API }));
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("unavailable");
+    expect(out.value).toMatchObject({ saved: "no", attempt: 2 });
+    expect(out.value.retryAfterSeconds).toBeUndefined();
+    expect(out.hint).toContain("stop retrying");
+    expect(out.hint).toContain(out.value.trackUrl);
+    expect(out.hint).toContain("https://github.com/extensiondev/mcp/issues");
+    expect(out.hint).not.toContain("call again");
+  });
+
+  it("ledger 501: a 5xx whose readback shows the change in place answers build-configured and does not ask for a retry", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+    const merged = { chrome: CURRENT.chrome, edge: CURRENT.edge, firefox: { ...CURRENT.firefox, buildCommand: "pnpm build --browser firefox" } };
+    let written = false;
+
+    world.routes[`PUT ${SETTINGS_ROUTE}`] = () => {
+      written = true;
+
+      return { status: 500, body: { message: "Internal server error" } };
+    };
+
+    world.routes[`GET ${SETTINGS_ROUTE}`] = () => ({ body: { buildSettings: written ? { ...merged, safari: CURRENT.safari } : CURRENT } });
+
+    const out = JSON.parse(
+      await builds({ action: "configure", buildSettings: { firefox: { buildCommand: "pnpm build --browser firefox" } }, api: API }),
+    );
+
+    expect(out.ok).toBe(true);
+    expect(out.status).toBe("build-configured");
+    expect(out.value.buildSettings.firefox.buildCommand).toBe("pnpm build --browser firefox");
+    expect(out.warnings.join(" ")).toContain("answered 500");
+    expect(out.hint).toContain("nothing needs sending again");
+    expect(out.hint).not.toContain("call again");
+  });
+
+  it("ledger 501: a 5xx whose readback also fails says whether anything was saved is unknown", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+    let reads = 0;
+    world.routes[`PUT ${SETTINGS_ROUTE}`] = () => ({ status: 503, body: { message: "Service unavailable" } });
+    world.routes[`GET ${SETTINGS_ROUTE}`] = () => (reads++ === 0 ? { body: { buildSettings: CURRENT } } : { status: 503, body: { message: "Service unavailable" } });
+
+    const out = JSON.parse(await builds({ action: "configure", buildSettings: { chrome: { enabled: false } }, api: API }));
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("unavailable");
+    expect(out.value).toMatchObject({ saved: "unknown", attempt: 1 });
+    expect(out.hint).toContain("whether anything was saved is unknown");
+    expect(out.hint).toContain("once");
+  });
+
   it("configure with an approval that is still pending says to approve and call again, and writes nothing", async () => {
     if (process.platform === "win32") return;
 

@@ -11,7 +11,7 @@ import crypto from "node:crypto";
 import { envelope } from "../lib/envelope";
 import { type ApprovalGateInput } from "../lib/approval-gate";
 import { projectApiGet } from "../lib/project-api";
-import { approvedSettingsWrite } from "../lib/settings-write";
+import { approvedSettingsWrite, UNCONFIRMED_RETRY_SECONDS, unconfirmedWriteSentence, type ReadBack, type UnconfirmedWrite } from "../lib/settings-write";
 import { trackUrl } from "../lib/track-url";
 import { COMMAND, actRefusal, badRequest, isRow, openFor, text, type ActArgs, type Row } from "./builds-acts";
 
@@ -121,6 +121,58 @@ function recordedConfigure(json: Row): { buildSettings: Row | null; changes: str
   };
 }
 
+function settingsHold(stored: Row, merged: Record<string, BrowserConfig>): boolean {
+  return Object.entries(merged).every(([browser, config]) => {
+    const kept = isRow(stored[browser]) ? (stored[browser] as Row) : {};
+
+    return FIELDS.every((field) => config[field] === "" || kept[field] === config[field]);
+  });
+}
+
+function unconfirmedConfigure(args: {
+  unconfirmed: UnconfirmedWrite;
+  sent: { status: number; code: string; message: string };
+  project: string;
+  merged: Record<string, BrowserConfig>;
+  settingsPage: string;
+}): string {
+  const { unconfirmed, sent, project, merged, settingsPage } = args;
+
+  if (unconfirmed.saved === "yes") {
+    return envelope({
+      ok: true,
+      command: COMMAND,
+      status: "build-configured",
+      value: { action: "configure", project, buildSettings: unconfirmed.state ?? merged, trackUrl: settingsPage },
+      hint: `${project}'s build settings now read as buildSettings: the platform answered ${sent.status} to the write, but the settings read back with the change in place, so nothing needs sending again. The next build runs them: a push, or extension_builds action:"rebuild".`,
+      warnings: [`${sent.message}; the change was saved anyway.`],
+    });
+  }
+
+  const retry = unconfirmed.attempt < 2;
+
+  return envelope({
+    ok: false,
+    command: COMMAND,
+    status: "unavailable",
+    value: {
+      action: "configure",
+      project,
+      saved: unconfirmed.saved,
+      attempt: unconfirmed.attempt,
+      ...(retry ? { retryAfterSeconds: UNCONFIRMED_RETRY_SECONDS } : {}),
+      trackUrl: settingsPage,
+    },
+    error: {
+      code: "E_PLATFORM",
+      name: "BuildsRefused",
+      ...(sent.code ? { platformCode: sent.code } : {}),
+      message: sent.message,
+    },
+    hint: unconfirmedWriteSentence({ what: "build settings", unconfirmed, page: settingsPage, pageWord: "console build settings page" }),
+  });
+}
+
 const SETTINGS_CONSUMED_NEXT = 'The call that used it may already have changed the settings: read them with extension_workspace (action: "settings") first, and request a fresh approval only if the change is not there.';
 
 export async function configure(args: ActArgs): Promise<string> {
@@ -137,7 +189,16 @@ export async function configure(args: ActArgs): Promise<string> {
   const merged = mergeSettings(isRow(current.json.buildSettings) ? current.json.buildSettings : {}, read.change);
   const scope = { settingsDigest: settingsDigest(merged) };
   const project = `${api.ref.workspace}/${api.ref.project}`;
+  const settingsPage = trackUrl("build-settings", { workspace: api.ref.workspace, project: api.ref.project }, args.api);
   const approvalId = text(args.approvalId);
+
+  const readBack = async (): Promise<ReadBack> => {
+    const again = await projectApiGet<Row>(api, "settings/build");
+    if (!again.ok || !isRow(again.json.buildSettings)) return { saved: "unknown" };
+
+    return { saved: settingsHold(again.json.buildSettings, merged) ? "yes" : "no", state: again.json.buildSettings };
+  };
+
   const gateInput: ApprovalGateInput = {
     command: COMMAND,
     action: SETTINGS_ACTION,
@@ -173,7 +234,12 @@ export async function configure(args: ActArgs): Promise<string> {
     undone: "Nothing was changed by this call.",
     value: { action: "configure" },
     next: { used: SETTINGS_CONSUMED_NEXT },
+    readBack,
   });
+
+  if (!written.ok && written.unconfirmed) {
+    return unconfirmedConfigure({ unconfirmed: written.unconfirmed, sent: written.sent, project, merged, settingsPage });
+  }
 
   if (!written.ok) return written.out ?? actRefusal(written.sent, "configure", api, args);
 
@@ -195,7 +261,7 @@ export async function configure(args: ActArgs): Promise<string> {
       ...(recorded.changes ? { changes: recorded.changes } : {}),
       ...(recorded.defaulted.length ? { defaulted: recorded.defaulted } : {}),
       ...(Object.keys(recorded.notes).length ? { notes: recorded.notes } : {}),
-      trackUrl: trackUrl("build-settings", { workspace: api.ref.workspace, project: api.ref.project }, args.api),
+      trackUrl: settingsPage,
     },
     hint: `${project}'s build settings now read as buildSettings.${gateLine}${defaultedLine}${noteLines} The next build runs them: a push, or extension_builds action:"rebuild".`,
   });
