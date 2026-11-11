@@ -226,6 +226,7 @@ describe("the docs say what the code does", () => {
         environmentVariables?: Array<{ name: string; choices?: string[]; format?: string }>;
       }>;
       remotes?: Array<{ type: string; url: string }>;
+      icons?: Array<{ src: string; mimeType?: string; sizes?: string[] }>;
     };
 
     expect(server.$schema).toBe("https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json");
@@ -270,6 +271,9 @@ describe("the docs say what the code does", () => {
     });
 
     expect(server.remotes).toEqual([{ type: "streamable-http", url: "https://mcp.extension.dev/mcp" }]);
+    expect(server.icons).toEqual([
+      { src: "https://media.extension.land/brand/extension-dev/favicon/icon-512.png", mimeType: "image/png", sizes: ["512x512"] },
+    ]);
   });
 
   it("claims the Glama listing with the same name and sentence the registry carries, under three categories", () => {

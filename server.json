@@ -9,6 +9,15 @@
     "id": "1413830001"
   },
   "websiteUrl": "https://extension.dev",
+  "icons": [
+    {
+      "src": "https://media.extension.land/brand/extension-dev/favicon/icon-512.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "512x512"
+      ]
+    }
+  ],
   "version": "10.22.0",
   "packages": [
     {
