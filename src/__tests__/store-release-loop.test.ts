@@ -97,7 +97,7 @@ describe("extension_submit preflight answers what the next release costs in appr
 
     expect(minted).toHaveLength(1);
     expect(minted[0].body.scope.acts).toEqual(["chrome:upload", "edge:upload", "firefox:upload", "safari:publish", "safari:upload"]);
-    expect(platform.sent("POST", "/api/cli/stores/submit")).toHaveLength(0);
+    expect(platform.sent("POST", "/api/cli/stores/submit").map((call) => call.body.dryRun)).toEqual([true]);
   });
 
   it("keeps the release act when Safari reaches review but STORE.md holds the release", async () => {

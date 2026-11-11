@@ -282,9 +282,7 @@ describe("the Chrome Web Store goal walks from not connected to submitted with a
     );
 
     expect(out.value.checkUrl).toMatch(/\/acme\/widget\/submissions\/chrome$/);
-    expect(
-      world.calls.some((call) => SUBMIT.test(`${call.method} ${call.path}`)),
-    ).toBe(false);
+    expect(world.calls.filter((call) => SUBMIT.test(`${call.method} ${call.path}`)).map((call) => call.body.dryRun)).toEqual([true]);
   });
 
   it("6. resume: the approved submission answers submitted and nextStep publish at the item", async () => {

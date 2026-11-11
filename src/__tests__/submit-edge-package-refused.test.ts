@@ -16,10 +16,10 @@ describe("extension_submit renders the platform's Edge package refusal", () => {
 
     process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
     platform.login();
-    let dispatchCalls = 0;
+    const dispatchCalls: unknown[] = [];
 
-    platform.routes[`POST ${SUBMIT}`] = () => {
-      dispatchCalls += 1;
+    platform.routes[`POST ${SUBMIT}`] = (call) => {
+      dispatchCalls.push(call.body.dryRun);
 
       return {
         status: 409,
@@ -39,7 +39,7 @@ describe("extension_submit renders the platform's Edge package refusal", () => {
       await submit({ browsers: ["edge"], buildSha: "2bda5b2", dryRun: false, api: API }),
     );
 
-    expect(dispatchCalls).toBe(1);
+    expect(dispatchCalls).toEqual([true, false]);
     expect(out.ok).toBe(false);
     expect(out.status).toBe("package-refused");
     expect(out.error.platformCode).toBe("EDGE_PACKAGE_HAS_ARCHIVES");

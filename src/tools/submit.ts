@@ -110,6 +110,7 @@ import {
 } from "../lib/store-connection";
 import { browserBuildRefusal, browserBuildVerdicts } from "../lib/browser-builds";
 import { localSubmitPrecheck } from "../lib/submit-local-precheck";
+import { dryRunStoreRun, platformUnavailableAnswer } from "../lib/store-run-unavailable";
 import { appendWarnings } from "../lib/envelope-warnings";
 import { reviewPromiseFromApproval } from "../lib/review-promise";
 import { SUBMIT_ACTION_SAFETY } from "../lib/submit-action-safety";
@@ -602,8 +603,12 @@ async function connectionPrecheck(
     if (verdict) return { refused: browserBuildRefusal(verdict, browsers, scope.buildSha), modes, reports: read.reports, warnings: [] };
 
     const local = await localSubmitPrecheck({ api: read.api, browsers, buildSha: scope.buildSha, projectPath: args.projectPath, ref, apiBase: args.api });
+    if (local.refused) return { refused: local.refused, modes, reports: read.reports, warnings: local.warnings };
 
-    return { refused: local.refused, modes, reports: read.reports, warnings: local.warnings };
+    const unavailable = read.api && !String(args.approvalId ?? "").trim() ? await dryRunStoreRun(read.api, browsers, scope.buildSha) : null;
+    const refused = unavailable ? platformUnavailableAnswer({ command: "extension_submit", found: unavailable, dryRun: false, ref, stores: browsers, buildSha: scope.buildSha }) : null;
+
+    return { refused, modes, reports: read.reports, warnings: local.warnings };
   }
 
   const step = connectionStep(blocked, connections[blocked.browser], ctx);

@@ -50,7 +50,7 @@ describe("the submit approval's review sentence follows the per-store lines it s
     expect(out.value.nextStep.say).toContain(expected);
     expect(out.hint).toContain(expected);
     expect(JSON.stringify(out)).not.toContain("Nothing goes to review");
-    expect(platform.sent("POST", "/api/cli/stores/submit")).toHaveLength(0);
+    expect(platform.sent("POST", "/api/cli/stores/submit").map((call) => call.body.dryRun)).toEqual([true]);
   });
 
   it("keeps the draft promise when every line stops at a draft or signs without review", async () => {

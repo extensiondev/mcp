@@ -120,6 +120,7 @@ import { publishVersion } from "./store-publish-version";
 import { iconPaddingSentences, iconPaddingView } from "../lib/chrome-icon-padding";
 import { builtToolchainFor, reviewerNoteToolchainCheck } from "../lib/store-md-toolchain";
 import { firefoxListingCheck, safariDescriptionCheck, withLocalChecks } from "../lib/store-preflight-local";
+import { dryRunStoreRun, platformUnavailableStep, storeRunCheck } from "../lib/store-run-unavailable";
 
 import type { PackageScope } from "../lib/package-address";
 import type { ListingStore } from "../lib/store-md-listing";
@@ -633,7 +634,7 @@ function checkView(check: Row, withLabel: boolean): Row {
   if (withLabel && text(check.label)) out.label = text(check.label);
   if (text(check.severity)) out.severity = text(check.severity);
 
-  for (const key of ["message", "expected", "actual", "docsUrl"]) {
+  for (const key of ["message", "expected", "actual", "docsUrl", "owner", "reportUrl", "platformLine"]) {
     if (text(check[key])) out[key] = text(check[key]);
   }
 
@@ -1024,12 +1025,33 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     };
   };
 
+  const updateManifests = asked.map((store, i) => (reads[i].ok && store === "firefox" ? firefoxUpdateManifestOf(reads[i].json, api.ref, text(args.projectPath), args.api) : null));
+  const checked = asked.map((store, i) => {
+    const read = reads[i];
+    if (!read.ok) return null;
+
+    const local = store === "safari" ? [safariDescriptionCheck(text(args.projectPath))] : store === "firefox" ? [firefoxListingCheck(listings[i]), reviewerNoteToolchainCheck(text(args.projectPath), builtToolchain)] : [];
+
+    return withLocalChecks(relayFirefoxUpdateUrl(read.json, updateManifests[i]), local);
+  });
+  const shaFor = (json: Row, store: string): string => text(args.buildSha) || text(json.buildId) || buildsReadByPackageChecks(json, store)[0] || "";
+  const platformFaults = await Promise.all(
+    asked.map((store, i) => {
+      const json = checked[i];
+      if (!json || !isRow(json.summary) || json.summary.canSubmit !== true) return Promise.resolve(null);
+
+      return dryRunStoreRun(api, [store], shaFor(json, store));
+    }),
+  );
+  const platformBlocked = asked.filter((store, i) => platformFaults[i] !== null);
+  const platformScope = { ref: api.ref, stores: platformBlocked, buildSha: platformBlocked.length ? shaFor(checked[asked.indexOf(platformBlocked[0]!)]!, platformBlocked[0]!) : "" };
+
   asked.forEach((store, i) => {
     const read = reads[i];
     if (read.ok) {
-      const updateManifest = store === "firefox" ? firefoxUpdateManifestOf(read.json, api.ref, text(args.projectPath), args.api) : null;
-      const local = store === "safari" ? [safariDescriptionCheck(text(args.projectPath))] : store === "firefox" ? [firefoxListingCheck(listings[i]), reviewerNoteToolchainCheck(text(args.projectPath), builtToolchain)] : [];
-      const json = withLocalChecks(relayFirefoxUpdateUrl(read.json, updateManifest), local);
+      const updateManifest = updateManifests[i];
+      const fault = platformFaults[i];
+      const json = withLocalChecks(checked[i]!, [fault ? storeRunCheck(fault, { ref: api.ref, stores: [store], buildSha: shaFor(checked[i]!, store) }) : null]);
       reports[store] = json;
 
       const block = storePreflightView(json, store, text(args.projectPath) ? readLocalListing(text(args.projectPath), store as ListingStore) : null);
@@ -1464,7 +1486,9 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     ]),
   );
   const goes = asked.filter((store) => isRow(stores[store]) && (stores[store] as Row).canSubmit === true && (stores[store] as Row).readyForReview !== false);
-  const step = reviewBlocks
+  const step = platformBlocked.length
+    ? platformUnavailableStep(platformScope)
+    : reviewBlocks
     ? nextStep("done", reviewSay, reviewUrl)
     : captureStep && (!green || !notReadyStep)
       ? captureStep

@@ -289,7 +289,7 @@ describe("extension_submit points a person at the Chrome Web Store connection in
     expect(out.hint).toContain("2026-10-19T19:40:00.000Z");
     expect(out.hint).toContain("Nothing goes to review until you publish.");
     expect(out.error.message).toContain("Nothing goes to review until you publish.");
-    expect(platform.sent("POST", SUBMIT)).toHaveLength(0);
+    expect(platform.sent("POST", SUBMIT).map((call) => call.body.dryRun)).toEqual([true]);
   });
 
   it("no submit answer names a store secret, whatever the platform said", async () => {

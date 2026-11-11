@@ -66,7 +66,7 @@ describe("a real submit naming several stores asks for one approval per version"
     expect(out.value.lines.map((row: Line) => row.store)).toEqual(["chrome", "firefox"]);
     expect(out.value.nextStep.say).toContain("The page lists 2 stores; uncheck one to leave it out.");
     expect(out.hint).toContain("one line per store");
-    expect(platform.sent("POST", "/api/cli/stores/submit")).toHaveLength(0);
+    expect(platform.sent("POST", "/api/cli/stores/submit").map((call) => call.body.dryRun)).toEqual([true]);
   });
 
   it("asks the version act for Safari alone under the saved review mode, with the publish line beside the upload, and names it when the upload lands (ledger 324)", async () => {

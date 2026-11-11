@@ -14,7 +14,9 @@ import { describe, expect, it } from "vitest";
 
 import { buildSummaryPath } from "../lib/session-paths";
 import { REVIEWER_NOTE_TOOLCHAIN_CHECK, reviewerNoteBuildLine, toolchainDifferences, toolchainSentence } from "../lib/store-md-toolchain";
+import { WRITE_FAILURE_REPORT_URL } from "../lib/settings-write";
 import { FIREFOX_LISTING_CHECK, SAFARI_DESCRIPTION_CHECK, SAFARI_DESCRIPTION_MAX } from "../lib/store-preflight-local";
+import { PLATFORM_UNAVAILABLE_SENTENCE, PLATFORM_UNAVAILABLE_STATUS, STORE_RUN_CHECK, storeRunUnavailable } from "../lib/store-run-unavailable";
 import { LOCAL_CHECK_FAILED_STATE, SAFARI_DESCRIPTION_UNCHECKED } from "../lib/submit-local-precheck";
 import { handler as submit } from "../tools/submit";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
@@ -28,6 +30,12 @@ const PREFLIGHT = (store: string) => `POST ${PROJECT_ROUTE}/stores/${store}/subm
 const LISTING = (store: string) => `GET ${PROJECT_ROUTE}/stores/${store}/listing`;
 const BUILD = `GET ${PROJECT_ROUTE}/builds/${SHA}`;
 const SETTINGS = `GET ${PROJECT_ROUTE}/settings/build`;
+
+const NO_STORE_RUN = "No store submission workflow (the store run) found on the project's build environment";
+const LANE_NOT_TAKING = "Store submissions for this project run on the build lane, which is not taking them yet. Nothing was sent to the store, and your approval was not spent.";
+const ON_FILE = { store: "firefox", listing: { title: "Widget" }, media: {}, updatedAt: "2026-11-06T23:19:00.000Z" };
+
+const said = (out: Row): string => JSON.stringify(out, (key, value) => (key === "platformLine" ? undefined : value));
 
 const CONNECTED: Record<string, Row> = {
   safari: { kind: "app-store-connect", connectedAs: "Visionario", healthy: true, itemId: "6749000000", itemLinked: true },
@@ -126,6 +134,54 @@ describe("a real submit runs the preflight's two local checks before the approva
     expect(out.status).toBe("approval-required");
     expect(out.warnings).toContain(SAFARI_DESCRIPTION_UNCHECKED);
     expect(platform.sent("POST", APPROVALS)).toHaveLength(1);
+  });
+
+  it("refuses a Firefox submit as platform-unavailable before any approval POST when the submit route's dry run names a missing store run, and the preflight fails the integration stage with the same row (ledger 508)", async () => {
+    stores("firefox");
+    platform.routes[LISTING("firefox")] = () => ({ body: ON_FILE });
+    platform.routes[`POST ${DISPATCH}`] = () => ({ status: 404, body: { message: NO_STORE_RUN } });
+
+    const out = await real(["firefox"]);
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe(PLATFORM_UNAVAILABLE_STATUS);
+    expect(out.value).toMatchObject({ owner: "platform", refusedBeforeApproval: true, reportUrl: WRITE_FAILURE_REPORT_URL, platformLine: NO_STORE_RUN });
+    expect(out.hint).toContain(PLATFORM_UNAVAILABLE_SENTENCE);
+    expect(out.hint).toContain(`${WRITE_FAILURE_REPORT_URL} with the project acme/widget, the store firefox and build ${SHA}`);
+    expect(said(out)).not.toMatch(/workflow|store\.yml/i);
+    expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
+    expect(platform.sent("POST", DISPATCH).map((call) => call.body)).toEqual([{ browsers: ["firefox"], buildSha: SHA, dryRun: true }]);
+
+    const read = JSON.parse(await submit({ action: "preflight", browsers: ["firefox"], buildSha: SHA, api: API }));
+    const view = read.value.stores.firefox as Row;
+    const row = (view.failing as Row[]).find((check) => check.id === STORE_RUN_CHECK)!;
+
+    expect(view.canSubmit).toBe(false);
+    expect(row).toMatchObject({ owner: "platform", severity: "blocking", reportUrl: WRITE_FAILURE_REPORT_URL });
+    expect(row.message).toContain(PLATFORM_UNAVAILABLE_SENTENCE);
+    expect(read.value.nextStep.say).toContain(PLATFORM_UNAVAILABLE_SENTENCE);
+    expect(said(read)).not.toMatch(/workflow|store\.yml/i);
+  });
+
+  it("treats a 409 STORE_RUN_UNAVAILABLE or MIRRORS_FROZEN as the same platform fault with no approval asked, and leaves every other refusal alone", async () => {
+    stores("firefox");
+    platform.routes[LISTING("firefox")] = () => ({ body: ON_FILE });
+    platform.routes[`POST ${DISPATCH}`] = () => ({ status: 409, body: { code: "STORE_RUN_UNAVAILABLE", approvalRefunded: true, message: LANE_NOT_TAKING } });
+
+    const out = await real(["firefox"]);
+
+    expect(out.status).toBe(PLATFORM_UNAVAILABLE_STATUS);
+    expect(out.error.platformCode).toBe("STORE_RUN_UNAVAILABLE");
+    expect(out.value.approvalRefunded).toBeUndefined();
+    expect(out.error.message).toContain("no approval was asked for");
+    expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
+
+    expect(storeRunUnavailable(409, { code: "MIRRORS_FROZEN", message: "The mirrors are frozen." })).toMatchObject({ code: "MIRRORS_FROZEN" });
+    expect(storeRunUnavailable(404, { message: "No store submission workflow (store.yml) found on the project's mirror repository." })).toMatchObject({ status: 404 });
+    expect(storeRunUnavailable(404, { message: "Build not found", code: "UNKNOWN_BUILD" })).toBeNull();
+    expect(storeRunUnavailable(404, { message: "not found" })).toBeNull();
+    expect(storeRunUnavailable(409, { code: "EDGE_PACKAGE_HAS_ARCHIVES", message: "nested archives" })).toBeNull();
+    expect(storeRunUnavailable(500, { message: NO_STORE_RUN })).toBeNull();
   });
 });
 

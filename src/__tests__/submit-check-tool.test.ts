@@ -11,6 +11,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import { createServer } from "../index";
+import { PLATFORM_UNAVAILABLE_SENTENCE, PLATFORM_UNAVAILABLE_STATUS } from "../lib/store-run-unavailable";
 import { SHARED_INPUT_NOTE, handler as checkHandler, schema as checkSchema } from "../tools/submit-check";
 import { schema as submitSchema } from "../tools/submit";
 import { usePlatformWorld, WORLD_API } from "./fixtures/platform-world";
@@ -73,7 +74,27 @@ describe("extension_submit_check takes the calls that only read or ask, under a 
     expect(out.status).toBe("approval-required");
     expect(out.value.approvalUrl).toContain("/device/approve/apr_world");
     expect(sent()).toContain("POST /api/cli/approvals");
-    expect(sent()).not.toContain(STORE_SEND);
+    expect(world.calls.filter((call) => `${call.method} ${call.path}` === STORE_SEND).map((call) => call.body.dryRun)).toEqual([true]);
+  });
+
+  it("asks no human while the platform cannot take the submission: a dry run answering STORE_RUN_UNAVAILABLE is platform-unavailable with no approval POST (ledger 508)", async () => {
+    world.login();
+    world.routes.push([
+      /^POST \/api\/cli\/stores\/submit$/,
+      () => ({ status: 409, body: { code: "STORE_RUN_UNAVAILABLE", approvalRefunded: true, message: "Store submissions for this project run on the build lane, which is not taking them yet." } }),
+    ]);
+
+    const asked = await world.call("extension_submit_check", { browsers: ["chrome"], buildSha: "603fc8a", dryRun: false, ...api });
+    const dry = await world.call("extension_submit_check", { browsers: ["chrome"], buildSha: "603fc8a", ...api });
+
+    expect(asked.command).toBe("extension_submit_check");
+    expect(asked.status).toBe(PLATFORM_UNAVAILABLE_STATUS);
+    expect(asked.value).toMatchObject({ owner: "platform", refusedBeforeApproval: true });
+    expect(asked.hint).toContain(PLATFORM_UNAVAILABLE_SENTENCE);
+    expect(dry.status).toBe(PLATFORM_UNAVAILABLE_STATUS);
+    expect(dry.value.approvalRefunded).toBeUndefined();
+    expect(sent()).not.toContain("POST /api/cli/approvals");
+    expect(sent().filter((call) => call === STORE_SEND)).toHaveLength(2);
   });
 
   it("refuses a store act, the call spending an approval and a server with its gate off, before anything leaves the machine", async () => {
