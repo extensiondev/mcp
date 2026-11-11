@@ -6,6 +6,9 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import fs from "node:fs";
+import path from "node:path";
+
 import { wwwImportPath } from "@extension.dev/urls/paths";
 
 import { linksOf, madeSentence, recordedOutcome } from "../lib/act-outcome";
@@ -35,7 +38,21 @@ import {
   type HeldCreateGrant,
 } from "../lib/held-create-grant";
 import { createProjectBatch } from "../lib/project-create-batch";
-import { buildCreateBody, DEFAULT_BUILD_COMMAND } from "../lib/project-create-body";
+import { buildCreateBody, DEFAULT_BUILD_COMMAND, type CreateBodySource } from "../lib/project-create-body";
+import {
+  projectCreateUrl,
+  SOURCE_UPLOAD_CONSUMED_CODE,
+  uploadProjectSource,
+  type SourceUploadOutcome,
+} from "../lib/project-source-upload";
+import {
+  buildSourceArchive,
+  looksLikeExtensionFolder,
+  megabytes,
+  SOURCE_SKIPPED_EXTENSIONS,
+  SOURCE_SKIPPED_FOLDERS,
+  sourceManifestPath,
+} from "../lib/source-archive";
 import { consoleBase, consoleProjectUrl } from "../lib/registry";
 import { mcpOrigins } from "../lib/origins";
 import { laneClosedFacts, laneClosedHint, platformHoldEnvelope, sawPlatformHold, type CreatePrefill } from "../lib/platform-hold";
@@ -79,7 +96,7 @@ const CREATE_STUCK_MINUTES = CREATE_STUCK_AFTER_SECONDS / 60;
 export const schema = {
   name: "extension_project_create",
   description:
-    `Create an extension.dev project from a pushed GitHub repo, BEFORE extension_auth; it reads GitHub only, no call uploads a local folder. First call: a URL a signed-in workspace member approves; resume with deviceCode and waitSeconds, the login is stored too. The first build spends one build of the workspace's monthly allowance, running the build command exactly as stored. projects: up to ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} per approval, at most ${PLATFORM_CREATES_PER_HOUR} per hour, never split silently.`,
+    `Create an extension.dev project from its folder (projectPath, uploaded, no push) or a pushed GitHub repo, BEFORE extension_auth. First call: a URL a signed-in workspace member approves; resume with deviceCode and waitSeconds, the login is stored too. The first build spends one build of the workspace's monthly allowance, running the build command exactly as stored. projects: up to ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} per approval, at most ${PLATFORM_CREATES_PER_HOUR} per hour, never split silently.`,
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -87,9 +104,13 @@ export const schema = {
         type: "string",
         description: "New '<workspace>/<project>'.",
       },
+      projectPath: {
+        type: "string",
+        description: `Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). ${SOURCE_SKIPPED_FOLDERS.join(", ")}, ${SOURCE_SKIPPED_EXTENSIONS.join(", ")} and .gitignore entries stay out; 4 MB zipped at most.`,
+      },
       repo: {
         type: "string",
-        description: "GitHub '<owner>/<repo>' the source is pushed to; required.",
+        description: "GitHub '<owner>/<repo>' the source is pushed to; instead of projectPath.",
       },
       installationId: {
         type: "string",
@@ -184,7 +205,13 @@ function closedLane(name: string, message: string, api: string, prefill: CreateP
   });
 }
 
-function repoRequired(apiBase: string): string {
+type CreateSource =
+  | { kind: "github"; repo: string }
+  | { kind: "upload"; root: string; defaulted: boolean; zip: Buffer; bytes: number; files: number };
+
+function sourceRequired(apiBase: string): string {
+  const cwd = process.cwd();
+
   return envelope({
     ok: false,
     command: COMMAND,
@@ -192,12 +219,75 @@ function repoRequired(apiBase: string): string {
     error: {
       code: "E_BAD_REQUEST",
       name: "BadRequest",
-      message:
-        "repo must be in the form '<owner>/<repo>', a GitHub repository the extension's source is pushed to. The platform creates a project from GitHub only; this server has no call that uploads a local folder, so projectPath is not an alternative.",
+      message: `Name the source: projectPath, the folder holding the extension's manifest.json (uploaded as it is, no push needed), or repo '<owner>/<repo>', a GitHub repository the source is pushed to. Neither was given and the server's cwd (${cwd}) holds no manifest.json or extension.config.*.`,
     },
-    value: { needs: "github-repository", createUrl: `${mcpOrigins(apiBase).www}${wwwImportPath()}` },
-    hint: `Push the project to a GitHub repository the approving account can read (git init, commit, create the repository, git remote add origin, git push -u origin main; node_modules and dist stay out through .gitignore), then call extension_project_create again with repo '<owner>/<repo>'. The console's create form at ${mcpOrigins(apiBase).www}${wwwImportPath()} needs the same repository.`,
+    value: { needs: "source", createUrl: `${mcpOrigins(apiBase).www}${wwwImportPath()}` },
+    hint: `Call extension_project_create again with projectPath, the folder extension_create answered as projectPath (absolute, or relative to ${cwd}); the platform builds the upload on its own lane and nothing has to be pushed. A GitHub repository the approving account can read works too, with repo '<owner>/<repo>'; the console's create form at ${mcpOrigins(apiBase).www}${wwwImportPath()} takes a repository only.`,
   });
+}
+
+function prepareUpload(root: string, defaulted: boolean): { ok: true; source: CreateSource } | { ok: false; answer: string } {
+  let folder = false;
+
+  try {
+    folder = fs.statSync(root).isDirectory();
+  } catch {
+  }
+
+  if (!folder) {
+    return {
+      ok: false,
+      answer: fail(
+        "BadRequest",
+        `projectPath ${root} is not a folder on this machine, so there is nothing to upload. Pass the folder extension_create made (absolute, or relative to the server's cwd ${process.cwd()}), or repo '<owner>/<repo>'.`,
+        "bad-request",
+        "E_BAD_REQUEST",
+      ),
+    };
+  }
+
+  if (!sourceManifestPath(root)) {
+    return {
+      ok: false,
+      answer: fail(
+        "BadRequest",
+        `${root} holds no manifest.json (neither ${path.join(root, "manifest.json")} nor ${path.join(root, "src", "manifest.json")} exists), so it is not an extension's source folder and nothing was uploaded. Pass projectPath as the folder extension_create made, or repo '<owner>/<repo>'.`,
+        "bad-request",
+        "E_BAD_REQUEST",
+      ),
+    };
+  }
+
+  const archive = buildSourceArchive(root);
+
+  if (!archive.ok) {
+    if (archive.reason === "unreadable") {
+      return {
+        ok: false,
+        answer: fail("SourceReadError", `The folder ${root} could not be read for upload (${archive.message}), so nothing was sent.`, "bad-request", "E_BAD_REQUEST"),
+      };
+    }
+
+    const named = archive.biggest.map((entry) => `${entry.path} (${megabytes(entry.bytes)})`).join(", ");
+
+    return {
+      ok: false,
+      answer: envelope({
+        ok: false,
+        command: COMMAND,
+        status: "source-too-large",
+        error: {
+          code: "E_BAD_REQUEST",
+          name: "SourceTooLarge",
+          message: `The source at ${root} zips to ${archive.atLeast ? "more than " : ""}${megabytes(archive.bytes)}, over the ${megabytes(archive.maxBytes)} the platform takes in one upload, so nothing was sent. The biggest entries are ${named}.`,
+        },
+        value: { projectPath: root, bytes: archive.bytes, maxBytes: archive.maxBytes, files: archive.files, biggest: archive.biggest },
+        hint: `Leave those out (add them to .gitignore or move them out of the folder; ${SOURCE_SKIPPED_FOLDERS.join(", ")} and ${SOURCE_SKIPPED_EXTENSIONS.join(", ")} files are already left out), then call extension_project_create again. Or push the folder to a GitHub repository and pass repo '<owner>/<repo>' instead.`,
+      }),
+    };
+  }
+
+  return { ok: true, source: { kind: "upload", root, defaulted, zip: archive.zip, bytes: archive.bytes, files: archive.files } };
 }
 
 /* @invariant THE CODE'S DEADLINE IS PART OF THE ASK. The device code lives
@@ -256,6 +346,7 @@ function pendingEnvelope(start: {
 export async function handler(args: {
   project?: string;
   repo?: string;
+  projectPath?: string;
   projects?: unknown;
   installationId?: string;
   displayName?: string;
@@ -305,20 +396,55 @@ export async function handler(args: {
 
   const apiBase = apiCheck.base;
   const repo = String(args.repo || "").trim();
+  const projectPathArg = String(args.projectPath || "").trim();
 
-  if (repo && !isProjectRef(repo)) return repoRequired(apiBase);
+  if (repo && projectPathArg) {
+    return fail(
+      "BadRequest",
+      "Pass repo or projectPath, not both: projectPath uploads the folder as it is, repo names a GitHub repository the platform reads instead.",
+      "bad-request",
+      "E_BAD_REQUEST",
+    );
+  }
 
-  const refusal = repo ? null : repoRequired(apiBase);
+  if (repo && !isProjectRef(repo)) {
+    return fail(
+      "BadRequest",
+      "repo must be in the form '<owner>/<repo>', a GitHub repository the extension's source is pushed to; or pass projectPath to upload the folder instead.",
+      "bad-request",
+      "E_BAD_REQUEST",
+    );
+  }
+
+  let source: CreateSource | null = repo ? { kind: "github", repo } : null;
+
+  if (!source) {
+    const root = projectPathArg
+      ? path.resolve(projectPathArg)
+      : looksLikeExtensionFolder(process.cwd())
+        ? process.cwd()
+        : "";
+
+    if (root) {
+      const upload = prepareUpload(root, !projectPathArg);
+      if (!upload.ok) return upload.answer;
+
+      source = upload.source;
+    }
+  }
+
+  const refusal = source ? null : sourceRequired(apiBase);
   const resumeDeviceCode = String(args.deviceCode || "").trim();
   const held = heldCreateGrant(apiBase, resumeDeviceCode, project);
 
   if (held) {
-    if (refusal) return refusal;
+    if (refusal || !source) return refusal ?? sourceRequired(apiBase);
 
     return createWithGrant({
       apiBase,
       project,
       args,
+      source,
       deviceCode: resumeDeviceCode,
       callStartedAt,
       held,
@@ -377,7 +503,7 @@ export async function handler(args: {
       return fail("CreateStartError", String(message), "create-failed", "E_PLATFORM");
     }
 
-    if (refusal) return refusal;
+    if (refusal || !source) return refusal ?? sourceRequired(apiBase);
 
     deviceCode = start.deviceCode;
     interval = start.interval;
@@ -399,6 +525,7 @@ export async function handler(args: {
       apiBase,
       project,
       args,
+      source,
       verificationUri: config.verificationUri,
       deviceCode,
       callStartedAt,
@@ -407,7 +534,7 @@ export async function handler(args: {
     });
   }
 
-  if (refusal) return refusal;
+  if (refusal || !source) return refusal ?? sourceRequired(apiBase);
 
   const poll = await pollDeviceGrant({
     apiBase,
@@ -422,6 +549,7 @@ export async function handler(args: {
     apiBase,
     project,
     args,
+    source,
     verificationUri: config.verificationUri,
     deviceCode,
     callStartedAt,
@@ -447,6 +575,7 @@ async function finishFromPoll(
       outputDirectories?: Record<string, unknown>;
       login?: unknown;
     };
+    source: CreateSource;
     verificationUri: string;
     deviceCode: string;
     callStartedAt: number;
@@ -571,6 +700,7 @@ async function finishFromPoll(
     apiBase: ctx.apiBase,
     project: ctx.project,
     args: ctx.args,
+    source: ctx.source,
     deviceCode: ctx.deviceCode,
     callStartedAt: ctx.callStartedAt,
     held: { grant: token, grantExpiresAt: grantExpiresAt(grant as Record<string, unknown>) },
@@ -596,6 +726,7 @@ async function createWithGrant(ctx: {
   apiBase: string;
   project: string;
   args: CreateArgs;
+  source: CreateSource;
   deviceCode: string;
   callStartedAt: number;
   held: HeldCreateGrant;
@@ -621,6 +752,7 @@ async function sendCreate(
     apiBase: string;
     project: string;
     args: CreateArgs;
+    source: CreateSource;
     deviceCode: string;
     callStartedAt: number;
     held: HeldCreateGrant;
@@ -632,23 +764,7 @@ async function sendCreate(
 ): Promise<string> {
   const token = ctx.held.grant;
   const [wantWorkspace = "", wantProject = ""] = ctx.project.split("/");
-  const [owner = "", repoName = ""] = String(ctx.args.repo || "").split("/");
-  const body = buildCreateBody({
-    workspace: wantWorkspace,
-    projectSlug: wantProject,
-    owner,
-    repoName,
-    installationId: ctx.args.installationId,
-    displayName: ctx.args.displayName,
-    description: ctx.args.description,
-    installCommand: ctx.args.installCommand,
-    buildCommand: ctx.args.buildCommand,
-    outputDirectory: ctx.args.outputDirectory,
-    browsers: ctx.args.browsers,
-    outputDirectories: ctx.args.outputDirectories,
-  });
-
-  const url = `${ctx.apiBase}/api/cli/projects/create`;
+  const url = projectCreateUrl(ctx.apiBase);
 
   const unconfirmed = (what: string, code: ErrorCode): string => {
     keepGrant();
@@ -674,6 +790,35 @@ async function sendCreate(
   };
 
   const allowanceBefore = await readWorkspaceBuildAllowance({ apiBase: ctx.apiBase, workspace: wantWorkspace, command: COMMAND });
+  let bodySource: CreateBodySource;
+  let uploaded: { bytes: number; files: number } | null = null;
+
+  if (ctx.source.kind === "github") {
+    const [owner = "", repoName = ""] = ctx.source.repo.split("/");
+    bodySource = { kind: "github", owner, repoName, installationId: ctx.args.installationId };
+  } else {
+    const upload = await uploadProjectSource({ apiBase: ctx.apiBase, token, zip: ctx.source.zip, command: COMMAND });
+
+    if (!upload.ok) {
+      return uploadFailed(upload, { ...ctx, wantWorkspace, wantProject, kept, keepGrant });
+    }
+
+    uploaded = { bytes: upload.receipt.bytes || ctx.source.bytes, files: upload.receipt.files || ctx.source.files };
+    bodySource = { kind: "upload", uploadId: upload.receipt.uploadId };
+  }
+
+  const body = buildCreateBody({
+    workspace: wantWorkspace,
+    projectSlug: wantProject,
+    source: bodySource,
+    displayName: ctx.args.displayName,
+    description: ctx.args.description,
+    installCommand: ctx.args.installCommand,
+    buildCommand: ctx.args.buildCommand,
+    outputDirectory: ctx.args.outputDirectory,
+    browsers: ctx.args.browsers,
+    outputDirectories: ctx.args.outputDirectories,
+  });
   let res: Response;
   const deadline = createRequestDeadline(ctx.callStartedAt, ctx.callBlocks);
   const send = (signal: AbortSignal) =>
@@ -721,10 +866,21 @@ async function sendCreate(
     data = { message: text };
   }
 
+  if (String(data.code || "") === SOURCE_UPLOAD_CONSUMED_CODE) {
+    const found = await findProjectByStoredLogin({ apiBase: ctx.apiBase, project: ctx.project, command: COMMAND });
+
+    if (found) return createdByRead(found, ctx.source, ctx.apiBase);
+
+    return unconfirmed(
+      `The platform answered that the uploaded source was already consumed by an earlier create request with this grant (${String(data.message || SOURCE_UPLOAD_CONSUMED_CODE)}), so that create landed or is still running`,
+      "E_PLATFORM",
+    );
+  }
+
   if (String(data.code || "") === CREATE_IN_PROGRESS_CODE) {
     const found = await findProjectByStoredLogin({ apiBase: ctx.apiBase, project: ctx.project, command: COMMAND });
 
-    if (found) return createdByRead(found, ctx.args.repo, ctx.apiBase);
+    if (found) return createdByRead(found, ctx.source, ctx.apiBase);
 
     keepGrant();
     const waitSeconds = Number(data.retryAfterSeconds) > 0 ? Number(data.retryAfterSeconds) : 10;
@@ -891,6 +1047,19 @@ async function sendCreate(
     project: `${finalWorkspace}/${finalProject}`,
     login: wantsCreateLogin(ctx.args.login),
   });
+  const ref = `${finalWorkspace}/${finalProject}`;
+  const buildStep =
+    ctx.source.kind === "upload"
+      ? `extension_builds (action: list, project: '${ref}') to follow the first build, then extension_publish`
+      : firstBuild.state === "dispatched"
+        ? "extension_publish"
+        : `extension_release_status (include: ['releases'], project: '${ref}') until a build is listed, then extension_publish`;
+  const buildNext =
+    ctx.source.kind === "upload"
+      ? `extension_builds (action: list, project: '${ref}') follows the first build of the upload; extension_publish shares it once it is listed.`
+      : firstBuild.state === "dispatched"
+        ? "extension_publish to share it."
+        : "extension_release_status until a build is listed; extension_publish has nothing to share until a build exists.";
 
   return envelope({
     ok: true,
@@ -901,7 +1070,10 @@ async function sendCreate(
       projectSlug: finalProject,
       projectId: createdAnswer.projectId,
       consoleUrl,
-      sourceRepo: ctx.args.repo,
+      source: ctx.source.kind,
+      ...(ctx.source.kind === "github"
+        ? { sourceRepo: ctx.source.repo }
+        : { projectPath: ctx.source.root, uploaded: uploaded ?? { bytes: ctx.source.bytes, files: ctx.source.files } }),
       outcome: recordedOutcome(data.replayed === true ? "created-earlier" : "created"),
       links,
       login: login.login,
@@ -919,22 +1091,17 @@ async function sendCreate(
         before: allowanceBefore,
       }),
       nextSteps: [
-        ...(login.login.stored ? [] : [`extension_auth (action: login, project: '${finalWorkspace}/${finalProject}')`]),
-        ...(firstBuild.state === "dispatched"
-          ? ["extension_publish"]
-          : [
-              `extension_release_status (include: ['releases'], project: '${finalWorkspace}/${finalProject}') until a build is listed, then extension_publish`,
-            ]),
+        ...(login.login.stored ? [] : [`extension_auth (action: login, project: '${ref}')`]),
+        buildStep,
       ],
     },
-    hint: `Project ${finalWorkspace}/${finalProject} exists.${data.replayed === true ? " The platform read this back from its record of the earlier create request with this grant; nothing was created twice." : ""} ${firstBuildSentence(firstBuild, buildsPageUrl)} ${login.sentence} The provisioning grant is spent and not kept on this machine; the other files this tool leaves are its install id (install.json) and a note that ${finalWorkspace}/${finalProject} exists on this server (created-projects.json), so extension_auth does not doubt it. Next: ${
-      login.login.stored ? "" : `extension_auth (action: login, project: '${finalWorkspace}/${finalProject}') to mint the project token, then `
-    }${
-      firstBuild.state === "dispatched"
-        ? "extension_publish to share it."
-        : "extension_release_status until a build is listed; extension_publish has nothing to share until a build exists."
-    } ${madeSentence(links)}`,
+    hint: `Project ${ref} exists${ctx.source.kind === "upload" ? `, created from the upload of ${ctx.source.root} (${uploaded?.files ?? ctx.source.files} files, ${megabytes(uploaded?.bytes ?? ctx.source.bytes)} zipped), nothing was pushed` : ""}.${data.replayed === true ? " The platform read this back from its record of the earlier create request with this grant; nothing was created twice." : ""} ${firstBuildSentence(firstBuild, buildsPageUrl)} ${login.sentence} The provisioning grant is spent and not kept on this machine; the other files this tool leaves are its install id (install.json) and a note that ${ref} exists on this server (created-projects.json), so extension_auth does not doubt it. Next: ${
+      login.login.stored ? "" : `extension_auth (action: login, project: '${ref}') to mint the project token, then `
+    }${buildNext} ${madeSentence(links)}`,
     warnings: [
+      ...(ctx.source.kind === "upload" && ctx.source.defaulted
+        ? [`projectPath was not given, so the server's cwd ${ctx.source.root} was uploaded because it holds the extension's manifest.`]
+        : []),
       ...(renamed
         ? [
             `The platform registered this project as ${finalWorkspace}/${finalProject}, not the ${ctx.project} that was asked for. Use the name it has.`,
@@ -951,7 +1118,74 @@ async function sendCreate(
   });
 }
 
-function createdByRead(found: ProjectFoundByRead, repo: string | undefined, apiBase: string): string {
+function uploadFailed(
+  upload: Exclude<SourceUploadOutcome, { ok: true }>,
+  ctx: {
+    apiBase: string;
+    project: string;
+    deviceCode: string;
+    held: HeldCreateGrant;
+    wantWorkspace: string;
+    wantProject: string;
+    kept: boolean;
+    keepGrant: () => void;
+  },
+): string {
+  if (upload.kind === "refused") {
+    if (sawPlatformHold(upload.res, upload.body)) {
+      return platformHoldEnvelope({
+        command: COMMAND,
+        name: "CreateHeld",
+        body: upload.body,
+        api: ctx.apiBase,
+        value: { workspace: ctx.wantWorkspace, project: ctx.wantProject },
+      });
+    }
+
+    if (upload.code === "CLI_PROJECT_CREATE_DISABLED") {
+      return closedLane("CreateClosed", upload.message, ctx.apiBase, { project: ctx.project });
+    }
+  }
+
+  ctx.keepGrant();
+  const resume = ctx.kept
+    ? `then call extension_project_create again with this same deviceCode and the same arguments; the grant stays held on this machine until ${heldUntilSentence(ctx.held)}, so no second approval is needed`
+    : "then call extension_project_create again; the grant could not be kept on this machine, so that call asks for a new approval";
+
+  if (upload.kind === "refused") {
+    const fixable = upload.status === 400 || upload.status === 413;
+
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: fixable ? "source-refused" : "create-failed",
+      error: {
+        code: fixable ? "E_BAD_REQUEST" : "E_PLATFORM",
+        name: fixable ? "SourceRefused" : "SourceUploadError",
+        message: `The platform refused the source upload for ${ctx.project} (${upload.status}${upload.code ? ` ${upload.code}` : ""}): ${upload.message} Nothing was created.`,
+      },
+      value: { project: ctx.project, status: upload.status, ...(upload.code ? { code: upload.code } : {}), ...(ctx.kept ? { deviceCode: ctx.deviceCode } : {}) },
+      hint: fixable
+        ? `Fix the folder the message names (leave the entry out, or add it to .gitignore), ${resume}.`
+        : `Nothing left this machine but the upload, and the platform kept no project. Try once more, ${resume}.`,
+    });
+  }
+
+  return envelope({
+    ok: false,
+    command: COMMAND,
+    status: "upload-failed",
+    error: {
+      code: upload.kind === "network" ? "E_NETWORK" : "E_PLATFORM",
+      name: "SourceUploadError",
+      message: `The source upload for ${ctx.project} ${upload.kind === "network" ? `did not complete (${upload.message})` : `answered ${upload.status} but could not be read (${upload.message})`}, so no create was sent and nothing was created.`,
+    },
+    value: { project: ctx.project, ...(ctx.kept ? { deviceCode: ctx.deviceCode } : {}) },
+    hint: `Nothing was created, so a retry is safe: ${resume}.`,
+  });
+}
+
+function createdByRead(found: ProjectFoundByRead, source: CreateSource, apiBase: string): string {
   const ref = `${found.workspaceSlug}/${found.projectSlug}`;
   rememberCreatedProject(apiBase, ref);
   const consoleUrl = consoleProjectUrl({ workspace: found.workspaceSlug, project: found.projectSlug }, "", apiBase);
@@ -967,7 +1201,8 @@ function createdByRead(found: ProjectFoundByRead, repo: string | undefined, apiB
       projectSlug: found.projectSlug,
       projectId: found.projectId,
       consoleUrl,
-      sourceRepo: repo,
+      source: source.kind,
+      ...(source.kind === "github" ? { sourceRepo: source.repo } : { projectPath: source.root }),
       confirmedBy: "project-read",
       outcome: recordedOutcome("created"),
       links,

@@ -199,7 +199,7 @@ function prefilledFormSentence(facts: LaneClosedFacts, prefill: CreatePrefill): 
     : `name ${name} and workspace ${workspace}`;
   const asks = repo
     ? "The form asks which browsers to build"
-    : "The form still asks for the GitHub repository the source is pushed to, because the platform creates a project from GitHub only, and which browsers to build";
+    : "The form still asks for the GitHub repository the source is pushed to, because the console's create form takes a repository only (extension_project_create with projectPath uploads a folder instead once the lane opens), and which browsers to build";
 
   return `Create the project in the console: open ${facts.createUrl}, the create form with ${carried} prefilled. ${asks}; ${CREATE_FORM_SETTINGS_LATER}. Then run extension_auth (action: login) against it.`;
 }

@@ -1,6 +1,11 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { mcpOrigins, withCallApi } from "../lib/origins";
+import { projectCreateUrl, projectSourceUploadUrl } from "../lib/project-source-upload";
 import { handler as createProject } from "../tools/project-create";
 import { handler as createWorkspace } from "../tools/workspace-create";
 
@@ -133,6 +138,57 @@ describe("a call's api picks the console in a lane-closed answer", () => {
     expect(out.status).toBe("lane-closed");
     expect(out.hint).toContain("https://console.extension.dev");
     expect(out.hint).not.toContain("extension.localhost");
+  });
+});
+
+describe("a call's api picks the host a folder is uploaded to", () => {
+  it("489: sends the source zip and the create to the server the call names, not the env's", async () => {
+    process.env.EXTENSION_DEV_API_URL = LOCAL;
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-upload-host-"));
+    process.env.XDG_CONFIG_HOME = tmp;
+    const dir = path.join(tmp, "ext");
+    fs.mkdirSync(dir);
+    fs.writeFileSync(path.join(dir, "manifest.json"), JSON.stringify({ name: "Ghost", version: "1.0.0" }));
+    const urls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: unknown) => {
+        const href = String(url);
+        urls.push(href);
+
+        if (href.endsWith("/api/cli/login/config")) {
+          return new Response(JSON.stringify({ deviceCodeUrl: "/api/cli/device/code", deviceTokenUrl: "/api/cli/device/token", verificationUri: `${PROD}/device` }));
+        }
+
+        if (href.endsWith("/api/cli/device/token")) {
+          return new Response(JSON.stringify({ token: "provision-token", expiresAt: Math.floor(Date.now() / 1000) + 900, workspaceSlug: "cezaraugusto", projectSlug: "pii-shield", tokenKind: "provisioning" }));
+        }
+
+        if (href.endsWith("/api/cli/projects/source")) {
+          return new Response(JSON.stringify({ uploadId: "upl_9", bytes: 10, files: 1, manifest: { name: "Ghost", version: "1.0.0" }, expiresAt: "2026-11-11T12:00:00.000Z" }));
+        }
+
+        if (href.endsWith("/api/cli/projects/create")) {
+          return new Response(JSON.stringify({ success: true, projectId: "prj_1", projectSlug: "pii-shield", workspaceSlug: "cezaraugusto" }));
+        }
+
+        throw new Error(`Unexpected fetch: ${href}`);
+      }),
+    );
+
+    try {
+      const out = JSON.parse(await createProject({ project: "cezaraugusto/pii-shield", projectPath: dir, deviceCode: "dev-code", api: PROD }));
+
+      expect(out.status).toBe("created");
+      expect(out.value.source).toBe("upload");
+      expect(urls).toContain(projectSourceUploadUrl(PROD));
+      expect(urls).toContain(projectCreateUrl(PROD));
+      expect(urls.some((href) => href.startsWith(LOCAL))).toBe(false);
+      expect(projectSourceUploadUrl(PROD)).toBe(`${PROD}/api/cli/projects/source`);
+      expect(projectCreateUrl(PROD)).toBe(`${PROD}/api/cli/projects/create`);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });
 

@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -7,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handler, schema } from "../tools/project-create";
 import { readCredentials } from "../lib/credentials";
 import { pendingCreate } from "../lib/pending-creates";
+import { readZipEntry, readZipEntryNames } from "../lib/zip-entries";
 
 const API = "https://api.test";
 const FUTURE = Math.floor(Date.now() / 1000) + 900;
@@ -23,6 +25,7 @@ type Route = { status: number; body: unknown };
 function createFetch(routes: {
   code?: Route;
   token: Route[];
+  source?: Route;
   create?: Route;
 }) {
   let tokenCalls = 0;
@@ -67,6 +70,10 @@ function createFetch(routes: {
       return jsonResponse(next.body, next.status);
     }
 
+    if (href.endsWith("/api/cli/projects/source") && routes.source) {
+      return jsonResponse(routes.source.body, routes.source.status);
+    }
+
     if (href.endsWith("/api/cli/projects/create")) {
       const route = routes.create ?? { status: 500, body: { message: "no" } };
 
@@ -78,6 +85,16 @@ function createFetch(routes: {
 
   return { fn, calls };
 }
+
+const UPLOADED = {
+  status: 200,
+  body: { uploadId: "upl_1", bytes: 1234, files: 4, manifest: { name: "Ghost", version: "1.0.0" }, expiresAt: "2026-11-11T12:00:00.000Z" },
+};
+
+const CREATED = {
+  status: 200,
+  body: { success: true, projectId: "prj_new", projectSlug: "ghost-app", workspaceSlug: "acme", idempotencyKey: "idem-1", initialBuild: { dispatched: true } },
+};
 
 const grantBody = {
   token: "provision-token",
@@ -97,6 +114,32 @@ let tmp: string;
 let prevXdg: string | undefined;
 let prevApi: string | undefined;
 
+function extensionFolder(name: string, extra: Record<string, string | Buffer> = {}): string {
+  const dir = path.join(tmp, name);
+
+  const write = (rel: string, data: string | Buffer) => {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), data);
+  };
+
+  write("manifest.json", JSON.stringify({ name: "Ghost", version: "1.0.0", manifest_version: 3 }));
+  write("package.json", JSON.stringify({ name: "ghost-app" }));
+  write("src/content.js", "console.log(1)");
+  write("node_modules/dep/index.js", "x");
+  write("dist/chrome/manifest.json", "{}");
+  write(".git/HEAD", "ref: refs/heads/main");
+  write(".extension-dev/state.json", "{}");
+  write("ghost.zip", "zip");
+  write(".gitignore", "secret.txt\nlogs/\n*.bak\n");
+  write("secret.txt", "s");
+  write("logs/a.log", "l");
+  write("src/old.bak", "b");
+
+  for (const [rel, data] of Object.entries(extra)) write(rel, data);
+
+  return dir;
+}
+
 beforeEach(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-projcreate-"));
   prevXdg = process.env.XDG_CONFIG_HOME;
@@ -107,6 +150,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
   else process.env.XDG_CONFIG_HOME = prevXdg;
   if (prevApi === undefined) delete process.env.EXTENSION_DEV_API_URL;
@@ -135,7 +179,8 @@ describe("extension_project_create", () => {
     expect(fn).not.toHaveBeenCalled();
   });
 
-  it("asks for the repo only once the platform has opened the lane, and says the platform takes GitHub only", async () => {
+  it("489: asks for a source only once the platform has opened the lane, naming projectPath first and repo second", async () => {
+    vi.spyOn(process, "cwd").mockReturnValue(tmp);
     const { fn, calls } = createFetch({ token: [] });
     vi.stubGlobal("fetch", fn);
 
@@ -144,13 +189,177 @@ describe("extension_project_create", () => {
     expect(out.ok).toBe(false);
     expect(out.status).toBe("bad-request");
     expect(out.error.code).toBe("E_BAD_REQUEST");
-    expect(out.error.message).toContain("GitHub only");
-    expect(out.error.message).toContain("projectPath is not an alternative");
-    expect(out.hint).toContain("git push");
+    expect(out.error.message).toContain("projectPath");
+    expect(out.error.message).toContain("repo '<owner>/<repo>'");
+    expect(out.error.message).toContain(tmp);
+    expect(out.error.message).not.toContain("GitHub only");
+    expect(out.hint).toContain("projectPath");
+    expect(out.hint).toContain("nothing has to be pushed");
     expect(out.hint).toContain(`${API}/import`);
-    expect(out.value.needs).toBe("github-repository");
+    expect(out.value.needs).toBe("source");
     expect(calls.some((c) => c.url.endsWith("/api/cli/device/code"))).toBe(true);
     expect(calls.some((c) => c.url.endsWith("/api/cli/device/token"))).toBe(false);
+  });
+
+  it("489: refuses a projectPath with no manifest.json before any network call, naming the path", async () => {
+    const { fn } = createFetch({ token: [] });
+    vi.stubGlobal("fetch", fn);
+    const bare = path.join(tmp, "bare");
+    fs.mkdirSync(bare);
+
+    const out = JSON.parse(await handler({ project: "acme/ghost-app", projectPath: bare }));
+
+    expect(out.ok).toBe(false);
+    expect(out.error.code).toBe("E_BAD_REQUEST");
+    expect(out.error.message).toContain(bare);
+    expect(out.error.message).toContain("manifest.json");
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("489: refuses repo and projectPath together before any network call", async () => {
+    const { fn } = createFetch({ token: [] });
+    vi.stubGlobal("fetch", fn);
+
+    const out = JSON.parse(await handler({ ...baseArgs, projectPath: extensionFolder("ext") }));
+
+    expect(out.error.code).toBe("E_BAD_REQUEST");
+    expect(out.error.message).toContain("not both");
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("489: refuses before any network call when the zip would pass 4 MB, naming the biggest three entries", async () => {
+    const { fn } = createFetch({ token: [] });
+    vi.stubGlobal("fetch", fn);
+    const dir = extensionFolder("heavy", {
+      "media/a.bin": crypto.randomBytes(1_700_000),
+      "media/b.bin": crypto.randomBytes(1_600_000),
+      "media/c.bin": crypto.randomBytes(1_500_000),
+      "media/d.bin": crypto.randomBytes(100_000),
+    });
+
+    const out = JSON.parse(await handler({ project: "acme/ghost-app", projectPath: dir }));
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("source-too-large");
+    expect(out.error.code).toBe("E_BAD_REQUEST");
+    expect(out.error.message).toContain(dir);
+    expect(out.error.message).toContain("4 MB");
+    expect(out.error.message).toContain("media/a.bin (1.6 MB), media/b.bin (1.5 MB), media/c.bin (1.4 MB)");
+    expect(out.value.biggest.map((entry: { path: string }) => entry.path)).toEqual(["media/a.bin", "media/b.bin", "media/c.bin"]);
+    expect(out.value.maxBytes).toBe(4 * 1024 * 1024);
+    expect(out.hint).toContain(".gitignore");
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("489: uploads the folder as a zip with the provisioning grant, leaving out node_modules, dist, .git, archives and .gitignore entries, then creates from the uploadId", async () => {
+    const dir = extensionFolder("ext");
+    const { fn, calls } = createFetch({ token: [{ status: 200, body: grantBody }], source: UPLOADED, create: CREATED });
+    vi.stubGlobal("fetch", fn);
+
+    const out = JSON.parse(await handler({ project: "acme/ghost-app", projectPath: dir, deviceCode: "dev-code" }));
+
+    const sourceAt = calls.findIndex((c) => c.url.endsWith("/api/cli/projects/source"));
+    const createAt = calls.findIndex((c) => c.url.endsWith("/api/cli/projects/create"));
+    expect(sourceAt).toBeGreaterThanOrEqual(0);
+    expect(sourceAt).toBeLessThan(createAt);
+
+    const upload = calls[sourceAt]!.init!;
+    const headers = upload.headers as Record<string, string>;
+    expect(headers.authorization).toBe("Bearer provision-token");
+    expect(headers["content-type"]).toBe("application/zip");
+    const zip = Buffer.from(upload.body as Uint8Array);
+    const zipFile = path.join(tmp, "sent.zip");
+    fs.writeFileSync(zipFile, zip);
+    const listing = readZipEntryNames(zipFile);
+    expect(listing.readable).toBe(true);
+    expect(listing.names.sort()).toEqual([".gitignore", "manifest.json", "package.json", "src/content.js"]);
+    const manifest = readZipEntry(zip, "manifest.json", { maxEntries: 100, maxBytes: 1_000_000 });
+    expect(manifest.ok && JSON.parse(manifest.data.toString("utf8")).name).toBe("Ghost");
+
+    const body = JSON.parse(String(calls[createAt]!.init?.body));
+    expect(body.source).toEqual({ uploadId: "upl_1" });
+    expect(body.github).toBeUndefined();
+    expect(body.createdFrom).toEqual({ kind: "upload", ref: "upl_1" });
+    expect(body.workspaceSlug).toBe("acme");
+    expect(body.info.name).toBe("ghost-app");
+
+    expect(out.ok).toBe(true);
+    expect(out.status).toBe("created");
+    expect(out.value.projectId).toBe("prj_new");
+    expect(out.value.source).toBe("upload");
+    expect(out.value.uploaded).toEqual({ bytes: 1234, files: 4 });
+    expect(out.value.projectPath).toBe(dir);
+    expect(out.value.sourceRepo).toBeUndefined();
+    expect(out.value.firstBuild).toEqual({ dispatched: true, spent: 1 });
+    expect(out.value.nextSteps.join(" ")).toContain("extension_builds (action: list, project: 'acme/ghost-app')");
+    expect(out.hint).toContain("nothing was pushed");
+    expect(out.hint).toContain("extension_builds (action: list");
+    expect(out.warnings ?? []).toEqual([]);
+  });
+
+  it("489: keeps the GitHub path's answer shape and names its source", async () => {
+    const { fn } = createFetch({ token: [{ status: 200, body: grantBody }], create: CREATED });
+    vi.stubGlobal("fetch", fn);
+
+    const out = JSON.parse(await handler({ ...baseArgs, deviceCode: "dev-code" }));
+
+    expect(out.value.source).toBe("github");
+    expect(out.value.sourceRepo).toBe("acme/ghost-app-src");
+    expect(out.value.uploaded).toBeUndefined();
+    expect(fn.mock.calls.some(([url]) => String(url).endsWith("/api/cli/projects/source"))).toBe(false);
+  });
+
+  it("489: uploads the server's cwd when neither repo nor projectPath is given and the cwd holds a manifest, and says so", async () => {
+    const dir = extensionFolder("ext");
+    vi.spyOn(process, "cwd").mockReturnValue(dir);
+    const { fn, calls } = createFetch({ token: [{ status: 200, body: grantBody }], source: UPLOADED, create: CREATED });
+    vi.stubGlobal("fetch", fn);
+
+    const out = JSON.parse(await handler({ project: "acme/ghost-app", deviceCode: "dev-code" }));
+
+    expect(out.status).toBe("created");
+    expect(out.value.source).toBe("upload");
+    expect(out.value.projectPath).toBe(dir);
+    expect(calls.some((c) => c.url.endsWith("/api/cli/projects/source"))).toBe(true);
+    expect(out.warnings).toContainEqual(expect.stringContaining(`server's cwd ${dir}`));
+  });
+
+  it.each([
+    [413, { code: "SOURCE_TOO_LARGE", message: "The upload is 5 MB; 4 MB is the most." }, "SOURCE_TOO_LARGE"],
+    [400, { message: "The archive holds node_modules/dep/index.js, which must stay out." }, "node_modules/dep/index.js"],
+  ])("489: relays a %s refusal of the upload, sends no create and keeps the grant for the retry", async (status, body, words) => {
+    const dir = extensionFolder("ext");
+    const { fn, calls } = createFetch({ token: [{ status: 200, body: grantBody }], source: { status, body } });
+    vi.stubGlobal("fetch", fn);
+
+    const out = JSON.parse(await handler({ project: "acme/ghost-app", projectPath: dir, deviceCode: "dev-code" }));
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("source-refused");
+    expect(out.error.code).toBe("E_BAD_REQUEST");
+    expect(out.error.message).toContain(words);
+    expect(out.error.message).toContain("Nothing was created");
+    expect(out.value.deviceCode).toBe("dev-code");
+    expect(out.hint).toContain("same deviceCode");
+    expect(calls.some((c) => c.url.endsWith("/api/cli/projects/create"))).toBe(false);
+  });
+
+  it("489: calls a 409 SOURCE_UPLOAD_CONSUMED create unconfirmed, never created and never failed", async () => {
+    const dir = extensionFolder("ext");
+    const { fn } = createFetch({
+      token: [{ status: 200, body: grantBody }],
+      source: UPLOADED,
+      create: { status: 409, body: { code: "SOURCE_UPLOAD_CONSUMED", message: "Upload upl_1 was already used." } },
+    });
+    vi.stubGlobal("fetch", fn);
+
+    const out = JSON.parse(await handler({ project: "acme/ghost-app", projectPath: dir, deviceCode: "dev-code" }));
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("create-unconfirmed");
+    expect(out.error.message).toContain("already consumed");
+    expect(out.error.message).toContain("is unknown");
+    expect(out.hint).toContain("again with this same deviceCode");
   });
 
   it("says the lane is closed before it asks for a repo", async () => {
@@ -207,11 +416,15 @@ describe("extension_project_create", () => {
     expect(out.hint).toContain("extension_auth (action: login)");
   });
 
-  it("says in its description that the platform reads source from GitHub only and takes no local folder", () => {
-    expect(schema.description).toContain("reads GitHub only");
-    expect(schema.description).toContain("no call uploads a local folder");
-    expect(schema.inputSchema.properties.repo.description).toContain("required");
-    expect(schema.inputSchema.properties).not.toHaveProperty("projectPath");
+  it("489: says in its description that the platform takes the source from the folder or from a GitHub repository", () => {
+    expect(schema.description).toContain("projectPath");
+    expect(schema.description).toContain("GitHub repo");
+    expect(schema.description).not.toContain("GitHub only");
+    expect(schema.description).not.toContain("no call uploads");
+    expect(schema.inputSchema.properties.projectPath.description).toContain("manifest.json");
+    expect(schema.inputSchema.properties.projectPath.description).toContain("default: the cwd");
+    expect(schema.inputSchema.properties.repo.description).not.toContain("required");
+    expect(schema.inputSchema.properties.repo.description).toContain("instead of projectPath");
   });
 
   it("asks for no installation id, because the platform resolves it", () => {
