@@ -35,7 +35,7 @@ export function uploadPending(upload: StoreUpload | undefined): boolean {
   return PENDING_WORDS.has(uploadWordOf(upload));
 }
 
-function storeName(store: string): string {
+export function storeName(store: string): string {
   const name = STORE_NAMES[store] ?? store;
 
   return name.charAt(0).toUpperCase() + name.slice(1);

@@ -112,6 +112,7 @@ import {
 import { browserBuildRefusal, browserBuildVerdicts } from "../lib/browser-builds";
 import { localSubmitPrecheck } from "../lib/submit-local-precheck";
 import { dryRunStoreRun, platformUnavailableAnswer, storeRunUnavailable } from "../lib/store-run-unavailable";
+import { installRefusedAfterRun, installRefusedAnswer, installRefusedRecords, storeRefusedInstall } from "../lib/store-refused-install";
 import { appendWarnings } from "../lib/envelope-warnings";
 import { reviewPromiseFromApproval } from "../lib/review-promise";
 import { SUBMIT_ACTION_SAFETY } from "../lib/submit-action-safety";
@@ -917,6 +918,21 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       });
     }
 
+    const installRefused = storeRefusedInstall(res.status, data);
+
+    if (installRefused) {
+      return installRefusedAnswer({
+        command: "extension_submit",
+        found: installRefused,
+        dryRun,
+        ref: credential.ref,
+        stores: browsers,
+        buildSha,
+        api: args.api,
+        ...(body.approvalId ? { approvalId: String(body.approvalId), refundSaid: data?.approvalRefunded } : {}),
+      });
+    }
+
     const refusedCode = typeof data?.code === "string" ? data.code : "";
 
     if (refusedCode === ITEM_NOT_LINKED_CODE) {
@@ -1603,6 +1619,21 @@ async function answer(args: SubmitToolArgs): Promise<string> {
     const sourcesLine = `${firefoxSources ? ` ${firefoxSources.say}` : ""}${firefoxUpdates ? ` ${firefoxUpdates.say}` : ""}`;
     if (firefoxSources) result.firefoxSourceArchive = firefoxSources;
     if (firefoxUpdates) result.firefoxUpdateManifest = firefoxUpdates;
+
+    const installRefusals = waited.failed ? installRefusedRecords(failedStores, waited.record) : null;
+
+    if (installRefusals) {
+      return installRefusedAfterRun({
+        command: "extension_submit",
+        refusals: installRefusals,
+        result,
+        ref: credential.ref,
+        buildSha,
+        statusRead,
+        warnings: [...warnings, credential.note],
+        api: args.api,
+      });
+    }
 
     if (waited.failed) {
       return envelope({

@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, it, expect } from "vitest";
 import { schema, handler, storeMdWarnings } from "../tools/submit";
 import { writeCredentials } from "../lib/credentials";
 import { WRITE_FAILURE_REPORT_URL } from "../lib/settings-write";
+import { actionFingerprint } from "../lib/approval-gate";
+import { INSTALL_FILES_HINT, STORE_REFUSED_INSTALL_STATUS } from "../lib/store-refused-install";
 import { PLATFORM_UNAVAILABLE_SENTENCE, PLATFORM_UNAVAILABLE_STATUS } from "../lib/store-run-unavailable";
 import { submitAnswer } from "./fixtures/platform-answers";
 
@@ -370,6 +372,100 @@ describe("extension_submit: platform submit handler", () => {
     expect(out.value.approvalRefunded).toBe(true);
     expect(out.hint).toContain("approval apr_508 was not spent");
     expect(out.hint).not.toContain("extension_approvals");
+  });
+});
+
+describe("extension_submit answers an upload the store's installation test refused as the person's to fix (ledger 510)", () => {
+  const INSTALL_LINE = "The Chrome Web Store refused the package for item abcdefghijklmnopabcdefghijklmnop: ITEM_INSTALL_FAILED: The extension could not be installed. Service worker file background.js was not found in the package.";
+  const said = (out: any): string => JSON.stringify(out, (key, value) => (key === "platformLine" ? undefined : value));
+  let tmp: string;
+  let prevXdg: string | undefined;
+  let prevToken: string | undefined;
+  let prevGate: string | undefined;
+  let prevFetch: typeof fetch;
+
+  beforeEach(() => {
+    prevGate = process.env.EXTENSION_DEV_APPROVAL_GATE;
+    process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-submit-510-"));
+    prevXdg = process.env.XDG_CONFIG_HOME;
+    prevToken = process.env.EXTENSION_DEV_TOKEN;
+    prevFetch = global.fetch;
+    process.env.XDG_CONFIG_HOME = tmp;
+    process.env.EXTENSION_DEV_TOKEN = claimsToken("acme", "widget");
+  });
+
+  afterEach(() => {
+    if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = prevXdg;
+    if (prevToken === undefined) delete process.env.EXTENSION_DEV_TOKEN;
+    else process.env.EXTENSION_DEV_TOKEN = prevToken;
+    if (prevGate === undefined) delete process.env.EXTENSION_DEV_APPROVAL_GATE;
+    else process.env.EXTENSION_DEV_APPROVAL_GATE = prevGate;
+
+    global.fetch = prevFetch;
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it("answers store-refused-install with the store's reason, owner you and the manifest hint when the submit route refuses the upload after an approval", async () => {
+    global.fetch = (async () => jsonResponse({ ok: false, code: "CHROME_UPLOAD_FAILED", store: "chrome", message: INSTALL_LINE }, false, 422)) as unknown as typeof fetch;
+
+    const out = JSON.parse(await handler({ browsers: ["chrome"], buildSha: "4cec881", dryRun: false, approvalId: "apr_510" }));
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe(STORE_REFUSED_INSTALL_STATUS);
+    expect(out.error).toMatchObject({ name: "StoreRefusedInstall", platformCode: "CHROME_UPLOAD_FAILED" });
+    expect(out.value).toMatchObject({ owner: "you", store: "chrome", approvalId: "apr_510", approvalRefunded: "unknown", platformLine: INSTALL_LINE });
+    expect(out.value.nextStep).toMatchObject({ kind: "resubmit" });
+    expect(out.value.trackUrl).toContain("4cec881");
+    expect(out.hint).toContain(`the store's reason: "${INSTALL_LINE.replace(/\.$/, "")}"`);
+    expect(out.hint).toContain(INSTALL_FILES_HINT);
+    expect(out.hint).toContain("extension_approvals (action: status, approvalId: apr_510)");
+    expect(said(out)).not.toMatch(/platform cannot take|workflow|store\.yml|report it|fix the cause/i);
+  });
+
+  it("answers store-refused-install, not submit-failed, when the platform's record after the run carries the store's install refusal", async () => {
+    const records = {
+      submissions: [
+        {
+          id: "sub_c",
+          store: "chrome",
+          version: "0.1.0",
+          status: "failed",
+          rawStatus: "upload_failed",
+          failureReason: INSTALL_LINE,
+          statusRead: { word: "failed", readAt: "2026-11-11T18:00:00.000Z", source: "poll", storeWord: "FAILED", note: INSTALL_LINE },
+          storeUpload: { state: "FAILED", checkedAt: "2026-11-11T18:00:00.000Z", source: "poll", message: INSTALL_LINE },
+        },
+      ],
+    };
+    global.fetch = (async (url: string, init?: RequestInit) => {
+      const target = String(url);
+      const method = String(init?.method ?? "GET").toUpperCase();
+
+      if (method === "POST" && target.endsWith("/api/cli/stores/submit")) {
+        return jsonResponse({ ok: true, buildId: "4cec881", dispatchedAt: "2026-11-11T17:59:00.000Z", submissions: [{ id: "sub_c", store: "chrome", status: "pending" }] });
+      }
+
+      if (target.includes("/api/cli/approvals/")) {
+        return jsonResponse({ status: "approved", used: false, expiresAt: new Date(Date.now() + 600_000).toISOString(), fingerprint: actionFingerprint("extension_submit", { browsers: ["chrome"], buildSha: "4cec881" }) });
+      }
+
+      if (target.includes("/api/cli/stores/submissions")) return jsonResponse(records);
+
+      return jsonResponse({}, false, 404);
+    }) as unknown as typeof fetch;
+
+    const out = JSON.parse(await handler({ browsers: ["chrome"], buildSha: "4cec881", dryRun: false, approvalId: "apr_510", waitSeconds: 5 }));
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe(STORE_REFUSED_INSTALL_STATUS);
+    expect(out.error.name).toBe("StoreRefusedInstall");
+    expect(out.value).toMatchObject({ owner: "you", platformLine: INSTALL_LINE, refusals: [{ store: "chrome", platformLine: INSTALL_LINE }] });
+    expect(out.value.nextStep).toMatchObject({ kind: "resubmit" });
+    expect(out.hint).toContain(INSTALL_FILES_HINT);
+    expect(out.hint).toContain("The approval was spent on this upload");
+    expect(said(out)).not.toMatch(/fix the cause|platform cannot take/i);
   });
 });
 

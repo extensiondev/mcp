@@ -17,7 +17,9 @@ import { buildSummaryPath } from "../lib/session-paths";
 import { REVIEWER_NOTE_TOOLCHAIN_CHECK, reviewerNoteBuildLine, toolchainDifferences, toolchainSentence } from "../lib/store-md-toolchain";
 import { WRITE_FAILURE_REPORT_URL } from "../lib/settings-write";
 import { FIREFOX_LISTING_CHECK, SAFARI_DESCRIPTION_CHECK, SAFARI_DESCRIPTION_MAX } from "../lib/store-preflight-local";
+import { INSTALL_FILES_HINT, STORE_REFUSED_INSTALL_CODE, storeRefusedInstall } from "../lib/store-refused-install";
 import { PLATFORM_UNAVAILABLE_SENTENCE, PLATFORM_UNAVAILABLE_STATUS, STORE_RUN_CHECK, storeRunUnavailable } from "../lib/store-run-unavailable";
+import { runCauseOf } from "../lib/submit-run-cause";
 import { LOCAL_CHECK_FAILED_STATE, SAFARI_DESCRIPTION_UNCHECKED } from "../lib/submit-local-precheck";
 import { handler as submit } from "../tools/submit";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
@@ -352,5 +354,49 @@ describe("510: a first Chrome item is told about the publisher's two default ext
     expect(out.status).toBe("store-item-not-linked");
     expect(out.warnings).toContain(CHROME_SLOTS_SENTENCE);
     expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
+  });
+});
+
+describe("510: an upload the store's installation test refused is the person's to fix, never the platform's fault", () => {
+  const INSTALL_LINE = "The Chrome Web Store refused the package for item abcdefghijklmnopabcdefghijklmnop: ITEM_INSTALL_FAILED: The extension could not be installed. Service worker file background.js was not found in the package.";
+  const INSTALL_BODY = { ok: false, code: "CHROME_UPLOAD_FAILED", store: "chrome", message: INSTALL_LINE, approvalRefunded: false };
+  const LANE_BODY = { code: "STORE_RUN_UNAVAILABLE", approvalRefunded: true, message: LANE_NOT_TAKING };
+  const RUN_BODY = { message: NO_STORE_RUN };
+
+  it("keeps the install family and the 508 platform family disjoint on both sample bodies, and matches nothing else", () => {
+    expect(storeRefusedInstall(422, INSTALL_BODY)).toMatchObject({ status: 422, code: "CHROME_UPLOAD_FAILED", store: "chrome", platformLine: INSTALL_LINE });
+    expect(storeRunUnavailable(422, INSTALL_BODY)).toBeNull();
+    expect(storeRunUnavailable(409, INSTALL_BODY)).toBeNull();
+    expect(storeRunUnavailable(404, INSTALL_BODY)).toBeNull();
+
+    expect(storeRunUnavailable(409, LANE_BODY)).toMatchObject({ code: "STORE_RUN_UNAVAILABLE" });
+    expect(storeRefusedInstall(409, LANE_BODY)).toBeNull();
+    expect(storeRunUnavailable(404, RUN_BODY)).toMatchObject({ status: 404 });
+    expect(storeRefusedInstall(404, RUN_BODY)).toBeNull();
+
+    expect(storeRefusedInstall(404, { message: `${NO_STORE_RUN}; the package could not be installed` })).toBeNull();
+    expect(storeRefusedInstall(409, { code: STORE_REFUSED_INSTALL_CODE, store: "chrome", message: "Package refused" })).toMatchObject({ code: STORE_REFUSED_INSTALL_CODE, platformLine: "Package refused" });
+    expect(storeRefusedInstall(409, { storeUpload: { message: "Installation test failed: manifest.json names icons/128.png, which is not in the package" } })).toMatchObject({ platformLine: expect.stringContaining("Installation test failed") });
+    expect(storeRefusedInstall(500, INSTALL_BODY)).toBeNull();
+    expect(storeRefusedInstall(409, { message: "Installed by 3 users; the version 0.1.0 is not higher than 0.1.0" })).toBeNull();
+    expect(storeRefusedInstall(409, { message: "See the installation instructions on the listing" })).toBeNull();
+    expect(storeRefusedInstall(422, { code: "EDGE_PACKAGE_HAS_ARCHIVES", message: "nested archives" })).toBeNull();
+  });
+
+  it("reads the family from a failed run's record with a resubmit step naming the manifest and the files to check", () => {
+    const url = "http://console.extension.localhost/acme/widget/submissions/chrome/sub_c";
+    const cause = runCauseOf("chrome", { status: "failed", failureReason: INSTALL_LINE, storeUpload: { state: "FAILED", message: INSTALL_LINE } }, {}, url);
+
+    expect(cause.failed).toBe(true);
+    expect(cause.failureReason).toBe(INSTALL_LINE);
+    expect(cause.nextStep).toMatchObject({ kind: "resubmit", url });
+    expect(cause.nextStep!.say).toContain("The Chrome Web Store refused the upload because the package could not be installed");
+    expect(cause.nextStep!.say).toContain(INSTALL_FILES_HINT);
+    expect(INSTALL_FILES_HINT).toMatch(/manifest/);
+    expect(INSTALL_FILES_HINT).toMatch(/service worker/);
+
+    const other = runCauseOf("chrome", { status: "failed", failureReason: "The Chrome Web Store refused the package for item x: PKG_INVALID_MANIFEST: manifest.json is not valid JSON" }, {}, url);
+
+    expect(other.nextStep).toBeNull();
   });
 });

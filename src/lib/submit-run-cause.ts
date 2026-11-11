@@ -9,6 +9,7 @@
 import { isRow, text } from "./ship-act";
 import { FIREFOX_SYNC_LISTING_CALL, SAFARI_DESCRIPTION_MAX } from "./store-preflight-local";
 import { nextStep, type NextStep } from "./store-connection";
+import { installRefusalLine, installRefusedSay } from "./store-refused-install";
 
 type Row = Record<string, unknown>;
 
@@ -101,6 +102,10 @@ export function runCauseOf(store: string, submission: Row, run: Row, url: string
       nextStep: nextStep("sync-listing", say, url ?? undefined),
     };
   }
+
+  const install = installRefusalLine(reasons);
+
+  if (install) return { failed: true, failureReason: trimmed(install), nextStep: nextStep("resubmit", installRefusedSay(store, install), url ?? undefined) };
 
   if (said) return { failed: true, failureReason: trimmed(said), nextStep: null };
 
