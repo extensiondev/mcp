@@ -15,6 +15,8 @@ import {
   SESSION_PROJECT_PATH,
 } from "../lib/common-schema";
 import { actFrameJson, addWarning, patchValue, runActVerb, type ActArgs } from "../lib/act";
+import { observeAfterAct, observeAsked, OBSERVE_PROPERTY } from "../lib/observe-surface";
+import { resolveExtensionId, surfaceDocument } from "./open";
 import { envelope } from "../lib/envelope";
 import { jsonTextType, jsonType, sameJsonValue } from "../lib/json-value";
 import {
@@ -51,6 +53,7 @@ export const schema = {
         description:
           "Value as JSON text; not with value.",
       },
+      observe: OBSERVE_PROPERTY,
       browser: SESSION_BROWSER,
       timeout: CALL_TIMEOUT,
     },
@@ -85,6 +88,7 @@ export async function handler(
     key?: string;
     value?: unknown;
     valueJson?: string;
+    observe?: boolean | string;
   },
 ): Promise<string> {
   const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
@@ -237,6 +241,15 @@ export async function handler(
     } else {
       parsed.status = "set";
     }
+  }
+
+  if (args.action === "set") {
+    await observeAfterAct(
+      parsed,
+      observeAsked(args.observe),
+      { projectPath: args.projectPath, browser, context: "popup", timeout: args.timeout },
+      { surfaceDocument, resolveExtensionId },
+    );
   }
 
   return actFrameJson(parsed);

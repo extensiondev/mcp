@@ -61,6 +61,8 @@ import {
 import { openSidePanelWithSyntheticGesture } from "../lib/cdp-extension-page";
 import { openDevToolsPanel } from "../lib/cdp-devtools";
 import { listPageTargets, matchTargetsByUrl } from "../lib/cdp-targets";
+import { observeAfterAct, observeAsked, OBSERVE_PROPERTY } from "../lib/observe-surface";
+import { SURFACE_CONTEXTS } from "../lib/element-list";
 import { sessionGuestIdentity, unpackedExtensionId } from "../lib/extension-identity";
 import { clickGeckoToolbarButton, declaredToolbarButton } from "../lib/gecko-toolbar-click";
 import { geckoSidebarPanel, sidebarOpenedAnswer } from "../lib/gecko-sidebar";
@@ -1199,6 +1201,7 @@ export const schema = {
         description:
           "Render the surface in a tab.",
       },
+      observe: OBSERVE_PROPERTY,
       browser: SESSION_BROWSER,
       timeout: CALL_TIMEOUT,
     },
@@ -1333,22 +1336,62 @@ function tabIdRefusal(tab: unknown): string {
   });
 }
 
-export async function handler(
-  args: ActArgs & {
-    surface?: string;
-    name?: string;
-    panel?: string;
-    waitMs?: number;
-    reload?: boolean;
-    url?: string;
-    asTab?: boolean;
-    foreground?: boolean;
-    newTab?: boolean;
-  },
-): Promise<string> {
+type OpenArgs = ActArgs & {
+  surface?: string;
+  name?: string;
+  panel?: string;
+  waitMs?: number;
+  reload?: boolean;
+  url?: string;
+  asTab?: boolean;
+  foreground?: boolean;
+  newTab?: boolean;
+  observe?: boolean | string;
+};
+
+function observedSurface(surface: string | undefined): string | undefined {
+  if (surface === "action" || surface === "command") return "popup";
+
+  return surface && SURFACE_CONTEXTS.includes(surface) ? surface : undefined;
+}
+
+async function observeOpened(raw: string, args: OpenArgs, browser: string): Promise<string> {
+  const frame = parseFrameObject(raw);
+  if (!frame || frame.ok !== true) return raw;
+
+  const value = frame.value && typeof frame.value === "object" ? (frame.value as Record<string, any>) : {};
+  const landed = value.surfaceTarget ?? value.target ?? null;
+  const targetId = isChromiumFamily(browser) && typeof landed?.targetId === "string" ? landed.targetId : undefined;
+  const url = typeof landed?.url === "string" ? landed.url : args.url;
+  const context = observedSurface(args.surface);
+
+  await observeAfterAct(
+    frame,
+    observeAsked(args.observe),
+    {
+      projectPath: args.projectPath,
+      browser,
+      targetId,
+      context: targetId || url ? undefined : context,
+      url: targetId ? undefined : url,
+      timeout: args.timeout,
+    },
+    { surfaceDocument, resolveExtensionId },
+  );
+
+  return actFrameJson(frame);
+}
+
+export async function handler(args: OpenArgs): Promise<string> {
   const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
   if (ambiguous) return ambiguous;
 
+  const raw = await openOnce(args);
+
+  return observeAsked(args.observe).on ? observeOpened(raw, args, resolveSessionBrowser(args.projectPath, args.browser).browser) : raw;
+}
+
+async function openOnce(args: OpenArgs): Promise<string> {
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
 
   if (args.surface === "devtools") {

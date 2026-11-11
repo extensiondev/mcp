@@ -210,6 +210,7 @@ Evaluate JavaScript in a running extension's background, surface, content script
 | `url` | string | no |  | content/page: the tab by url. |
 | `tab` | number | no |  | chrome.tabs id to break a url tie. |
 | `targetId` | string | no |  | A page's targetId (extension_open, or dom_snapshot listTargets); overrides url. |
+| `observe` | boolean \| string | no | `false` | true also answers value.observation: the surface's elements once it loaded and settled; a surface name (popup, options, sidebar...) reads that one. |
 | `browser` | string | no |  | Session browser; required when several run. |
 | `timeout` | number | no |  | Timeout ms (default 30000; Firefox 10000; debug port 15000). |
 | `until` | object | no |  | Repeat until truthy ({} for defaults); never sleep in a shell. |
@@ -286,6 +287,7 @@ Open an extension surface or a url, or replay the toolbar action or a shortcut, 
 | `newTab` | boolean | no | `false` | New tab even if one shows the url. |
 | `tab` | number | no |  | With url: navigate this chrome.tabs id (not a tab position; from dom_snapshot listTabs: true). |
 | `asTab` | boolean | no | `false` | Render the surface in a tab. |
+| `observe` | boolean \| string | no | `false` | true also answers value.observation: the surface's elements once it loaded and settled; a surface name (popup, options, sidebar...) reads that one. |
 | `browser` | string | no |  | Session browser; required when several run. |
 | `timeout` | number | no |  | Timeout ms (default 30000; Firefox 10000; debug port 15000). |
 
@@ -393,6 +395,7 @@ Reload the extension's background, or a tab, over the control channel (allowCont
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
 | `context` | "background" \| "content" \| "page" | no | `"background"` | Background, or a content or page tab. |
 | `tab` | number | no |  | content/page: the tab id. |
+| `observe` | boolean \| string | no | `false` | true also answers value.observation: the surface's elements once it loaded and settled; a surface name (popup, options, sidebar...) reads that one. |
 | `browser` | string | no |  | Session browser; required when several run. |
 | `timeout` | number | no |  | Timeout ms (default 30000; Firefox 10000; debug port 15000). |
 
@@ -487,6 +490,7 @@ Read or write one chrome.storage key from the background, over the control chann
 | `key` | string | no |  | Key to get or set. |
 | `value` | any | no |  | Value to set; for null or "" use valueJson. |
 | `valueJson` | string | no |  | Value as JSON text; not with value. |
+| `observe` | boolean \| string | no | `false` | true also answers value.observation: the surface's elements once it loaded and settled; a surface name (popup, options, sidebar...) reads that one. |
 | `browser` | string | no |  | Session browser; required when several run. |
 | `timeout` | number | no |  | Timeout ms (default 30000; Firefox 10000; debug port 15000). |
 

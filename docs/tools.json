@@ -903,6 +903,13 @@
           "description": "A page's targetId (extension_open, or dom_snapshot listTargets); overrides url."
         },
         {
+          "name": "observe",
+          "type": "boolean | string",
+          "required": false,
+          "default": false,
+          "description": "true also answers value.observation: the surface's elements once it loaded and settled; a surface name (popup, options, sidebar...) reads that one."
+        },
+        {
           "name": "browser",
           "type": "string",
           "required": false,
@@ -1243,6 +1250,13 @@
           "required": false,
           "default": false,
           "description": "Render the surface in a tab."
+        },
+        {
+          "name": "observe",
+          "type": "boolean | string",
+          "required": false,
+          "default": false,
+          "description": "true also answers value.observation: the surface's elements once it loaded and settled; a surface name (popup, options, sidebar...) reads that one."
         },
         {
           "name": "browser",
@@ -1744,6 +1758,13 @@
           "description": "content/page: the tab id."
         },
         {
+          "name": "observe",
+          "type": "boolean | string",
+          "required": false,
+          "default": false,
+          "description": "true also answers value.observation: the surface's elements once it loaded and settled; a surface name (popup, options, sidebar...) reads that one."
+        },
+        {
           "name": "browser",
           "type": "string",
           "required": false,
@@ -2188,6 +2209,13 @@
           "type": "string",
           "required": false,
           "description": "Value as JSON text; not with value."
+        },
+        {
+          "name": "observe",
+          "type": "boolean | string",
+          "required": false,
+          "default": false,
+          "description": "true also answers value.observation: the surface's elements once it loaded and settled; a surface name (popup, options, sidebar...) reads that one."
         },
         {
           "name": "browser",

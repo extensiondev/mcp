@@ -16,6 +16,7 @@ import { reloadFrame, stampExecutorAttached, stampExecutorDetached } from "./fix
 import { writeModernContract } from "./fixtures/ready-contract";
 
 import type * as ActModule from "../lib/act";
+import type * as ObserveModule from "../lib/observe-surface";
 
 const act = vi.hoisted(() => ({
   calls: [] as Array<{ cli: string[]; projectPath: string; timeout: number | undefined; tool: string | undefined }>,
@@ -46,6 +47,35 @@ vi.mock("../lib/session-browser", () => ({
   },
 }));
 
+const observe = vi.hoisted(() => ({
+  picks: [] as Array<Record<string, unknown>>,
+  answer: {
+    elements: [{ role: "button", name: "Save", selector: "#save" }],
+    elementCount: 1,
+    elementsTruncated: false,
+    settled: true,
+    url: "chrome-extension://x/popup.html",
+    title: "Popup",
+  },
+}));
+vi.mock("../lib/observe-surface", async (importOriginal) => {
+  const actual = await importOriginal<typeof ObserveModule>();
+
+  return {
+    ...actual,
+    observeAfterAct: async (frame: Record<string, any>, ask: { on: boolean; context?: string }, pick: Record<string, unknown>) => {
+      if (!ask.on || frame.ok !== true) return;
+
+      observe.picks.push(ask.context ? { ...pick, context: ask.context } : pick);
+      actual.attachObservation(
+        frame,
+        { observation: observe.answer, waitedMs: 1_500, target: { kind: "cdp", port: 9222, targetId: "pop", url: observe.answer.url, label: "the popup" } },
+        ask.context ?? (pick.context as string | undefined),
+      );
+    },
+  };
+});
+
 const reload = await import("../tools/reload");
 
 const ATTACHED_AT = "2026-10-07T12:00:00.000Z";
@@ -55,6 +85,7 @@ let contractFile = "";
 beforeEach(() => {
   act.calls.length = 0;
   act.onCall = null;
+  observe.picks.length = 0;
   act.reply = JSON.stringify(reloadFrame());
   session.browser = "chrome";
   session.asked.length = 0;
@@ -274,4 +305,29 @@ describe("ledger 396: a reload of an extension_start session says it does not pi
     expect(out.value.reloadedCopy).toBeUndefined();
     expect(out.warnings).toEqual([]);
   });
+});
+
+describe("extension_reload observe", () => {
+  it("reads the popup after a background reload only when asked, a named surface when observe names one, and the tab after a tab reload", async () => {
+    act.reply = JSON.stringify(reloadFrame());
+
+    const plain = parsed(await reload.handler({ projectPath }));
+    expect(plain.value.observation).toBeUndefined();
+    expect(observe.picks).toEqual([]);
+
+    const popup = parsed(await reload.handler({ projectPath, observe: true }));
+    expect(popup.value.observation).toEqual(observe.answer);
+    expect(popup.value.reloading).toBe(true);
+    expect(observe.picks[0]).toMatchObject({ projectPath, browser: "chrome", context: "popup" });
+
+    await reload.handler({ projectPath, observe: "options" });
+    expect(observe.picks[1]).toMatchObject({ context: "options" });
+
+    act.reply = JSON.stringify(reloadFrame(7));
+    const tab = parsed(await reload.handler({ projectPath, context: "page", tab: 7, observe: true }));
+    expect(tab.value.observation).toEqual(observe.answer);
+    expect(observe.picks[2]).toMatchObject({ tab: 7 });
+    expect(observe.picks[2]).not.toHaveProperty("context", "popup");
+    expect(reload.schema.inputSchema.properties.observe.type).toEqual(["boolean", "string"]);
+  }, 15_000);
 });

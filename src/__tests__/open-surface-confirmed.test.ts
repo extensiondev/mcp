@@ -10,6 +10,7 @@ import { unpackedExtensionId } from "../lib/extension-identity";
 
 import type * as ActModule from "../lib/act";
 import type * as CdpPortModule from "../lib/cdp-port";
+import type * as CdpExtensionPageModule from "../lib/cdp-extension-page";
 
 const openedFrame = () =>
   envelope({
@@ -82,6 +83,28 @@ vi.mock("../lib/cdp", () => {
   return { CDPClient };
 });
 
+const pageReads: Array<{ targetId: string; expression: string }> = [];
+const observation = {
+  elements: [{ role: "button", name: "Save", selector: "#save" }],
+  elementCount: 1,
+  elementsTruncated: false,
+  settled: true,
+  url: "chrome-extension://x/options.html",
+  title: "Options",
+};
+vi.mock("../lib/cdp-extension-page", async (importOriginal) => {
+  const actual = await importOriginal<typeof CdpExtensionPageModule>();
+
+  return {
+    ...actual,
+    evaluateOnExtensionPage: async (_port: number, targetId: string, expression: string) => {
+      pageReads.push({ targetId, expression });
+
+      return { ok: true, value: observation };
+    },
+  };
+});
+
 const open = await import("../tools/open");
 
 const tmpDirs: string[] = [];
@@ -116,6 +139,7 @@ afterEach(() => {
   cdpTargets = [];
   actCalls.length = 0;
   attached.length = 0;
+  pageReads.length = 0;
   open.renderedTabTargets.clear();
 
   for (const dir of tmpDirs.splice(0)) {
@@ -273,5 +297,37 @@ describe("extension_open surface confirmation", () => {
 
     expect(result.error.code).toBe("E_SESSION_NOT_FOUND");
     expect(result.value?.renderedAsTab).toBeUndefined();
+  });
+});
+
+describe("extension_open observe", () => {
+  it("answers the opened surface's settled element list on the target it confirmed, and nothing more by default", async () => {
+    const p = project();
+    cdpTargets = [{ id: "opt", type: "page", url: `chrome-extension://${p.id}/options.html` }];
+
+    const plain = JSON.parse(await open.handler({ projectPath: p.dir, surface: "options" }));
+    expect(plain.value.observation).toBeUndefined();
+    expect(pageReads).toEqual([]);
+
+    const observed = JSON.parse(await open.handler({ projectPath: p.dir, surface: "options", observe: true }));
+
+    expect(observed.ok).toBe(true);
+    expect(observed.value.surfaceTarget).toEqual({ targetId: "opt", url: `chrome-extension://${p.id}/options.html` });
+    expect(observed.value.observation).toEqual(observation);
+    expect(pageReads).toEqual([{ targetId: "opt", expression: expect.stringContaining("getAnimations") }]);
+    expect(observed.warnings).toEqual([]);
+  });
+
+  it("says observation: null and the snapshot call to make when the surface it opened cannot be read", async () => {
+    const p = project();
+    const optionsUrl = `chrome-extension://${p.id}/options.html`;
+    cdpTargets = [{ id: "opt", type: "page", url: optionsUrl }];
+
+    const result = JSON.parse(await open.handler({ projectPath: p.dir, surface: "options", asTab: true, observe: "popup" }));
+
+    expect(result.ok).toBe(true);
+    expect(result.value.observation).toBeNull();
+    expect(result.warnings.join(" ")).toContain("observe: true could not read the popup: the manifest declares no popup document");
+    expect(result.warnings.join(" ")).toContain('extension_dom_snapshot {context: "popup", include: ["elements"]}');
   });
 });

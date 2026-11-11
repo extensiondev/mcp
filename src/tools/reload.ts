@@ -14,6 +14,9 @@ import {
   SESSION_PROJECT_PATH,
 } from "../lib/common-schema";
 import { actFrameJson, runActVerb, commonFlags, type ActArgs } from "../lib/act";
+import { parseFrameObject } from "../lib/frame-json";
+import { observeAfterAct, observeAsked, OBSERVE_PROPERTY } from "../lib/observe-surface";
+import { resolveExtensionId, surfaceDocument } from "./open";
 import { readExecutorStamp, watchExecutorReattach } from "../lib/executor-stamp";
 import { readyContractPath } from "../lib/session-paths";
 import { COPY_IS_FIXED_LINE } from "../lib/start-answer";
@@ -37,6 +40,7 @@ export const schema = {
         description: "Background, or a content or page tab.",
       },
       tab: { type: "number", description: "content/page: the tab id." },
+      observe: OBSERVE_PROPERTY,
       browser: SESSION_BROWSER,
       timeout: CALL_TIMEOUT,
     },
@@ -57,10 +61,39 @@ function productionCopy(projectPath: string, browser: string): string | null {
   }
 }
 
-export async function handler(args: ActArgs): Promise<string> {
+type ReloadArgs = ActArgs & { observe?: boolean | string };
+
+export async function handler(args: ReloadArgs): Promise<string> {
   const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
   if (ambiguous) return ambiguous;
 
+  const raw = await reloadOnce(args);
+  const ask = observeAsked(args.observe);
+  if (!ask.on) return raw;
+
+  const frame = parseFrameObject(raw);
+  if (!frame || frame.ok !== true) return raw;
+
+  const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
+  const background = (args.context ?? "background") === "background";
+
+  await observeAfterAct(
+    frame,
+    ask,
+    {
+      projectPath: args.projectPath,
+      browser,
+      context: background ? "popup" : undefined,
+      tab: background ? undefined : args.tab,
+      timeout: args.timeout,
+    },
+    { surfaceDocument, resolveExtensionId },
+  );
+
+  return actFrameJson(frame);
+}
+
+async function reloadOnce(args: ReloadArgs): Promise<string> {
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
   const before = readExecutorStamp(args.projectPath, browser);
   const raw = await runActVerb(

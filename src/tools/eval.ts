@@ -61,6 +61,8 @@ import {
   CDP_PORT_MISSING_HINT,
 } from "../lib/cdp-port";
 import { rdpEvaluateInTab, rdpListTabs, type RdpTab } from "../lib/rdp";
+import { observeAfterAct, observeAsked, OBSERVE_PROPERTY } from "../lib/observe-surface";
+import type { RdpPortRead } from "../lib/rdp-port-notes";
 import { matchPatternCovers } from "../lib/match-patterns";
 import {
   evaluateOnExtensionPage,
@@ -144,6 +146,7 @@ export const schema = {
       url: { type: "string", description: "content/page: the tab by url." },
       tab: { type: "number", description: "chrome.tabs id to break a url tie." },
       targetId: TARGET_ID_PROPERTY,
+      observe: OBSERVE_PROPERTY,
       browser: SESSION_BROWSER,
       timeout: CALL_TIMEOUT,
       until: EVAL_UNTIL_PROPERTY,
@@ -1556,13 +1559,44 @@ async function evaluateByTargetId(
   });
 }
 
-export async function handler(
-  args: ActArgs & { expression: string; until?: EvalUntil; targetId?: string },
-): Promise<string> {
+type EvalArgs = ActArgs & { expression: string; until?: EvalUntil; targetId?: string; observe?: boolean | string };
+
+export async function handler(args: EvalArgs): Promise<string> {
   const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
   if (ambiguous) return ambiguous;
 
-  const { until, ...once } = args;
+  const raw = await evaluateAsAsked(args);
+  const ask = observeAsked(args.observe);
+  if (!ask.on) return raw;
+
+  const frame = parseFrameObject(raw);
+  if (!frame || frame.ok !== true) return raw;
+
+  const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
+  const context = args.context ?? resolveDefaultEvalContext(args.projectPath, browser);
+  const inTab = (context === "page" || context === "content") && (args.url || args.tab != null);
+  const surface = EXTENSION_PAGE_CONTEXTS.includes(context) ? context : undefined;
+
+  await observeAfterAct(
+    frame,
+    ask,
+    {
+      projectPath: args.projectPath,
+      browser,
+      targetId: args.targetId,
+      context: args.targetId || inTab ? undefined : (surface ?? "popup"),
+      url: inTab ? args.url : undefined,
+      tab: inTab ? args.tab : undefined,
+      timeout: args.timeout,
+    },
+    { surfaceDocument, resolveExtensionId },
+  );
+
+  return actFrameJson(frame);
+}
+
+async function evaluateAsAsked(args: EvalArgs): Promise<string> {
+  const { until, observe: _observe, ...once } = args;
   if (!until) return evaluateOnce(once);
 
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);

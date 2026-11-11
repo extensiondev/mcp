@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { envelope } from "../lib/envelope";
 
 import type * as ActModule from "../lib/act";
+import type * as ObserveModule from "../lib/observe-surface";
 
 const act = vi.hoisted(() => ({
   calls: [] as string[][],
@@ -44,10 +45,33 @@ vi.mock("../lib/session-browser", () => ({
   resolveSessionBrowser: () => ({ browser: "chrome" }),
 }));
 
+const observe = vi.hoisted(() => ({
+  picks: [] as Array<Record<string, unknown>>,
+  answer: { elements: [], elementCount: 0, elementsTruncated: false, settled: true, url: "chrome-extension://x/popup.html", title: "Popup" },
+}));
+vi.mock("../lib/observe-surface", async (importOriginal) => {
+  const actual = await importOriginal<typeof ObserveModule>();
+
+  return {
+    ...actual,
+    observeAfterAct: async (frame: Record<string, any>, ask: { on: boolean; context?: string }, pick: Record<string, unknown>) => {
+      if (!ask.on || frame.ok !== true) return;
+
+      observe.picks.push(ask.context ? { ...pick, context: ask.context } : pick);
+      actual.attachObservation(
+        frame,
+        { observation: observe.answer, waitedMs: 1_500, target: { kind: "cdp", port: 9222, targetId: "pop", url: observe.answer.url, label: "the popup" } },
+        ask.context ?? (pick.context as string | undefined),
+      );
+    },
+  };
+});
+
 const storage = await import("../tools/storage");
 
 beforeEach(() => {
   act.calls.length = 0;
+  observe.picks.length = 0;
   act.stored = {};
   act.getFails = false;
   act.writeThrough = false;
@@ -214,5 +238,28 @@ describe("extension_storage says when the source manifest does not declare stora
     const out = JSON.parse(await storage.handler({ projectPath: dir, action: "set", key: "theme", value: "dark" }));
     expect(out.value.manifestDeclaresStorage).toBeUndefined();
     expect((out.warnings ?? []).join(" ")).not.toMatch(/does not declare/);
+  });
+});
+
+describe("extension_storage observe", () => {
+  it("reads the popup after a confirmed set only when asked, and never after a get", async () => {
+    act.stored = { theme: "dark" };
+
+    const plain = JSON.parse(await storage.handler({ projectPath: "/p", action: "set", key: "theme", value: "dark" }));
+    expect(plain.value.observation).toBeUndefined();
+
+    const observed = JSON.parse(await storage.handler({ projectPath: "/p", action: "set", key: "theme", value: "dark", observe: true }));
+    expect(observed.status).toBe("set");
+    expect(observed.value.readBack.matches).toBe(true);
+    expect(observed.value.observation).toEqual(observe.answer);
+    expect(observe.picks).toEqual([{ projectPath: "/p", browser: "chrome", context: "popup", timeout: undefined }]);
+
+    await storage.handler({ projectPath: "/p", action: "set", key: "theme", value: "dark", observe: "options" });
+    expect(observe.picks[1]).toMatchObject({ context: "options" });
+
+    const read = JSON.parse(await storage.handler({ projectPath: "/p", action: "get", key: "theme", observe: true }));
+    expect(read.value.observation).toBeUndefined();
+    expect(observe.picks).toHaveLength(2);
+    expect(storage.schema.inputSchema.properties.observe.type).toEqual(["boolean", "string"]);
   });
 });

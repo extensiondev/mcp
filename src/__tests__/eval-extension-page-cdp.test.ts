@@ -418,3 +418,47 @@ describe("extension_eval reaches an MV3 extension page over CDP, which the page 
     expect(evaluations).toEqual([]);
   });
 });
+
+describe("extension_eval observe", () => {
+  const observation = {
+    elements: [{ role: "link", name: "Docs", selector: "#docs" }],
+    elementCount: 1,
+    elementsTruncated: false,
+    settled: true,
+    url: "chrome-extension://x/chrome_url_overrides/newtab.html",
+    title: "New Tab",
+  };
+
+  it("appends the surface's settled element list after the expression ran in it, moving a scalar result under result", async () => {
+    const p = project(MV3);
+    cdpTargets = [newtabOpen(p.id)];
+    evaluateResponse = () => (evaluations.length === 1 ? { result: { type: "number", value: 5 } } : { result: { type: "object", value: observation } });
+
+    const result = JSON.parse(
+      await evalTool.handler({ projectPath: p.dir, expression: "1 + 4", context: "newtab", browser: "chrome", observe: true }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.value).toEqual({ result: 5, observation });
+    expect(evaluations).toHaveLength(2);
+    expect(evaluations[1].sessionId).toBe("session-nt");
+    expect(String(evaluations[1].params.expression)).toContain("getAnimations");
+    expect(evaluations[0].params.expression).toBe("1 + 4");
+  });
+
+  it("leaves the answer alone without observe, and refuses a name that is no surface in a warning", async () => {
+    const p = project(MV3);
+    cdpTargets = [newtabOpen(p.id)];
+
+    const plain = JSON.parse(await evalTool.handler({ projectPath: p.dir, expression: "1 + 4", context: "newtab", browser: "chrome" }));
+    expect(plain.value).toBe(5);
+    expect(evaluations).toHaveLength(1);
+
+    const refused = JSON.parse(
+      await evalTool.handler({ projectPath: p.dir, expression: "1 + 4", context: "newtab", browser: "chrome", observe: "background" }),
+    );
+    expect(refused.value).toEqual({ result: 5, observation: null });
+    expect(refused.warnings.join(" ")).toContain('"background" is not a surface this server reads');
+    expect(evaluations).toHaveLength(2);
+  });
+});
