@@ -10,6 +10,9 @@ import { PROJECT_PIN_ENV, isProjectRef, pinnedProject, sameProject } from "./cre
 import { envelope } from "./envelope";
 import { sameStoredProject } from "./project-identity";
 import { submitCheckRefused, submitShips } from "./submit-action-safety";
+import { TOOL_ANNOTATIONS, type ToolAnnotations } from "./tool-annotations";
+
+export type { ToolAnnotations } from "./tool-annotations";
 
 export type FeatureGroup = "local" | "platform";
 
@@ -17,13 +20,6 @@ export const FEATURE_GROUPS: FeatureGroup[] = ["local", "platform"];
 
 export const FEATURES_ENV = "EXTENSION_DEV_FEATURES";
 export const NO_SHIP_ENV = "EXTENSION_DEV_NO_SHIP";
-
-export interface ToolAnnotations {
-  readOnlyHint: boolean;
-  destructiveHint: boolean;
-  idempotentHint: boolean;
-  openWorldHint: boolean;
-}
 
 type Args = Record<string, unknown>;
 
@@ -34,23 +30,6 @@ export interface ToolPolicy {
   untrusted?: true;
   actsAs?: { tool: string; refuse: (args: Args) => string | null };
 }
-
-const reads = (openWorld = false): ToolAnnotations => ({
-  readOnlyHint: true,
-  destructiveHint: false,
-  idempotentHint: true,
-  openWorldHint: openWorld,
-});
-
-const acts = (
-  over: Partial<Omit<ToolAnnotations, "readOnlyHint">> = {},
-): ToolAnnotations => ({
-  readOnlyHint: false,
-  destructiveHint: false,
-  idempotentHint: false,
-  openWorldHint: false,
-  ...over,
-});
 
 /* @invariant EVERY TOOL CARRIES A TITLE, THE VERB PHRASE A CLIENT SHOWS IN A
  * CONSENT PROMPT. Without one the person approving a call reads the raw tool
@@ -103,138 +82,138 @@ export function toolTitle(name: string): string {
 }
 
 export const TOOL_POLICY: Record<string, ToolPolicy> = {
-  extension_create: { group: "local", annotations: acts({ openWorldHint: true }) },
-  extension_templates: { group: "local", annotations: reads(true) },
-  extension_docs_search: { group: "local", annotations: reads(true) },
-  extension_add_feature: { group: "local", annotations: reads() },
-  extension_build: { group: "local", annotations: acts({ idempotentHint: true }) },
-  extension_dev: { group: "local", annotations: acts() },
-  extension_start: { group: "local", annotations: acts() },
+  extension_create: { group: "local", annotations: TOOL_ANNOTATIONS.extension_create },
+  extension_templates: { group: "local", annotations: TOOL_ANNOTATIONS.extension_templates },
+  extension_docs_search: { group: "local", annotations: TOOL_ANNOTATIONS.extension_docs_search },
+  extension_add_feature: { group: "local", annotations: TOOL_ANNOTATIONS.extension_add_feature },
+  extension_build: { group: "local", annotations: TOOL_ANNOTATIONS.extension_build },
+  extension_dev: { group: "local", annotations: TOOL_ANNOTATIONS.extension_dev },
+  extension_start: { group: "local", annotations: TOOL_ANNOTATIONS.extension_start },
   extension_wait: {
     group: "local",
-    annotations: reads(),
+    annotations: TOOL_ANNOTATIONS.extension_wait,
     untrusted: true,
   },
-  extension_stop: { group: "local", annotations: acts({ idempotentHint: true, destructiveHint: true }) },
-  extension_manifest_validate: { group: "local", annotations: reads() },
-  extension_theme_verify: { group: "local", annotations: reads() },
-  extension_analyze: { group: "local", annotations: reads() },
+  extension_stop: { group: "local", annotations: TOOL_ANNOTATIONS.extension_stop },
+  extension_manifest_validate: { group: "local", annotations: TOOL_ANNOTATIONS.extension_manifest_validate },
+  extension_theme_verify: { group: "local", annotations: TOOL_ANNOTATIONS.extension_theme_verify },
+  extension_analyze: { group: "local", annotations: TOOL_ANNOTATIONS.extension_analyze },
   extension_assert: {
     group: "local",
-    annotations: acts({ idempotentHint: true }),
+    annotations: TOOL_ANNOTATIONS.extension_assert,
     untrusted: true,
   },
   extension_inspect: {
     group: "local",
-    annotations: acts({ idempotentHint: true }),
+    annotations: TOOL_ANNOTATIONS.extension_inspect,
     untrusted: true,
   },
   extension_dom_snapshot: {
     group: "local",
-    annotations: reads(),
+    annotations: TOOL_ANNOTATIONS.extension_dom_snapshot,
     untrusted: true,
   },
   extension_screenshot: {
     group: "local",
-    annotations: acts({ idempotentHint: true }),
+    annotations: TOOL_ANNOTATIONS.extension_screenshot,
     untrusted: true,
   },
   extension_try: {
     group: "local",
-    annotations: acts({ openWorldHint: true }),
+    annotations: TOOL_ANNOTATIONS.extension_try,
     untrusted: true,
   },
   extension_list_extensions: {
     group: "local",
-    annotations: reads(),
+    annotations: TOOL_ANNOTATIONS.extension_list_extensions,
     untrusted: true,
   },
   extension_logs: {
     group: "local",
-    annotations: reads(),
+    annotations: TOOL_ANNOTATIONS.extension_logs,
     untrusted: true,
   },
   extension_doctor: {
     group: "local",
-    annotations: reads(),
+    annotations: TOOL_ANNOTATIONS.extension_doctor,
     untrusted: true,
   },
   extension_eval: {
     group: "local",
-    annotations: acts({ destructiveHint: true, openWorldHint: true }),
+    annotations: TOOL_ANNOTATIONS.extension_eval,
     untrusted: true,
   },
   extension_storage: {
     group: "local",
-    annotations: acts({ destructiveHint: true }),
+    annotations: TOOL_ANNOTATIONS.extension_storage,
     untrusted: true,
   },
   extension_reload: {
     group: "local",
-    annotations: acts({ idempotentHint: true }),
+    annotations: TOOL_ANNOTATIONS.extension_reload,
     untrusted: true,
   },
   extension_open: {
     group: "local",
-    annotations: acts({ openWorldHint: true }),
+    annotations: TOOL_ANNOTATIONS.extension_open,
     untrusted: true,
   },
   extension_browsers: {
     group: "local",
-    annotations: acts({ destructiveHint: true, openWorldHint: true }),
+    annotations: TOOL_ANNOTATIONS.extension_browsers,
   },
-  extension_auth: { group: "platform", annotations: acts({ openWorldHint: true, destructiveHint: true }) },
+  extension_auth: { group: "platform", annotations: TOOL_ANNOTATIONS.extension_auth },
   extension_workspace_create: {
     group: "platform",
-    annotations: acts({ openWorldHint: true }),
+    annotations: TOOL_ANNOTATIONS.extension_workspace_create,
   },
   extension_project_create: {
     group: "platform",
-    annotations: acts({ openWorldHint: true }),
+    annotations: TOOL_ANNOTATIONS.extension_project_create,
   },
   extension_preview_web: {
     group: "platform",
-    annotations: acts({ openWorldHint: true }),
+    annotations: TOOL_ANNOTATIONS.extension_preview_web,
     ships: (args) => args.share === true,
   },
   extension_shares: {
     group: "platform",
-    annotations: acts({ destructiveHint: true, openWorldHint: true }),
+    annotations: TOOL_ANNOTATIONS.extension_shares,
     ships: (args) => args.action === "revoke" || args.action === "create",
   },
   extension_publish: {
     group: "platform",
-    annotations: acts({ openWorldHint: true }),
+    annotations: TOOL_ANNOTATIONS.extension_publish,
     ships: "always",
   },
-  extension_release_status: { group: "platform", annotations: reads(true) },
+  extension_release_status: { group: "platform", annotations: TOOL_ANNOTATIONS.extension_release_status },
   extension_approvals: {
     group: "platform",
-    annotations: acts({ destructiveHint: true, openWorldHint: true }),
+    annotations: TOOL_ANNOTATIONS.extension_approvals,
   },
   extension_builds: {
     group: "platform",
-    annotations: acts({ destructiveHint: true, openWorldHint: true }),
+    annotations: TOOL_ANNOTATIONS.extension_builds,
     untrusted: true,
   },
   extension_workspace: {
     group: "platform",
-    annotations: acts({ openWorldHint: true }),
+    annotations: TOOL_ANNOTATIONS.extension_workspace,
     untrusted: true,
   },
   extension_release_promote: {
     group: "platform",
-    annotations: acts({ destructiveHint: true, openWorldHint: true }),
+    annotations: TOOL_ANNOTATIONS.extension_release_promote,
     ships: "always",
   },
   extension_submit: {
     group: "platform",
-    annotations: acts({ destructiveHint: true, openWorldHint: true }),
+    annotations: TOOL_ANNOTATIONS.extension_submit,
     ships: submitShips,
   },
   extension_submit_check: {
     group: "platform",
-    annotations: reads(true),
+    annotations: TOOL_ANNOTATIONS.extension_submit_check,
     actsAs: { tool: "extension_submit", refuse: submitCheckRefused },
   },
 };
