@@ -409,6 +409,22 @@ describe("extension_build reads the build numbers off the engine, not off its pr
     expect(result.value.output).not.toContain('"schema"');
   });
 
+  it("answers no output tail when silent was asked for", async () => {
+    const dir = project();
+    distFor(dir, "chrome");
+    cliResponse = {
+      ...summariesOf({ browser: "chrome", total_bytes: 5 }),
+      stderr: buildNarration("chrome", "Reading List"),
+    };
+
+    const result = await run({ projectPath: dir, browser: "chrome", silent: true });
+
+    expect(result.ok).toBe(true);
+    expect(cliCalls[0]).toContain("--silent");
+    expect(result.value.totalBytes).toBe(5);
+    expect(result.value).not.toHaveProperty("output");
+  });
+
   it("reports the engine's own failure message when the build fails", async () => {
     const dir = project();
     distFor(dir, "chrome");

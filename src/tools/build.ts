@@ -1089,7 +1089,7 @@ export async function handler(args: {
         ...(zipPath ? { zipPath } : {}),
         ...(zipSourcePath ? { zipSourcePath } : {}),
         duration,
-        output: lastLines(out, 12),
+        ...(args.silent ? {} : { output: lastLines(out, 12) }),
       },
       warnings: [
         ...warnings,
