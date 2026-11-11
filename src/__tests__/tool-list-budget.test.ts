@@ -22,7 +22,7 @@ import { createServer } from "../index";
  * are measured on JSON.stringify of each listed tool, the bytes a client
  * actually receives. */
 const PER_TOOL = 6_000;
-const WHOLE_LIST = 61_000;
+const WHOLE_LIST = 62_000;
 
 type Listed = Awaited<ReturnType<Client["listTools"]>>["tools"][number];
 

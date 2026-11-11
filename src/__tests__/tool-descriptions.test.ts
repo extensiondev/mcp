@@ -23,6 +23,7 @@ const IMPERATIVE_VERBS = [
   "Run",
   "Sign",
   "Stop",
+  "Stub",
   "Submit",
   "Take",
   "Validate",

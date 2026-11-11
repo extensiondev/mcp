@@ -21,6 +21,7 @@ import { withCallWaits } from "./call-waits";
 import { envelope } from "./envelope";
 import { crashAnswerFields, watchCall } from "./server-crash-log";
 import { resolveApiBase } from "./login-flow";
+import { stubbedReadWarning } from "./network-stubs";
 import {
   TOOL_POLICY,
   disabledToolEnvelope,
@@ -340,7 +341,7 @@ export function createToolSurface(setup: ToolHandlerOptions): {
                 await withCallWaits(() =>
                   inSessionOrder(sessionLaneKey(normalizedArgs), name, () => withSessionIdle(normalizedArgs, () => tool.handler(normalizedArgs))),
                 ),
-                { note: bound.note },
+                { note: bound.note, warning: stubbedReadWarning(name, normalizedArgs) },
               );
             }
 

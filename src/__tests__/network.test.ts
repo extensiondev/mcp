@@ -46,14 +46,14 @@ class FakeLink implements StubLink {
     return {};
   }
 
-  onEvent(handler: (msg: Record<string, unknown>) => void): () => void {
-    this.handlers.add(handler);
+  onEvent(listener: (msg: Record<string, unknown>) => void): () => void {
+    this.handlers.add(listener);
 
-    return () => this.handlers.delete(handler);
+    return () => this.handlers.delete(listener);
   }
 
-  onClose(handler: () => void): void {
-    this.closeHandlers.push(handler);
+  onClose(listener: () => void): void {
+    this.closeHandlers.push(listener);
   }
 
   disconnect(): void {
@@ -61,13 +61,13 @@ class FakeLink implements StubLink {
   }
 
   async emit(msg: Record<string, unknown>): Promise<void> {
-    for (const handler of this.handlers) handler(msg);
+    for (const listener of this.handlers) listener(msg);
 
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
 
   close(): void {
-    for (const handler of this.closeHandlers) handler();
+    for (const listener of this.closeHandlers) listener();
   }
 
   of(method: string): Sent[] {
@@ -96,6 +96,7 @@ beforeEach(() => {
   link = new FakeLink();
   opened = [];
   live.port = 9222;
+
   stubLinks.open = async (port: number) => {
     opened.push(port);
 
@@ -171,7 +172,7 @@ describe("extension_network add installs Fetch interception on every attached co
     await call({ action: "add", id: "users", method: "post", url: "https://api.example.com/users", status: 201, body: "ok" });
 
     const enables = link.of("Fetch.enable").filter((entry) => entry.sessionId === "popup");
-    expect(enables.at(-1)?.params).toEqual({
+    expect(enables[enables.length - 1]?.params).toEqual({
       patterns: [
         { urlPattern: "https://api.example.com/*", requestStage: "Request" },
         { urlPattern: "https://api.example.com/users", requestStage: "Request" },
@@ -201,6 +202,7 @@ describe("extension_network answers matching requests and records hits and misse
       { name: "Content-Type", value: "application/json" },
       { name: "Access-Control-Allow-Origin", value: "*" },
     ]);
+
     expect(link.of("Fetch.continueRequest").map((entry) => entry.params)).toEqual([{ requestId: "r2" }]);
 
     const requests = await call({ action: "requests" });

@@ -42,6 +42,7 @@ export const TOOL_DOCS: Record<string, ToolDocsMeta> = {
   extension_doctor: { tier: "see", gate: SESSION, samplePrompt: "The session looks stuck. Diagnose it" },
   extension_theme_verify: { tier: "see", gate: NONE, samplePrompt: "Does this theme manifest paint the colors it declares?" },
   extension_assert: { tier: "test", gate: SESSION, samplePrompt: "Check that the worker booted, the popup rendered and the console is clean" },
+  extension_network: { tier: "test", gate: `${SESSION} on a Chromium browser`, samplePrompt: "Make the API answer 500 and show me what the popup renders" },
   extension_eval: { tier: "act", gate: EVAL, samplePrompt: "Evaluate chrome.runtime.id in the background and in the popup" },
   extension_storage: { tier: "act", gate: CONTROL, samplePrompt: "Read chrome.storage.local and set settings.theme to dark" },
   extension_reload: { tier: "act", gate: CONTROL, samplePrompt: "Reload the extension and confirm the worker came back" },

@@ -59,6 +59,7 @@ export const TOOL_TITLES: Record<string, string> = {
   extension_doctor: "Diagnose the session",
   extension_eval: "Evaluate code in a context",
   extension_storage: "Read extension storage",
+  extension_network: "Stub network responses",
   extension_reload: "Reload the extension",
   extension_open: "Open a surface",
   extension_browsers: "List the browsers",
@@ -151,6 +152,11 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
   extension_reload: {
     group: "local",
     annotations: TOOL_ANNOTATIONS.extension_reload,
+    untrusted: true,
+  },
+  extension_network: {
+    group: "local",
+    annotations: acts(),
     untrusted: true,
   },
   extension_open: {

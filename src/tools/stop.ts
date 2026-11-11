@@ -37,6 +37,7 @@ import { contractBrowserPid, describeEnded, endedProcesses } from "../lib/stop-e
 import { sweepCarriers, type CarrierSweepEntry } from "../lib/carrier-exit";
 import { readRememberedCarriers } from "../lib/carrier-registry";
 import { envelope } from "../lib/envelope";
+import { dropNetworkStubs } from "../lib/network-stubs";
 import { describeGroups, groupByProject, onlyLiveSession } from "../lib/only-live-session";
 import { killWindowsTree } from "../lib/exec";
 import { trackUrl } from "../lib/track-url";
@@ -339,6 +340,7 @@ export async function stopOne(
   projectPath: string,
   browser: string,
 ): Promise<StopOutcome> {
+  dropNetworkStubs(projectPath, browser);
   const session = findSessionInfo(projectPath, browser);
   const pid = session?.pid ?? pidFromReadyContract(projectPath, browser);
   const hints = contractProcessHints(projectPath, browser);

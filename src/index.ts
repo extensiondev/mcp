@@ -30,6 +30,7 @@ import * as logs from "./tools/logs";
 import * as evalTool from "./tools/eval";
 import * as storage from "./tools/storage";
 import * as reload from "./tools/reload";
+import * as network from "./tools/network";
 import * as open from "./tools/open";
 import * as domSnapshot from "./tools/dom-snapshot";
 import * as screenshot from "./tools/screenshot";
@@ -96,6 +97,7 @@ export const tools: ToolModule[] = [
   evalTool,
   storage,
   reload,
+  network,
   open,
   domSnapshot,
   screenshot,
