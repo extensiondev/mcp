@@ -4,6 +4,10 @@ import { handler as builds, schema } from "../tools/builds";
 import { TOOL_POLICY } from "../lib/tool-policy";
 import { API, DISPATCH_ROUTE, SUITE, login, world } from "./builds-acts-harness";
 
+const FRESH_SHA = "4cec881";
+const FRESH_ROUTE = `/api/projects/prj_probe/builds/${FRESH_SHA}`;
+const DISPATCHED_AT = "2026-11-11T16:52:04.000Z";
+
 describe(SUITE, () => {
   it("offers download, rebuild, configure and create-channel beside the reads, and is no longer a read-only tool", () => {
     expect(schema.inputSchema.properties.action.enum).toEqual(["list", "get", "logs", "download", "rebuild", "recheck", "configure", "create-channel", "configure-channel", "delete-channel"]);
@@ -34,6 +38,55 @@ describe(SUITE, () => {
     expect(out.hint).toContain("real build");
     expect(out.hint).toContain('action:"get"');
     expect(out.value.follow).toMatchObject({ list: { action: "list" }, get: { action: "get", buildId: "603fc8a" } });
+  });
+
+  it("ledger 507: rebuild keeps reading through a 404 of its own dispatch, backing off from 3 s to 15 s, and names the dispatch and the get call when the bound ends", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+    world.routes[`POST ${DISPATCH_ROUTE}`] = () => ({
+      body: { ok: true, branch: "main", commit: FRESH_SHA, browsers: "chrome,firefox", origin: "mcp", dispatchedAt: DISPATCHED_AT },
+    });
+
+    world.routes[`GET ${FRESH_ROUTE}`] = () => ({ body: { message: "Build not found" }, status: 404 });
+
+    const out = JSON.parse(await builds({ action: "rebuild", buildId: FRESH_SHA, waitSeconds: 30, api: API }));
+    const reads = world.calls.filter((call) => call.method === "GET" && call.url.endsWith(FRESH_ROUTE));
+
+    expect(out.ok).toBe(true);
+    expect(out.status).toBe("rebuild-dispatched");
+    expect(reads).toHaveLength(5);
+    expect(out.value.outcome).toMatchObject({ recorded: false, waitedSeconds: 30, readMisses: 5 });
+    expect(out.value.outcome.readProblem).toContain(`build ${FRESH_SHA} is not recorded yet`);
+    expect(out.value.outcome.readProblem).not.toContain("/api/projects/");
+    expect(out.hint).toContain(`did not appear within the 30 s wait`);
+    expect(out.hint).toContain(`dispatched at ${DISPATCHED_AT}`);
+    expect(out.hint).toContain(`extension_builds (action: "get", buildId: "${FRESH_SHA}", waitSeconds:`);
+    expect(out.hint).toContain("Do not rebuild again");
+  });
+
+  it("ledger 507: rebuild answers built once the record of its own dispatch appears after a 404", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+    world.routes[`POST ${DISPATCH_ROUTE}`] = () => ({
+      body: { ok: true, branch: "main", commit: FRESH_SHA, browsers: "chrome", origin: "mcp", dispatchedAt: DISPATCHED_AT },
+    });
+
+    let reads = 0;
+
+    world.routes[`GET ${FRESH_ROUTE}`] = () => {
+      reads += 1;
+
+      return reads < 3 ? { body: { message: "Build not found" }, status: 404 } : { body: { buildId: FRESH_SHA, buildNumber: 1, status: "success" } };
+    };
+
+    const out = JSON.parse(await builds({ action: "rebuild", buildId: FRESH_SHA, waitSeconds: 60, api: API }));
+
+    expect(out.status).toBe("built");
+    expect(reads).toBe(3);
+    expect(out.value.outcome).toMatchObject({ recorded: true, status: "success", waitedSeconds: 9, readMisses: 2 });
+    expect(out.hint).toContain("Build #1 (4cec881) now reads success");
   });
 
   it("rebuild refuses an unknown build environment before asking the platform", async () => {

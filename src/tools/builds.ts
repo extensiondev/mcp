@@ -13,6 +13,7 @@ import { API_BASE } from "../lib/common-schema";
 import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
 import { buildName, buildNumberOf, buildState, channelsOf, isActiveState, isRow, pinsWords, text, type Row } from "../lib/builds-list-row";
 import { browserFigures } from "../lib/build-browser-figures";
+import { forgetBuildDispatch } from "../lib/build-dispatches";
 import { unrecordedBrowsers, unrecordedRowReason } from "../lib/build-health";
 import { envChannelOf, listItemFor, rowNameOf, runningBrowsers, runningClause, runningReason, unrecordedClause, unrecordedRow } from "../lib/build-row-states";
 import { usageValue } from "../lib/build-usage";
@@ -247,6 +248,8 @@ async function getBuild(args: HandlerArgs): Promise<string> {
   const boundMs = getWaitBoundMs(args.waitSeconds);
   const waitedRead = await readBuildWaiting(opened.api, buildId, boundMs);
   const { detail, started } = waitedRead;
+
+  if (detail.ok) forgetBuildDispatch(opened.api, buildId);
 
   if (waitedRead.naming) {
     return notRecordedYet(COMMAND, buildId, waitedRead, boundMs, consoleProjectUrl(opened.api.ref, ConsoleProjectPage.builds, args.api));

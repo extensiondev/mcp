@@ -432,6 +432,63 @@ describe("extension_builds reads the platform's builds with the project's own to
     expect(calls).toHaveLength(0);
   });
 
+  it("ledger 507: get keeps waiting through a 404 of a sha this server dispatched, backing off, then answers the verdict", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+    routes[`/api/projects/${PROJECT_ID}/builds/dispatch`] = { body: { ok: true, commit: "4cec881", browsers: "chrome", branch: "main", dispatchedAt: "2026-11-11T16:52:04.000Z" } };
+    routes[`/api/projects/${PROJECT_ID}/builds`] = { body: { items: [BUILD_ROW] } };
+    const dispatched = JSON.parse(await builds({ action: "rebuild", buildId: "4cec881", waitSeconds: 0, api: API }));
+
+    expect(dispatched.status).toBe("rebuild-dispatched");
+
+    const route = `/api/projects/${PROJECT_ID}/builds/4cec881`;
+    const { sleep } = outcomeClock;
+    const slept: number[] = [];
+
+    outcomeClock.sleep = async (ms: number) => {
+      slept.push(ms);
+      await sleep(ms);
+      if (slept.length === 4) routes[route] = { body: { ...DETAIL, id: "4cec881", buildId: "4cec881", status: "success", browsers: [] } };
+    };
+
+    try {
+      const out = JSON.parse(await builds({ action: "get", buildId: "4cec881", waitSeconds: 240, api: API }));
+
+      expect(slept).toEqual([3000, 6000, 12000, 15000]);
+      expect(out.status).toBe("read");
+      expect(out.value.build.status).toBe("success");
+      expect(out.value.waited).toEqual({ seconds: 36, settled: true });
+    } finally {
+      outcomeClock.sleep = sleep;
+    }
+  });
+
+  it("ledger 507: get answers not-recorded-yet naming the dispatch time and the next get when the bound ends before the record appears", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+    routes[`/api/projects/${PROJECT_ID}/builds/dispatch`] = { body: { ok: true, commit: "7e1f0a2", browsers: "chrome", branch: "main", dispatchedAt: "2026-11-11T17:00:10.000Z" } };
+    routes[`/api/projects/${PROJECT_ID}/builds`] = { body: { items: [BUILD_ROW] } };
+    await builds({ action: "rebuild", buildId: "7e1f0a2", waitSeconds: 0, api: API });
+
+    const out = JSON.parse(await builds({ action: "get", buildId: "7e1f0a2", waitSeconds: 40, api: API }));
+
+    expect(out.ok).toBe(true);
+    expect(out.status).toBe("not-recorded-yet");
+    expect(out.value.dispatch).toEqual({ dispatchedAt: "2026-11-11T17:00:10Z" });
+    expect(out.value.waited).toEqual({ seconds: 40, settled: false });
+    expect(out.hint).toContain("this server dispatched a rebuild for it at 2026-11-11T17:00:10Z");
+    expect(out.hint).toContain("The 40 s wait passed before the record appeared");
+    expect(out.hint).toContain('extension_builds (action: "get", buildId: "7e1f0a2", waitSeconds:');
+    expect(out.hint).not.toContain('action:"rebuild"');
+
+    const once = JSON.parse(await builds({ action: "get", buildId: "7e1f0a2", api: API }));
+
+    expect(once.status).toBe("not-recorded-yet");
+    expect(once.value.waited).toBeUndefined();
+  });
+
   it("says a build neither lastPush nor the list names is not found at once, even with waitSeconds", async () => {
     if (process.platform === "win32") return;
 

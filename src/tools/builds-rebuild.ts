@@ -22,6 +22,7 @@ import {
   waitBound,
   type Verdict,
 } from "../lib/act-outcome";
+import { forgetBuildDispatch, rememberBuildDispatch, unrecordedBackoffSeconds, unrecordedGetCall } from "../lib/build-dispatches";
 import { buildName, buildNumberOf } from "../lib/builds-list-row";
 import { consoleProjectUrl } from "../lib/registry";
 import { envelope } from "../lib/envelope";
@@ -278,13 +279,25 @@ async function dispatch(call: RebuildCall, found: FinishedBuild | null): Promise
   const links = linksOf(trackLinks(COMMAND, { ...args, action: "rebuild", buildId: commit } as Row, "rebuild-dispatched", base).map((row) => (row.kind === "track" ? { ...row, kind: "build" as const } : row)));
   const buildPage = links.find((link) => link.kind === "build")?.url ?? String(base.buildsPageUrl);
   const readCall = `extension_builds (action: "get", buildId: "${commit || "<the new build>"}")`;
+  if (commit) rememberBuildDispatch(api, commit, acceptedAt);
+
+  let unrecordedReads = 0;
+  let recordMissing = false;
   const waited = await awaitRecordedOutcome<Row>({
     waitSeconds: call.waitSeconds,
     read: async () => {
       if (!commit) return { ok: false, message: "the platform named no commit for this rebuild, so its record cannot be read by build id" };
 
       const read = await projectApiGet<Row>(api, `builds/${encodeURIComponent(commit)}`);
+      recordMissing = !read.ok && read.status === 404;
+
+      if (recordMissing) {
+        return { ok: false, message: `build ${commit} is not recorded yet`, transient: true, retryAfterSeconds: unrecordedBackoffSeconds(unrecordedReads++) };
+      }
+
       if (!read.ok) return missedRead(read);
+
+      forgetBuildDispatch(api, commit);
 
       return { ok: true, record: isRow(read.json) ? read.json : {} };
     },
@@ -317,6 +330,20 @@ async function dispatch(call: RebuildCall, found: FinishedBuild | null): Promise
       status: "built",
       value,
       hint: `${started} The platform's record of ${named} now reads ${waited.outcome.status}; ${readCall} reads its artifacts and checks, and the build page is ${buildPage}. ${made}`,
+      warnings: [stripWarning],
+    });
+  }
+
+  if (recordMissing) {
+    const seconds = waited.outcome.waitedSeconds;
+    const missing = seconds > 0 ? `did not appear within the ${seconds} s wait` : "was not there on this call's one read";
+
+    return envelope({
+      ok: true,
+      command: COMMAND,
+      status: "rebuild-dispatched",
+      value,
+      hint: `The platform accepted this rebuild, dispatched at ${acceptedAt}, and its record of build ${commit} ${missing}: the build is dispatched but not recorded yet, which takes the platform a few minutes. Keep waiting with ${unrecordedGetCall(commit)}; once recorded, extension_builds action:"get" or action:"logs" with buildId ${commit} reads it, and the build page is ${buildPage}. ${started} ${run.sentence} Do not rebuild again to check on it. ${made}`,
       warnings: [stripWarning],
     });
   }
