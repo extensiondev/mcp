@@ -17,6 +17,8 @@ claude mcp add extension-dev npx @extension.dev/mcp
 
 Works with Claude Code, Claude Desktop, Cursor, and any MCP client.
 
+Extension.js is the framework you run. extension.dev is where it ships. This server covers both: the local tools run Extension.js on your machine, and the platform lane takes the build the rest of the way to the stores.
+
 [extension.dev](https://extension.dev) · [Docs](https://docs.extension.dev/tools/mcp) · [Templates](https://templates.extension.dev) · [Discord](https://discord.gg/v9h2RgeTSN)
 
 ## Why an MCP server for extensions
