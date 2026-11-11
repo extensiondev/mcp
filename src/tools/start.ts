@@ -35,6 +35,7 @@ import {
   removeSessionMarker,
 } from "../lib/process-manager";
 import { guardSameBrowserSession } from "../lib/same-browser-session";
+import { DEFAULT_IDLE_MINUTES, IDLE_MINUTES_SCHEMA, armSessionIdle, resolveIdleMinutes } from "../lib/session-idle";
 import {
   LAUNCH_FLAG_SCHEMA,
   headlessLaunch,
@@ -106,6 +107,7 @@ export const schema = {
         description:
           "Wait up to 45 s; false: call extension_wait.",
       },
+      ...IDLE_MINUTES_SCHEMA,
       ...LAUNCH_FLAG_SCHEMA,
     },
     required: ["projectPath"],
@@ -126,6 +128,7 @@ export async function handler(
     replace?: boolean;
     wait?: boolean;
     isolated?: boolean;
+    idleMinutes?: number;
   } & LaunchFlagArgs,
 ): Promise<string> {
   const browser = args.browser ?? "chrome";
@@ -238,6 +241,7 @@ export async function handler(
   }
 
   const pid = child.pid;
+  const idleMinutes = resolveIdleMinutes(args.idleMinutes, visibility.headless);
 
   let markerWarning = registerSession({
     pid,
@@ -246,8 +250,10 @@ export async function handler(
     command,
     profileReused: carryover.reused,
     headless: visibility.headless,
+    idleMinutes,
     allowControl,
   });
+  const idleWarning = armSessionIdle({ projectPath: args.projectPath, browser, pid, idleMinutes });
   child.on("exit", () => {
     removeSession(args.projectPath, browser, pid);
     removeSessionMarker(args.projectPath, browser, pid);
@@ -394,6 +400,7 @@ export async function handler(
       command,
       profileReused,
       headless: visibility.headless,
+      idleMinutes,
       allowControl,
     });
   }
@@ -416,6 +423,7 @@ export async function handler(
     noBrowser: Boolean(args.noBrowser),
     profileReused,
     headless: visibility.headless,
+    idleMinutes,
     allowControl,
     allowEval,
     controlPort,
@@ -440,6 +448,7 @@ export async function handler(
       ...sessionIdentityWarnings(identity, loaded, args.projectPath, browser),
       ...boot.warnings,
       markerWarning,
+      idleWarning,
       stale.removed &&
         "Removed a Live Preview carrier left behind by an earlier dev session, so it was not loaded beside your extension here.",
       !stale.removed &&
@@ -530,6 +539,7 @@ async function isolatedStart(args: IsolatedStartArgs, browser: string): Promise<
     outputPath: run.extensionDir,
     profile: run.profileDir,
     headless: args.headless !== false,
+    idleMinutes: args.idleMinutes ?? DEFAULT_IDLE_MINUTES,
     replace: false,
   });
   let parsed: { ok?: boolean } = {};

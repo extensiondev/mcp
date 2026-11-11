@@ -40,6 +40,7 @@ import {
   contractControlState,
 } from "../lib/session-browser";
 import { guardSameBrowserSession } from "../lib/same-browser-session";
+import { IDLE_MINUTES_SCHEMA, armSessionIdle, idleSentence, resolveIdleMinutes } from "../lib/session-idle";
 import { handler as waitHandler } from "./wait";
 import { handler as logsHandler } from "./logs";
 import {
@@ -119,6 +120,7 @@ export const schema = {
         description:
           "Enable extension_eval; implies allowControl.",
       },
+      ...IDLE_MINUTES_SCHEMA,
     },
     required: ["projectPath"],
   },
@@ -135,6 +137,7 @@ export async function handler(
     allowControl?: boolean;
     allowEval?: boolean;
     wait?: boolean;
+    idleMinutes?: number;
   } & LaunchFlagArgs &
     SafariDevOptionArgs,
 ): Promise<string> {
@@ -195,6 +198,8 @@ export async function handler(
     ...(args.appName ? { appName: args.appName } : {}),
   };
 
+  const idleMinutes = resolveIdleMinutes(args.idleMinutes, visibility.headless && !args.noBrowser);
+
   let markerWarning = registerSession({
     pid,
     browser,
@@ -204,9 +209,11 @@ export async function handler(
     noBrowser: Boolean(args.noBrowser),
     profileReused,
     headless: visibility.headless,
+    idleMinutes,
     logPath,
     ...safariRecord,
   });
+  const idleWarning = armSessionIdle({ projectPath: args.projectPath, browser, pid, idleMinutes });
   child.on("exit", () => {
     removeSession(args.projectPath, browser, pid);
     removeSessionMarker(args.projectPath, browser, pid);
@@ -403,6 +410,7 @@ export async function handler(
       noBrowser: Boolean(args.noBrowser),
       profileReused,
       headless: visibility.headless,
+      idleMinutes,
       logPath,
       ...safariRecord,
     });
@@ -463,11 +471,12 @@ export async function handler(
         projectPath: args.projectPath,
         ...(replaced.length > 0 ? { replacedSession: replaced[0] } : {}),
         headless: visibility.headless,
+        idleMinutes,
         capabilities,
         engine: describeExtensionInvocation(args.projectPath),
         logPath,
       },
-      warnings: [portNote, portKeptNote, ...boot.warnings, markerWarning],
+      warnings: [portNote, portKeptNote, ...boot.warnings, markerWarning, idleWarning],
       hint: diagnosis.hint,
     });
   }
@@ -503,6 +512,7 @@ export async function handler(
       projectPath: args.projectPath,
       ...(replaced.length > 0 ? { replacedSession: replaced[0] } : {}),
       ...(args.noBrowser ? {} : { headless: visibility.headless }),
+      idleMinutes,
       ...(signingFrame ? { signing: signingFrame.signing } : {}),
       ...(safariEnable ? { safari: safariEnable.safari } : {}),
       capabilities,
@@ -518,6 +528,7 @@ export async function handler(
       ...droppedRuntimePages(args.projectPath, browser, readyDistPath(readiness?.ready)).map((page) => page.say),
       readiness ? safariStartingUrlWarning(args.projectPath, browser, args.startingUrl) : null,
       markerWarning,
+      idleWarning,
     ],
     hint: args.noBrowser
       ? "Build-only session (noBrowser: true): no browser will launch, so no runtime will ever attach. extension_wait returns as soon as the first compile lands (compiled: true, browserAttached: false) instead of waiting out its budget; do not wait for a browser. The control verbs (storage/reload/open/dom_snapshot/eval) need a live browser and will not work against this session. When you are done, call extension_stop to shut down the dev server."
@@ -529,7 +540,7 @@ export async function handler(
               ? `Control was requested, but the engine reports no control port (${control.unavailableReason}), so extension_${controlVerbs.split(", ").join("/extension_")} will be refused until the session is relaunched.`
               : `Control was requested; ready.json has not stamped the control port yet, so extension_wait is what confirms extension_${controlVerbs.split(", ").join("/extension_")} will work.`
           : "Control channel is OFF because this session was started with allowControl: false: extension_storage/reload/open/dom_snapshot are locked, and extension_eval needs allowEval: true. To unlock them, call extension_dev again without allowControl: false (plus allowEval: true for eval) and replace: true (it stops this session first); a plain second call is refused so the session does not fork."
-        } When you are done, call extension_stop to shut down the dev server and browser.`,
+        } When you are done, call extension_stop to shut down the dev server and browser.${idleMinutes === null ? "" : ` ${idleSentence(idleMinutes)}`}`,
   });
 }
 

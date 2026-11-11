@@ -3,9 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { beforeEach, describe, it, expect, vi, afterEach } from "vitest";
 
 import { readyContract } from "./fixtures/engine-answers";
+import { armSessionIdle, idleClock, idleRecordPath, idledOutPath, readIdledOut, resolveIdleMinutes } from "../lib/session-idle";
+import { createToolDispatcher, type ToolModule } from "../lib/tool-dispatch";
 
 import type * as WaitModule from "../tools/wait";
 import type * as LogsModule from "../tools/logs";
@@ -454,4 +456,107 @@ describe("extension_stop all:true discovery", () => {
     expect(result.status).toBe("nothing-to-stop");
     expect(result.hint).toContain("no session markers");
   }, 30_000);
+});
+
+describe("ledger 515: a session the agent owns ends itself after an idle time, and the next call says so", () => {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  beforeEach(() => {
+    nextChild = () => fakeCli("setTimeout(()=>{}, 60000)");
+  });
+
+  it("a headless extension_dev takes a 30 minute idle limit by default, names it, and arms the idle record", async () => {
+    const project = tmpProject();
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project, headless: true }));
+
+    expect(result.status).toBe("started");
+    expect(result.value.idleMinutes).toBe(30);
+    expect(result.hint).toContain("ends itself after 30 minutes");
+    expect(result.hint).toContain("idleMinutes");
+
+    const record = JSON.parse(fs.readFileSync(idleRecordPath(project, "chrome"), "utf8"));
+    expect(record.pid).toBe(result.value.pid);
+    expect(record.idleMs).toBe(30 * 60_000);
+    expect(record.session).toEqual({ projectPath: path.resolve(project), browser: "chrome" });
+  });
+
+  it("a visible extension_dev window keeps no idle limit unless idleMinutes is given, and 0 means never", async () => {
+    const project = tmpProject();
+    const shown = JSON.parse(await dev.handler({ wait: false, projectPath: project, headless: false }));
+
+    expect(shown.value.idleMinutes).toBeNull();
+    expect(shown.hint).not.toContain("ends itself");
+    expect(fs.existsSync(idleRecordPath(project, "chrome"))).toBe(false);
+    expect(resolveIdleMinutes(0, true)).toBeNull();
+    expect(resolveIdleMinutes(undefined, true)).toBe(30);
+    expect(resolveIdleMinutes(5, false)).toBe(5);
+  });
+
+  it("idleMinutes on a visible window arms the record with that time", async () => {
+    const project = tmpProject();
+    const limited = JSON.parse(await dev.handler({ wait: false, projectPath: project, headless: false, idleMinutes: 5 }));
+
+    expect(limited.value.idleMinutes).toBe(5);
+    expect(limited.hint).toContain("ends itself after 5 minutes");
+    expect(JSON.parse(fs.readFileSync(idleRecordPath(project, "chrome"), "utf8")).idleMs).toBe(5 * 60_000);
+  });
+
+  it("a tool call naming the project resets the idle clock on its record", async () => {
+    const project = tmpProject();
+    const pid = spawnVictim();
+    registerSession({ pid, browser: "chrome", projectPath: project, command: "dev" });
+    const before = new Date(Date.now() - 60_000);
+    fs.mkdirSync(path.dirname(idleRecordPath(project, "chrome")), { recursive: true });
+    fs.writeFileSync(idleRecordPath(project, "chrome"), JSON.stringify({ pid, session: { projectPath: project, browser: "chrome" }, idleMs: 60_000 }));
+    fs.utimesSync(idleRecordPath(project, "chrome"), before, before);
+
+    const reads: ToolModule = {
+      schema: { name: "extension_wait", description: "fake", inputSchema: { type: "object", properties: { projectPath: { type: "string" }, browser: { type: "string" } }, required: ["projectPath"] } },
+      handler: async () => JSON.stringify({ ok: true, status: "ready", value: {} }),
+    };
+    const dispatch = createToolDispatcher({ tools: [reads], options: { features: ["local"], noShip: false } });
+    await dispatch({ name: "extension_wait", arguments: { projectPath: project } });
+
+    expect(fs.statSync(idleRecordPath(project, "chrome")).mtimeMs).toBeGreaterThan(before.getTime() + 30_000);
+  });
+
+  it("the watchdog ends an idle session on its own, and the next failing call on it says when it idled out", async () => {
+    if (process.platform === "win32") return;
+
+    const project = tmpProject();
+    const pid = spawnVictim();
+    registerSession({ pid, browser: "chrome", projectPath: project, command: "dev" });
+    const { pollMs, graceMs } = idleClock;
+    idleClock.pollMs = 50;
+    idleClock.graceMs = 100;
+
+    try {
+      expect(armSessionIdle({ projectPath: project, browser: "chrome", pid, idleMinutes: 0.005 })).toBeNull();
+    } finally {
+      idleClock.pollMs = pollMs;
+      idleClock.graceMs = graceMs;
+    }
+
+    const deadline = Date.now() + 3_000;
+    while (isAlive(pid) && Date.now() < deadline) await sleep(50);
+
+    expect(isAlive(pid)).toBe(false);
+    while (!fs.existsSync(idledOutPath(project, "chrome")) && Date.now() < deadline) await sleep(50);
+
+    const ended = readIdledOut(project, "chrome");
+    expect(ended).toMatchObject({ pid, idleMinutes: 0.005, session: { projectPath: path.resolve(project), browser: "chrome" } });
+    expect(typeof ended?.idledOutAt).toBe("string");
+    expect(fs.existsSync(idleRecordPath(project, "chrome"))).toBe(false);
+    expect(listSessionMarkers().map((m) => path.resolve(m.projectPath))).not.toContain(project);
+    removeSession(project, "chrome");
+
+    const dispatch = createToolDispatcher({ tools: [stop as unknown as ToolModule], options: { features: ["local"], noShip: false } });
+    const frame = await dispatch({ name: "extension_stop", arguments: { projectPath: project, browser: "chrome" } });
+    const answer = JSON.parse(frame.content[0]?.text ?? "{}");
+
+    expect(answer.ok).toBe(false);
+    expect(answer.warnings.join(" ")).toContain(`ended itself at ${ended?.idledOutAt}`);
+    expect(answer.warnings.join(" ")).toContain("no tool call named it for 0.005 minutes");
+    expect(fs.existsSync(idledOutPath(project, "chrome"))).toBe(false);
+  }, 10_000);
 });

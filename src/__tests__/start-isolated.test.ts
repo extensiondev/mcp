@@ -73,6 +73,7 @@ vi.mock("../lib/boot-verdict", () => ({
 const start = await import("../tools/start");
 const { removeSession } = await import("../lib/process-manager");
 const { ISOLATED_ROOT_ENV, ISOLATED_MARKER, isolatedRoot } = await import("../lib/isolated-run");
+const { idleRecordPath } = await import("../lib/session-idle");
 
 const tmpDirs: string[] = [];
 let isolatedRootDir = "";
@@ -178,6 +179,19 @@ describe("401: extension_start isolated runs a throwaway session beside the pers
     expect(spawnedArgs).toHaveLength(2);
     expect(quiet.value.headless).toBe(true);
     expect(shown.value.headless).toBe(false);
+  });
+
+  it("ledger 515: an isolated run ends itself after 30 idle minutes even with a visible window, and says so", async () => {
+    const source = sourceProject();
+
+    const shown = JSON.parse(await start.handler({ wait: false, projectPath: source, isolated: true, headless: false }));
+    const custom = JSON.parse(await start.handler({ wait: false, projectPath: source, isolated: true, idleMinutes: 2 }));
+
+    expect(shown.value.idleMinutes).toBe(30);
+    expect(shown.hint).toContain("ends itself after 30 minutes");
+    expect(fs.existsSync(idleRecordPath(shown.value.isolated.projectPath, "chrome"))).toBe(true);
+    expect(custom.value.idleMinutes).toBe(2);
+    expect(custom.hint).toContain("ends itself after 2 minutes");
   });
 
   it("refuses the arguments that cannot go with isolated before building anything", async () => {

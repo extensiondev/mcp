@@ -683,6 +683,12 @@
           "required": false,
           "default": false,
           "description": "Enable extension_eval; implies allowControl."
+        },
+        {
+          "name": "idleMinutes",
+          "type": "number",
+          "required": false,
+          "description": "Idle minutes before it ends itself; 0 never; default 30 headless."
         }
       ]
     },
@@ -2030,6 +2036,12 @@
           "description": "Wait up to 45 s; false: call extension_wait."
         },
         {
+          "name": "idleMinutes",
+          "type": "number",
+          "required": false,
+          "description": "Idle minutes before it ends itself; 0 never; default 30 headless."
+        },
+        {
           "name": "profile",
           "type": "string",
           "required": false,
@@ -2607,6 +2619,12 @@
           "required": false,
           "default": "run",
           "description": "run launches; close ends this project's tries."
+        },
+        {
+          "name": "idleMinutes",
+          "type": "number",
+          "required": false,
+          "description": "Idle minutes before it ends itself; 0 never; default 30."
         }
       ]
     },

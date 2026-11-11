@@ -21,6 +21,7 @@ function facts(overrides: Partial<StartFacts> = {}): StartFacts {
     noBrowser: false,
     profileReused: false,
     headless: false,
+    idleMinutes: null,
     allowControl: true,
     allowEval: false,
     controlPort: 53605,
@@ -49,6 +50,22 @@ describe("ledger 396: extension_start says its copy is fixed and sends a watched
 
     expect(hint).toContain("never reads a rebuilt build folder");
     expect(hint).not.toContain("use extension_dev instead");
+  });
+});
+
+describe("ledger 515: extension_start names the idle time a session the agent owns ends at", () => {
+  it("a session with an idle limit carries it in the value and the hint", () => {
+    const answer = JSON.parse(startAnswer(facts({ headless: true, idleMinutes: 30 })));
+
+    expect(answer.value.idleMinutes).toBe(30);
+    expect(String(answer.hint)).toContain("ends itself after 30 minutes");
+  });
+
+  it("a session without one says null and nothing about ending itself", () => {
+    const answer = JSON.parse(startAnswer(facts()));
+
+    expect(answer.value.idleMinutes).toBeNull();
+    expect(String(answer.hint)).not.toContain("ends itself");
   });
 });
 

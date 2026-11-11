@@ -3,13 +3,41 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { namesRegistryOrToken } from "../lib/package-address";
 import { readTryPermissions } from "../lib/try-permissions";
 import { openTryRun } from "../lib/try-runs";
 import { handler } from "../tools/try";
 import { storedZip } from "./fixtures/stored-zip";
+
+import type * as EngineVersionModule from "../lib/engine-version";
+import type * as StartModule from "../tools/start";
+
+const startCalls: Array<Record<string, unknown>> = [];
+let startAnswer: (args: Record<string, unknown>) => string = () => JSON.stringify({ ok: false, status: "launch-failed", error: { code: "E_BROWSER_EXITED", message: "not launched in this test" } });
+
+vi.mock("../tools/start", async (importOriginal) => {
+  const actual = await importOriginal<typeof StartModule>();
+
+  return {
+    ...actual,
+    handler: async (args: Record<string, unknown>) => {
+      startCalls.push(args);
+
+      return startAnswer(args);
+    },
+  };
+});
+
+vi.mock("../lib/engine-version", async (importOriginal) => {
+  const actual = await importOriginal<typeof EngineVersionModule>();
+
+  return {
+    ...actual,
+    resolvedEngineFacts: async () => ({ version: "4.1.30", outputJsonCommands: null }),
+  };
+});
 
 const PROJECT = "acme/notes";
 
@@ -178,6 +206,44 @@ describe("extension_try runs only the published build the person asked for, and 
 
     const again = JSON.parse(await handler({ project: PROJECT, action: "close" }));
     expect(again.status).toBe("nothing-to-close");
+  });
+
+  describe("ledger 515: a try ends itself after an idle time, and the answer names it", () => {
+    beforeEach(() => {
+      startCalls.length = 0;
+      startAnswer = (args) => JSON.stringify({ ok: true, status: "started", value: { pid: 4242, headless: args.headless, idleMinutes: args.idleMinutes, extensionLoaded: true, loadEvidence: "the target list names it." } });
+    });
+
+    it("asks extension_start for a 30 minute idle limit by default and says so in the hint", async () => {
+      const bytes = storedZip({ "manifest.json": JSON.stringify({ manifest_version: 3, name: "Notes", version: "0.3.0", permissions: ["storage"] }) });
+      routes["/acme/notes/builds/bbbbbbb/chrome.zip"] = () => new Response(bytes);
+      routes["/acme/notes/builds/bbbbbbb/artifact-integrity/chrome.json"] = () => Response.json(integrityReport("chrome.zip", bytes));
+
+      const answer = JSON.parse(await handler({ project: PROJECT }));
+
+      expect(answer.status).toBe("launched");
+      expect(startCalls[0]).toMatchObject({ idleMinutes: 30, headless: true });
+      expect(answer.value.idleMinutes).toBe(30);
+      expect(answer.hint).toContain("This try ends itself after 30 minutes");
+      expect(answer.hint).toContain("tryPath");
+
+      await handler({ project: PROJECT, action: "close" });
+    });
+
+    it("passes idleMinutes through, 0 meaning never", async () => {
+      const bytes = storedZip({ "manifest.json": JSON.stringify({ manifest_version: 3, name: "Notes", version: "0.3.0" }) });
+      routes["/acme/notes/builds/bbbbbbb/chrome.zip"] = () => new Response(bytes);
+      routes["/acme/notes/builds/bbbbbbb/artifact-integrity/chrome.json"] = () => Response.json(integrityReport("chrome.zip", bytes));
+      startAnswer = (args) => JSON.stringify({ ok: true, status: "started", value: { pid: 4242, headless: args.headless, idleMinutes: null } });
+
+      const answer = JSON.parse(await handler({ project: PROJECT, idleMinutes: 0 }));
+
+      expect(startCalls[0]).toMatchObject({ idleMinutes: 0 });
+      expect(answer.value.idleMinutes).toBeNull();
+      expect(answer.hint).not.toContain("ends itself");
+
+      await handler({ project: PROJECT, action: "close" });
+    });
   });
 });
 

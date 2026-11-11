@@ -15,6 +15,7 @@ import { envelope } from "../lib/envelope";
 import { packageAddress } from "../lib/package-address";
 import { PRODUCTION_DEBUG_PORT_FLOOR } from "../lib/production-launch";
 import { userlandProjectUrl, type ProjectRef } from "../lib/registry";
+import { DEFAULT_IDLE_MINUTES, IDLE_MINUTES_SCHEMA, idleSentence } from "../lib/session-idle";
 import { downloadTryPackage, pickTryBuild, readTryBuilds, type TryRefusal } from "../lib/try-package";
 import { readTryPermissions, type TryPermissionFacts } from "../lib/try-permissions";
 import {
@@ -71,6 +72,10 @@ export const schema = {
         default: "run",
         description: "run launches; close ends this project's tries.",
       },
+      idleMinutes: {
+        ...IDLE_MINUTES_SCHEMA.idleMinutes,
+        description: "Idle minutes before it ends itself; 0 never; default 30.",
+      },
     },
     required: ["project"],
   },
@@ -83,6 +88,7 @@ interface Args {
   url?: string;
   headless?: boolean;
   action?: string;
+  idleMinutes?: number;
 }
 
 type Frame = { ok?: boolean; status?: string; value?: Record<string, any>; error?: { code?: string; message?: string }; hint?: string };
@@ -277,6 +283,7 @@ export async function handler(args: Args): Promise<string> {
   const floorMet = engine.version !== null && (compareVersions(engine.version, PRODUCTION_DEBUG_PORT_FLOOR) ?? -1) >= 0;
   const page = url || NO_SAMPLE_PAGE;
   const headless = args.headless !== false;
+  const idleMinutes = typeof args.idleMinutes === "number" && Number.isFinite(args.idleMinutes) ? args.idleMinutes : DEFAULT_IDLE_MINUTES;
   const started = parsed(
     await startHandler({
       projectPath: run.dir,
@@ -285,6 +292,7 @@ export async function handler(args: Args): Promise<string> {
       profile: path.join(run.dir, TRY_PROFILE_DIR),
       startingUrl: page,
       headless,
+      idleMinutes,
       allowControl: floorMet,
     }),
   );
@@ -333,6 +341,7 @@ export async function handler(args: Args): Promise<string> {
       ...packageFacts,
       engine: { version: engine.version, used: floorMet },
       headless,
+      idleMinutes: typeof launched.idleMinutes === "number" ? launched.idleMinutes : null,
       page,
       confirmed,
       notConfirmed,
@@ -342,7 +351,7 @@ export async function handler(args: Args): Promise<string> {
       tryPath: run.dir,
       close: { tool: COMMAND, arguments: { project, action: "close" } },
     },
-    hint: `${screenshot ? `The screenshot is ${screenshot.path}; look at it before you describe the extension.` : "No screenshot was taken."} Say only what value.confirmed lists, and name what value.notConfirmed lists as not checked. Before the person relies on ${name}, tell them: ${warn} Nothing is installed in their own browser. When they are done, call ${closeCall(project)}, which ends the browser and deletes the folder and the profile.`,
+    hint: `${screenshot ? `The screenshot is ${screenshot.path}; look at it before you describe the extension.` : "No screenshot was taken."} Say only what value.confirmed lists, and name what value.notConfirmed lists as not checked. Before the person relies on ${name}, tell them: ${warn} Nothing is installed in their own browser. When they are done, call ${closeCall(project)}, which ends the browser and deletes the folder and the profile.${typeof launched.idleMinutes === "number" ? ` ${idleSentence(launched.idleMinutes).replace("This session", "This try").replace("naming its projectPath", "naming its tryPath as projectPath")}` : ""}`,
     warnings: [headless ? null : "The browser window is on the person's screen and took the keyboard when it opened."],
   });
 }

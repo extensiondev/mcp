@@ -157,6 +157,7 @@ Run the extension while you edit it (dev build, hot reload, browser): the first 
 | `allowControl` | boolean | no | `true` | Control channel for the bridge verbs. |
 | `wait` | boolean | no | `true` | Wait up to 45 s for ready. |
 | `allowEval` | boolean | no | `false` | Enable extension_eval; implies allowControl. |
+| `idleMinutes` | number | no |  | Idle minutes before it ends itself; 0 never; default 30 headless. |
 
 ## extension_docs_search
 
@@ -452,6 +453,7 @@ Run the PRODUCTION build in a browser (extension_dev is for writing code); no ho
 | `replace` | boolean | no | `false` | Replace this project's session; else refused. |
 | `isolated` | boolean | no | `false` | Throwaway headless run in a temp folder (4.1.36+); later calls and extension_stop use value.isolated.projectPath. |
 | `wait` | boolean | no | `true` | Wait up to 45 s; false: call extension_wait. |
+| `idleMinutes` | number | no |  | Idle minutes before it ends itself; 0 never; default 30 headless. |
 | `profile` | string | no |  | Profile path; "false" reuses the real one. |
 | `startingUrl` | string | no |  | URL opened on launch. |
 | `chromiumBinary` | string | no |  | Chromium binary; browser still names the target family. |
@@ -578,6 +580,7 @@ Run a published extension.dev build in a fresh profile on this machine, no insta
 | `url` | string | no |  | http(s) page to open. |
 | `headless` | boolean | no | `true` | false opens a usable window. |
 | `action` | "run" \| "close" | no | `"run"` | run launches; close ends this project's tries. |
+| `idleMinutes` | number | no |  | Idle minutes before it ends itself; 0 never; default 30. |
 
 ## extension_wait
 

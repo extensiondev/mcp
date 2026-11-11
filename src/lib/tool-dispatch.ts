@@ -35,6 +35,7 @@ import { followProjectMove, followSentence, movedAnswer } from "./project-move";
 import { scrubRunAnswer } from "./run-privacy";
 import { inSessionOrder, sessionLaneKey } from "./session-order";
 import { secretArgumentRefusal } from "./secret-arguments";
+import { withSessionIdle } from "./session-idle";
 import { createReloader, handoverState, type ActiveBuild, type BuildImporter, type ListedTool, type RebuiltCall, type ToolFrame } from "./server-reload";
 import { markListStale, reloadedWarning, serverStamp, staleEnvelope, type ServerStampReader } from "./server-stamp";
 import { markStaleLocal, noLocalCarryReason, predatedChecks, predatesCheckEnvelope, type HeldLocal } from "./stale-local";
@@ -336,7 +337,9 @@ export function createToolSurface(setup: ToolHandlerOptions): {
           async () => {
             if (!platform) {
               return annotate(
-                await withCallWaits(() => inSessionOrder(sessionLaneKey(normalizedArgs), name, () => tool.handler(normalizedArgs))),
+                await withCallWaits(() =>
+                  inSessionOrder(sessionLaneKey(normalizedArgs), name, () => withSessionIdle(normalizedArgs, () => tool.handler(normalizedArgs))),
+                ),
                 { note: bound.note },
               );
             }

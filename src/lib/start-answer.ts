@@ -11,6 +11,7 @@ import { headlessHint } from "./launch-flags";
 import { denoiseCliLog } from "./legacy-stdout";
 import { productionLoadProofLine } from "./production-launch";
 import { waitCall } from "./production-receipt";
+import { idleSentence } from "./session-idle";
 import { START_WAIT_BUDGET_MS } from "./start-landing";
 import { handler as waitHandler } from "../tools/wait";
 
@@ -52,6 +53,7 @@ export interface StartFacts {
   noBrowser: boolean;
   profileReused: boolean;
   headless: boolean;
+  idleMinutes: number | null;
   allowControl: boolean;
   allowEval: boolean;
   controlPort: number | null;
@@ -96,6 +98,10 @@ function lastWords(output: string): string[] {
 
 const STOP = "When you are done, call extension_stop to shut the session down.";
 
+function stopLine(facts: StartFacts): string {
+  return facts.idleMinutes === null ? STOP : `${STOP} ${idleSentence(facts.idleMinutes)}`;
+}
+
 function bridgeLine(facts: StartFacts): string {
   const { allowControl, allowEval, controlPort, controlledCopy } = facts;
 
@@ -130,6 +136,7 @@ function sessionValue(facts: StartFacts): Record<string, unknown> {
     verb: facts.verb,
     ...(facts.noBrowser ? {} : { profileReused: facts.profileReused }),
     headless: facts.headless,
+    idleMinutes: facts.idleMinutes,
     allowControl: facts.allowControl,
     allowEval: facts.allowEval,
     ...(facts.allowControl ? { controlPort: facts.controlPort } : {}),
@@ -152,8 +159,8 @@ function startedHint(facts: StartFacts, lead: string): string {
   const proof = productionLoadProofLine(contract, launch, allowControl, projectPath, browser);
 
   return launch.extensionLoaded === true
-    ? `${lead} ${launchSeen(facts)}, and ${browser} loaded the extension: ${launch.loadEvidence} ${bridgeLine(facts)} ${visibility} ${STOP}`
-    : `${lead} ${launchSeen(facts)}. What this answer cannot confirm is that ${browser} loaded the extension: ${launch.loadEvidence} ${bridgeLine(facts)} ${proof} ${visibility} ${STOP}`;
+    ? `${lead} ${launchSeen(facts)}, and ${browser} loaded the extension: ${launch.loadEvidence} ${bridgeLine(facts)} ${visibility} ${stopLine(facts)}`
+    : `${lead} ${launchSeen(facts)}. What this answer cannot confirm is that ${browser} loaded the extension: ${launch.loadEvidence} ${bridgeLine(facts)} ${proof} ${visibility} ${stopLine(facts)}`;
 }
 
 function waitedOut(frame: WaitFrame): Record<string, unknown> {
@@ -180,7 +187,7 @@ function landedAnswer(facts: StartFacts, frame: WaitFrame): string {
     command: facts.command,
     status: frame.status ?? "build-ready",
     value: { ...sessionValue(facts), ...value, pid: facts.pid, waited: { ...waitedOut(frame), status: "landed" } },
-    hint: `${lead} ${frame.hint ?? ""} ${bridgeLine(facts)} ${visibility} ${STOP}`.replace(/\s+/g, " ").trim(),
+    hint: `${lead} ${frame.hint ?? ""} ${bridgeLine(facts)} ${visibility} ${stopLine(facts)}`.replace(/\s+/g, " ").trim(),
     warnings: [...facts.warnings, ...((frame.warnings ?? []) as Array<string | null>)],
   });
 }
