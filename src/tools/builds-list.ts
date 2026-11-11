@@ -35,6 +35,16 @@ export interface ListArgs {
   limit?: number;
 }
 
+function emptyListHint(project: string, lastPush: unknown, buildsPageUrl: string, noted: string[]): string {
+  const rebuild = `Call extension_builds action:"rebuild" to build the branch head now; it needs no push, and ${buildsPageUrl} tracks the run.`;
+
+  if (!lastPush) {
+    return `No builds are recorded for ${project} yet, and the platform has received no push since the project was created, so the source arrived with the project and that import produced no first build. ${rebuild}`;
+  }
+
+  return `No builds are recorded for ${project} yet.${noted.length ? ` ${noted.join(" ")}` : ""} ${rebuild}`;
+}
+
 export async function listBuilds(command: string, args: ListArgs): Promise<string> {
   const opened = await openProjectApi({ command, project: args.project, api: args.api, renew: true });
   if (!opened.ok) return projectApiOpenFailure(command, opened, { api: args.api, name: "Builds", value: { action: "list" } });
@@ -85,7 +95,7 @@ export async function listBuilds(command: string, args: ListArgs): Promise<strin
         ? `${rows.length} recent build${rows.length === 1 ? "" : "s"} of ${project}, newest first; the latest is ${rowWords(latest, text(latest.status) || "status unknown")}${latestPins ? `, ${latestPins}` : ""}. Pass action:"get" or action:"logs" with a buildId to read one.${
             rows.some((row) => row.status === "partial") ? " A partial build finished with at least one browser failed; failedBrowsers names them." : ""
           }${cancelledSentences.length ? ` ${cancelledSentences.join(" ")}` : ""}${noted.length ? ` ${noted.join(" ")}` : ""}`
-        : `No builds are recorded for ${project} yet.${noted.length ? ` ${noted.join(" ")}` : ""} Push a commit to produce one, then check ${buildsPageUrl}.`
+        : emptyListHint(project, push.lastPush, buildsPageUrl, noted)
     }`,
     warnings: [
       rows.length === limit ? `This is the newest ${limit}; raise limit (max ${MAX_LIMIT}) to see older builds.` : null,

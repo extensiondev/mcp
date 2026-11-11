@@ -301,6 +301,36 @@ describe("extension_builds answers one truth per build", () => {
     );
   });
 
+  it("ledger 498: an empty list with no push record says the import produced no first build and names rebuild, never a push", async () => {
+    if (process.platform === "win32") return;
+
+    body = { items: [] };
+
+    const out = await list();
+
+    expect(out.value.builds).toEqual([]);
+    expect(out.value.lastPush).toBeUndefined();
+    expect(out.hint).toContain("that import produced no first build");
+    expect(out.hint).toContain('extension_builds action:"rebuild"');
+    expect(out.hint).not.toContain("Push a commit");
+  });
+
+  it("ledger 498: an empty list with a push record keeps the push sentence and still names rebuild", async () => {
+    if (process.platform === "win32") return;
+
+    body = {
+      items: [],
+      lastPush: { commit: "f939a95", ref: "main", receivedAt: "2026-10-30T17:40:06Z", outcome: "DEBOUNCED", dispatched: false },
+    };
+
+    const out = await list();
+
+    expect(out.hint).toContain("The last push f939a95");
+    expect(out.hint).not.toContain("produced no first build");
+    expect(out.hint).toContain('extension_builds action:"rebuild"');
+    expect(out.hint).not.toContain("Push a commit");
+  });
+
   it("a refused push gets no folding sentence", async () => {
     if (process.platform === "win32") return;
 
