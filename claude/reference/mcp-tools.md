@@ -306,12 +306,12 @@ Preview a build in the web emulator; share:true returns a link anyone opens with
 
 ## extension_project_create
 
-Create an extension.dev project from its GitHub repository, BEFORE extension_auth. The first call answers a URL a signed-in workspace member approves; call again with deviceCode and waitSeconds, and the login is stored too. The first build spends one build of the workspace's monthly allowance, running the build command exactly as stored. projects: up to 10 per approval, at most 10 per hour, never split silently.
+Create an extension.dev project from a pushed GitHub repo, BEFORE extension_auth; it reads GitHub only, no call uploads a local folder. First call: a URL a signed-in workspace member approves; resume with deviceCode and waitSeconds, the login is stored too. The first build spends one build of the workspace's monthly allowance, running the build command exactly as stored. projects: up to 10 per approval, at most 10 per hour, never split silently.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `project` | string | no |  | New '<workspace>/<project>'. |
-| `repo` | string | no |  | Pushed GitHub '<owner>/<repo>'. |
+| `repo` | string | no |  | GitHub '<owner>/<repo>' the source is pushed to; required. |
 | `installationId` | string | no |  | Omit; the platform finds it or answers a connect link. |
 | `displayName` | string | no |  | Human name; rename later with extension_workspace configure-project. |
 | `description` | string | no |  | Short description. |

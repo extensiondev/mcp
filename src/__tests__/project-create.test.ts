@@ -122,17 +122,96 @@ describe("extension_project_create", () => {
     expect(schema.inputSchema.required).toEqual([]);
   });
 
-  it("still refuses a single call that names no project or no repo", async () => {
+  it("still refuses a single call that names no project before any network call", async () => {
     const { fn } = createFetch({ token: [] });
     vi.stubGlobal("fetch", fn);
 
-    for (const args of [{}, { project: "acme/ghost-app" }, { repo: "acme/src" }]) {
+    for (const args of [{}, { repo: "acme/src" }]) {
       const out = JSON.parse(await handler(args as never));
       expect(out.ok).toBe(false);
       expect(out.error.code).toBe("E_BAD_REQUEST");
     }
 
     expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("asks for the repo only once the platform has opened the lane, and says the platform takes GitHub only", async () => {
+    const { fn, calls } = createFetch({ token: [] });
+    vi.stubGlobal("fetch", fn);
+
+    const out = JSON.parse(await handler({ project: "acme/ghost-app" }));
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("bad-request");
+    expect(out.error.code).toBe("E_BAD_REQUEST");
+    expect(out.error.message).toContain("GitHub only");
+    expect(out.error.message).toContain("projectPath is not an alternative");
+    expect(out.hint).toContain("git push");
+    expect(out.hint).toContain(`${API}/import`);
+    expect(out.value.needs).toBe("github-repository");
+    expect(calls.some((c) => c.url.endsWith("/api/cli/device/code"))).toBe(true);
+    expect(calls.some((c) => c.url.endsWith("/api/cli/device/token"))).toBe(false);
+  });
+
+  it("says the lane is closed before it asks for a repo", async () => {
+    const { fn } = createFetch({
+      code: {
+        status: 403,
+        body: {
+          error: "access_denied",
+          message: "Headless project creation is not open on this host yet.",
+          code: "CLI_PROJECT_CREATE_DISABLED",
+        },
+      },
+      token: [],
+    });
+    vi.stubGlobal("fetch", fn);
+
+    const out = JSON.parse(await handler({ project: "acme/ghost-app" }));
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("lane-closed");
+    expect(out.error.code).toBe("E_PLATFORM");
+    expect(out.value.createUrl).toBe(`${API}/import?name=ghost-app&workspace=acme`);
+    expect(out.value.prefilled).toEqual(["name", "workspace"]);
+    expect(out.value.askedOnTheForm).toEqual(["repository", "browsers"]);
+    expect(out.hint).toContain(out.value.createUrl);
+    expect(out.hint).toContain("GitHub repository the source is pushed to");
+  });
+
+  it("carries a prefilled create form link when the lane is closed", async () => {
+    const { fn } = createFetch({
+      code: {
+        status: 403,
+        body: {
+          error: "access_denied",
+          message: "Headless project creation is not open on this host yet.",
+          code: "CLI_PROJECT_CREATE_DISABLED",
+        },
+      },
+      token: [],
+    });
+    vi.stubGlobal("fetch", fn);
+
+    const out = JSON.parse(await handler(baseArgs));
+
+    expect(out.status).toBe("lane-closed");
+    expect(out.value.createUrl).toBe(`${API}/import?repository=acme%2Fghost-app-src&name=ghost-app&workspace=acme`);
+    expect(out.value.prefilled).toEqual(["repository", "name", "workspace"]);
+    expect(out.value.askedOnTheForm).toEqual(["browsers"]);
+    expect(out.value.consoleUrl).toBeDefined();
+    expect(out.hint).toContain("Create the project in the console");
+    expect(out.hint).toContain(out.value.createUrl);
+    expect(out.hint).toContain("repository acme/ghost-app-src, name ghost-app and workspace acme prefilled");
+    expect(out.hint).toContain("extension_builds (action: configure)");
+    expect(out.hint).toContain("extension_auth (action: login)");
+  });
+
+  it("says in its description that the platform reads source from GitHub only and takes no local folder", () => {
+    expect(schema.description).toContain("reads GitHub only");
+    expect(schema.description).toContain("no call uploads a local folder");
+    expect(schema.inputSchema.properties.repo.description).toContain("required");
+    expect(schema.inputSchema.properties).not.toHaveProperty("projectPath");
   });
 
   it("asks for no installation id, because the platform resolves it", () => {

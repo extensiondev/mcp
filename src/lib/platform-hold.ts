@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { wwwImportPath } from "@extension.dev/urls/paths";
+
 import { envelope } from "./envelope";
 import { effectiveApiBase, mcpOrigins } from "./origins";
 
@@ -142,14 +144,41 @@ const HOLD_MARKER_TEXT = "is not open to the public yet";
 
 export type LaneSubject = "project" | "projects" | "workspace";
 
+export interface CreatePrefill {
+  project: string;
+  repo?: string;
+}
+
 export interface LaneClosedFacts {
   server: string;
   publicHold: boolean;
   allowlistNamed: false;
   consoleUrl?: string;
+  createUrl?: string;
+  prefilled?: string[];
+  askedOnTheForm?: string[];
 }
 
-export function laneClosedFacts(options: { api?: string; message?: string }): LaneClosedFacts {
+export const CREATE_FORM_SETTINGS_LATER =
+  "the install command, build command and output directory are set after creation with extension_builds (action: configure)";
+
+function createForm(www: string, prefill: CreatePrefill): Required<Pick<LaneClosedFacts, "createUrl" | "prefilled" | "askedOnTheForm">> {
+  const [workspace = "", name = ""] = prefill.project.split("/");
+  const repo = String(prefill.repo ?? "").trim();
+  const query = {
+    ...(repo ? { repository: repo } : {}),
+    name,
+    workspace,
+  };
+
+  return {
+    createUrl: `${www.replace(/\/+$/, "")}${wwwImportPath(query)}`,
+    prefilled: Object.keys(query),
+    askedOnTheForm: [...(repo ? [] : ["repository"]), "browsers"],
+  };
+}
+
+export function laneClosedFacts(options: { api?: string; message?: string; prefill?: CreatePrefill }): LaneClosedFacts {
   const origins = mcpOrigins(options.api);
   const publicHold = String(options.message ?? "").includes(HOLD_MARKER_TEXT);
 
@@ -158,10 +187,24 @@ export function laneClosedFacts(options: { api?: string; message?: string }): La
     publicHold,
     allowlistNamed: false,
     ...(publicHold ? {} : { consoleUrl: origins.console }),
+    ...(publicHold || !options.prefill ? {} : createForm(origins.www, options.prefill)),
   };
 }
 
-export function laneClosedHint(options: { api?: string; message?: string; subject: LaneSubject }): string {
+function prefilledFormSentence(facts: LaneClosedFacts, prefill: CreatePrefill): string {
+  const [workspace = "", name = ""] = prefill.project.split("/");
+  const repo = String(prefill.repo ?? "").trim();
+  const carried = repo
+    ? `repository ${repo}, name ${name} and workspace ${workspace}`
+    : `name ${name} and workspace ${workspace}`;
+  const asks = repo
+    ? "The form asks which browsers to build"
+    : "The form still asks for the GitHub repository the source is pushed to, because the platform creates a project from GitHub only, and which browsers to build";
+
+  return `Create the project in the console: open ${facts.createUrl}, the create form with ${carried} prefilled. ${asks}; ${CREATE_FORM_SETTINGS_LATER}. Then run extension_auth (action: login) against it.`;
+}
+
+export function laneClosedHint(options: { api?: string; message?: string; subject: LaneSubject; prefill?: CreatePrefill }): string {
   const facts = laneClosedFacts(options);
   const noun = options.subject === "workspace" ? "workspace" : "project";
 
@@ -172,7 +215,9 @@ export function laneClosedHint(options: { api?: string; message?: string; subjec
   const target =
     options.subject === "workspace"
       ? `Create the workspace in the console at ${facts.consoleUrl} (workspace switcher, New workspace), then run extension_project_create against it.`
-      : `Create the ${options.subject === "projects" ? "projects" : "project"} in the console at ${facts.consoleUrl} (workspace page, New project), then run extension_auth (action: login) against ${options.subject === "projects" ? "them" : "it"}.`;
+      : options.subject === "project" && options.prefill
+        ? prefilledFormSentence(facts, options.prefill)
+        : `Create the ${options.subject === "projects" ? "projects" : "project"} in the console at ${facts.consoleUrl} (workspace page, New project), then run extension_auth (action: login) against ${options.subject === "projects" ? "them" : "it"}.`;
 
   return `The platform at ${facts.server} closed headless ${noun} creation for this call; its own message above says why. ${target}`;
 }

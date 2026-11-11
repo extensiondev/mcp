@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { wwwImportPath } from "@extension.dev/urls/paths";
+
 import { linksOf, madeSentence, recordedOutcome } from "../lib/act-outcome";
 import { createRequestDeadline, readBackOnce, RESUME_POLL_MS } from "../lib/call-budget";
 import { API_BASE } from "../lib/common-schema";
@@ -35,7 +37,8 @@ import {
 import { createProjectBatch } from "../lib/project-create-batch";
 import { buildCreateBody, DEFAULT_BUILD_COMMAND } from "../lib/project-create-body";
 import { consoleBase, consoleProjectUrl } from "../lib/registry";
-import { laneClosedFacts, laneClosedHint, platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
+import { mcpOrigins } from "../lib/origins";
+import { laneClosedFacts, laneClosedHint, platformHoldEnvelope, sawPlatformHold, type CreatePrefill } from "../lib/platform-hold";
 import { identityHeaders } from "../lib/session-identity";
 import { firstBuildSpendNarration, readWorkspaceBuildAllowance } from "../lib/build-allowance";
 import { answerIsUnknownOutcome, readCreatedProject } from "../lib/create-answer";
@@ -76,7 +79,7 @@ const CREATE_STUCK_MINUTES = CREATE_STUCK_AFTER_SECONDS / 60;
 export const schema = {
   name: "extension_project_create",
   description:
-    `Create an extension.dev project from its GitHub repository, BEFORE extension_auth. The first call answers a URL a signed-in workspace member approves; call again with deviceCode and waitSeconds, and the login is stored too. The first build spends one build of the workspace's monthly allowance, running the build command exactly as stored. projects: up to ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} per approval, at most ${PLATFORM_CREATES_PER_HOUR} per hour, never split silently.`,
+    `Create an extension.dev project from a pushed GitHub repo, BEFORE extension_auth; it reads GitHub only, no call uploads a local folder. First call: a URL a signed-in workspace member approves; resume with deviceCode and waitSeconds, the login is stored too. The first build spends one build of the workspace's monthly allowance, running the build command exactly as stored. projects: up to ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} per approval, at most ${PLATFORM_CREATES_PER_HOUR} per hour, never split silently.`,
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -86,7 +89,7 @@ export const schema = {
       },
       repo: {
         type: "string",
-        description: "Pushed GitHub '<owner>/<repo>'.",
+        description: "GitHub '<owner>/<repo>' the source is pushed to; required.",
       },
       installationId: {
         type: "string",
@@ -167,8 +170,9 @@ function fail(
   });
 }
 
-function closedLane(name: string, message: string, api: string, workspace: string): string {
-  const facts = laneClosedFacts({ api, message });
+function closedLane(name: string, message: string, api: string, prefill: CreatePrefill): string {
+  const workspace = prefill.project.split("/")[0] ?? "";
+  const facts = laneClosedFacts({ api, message, prefill });
 
   return envelope({
     ok: false,
@@ -176,7 +180,23 @@ function closedLane(name: string, message: string, api: string, workspace: strin
     status: "lane-closed",
     error: { code: "E_PLATFORM", name, message },
     value: { workspace, ...facts },
-    hint: laneClosedHint({ api, message, subject: "project" }),
+    hint: laneClosedHint({ api, message, subject: "project", prefill }),
+  });
+}
+
+function repoRequired(apiBase: string): string {
+  return envelope({
+    ok: false,
+    command: COMMAND,
+    status: "bad-request",
+    error: {
+      code: "E_BAD_REQUEST",
+      name: "BadRequest",
+      message:
+        "repo must be in the form '<owner>/<repo>', a GitHub repository the extension's source is pushed to. The platform creates a project from GitHub only; this server has no call that uploads a local folder, so projectPath is not an alternative.",
+    },
+    value: { needs: "github-repository", createUrl: `${mcpOrigins(apiBase).www}${wwwImportPath()}` },
+    hint: `Push the project to a GitHub repository the approving account can read (git init, commit, create the repository, git remote add origin, git push -u origin main; node_modules and dist stay out through .gitignore), then call extension_project_create again with repo '<owner>/<repo>'. The console's create form at ${mcpOrigins(apiBase).www}${wwwImportPath()} needs the same repository.`,
   });
 }
 
@@ -266,17 +286,6 @@ export async function handler(args: {
     );
   }
 
-  const repo = String(args.repo || "").trim();
-
-  if (!isProjectRef(repo)) {
-    return fail(
-      "BadRequest",
-      "repo must be in the form '<owner>/<repo>', a GitHub repository the extension's source is pushed to.",
-      "bad-request",
-      "E_BAD_REQUEST",
-    );
-  }
-
   const installationId = String(args.installationId || "").trim();
 
   if (installationId && !/^\d+$/.test(installationId)) {
@@ -295,10 +304,17 @@ export async function handler(args: {
   }
 
   const apiBase = apiCheck.base;
+  const repo = String(args.repo || "").trim();
+
+  if (repo && !isProjectRef(repo)) return repoRequired(apiBase);
+
+  const refusal = repo ? null : repoRequired(apiBase);
   const resumeDeviceCode = String(args.deviceCode || "").trim();
   const held = heldCreateGrant(apiBase, resumeDeviceCode, project);
 
   if (held) {
+    if (refusal) return refusal;
+
     return createWithGrant({
       apiBase,
       project,
@@ -354,12 +370,14 @@ export async function handler(args: {
           "CreateStartError",
           serverMessage || `Headless project creation is not open on ${apiBase} yet. (${message})`,
           apiBase,
-          project.split("/")[0] ?? "",
+          { project, repo: args.repo },
         );
       }
 
       return fail("CreateStartError", String(message), "create-failed", "E_PLATFORM");
     }
+
+    if (refusal) return refusal;
 
     deviceCode = start.deviceCode;
     interval = start.interval;
@@ -388,6 +406,8 @@ export async function handler(args: {
       expiresAt: codeExpiryFromStart(start.expiresIn),
     });
   }
+
+  if (refusal) return refusal;
 
   const poll = await pollDeviceGrant({
     apiBase,
@@ -460,7 +480,7 @@ async function finishFromPoll(
 
     if (poll.reason === "denied") {
       if (poll.code === "CLI_PROJECT_CREATE_DISABLED") {
-        return closedLane("CreateClosed", poll.message || `Headless project creation is not open on ${ctx.apiBase}.`, ctx.apiBase, ctx.project.split("/")[0] ?? "");
+        return closedLane("CreateClosed", poll.message || `Headless project creation is not open on ${ctx.apiBase}.`, ctx.apiBase, { project: ctx.project, repo: ctx.args.repo });
       }
 
       return fail(
@@ -770,7 +790,7 @@ async function sendCreate(
         "CreateClosed",
         String(data.message || `Headless project creation is not open on ${ctx.apiBase} yet.`),
         ctx.apiBase,
-        wantWorkspace,
+        { project: ctx.project, repo: ctx.args.repo },
       );
     }
 

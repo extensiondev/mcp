@@ -1330,7 +1330,7 @@
       "name": "extension_project_create",
       "tier": "platform",
       "group": "platform",
-      "description": "Create an extension.dev project from its GitHub repository, BEFORE extension_auth. The first call answers a URL a signed-in workspace member approves; call again with deviceCode and waitSeconds, and the login is stored too. The first build spends one build of the workspace's monthly allowance, running the build command exactly as stored. projects: up to 10 per approval, at most 10 per hour, never split silently.",
+      "description": "Create an extension.dev project from a pushed GitHub repo, BEFORE extension_auth; it reads GitHub only, no call uploads a local folder. First call: a URL a signed-in workspace member approves; resume with deviceCode and waitSeconds, the login is stored too. The first build spends one build of the workspace's monthly allowance, running the build command exactly as stored. projects: up to 10 per approval, at most 10 per hour, never split silently.",
       "gate": "the server started with --features=local,platform",
       "samplePrompt": "Create the extension.dev project for this build under acme",
       "readOnly": false,
@@ -1349,7 +1349,7 @@
           "name": "repo",
           "type": "string",
           "required": false,
-          "description": "Pushed GitHub '<owner>/<repo>'."
+          "description": "GitHub '<owner>/<repo>' the source is pushed to; required."
         },
         {
           "name": "installationId",

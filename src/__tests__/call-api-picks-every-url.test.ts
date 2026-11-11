@@ -75,19 +75,21 @@ describe("a call's api picks the console in a lane-closed answer", () => {
     const out = await laneClosed(PROD);
 
     expect(out.status).toBe("lane-closed");
-    expect(out.hint).toContain("https://console.extension.dev");
-    expect(out.hint).not.toContain("extension.localhost");
+    expect(out.hint).toContain("https://www.extension.dev/import?repository=cezaraugusto%2Fpii-shield");
+    expect(out.hint).not.toContain("localhost");
     expect(out.value.server).toBe(PROD);
     expect(out.value.consoleUrl).toBe("https://console.extension.dev");
+    expect(out.value.createUrl).toBe("https://www.extension.dev/import?repository=cezaraugusto%2Fpii-shield&name=pii-shield&workspace=cezaraugusto");
   });
 
-  it("names the local console when the env points at production and the call names a local server", async () => {
+  it("names the local create form when the env points at production and the call names a local server", async () => {
     process.env.EXTENSION_DEV_API_URL = PROD;
 
     const out = await laneClosed(LOCAL);
 
-    expect(out.hint).toContain("http://console.extension.localhost");
-    expect(out.hint).not.toContain("https://console.extension.dev");
+    expect(out.hint).toContain(`${LOCAL}/import?repository=`);
+    expect(out.hint).not.toContain("https://www.extension.dev");
+    expect(out.value.consoleUrl).toBe("http://console.extension.localhost");
   });
 
   it("falls back to the env server when the call names none", async () => {
@@ -95,7 +97,8 @@ describe("a call's api picks the console in a lane-closed answer", () => {
 
     const out = await laneClosed(undefined);
 
-    expect(out.hint).toContain("http://console.extension.localhost");
+    expect(out.hint).toContain(`${LOCAL}/import?repository=`);
+    expect(out.value.consoleUrl).toBe("http://console.extension.localhost");
     expect(out.value.server).toBe(LOCAL);
   });
 
