@@ -110,7 +110,7 @@ import {
 } from "../lib/store-connection";
 import { browserBuildRefusal, browserBuildVerdicts } from "../lib/browser-builds";
 import { localSubmitPrecheck } from "../lib/submit-local-precheck";
-import { dryRunStoreRun, platformUnavailableAnswer } from "../lib/store-run-unavailable";
+import { dryRunStoreRun, platformUnavailableAnswer, storeRunUnavailable } from "../lib/store-run-unavailable";
 import { appendWarnings } from "../lib/envelope-warnings";
 import { reviewPromiseFromApproval } from "../lib/review-promise";
 import { SUBMIT_ACTION_SAFETY } from "../lib/submit-action-safety";
@@ -898,6 +898,20 @@ async function answer(args: SubmitToolArgs): Promise<string> {
         body: data,
         api: args.api,
         value: { browsers, buildSha, dryRun },
+      });
+    }
+
+    const unavailable = storeRunUnavailable(res.status, data);
+
+    if (unavailable) {
+      return platformUnavailableAnswer({
+        command: "extension_submit",
+        found: unavailable,
+        dryRun,
+        ref: credential.ref,
+        stores: browsers,
+        buildSha,
+        ...(body.approvalId ? { approvalId: String(body.approvalId), refundSaid: data?.approvalRefunded } : {}),
       });
     }
 

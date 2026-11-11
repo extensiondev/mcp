@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, it, expect } from "vitest";
 
 import { schema, handler, storeMdWarnings } from "../tools/submit";
 import { writeCredentials } from "../lib/credentials";
+import { WRITE_FAILURE_REPORT_URL } from "../lib/settings-write";
+import { PLATFORM_UNAVAILABLE_SENTENCE, PLATFORM_UNAVAILABLE_STATUS } from "../lib/store-run-unavailable";
 import { submitAnswer } from "./fixtures/platform-answers";
 
 function claimsToken(u: string, p: string): string {
@@ -333,6 +335,41 @@ describe("extension_submit: platform submit handler", () => {
     expect(out.error.code).toBe("E_PLATFORM");
     expect(out.error.name).toBe("SubmitError");
     expect(out.error.message).toContain("404");
+  });
+
+  it("answers platform-unavailable, not submit-failed, when the platform has no store run after an approval, naming the report path and never the platform's words (ledger 508)", async () => {
+    process.env.EXTENSION_DEV_TOKEN = claimsToken("acme", "widget");
+    const line = "No store submission workflow (the store run) found on the project's build environment";
+    global.fetch = (async () => jsonResponse({ message: line }, false, 404)) as unknown as typeof fetch;
+
+    const out = JSON.parse(await handler({ browsers: ["firefox"], buildSha: "4cec881", dryRun: false, approvalId: "apr_508" }));
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe(PLATFORM_UNAVAILABLE_STATUS);
+    expect(out.error).toMatchObject({ code: "E_PLATFORM", name: "PlatformUnavailable" });
+    expect(out.value).toMatchObject({ owner: "platform", approvalId: "apr_508", approvalRefunded: "unknown", platformLine: line, reportUrl: WRITE_FAILURE_REPORT_URL });
+    expect(out.hint).toContain(PLATFORM_UNAVAILABLE_SENTENCE);
+    expect(out.hint).toContain(`${WRITE_FAILURE_REPORT_URL} with the project acme/widget, the store firefox and build 4cec881`);
+    expect(out.hint).toContain("extension_approvals (action: status, approvalId: apr_508)");
+    expect(JSON.stringify(out, (key, value) => (key === "platformLine" ? undefined : value))).not.toMatch(/workflow|store\.yml|fix the cause/i);
+  });
+
+  it("reads approvalRefunded from a 409 STORE_RUN_UNAVAILABLE answer and says the approval was not spent", async () => {
+    process.env.EXTENSION_DEV_TOKEN = claimsToken("acme", "widget");
+    global.fetch = (async () =>
+      jsonResponse(
+        { code: "STORE_RUN_UNAVAILABLE", approvalRefunded: true, message: "Store submissions for this project run on the build lane, which is not taking them yet. Nothing was sent to the store, and your approval was not spent." },
+        false,
+        409,
+      )) as unknown as typeof fetch;
+
+    const out = JSON.parse(await handler({ browsers: ["firefox"], buildSha: "4cec881", dryRun: false, approvalId: "apr_508" }));
+
+    expect(out.status).toBe(PLATFORM_UNAVAILABLE_STATUS);
+    expect(out.error.platformCode).toBe("STORE_RUN_UNAVAILABLE");
+    expect(out.value.approvalRefunded).toBe(true);
+    expect(out.hint).toContain("approval apr_508 was not spent");
+    expect(out.hint).not.toContain("extension_approvals");
   });
 });
 
