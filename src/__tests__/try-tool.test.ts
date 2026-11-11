@@ -146,6 +146,18 @@ describe("extension_try runs only the published build the person asked for, and 
     expect(fetched).toEqual([]);
   });
 
+  it("tells a safari caller that no Mac is needed to reach the App Store, and what the lane does", async () => {
+    const answer = JSON.parse(await handler({ project: PROJECT, browser: "safari" }));
+    const words = `${answer.error.message} ${answer.hint}`;
+
+    expect(words).toContain("No Mac is needed to reach the App Store");
+    expect(words).toContain("one approval");
+    expect(words).toContain("encrypted at rest");
+    expect(words).toContain("no hand upload");
+    expect(words).not.toContain("macOS app");
+    expect(fetched).toEqual([]);
+  });
+
   it("refuses a url that is not a web page", async () => {
     const answer = JSON.parse(await handler({ project: PROJECT, url: "chrome://settings" }));
 

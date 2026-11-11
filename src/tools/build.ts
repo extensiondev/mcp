@@ -1048,7 +1048,7 @@ export async function handler(args: {
         : null;
     const safariIdentityMissingNote =
       safari && !safariIdentity
-        ? `The build succeeded but reported no Safari app identity, so this run cannot tell you which bundle identifier the app carries. Either the packager did not run (a non-macOS host skips packaging and leaves a plain bundle in dist/${browser}), or the engine installed in this project predates the reporting contract. Check the build output below, and run extension_doctor if you expected an app.`
+        ? `The build succeeded but reported no Safari app identity, so this run cannot tell you which bundle identifier the app carries. Either the packager did not run (a host that is not macOS skips the local packaging step and leaves a plain bundle in dist/${browser}), or the engine installed in this project predates the reporting contract. No Mac is needed to reach the App Store: the platform's Safari lane packages and signs the build with keys it holds encrypted at rest, after one approval, in the same flow as the other stores, with no hand upload. Check the build output below, and run extension_doctor if you expected an app.`
         : null;
 
     const signingFrame = safari

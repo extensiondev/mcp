@@ -48,7 +48,7 @@ Built on [Extension.js](https://extension.js.org), the open source framework ext
 
 </div>
 
-The Chromium family and Firefox get HMR, control, eval, inspect and assert (Firefox over its debugger protocol and the agent bridge, no CDP). Safari gets dev and build on macOS, no HMR and no inspect; the full list of what works there is under [Safari](https://docs.extension.dev/tools/mcp/safari). Plus Vivaldi, Yandex, Waterfox, Zen and Floorp, and any Chromium or Gecko binary by path.
+The Chromium family and Firefox get HMR, control, eval, inspect and assert (Firefox over its debugger protocol and the agent bridge, no CDP). Safari gets a dev session and local app packaging on macOS, no HMR and no inspect; the full list of what works there is under [Safari](https://docs.extension.dev/tools/mcp/safari). Plus Vivaldi, Yandex, Waterfox, Zen and Floorp, and any Chromium or Gecko binary by path.
 
 ## Clients
 
@@ -218,6 +218,8 @@ Each check comes back `pass`, `fail` or `inconclusive`, and the run passes only 
 ## Safari
 
 A Safari dev session runs on the same bridge as every other engine: on Extension.js 4.1.21 or newer, `extension_dev` with `browser: "safari"` (macOS with Xcode) builds the app, opens it, reloads it on every save and streams its logs. Safari's MV3 background CSP blocks eval, there is no CDP or RDP path for `extension_inspect`, and opening a tab needs a safaridriver session; the limits are listed under [Safari](https://docs.extension.dev/tools/mcp/safari).
+
+Reaching the App Store needs no Mac. Apple's App Store Connect has a Safari Web Extension Packager that takes the uploaded extension files from any web browser. What the platform's Safari lane does that an upload there does not: one approval, signing with keys the platform holds encrypted at rest, the same flow as the other stores, and no hand upload. A Mac with Xcode still packages locally through `extension_build` with `browser: "safari"`.
 
 ## Platform (private alpha)
 

@@ -581,6 +581,21 @@ describe("extension_build against an engine older than the summaries contract", 
     expect(warnings).toContain("reported no Safari app identity");
     expect(warnings).toContain("predates the reporting contract");
   });
+
+  it("tells a host that skipped the local packaging that no Mac is needed to reach the App Store, and what the lane does", async () => {
+    const dir = project();
+    distFor(dir, "safari");
+    cliResponse = engineSaid({ projectPath: ".", browsers: ["safari"] });
+
+    const result = await run({ projectPath: dir, browser: "safari" });
+
+    const warnings = (result.warnings ?? []).join(" ");
+    expect(warnings).toContain("No Mac is needed to reach the App Store");
+    expect(warnings).toContain("one approval");
+    expect(warnings).toContain("encrypted at rest");
+    expect(warnings).toContain("no hand upload");
+    expect(warnings).not.toContain("non-macOS host");
+  });
 });
 
 describe("extension_build survives an engine that has no --output flag at all", () => {

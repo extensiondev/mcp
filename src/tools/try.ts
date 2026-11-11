@@ -207,7 +207,7 @@ export async function handler(args: Args): Promise<string> {
   if (args.action === "close") return close(args, project);
 
   if (browser === "safari") {
-    return refuse("unsupported-browser", "E_UNSUPPORTED_BROWSER", "safari cannot be tried this way: its package is a macOS app that needs signing and a manual enable in Safari > Settings > Extensions.", `Try it in chrome, edge or firefox, or open its page and install it from there.`);
+    return refuse("unsupported-browser", "E_UNSUPPORTED_BROWSER", "safari cannot be tried this way: a Safari extension runs inside an app that needs signing and a manual enable in Safari > Settings > Extensions, and this tool installs an unpacked bundle. No Mac is needed to reach the App Store: the platform's Safari lane packages and signs the build with keys it holds encrypted at rest, after one approval, in the same flow as the other stores, with no hand upload.", `Try it in chrome, edge or firefox, or open its page and install it from there. For the App Store, start with extension_submit_check.`);
   }
 
   if (!TRY_BROWSERS.includes(browser)) {
