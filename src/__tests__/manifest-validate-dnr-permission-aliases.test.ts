@@ -112,7 +112,7 @@ describe("declarativeNetRequestWithHostAccess grants chrome.declarativeNetReques
     const firefox = await validate(dir, "firefox");
     expect(firefox.dnrWarnings).toEqual([]);
     expect(firefox.dnrIssues).toHaveLength(1);
-    expect(firefox.dnrIssues[0]).toMatch(/browser\.declarativeNetRequest.*firefox build's permissions do not include "declarativeNetRequest"/);
+    expect(firefox.dnrIssues[0]).toMatch(/chrome\.declarativeNetRequest.*firefox build's permissions do not include "declarativeNetRequest"/);
     expect(firefox.out.value.browserSupport.firefox.supported).toBe(false);
   });
 });

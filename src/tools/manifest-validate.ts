@@ -819,10 +819,14 @@ export async function handler(args: {
       const ns = isFirefox ? "browser" : "chrome";
       const where = (uses: ApiUse[]): string =>
         uses.slice(0, 5).map((use) => `${use.file}:${use.line}`).join(", ") + (uses.length > 5 ? `, and ${uses.length - 5} more` : "");
+      const named = (uses: ApiUse[]): string =>
+        [...new Set(uses.map((use) => use.namespace))].map((namespace) => `${namespace}.${api}`).join(" and ");
       const uses = usesOf(api);
       const guarded = uses.filter((use) => use.guarded);
-      const unguarded = uses.filter((use) => !use.guarded);
+      const unproven = uses.filter((use) => !use.guarded && use.checked);
+      const unguarded = uses.filter((use) => !use.guarded && !use.checked);
       const gap = `the ${browser} build's permissions do not include ${grantPhrase(api)} (it is declared only under another target's prefixed key, e.g. chromium:permissions)`;
+      const gapSentence = `${gap[0].toUpperCase()}${gap.slice(1)}`;
 
       if (!uses.length) {
         result.warnings.push(
@@ -832,13 +836,21 @@ export async function handler(args: {
 
       if (guarded.length) {
         result.warnings.push(
-          `${browser}: ${ns}.${api} at ${where(guarded)} is guarded: runs only where ${ns}.${api} exists. ${gap[0].toUpperCase()}${gap.slice(1)}, so on ${browser} that code is skipped; grant ${grantPhrase(api)} to this target if it should run there.`,
+          `${browser}: ${named(guarded)} at ${where(guarded)} is guarded: runs only where ${named(guarded)} exists. ${gapSentence}, so on ${browser} that code is skipped; grant ${grantPhrase(api)} to this target if it should run there.`,
+        );
+      }
+
+      if (unproven.length) {
+        const root = unproven[0].namespace;
+        result.warnings.push(
+          `${browser}: ${named(unproven)} at ${where(unproven)} may run unguarded: the file checks for ${root}.${api} elsewhere, but that check could not be tied to this call. ${gapSentence}, so the call crashes on ${browser} if it runs there. Keep it behind the check (if (${root}.${api}) { ... } or ${root}.${api}?.method(...)), or grant ${grantPhrase(api)} to this target too.`,
         );
       }
 
       if (unguarded.length) {
+        const root = unguarded[0].namespace;
         issues.push(
-          `Code calls ${ns}.${api} at ${where(unguarded)} but ${gap}. An unguarded call crashes this target at runtime. Guard it (${ns}.${api}?.method(...), if (${ns}.${api}), typeof ${ns}.${api} !== "undefined", or '${api}' in ${ns}), or grant ${grantPhrase(api)} to this target too.`,
+          `Code calls ${named(unguarded)} at ${where(unguarded)} but ${gap}. An unguarded call crashes this target at runtime. Guard it (${root}.${api}?.method(...), if (${root}.${api}), typeof ${root}.${api} !== "undefined", or '${api}' in ${root}), or grant ${grantPhrase(api)} to this target too.`,
         );
       }
     }

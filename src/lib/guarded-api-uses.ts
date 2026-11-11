@@ -9,7 +9,7 @@
 import { parse as acornParse } from "acorn";
 
 /* @invariant A GUARDED USE IS WHAT THE ENGINE CALLS GUARDED, BY THE SAME
- * RULE. The source of truth is Extension.js
+ * RULE, PLUS A CHECK HELD IN A CONST. The source of truth is Extension.js
  * programs/develop/plugin-web-extension/feature-manifest/steps/apply-dev-defaults-lib/webkit-guarded-ranges.ts
  * (webkitGuardedRanges) and the member pattern of usesGeckoUnsupportedApi in
  * warn-gecko-unsupported-apis.ts beside it; extension-develop does not export
@@ -19,18 +19,26 @@ import { parse as acornParse } from "acorn";
  * chrome.downloads !== "undefined", 'downloads' in chrome, with !, Boolean(),
  * && and || folded), when an early exit on an open check precedes it, when a
  * try with a catch holds it, or when it is the body of an unexported function
- * referred to only from guarded spans. A use is a member read through the
+ * referred to only from guarded spans. A const bound once in the file and
+ * never assigned stands for its initializer in every test (const has = typeof
+ * chrome.debugger !== "undefined"; if (!has) return), folded the same way;
+ * ledger entry 491. A use is a member read through the
  * namespace (chrome.downloads.download); one written with optional chaining
  * on the namespace (chrome.downloads?.download) is guarded wherever it sits,
  * and a bare read of the namespace is the presence check itself, never a use.
  * A file the parser refuses yields no spans, so every use in it is unguarded.
- * Ledger entry 251.
+ * A use left unguarded in a file that holds a presence check on the namespace
+ * somewhere (a bare read outside a comment, 'downloads' in chrome, or an
+ * optional chain through it) is checked: the validator cannot tie the check
+ * to the call and warns instead of blocking. Ledger entries 251 and 491.
  */
 
 export interface ApiUse {
   file: string;
   line: number;
+  namespace: string;
   guarded: boolean;
+  checked: boolean;
 }
 
 interface AstNode {
@@ -127,6 +135,27 @@ function propertyName(member: AstNode): string | undefined {
   return undefined;
 }
 
+function bindingNames(pattern: AstNode | undefined): string[] {
+  if (!pattern) return [];
+
+  switch (pattern.type) {
+    case "Identifier":
+      return [String(pattern.name)];
+    case "ObjectPattern":
+      return list(pattern.properties).flatMap((property) =>
+        bindingNames(property.type === "RestElement" ? property : node(property.value)),
+      );
+    case "ArrayPattern":
+      return list(pattern.elements).flatMap((element) => bindingNames(element));
+    case "AssignmentPattern":
+      return bindingNames(node(pattern.left));
+    case "RestElement":
+      return bindingNames(node(pattern.argument));
+    default:
+      return [];
+  }
+}
+
 function memberPath(value: AstNode): string[] | undefined {
   let current: AstNode | undefined = value;
   const names: string[] = [];
@@ -163,10 +192,78 @@ class GuardedRangeScan {
   public readonly ranges: Range[] = [];
   public readonly functions = new Map<string, NamedFunction>();
   private readonly pending: PendingReference[] = [];
+  private readonly constants = new Map<string, Truth>();
 
   constructor(program: AstNode, private readonly missing: ReadonlySet<string>) {
+    this.collectConstants(program);
     this.visit(program, []);
     for (const { name, reference } of this.pending) this.functions.get(name)?.references.push(reference);
+  }
+
+  private collectConstants(program: AstNode): void {
+    const declared = new Map<string, number>();
+    const mutated = new Set<string>();
+    const consts: Array<{ name: string; init: AstNode }> = [];
+
+    const bind = (names: string[]): void => {
+      for (const name of names) declared.set(name, (declared.get(name) ?? 0) + 1);
+    };
+
+    const walk = (current: AstNode | undefined): void => {
+      if (!current) return;
+
+      switch (current.type) {
+        case "VariableDeclaration":
+          for (const declarator of list(current.declarations)) {
+            const id = node(declarator.id);
+            const init = node(declarator.init);
+            bind(bindingNames(id));
+            if (current.kind === "const" && id?.type === "Identifier" && init) consts.push({ name: String(id.name), init });
+          }
+
+          break;
+        case "FunctionDeclaration":
+        case "FunctionExpression":
+        case "ArrowFunctionExpression":
+        case "ClassDeclaration":
+        case "ClassExpression":
+          bind(bindingNames(node(current.id)));
+          for (const param of list(current.params)) bind(bindingNames(param));
+
+          break;
+        case "CatchClause":
+          bind(bindingNames(node(current.param)));
+
+          break;
+        case "ImportSpecifier":
+        case "ImportDefaultSpecifier":
+        case "ImportNamespaceSpecifier":
+          bind(bindingNames(node(current.local)));
+
+          break;
+        case "AssignmentExpression":
+          for (const name of bindingNames(node(current.left))) mutated.add(name);
+
+          break;
+        case "UpdateExpression":
+          for (const name of bindingNames(node(current.argument))) mutated.add(name);
+
+          break;
+        default:
+          break;
+      }
+
+      for (const child of children(current)) walk(child);
+    };
+
+    walk(program);
+
+    for (const { name, init } of consts) {
+      if (declared.get(name) !== 1 || mutated.has(name)) continue;
+
+      const truth = this.truth(init);
+      if (truth) this.constants.set(name, truth);
+    }
   }
 
   private namesMissing(path: string[]): boolean {
@@ -210,6 +307,8 @@ class GuardedRangeScan {
     if (!test) return undefined;
 
     switch (test.type) {
+      case "Identifier":
+        return this.constants.get(String(test.name));
       case "ChainExpression":
       case "MemberExpression":
         return this.readsMissing(test) ? "false" : undefined;
@@ -529,18 +628,43 @@ function lineAt(source: string, offset: number): number {
   return line;
 }
 
+function inComment(source: string, offset: number): boolean {
+  const lineStart = source.lastIndexOf("\n", offset - 1) + 1;
+  const lead = source.slice(lineStart, offset).trimStart();
+
+  return lead.startsWith("//") || lead.startsWith("*") || lead.startsWith("/*");
+}
+
 export function apiUsesIn(file: string, source: string, api: string): ApiUse[] {
-  const re = new RegExp(`\\b(?:chrome|browser)\\s*\\.\\s*${api}(?![\\w$])\\s*(\\?\\.|\\.\\s*[A-Za-z_$])?`, "g");
+  const re = new RegExp(`\\b(chrome|browser)\\s*\\.\\s*${api}(?![\\w$])\\s*(\\?\\.|\\.\\s*[A-Za-z_$])?`, "g");
+  const inCheck = new RegExp(`['"\`]${api}['"\`]\\s+in\\s+(?:chrome|browser)\\b`);
   const uses: ApiUse[] = [];
   let ranges: Range[] | undefined;
+  let checked = inCheck.test(source);
 
   for (let match = re.exec(source); match !== null; match = re.exec(source)) {
-    const tail = match[1];
-    if (!tail) continue;
+    const namespace = match[1];
+    const tail = match[2];
+
+    if (!tail) {
+      if (!inComment(source, match.index)) checked = true;
+
+      continue;
+    }
+
+    if (tail === "?.") checked = true;
 
     ranges ??= guardedRanges(source, new Set([api]));
-    uses.push({ file, line: lineAt(source, match.index), guarded: tail === "?." || covers(ranges, match.index) });
+    uses.push({
+      file,
+      line: lineAt(source, match.index),
+      namespace,
+      guarded: tail === "?." || covers(ranges, match.index),
+      checked: false,
+    });
   }
+
+  for (const use of uses) use.checked = checked;
 
   return uses;
 }
