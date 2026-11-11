@@ -4,6 +4,7 @@ import { actFrame, tabRows } from "./fixtures/engine-answers";
 
 import type * as ActModule from "../lib/act";
 import type * as CdpPortModule from "../lib/cdp-port";
+import type * as CdpExtensionPageModule from "../lib/cdp-extension-page";
 
 
 const calls: string[][] = [];
@@ -39,6 +40,21 @@ vi.mock("../lib/cdp", () => {
   return { CDPClient };
 });
 
+const pageReads: Array<{ targetId: string; expression: string }> = [];
+const elementsAnswer = { elements: [{ role: "button", name: "Save", selector: "#save" }], elementCount: 1, elementsTruncated: false };
+vi.mock("../lib/cdp-extension-page", async (importOriginal) => {
+  const actual = await importOriginal<typeof CdpExtensionPageModule>();
+
+  return {
+    ...actual,
+    evaluateOnExtensionPage: async (_port: number, targetId: string, expression: string) => {
+      pageReads.push({ targetId, expression });
+
+      return { ok: true, value: elementsAnswer };
+    },
+  };
+});
+
 const domSnapshot = await import("../tools/dom-snapshot");
 const { matchTargetsByUrl, filterPageTargets } = await import(
   "../lib/cdp-targets"
@@ -57,6 +73,7 @@ beforeEach(() => {
 
 afterEach(() => {
   calls.length = 0;
+  pageReads.length = 0;
 });
 
 describe("dom_snapshot listTargets", () => {
@@ -351,5 +368,40 @@ describe("cdp-targets helpers", () => {
       expect(matchTargetsByUrl(pages, "*of the day").map((t) => t.targetId)).toEqual(["yt"]);
       expect(matchTargetsByUrl(pages, "of the*")).toEqual([]);
     });
+  });
+});
+
+describe("dom_snapshot include elements on the bridge path", () => {
+  it("keeps elements away from the engine's inspect verb and reads the list over CDP on the page the engine answered", async () => {
+    actResponder = () => JSON.stringify({ ok: true, value: { context: "page", url: "https://example.com/", summary: { htmlLength: 10 } } });
+
+    const result = JSON.parse(
+      await domSnapshot.handler({ projectPath: "/p", url: "https://example.com/", include: ["elements"], browser: "chrome" }),
+    );
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0][calls[0].indexOf("--include") + 1]).toBe("summary");
+    expect(calls[0]).not.toContain("elements");
+    expect(pageReads).toEqual([{ targetId: "AAA1", expression: expect.stringContaining("elementsTruncated") }]);
+    expect(result.ok).toBe(true);
+    expect(result.value).toMatchObject({ url: "https://example.com/", summary: { htmlLength: 10 }, ...elementsAnswer });
+    expect(result.warnings.join(" ")).toContain("selector that matches exactly one element");
+  });
+
+  it("answers elements: null with the reason and the snapshot call to make when no debug port can read the page", async () => {
+    cdpPort = null;
+    actResponder = () => JSON.stringify({ ok: true, value: { context: "page", url: "https://example.com/", summary: { htmlLength: 10 } } });
+
+    const result = JSON.parse(
+      await domSnapshot.handler({ projectPath: "/p", url: "https://example.com/", include: ["summary", "elements"], browser: "chrome" }),
+    );
+
+    expect(calls[0][calls[0].indexOf("--include") + 1]).toBe("summary");
+    expect(pageReads).toEqual([]);
+    expect(result.ok).toBe(true);
+    expect(result.value.elements).toBeNull();
+    expect(result.value.summary).toEqual({ htmlLength: 10 });
+    expect(result.warnings.join(" ")).toMatch(/could not be read over the debug port for https:\/\/example\.com\/: the session records no CDP port/);
+    expect(result.warnings.join(" ")).toContain('extension_dom_snapshot {include: ["elements"]}');
   });
 });

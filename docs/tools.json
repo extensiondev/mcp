@@ -819,12 +819,12 @@
         },
         {
           "name": "include",
-          "type": "array of \"summary\" | \"html\"",
+          "type": "array of \"summary\" | \"html\" | \"elements\"",
           "required": false,
           "default": [
             "summary"
           ],
-          "description": "What to include."
+          "description": "summary: counts. html: markup to maxBytes. elements: visible interactive elements with role, name, unique selector and state."
         },
         {
           "name": "maxBytes",

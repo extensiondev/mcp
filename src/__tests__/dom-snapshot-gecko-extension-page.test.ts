@@ -217,3 +217,36 @@ describe("the snapshot built over the protocol", () => {
     expect(snap.htmlTruncated).toBe(true);
   });
 });
+
+describe("the element list rides every protocol read of extension_dom_snapshot", () => {
+  const fakeDocument = {
+    title: "panel",
+    documentElement: { outerHTML: "<html></html>" },
+    body: { children: [] },
+    querySelectorAll: () => [],
+  };
+
+  it("offers include: elements and asks the page for the list only when the caller did", async () => {
+    expect(domSnapshot.schema.inputSchema.properties.include.items.enum).toEqual(["summary", "html", "elements"]);
+
+    respond = missingHostPermission;
+    openTabs = [{ actor: "tab2", url: PANEL, title: "panel" }];
+    await domSnapshot.handler({ projectPath: "/p", browser: "firefox", url: PANEL });
+    await domSnapshot.handler({ projectPath: "/p", browser: "firefox", url: PANEL, include: ["elements"] });
+
+    expect(rdpCalls[0].expression).not.toContain("snap.elements");
+    expect(rdpCalls[1].expression).toContain("snap.elements");
+  });
+
+  it("adds elements, elementCount and elementsTruncated beside the summary when asked", () => {
+    const snap = vm.runInNewContext(domSnapshot.protocolSnapshotExpression(false, 262144, true), {
+      document: fakeDocument,
+      location: { href: "moz-extension://uuid/pages/panel.html" },
+    });
+
+    expect(Object.keys(snap)).toEqual(["context", "url", "title", "summary", "elements", "elementCount", "elementsTruncated"]);
+    expect(snap.elements).toEqual([]);
+    expect(snap.elementCount).toBe(0);
+    expect(snap.elementsTruncated).toBe(false);
+  });
+});

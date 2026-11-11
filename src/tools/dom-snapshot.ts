@@ -59,10 +59,12 @@ import {
   namesExtensionDocument,
   productionSessionCommand,
 } from "../lib/extension-surfaces";
-import { surfaceDocument } from "./open";
+import { resolveExtensionId, surfaceDocument } from "./open";
 import { readOpeningIfClosed, surfaceOpening } from "../lib/open-if-closed";
 import { listBridgeTabs, matchTabsByUrl } from "../lib/bridge-tabs";
 import { lacksScriptingOnMv3, readGeckoTabWithoutScripting } from "../lib/gecko-no-scripting";
+import { ELEMENT_LIST_CAP, ELEMENT_LIST_FUNCTION, ELEMENTS_INCLUDE_NOTE } from "../lib/element-list";
+import { readElementsOn, resolveObserveTarget, snapshotCallFor } from "../lib/observe-surface";
 
 const RDP_ACTOR_NOTE =
   "actor is an RDP tab descriptor actor id, NOT a chrome.tabs id: do not pass it as `tab`. " +
@@ -105,9 +107,9 @@ export const schema = {
       },
       include: {
         type: "array",
-        items: { type: "string", enum: ["summary", "html"] },
+        items: { type: "string", enum: ["summary", "html", "elements"] },
         default: ["summary"],
-        description: "What to include.",
+        description: "summary: counts. html: markup to maxBytes. elements: visible interactive elements with role, name, unique selector and state.",
       },
       maxBytes: { type: "number", default: 262144, description: "Byte cap on the html." },
       withConsole: {
@@ -127,9 +129,14 @@ const GECKO_EXTENSION_URL = /^moz-extension:\/\//;
 const sameDocumentUrl = (a: unknown, b: string): boolean =>
   String(a ?? "").replace(/[?#].*$/, "") === b.replace(/[?#].*$/, "");
 
+export function wantsElements(include: string[] | undefined): boolean {
+  return include?.includes("elements") === true;
+}
+
 export function protocolSnapshotExpression(
   wantHtml: boolean,
   maxBytes: number,
+  wantElements = false,
 ): string {
   return `(function () {
   var doc = document;
@@ -157,8 +164,16 @@ export function protocolSnapshotExpression(
     if (cap > 0 && html.length > cap) { snap.html = html.slice(0, cap); snap.htmlTruncated = true; }
     else { snap.html = html; }
   }
+  ${wantElements ? elementsBlock() : ""}
   return snap;
 })()`;
+}
+
+function elementsBlock(): string {
+  return `var listed = (${ELEMENT_LIST_FUNCTION})(${ELEMENT_LIST_CAP});
+  snap.elements = listed.elements;
+  snap.elementCount = listed.elementCount;
+  snap.elementsTruncated = listed.elementsTruncated;`;
 }
 
 function extensionPageTarget(
@@ -226,7 +241,7 @@ async function snapshotExtensionPageOverProtocol(
   try {
     const outcome = await rdpEvaluateInTab(resolved.port, {
       select: target.select,
-      expression: protocolSnapshotExpression(wantHtml, args.maxBytes ?? 262144),
+      expression: protocolSnapshotExpression(wantHtml, args.maxBytes ?? 262144, wantsElements(args.include)),
       timeoutMs: args.timeout ?? 10_000,
     });
 
@@ -277,7 +292,7 @@ async function snapshotWithoutScripting(
   const read = await readGeckoTabWithoutScripting(
     args,
     browser,
-    protocolSnapshotExpression(args.include?.includes("html") === true, args.maxBytes ?? 262144),
+    protocolSnapshotExpression(args.include?.includes("html") === true, args.maxBytes ?? 262144, wantsElements(args.include)),
     schema.name,
   );
   if ("error" in read) return read.error;
@@ -328,7 +343,7 @@ async function snapshotByTargetId(
   targetId: string,
   warnings: Array<string | null>,
 ): Promise<string> {
-  const expression = protocolSnapshotExpression(args.include?.includes("html") === true, args.maxBytes ?? 262144);
+  const expression = protocolSnapshotExpression(args.include?.includes("html") === true, args.maxBytes ?? 262144, wantsElements(args.include));
 
   if (isGeckoFamily(browser)) {
     const resolved = await resolveRdpPort(args.projectPath, browser);
@@ -701,7 +716,12 @@ async function snapshot(
   if (targetTab != null) cli.push("--tab", String(targetTab));
   if (targetUrl) cli.push("--url", targetUrl);
   if (args.context) cli.push("--context", args.context);
-  if (args.include?.length) cli.push("--include", args.include.join(","));
+
+  const engineInclude = (args.include ?? []).filter((item) => item !== "elements");
+
+  if (engineInclude.length) cli.push("--include", engineInclude.join(","));
+  else if (wantsElements(args.include)) cli.push("--include", "summary");
+
   if (args.maxBytes != null) cli.push("--max-bytes", String(args.maxBytes));
   if (withConsole != null) cli.push("--with-console", String(withConsole));
 
@@ -726,10 +746,14 @@ async function snapshot(
         withConsole != null,
       );
   const raw = overProtocol ?? withoutScripting ?? asked;
-  if (!resolvedTarget) return raw;
+  const withElements =
+    wantsElements(args.include) && !overProtocol && !withoutScripting
+      ? await elementsOverDebugPort(args, sessionBrowser, raw, targetUrl ?? (typeof resolvedTarget?.url === "string" ? resolvedTarget.url : undefined), targetTab)
+      : raw;
+  if (!resolvedTarget) return withElements;
 
   try {
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(withElements);
     if (tabPickWarning) addWarning(parsed, tabPickWarning);
 
     patchValue(parsed, {
@@ -753,6 +777,53 @@ async function snapshot(
 
     return actFrameJson(parsed);
   } catch {
+    return withElements;
+  }
+}
+
+async function elementsOverDebugPort(
+  args: SnapshotArgs & { tab?: number },
+  browser: string,
+  raw: string,
+  url: string | undefined,
+  tab: number | undefined,
+): Promise<string> {
+  let parsed: Record<string, any> | null;
+
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
     return raw;
   }
+
+  if (!parsed || parsed.ok !== true) return raw;
+
+  const surface = args.context && EXTENSION_PAGE_CONTEXTS.includes(args.context) ? args.context : undefined;
+  const reported =
+    typeof parsed.value?.meta?.url === "string" ? parsed.value.meta.url : typeof parsed.value?.url === "string" ? parsed.value.url : undefined;
+  const target = await resolveObserveTarget(
+    {
+      projectPath: args.projectPath,
+      browser,
+      context: surface,
+      url: surface ? undefined : (reported ?? url),
+      tab: surface || reported || url ? undefined : tab,
+      timeout: args.timeout,
+    },
+    { surfaceDocument, resolveExtensionId },
+  );
+  const read = await readElementsOn(target, args.timeout);
+
+  if ("unavailable" in read) {
+    patchValue(parsed, { elements: null });
+    addWarning(
+      parsed,
+      `include elements could not be read over the debug port for ${read.target.label}: ${read.unavailable}. The engine's snapshot carries no element list, so this answer holds the rest. Retry with ${snapshotCallFor(read.target, surface)} once it is reachable.`,
+    );
+  } else {
+    patchValue(parsed, { ...read.list });
+    addWarning(parsed, ELEMENTS_INCLUDE_NOTE);
+  }
+
+  return actFrameJson(parsed);
 }
