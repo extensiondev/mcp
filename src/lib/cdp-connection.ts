@@ -16,6 +16,7 @@ export class CDPConnection {
   private ws: WebSocket | null = null;
   private messageId = 0;
   private eventListeners = new Set<(msg: Record<string, unknown>) => void>();
+  private closeListeners = new Set<() => void>();
   private pendingRequests = new Map<
     number,
     {
@@ -48,6 +49,13 @@ export class CDPConnection {
 
       this.ws.on("close", () => {
         this.rejectAllPending("CDP connection closed");
+
+        for (const listener of this.closeListeners) {
+          try {
+            listener();
+          } catch {
+          }
+        }
       });
     });
   }
@@ -208,6 +216,10 @@ export class CDPConnection {
 
   resetConsole(): void {
     this.consoleMessages = [];
+  }
+
+  onClose(handler: () => void): void {
+    this.closeListeners.add(handler);
   }
 
   onEvent(

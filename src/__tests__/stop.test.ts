@@ -13,6 +13,7 @@ import {
   listSessions,
 } from "../lib/process-manager";
 import { resolveExtensionInvocation } from "../lib/exec";
+import { liveNetworkStubs, openNetworkStubs, stubLinks } from "../lib/network-stubs";
 import { readyContract } from "./fixtures/engine-answers";
 
 const inMemorySession = (projectPath: string, browser: string) =>
@@ -97,6 +98,33 @@ describe("extension_stop", () => {
     );
     expect(result.value.stopped).toBe(false);
     expect(result.value.pid).toBeNull();
+  });
+
+  it("takes the session's network stub rules down with it, even when no pid is on record", async () => {
+    const projectPath = tmpProject();
+    const originalOpen = stubLinks.open;
+    let disconnected = 0;
+    stubLinks.open = async () => ({
+      sendCommand: async () => ({}),
+      onEvent: () => () => undefined,
+      onClose: () => undefined,
+      disconnect: () => {
+        disconnected += 1;
+      },
+    });
+
+    try {
+      const stubs = await openNetworkStubs(projectPath, "chrome", 9222);
+      await stubs.add({ id: "stub-1", method: "ANY", url: "https://api.example.com/*", status: 500, body: "", contentType: "text/plain", headers: {}, hits: 0 });
+      expect(liveNetworkStubs(projectPath, "chrome")).toHaveLength(1);
+
+      await stop.handler({ projectPath, browser: "chrome" });
+
+      expect(liveNetworkStubs(projectPath, "chrome")).toEqual([]);
+      expect(disconnected).toBe(1);
+    } finally {
+      stubLinks.open = originalOpen;
+    }
   });
 
   it("kills a registered session and removes it from the registry", async () => {

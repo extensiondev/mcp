@@ -33,6 +33,7 @@ const CEILINGS: Record<string, number> = {
   extension_list_extensions: 100,
   extension_logs: 250,
   extension_manifest_validate: 150,
+  extension_network: 300,
   extension_open: 300,
   extension_preview_web: 300,
   extension_project_create: 450,

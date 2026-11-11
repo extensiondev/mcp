@@ -46,6 +46,7 @@ const NEVER = [
   "extension_build",
   "extension_eval",
   "extension_storage",
+  "extension_network",
   "extension_open",
   "extension_logs",
   "extension_create",
