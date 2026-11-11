@@ -1,7 +1,7 @@
 {
   "generatedFrom": "src/index.ts schemas, src/lib/tool-policy.ts, src/lib/docs-meta.ts; regenerate with pnpm docs:tools",
   "version": "10.22.0",
-  "count": 39,
+  "count": 40,
   "tools": [
     {
       "name": "extension_add_feature",

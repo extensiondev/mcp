@@ -110,7 +110,6 @@ import {
   type ModeIds,
 } from "../lib/store-connection";
 import { browserBuildRefusal, browserBuildVerdicts } from "../lib/browser-builds";
-import { localSubmitPrecheck } from "../lib/submit-local-precheck";
 import { installRefusedAfterRun, installRefusedAnswer, installRefusedRecords, storeRefusedInstall } from "../lib/store-refused-install";
 import { LOCAL_CHECK_FAILED_STATE, localCheckRefusal, localSubmitPrecheck } from "../lib/submit-local-precheck";
 import { dryRunStoreRead, platformUnavailableAnswer, storeRunUnavailable } from "../lib/store-run-unavailable";

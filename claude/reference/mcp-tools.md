@@ -2,7 +2,7 @@
 
 Generated from the schemas the server registers (`src/index.ts`); do not edit by hand. Regenerate with `pnpm docs:tools`. A test fails when this file and the schemas disagree.
 
-39 tools.
+40 tools.
 
 ## extension_add_feature
 

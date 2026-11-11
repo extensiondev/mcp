@@ -115,7 +115,7 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
     annotations: TOOL_ANNOTATIONS.extension_dom_snapshot,
     untrusted: true,
   },
-  extension_element: { group: "local", annotations: acts(), untrusted: true },
+  extension_element: { group: "local", annotations: TOOL_ANNOTATIONS.extension_element, untrusted: true },
   extension_screenshot: {
     group: "local",
     annotations: TOOL_ANNOTATIONS.extension_screenshot,
@@ -158,7 +158,7 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
   },
   extension_network: {
     group: "local",
-    annotations: acts(),
+    annotations: TOOL_ANNOTATIONS.extension_network,
     untrusted: true,
   },
   extension_open: {

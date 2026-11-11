@@ -121,8 +121,6 @@ import {
 import { SAFARI_EVAL_LIMIT, safariContextRefusal } from "../lib/safari-eval";
 import { readOpeningIfClosed, surfaceOpening } from "../lib/open-if-closed";
 
-import type { RdpPortRead } from "../lib/rdp-port-notes";
-
 const pageRef = (t: { targetId: string; url: string }): TargetRef => ({ targetId: t.targetId, url: t.url });
 
 export const schema = {

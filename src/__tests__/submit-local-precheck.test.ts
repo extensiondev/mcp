@@ -517,6 +517,9 @@ describe("510: an upload the store's installation test refused is the person's t
     const other = runCauseOf("chrome", { status: "failed", failureReason: "The Chrome Web Store refused the package for item x: PKG_INVALID_MANIFEST: manifest.json is not valid JSON" }, {}, url);
 
     expect(other.nextStep).toBeNull();
+  });
+});
+
 describe("512: a project on Google's path is not asked to retype CHROMEWEBSTORE.md into STORE.md", () => {
   const platform = useProjectRoutes("extdev-512-");
 
