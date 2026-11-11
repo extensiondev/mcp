@@ -326,8 +326,43 @@ describe("extension_eval on MV2 Gecko reaches a tab through tabs.executeScript",
     );
 
     expect(result.ok).toBe(false);
+    expect(result.error.code).toBe("E_EVAL");
     expect(result.error.message).toBe("Missing host permission for the tab");
     expect(result.hint).toContain("host permissions");
+    expect(result.hint).not.toContain("until: {}");
+  });
+
+  it("blames the returned promise, not host permissions, when executeScript cannot clone the result", async () => {
+    const dir = project(MV2);
+    respond = (_call, index) =>
+      index === 0
+        ? noScripting()
+        : envelope({
+            ok: true,
+            command: "extension_eval",
+            status: "ok",
+            value: { error: "Script '<anonymous code>' result is non-structured-clonable data" },
+          });
+
+    const result = JSON.parse(
+      await evalTool.handler({
+        projectPath: dir,
+        browser: "firefox",
+        context: "page",
+        url: "example.com",
+        expression: "new Promise(r => setTimeout(() => r('x'), 6000))",
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("eval-result-not-cloneable");
+    expect(result.error.code).toBe("E_EVAL_NOT_CLONEABLE");
+    expect(result.error.message).toContain("non-structured-clonable");
+    expect(result.hint).toContain("cannot clone");
+    expect(result.hint).toContain("promise");
+    expect(result.hint).toContain("synchronous");
+    expect(result.hint).toContain("until: {}");
+    expect(result.hint).not.toContain("host permissions");
   });
 
   it("does not retry on Chromium or for a different refusal", async () => {

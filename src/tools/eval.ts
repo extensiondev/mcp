@@ -1308,6 +1308,16 @@ async function evaluateThroughExecuteScript(
   const value = frame.value;
 
   if (value && typeof value === "object" && typeof value.error === "string") {
+    if (NOT_CLONEABLE.test(value.error)) {
+      return envelope({
+        ok: false,
+        command: schema.name,
+        status: "eval-result-not-cloneable",
+        error: { code: "E_EVAL_NOT_CLONEABLE", name: "ResultNotCloneable", message: value.error },
+        hint: `Because ${why}, the expression went through tabs.executeScript from the background, which does not await a returned promise and could not copy the result back: the expression returned a value tabs.executeScript cannot clone, usually a promise on ${browser} MV2, or a DOM node or a function. Return a synchronous, cloneable value (plain data, or JSON.stringify of it) and pass until: {} to wait for a condition instead of returning a promise.`,
+      });
+    }
+
     return envelope({
       ok: false,
       command: schema.name,
