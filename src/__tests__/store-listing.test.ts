@@ -5,6 +5,7 @@ import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { actionFingerprint } from "../lib/approval-gate";
+import { CHROMEWEBSTORE_MD_PREFILL_CALL } from "../lib/chromewebstore-md";
 import { listingDigest } from "../lib/store-listing-media";
 import { STORE_FIELDS, derivedListingFields, listingForStore, parseStoreMdListing } from "../lib/store-md-listing";
 import { TOOL_POLICY } from "../lib/tool-policy";
@@ -1780,5 +1781,44 @@ describe("the STORE.md Support URL line", () => {
     expect(listingForStore(parsed, "safari").listing.homepageUrl).toBe("https://example.com");
     expect(listingForStore(parsed, "chrome").listing.supportUrl).toBeUndefined();
     expect(STORE_FIELDS.safari.slice(-2)).toEqual(["supportUrl", "releaseMode"]);
+  });
+});
+
+describe("sync-listing points at CHROMEWEBSTORE.md for a Chrome line STORE.md lacks (ledger 512)", () => {
+  const platform = useProjectRoutes("extdev-sync-512-");
+
+  const CHROMEWEBSTORE_MD = "# Chrome Web Store Listing - Widget\n\n## Store Listing\n\n**Single Purpose** [REQUIRED]\nBlurs names on the pages the user has open.\n\n**Visibility**: Public / Unlisted / Private\n";
+
+  function bare(storeMd: string | null): string {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-sync-512-"));
+    fs.writeFileSync(path.join(root, "CHROMEWEBSTORE.md"), CHROMEWEBSTORE_MD);
+    if (storeMd !== null) fs.writeFileSync(path.join(root, "STORE.md"), storeMd);
+
+    return root;
+  }
+
+  it("marks the unread line as held by CHROMEWEBSTORE.md with the preflight that prefills it, as a warning beside the sync, never as a read of that file", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    const out = JSON.parse(await submit({ action: "sync-listing", browsers: ["chrome"], projectPath: bare("# Widget\n\n## Chrome Web Store\n"), api: API }));
+    const chrome = out.value.stores.chrome;
+    const unread = (chrome.unread as Array<Record<string, unknown>>).find((row) => row.field === "singlePurpose")!;
+
+    expect(chrome.status).toBe("nothing-to-sync");
+    expect(unread).toEqual({ field: "singlePurpose", line: "### Single purpose", section: "## Chrome Web Store", heldBy: "CHROMEWEBSTORE.md **Single Purpose**", prefill: CHROMEWEBSTORE_MD_PREFILL_CALL });
+    expect((chrome.unread as Array<Record<string, unknown>>).find((row) => row.field === "visibility")).toEqual({ field: "visibility", line: "- Visibility:", section: "## Chrome Web Store" });
+    expect(out.value.sayToPerson).toContain(`For chrome, STORE.md has no \`### Single purpose\`, and CHROMEWEBSTORE.md holds it (**Single Purpose**); run ${CHROMEWEBSTORE_MD_PREFILL_CALL}`);
+    expect(platform.sent("PUT", LISTING("chrome"))).toHaveLength(0);
+  });
+
+  it("refuses a sync with no STORE.md by naming the CHROMEWEBSTORE.md lines the preflight writes into one", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    const out = JSON.parse(await submit({ action: "sync-listing", browsers: ["chrome"], projectPath: bare(null), api: API }));
+
+    expect(out.error.name).toBe("StoreMdMissing");
+    expect(out.error.message).toContain(`There is no STORE.md, and CHROMEWEBSTORE.md already holds \`### Single purpose\` (**Single Purpose**); run ${CHROMEWEBSTORE_MD_PREFILL_CALL} and value.readiness.listingDraft.storeMd is the STORE.md to save, so nothing is retyped. Nothing was sent.`);
   });
 });

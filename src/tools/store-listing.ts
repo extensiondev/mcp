@@ -86,6 +86,7 @@ import {
 } from "../lib/listing-image-stage";
 import { firefoxCategoryCover } from "../lib/firefox-category-cover";
 import { iconPaddingView } from "../lib/chrome-icon-padding";
+import { CHROMEWEBSTORE_MD_FILENAME, CHROMEWEBSTORE_MD_PREFILL_CALL, chromeWebStoreHeld, chromeWebStoreHeldSentence, readChromeWebStoreMd, type ChromeWebStoreHeld } from "../lib/chromewebstore-md";
 import { STORE_MD_FILENAME } from "../lib/store-md";
 import { EDGE_STORE_LOGO_RECIPE } from "../lib/store-bring-list";
 import {
@@ -101,11 +102,12 @@ import {
 } from "../lib/store-md-over-limit";
 import { reconcileChromeCheck } from "../lib/store-md-chrome-reconcile";
 import { requirementsView, type RequirementsView } from "../lib/store-requirements";
-import { linesNotFound, storeMdLineOf, storeMdSectionOf } from "../lib/store-md-fields";
+import { linesNotFound, storeMdLineOf, storeMdSectionOf, type StoreMdLineNotFound } from "../lib/store-md-fields";
 import {
   LISTING_STORES,
   LISTING_TEXT_LIMITS,
   PRIVACY_SECTION,
+  STORE_FIELDS,
   STORE_SECTIONS,
   derivedListingFields,
   listingForStore,
@@ -251,8 +253,10 @@ export function readLocalListing(
   try {
     content = fs.readFileSync(file, "utf8");
   } catch {
+    const held = chromeWebStoreHeld(readChromeWebStoreMd(projectPath), store, STORE_FIELDS[store]);
+
     return {
-      problem: `No ${STORE_MD_FILENAME} at ${file}. Create it with the listing copy first (the browser-extension skill's store-md reference has the shape).`,
+      problem: `No ${STORE_MD_FILENAME} at ${file}. ${held.length ? chromeWebStoreHeldSentence(held, false) : "Create it with the listing copy first (the browser-extension skill's store-md reference has the shape)."}`,
     };
   }
 
@@ -568,6 +572,12 @@ export function screenshotsLineOnce(stores: Row): { stores: Row; screenshotsLine
   }
 
   return { stores: lifted, screenshotsLine };
+}
+
+function heldRow(row: StoreMdLineNotFound, held: ChromeWebStoreHeld[]): Row {
+  const holder = held.find((entry) => entry.field === row.field);
+
+  return holder ? { ...row, heldBy: `${CHROMEWEBSTORE_MD_FILENAME} ${holder.heading}`, prefill: CHROMEWEBSTORE_MD_PREFILL_CALL } : { ...row };
 }
 
 function filledFields(patch: ListingPatch): string[] {
@@ -1218,6 +1228,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
 
   const api = opened.api;
   const builds = await platformBuildIcons(api, projectPath, text(args.useBuild));
+  const chromeWebStoreMd = readChromeWebStoreMd(projectPath);
 
   if (text(args.useBuild) && !builds.build) {
     return badShipRequest(
@@ -1254,7 +1265,10 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     if (padding.iconPadding) iconAdvice.push(padding.iconPadding.say);
 
     const notFound = linesNotFound(local);
-    const unread = notFound.length ? { unread: notFound } : {};
+    const held = chromeWebStoreHeld(chromeWebStoreMd, store, notFound.map((row) => row.field));
+    const unread = notFound.length ? { unread: notFound.map((row) => heldRow(row, held)) } : {};
+
+    if (held.length) said.push(`For ${store}, ${chromeWebStoreHeldSentence(held, true)}`);
 
     if (!filledFields(local.patch).length) {
       stores[store] = { store, status: "nothing-to-sync", ...unread };
