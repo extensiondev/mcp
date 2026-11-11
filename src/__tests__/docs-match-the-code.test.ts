@@ -109,6 +109,31 @@ describe("the docs say what the code does", () => {
     expect(read("docs/clients.json")).toBe(clientsJson);
   });
 
+  it("carries the eight reviewer test cases the directory reviews ask for, five positive and three negative", () => {
+    const page = read("docs/directory-review.md");
+    const headings = page.split("\n").filter((line) => /^### (Positive|Negative) \d+: /.test(line));
+
+    expect(headings).toEqual([
+      "### Positive 1: Who am I signed in as",
+      "### Positive 2: Which projects does the workspace hold",
+      "### Positive 3: Did the latest build pass",
+      "### Positive 4: Where does the project stand on the stores",
+      "### Positive 5: Release the latest Stable build to Preview",
+      "### Negative 1: Release a Preview build to Stable",
+      "### Negative 2: Rebuild past the monthly build allowance",
+      "### Negative 3: Create a project in a workspace the reviewer cannot write",
+    ]);
+
+    for (const heading of headings) {
+      const section = page.slice(page.indexOf(heading));
+      const body = section.slice(0, section.indexOf("\n### ", 1) === -1 ? undefined : section.indexOf("\n### ", 1));
+
+      expect(body, heading).toContain("- Prompt:");
+      expect(body, heading).toContain("- Expected tools:");
+      expect(body, heading).toContain(heading.startsWith("### Negative") ? "- Expected refusal:" : "- Expected answer:");
+    }
+  });
+
   it("renders the STORE.md field table from the parser's declarations, the files on disk are that rendering, and every line is a label the platform's requirements name", () => {
     const version = String((require("../../package.json") as { version: string }).version);
     const doc = `${renderStoreMdFieldsDoc()}\n`;
