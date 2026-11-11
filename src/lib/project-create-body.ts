@@ -8,12 +8,14 @@
 
 export const DEFAULT_BUILD_COMMAND = "npm run build -- --browser <browser>";
 
+export type CreateBodySource =
+  | { kind: "github"; owner: string; repoName: string; installationId?: string }
+  | { kind: "upload"; uploadId: string };
+
 export function buildCreateBody(args: {
   workspace: string;
   projectSlug: string;
-  owner: string;
-  repoName: string;
-  installationId?: string;
+  source: CreateBodySource;
   displayName?: string;
   description?: string;
   installCommand?: string;
@@ -43,6 +45,29 @@ export function buildCreateBody(args: {
     return `dist/${name}`;
   };
 
+  const source = args.source;
+  const origin =
+    source.kind === "github"
+      ? {
+          github: {
+            owner: source.owner,
+            repo: source.repoName,
+            installationId: source.installationId,
+            createdAt: new Date().toISOString(),
+            pullRequestComments: true,
+            commitComments: false,
+          },
+          createdFrom: { kind: "repository", ref: `${source.owner}/${source.repoName}` },
+        }
+      : {
+          source: { uploadId: source.uploadId },
+          createdFrom: { kind: "upload", ref: source.uploadId },
+        };
+  const describedAs =
+    source.kind === "github"
+      ? `Browser extension project for ${source.owner}/${source.repoName}.`
+      : `Browser extension project ${args.projectSlug}.`;
+
   const browser = (name: string) => ({
     enabled: wanted.has(name),
     installCommand,
@@ -55,10 +80,7 @@ export function buildCreateBody(args: {
       id: "",
       name: args.projectSlug,
       displayName: String(args.displayName || args.projectSlug).trim(),
-      description: String(
-        args.description ||
-          `Browser extension project for ${args.owner}/${args.repoName}.`,
-      ).trim(),
+      description: String(args.description || describedAs).trim(),
     },
     build: {
       chrome: browser("chrome"),
@@ -71,15 +93,7 @@ export function buildCreateBody(args: {
       runWhatsNew: false,
       runExtensionExecutables: false,
     },
-    github: {
-      owner: args.owner,
-      repo: args.repoName,
-      installationId: args.installationId,
-      createdAt: new Date().toISOString(),
-      pullRequestComments: true,
-      commitComments: false,
-    },
+    ...origin,
     workspaceSlug: args.workspace,
-    createdFrom: { kind: "repository", ref: `${args.owner}/${args.repoName}` },
   };
 }

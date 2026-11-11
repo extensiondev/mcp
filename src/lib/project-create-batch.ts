@@ -24,6 +24,7 @@ import {
   sameProjectSet,
 } from "./project-batch";
 import { buildCreateBody } from "./project-create-body";
+import { projectCreateUrl } from "./project-source-upload";
 import { consoleBase, consoleProjectUrl } from "./registry";
 import { identityHeaders } from "./session-identity";
 
@@ -402,14 +403,12 @@ function persist(session: Session, deviceCode: string, inFlight?: BatchEntry): v
 }
 
 async function createOne(session: Session, entry: BatchEntry, installationId: string | undefined, callStartedAt: number): Promise<CreateOutcome> {
-  const url = `${session.apiBase}/api/cli/projects/create`;
+  const url = projectCreateUrl(session.apiBase);
   const body = {
     ...buildCreateBody({
       workspace: entry.workspace,
       projectSlug: entry.slug,
-      owner: entry.owner,
-      repoName: entry.repoName,
-      installationId,
+      source: { kind: "github", owner: entry.owner, repoName: entry.repoName, installationId },
       displayName: entry.displayName,
       description: entry.description,
       installCommand: entry.installCommand,
