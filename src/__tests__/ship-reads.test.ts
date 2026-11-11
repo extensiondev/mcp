@@ -27,6 +27,28 @@ describe("extension_release_status reads the latest release runs, the Chrome rol
     expect(out.value.runs.value).toMatchObject({ since: "2026-10-05T00:00:00.000Z", recent: [{ runId: 1, conclusion: "success" }] });
   });
 
+  it("runs on a project without a mirror answers the lane's store runs, or says it has none, and never names a workflow", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`GET ${PROJECT_ROUTE}/releases/promotion-runs`] = () => ({ body: { since: "2026-11-04T00:00:00.000Z", source: "lane", recent: [] } });
+
+    const empty = JSON.parse(await status({ include: ["runs"], api: API }));
+
+    expect(empty.value.runs.value).toMatchObject({ source: "lane", recent: [] });
+    expect(empty.value.runs.hint).toBe("This project has no release runs yet: the build lane ran no store submission for it since 2026-11-04T00:00:00.000Z. Pass since (up to 30 days back) to look further.");
+    expect(JSON.stringify(empty.value.runs)).not.toMatch(/workflow/i);
+
+    platform.routes[`GET ${PROJECT_ROUTE}/releases/promotion-runs`] = () => ({
+      body: { since: "2026-11-04T00:00:00.000Z", source: "lane", recent: [{ name: "⏵⏵⏵ Submit to Browser Stores", status: "completed", conclusion: "success", htmlUrl: "", createdAt: "2026-11-11T20:31:00Z" }] },
+    });
+
+    const listed = JSON.parse(await status({ include: ["runs"], api: API }));
+
+    expect(listed.value.runs.hint).toBe("The 1 newest store submission runs the build lane ran for this project since 2026-11-04T00:00:00.000Z, newest first; a store submit starts one per browser.");
+    expect(JSON.stringify(listed.value.runs)).not.toMatch(/workflow/i);
+  });
+
   it("runs read by a login whose minter is not an owner says it needs an owner", async () => {
     if (process.platform === "win32") return;
 

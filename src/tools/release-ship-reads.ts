@@ -27,15 +27,21 @@ export async function readPromotionRuns(scope: Scope & { since?: string }): Prom
 
   const recent = (Array.isArray(read.json.recent) ? read.json.recent : []).filter(isRow);
   const degraded = read.json.degraded === true;
+  const lane = read.json.source === "lane";
+  const since = text(read.json.since);
 
   return envelope({
     ok: true,
     command: COMMAND,
     status: "read",
-    value: { ...where, since: text(read.json.since) || null, recent, ...(degraded ? { degraded: true } : {}) },
-    hint: recent.length
-      ? `The ${recent.length} newest release workflow runs since ${text(read.json.since)}, newest first; a promote or a rollback starts one per browser.`
-      : `No release workflow ran since ${text(read.json.since) || "the start of the window"}. Pass since (up to 30 days back) to look further.`,
+    value: { ...where, since: since || null, ...(lane ? { source: "lane" } : {}), recent, ...(degraded ? { degraded: true } : {}) },
+    hint: lane
+      ? recent.length
+        ? `The ${recent.length} newest store submission runs the build lane ran for this project since ${since}, newest first; a store submit starts one per browser.`
+        : `This project has no release runs yet: the build lane ran no store submission for it since ${since || "the start of the window"}. Pass since (up to 30 days back) to look further.`
+      : recent.length
+        ? `The ${recent.length} newest release workflow runs since ${since}, newest first; a promote or a rollback starts one per browser.`
+        : `No release workflow ran since ${since || "the start of the window"}. Pass since (up to 30 days back) to look further.`,
     warnings: [degraded ? "The platform could not list the runs just now, so an empty list here is unknown, not empty." : null],
   });
 }

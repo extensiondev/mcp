@@ -213,6 +213,66 @@ describe("extension_release_status refresh with several stores: one project-leve
     expect(out.hint).toContain("safari refused:");
   });
 
+  it("reads a store the platform polled itself as read now, with the platform's words, and waits on nothing", async () => {
+    if (process.platform === "win32") return;
+
+    const served = serve({
+      laterPolls: (store) =>
+        jsonResponse({
+          ok: true,
+          dispatched: false,
+          queued: false,
+          polled: true,
+          readAt: LANDED_AT,
+          store,
+          message: `${store === "firefox" ? "Firefox Add-ons" : "App Store Connect"} was read now and answers signed; the record carries that word.`,
+          read: [{ store, phase: "signed", changed: true }],
+          refused: [],
+          skipped: [],
+          failed: [],
+        }),
+    });
+
+    global.fetch = served.fetch;
+
+    const out = JSON.parse(await readStores({ ...CALL, refresh: ["firefox"] }));
+
+    expect(out.value.refresh.firefox).toEqual({ dispatched: true, queued: false, dispatchedAt: DISPATCHED_AT });
+
+    const later = JSON.parse(await readStores({ ...CALL, refresh: ["safari"] }));
+
+    expect(later.value.refresh.safari).toEqual({
+      dispatched: false,
+      queued: false,
+      polled: true,
+      readAt: LANDED_AT,
+      message: "App Store Connect was read now and answers signed; the record carries that word.",
+    });
+
+    expect(later.value.refreshWait).toBeUndefined();
+    expect(later.hint).toContain("safari read now: App Store Connect was read now and answers signed; the record carries that word");
+    expect(later.hint).toContain("the platform read the store before answering, so this read carries its word");
+    expect(later.hint).not.toContain("refused");
+    expect(later.hint).not.toContain("within a minute or two");
+  });
+
+  it("says what it knows when the platform refuses a refresh with no reason: which browser, that no reason came, and the next step", async () => {
+    if (process.platform === "win32") return;
+
+    const served = serve({ laterPolls: () => jsonResponse({ ok: true, dispatched: false, queued: false }) });
+
+    global.fetch = served.fetch;
+
+    const out = JSON.parse(await readStores(CALL));
+
+    expect(out.value.refresh.firefox).toEqual({ dispatched: false, queued: false });
+    expect(out.hint).toContain(
+      "firefox refused: the platform refused the store check for firefox and gave no reason; read extension_release_status again in a minute, and if it stays silent open the console Submissions page",
+    );
+
+    expect(out.hint).not.toContain("no reason given");
+  });
+
   it("keeps the refusal words for any other status on a later store", async () => {
     if (process.platform === "win32") return;
 

@@ -25,6 +25,8 @@ export interface StoreReadView {
 export interface StoreRefreshOwnView {
   dispatched: boolean;
   queued: boolean;
+  polled?: boolean;
+  readAt?: string;
   dispatchedAt?: string;
   dueAt?: string;
   message?: string;
@@ -132,12 +134,16 @@ function answeredRow(json: Record<string, unknown>, lead: LeadCheck | null): Sto
   const dueAt = str(json.dueAt);
   const message = str(json.message);
   const storeRead = storeReadOf(json.storeRead);
-  const sameCheck = json.dispatched !== true && json.queued !== true ? coveredByLead(lead, checkStartedAt(json, message)) : null;
+  const polled = json.polled === true;
+  const readAt = polled ? str(json.readAt) : undefined;
+  const sameCheck = !polled && json.dispatched !== true && json.queued !== true ? coveredByLead(lead, checkStartedAt(json, message)) : null;
   if (sameCheck) return coveredRow(sameCheck, message, storeRead);
 
   return {
     dispatched: json.dispatched === true,
     queued: json.queued === true,
+    ...(polled ? { polled } : {}),
+    ...(readAt ? { readAt } : {}),
     ...(dispatchedAt ? { dispatchedAt } : {}),
     ...(dueAt ? { dueAt } : {}),
     ...(message ? { message } : {}),

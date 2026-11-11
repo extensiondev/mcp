@@ -490,23 +490,33 @@ export interface RefreshWaitView {
   stores: string[];
 }
 
+function reasonlessRefusal(store: string): string {
+  return `the platform refused the store check for ${store} and gave no reason; read extension_release_status again in a minute, and if it stays silent open the console Submissions page`;
+}
+
 function refreshSentence(refresh: Record<string, StoreRefreshView> | null, wait: RefreshWaitView | null): string {
   if (!refresh || !Object.keys(refresh).length) return "";
 
   const reads: string[] = [];
+  let polled = false;
+  let inCheck = false;
   const rows = Object.entries(refresh).flatMap(([store, row]) => {
     const read = row.storeRead;
     pushStoreRead(reads, read);
+    if (refreshInCheck(row)) inCheck = true;
     if (refreshCovered(row)) return [];
     if (row.dispatched && row.sharedWith?.length) return [`one store check dispatched for ${spokenStores([store, ...row.sharedWith])}`];
+    if (row.polled) polled = true;
 
     const word = row.dispatched
       ? "dispatched"
       : row.queued
         ? "queued for the budget reset"
-        : read
-          ? "read now"
-          : `refused: ${row.message || "no reason given"}`;
+        : row.polled
+          ? `read now${row.message ? `: ${row.message.replace(/\.$/, "")}` : ""}`
+          : read
+            ? "read now"
+            : `refused: ${row.message || reasonlessRefusal(store)}`;
 
     return [`${store} ${word}`];
   });
@@ -519,6 +529,10 @@ function refreshSentence(refresh: Record<string, StoreRefreshView> | null, wait:
 
   if (wait) {
     return `${asked}; it had not landed after ${wait.waitedSeconds} s of waiting, so this read is the state before it: read extension_release_status again before saying the state changed. `;
+  }
+
+  if (polled && !inCheck) {
+    return `${asked}; the platform read the store before answering, so this read carries its word. `;
   }
 
   return `${asked}; the registry reflects the rest of the check within a minute or two, so read extension_release_status again before saying the state changed, or pass waitSeconds with refresh to answer once it lands. `;
