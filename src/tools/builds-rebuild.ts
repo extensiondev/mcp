@@ -310,7 +310,7 @@ async function dispatch(call: RebuildCall, found: FinishedBuild | null): Promise
   const value = { ...base, ...(number ? { buildNumber: number } : {}), outcome: waited.outcome, links };
   const before = found ? `${followedSentence(found)} ` : "";
   const started = `${before}This started a real build for ${project} at ${commit || "the branch head"} on ${browsers.join(", ") || "the enabled browsers"}, and it counts against the workspace's build allowance. ${target.sentence}`;
-  const stripWarning = stripped.length ? `The platform left out ${stripped.join(", ")}, which this plan does not build.` : null;
+  const stripWarning = stripped.length ? `The platform left out ${stripped.join(", ")}, which the workspace's build allowance does not cover.` : null;
 
   if (waited.failed) {
     const fault = platformFault(waited.record, commit, [], `extension_builds action:"logs" with buildId ${commit}`);

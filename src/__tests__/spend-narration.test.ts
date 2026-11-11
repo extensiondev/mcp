@@ -36,7 +36,8 @@ function expectNarrated(allowance: any, what: string) {
   );
 
   expect(allowance.remains).toBeTruthy();
-  expect(allowance.wall).toContain("/pricing");
+  expect(allowance.wall).toContain("console's workspace settings");
+  expect(allowance.wall).not.toMatch(/pricing|\bplan\b|upgrade/i);
 }
 
 describe("every spending lane counts the allowance out loud in its result", () => {

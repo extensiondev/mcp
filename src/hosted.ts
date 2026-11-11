@@ -21,7 +21,7 @@ import * as workspace from "./tools/workspace";
 
 import { version } from "../package.json";
 
-import type { ServerOptions } from "./lib/tool-policy";
+import type { ServerOptions, ToolAnnotations } from "./lib/tool-policy";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 export { withRequestCredential, requestCredential, type RequestCredential, type ScopedProject } from "./lib/credential-scope";
@@ -31,12 +31,19 @@ interface HostedProjection {
   actions?: string[];
   drop?: string[];
   description?: string;
+  title?: string;
+  annotations?: ToolAnnotations;
 }
+
+const HOSTED_READ: ToolAnnotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
 
 export const HOSTED_DROPPED_INPUTS = ["api", "projectPath"] as const;
 
 const HOSTED_AUTH_DESCRIPTION =
   "Report who this connection is signed in as: the workspace and project its OAuth token covers, when it expires, and whether the platform's whoami endpoint confirms it (value.server.verdict: confirmed, refused or unavailable). The token itself is never returned. Signing in and out happens in the MCP client, through the connection's OAuth flow, so this server has no login or logout action.";
+
+const HOSTED_WORKSPACE_DESCRIPTION =
+  "Read the workspace this connection's token covers. info: the workspace, its build allowance and what is used; projects: every project with its last build; settings: a project's build settings. Builds spend only on build branch pushes that change the root directory; docs-only pushes spend nothing. Changing settings, visibility or environment runs in the local server (npx @extension.dev/mcp).";
 
 const PROJECTIONS: Record<string, HostedProjection> = {
   extension_auth: {
@@ -44,10 +51,22 @@ const PROJECTIONS: Record<string, HostedProjection> = {
     actions: ["status"],
     drop: ["project", "projects", "workspace", "deviceCode", "waitSeconds"],
     description: HOSTED_AUTH_DESCRIPTION,
+    title: "Read the signed-in identity",
+    annotations: HOSTED_READ,
   },
-  extension_workspace: { module: workspace, actions: ["info", "projects", "settings"] },
+  extension_workspace: {
+    module: workspace,
+    actions: ["info", "projects", "settings"],
+    description: HOSTED_WORKSPACE_DESCRIPTION,
+    title: "Read the workspace",
+    annotations: HOSTED_READ,
+  },
   extension_project_create: { module: projectCreate, drop: ["projects"] },
-  extension_builds: { module: builds },
+  extension_builds: {
+    module: builds,
+    actions: ["list", "get", "logs", "rebuild", "recheck", "configure", "create-channel", "configure-channel", "delete-channel"],
+    drop: ["to"],
+  },
   extension_release_status: { module: releaseStatus },
   extension_release_promote: { module: releasePromote },
 };
@@ -103,7 +122,12 @@ export function hostedTools(names: readonly string[] = HOSTED_TOOL_NAMES): ToolM
   return names.map((name) => {
     const projection = PROJECTIONS[name] as HostedProjection;
 
-    return { schema: projectSchema(projection), handler: projection.module.handler };
+    return {
+      schema: projectSchema(projection),
+      handler: projection.module.handler,
+      ...(projection.title ? { title: projection.title } : {}),
+      ...(projection.annotations ? { annotations: projection.annotations } : {}),
+    };
   });
 }
 

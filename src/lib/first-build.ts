@@ -23,7 +23,7 @@ const WITHHELD_BECAUSE: Record<string, string> = {
   allowance_exhausted:
     "the workspace has used its build allowance for the month",
   target_not_allowed:
-    "the project's browser targets are not built on the workspace's plan",
+    "the project's browser targets are outside the workspace's build allowance",
   dispatch_failed: "the platform tried to dispatch it and could not",
   project_already_existed:
     "the project already existed, so this call started no build",

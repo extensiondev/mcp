@@ -39,7 +39,7 @@ export function workspaceConsole(workspace: string, apiHint?: string): Row {
 export function consoleOnly(workspace: string, apiHint?: string): string {
   const links = workspaceConsole(workspace || "<workspace>", apiHint);
 
-  return `Plan and billing changes happen at ${links.plan}, and members are managed at ${links.members}; a project login never changes them.`;
+  return `The workspace's allowance is shown at ${links.usage}, and members are managed at ${links.members}; a project login never changes either.`;
 }
 
 export function storedLoginsOn(api?: string): Array<{ workspace: string; project: string; active: boolean; expiresAt: number }> {

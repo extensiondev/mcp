@@ -127,6 +127,35 @@ describe("hosted tool surface", () => {
     expect(Object.keys(create.inputSchema.properties ?? {})).not.toContain("projects");
   });
 
+  it("lists a title and explicit hints on every tool, read-only where the hosted actions only read", async () => {
+    const listed = (await (await hostedClient()).listTools()).tools;
+    const readOnly = new Set(["extension_auth", "extension_workspace", "extension_release_status"]);
+
+    for (const tool of listed) {
+      expect(tool.title, tool.name).toMatch(/^[A-Z]/);
+      expect(tool.annotations?.title, tool.name).toBe(tool.title);
+
+      for (const hint of ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"]) {
+        expect(typeof (tool.annotations as Record<string, unknown> | undefined)?.[hint], `${tool.name}.${hint}`).toBe("boolean");
+      }
+
+      expect(tool.annotations?.readOnlyHint, tool.name).toBe(readOnly.has(tool.name));
+
+      if (readOnly.has(tool.name)) expect(tool.annotations?.destructiveHint, tool.name).toBe(false);
+
+      expect(tool.name.length, tool.name).toBeLessThanOrEqual(64);
+    }
+
+    const auth = listed.find((tool) => tool.name === "extension_auth")!;
+    expect(auth.title).toBe("Read the signed-in identity");
+    const workspace = listed.find((tool) => tool.name === "extension_workspace")!;
+    expect(workspace.title).toBe("Read the workspace");
+    expect(workspace.description).not.toMatch(/change a project's settings/);
+    const builds = listed.find((tool) => tool.name === "extension_builds")!;
+    expect((builds.inputSchema.properties as any).action.enum).not.toContain("download");
+    expect(Object.keys(builds.inputSchema.properties ?? {})).not.toContain("to");
+  });
+
   it("answers unknown-tool for a forbidden tool called by name", async () => {
     const client = await hostedClient();
 

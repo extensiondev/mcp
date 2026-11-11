@@ -6,18 +6,14 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { mcpOrigins } from "./origins";
+export const ALLOWANCE_PHRASE = "is metered against the workspace's build allowance on extension.dev";
 
-export const ALLOWANCE_PHRASE = "is metered against your plan's allowance on extension.dev";
+export const ALLOWANCE_WALL = "The console's workspace settings show what the allowance covers and how much of it is used.";
 
 export interface SpendNarration {
   spent: string;
   remains: string;
   wall: string;
-}
-
-export function allowanceWallUrl(apiHint?: string): string {
-  return `${mcpOrigins(apiHint).www.replace(/\/+$/, "")}/pricing`;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -64,8 +60,6 @@ export function spendNarration(options: {
     remains: counted
       ? `The platform reports ${counted.used} of ${counted.limit} used.`
       : "The platform sent no remaining count on this call, and this client never invents one.",
-    wall: `What the allowance covers and when the paid plan starts are published at ${allowanceWallUrl(
-      options.api,
-    )}.`,
+    wall: ALLOWANCE_WALL,
   };
 }

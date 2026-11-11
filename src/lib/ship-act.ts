@@ -164,7 +164,7 @@ export function shipRefusalHint(code: string, retryAfterSeconds?: number, store 
   if (drafted) return drafted;
 
   if (code === "burst_cap") return `The workspace dispatched too many runs in the last hour.${wait} Nothing ran.`;
-  if (code === "monthly_cap") return `The workspace's build allowance for this month is spent, so nothing ran.${wait} The plan page in the console raises it.`;
+  if (code === "monthly_cap") return `The workspace's build allowance for this month is spent, so nothing ran.${wait} The console's workspace settings show the allowance.`;
   if (code === "RATE_LIMITED") return `This login made too many of these requests.${wait}`;
   if (UNSURE.has(code)) return `The platform could not confirm this is within the workspace's allowance, so it refused instead of guessing.${wait || " Try again shortly."}`;
 

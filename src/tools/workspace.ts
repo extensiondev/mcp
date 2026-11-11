@@ -231,8 +231,8 @@ async function readInfo(args: HandlerArgs): Promise<string> {
   const slug = text(ws.slug) || workspace;
   const usage =
     summary && summary.used
-      ? `: ${used.buildsThisMonth ?? "?"} of ${limits.buildsPerMonth ?? "?"} builds this month, ${used.projects ?? "?"} of ${limits.projects ?? "?"} projects`
-      : "";
+      ? `${slug} has used ${used.buildsThisMonth ?? "?"} of ${limits.buildsPerMonth ?? "?"} builds this month and ${used.projects ?? "?"} of ${limits.projects ?? "?"} projects.`
+      : `${slug}'s allowance counters were not read.`;
   const allowance = readBuildAllowance(summary);
   const warning = allowance ? buildAllowanceWarning(allowance) : null;
 
@@ -258,10 +258,10 @@ async function readInfo(args: HandlerArgs): Promise<string> {
       login: loginOf(api),
       console: workspaceConsole(slug, args.api),
     },
-    hint: `${warning ? `${warning} ` : ""}${slug} is on the ${summary?.plan ?? "unknown"} plan${usage}. This login acts as ${text(ws.currentUserLogin) || "its minter"} (${text(ws.currentUserRole) || "role unknown"}). ${consoleOnly(slug, args.api)}`,
+    hint: `${warning ? `${warning} ` : ""}${usage} This login acts as ${text(ws.currentUserLogin) || "its minter"} (${text(ws.currentUserRole) || "role unknown"}). ${consoleOnly(slug, args.api)}`,
     warnings: [
-      plan.ok ? null : `The plan could not be read (${plan.message}).`,
-      summary && summary.countersReadable === false ? "The plan's counters could not be read right now, so used is not current." : null,
+      plan.ok ? null : `The allowance could not be read (${plan.message}).`,
+      summary && summary.countersReadable === false ? "The allowance counters could not be read right now, so used is not current." : null,
     ],
   });
 }

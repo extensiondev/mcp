@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   ALLOWANCE_PHRASE,
-  allowanceWallUrl,
+  ALLOWANCE_WALL,
   readPlatformAllowance,
   spendNarration,
 } from "../lib/allowance";
@@ -24,13 +24,13 @@ describe("the allowance narration", () => {
   });
 
   it("keeps the one house phrasing, verbatim", () => {
-    expect(ALLOWANCE_PHRASE).toBe("is metered against your plan's allowance on extension.dev");
+    expect(ALLOWANCE_PHRASE).toBe("is metered against the workspace's build allowance on extension.dev");
   });
 
   it("says what was spent using the house phrasing and our machines", () => {
     const n = spendNarration({ what: "This share upload" });
     expect(n.spent).toBe(
-      "This share upload is metered against your plan's allowance on extension.dev.",
+      "This share upload is metered against the workspace's build allowance on extension.dev.",
     );
   });
 
@@ -77,15 +77,15 @@ describe("the allowance narration", () => {
     }
   });
 
-  it("points the wall at the platform's pricing page, which owns the dates", () => {
-    expect(allowanceWallUrl()).toBe("https://www.extension.dev/pricing");
-    expect(allowanceWallUrl("http://localhost:3000")).toBe(
-      "http://localhost:3000/pricing",
+  it("points the wall at the console's workspace settings, never at a price, a plan or an upgrade", () => {
+    const n = spendNarration({ what: "This publish", api: "http://localhost:3000" });
+    expect(n.wall).toBe(ALLOWANCE_WALL);
+    expect(n.wall).toBe(
+      "The console's workspace settings show what the allowance covers and how much of it is used.",
     );
 
-    const n = spendNarration({ what: "This publish" });
-    expect(n.wall).toBe(
-      "What the allowance covers and when the paid plan starts are published at https://www.extension.dev/pricing.",
-    );
+    for (const text of [n.spent, n.remains, n.wall]) {
+      expect(text).not.toMatch(/pricing|\bplan\b|\bPro\b|\bFree\b|upgrade|subscription|\$\d/i);
+    }
   });
 });

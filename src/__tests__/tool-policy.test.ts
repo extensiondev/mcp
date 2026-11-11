@@ -133,6 +133,7 @@ describe("the server honours the options", () => {
 
     for (const tool of listed) {
       expect(tool.annotations, tool.name).toEqual({ title: toolTitle(tool.name), ...TOOL_POLICY[tool.name].annotations });
+      expect(tool.title, tool.name).toBe(toolTitle(tool.name));
       expect(String(tool.annotations?.title), tool.name).toMatch(/^[A-Z]/);
     }
   });

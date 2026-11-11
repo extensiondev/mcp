@@ -235,7 +235,7 @@ export async function handler(args: {
     if (!Number.isInteger(t) || t < 1 || t > 8760) {
       return fail(
         "PublishBadRequest",
-        "ttlHours must be an integer between 1 and 8760 (365 days); the platform cuts a longer ask back to the plan's share window.",
+        "ttlHours must be an integer between 1 and 8760 (365 days); the platform cuts a longer ask back to the workspace's share window.",
         "bad-request",
         "E_BAD_REQUEST",
       );

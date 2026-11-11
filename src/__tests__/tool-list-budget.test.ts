@@ -20,9 +20,11 @@ import { createServer } from "../index";
  * per property and per action; the long prose lives in the answers the
  * server already writes (hint, sayToPerson, nextStep). The ceilings below
  * are measured on JSON.stringify of each listed tool, the bytes a client
- * actually receives. */
+ * actually receives. Since ledger 525 every tool also lists its title as
+ * the tool's own `title` field, the one the connector directories read,
+ * which is about 1,000 characters over the whole list. */
 const PER_TOOL = 6_000;
-const WHOLE_LIST = 65_000;
+const WHOLE_LIST = 67_000;
 
 type Listed = Awaited<ReturnType<Client["listTools"]>>["tools"][number];
 

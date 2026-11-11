@@ -11,7 +11,7 @@ import { pathToFileURL } from "node:url";
 import { adoptLocalState, localState, type LocalState } from "./local-state";
 import { serverStamp, type ServerStamp } from "./server-stamp";
 import { adoptKeptLogins, keptLoginEntries } from "./session-login";
-import { DEFAULT_SERVER_OPTIONS, setServerOptions, type ServerOptions } from "./tool-policy";
+import { DEFAULT_SERVER_OPTIONS, setServerOptions, type ServerOptions, type ToolAnnotations } from "./tool-policy";
 import { ASSERT_CHECKS } from "./verdict";
 
 export type ToolFrame = {
@@ -34,6 +34,8 @@ export interface ListedTool {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  title?: string;
+  annotations?: ToolAnnotations;
 }
 
 export interface RebuiltBuild {

@@ -352,7 +352,7 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Upload for share.previewUrl; metered against your plan's allowance, and hands over the code.",
+          "Upload for share.previewUrl; metered against the workspace's allowance, and hands over the code.",
       },
     },
     required: ["projectPath"],

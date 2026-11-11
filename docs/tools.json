@@ -1487,7 +1487,7 @@
           "type": "boolean",
           "required": false,
           "default": false,
-          "description": "Upload for share.previewUrl; metered against your plan's allowance, and hands over the code."
+          "description": "Upload for share.previewUrl; metered against the workspace's allowance, and hands over the code."
         }
       ]
     },

@@ -338,7 +338,7 @@ Preview a build in the web emulator; share:true returns a link anyone opens with
 | `probe` | boolean | no | `true` | Check the artifact loads. |
 | `open` | boolean | no | `false` | Also open it in a live session. |
 | `openIn` | "chrome" \| "chromium" \| "edge" \| "brave" \| "opera" \| "vivaldi" \| "yandex" \| "firefox" \| "waterfox" \| "librewolf" \| "zen" \| "floorp" \| "safari" | no |  | Session browser to open in. |
-| `share` | boolean | no | `false` | Upload for share.previewUrl; metered against your plan's allowance, and hands over the code. |
+| `share` | boolean | no | `false` | Upload for share.previewUrl; metered against the workspace's allowance, and hands over the code. |
 
 ## extension_project_create
 

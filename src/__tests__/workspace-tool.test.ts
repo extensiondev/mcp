@@ -237,7 +237,7 @@ describe("extension_workspace reads a workspace with any project login it holds"
     const out = JSON.parse(await workspace({ api: API }));
 
     expect(out.ok).toBe(true);
-    expect(out.hint.startsWith("8 builds remain of 350 this month; each project creation spends one, and so does a push to the build branch that changes a file under the root directory; a push to another branch, one that changes only docs or license files outside public/, or one whose head commit says [skip build] (or [skip ci], or carries an Extension-Build: skip trailer) spends nothing (extension_builds list names each skipped push with its outcome). acme is on the pro plan: 342 of 350 builds")).toBe(true);
+    expect(out.hint.startsWith("8 builds remain of 350 this month; each project creation spends one, and so does a push to the build branch that changes a file under the root directory; a push to another branch, one that changes only docs or license files outside public/, or one whose head commit says [skip build] (or [skip ci], or carries an Extension-Build: skip trailer) spends nothing (extension_builds list names each skipped push with its outcome). acme has used 342 of 350 builds")).toBe(true);
     expect(out.value.allowance).toEqual({ used: 342, limit: 350, remaining: 8, warning: "8 builds remain of 350 this month; each project creation spends one, and so does a push to the build branch that changes a file under the root directory; a push to another branch, one that changes only docs or license files outside public/, or one whose head commit says [skip build] (or [skip ci], or carries an Extension-Build: skip trailer) spends nothing (extension_builds list names each skipped push with its outcome)." });
   });
 
@@ -257,7 +257,8 @@ describe("extension_workspace reads a workspace with any project login it holds"
     const fine = JSON.parse(await workspace({ api: API }));
 
     expect(fine.value.allowance).toEqual({ used: 950, limit: 1000, remaining: 50, warning: null });
-    expect(fine.hint.startsWith("acme is on the pro plan")).toBe(true);
+    expect(fine.hint.startsWith("acme has used ")).toBe(true);
+    expect(fine.hint).not.toMatch(/\bplan\b|\bpro\b|upgrade/i);
   });
 
   it("carries no warning above the threshold and no allowance when the counters are unreadable", async () => {
@@ -268,7 +269,8 @@ describe("extension_workspace reads a workspace with any project login it holds"
     const fine = JSON.parse(await workspace({ api: API }));
 
     expect(fine.value.allowance).toEqual({ used: 4, limit: 350, remaining: 346, warning: null });
-    expect(fine.hint.startsWith("acme is on the pro plan")).toBe(true);
+    expect(fine.hint.startsWith("acme has used ")).toBe(true);
+    expect(fine.hint).not.toMatch(/\bplan\b|\bpro\b|upgrade/i);
 
     routes["/api/workspaces/acme/plan"] = { body: { ...PLAN, countersReadable: false, used: null } };
 

@@ -87,7 +87,7 @@ function refusalHint(code: string, retryAfterSeconds?: number, body?: unknown): 
   const wait = retryAfterSeconds ? ` The platform asks for ${retryAfterSeconds} seconds before the next try.` : "";
 
   if (code === "burst_cap") return `The workspace started too many builds in the last hour.${wait} Nothing was dispatched.`;
-  if (code === "monthly_cap") return `The workspace's build allowance for this month is spent, so nothing was dispatched.${wait} The plan page in the console raises it.`;
+  if (code === "monthly_cap") return `The workspace's build allowance for this month is spent, so nothing was dispatched.${wait} The console's workspace settings show the allowance.`;
   if (code === "RATE_LIMITED") return `This login made too many of these requests.${wait}`;
   if (code === "BUILD_DISPATCH_DISABLED") return "Build dispatch is paused for every project right now, so nothing was dispatched. Try again later.";
   if (UNAVAILABLE.has(code)) return `The platform could not confirm this build is within the workspace's allowance, so it refused instead of guessing.${wait || " Try again shortly."}`;

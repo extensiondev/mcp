@@ -369,7 +369,7 @@ function refusalHint(code: string, ref: string, retryAfterSeconds?: number, gran
   }
 
   if (code === "PROJECT_LIMIT_EXCEEDED") {
-    return "The workspace is at its plan's project limit. Nothing more can be created in it until a project is removed or the plan changes.";
+    return "The workspace is at its project limit. Nothing more can be created in it until a project is removed; the console's workspace settings show the limit.";
   }
 
   if (code === "RESERVED_PROJECT_SLUG") {
