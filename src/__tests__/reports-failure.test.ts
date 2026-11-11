@@ -260,6 +260,42 @@ describe("build reports failure when the artifact is unusable", () => {
     expect(result.value.buildExitCode).toBe(0);
   });
 
+  it("lists the pages and scripts special folders beside the manifest entry points", async () => {
+    const dir = projectWithManifest(
+      { manifest_version: 3, name: "F", version: "1.0.0", options_page: "options.html" },
+      { manifest: { options_page: "options.html" }, files: ["options.html"] },
+    );
+    const sources = ["src/options.html", "pages/demo.html", "pages/nested/index.html", "pages/draft.html", "scripts/standalone.ts"];
+    const emitted = ["pages/demo.html", "pages/demo.js", "pages/nested.html", "scripts/standalone.js"];
+
+    for (const file of sources) {
+      fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+      fs.writeFileSync(path.join(dir, file), "x");
+    }
+
+    for (const file of emitted) {
+      fs.mkdirSync(path.dirname(path.join(dir, "dist", "chrome", file)), { recursive: true });
+      fs.writeFileSync(path.join(dir, "dist", "chrome", file), "x");
+    }
+
+    cliResult = buildCliAnswer(dir, "chrome");
+
+    const result = JSON.parse(await build.handler({ projectPath: dir }));
+    const listed = (result.value.entrypoints as Array<{ role: string; path: string; present: boolean }>)
+      .map((e) => `${e.role} -> ${e.path}:${e.present}`);
+
+    expect(result.ok).toBe(true);
+    expect(listed).toEqual([
+      "options_page -> options.html:true",
+      "pages/demo.html -> pages/demo.html:true",
+      "pages/draft.html -> pages/draft.html:false",
+      "pages/nested/index.html -> pages/nested.html:true",
+      "scripts/standalone.ts -> scripts/standalone.js:true",
+    ]);
+
+    expect(result.warnings.join("\n")).toContain("pages/draft.html (expected pages/draft.html)");
+  });
+
   it("propagates a non-zero build exit as a failure", async () => {
     const dir = projectWithManifest({
       manifest_version: 3,
