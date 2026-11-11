@@ -85,6 +85,7 @@ describe("extension_builds answers one truth per build", () => {
   let prevApi: string | undefined;
   let prevFetch: typeof fetch;
   let body: Record<string, unknown>;
+  let dispatchBody: Record<string, unknown>;
 
   beforeEach(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-builds-truth-"));
@@ -94,6 +95,7 @@ describe("extension_builds answers one truth per build", () => {
     process.env.XDG_CONFIG_HOME = tmp;
     prevFetch = global.fetch;
     body = { items: [] };
+    dispatchBody = { ok: true, branch: "main", commit: "4cec881", browsers: "chrome", dispatchedAt: "2026-11-11T16:52:04.000Z" };
 
     global.fetch = (async (url: string) => {
       const pathname = new URL(String(url)).pathname;
@@ -103,6 +105,7 @@ describe("extension_builds answers one truth per build", () => {
       }
 
       if (pathname === `/api/projects/${PROJECT_ID}/builds`) return jsonResponse(body);
+      if (pathname === `/api/projects/${PROJECT_ID}/builds/dispatch`) return jsonResponse(dispatchBody);
 
       return jsonResponse({ message: "not found" }, 404);
     }) as unknown as typeof fetch;
@@ -305,6 +308,7 @@ describe("extension_builds answers one truth per build", () => {
     if (process.platform === "win32") return;
 
     body = { items: [] };
+    dispatchBody = { ok: true, branch: "main", commit: "4cec881", browsers: "chrome", dispatchedAt: "2026-11-11T16:52:04.000Z" };
 
     const out = await list();
 
@@ -329,6 +333,43 @@ describe("extension_builds answers one truth per build", () => {
     expect(out.hint).not.toContain("produced no first build");
     expect(out.hint).toContain('extension_builds action:"rebuild"');
     expect(out.hint).not.toContain("Push a commit");
+  });
+
+  it("ledger 507: an empty list right after this server dispatched a build says the build is dispatched, not recorded yet, and names get for that sha", async () => {
+    if (process.platform === "win32") return;
+
+    body = { items: [] };
+    const dispatched = JSON.parse(await builds({ action: "rebuild", buildId: "4cec881", waitSeconds: 0, api: API }));
+
+    expect(dispatched.status).toBe("rebuild-dispatched");
+
+    const out = await list();
+
+    expect(out.value.builds).toEqual([]);
+    expect(out.value.dispatched).toEqual({ buildId: "4cec881", dispatchedAt: "2026-11-11T16:52:04Z" });
+    expect(out.hint).toContain("Build for 4cec881 was dispatched at 2026-11-11T16:52:04Z, not recorded yet");
+    expect(out.hint).toContain('extension_builds action:"get" with buildId 4cec881');
+    expect(out.hint).not.toContain('action:"rebuild"');
+    expect(out.hint).not.toContain("Push a commit");
+    expect(out.hint).not.toContain("produced no first build");
+  });
+
+  it("ledger 507: once the list carries the dispatched build, the dispatch sentence is gone", async () => {
+    if (process.platform === "win32") return;
+
+    body = { items: [{ ...TWO_STAMPS, id: "4cec881", buildId: "4cec881", commit: "4cec8810ff0ac1dae1c598428ce49ad43081c98", status: "building", conclusion: undefined, completedAt: undefined, duration: undefined }] };
+
+    const out = await list();
+
+    expect(out.value.dispatched).toBeUndefined();
+    expect(out.hint).not.toContain("not recorded yet");
+    expect(out.hint).toContain("the latest is 4cec881 (building)");
+
+    body = { items: [] };
+    const after = await list();
+
+    expect(after.value.dispatched).toBeUndefined();
+    expect(after.hint).toContain('extension_builds action:"rebuild"');
   });
 
   it("a refused push gets no folding sentence", async () => {

@@ -8,6 +8,7 @@
 
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
+import { forgetBuildDispatch, latestBuildDispatch, sameSha, type BuildDispatch } from "../lib/build-dispatches";
 import {
   browsersPendingSentence,
   buildNumberOf,
@@ -35,7 +36,16 @@ export interface ListArgs {
   limit?: number;
 }
 
-function emptyListHint(project: string, lastPush: unknown, buildsPageUrl: string, noted: string[]): string {
+function dispatchSentence(dispatch: BuildDispatch | null): string | null {
+  if (!dispatch) return null;
+
+  return `Build for ${dispatch.sha} was dispatched at ${dispatch.dispatchedAt}, not recorded yet: the platform records a build a few minutes after accepting it. Call extension_builds action:"get" with buildId ${dispatch.sha} and waitSeconds to wait for its record; do not rebuild it again.`;
+}
+
+function emptyListHint(project: string, lastPush: unknown, buildsPageUrl: string, noted: string[], dispatch: BuildDispatch | null): string {
+  const dispatched = dispatchSentence(dispatch);
+  if (dispatched) return `No builds are recorded for ${project} yet. ${dispatched}`;
+
   const rebuild = `Call extension_builds action:"rebuild" to build the branch head now; it needs no push, and ${buildsPageUrl} tracks the run.`;
 
   if (!lastPush) {
@@ -72,6 +82,11 @@ export async function listBuilds(command: string, args: ListArgs): Promise<strin
   const latest = rows[0];
   const latestPins = latest ? pinsWords(channelsOf(latest)) : null;
 
+  for (const row of rows) forgetBuildDispatch(opened.api, text(row.buildId));
+
+  const dispatch = latestBuildDispatch(opened.api);
+  const unlisted = dispatch && !rows.some((row) => sameSha(text(row.buildId), dispatch.sha)) ? dispatch : null;
+
   return envelope({
     ok: true,
     command,
@@ -86,6 +101,7 @@ export async function listBuilds(command: string, args: ListArgs): Promise<strin
       ...(read.json?.pushRefusal ? { pushRefusal: read.json.pushRefusal } : {}),
       ...(push.lastPush ? { lastPush: push.lastPush } : {}),
       ...(headLag ? { headLag } : {}),
+      ...(unlisted ? { dispatched: { buildId: unlisted.sha, dispatchedAt: unlisted.dispatchedAt } } : {}),
       buildsPageUrl,
       trackUrl: buildsPageUrl,
       ...(spoken.length ? { sayToPerson: spoken.join(" ") } : {}),
@@ -94,8 +110,8 @@ export async function listBuilds(command: string, args: ListArgs): Promise<strin
       latest
         ? `${rows.length} recent build${rows.length === 1 ? "" : "s"} of ${project}, newest first; the latest is ${rowWords(latest, text(latest.status) || "status unknown")}${latestPins ? `, ${latestPins}` : ""}. Pass action:"get" or action:"logs" with a buildId to read one.${
             rows.some((row) => row.status === "partial") ? " A partial build finished with at least one browser failed; failedBrowsers names them." : ""
-          }${cancelledSentences.length ? ` ${cancelledSentences.join(" ")}` : ""}${noted.length ? ` ${noted.join(" ")}` : ""}`
-        : emptyListHint(project, push.lastPush, buildsPageUrl, noted)
+          }${cancelledSentences.length ? ` ${cancelledSentences.join(" ")}` : ""}${noted.length ? ` ${noted.join(" ")}` : ""}${unlisted ? ` ${dispatchSentence(unlisted)}` : ""}`
+        : emptyListHint(project, push.lastPush, buildsPageUrl, noted, unlisted)
     }`,
     warnings: [
       rows.length === limit ? `This is the newest ${limit}; raise limit (max ${MAX_LIMIT}) to see older builds.` : null,
