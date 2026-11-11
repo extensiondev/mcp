@@ -324,9 +324,9 @@ export function connectionStep(row: StoreRow, connection: ConnectionRecord | und
   const connectUrl = connection?.connectUrl || fallbackConnectUrl(ctx.ref, row.browser, ctx.api);
 
   if (row.browser === "firefox" && row.state === "store-connection-failed") {
-    const say = firefoxKeyPairFailedSentences(connection?.reason ?? "", connectUrl);
+    const say = firefoxKeyPairFailedSentences(connection?.reason ?? "", connectUrl, connection?.cause);
 
-    return nextStep("connect", say, connectUrl);
+    return { ...nextStep("connect", say, connectUrl), replace: true };
   }
 
   if (row.browser !== "chrome") {

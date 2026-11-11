@@ -26,6 +26,7 @@ export interface SubmissionView extends ApprovalRefund {
   buildSha?: string;
   storeSubmissionId?: string;
   failureReason?: string;
+  failureCause?: Record<string, unknown>;
   supersededBy?: string;
   storeVersion?: { packaged: string; displayed: string; source: string; buildNumber?: number };
   storeCrxVersion?: string;

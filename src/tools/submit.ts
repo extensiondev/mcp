@@ -107,8 +107,10 @@ import {
   withApproveStep,
   withReviewPromise,
   withoutSecretNames,
+  workspaceStoreAccountsUrl,
   type ModeIds,
 } from "../lib/store-connection";
+import { credentialFailureOf, credentialFailureStep } from "../lib/store-credential-failure";
 import { browserBuildRefusal, browserBuildVerdicts } from "../lib/browser-builds";
 import { installRefusedAfterRun, installRefusedAnswer, installRefusedRecords, storeRefusedInstall } from "../lib/store-refused-install";
 import { LOCAL_CHECK_FAILED_STATE, localCheckRefusal, localSubmitPrecheck } from "../lib/submit-local-precheck";
@@ -1550,6 +1552,9 @@ async function answer(args: SubmitToolArgs): Promise<string> {
     const failureLines = failedStores.map((store) =>
       failureLineOf(store, waited.record?.[store]?.storeUpload, String(waited.record?.[store]?.failureReason ?? "")),
     );
+    const credentialFailure = failedStores
+      .map((store) => credentialFailureOf({ ...(waited.record?.[store] as unknown as Record<string, unknown>), store }))
+      .find((failure) => failure !== null);
 
     const uploadedFailures = waited.outcome.recorded
       ? outcome.stores
@@ -1571,7 +1576,14 @@ async function answer(args: SubmitToolArgs): Promise<string> {
         ? runPublishesStep(awaitingPublish, modes, false, firstPage)
         : dispatchedStep(outcome.stores, firstPage)
       : failedStores.length
-        ? submitFailedStep(failureLines, firstPage)
+        ? credentialFailure
+          ? credentialFailureStep({
+              failure: credentialFailure,
+              connectUrl: firefoxConnectUrl(credential.ref, args.api),
+              accountsUrl: workspaceStoreAccountsUrl(credential.ref, args.api),
+              trackUrl: firstPage,
+            })
+          : submitFailedStep(failureLines, firstPage)
         : uploadedFailures.length
           ? uploadedStepFailedStep(
               uploadedFailures.map((row) => row.store),
@@ -1669,7 +1681,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
           message: `The platform's record says the submission did not reach ${failedStores.join(", ")}: ${failureLines.join("; ")}.`,
         },
         value: result,
-        hint: `Fix the cause and submit again; ${statusRead} reads the record. ${made}`,
+        hint: credentialFailure ? `${step.say} ${made}`.trim() : `Fix the cause and submit again; ${statusRead} reads the record. ${made}`,
         warnings: [...warnings, credential.note],
       });
     }

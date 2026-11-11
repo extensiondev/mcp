@@ -61,13 +61,19 @@ export function firefoxKeyPairState(json: Row): FirefoxKeyPairState {
   return connection.healthy === true ? null : "unverified";
 }
 
-export function firefoxKeyPairFailedSentences(reason: string, connectUrl: string): string {
-  return `${failedCheckSentence(reason, "firefox")} The issuer and secret do not match; re-copy both from ${AMO_API_KEY_PAGE} and connect Firefox Add-ons again at ${connectUrl}, where the console checks the pair against AMO before it saves it; then say preflight again. Nothing is submitted to Firefox until AMO answers that check.`;
+function keyPairFix(cause: string | undefined): string {
+  return cause === "issuer-unknown"
+    ? `AMO no longer knows the issuer on file, so the key was revoked or regenerated at ${AMO_API_KEY_PAGE}; take the current pair from there (or generate one)`
+    : `The issuer and secret do not match; re-copy both from ${AMO_API_KEY_PAGE}`;
 }
 
-export function firefoxWorkspaceKeyPairSentences(state: "failed" | "unverified", reason: string, accountsUrl: string): string {
+export function firefoxKeyPairFailedSentences(reason: string, connectUrl: string, cause?: string): string {
+  return `${failedCheckSentence(reason, "firefox")} ${keyPairFix(cause)} and connect Firefox Add-ons again at ${connectUrl}, replacing the pair on file, where the console checks the pair against AMO before it saves it; then say preflight again. Nothing is submitted to Firefox until AMO answers that check.`;
+}
+
+export function firefoxWorkspaceKeyPairSentences(state: "failed" | "unverified", reason: string, accountsUrl: string, cause?: string): string {
   return state === "failed"
-    ? `${failedCheckSentence(reason, "firefox")} That pair is the workspace's Firefox Add-ons account, which every project without its own key uses; re-copy the issuer and secret from ${AMO_API_KEY_PAGE} and connect it again on the workspace's Store accounts page at ${accountsUrl}, then say preflight again.`
+    ? `${failedCheckSentence(reason, "firefox", "workspace")} That pair is the workspace's Firefox Add-ons account, which every project without its own key uses; ${keyPairFix(cause).replace(/^The /, "the ")} and connect it again on the workspace's Store accounts page at ${accountsUrl}, replacing the pair on file, then say preflight again.`
     : `The workspace's Firefox Add-ons account has not been checked against Mozilla yet; connect it again on the workspace's Store accounts page at ${accountsUrl}, where the console checks the pair against AMO before it saves it, then say preflight again.`;
 }
 

@@ -167,6 +167,10 @@ export function credentialsRefused(view: unknown): boolean {
 function credentialStatus(view: unknown, row: Row, passing: boolean): string {
   if (passing) return "have";
 
+  const connection = isRow(view) && isRow(view.connection) ? view.connection : null;
+
+  if (connection && connection.healthy === false) return "missing";
+
   const status = text(row.status) || "unknown";
 
   return status === "have" && credentialsRefused(view) ? "missing" : status;

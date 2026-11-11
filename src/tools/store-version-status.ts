@@ -12,7 +12,7 @@ import { approvalRefundOf, approvalRefundSentence, type ApprovalRefund } from ".
 import { envelope, isEnvelope } from "../lib/envelope";
 import { AMO_FILE_STATUS_LABEL, SIGNED_STATE_SENTENCE, type StoreReleaseView } from "../lib/platform-store-releases";
 import { storeUploadOf } from "../lib/platform-submissions";
-import { runCauseOf } from "../lib/submit-run-cause";
+import { runCauseOf, type ConnectUrls } from "../lib/submit-run-cause";
 import { AMO_SIGNED_STATUS } from "../lib/review-beside-submission";
 import { consoleProjectUrl } from "../lib/registry";
 import { readsBeforeDispatch } from "../lib/store-read-landed";
@@ -21,8 +21,8 @@ import { type ListingPushView } from "../lib/safari-listing-push-read";
 import { releaseChangeOfRow, releaseChangeSentence, releaseTypeMeaning, type ReleaseTypeChange, type ReleaseTypeChangeRefused } from "../lib/store-row-sources";
 import { packageRefusedSentence, uploadRefused } from "../lib/store-upload-words";
 import { readStores } from "./store-status";
-
-import type { NextStep } from "../lib/store-connection";
+import { workspaceStoreAccountsUrl, type NextStep } from "../lib/store-connection";
+import { firefoxConnectUrl } from "../lib/firefox-store";
 
 const COMMAND = "extension_submit";
 
@@ -123,7 +123,7 @@ function dryRunAfterRelease(submission: Row, release: StoreReleaseView): boolean
   return Number.isFinite(dryAt) && Number.isFinite(releaseAt) && dryAt > releaseAt;
 }
 
-function statusOfRow(row: Row, trackUrl = ""): StoreVersionStatus {
+function statusOfRow(row: Row, trackUrl = "", urls?: ConnectUrls): StoreVersionStatus {
   const submission: Row = isRow(row.lastSubmission) ? row.lastSubmission : {};
   const dryRun = DRY_RUN_STATUSES.has(text(submission.status));
   const unrecorded = !text(submission.status) && !text(submission.version);
@@ -136,7 +136,7 @@ function statusOfRow(row: Row, trackUrl = ""): StoreVersionStatus {
   const storeVersion: Row = isRow(submission.storeVersion) ? submission.storeVersion : {};
   const buildNumber = typeof storeVersion.buildNumber === "number" ? storeVersion.buildNumber : null;
   const run: Row = isRow(row.submissionRun) ? row.submissionRun : {};
-  const cause = runCauseOf(text(row.store), submission, run, trackUrl || null);
+  const cause = runCauseOf(text(row.store), submission, run, trackUrl || null, urls);
   const overridden = cause.failed && text(submission.status) !== "failed";
   const ownStep = !uploadRefused(upload) && isRow(row.nextStep) ? (row.nextStep as unknown as NextStep) : null;
 
@@ -265,7 +265,8 @@ export async function storeVersionStatus(args: {
     ? wanted.map((store) => rows.find((row) => row.store === store) ?? { store })
     : rows.filter((row) => row.configured === true || isRow(row.lastSubmission));
   const ref = text(value.workspace) && text(value.project) ? { workspace: text(value.workspace), project: text(value.project) } : null;
-  const stores = picked.map((row) => statusOfRow(row, ref ? consoleProjectUrl(ref, ConsoleProjectPage.submissionsStore(text(row.store)), args.api) : ""));
+  const urls = ref ? { connectUrl: firefoxConnectUrl(ref, args.api), accountsUrl: workspaceStoreAccountsUrl(ref, args.api) } : undefined;
+  const stores = picked.map((row) => statusOfRow(row, ref ? consoleProjectUrl(ref, ConsoleProjectPage.submissionsStore(text(row.store)), args.api) : "", urls));
   const step = overallStep(stores);
   const wait = isRow(value.refreshWait) ? value.refreshWait : null;
   const refresh = isRow(value.refresh) ? value.refresh : null;

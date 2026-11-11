@@ -301,6 +301,7 @@ function submissionView(row: Record<string, unknown>): SubmissionView {
   if (storeCrxVersion) view.storeCrxVersion = storeCrxVersion;
   if (storeReview) view.storeReview = storeReview;
   if (storeUpload) view.storeUpload = storeUpload;
+  if (isPlainObject(row.failureCause)) view.failureCause = row.failureCause;
 
   return Object.assign(view, approvalRefundOf(row));
 }

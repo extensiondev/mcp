@@ -183,6 +183,7 @@ export interface PlatformSubmission extends ApprovalRefund {
   storeReads?: StoreReadView[];
   storeUpload?: StoreUpload;
   failure?: StepFailure;
+  failureCause?: Record<string, unknown>;
   retryOf?: string;
   retriedAs?: string;
   run: SubmissionRun;
@@ -490,6 +491,7 @@ export function toSubmission(raw: Record<string, unknown>): PlatformSubmission |
   const failureRaw = raw.failure && typeof raw.failure === "object" ? (raw.failure as Record<string, unknown>) : null;
   const failedAt = failureRaw ? str(failureRaw.step) : undefined;
   if (failedAt) out.failure = { step: failedAt };
+  if (raw.failureCause && typeof raw.failureCause === "object") out.failureCause = raw.failureCause as Record<string, unknown>;
 
   const fields: Array<[keyof PlatformSubmission, unknown]> = [
     ["id", raw.id],

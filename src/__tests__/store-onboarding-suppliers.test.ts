@@ -43,6 +43,15 @@ describe("the readiness list leaves every owner-certified declaration and every 
     expect(supplierOf({ id: "edge.some_future_requirement", satisfiedBy })).toBe("person-decides");
   });
 
+  it("reads the AMO credentials row from the connection's verdict, so healthy never sits beside unknown", () => {
+    const rows = [{ id: "firefox.api_credentials", required: true, status: "unknown", satisfiedBy: "console-only" }];
+    const view = (healthy: boolean | null) => ({ firefox: { connection: { kind: "jwt", healthy, source: "workspace" }, requirements: { items: rows } } });
+
+    expect(readinessRowsOf(view(true), ["firefox"]).statusById["firefox.api_credentials"]).toBe("have");
+    expect(readinessRowsOf(view(false), ["firefox"]).statusById["firefox.api_credentials"]).toBe("missing");
+    expect(readinessRowsOf(view(null), ["firefox"]).statusById["firefox.api_credentials"]).toBe("unknown");
+  });
+
   it("files the new rows under person decides in the grouped list", () => {
     const rows = [...EDGE_PRIVACY, "safari.copyright", "chrome.some_future_requirement"].map((id) => ({ id, required: true, status: "unknown", satisfiedBy: "store-dashboard" }));
     const { groups } = readinessRowsOf({ edge: { requirements: { items: rows } } }, ["edge"]);

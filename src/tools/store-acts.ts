@@ -1296,7 +1296,9 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       firefoxPair,
       text(firefoxConnection?.reason),
       accountsUrl,
+      firefoxConnection?.cause,
     );
+    const step = firefoxPair === "failed" ? { ...nextStep("connect", say, accountsUrl), replace: true as const } : nextStep("configure", say, accountsUrl);
 
     return envelope({
       ok: true,
@@ -1313,7 +1315,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
         workspaceStoreAccountsUrl: accountsUrl,
         trackUrl: accountsUrl,
         sayToPerson: say,
-        nextStep: nextStep("configure", say, accountsUrl),
+        nextStep: step,
       },
       hint: say,
       warnings: [unreadLine, "This read wrote nothing."],
@@ -1331,6 +1333,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
         ? firefoxKeyPairFailedSentences(
             text(firefoxConnection?.reason),
             connectUrl,
+            firefoxConnection?.cause,
           )
         : firefoxKeyPairUnverifiedSentences(
             connectUrl,
@@ -1352,7 +1355,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
         connectUrl,
         trackUrl: settingsUrl,
         sayToPerson: say,
-        nextStep: nextStep("connect", say, connectUrl),
+        nextStep: firefoxPair === "failed" ? { ...nextStep("connect", say, connectUrl), replace: true as const } : nextStep("connect", say, connectUrl),
       },
       hint: say,
       warnings: [

@@ -102,6 +102,34 @@ describe("status reads a failed store run's own cause into failureReason with a 
     expect(out.value.stores[0].nextStep.kind).toBe("sync-listing");
   });
 
+  it("answers the connect step that replaces the key for a Firefox run AMO refused 401", async () => {
+    const AMO_401 = 'HTTP 401 Unauthorized, POST https://addons.mozilla.org/api/v5/addons/upload/ {"detail":"Unknown JWT iss (issuer)."}';
+    const out = await status(
+      [
+        {
+          store: "firefox",
+          configured: true,
+          lastSubmission: {
+            id: "sub_f",
+            version: "0.1.0.2",
+            status: "failed",
+            failureReason: AMO_401,
+            failureCause: { kind: "store-connection-failed", store: "firefox", credential: "issuer-unknown", keyOnFile: "refused", source: "workspace" },
+          },
+          submissionRun: { status: "completed", conclusion: "failure" },
+        },
+      ],
+      ["firefox"],
+    );
+    const entry = out.value.stores[0];
+
+    expect(entry.status).toBe("failed");
+    expect(entry.failureReason).toBe(AMO_401);
+    expect(entry.nextStep).toMatchObject({ kind: "connect", replace: true });
+    expect(entry.nextStep.url).toMatch(/\/settings\/store-accounts$/);
+    expect(entry.nextStep.say).toContain("The key on file is at fault");
+  });
+
   it("names the failing step beside the generic reason and grounds no next step when the cause is not known", async () => {
     const out = await status(
       [

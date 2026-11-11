@@ -36,6 +36,7 @@ export interface StoreConnection {
   itemId: string | null;
   itemLinked?: boolean;
   reason?: string;
+  cause?: string;
   itemUrl?: string;
   state?: string;
 }
@@ -68,6 +69,7 @@ export interface NextStep {
   kind: NextStepKind;
   say: string;
   url: string | null;
+  replace?: true;
 }
 
 const DRAFT_STORES = new Set(["chrome", "edge"]);
@@ -426,11 +428,13 @@ export function connectionOf(json: Row, apiHint?: string): (StoreConnection & Pa
   ].filter(([, url]) => url);
 
   const state = text(row.state);
+  const cause = text(row.cause);
 
   return {
     kind,
     ...(source ? { source } : {}),
     ...(state ? { state } : {}),
+    ...(cause ? { cause } : {}),
     connectedAs: text(row.connectedAs) || null,
     healthy: typeof row.healthy === "boolean" ? row.healthy : null,
     itemId: text(row.itemId) || null,

@@ -63,6 +63,27 @@ describe("a project the workspace's store account covers is never told to connec
     expect(raw).not.toContain("?connect=");
   });
 
+  it("sends a workspace account AMO refused to the Store accounts page as a connect step that replaces the pair, blocking before any approval", async () => {
+    if (process.platform === "win32") return;
+
+    const refused = report("firefox", false);
+    refused.connection = { ...refused.connection, cause: "issuer-unknown", reason: "Firefox Add-ons does not know the JWT issuer on file." } as typeof refused.connection;
+
+    platform.login();
+    platform.routes[`POST ${PROJECT_ROUTE}/stores/firefox/submissions/preflight`] = () => ({ body: refused });
+
+    const raw = await submit({ action: "preflight", browsers: ["firefox"], buildSha: "603fc8a", api: API });
+    const out = JSON.parse(raw);
+
+    expect(out.status).toBe("store-connection-failed");
+    expect(out.value.nextStep).toMatchObject({ kind: "connect", replace: true });
+    expect(out.value.nextStep.url).toMatch(/\/acme\/settings\/store-accounts$/);
+    expect(out.hint).toContain("The workspace's Firefox AMO account failed its last check: Firefox Add-ons does not know the JWT issuer on file.");
+    expect(out.hint).toContain("the key was revoked or regenerated at https://addons.mozilla.org/developers/addon/api/key/");
+    expect(out.hint).toContain("replacing the pair on file");
+    expect(raw).not.toContain("?connect=");
+  });
+
   it("configure-store reports the connection's source and names the workspace's account", async () => {
     if (process.platform === "win32") return;
 

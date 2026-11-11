@@ -114,6 +114,76 @@ describe("a failed Firefox listed upload answers AMO's own words", () => {
   });
 });
 
+describe("a Firefox upload AMO refused 401 answers the connect step that names the half at fault", () => {
+  const world = usePlatformWorld("extdev-firefox-401-");
+  const AMO_401 = 'HTTP 401 Unauthorized, POST https://addons.mozilla.org/api/v5/addons/upload/ {"detail":"Unknown JWT iss (issuer)."}';
+  const KEY_PAGE = "https://addons.mozilla.org/developers/addon/api/key/";
+
+  it("replaces the workspace's key on file when the platform's own read of AMO was refused too", async () => {
+    if (process.platform === "win32") return;
+
+    world.login();
+    approvedFirefoxSubmit(world, {
+      status: "failed",
+      rawStatus: "failed",
+      failureReason: AMO_401,
+      failureCause: { kind: "store-connection-failed", store: "firefox", credential: "issuer-unknown", keyOnFile: "refused", source: "workspace" },
+    });
+
+    const out = await world.call("extension_submit", { ...FIREFOX_ARGS, waitSeconds: 5 });
+    const context = JSON.stringify(out).slice(0, 2000);
+
+    expect(out.status, context).toBe("submit-failed");
+    expect(out.value.nextStep).toMatchObject({ kind: "connect", replace: true });
+    expect(out.value.nextStep.url).toMatch(/\/acme\/settings\/store-accounts$/);
+    expect(out.value.nextStep.say).toContain('AMO answered 401 "Unknown JWT iss (issuer)"');
+    expect(out.value.nextStep.say).toContain(`revoked or regenerated at ${KEY_PAGE}`);
+    expect(out.value.nextStep.say).toContain("The key on file is at fault");
+    expect(out.value.nextStep.say).toContain("replacing the one on file, at the workspace's Store accounts page");
+    expect(out.value.nextStep.say).toContain("nothing is in review");
+    expect(out.hint).toContain("The key on file is at fault");
+    expect(JSON.stringify(out)).not.toMatch(/Fix the cause/);
+    expect(JSON.stringify(out)).not.toMatch(MIRROR);
+  });
+
+  it("blames the handoff and never asks for a new key when the key on file was accepted", async () => {
+    if (process.platform === "win32") return;
+
+    world.login();
+    approvedFirefoxSubmit(world, {
+      status: "failed",
+      failureReason: AMO_401,
+      failureCause: { kind: "store-connection-failed", store: "firefox", credential: "issuer-unknown", keyOnFile: "accepted", source: "workspace" },
+    });
+
+    const out = await world.call("extension_submit", { ...FIREFOX_ARGS, waitSeconds: 5 });
+
+    expect(out.status).toBe("submit-failed");
+    expect(out.value.nextStep.kind).toBe("preflight");
+    expect(out.value.nextStep.replace).toBeUndefined();
+    expect(out.value.nextStep.say).toContain("The key on file is not at fault");
+    expect(out.value.nextStep.say).toContain("the handoff of that key to the store run is");
+    expect(out.value.nextStep.say).toContain("https://github.com/extensiondev/mcp/issues");
+  });
+
+  it("names the key on file as the likely cause and both places to connect it when the platform sent no detail", async () => {
+    if (process.platform === "win32") return;
+
+    world.login();
+    approvedFirefoxSubmit(world, { status: "failed", failureReason: 'HTTP 401 Unauthorized, POST https://addons.mozilla.org/api/v5/addons/upload/ {"detail":"Error decoding signature."}' });
+
+    const out = await world.call("extension_submit", { ...FIREFOX_ARGS, waitSeconds: 5 });
+
+    expect(out.status).toBe("submit-failed");
+    expect(out.value.nextStep).toMatchObject({ kind: "connect", replace: true });
+    expect(out.value.nextStep.url).toMatch(/project-settings\/stores\?connect=firefox$/);
+    expect(out.value.nextStep.say).toContain("the secret the run was handed does not match it");
+    expect(out.value.nextStep.say).toContain("the key on file is the likely cause");
+    expect(out.value.nextStep.say).toContain("the workspace's Store accounts page");
+    expect(out.value.nextStep.say).toContain("If AMO refuses the next run the same way, the handoff is at fault");
+  });
+});
+
 describe("the Edge submit's next step follows outcome.recorded", () => {
   const world = usePlatformWorld("extdev-edge-record-");
 

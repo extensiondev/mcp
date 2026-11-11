@@ -86,7 +86,7 @@ describe("a Firefox preflight answers the AMO key pair's state the way it answer
     expect(out.status).toBe("store-connection-failed");
     expect(out.value.connectUrl).toBe(CONNECT_URL);
     expect(out.value.trackUrl).toMatch(/\/project-settings\/stores$/);
-    expect(out.value.nextStep).toEqual({ kind: "connect", say: out.hint, url: CONNECT_URL });
+    expect(out.value.nextStep).toEqual({ kind: "connect", say: out.hint, url: CONNECT_URL, replace: true });
     expect(out.value.sayToPerson).toBe(out.hint);
     expect(out.hint).toContain(`Your Firefox AMO connection failed its last check: ${AMO_DETAIL.replace(/\.$/, "")}.`);
     expect(out.hint).toContain('AMO answered 401 "Error decoding signature."');
@@ -98,6 +98,28 @@ describe("a Firefox preflight answers the AMO key pair's state the way it answer
     expect(out.warnings).toContain("This read wrote nothing.");
     expect(JSON.stringify(out)).not.toContain("STORE_FIREFOX_API_KEY");
     expect(JSON.stringify(out)).not.toContain("STORE_FIREFOX_API_SECRET");
+  });
+
+  it("an issuer AMO no longer knows says the key was revoked or regenerated and asks to replace the pair on file", async () => {
+    if (process.platform === "win32") return;
+
+    const ISSUER_REASON = 'Firefox Add-ons does not know the JWT issuer on file (AMO answered 401 "Unknown JWT iss (issuer)."): the key was revoked or regenerated.';
+    const body = report({
+      credentials: check("store.credentials_present", "fail", `AMO refused the saved key pair (${ISSUER_REASON.replace(/\.$/, "")}).`, { actual: ISSUER_REASON, docsUrl: CONNECT_URL }),
+      connection: { kind: "jwt", connectedAs: "user:15559442:832", connectedAt: CHECKED_AT, checkedAt: CHECKED_AT, healthy: false, cause: "issuer-unknown", reason: ISSUER_REASON },
+    });
+
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT}`] = () => ({ body });
+
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["firefox"], buildSha: "603fc8a", api: API }));
+
+    expect(out.status).toBe("store-connection-failed");
+    expect(out.value.nextStep).toEqual({ kind: "connect", say: out.hint, url: CONNECT_URL, replace: true });
+    expect(out.hint).toContain("AMO no longer knows the issuer on file, so the key was revoked or regenerated at");
+    expect(out.hint).toContain("replacing the pair on file");
+    expect(out.hint).not.toContain("The issuer and secret do not match");
+    expect(out.value.stores.firefox.canSubmit).toBe(false);
   });
 
   it("a pair no store has answered for answers store-connection-unverified; on the listed channel the platform refuses the upload", async () => {

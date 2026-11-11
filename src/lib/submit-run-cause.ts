@@ -9,6 +9,7 @@
 import { isRow, text } from "./ship-act";
 import { FIREFOX_SYNC_LISTING_CALL, SAFARI_DESCRIPTION_MAX } from "./store-preflight-local";
 import { nextStep, type NextStep } from "./store-connection";
+import { credentialFailureOf, credentialFailureStep } from "./store-credential-failure";
 import { installRefusalLine, installRefusedSay } from "./store-refused-install";
 
 type Row = Record<string, unknown>;
@@ -67,7 +68,12 @@ function stepSay(store: string, step: string): string {
   return step ? `The ${store} submit run failed at step "${step}"` : `The ${store} submit run failed`;
 }
 
-export function runCauseOf(store: string, submission: Row, run: Row, url: string | null): RunCause {
+export interface ConnectUrls {
+  connectUrl: string;
+  accountsUrl: string;
+}
+
+export function runCauseOf(store: string, submission: Row, run: Row, url: string | null, urls?: ConnectUrls): RunCause {
   const status = text(submission.status).toLowerCase();
   const source = text(row(submission.statusRead).source);
   const live = OVERRIDDEN_STATUSES.has(status) || (status === "submitted" && !GROUNDED_SOURCES.has(source));
@@ -81,6 +87,15 @@ export function runCauseOf(store: string, submission: Row, run: Row, url: string
   const said = storeReason(reasons);
   const all = [...reasons, step].join(" ");
   const lead = stepSay(store, step);
+  const credential = credentialFailureOf({ ...submission, store });
+
+  if (credential) {
+    return {
+      failed: true,
+      failureReason: trimmed(said || `${lead}: AMO refused the run's credentials (401)`),
+      nextStep: urls ? credentialFailureStep({ failure: credential, connectUrl: urls.connectUrl, accountsUrl: urls.accountsUrl, trackUrl: url ?? "" }) : null,
+    };
+  }
 
   if (APPLE_DESCRIPTION.test(all) || (DESCRIPTION_LIMIT.test(all) && /manifest/i.test(all))) {
     const limit = APPLE_DESCRIPTION.test(all) ? SAFARI_DESCRIPTION_MAX : Number(DESCRIPTION_LIMIT.exec(all)?.slice(1).find(Boolean));
