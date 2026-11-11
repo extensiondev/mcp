@@ -11,11 +11,13 @@ import path from "node:path";
 
 import { isGeckoFamily } from "./browser-family";
 import { isDevelopmentBuild } from "./build-type";
+import { ENTERPRISE_CHANNEL_SENTENCE, adminInstallOnlyOf } from "./firefox-enterprise";
 
 export type ReviewRiskCode =
   | "BROAD_HOST_ACCESS"
   | "REMOTE_CODE"
   | "FIREFOX_DATA_COLLECTION_MISSING"
+  | "FIREFOX_ENTERPRISE_CHANNEL"
   | "UNUSED_PERMISSION";
 
 export interface ReviewRisk {
@@ -199,6 +201,14 @@ export function reviewRisksReport(input: {
         code: "FIREFOX_DATA_COLLECTION_MISSING",
         message: "The Firefox manifest has no browser_specific_settings.gecko.data_collection_permissions. AMO requires it for new add-ons and for updates of existing ones, and the platform's own Firefox preflight repeats the warning on every submission.",
         fix: 'Add "browser_specific_settings": { "gecko": { "data_collection_permissions": { "required": ["none"] } } }, or list what the extension does collect.',
+      });
+    }
+
+    if (adminInstallOnlyOf(input.manifest) === true) {
+      risks.push({
+        code: "FIREFOX_ENTERPRISE_CHANNEL",
+        message: `The Firefox manifest's ${ENTERPRISE_CHANNEL_SENTENCE}`,
+        fix: "Keep the key only for a version deployed through Firefox enterprise policies; for a listed or unlisted upload, remove it and build again.",
       });
     }
   }

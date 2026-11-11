@@ -57,6 +57,17 @@ describe("references are checked in each requested browser's view", () => {
     expect(out.value.errors.join("\n")).toMatch(/missing-bg\.js/);
   });
 
+  it("reads admin_install_only in the firefox view only, so a chrome validation passes what the firefox one refuses (ledger 511)", async () => {
+    const dir = project({ ...BASE, "firefox:browser_specific_settings": { gecko: { id: "f@example.com", admin_install_only: "yes" } } });
+    const chrome = await validate(dir, ["chrome"]);
+    const firefox = await validate(dir, ["firefox"]);
+
+    expect(chrome.status).toBe("valid");
+    expect(JSON.stringify(chrome)).not.toContain("admin_install_only");
+    expect(firefox.status).toBe("invalid");
+    expect(firefox.value.errors.join("\n")).toMatch(/firefox: .*admin_install_only must be true or false/);
+  });
+
   it("does not block a Firefox-only validation on a missing chromium:-only file", async () => {
     const dir = project({ ...BASE, "chromium:side_panel": { default_path: "panel/missing.html" } });
     const out = await validate(dir, ["firefox"]);

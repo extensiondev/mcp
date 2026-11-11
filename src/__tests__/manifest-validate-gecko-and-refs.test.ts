@@ -279,3 +279,42 @@ describe("data_collection_permissions follows what AMO's linter reports", () => 
     expect(await report({ gecko: { strict_min_version: "140.0" }, gecko_android: { strict_min_version: "142.0" } })).not.toMatch(/reads it from 142/);
   });
 });
+
+describe("admin_install_only names AMO's enterprise channel (ledger 511)", () => {
+  const withKey = (value: unknown) => ({
+    ...BASE,
+    "firefox:browser_specific_settings": { gecko: { id: "f@example.com", data_collection_permissions: { required: ["none"] }, admin_install_only: value } },
+  });
+
+  it("says a true key sends the version to the enterprise channel from December 1, 2026, neither listed nor unlisted, and blocks nothing", async () => {
+    const dir = project(withKey(true), ["images/icon-16.png"]);
+    const result = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"] }));
+    const line = result.value.warnings.find((w: string) => w.includes("admin_install_only"));
+
+    expect(result.status).toBe("valid");
+    expect(line).toContain("from December 1, 2026");
+    expect(line).toContain("enterprise channel");
+    expect(line).toContain("neither listed nor unlisted");
+    expect(line).toContain("accept the updated Firefox Add-on Distribution Agreement");
+    expect(line).toContain("https://blog.mozilla.org/addons/2026/10/28/introducing-enterprise-add-on-policies/");
+    expect(result.value.warnings.filter((w: string) => w.includes("admin_install_only"))).toHaveLength(1);
+  });
+
+  it("refuses a value that is not a boolean for the Firefox build, as AMO's linter does", async () => {
+    const dir = project(withKey("yes"), ["images/icon-16.png"]);
+    const result = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"] }));
+
+    expect(result.status).toBe("invalid");
+    expect(result.value.buildBlocking).toBe(true);
+    expect(result.value.errors.join("\n")).toMatch(/admin_install_only must be true or false, got "yes"/);
+    expect(result.value.warnings.find((w: string) => w.includes("enterprise channel"))).toBeUndefined();
+  });
+
+  it("warns that a false key is still refused by AMO's linter outside the enterprise channel", async () => {
+    const dir = project(withKey(false), ["images/icon-16.png"]);
+    const result = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"] }));
+
+    expect(result.status).toBe("valid");
+    expect(result.value.warnings.find((w: string) => w.includes("admin_install_only"))).toContain("ADMIN_INSTALL_ONLY_PROP_RESERVED");
+  });
+});

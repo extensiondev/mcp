@@ -16,6 +16,7 @@ import { envelope } from "../lib/envelope";
 import { apiUsesIn, type ApiUse } from "../lib/guarded-api-uses";
 import { chromeIconPaddingOfFile } from "../lib/chrome-icon-padding";
 import { droppedRuntimePages } from "../lib/dropped-runtime-pages";
+import { ADMIN_INSTALL_ONLY_KEY, ENTERPRISE_CHANNEL_SENTENCE, adminInstallOnlyOf, adminInstallOnlyTypeIssue } from "../lib/firefox-enterprise";
 
 const COMMAND = "extension_manifest_validate";
 
@@ -769,6 +770,19 @@ export async function handler(args: {
             `Firefox: strict_min_version "${minVersion}" covers data_collection_permissions on desktop, but Firefox for Android reads it from 142, so AMO's linter warns for Android. Add firefox:browser_specific_settings.gecko_android.strict_min_version "142.0".`,
           );
         }
+      }
+
+      const adminInstallOnly = adminInstallOnlyOf(effective);
+      const adminInstallOnlyIssue = adminInstallOnlyTypeIssue(adminInstallOnly);
+
+      if (adminInstallOnlyIssue) {
+        issues.push(adminInstallOnlyIssue);
+      } else if (adminInstallOnly === true) {
+        result.warnings.push(`Firefox: ${ENTERPRISE_CHANNEL_SENTENCE}`);
+      } else if (adminInstallOnly === false) {
+        result.warnings.push(
+          `Firefox: ${ADMIN_INSTALL_ONLY_KEY} is false, and AMO's linter (addons-linter 10.15.0, measured 2026-11-11) refuses a listed or unlisted upload that carries the key at all (ADMIN_INSTALL_ONLY_PROP_RESERVED). Remove it; only an enterprise version sets it, to true.`,
+        );
       }
 
       for (const key of CHROMIUM_ONLY_KEYS) {

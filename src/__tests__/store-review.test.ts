@@ -110,4 +110,17 @@ describe("reviewDistReport risks", () => {
     expect(report.notScanned).toEqual([]);
     expect(report.risks.map((r) => r.code)).toContain("UNUSED_PERMISSION");
   });
+
+  it("names the enterprise channel of a Firefox package whose manifest sets admin_install_only true (ledger 511)", () => {
+    manifest({ browser_specific_settings: { gecko: { id: "x@example.com", data_collection_permissions: { required: ["none"] }, admin_install_only: true } } });
+    const risk = reviewDistReport(dist, "firefox").risks.find((r) => r.code === "FIREFOX_ENTERPRISE_CHANNEL")!;
+
+    expect(risk.message).toContain("from December 1, 2026");
+    expect(risk.message).toContain("neither listed nor unlisted");
+    expect(risk.fix).toContain("remove it and build again");
+    expect(codes("chrome")).not.toContain("FIREFOX_ENTERPRISE_CHANNEL");
+
+    manifest({ browser_specific_settings: { gecko: { id: "x@example.com", data_collection_permissions: { required: ["none"] } } } });
+    expect(codes("firefox")).not.toContain("FIREFOX_ENTERPRISE_CHANNEL");
+  });
 });
