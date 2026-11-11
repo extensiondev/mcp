@@ -75,6 +75,97 @@ const FILES = {
 
 const DECLARATION_WORDS = /data usage|collects|does not collect|no data|remote code:|privacy practices|age rating:|content rights:/i;
 
+const CHROMEWEBSTORE_MD = `# Chrome Web Store Listing - Word Count
+
+> Last Updated: 2026-11-10
+
+## Store Listing
+
+**Extension Name** [REQUIRED]
+<!-- Must match manifest.json "name". Max 75 characters. -->
+Word Count
+
+**Short Description** [REQUIRED]
+Counts the words on any page you open.
+
+**Detailed Description** [REQUIRED]
+Word Count shows how many words are on the page you are reading.
+
+Open any page, click the toolbar button, and the count appears.
+
+Nothing leaves your computer.
+
+**Category** [REQUIRED]
+Productivity
+
+**Single Purpose** [REQUIRED]
+Counts the words on the page the user has open.
+
+**Primary Language** [REQUIRED]
+English
+
+## Graphics & Assets
+
+| Asset | Dimensions | Status | Filename |
+|-------|-----------|--------|----------|
+| Store Icon [REQUIRED] | 128×128 PNG | ⬜ Not created | |
+
+## Permissions Justification
+
+| Permission | Type | Justification |
+|------------|------|---------------|
+| storage | permissions | Remembers whether the badge is shown. |
+| activeTab | permissions | Reads the open tab when the user clicks the button. |
+| https://api.wordcount.example/* | host_permissions | Sends the count to the user's own dashboard when they opt in. |
+
+## Privacy & Data Use
+
+### Data Collection
+
+**Does the extension collect user data?** No
+
+### Data Use Certification
+- [x] Data is NOT sold to third parties
+- [x] Data is NOT used for purposes unrelated to the extension's core functionality
+- [x] Data is NOT used for creditworthiness or lending purposes
+
+## Privacy Policy
+
+**Privacy Policy URL** [REQUIRED]
+https://wordcount.example/privacy
+
+## Distribution
+
+**Visibility**: Unlisted
+**Regions**: All regions / [List specific regions]
+
+## Developer Info
+
+**Publisher Name** [REQUIRED]
+Acme
+
+**Contact Email** [REQUIRED]
+hello@wordcount.example
+
+**Support URL / Email** [RECOMMENDED]
+https://github.com/acme/word-count/issues
+
+**Homepage URL** [RECOMMENDED]
+https://wordcount.example
+
+## Version History
+
+| Version | Date | Changes | Status |
+|---------|------|---------|--------|
+| | | | Draft |
+
+## Review Notes
+
+### Known Issues / Limitations
+
+### Rejection History
+`;
+
 describe("extension_submit preflight drafts STORE.md from the code and leaves every data-use answer to the owner", () => {
   const platform = useProjectRoutes("extdev-draft-");
 
@@ -236,6 +327,75 @@ describe("extension_submit preflight drafts STORE.md from the code and leaves ev
     const chrome: Row = ((await preflight(project({ ...FILES, "STORE.md": storeMd, "store/shot-1.png": solidPng(1280, 800), "store/screenshots/chrome/01.png": solidPng(640, 400) }), ["chrome"])).listingDraft.gallery as Row[])[0]!;
 
     expect(chrome).toMatchObject({ source: "folder", shots: [{ file: "store/screenshots/chrome/01.png" }] });
+  });
+
+  it("prefills the lines Google's CHROMEWEBSTORE.md already holds, names them in prefilledFrom, and copies no data-use answer (ledger 512)", async () => {
+    const draft = (await preflight(project({ ...FILES, "CHROMEWEBSTORE.md": CHROMEWEBSTORE_MD }))).listingDraft;
+
+    expect(draft.exists).toBe(false);
+    expect(draft.fromCode.map((line: Row) => line.field)).toEqual(["title", "shortDescription"]);
+    expect(draft.prefilledFrom).toMatchObject({
+      file: "CHROMEWEBSTORE.md",
+      fields: ["fullDescription", "categories", "privacyPolicyUrl", "homepageUrl", "singlePurpose", "permissionJustifications", "visibility"],
+      stillEmpty: ["supportEmail"],
+    });
+
+    expect((draft.prefilledFrom.lines as Row[]).map((line) => [line.line, line.section, line.from])).toEqual([
+      ["- Description:", "## Listing", "CHROMEWEBSTORE.md **Detailed Description**"],
+      ["- Category:", "## Listing", "CHROMEWEBSTORE.md **Category**"],
+      ["- Privacy policy URL:", "## Privacy and data use", "CHROMEWEBSTORE.md **Privacy Policy URL**"],
+      ["- Homepage:", "## Listing", "CHROMEWEBSTORE.md **Homepage URL**"],
+      ["### Single purpose", "## Chrome Web Store", "CHROMEWEBSTORE.md **Single Purpose**"],
+      ["### Permissions justification", "## Chrome Web Store", "CHROMEWEBSTORE.md ## Permissions Justification"],
+      ["- Visibility:", "## Chrome Web Store", "CHROMEWEBSTORE.md **Visibility**"],
+    ]);
+
+    const parsed = parseStoreMdListing(draft.storeMd);
+
+    expect(listingForStore(parsed, "chrome").listing).toEqual({
+      title: "Word Count",
+      shortDescription: "Counts the words on any page you open.",
+      fullDescription: "Word Count shows how many words are on the page you are reading.\n\nOpen any page, click the toolbar button, and the count appears.\n\nNothing leaves your computer.",
+      categories: ["Productivity"],
+      privacyPolicyUrl: "https://wordcount.example/privacy",
+      homepageUrl: "https://wordcount.example",
+      singlePurpose: "Counts the words on the page the user has open.",
+      permissionJustifications: [
+        { permission: "storage", justification: "Remembers whether the badge is shown." },
+        { permission: "activeTab", justification: "Reads the open tab when the user clicks the button." },
+        { permission: "https://api.wordcount.example/*", justification: "Sends the count to the user's own dashboard when they opt in." },
+      ],
+      visibility: "unlisted",
+    });
+
+    expect(listingForStore(parsed, "edge").listing.singlePurpose).toBe("Counts the words on the page the user has open.");
+    expect(draft.storeMd).not.toMatch(DECLARATION_WORDS);
+    expect(draft.storeMd).not.toContain("Data is NOT sold");
+    expect(draft.storeMd).not.toContain("English");
+    expect(draft.agentWrites.map((line: Row) => line.field)).toEqual(["subtitle", "searchTerms", "reviewerNotes", "reviewerNotes", "certificationNotes", "releaseNotes"]);
+    expect(draft.say).toMatch(/^StoreMd is a STORE\.md to save as it is, read from the manifest and CHROMEWEBSTORE\.md;/);
+    expect(draft.prefilledFrom.say).toContain("CHROMEWEBSTORE.md filled `- Description:`, `- Category:`, `- Privacy policy URL:`, `- Homepage:`, `### Single purpose`, `### Permissions justification` and `- Visibility:`; still empty for Chrome: `- Support email:`.");
+    expect(draft.prefilledFrom.say).toContain("Not taken from it: Primary Language is the dashboard's Store listing tab language");
+    expect(draft.prefilledFrom.say).toContain("the Privacy & Data Use answers are yours to give on the dashboard's Privacy tab; this server never copies a data-use answer");
+    expect(draft.prefilledFrom.say).toContain("Support URL / Email holds a URL");
+    expect(draft.prefilledFrom.notMapped).toHaveLength(5);
+    expect(draft.prefilledFrom.say).not.toContain("Regions");
+    expect(draft.prefilledFrom.say).not.toContain("Version History");
+  });
+
+  it("prefills only the Chrome lines an existing STORE.md lacks from CHROMEWEBSTORE.md and says where each goes (ledger 512)", async () => {
+    const storeMd = "# Word Count\n\n## Listing\n\n- Name: Word Count\n- Summary: Counts the words on any page you open.\n- Description:\n\n  Counts words.\n\n## Chrome Web Store\n";
+    const draft = (await preflight(project({ ...FILES, "STORE.md": storeMd, "CHROMEWEBSTORE.md": CHROMEWEBSTORE_MD }))).listingDraft;
+
+    expect(draft.exists).toBe(true);
+    expect(draft.storeMd).toBeUndefined();
+    expect(draft.fromCode).toEqual([]);
+    expect(draft.prefilledFrom.fields).toEqual(["categories", "privacyPolicyUrl", "homepageUrl", "singlePurpose", "permissionJustifications", "visibility"]);
+    expect(draft.agentWrites.map((line: Row) => line.field)).not.toContain("singlePurpose");
+    expect(draft.agentWrites.map((line: Row) => line.field)).not.toContain("permissionJustifications");
+    expect(draft.say).toMatch(
+      /^Add "- Category:" and "- Homepage:" under "## Listing", "- Privacy policy URL:" under "## Privacy and data use" and "### Single purpose", "### Permissions justification" and "- Visibility:" under "## Chrome Web Store", read from CHROMEWEBSTORE\.md;/,
+    );
   });
 
   it("answers no draft without a projectPath", async () => {

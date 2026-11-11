@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { listOf, readChromeWebStoreMd, type ChromeWebStoreMd } from "./chromewebstore-md";
 import { localizedMessage, messageKeyOf } from "./publish-localized-name";
 import { NEVER_PREFILLED } from "./store-bring-list";
 import { accessFacts, codeFactsOf, dataCollectionFacts, networkFacts, remoteCodeFacts, type CodeFacts } from "./store-code-facts";
@@ -18,11 +19,15 @@ import {
   LISTING_SECTION,
   LISTING_STORES,
   LISTING_TEXT_LIMITS,
+  PRIVACY_SECTION,
   STORE_FIELDS,
+  STORE_SECTIONS,
   listingForStore,
   parseStoreMdListing,
   type ListingField,
   type ListingStore,
+  type ListingText,
+  type ListingTextField,
   type StoreMdListing,
 } from "./store-md-listing";
 import { storeGalleryOf, type GalleryStore } from "./store-gallery";
@@ -53,11 +58,21 @@ export interface OwnerAnswer {
   codeFacts: string[];
 }
 
+export interface PrefilledFrom {
+  file: string;
+  fields: ListingField[];
+  lines: DraftLine[];
+  stillEmpty: ListingField[];
+  notMapped: string[];
+  say: string;
+}
+
 export interface ListingDraft {
   file: string;
   exists: boolean;
   storeMd?: string;
   fromCode: DraftLine[];
+  prefilledFrom?: PrefilledFrom;
   agentWrites: AgentLine[];
   ownerAnswers: OwnerAnswer[];
   gallery: GalleryStore[];
@@ -201,8 +216,66 @@ function groupedBySection(field: ListingField, stores: ListingStore[]): Array<{ 
   return [...groups].map(([section, members]) => ({ section, stores: members }));
 }
 
+const DRAFT_SECTIONS = [LISTING_SECTION, PRIVACY_SECTION, ...LISTING_STORES.map((store) => STORE_SECTIONS[store])];
+
+function lineText(line: DraftLine): string[] {
+  if (line.line.startsWith("### ")) return [line.line, "", line.value, ""];
+  if (line.value.includes("\n")) return [line.line, "", ...line.value.split("\n").map((row) => (row ? `  ${row}` : "")), ""];
+
+  return [`${line.line} ${line.value}`];
+}
+
 function draftText(name: string, lines: DraftLine[]): string {
-  return [`# ${name || "Store listing"}`, "", LISTING_SECTION, "", ...lines.map((line) => `${line.line} ${line.value}`), ""].join("\n");
+  const out = [`# ${name || "Store listing"}`];
+
+  for (const section of DRAFT_SECTIONS) {
+    const rows = lines.filter((line) => line.section === section);
+    if (!rows.length) continue;
+
+    const bullets = rows.filter((line) => !line.line.startsWith("### "));
+    const subsections = rows.filter((line) => line.line.startsWith("### "));
+
+    out.push("", section, "", ...bullets.flatMap(lineText));
+    for (const row of subsections) out.push("", ...lineText(row));
+  }
+
+  return `${out.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd()}\n`;
+}
+
+function valueText(field: ListingField, listing: ListingText): string {
+  if (field === "permissionJustifications") return (listing.permissionJustifications ?? []).map((entry) => `- ${entry.permission}: ${entry.justification}`).join("\n");
+  if (field === "categories") return (listing.categories ?? []).join(", ");
+
+  return listing[field as ListingTextField] ?? "";
+}
+
+function prefilledLines(read: ChromeWebStoreMd, missing: (field: ListingField) => ListingStore[], drafted: DraftLine[]): DraftLine[] {
+  const lines: DraftLine[] = [];
+
+  for (const field of STORE_FIELDS.chrome) {
+    if (read.listing[field] === undefined || drafted.some((line) => line.field === field)) continue;
+
+    const stores = missing(field);
+    if (!stores.length) continue;
+
+    lines.push({ field, line: storeMdLineOf(field), section: storeMdSectionOf(field, "chrome").section, stores, value: valueText(field, read.listing), from: `${read.file} ${read.headings[field] ?? ""}`.trim() });
+  }
+
+  return lines;
+}
+
+function prefilledFromOf(read: ChromeWebStoreMd, lines: DraftLine[], stillEmpty: ListingField[]): PrefilledFrom {
+  const filled = lines.length ? `${read.file} filled ${listOf(lines.map((line) => `\`${line.line}\``))}` : `${read.file} holds no line STORE.md lacks`;
+  const empty = stillEmpty.length ? `; still empty for Chrome: ${listOf(stillEmpty.map((field) => `\`${storeMdLineOf(field)}\``))}` : "; every line STORE.md takes for Chrome is filled";
+  const refused = read.notMapped.length ? ` Not taken from it: ${read.notMapped.join("; ")}.` : "";
+
+  return { file: read.file, fields: lines.map((line) => line.field), lines, stillEmpty, notMapped: read.notMapped, say: `${filled}${empty}.${refused}` };
+}
+
+function addsSentence(lines: DraftLine[]): string {
+  const sections = [...new Set(lines.map((line) => line.section))];
+
+  return listOf(sections.map((section) => `${listOf(lines.filter((line) => line.section === section).map((line) => `"${line.line}"`))} under "${section}"`));
 }
 
 /* @invariant THE DRAFT WRITES ONLY WHAT THE CODE STATES, AND NO DATA-USE OR
@@ -216,7 +289,12 @@ function draftText(name: string, lines: DraftLine[]): string {
  * section is asked once there, and every declaration in
  * NEVER_PREFILLED goes to ownerAnswers with code facts alone: what the
  * manifest asks for, what the source calls, never a proposed answer. A line
- * STORE.md already carries is never drafted again.
+ * STORE.md already carries is never drafted again. A line the owner already
+ * wrote in Google's CHROMEWEBSTORE.md is the owner's own words, not a
+ * proposal: the listing copy, category, single purpose, permission reasons,
+ * privacy policy URL and visibility it holds are prefilled under their
+ * STORE.md lines and named in prefilledFrom, while its Privacy & Data Use
+ * answers stay the owner's to give on the dashboard (ledger 512).
  */
 export function listingDraftOf(args: { projectPath: string; asked: readonly string[]; statusById: Record<string, string> }): ListingDraft | null {
   const projectPath = args.projectPath.trim();
@@ -242,11 +320,15 @@ export function listingDraftOf(args: { projectPath: string; asked: readonly stri
     fromCode.push({ field: "shortDescription", line: storeMdLineOf("shortDescription"), section: LISTING_SECTION, stores: missing("shortDescription"), value: summary.value, from: summary.from });
   }
 
+  const chromeMd = readChromeWebStoreMd(projectPath);
+  const prefilled = chromeMd ? prefilledLines(chromeMd, missing, fromCode) : [];
+  const open = (field: ListingField): ListingStore[] => (prefilled.some((line) => line.field === field) ? [] : missing(field));
+  const stillEmpty = STORE_FIELDS.chrome.filter((field) => missing(field).includes("chrome") && ![...fromCode, ...prefilled].some((line) => line.field === field));
   const longName = Boolean(name && name.value.length > LISTING_TEXT_LIMITS.appStoreName);
   const agentWrites: AgentLine[] = AGENT_FIELDS.flatMap((field) => {
     if (field === "appStoreName" && !longName) return [];
 
-    return groupedBySection(field, missing(field)).map((group) => ({
+    return groupedBySection(field, open(field)).map((group) => ({
       field,
       line: storeMdLineOf(field),
       section: group.section,
@@ -261,14 +343,17 @@ export function listingDraftOf(args: { projectPath: string; asked: readonly stri
     .map((id) => ownerAnswerOf(id, facts));
 
   const gallery = storeGalleryOf(projectPath, stores, parsed?.screenshotPaths);
-  const written = fromCode.length ? `${raw === null ? "storeMd is a STORE.md to save as it is" : `add ${fromCode.map((line) => `"${line.line}"`).join(" and ")} under "${LISTING_SECTION}"`}, read from the manifest; ` : "";
+  const adds = [...fromCode, ...prefilled];
+  const sources = listOf([...(fromCode.length ? ["the manifest"] : []), ...(prefilled.length ? [chromeMd!.file] : [])]);
+  const written = adds.length ? `${raw === null ? "storeMd is a STORE.md to save as it is" : `add ${addsSentence(adds)}`}, read from ${sources}; ` : "";
   const say = `${written}${agentWrites.length ? `write ${agentWrites.length} ${agentWrites.length === 1 ? "line" : "lines"} in agentWrites from the facts beside each, inside its limit; ` : ""}the decisions write their own lines once answered${ownerAnswers.length ? `; ${ownerAnswers.length} data-use and privacy ${ownerAnswers.length === 1 ? "answer is" : "answers are"} the owner's alone (ownerAnswers): quote the code facts, propose no answer` : ""}. Then show the person the whole file for review; nothing is sent until sync-listing.`;
 
   return {
     file: STORE_MD_FILENAME,
     exists: raw !== null,
-    ...(raw === null && fromCode.length ? { storeMd: draftText(name?.value ?? "", fromCode) } : {}),
+    ...(raw === null && adds.length ? { storeMd: draftText(name?.value ?? "", adds) } : {}),
     fromCode,
+    ...(chromeMd ? { prefilledFrom: prefilledFromOf(chromeMd, prefilled, stillEmpty) } : {}),
     agentWrites,
     ownerAnswers,
     gallery,
