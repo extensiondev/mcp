@@ -497,10 +497,10 @@ Submit a platform build to the Chrome, Firefox, Edge and Safari stores through e
 | `browsers` | array of "chrome" \| "firefox" \| "edge" \| "safari" | no |  | Stores; submit, publish and sync-listing take several under one approval. |
 | `buildSha` | string | no |  | Commit sha of a completed platform build (extension_builds). |
 | `version` | string | no |  | Optional label; default the built manifest's version. |
-| `dryRun` | boolean | no | `true` | true (the default) dispatches nothing and does not run the owner gate, the approval, the build quota; false submits once approved and stops at the draft under the default modes unless a saved store mode says otherwise. |
+| `dryRun` | boolean | no | `true` | true (the default) sends nothing and spends no approval or quota; false submits once approved and stops at the draft under the default modes. |
 | `projectPath` | string | no |  | Project root; sync-listing needs it; nothing local is uploaded. |
 | `approvalId` | string | no |  | From an approval-required answer, once approved; same arguments again. A real submission needs a workspace owner's approval every time. |
-| `screenshots` | array of string | no |  | With sync-listing, PNGs in projectPath: Chrome 1-5 at 1280x800 or 640x400; Edge up to 6 at 1280x800 or 640x480; Safari 1-10 at 1280x800, 1440x900, 2560x1600 or 2880x1800; Firefox any. Up to 3 MB each. |
+| `screenshots` | array of string | no |  | With sync-listing, PNG screenshots in projectPath; a wrong size or weight is answered with what the store accepts. |
 | `useBuild` | string | no |  | With sync-listing, a completed build's sha to take icons from. |
 | `detail` | boolean \| array | no |  | With preflight, true or a list like ["chrome", "safari.subtitle"] answers those rows in full. |
 | `api` | string | no |  | Platform URL; default EXTENSION_DEV_API_URL. |
@@ -515,29 +515,29 @@ Submit a platform build to the Chrome, Firefox, Edge and Safari stores through e
 
 ## extension_submit_check
 
-Read a store submission or ask for an approval, under a read-only hint; it executes nothing. A real submit or store act first answers approval-required with value.approvalUrl here; the call carrying the approvalId runs through extension_submit.
+Read a store's state or ask for an approval, with extension_submit's inputs: preflight, status and a dry-run submit answer here; any other action only asks the owner's approval and answers value.approvalUrl, and the call carrying that approvalId runs through extension_submit. It executes nothing.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "preflight" \| "status" \| "submit" \| "publish" \| "review" \| "cancel" \| "rollout" \| "release" \| "sync-listing" \| "mint-signing" \| "configure-store" \| "connect" \| "first-submission" | no | `"submit"` | preflight, status, or submit (default; a dry run unless dryRun:false, which only asks approval); publish, review, cancel, rollout, release, sync-listing, configure-store only ask approval. |
-| `project` | string | no |  | Stored login '<workspace>/<project>' when several exist. |
-| `browsers` | array of "chrome" \| "firefox" \| "edge" \| "safari" | no |  | Stores; submit, publish and sync-listing take several under one approval. |
-| `buildSha` | string | no |  | Commit sha of a completed platform build (extension_builds). |
-| `version` | string | no |  | Optional label; default the built manifest's version. |
+| `action` | "preflight" \| "status" \| "submit" \| "publish" \| "review" \| "cancel" \| "rollout" \| "release" \| "sync-listing" \| "mint-signing" \| "configure-store" \| "connect" \| "first-submission" | no | `"submit"` | preflight, status, submit (a dry run unless dryRun:false, which only asks approval), or a store act to ask approval for. |
 | `dryRun` | boolean | no | `true` | true (the default) reads only; false only asks the owner's approval of the real submit. |
-| `projectPath` | string | no |  | Project root; sync-listing needs it; nothing local is uploaded. |
-| `screenshots` | array of string | no |  | With sync-listing, PNGs in projectPath, at the sizes extension_submit lists. |
-| `useBuild` | string | no |  | With sync-listing, a completed build's sha to take icons from. |
-| `detail` | boolean \| array | no |  | With preflight, true or a list of stores and requirement ids answers those rows in full. |
-| `api` | string | no |  | Platform URL; default EXTENSION_DEV_API_URL. |
-| `store` | "chrome" \| "firefox" \| "edge" \| "safari" | no |  | With cancel or rollout (default chrome), release (safari) or configure-store (required). |
-| `storeSettings` | object | no |  | With configure-store, only what changes for store, the same keys extension_submit's storeSettings lists. |
-| `submissionId` | string | no |  | With cancel, publish or release, which submission; default the newest. |
-| `buildNumber` | integer | no |  | Safari publish or release: TestFlight build number (default newest). |
-| `deployPercentage` | number | no |  | With rollout, the new share of users, 1 to 100, above the current one. |
-| `connectSession` | string | no |  | With connect, value.connectSession to wait on with waitSeconds. |
-| `replace` | boolean | no |  | With connect, true replaces a working key; only when asked. |
-| `waitSeconds` | number | no |  | Seconds to wait for the result, 0 to 600 (default 180), and with approvalId for the approval. |
+| `project` | string | no |  | Same as in extension_submit. |
+| `browsers` | array of "chrome" \| "firefox" \| "edge" \| "safari" | no |  | Same as in extension_submit. |
+| `buildSha` | string | no |  | Same as in extension_submit. |
+| `version` | string | no |  | Same as in extension_submit. |
+| `projectPath` | string | no |  | Same as in extension_submit. |
+| `screenshots` | array of string | no |  | Same as in extension_submit. |
+| `useBuild` | string | no |  | Same as in extension_submit. |
+| `detail` | boolean \| array | no |  | Same as in extension_submit. |
+| `api` | string | no |  | Same as in extension_submit. |
+| `store` | "chrome" \| "firefox" \| "edge" \| "safari" | no |  | Same as in extension_submit. |
+| `storeSettings` | object | no |  | Same as in extension_submit. |
+| `submissionId` | string | no |  | Same as in extension_submit. |
+| `buildNumber` | integer | no |  | Same as in extension_submit. |
+| `deployPercentage` | number | no |  | Same as in extension_submit. |
+| `connectSession` | string | no |  | Same as in extension_submit. |
+| `replace` | boolean | no |  | Same as in extension_submit. |
+| `waitSeconds` | number | no |  | Same as in extension_submit. |
 
 ## extension_templates
 

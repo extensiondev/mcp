@@ -11,7 +11,8 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import { createServer } from "../index";
-import { handler as checkHandler } from "../tools/submit-check";
+import { SHARED_INPUT_NOTE, handler as checkHandler, schema as checkSchema } from "../tools/submit-check";
+import { schema as submitSchema } from "../tools/submit";
 import { usePlatformWorld, WORLD_API } from "./fixtures/platform-world";
 
 const world = usePlatformWorld("extdev-submit-check-");
@@ -35,6 +36,21 @@ describe("extension_submit_check takes the calls that only read or ask, under a 
 
     expect(annotations.get("extension_submit_check")).toMatchObject({ readOnlyHint: true, destructiveHint: false, openWorldHint: true });
     expect(annotations.get("extension_submit")).toMatchObject({ readOnlyHint: false, destructiveHint: true });
+  });
+
+  it("describes only what differs from extension_submit: the shared inputs keep their shape and carry no prose of their own (ledger 502)", () => {
+    const own = Object.keys(submitSchema.inputSchema.properties).filter((key) => key !== "approvalId").sort();
+    const listedHere = Object.keys(checkSchema.inputSchema.properties).sort();
+    const described = Object.entries(checkSchema.inputSchema.properties as Record<string, { description?: string }>)
+      .filter(([, property]) => property.description !== SHARED_INPUT_NOTE)
+      .map(([key]) => key)
+      .sort();
+
+    expect(listedHere).toEqual(own);
+    expect(described).toEqual(["action", "dryRun"]);
+    expect((checkSchema.inputSchema.properties as Record<string, { enum?: string[] }>).store.enum).toEqual(["chrome", "firefox", "edge", "safari"]);
+    expect(JSON.stringify(checkSchema).length).toBeLessThan(2_500);
+    expect(JSON.stringify(submitSchema).length).toBeLessThan(5_700);
   });
 
   it("answers a preflight from extension_submit's own handler, reading the same routes", async () => {

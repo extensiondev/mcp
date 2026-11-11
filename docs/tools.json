@@ -2228,7 +2228,7 @@
           "type": "boolean",
           "required": false,
           "default": true,
-          "description": "true (the default) dispatches nothing and does not run the owner gate, the approval, the build quota; false submits once approved and stops at the draft under the default modes unless a saved store mode says otherwise."
+          "description": "true (the default) sends nothing and spends no approval or quota; false submits once approved and stops at the draft under the default modes."
         },
         {
           "name": "projectPath",
@@ -2246,7 +2246,7 @@
           "name": "screenshots",
           "type": "array of string",
           "required": false,
-          "description": "With sync-listing, PNGs in projectPath: Chrome 1-5 at 1280x800 or 640x400; Edge up to 6 at 1280x800 or 640x480; Safari 1-10 at 1280x800, 1440x900, 2560x1600 or 2880x1800; Firefox any. Up to 3 MB each."
+          "description": "With sync-listing, PNG screenshots in projectPath; a wrong size or weight is answered with what the store accepts."
         },
         {
           "name": "useBuild",
@@ -2320,7 +2320,7 @@
       "name": "extension_submit_check",
       "tier": "platform",
       "group": "platform",
-      "description": "Read a store submission or ask for an approval, under a read-only hint; it executes nothing. A real submit or store act first answers approval-required with value.approvalUrl here; the call carrying the approvalId runs through extension_submit.",
+      "description": "Read a store's state or ask for an approval, with extension_submit's inputs: preflight, status and a dry-run submit answer here; any other action only asks the owner's approval and answers value.approvalUrl, and the call carrying that approvalId runs through extension_submit. It executes nothing.",
       "gate": "the server started with --features=local,platform, and a login; never sends: asking for the approval of a submit, publish, cancel, rollout, release, derived sync-listing or public configure-store executes nothing, and the approved call runs through extension_submit",
       "samplePrompt": "Is my extension ready for the Chrome Web Store?",
       "readOnly": true,
@@ -2334,31 +2334,7 @@
           "type": "\"preflight\" | \"status\" | \"submit\" | \"publish\" | \"review\" | \"cancel\" | \"rollout\" | \"release\" | \"sync-listing\" | \"mint-signing\" | \"configure-store\" | \"connect\" | \"first-submission\"",
           "required": false,
           "default": "submit",
-          "description": "preflight, status, or submit (default; a dry run unless dryRun:false, which only asks approval); publish, review, cancel, rollout, release, sync-listing, configure-store only ask approval."
-        },
-        {
-          "name": "project",
-          "type": "string",
-          "required": false,
-          "description": "Stored login '<workspace>/<project>' when several exist."
-        },
-        {
-          "name": "browsers",
-          "type": "array of \"chrome\" | \"firefox\" | \"edge\" | \"safari\"",
-          "required": false,
-          "description": "Stores; submit, publish and sync-listing take several under one approval."
-        },
-        {
-          "name": "buildSha",
-          "type": "string",
-          "required": false,
-          "description": "Commit sha of a completed platform build (extension_builds)."
-        },
-        {
-          "name": "version",
-          "type": "string",
-          "required": false,
-          "description": "Optional label; default the built manifest's version."
+          "description": "preflight, status, submit (a dry run unless dryRun:false, which only asks approval), or a store act to ask approval for."
         },
         {
           "name": "dryRun",
@@ -2368,82 +2344,106 @@
           "description": "true (the default) reads only; false only asks the owner's approval of the real submit."
         },
         {
+          "name": "project",
+          "type": "string",
+          "required": false,
+          "description": "Same as in extension_submit."
+        },
+        {
+          "name": "browsers",
+          "type": "array of \"chrome\" | \"firefox\" | \"edge\" | \"safari\"",
+          "required": false,
+          "description": "Same as in extension_submit."
+        },
+        {
+          "name": "buildSha",
+          "type": "string",
+          "required": false,
+          "description": "Same as in extension_submit."
+        },
+        {
+          "name": "version",
+          "type": "string",
+          "required": false,
+          "description": "Same as in extension_submit."
+        },
+        {
           "name": "projectPath",
           "type": "string",
           "required": false,
-          "description": "Project root; sync-listing needs it; nothing local is uploaded."
+          "description": "Same as in extension_submit."
         },
         {
           "name": "screenshots",
           "type": "array of string",
           "required": false,
-          "description": "With sync-listing, PNGs in projectPath, at the sizes extension_submit lists."
+          "description": "Same as in extension_submit."
         },
         {
           "name": "useBuild",
           "type": "string",
           "required": false,
-          "description": "With sync-listing, a completed build's sha to take icons from."
+          "description": "Same as in extension_submit."
         },
         {
           "name": "detail",
           "type": "boolean | array",
           "required": false,
-          "description": "With preflight, true or a list of stores and requirement ids answers those rows in full."
+          "description": "Same as in extension_submit."
         },
         {
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default EXTENSION_DEV_API_URL."
+          "description": "Same as in extension_submit."
         },
         {
           "name": "store",
           "type": "\"chrome\" | \"firefox\" | \"edge\" | \"safari\"",
           "required": false,
-          "description": "With cancel or rollout (default chrome), release (safari) or configure-store (required)."
+          "description": "Same as in extension_submit."
         },
         {
           "name": "storeSettings",
           "type": "object",
           "required": false,
-          "description": "With configure-store, only what changes for store, the same keys extension_submit's storeSettings lists."
+          "description": "Same as in extension_submit."
         },
         {
           "name": "submissionId",
           "type": "string",
           "required": false,
-          "description": "With cancel, publish or release, which submission; default the newest."
+          "description": "Same as in extension_submit."
         },
         {
           "name": "buildNumber",
           "type": "integer",
           "required": false,
-          "description": "Safari publish or release: TestFlight build number (default newest)."
+          "description": "Same as in extension_submit."
         },
         {
           "name": "deployPercentage",
           "type": "number",
           "required": false,
-          "description": "With rollout, the new share of users, 1 to 100, above the current one."
+          "description": "Same as in extension_submit."
         },
         {
           "name": "connectSession",
           "type": "string",
           "required": false,
-          "description": "With connect, value.connectSession to wait on with waitSeconds."
+          "description": "Same as in extension_submit."
         },
         {
           "name": "replace",
           "type": "boolean",
           "required": false,
-          "description": "With connect, true replaces a working key; only when asked."
+          "description": "Same as in extension_submit."
         },
         {
           "name": "waitSeconds",
           "type": "number",
           "required": false,
-          "description": "Seconds to wait for the result, 0 to 600 (default 180), and with approvalId for the approval."
+          "description": "Same as in extension_submit."
         }
       ]
     },

@@ -254,7 +254,7 @@ export const schema = {
         type: "boolean",
         default: true,
         description:
-          "true (the default) dispatches nothing and does not run the owner gate, the approval, the build quota; false submits once approved and stops at the draft under the default modes unless a saved store mode says otherwise.",
+          "true (the default) sends nothing and spends no approval or quota; false submits once approved and stops at the draft under the default modes.",
       },
       projectPath: {
         type: "string",
@@ -269,7 +269,7 @@ export const schema = {
         type: "array",
         items: { type: "string" },
         description:
-          "With sync-listing, PNGs in projectPath: Chrome 1-5 at 1280x800 or 640x400; Edge up to 6 at 1280x800 or 640x480; Safari 1-10 at 1280x800, 1440x900, 2560x1600 or 2880x1800; Firefox any. Up to 3 MB each.",
+          "With sync-listing, PNG screenshots in projectPath; a wrong size or weight is answered with what the store accepts.",
       },
       useBuild: {
         type: "string",

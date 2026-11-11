@@ -43,12 +43,13 @@ describe("submit says what the platform checks and answers", () => {
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
-  it("names the owner gate, the draft upload and what a dry run skips in the words the model reads", () => {
+  it("names the owner gate and what a dry run skips in one line each, and keeps the store tables out of the schema", () => {
     const dryRun = String((submitSchema.inputSchema as { properties?: Record<string, { description?: string }> }).properties?.dryRun?.description ?? "");
 
-    expect(dryRun).toMatch(/does not run the owner gate, the approval, the build quota/);
-    expect(dryRun).toMatch(/stops at the draft under the default modes unless a saved store mode says otherwise/);
+    expect(dryRun).toMatch(/sends nothing and spends no approval or quota/);
+    expect(dryRun.length).toBeLessThan(160);
     expect(submitSchema.description).toMatch(/workspace owner/);
+    expect(JSON.stringify(submitSchema)).not.toMatch(/1280x800|640x400|2880x1800/);
   });
 
   it("renders the platform's warning objects and keeps a failing store configured but unhealthy", async () => {
