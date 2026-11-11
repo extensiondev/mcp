@@ -251,7 +251,7 @@ describe("extension_create defaultsApplied", () => {
     expect(result.value.defaultsApplied.gitInit).toBe(true);
   });
 
-  it("490: the ship step names extension_project_create and what it needs, never the /new?template deploy link", async () => {
+  it("490 and 489: the ship step names extension_project_create straight from the scaffolded folder, no push, never the /new?template deploy link", async () => {
     scaffoldTarget = path.join(tmpDir(), "probe");
 
     const result = JSON.parse(await create.handler({ projectName: "probe", template: "content-react" }));
@@ -261,10 +261,13 @@ describe("extension_create defaultsApplied", () => {
     expect(result.value.deployUrl).toBeUndefined();
     expect(result.value.ship.tool).toBe("extension_project_create");
     expect(result.value.ship.needs.join(" ")).toMatch(/project: .*<workspace>\/<project>/);
-    expect(result.value.ship.needs.join(" ")).toMatch(/repo: .*pushed/);
+    expect(result.value.ship.needs.join(" ")).toContain(`projectPath: ${scaffoldTarget}`);
+    expect(result.value.ship.needs.join(" ")).toContain("no push");
     expect(ship).toMatch(/^To ship: extension_create scaffolds and runs locally, it does not host\./);
-    expect(ship).toContain("extension_project_create (project: '<workspace>/probe', repo: '<owner>/<repo>')");
-    expect(ship).toContain("push this directory to a GitHub repository");
+    expect(ship).toContain(`extension_project_create (project: '<workspace>/probe', projectPath: '${scaffoldTarget}')`);
+    expect(ship).toContain("no GitHub push needed");
+    expect(ship).toContain("repo: '<owner>/<repo>' instead of projectPath");
+    expect(ship).not.toContain("push this directory");
     expect(ship).not.toContain("to deploy this template");
     expect(ship).not.toMatch(/Open https?:\/\//);
   });

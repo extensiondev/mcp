@@ -338,7 +338,7 @@ export async function handler(args: {
         tool: "extension_project_create",
         needs: [
           "project: the new '<workspace>/<project>' on extension.dev",
-          "repo: a GitHub '<owner>/<repo>' this scaffold is pushed to; today the platform builds from the pushed repository",
+          `projectPath: ${result.projectPath}; the folder is uploaded as it is, no push, and the platform builds the upload (repo: a GitHub '<owner>/<repo>' it is pushed to works instead)`,
         ],
       },
       defaultsApplied: {
@@ -366,7 +366,7 @@ export async function handler(args: {
           ? []
           : [`Dependencies were not installed: run \`${packageManager} install\` in ${result.projectPath} first.`]),
         openStep,
-        `To ship: extension_create scaffolds and runs locally, it does not host. When the person wants it on extension.dev, push this directory to a GitHub repository and call extension_project_create (project: '<workspace>/${result.projectName}', repo: '<owner>/<repo>'); it answers an approval URL first and the platform builds from the pushed repository. The www /new?template link makes an unrelated project from the pristine template, so never offer it as shipping this one.`,
+        `To ship: extension_create scaffolds and runs locally, it does not host. When the person wants it on extension.dev, call extension_project_create (project: '<workspace>/${result.projectName}', projectPath: '${result.projectPath}') straight from this folder, no GitHub push needed; it answers an approval URL first, uploads the folder as it is and the platform builds the upload. A pushed GitHub repository works too (repo: '<owner>/<repo>' instead of projectPath). The www /new?template link makes an unrelated project from the pristine template, so never offer it as shipping this one.`,
       ],
     },
     warnings: [
