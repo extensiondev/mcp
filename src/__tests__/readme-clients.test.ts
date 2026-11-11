@@ -36,6 +36,7 @@ describe("the README setup is generated from src/clients", () => {
     expect(setup.match(/```bash/g)).toHaveLength(1);
     expect(setup).toContain("claude mcp add extension-dev -- npx -y @extension.dev/mcp --features=local,platform");
     expect(setup).toContain('"args": [\n        "-y",\n        "@extension.dev/mcp",');
+    expect(setup).toContain("/plugin marketplace add extensiondev/skill\n/plugin install extension-dev@extensiondev");
     expect(setup).toContain("](https://cursor.com/en/install-mcp?name=extension-dev&config=");
     expect(setup).toContain("](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22extension-dev%22");
   });

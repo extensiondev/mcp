@@ -19,6 +19,12 @@ const VSCODE_BADGE =
 const fence = (language: string, text: string): string =>
   [`\`\`\`${language}`, text, "```"].join("\n");
 
+const PLUGIN_NOTE = [
+  "Or install the `extension-dev` plugin, the MCP server pinned to one published version plus the `browser-extension` skill, in one step:",
+  "",
+  fence("", "/plugin marketplace add extensiondev/skill\n/plugin install extension-dev@extensiondev"),
+].join("\n");
+
 const recipe = (client: ClientId): Recipe =>
   buildRecipe({ client, reach: "everything", strictApproval: false, project: "" });
 
@@ -49,6 +55,8 @@ export function renderReadmeSetup(): string {
     README_SETUP_START,
     "",
     fence("bash", withYes(claude.command)),
+    "",
+    PLUGIN_NOTE,
     "",
     `[![Install in Cursor](${CURSOR_BADGE})](${cursor.deeplink}) [![Install in VS Code](${VSCODE_BADGE})](${vscodeInstallLink(vscode.deeplink)})`,
     "",
