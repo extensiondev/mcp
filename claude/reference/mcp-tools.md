@@ -2,7 +2,7 @@
 
 Generated from the schemas the server registers (`src/index.ts`); do not edit by hand. Regenerate with `pnpm docs:tools`. A test fails when this file and the schemas disagree.
 
-38 tools.
+39 tools.
 
 ## extension_add_feature
 
@@ -269,6 +269,22 @@ Validate a manifest.json across browsers; buildBlocking lists the errors that ma
 | `browsers` | array of string | no | `["chrome","firefox","edge"]` | Browsers to validate against. |
 | `browser` | string | no |  | One browser; alias for browsers:[browser]. |
 | `include` | array of "similarTemplates" | no |  | Optional sections; similarTemplates adds up to five catalog templates with the same surfaces. |
+
+## extension_network
+
+Stub a network response on a Chromium session: add a rule (method, URL or glob, status, body or json), list or clear the rules, or read which requests hit one or missed. Rules last until extension_stop. Firefox is refused.
+
+| input | type | required | default | description |
+| --- | --- | --- | --- | --- |
+| `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
+| `action` | "add" \| "list" \| "clear" \| "requests" | yes |  | add a rule, list or clear the rules, or read the requests seen. |
+| `method` | string | no |  | add: HTTP method; default ANY. |
+| `url` | string | no |  | add: exact URL, or a glob with * and ?. |
+| `status` | number | no | `200` | add: HTTP status to answer. |
+| `body` | string | no |  | add: response text. |
+| `json` | any | no |  | add: response as a JSON value; not with body. |
+| `contentType` | string | no |  | add: Content-Type; default by body or json. |
+| `browser` | string | no |  | Session browser; required when several run. |
 
 ## extension_open
 

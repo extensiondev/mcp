@@ -1,7 +1,7 @@
 {
   "generatedFrom": "src/index.ts schemas, src/lib/tool-policy.ts, src/lib/docs-meta.ts; regenerate with pnpm docs:tools",
   "version": "10.22.0",
-  "count": 38,
+  "count": 39,
   "tools": [
     {
       "name": "extension_add_feature",
@@ -1165,6 +1165,76 @@
           "type": "array of \"similarTemplates\"",
           "required": false,
           "description": "Optional sections; similarTemplates adds up to five catalog templates with the same surfaces."
+        }
+      ]
+    },
+    {
+      "name": "extension_network",
+      "tier": "test",
+      "group": "local",
+      "description": "Stub a network response on a Chromium session: add a rule (method, URL or glob, status, body or json), list or clear the rules, or read which requests hit one or missed. Rules last until extension_stop. Firefox is refused.",
+      "gate": "a live dev or start session on a Chromium browser",
+      "samplePrompt": "Make the API answer 500 and show me what the popup renders",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": false,
+      "untrusted": true,
+      "inputs": [
+        {
+          "name": "projectPath",
+          "type": "string",
+          "required": true,
+          "description": "Project root of a running session: extension_dev, extension_start, or `npx extension dev|start` by hand"
+        },
+        {
+          "name": "action",
+          "type": "\"add\" | \"list\" | \"clear\" | \"requests\"",
+          "required": true,
+          "description": "add a rule, list or clear the rules, or read the requests seen."
+        },
+        {
+          "name": "method",
+          "type": "string",
+          "required": false,
+          "description": "add: HTTP method; default ANY."
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "required": false,
+          "description": "add: exact URL, or a glob with * and ?."
+        },
+        {
+          "name": "status",
+          "type": "number",
+          "required": false,
+          "default": 200,
+          "description": "add: HTTP status to answer."
+        },
+        {
+          "name": "body",
+          "type": "string",
+          "required": false,
+          "description": "add: response text."
+        },
+        {
+          "name": "json",
+          "type": "any",
+          "required": false,
+          "description": "add: response as a JSON value; not with body."
+        },
+        {
+          "name": "contentType",
+          "type": "string",
+          "required": false,
+          "description": "add: Content-Type; default by body or json."
+        },
+        {
+          "name": "browser",
+          "type": "string",
+          "required": false,
+          "description": "Session browser; required when several run."
         }
       ]
     },
