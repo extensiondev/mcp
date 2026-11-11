@@ -14,7 +14,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createHostedServer } from "../hosted";
+import { createHostedServer, hostedAnswer } from "../hosted";
 import { writeCredentials } from "../lib/credentials";
 import { createServer } from "../index";
 import { PROJECT, WWW, stubPlatformFetch, type SeenRequest } from "./hosted-platform-fetch";
@@ -93,7 +93,7 @@ function withoutWording(envelope: unknown): unknown {
   return rest;
 }
 
-async function run(client: Client, seen: SeenRequest[]) {
+async function run(client: Client, seen: SeenRequest[], rewrite: (name: string, text: string) => string = (_name, text) => text) {
   const tokens = new Set<string>();
   const answers: Array<{ envelope: unknown; isError: boolean; tokens?: string[]; requests: Array<Omit<SeenRequest, "project">> }> = [];
 
@@ -101,7 +101,7 @@ async function run(client: Client, seen: SeenRequest[]) {
     seen.length = 0;
     const result = await client.callTool({ name, arguments: args });
     answers.push({
-      envelope: comparable((result.content as Array<{ text: string }>)[0]?.text ?? ""),
+      envelope: comparable(rewrite(name, (result.content as Array<{ text: string }>)[0]?.text ?? "")),
       isError: result.isError === true,
       tokens: seen.map((request) => request.authorization ?? "").filter(Boolean),
       requests: seen.map(({ project: _project, ...request }) => ({ ...request, authorization: request.authorization?.replace(/^Bearer .+$/, "Bearer <token>") ?? null })),
@@ -121,7 +121,7 @@ describe("credential source parity", () => {
     const seen = stubPlatformFetch();
 
     writeCredentials({ version: 1, token: LOCAL_TOKEN, workspaceSlug: PROJECT.workspace, projectSlug: PROJECT.project, expiresAt: EXPIRES_AT, api: WWW });
-    const local = await run(await connect(createServer({ features: ["local", "platform"], noShip: false })), seen);
+    const local = await run(await connect(createServer({ features: ["local", "platform"], noShip: false })), seen, hostedAnswer);
 
     fs.rmSync(tmp, { recursive: true, force: true });
     fs.mkdirSync(tmp, { recursive: true });

@@ -18,7 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HOSTED_TOOL_NAMES, createHostedServer, registerHostedTools } from "../hosted";
 import { credentialsPath, writeCredentials } from "../lib/credentials";
 import { tools } from "../index";
-import { PROJECT, WWW, stubPlatformFetch } from "./hosted-platform-fetch";
+import { APPROVAL, PROJECT, WWW, stubPlatformFetch } from "./hosted-platform-fetch";
 
 const REQUEST_TOKEN = "request-bearer-token";
 const credential = { token: REQUEST_TOKEN, api: WWW, projects: [PROJECT], expiresAt: 4102444800 };
@@ -154,6 +154,71 @@ describe("hosted tool surface", () => {
     const builds = listed.find((tool) => tool.name === "extension_builds")!;
     expect((builds.inputSchema.properties as any).action.enum).not.toContain("download");
     expect(Object.keys(builds.inputSchema.properties ?? {})).not.toContain("to");
+  });
+
+  it("answers approval-required with the approval page and the same call again, naming no tool the hosted server does not serve", async () => {
+    stubPlatformFetch();
+    const client = await hostedClient();
+    const { result, envelope } = await call(client, "extension_release_promote", { buildId: "abc1234", channel: "stable" });
+    const text = (result.content as Array<{ text: string }>)[0]?.text ?? "";
+
+    expect(envelope.status).toBe("approval-required");
+    expect(envelope.value.approvalId).toBe(APPROVAL.approvalId);
+    expect(envelope.hint).toBe(
+      `Open ${APPROVAL.approvalUrl} in the browser and approve it there, then call extension_release_promote again with the same arguments and approvalId ${APPROVAL.approvalId}.`,
+    );
+
+    expect(envelope.error.message).toContain("Nothing was executed.");
+    expect(text).not.toContain("extension_approvals");
+  });
+
+  it("names the console sign-in, not a login action, in the hosted projects hint", async () => {
+    stubPlatformFetch();
+    const client = await hostedClient();
+    const { result, envelope } = await call(client, "extension_workspace", { action: "projects" });
+    const text = (result.content as Array<{ text: string }>)[0]?.text ?? "";
+
+    expect(envelope.status).toBe("listed");
+    expect(envelope.hint.startsWith("acme has 2 projects; the last build failed for acme/web.")).toBe(true);
+    expect(envelope.hint).toContain("sign in again from your MCP client");
+    expect(text).not.toMatch(/extension_auth|action: "login"|on this machine/);
+  });
+
+  it("never names a tool or action the hosted list does not serve in a hint, a next step or a spoken line", async () => {
+    stubPlatformFetch();
+    const client = await hostedClient();
+    const listed = (await client.listTools()).tools;
+    const served = new Map(
+      listed.map((tool) => [tool.name, ((tool.inputSchema.properties as any)?.action?.enum as string[] | undefined) ?? null]),
+    );
+    const calls: Array<[string, Record<string, unknown>]> = [
+      ["extension_auth", {}],
+      ["extension_workspace", { action: "info" }],
+      ["extension_workspace", { action: "projects" }],
+      ["extension_workspace", { action: "settings" }],
+      ["extension_builds", { action: "list" }],
+      ["extension_release_status", {}],
+      ["extension_release_promote", { buildId: "abc1234", channel: "stable" }],
+      ["extension_project_create", { repo: "acme/new", workspace: "acme", name: "new" }],
+    ];
+
+    for (const [name, args] of calls) {
+      const { envelope } = await call(client, name, args);
+      const value = envelope.value && typeof envelope.value === "object" ? envelope.value : {};
+      const spoken = [envelope.hint, envelope.error?.message, value.nextStep?.say, value.sayToPerson, ...(envelope.warnings ?? [])].filter(
+        (line): line is string => typeof line === "string",
+      );
+
+      for (const line of spoken) {
+        for (const match of line.matchAll(/(extension_[a-z_]+)(?:\s*[({]\s*action:\s*"([a-z-]+)")?/g)) {
+          const [, tool, action] = match;
+
+          expect([...served.keys()], `${name}: ${line}`).toContain(tool);
+
+          if (action) expect(served.get(tool) ?? [action], `${name}: ${line}`).toContain(action);
+        }
+      }
+    }
   });
 
   it("answers unknown-tool for a forbidden tool called by name", async () => {

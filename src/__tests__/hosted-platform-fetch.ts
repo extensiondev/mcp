@@ -38,8 +38,17 @@ function whoami(authorization: string | null, named: string | null): unknown {
   };
 }
 
-function answer(url: URL, authorization: string | null, named: string | null): { status: number; body: unknown } {
+export const APPROVAL = { approvalId: "apr_hosted", approvalUrl: "https://console.extension.dev/acme/web/approvals/apr_hosted" };
+
+const PROJECT_ROWS = [
+  { slug: "web", id: "prj_hosted1", displayName: "Web", lastBuild: { status: "failed", jobs: [{ browser: "chrome", conclusion: "failure" }] } },
+  { slug: "docs", id: "prj_hosted2", displayName: "Docs", lastBuild: { status: "success", jobs: [] } },
+];
+
+function answer(url: URL, authorization: string | null, named: string | null, method = "GET"): { status: number; body: unknown } {
   if (url.pathname === "/api/cli/whoami") return { status: 200, body: whoami(authorization, named) };
+  if (url.pathname === "/api/cli/approvals" && method === "POST") return { status: 200, body: { ...APPROVAL, expiresAt: "2099-01-01T00:00:00.000Z" } };
+  if (url.pathname === "/api/projects") return { status: 200, body: { projects: PROJECT_ROWS, total: PROJECT_ROWS.length } };
 
   if (url.pathname === "/api/artifacts") return { status: 200, body: { artifacts: [] } };
   if (url.hostname.startsWith("registry.")) return { status: 404, body: { error: "not found" } };
@@ -61,7 +70,7 @@ export function stubPlatformFetch(): SeenRequest[] {
     };
 
     seen.push(request);
-    const { status, body } = answer(url, request.authorization, request.project);
+    const { status, body } = answer(url, request.authorization, request.project, request.method);
 
     return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
   });

@@ -18,6 +18,12 @@ hints of every hosted tool.
 | `extension_release_status` | 24 | Read the release status | true | false | true | true | No: one read with `include` | None |
 | `extension_release_promote` | 25 | Promote a release | false | true | false | true | No: `promote`, `cut`, `rollback` all write | None of its own; a refused release relays the platform's sentence and its `upgradeUrl` |
 
+Every hosted answer names only steps the hosted server serves: an `approval-required` answer
+says to open the approval page in the browser and call the same tool again with `approvalId`,
+the projects hint names the sign-in from the MCP client, and the settings hint names the
+console's project settings page (`hostedAnswer` in `src/hosted.ts`, pinned by a scan of every
+hint, warning, error message, next step and spoken line in `hosted-tools.test.ts`).
+
 Every tool lists its title twice, as the tool's `title` (MCP 2025-06-18) and as
 `annotations.title`, and every hint is an explicit boolean (`listedToolEntry` in
 `src/lib/tool-dispatch.ts`). A hosted projection with fewer actions than its module names its own
@@ -122,9 +128,11 @@ promote lands. The tests in `src/__tests__/docs-match-the-code.test.ts` pin the 
 - Expected tools: `extension_workspace` (`action: "projects"`).
 - Expected answer: `status: "listed"`, `value.projects` with one row per project and its last build,
   and the hint "<workspace> has N projects" followed by "; the last build failed for <project>"
-  when one did (`readProjects` in `src/tools/workspace.ts`). The hint's closing sentence names
-  `extension_auth (action: "login", ...)`, which the hosted server does not serve; a reviewer
-  reads it as the local server's step. To replay after the www promote: the exact row fields.
+  when one did (`readProjects` in `src/tools/workspace.ts`), closing with "extension_builds
+  and extension_release_status read the ones this connection's token covers; to cover another
+  project, sign in again from your MCP client, which takes you through the console sign-in on
+  extension.dev." (`hostedAnswer` in `src/hosted.ts`). To replay after the www promote: the
+  exact row fields.
 
 ### Positive 3: Did the latest build pass
 
@@ -166,14 +174,14 @@ promote lands. The tests in `src/__tests__/docs-match-the-code.test.ts` pin the 
   `error.code: "E_APPROVAL_REQUIRED"`, `value.approvalId` and `value.approvalUrl`, the message
   "Release build <sha> to the preview channel. This is irreversible, so a human must approve it
   first. Open <approvalUrl> to review and approve, then call extension_release_promote with the
-  same arguments and approvalId <id>. ... Nothing was executed." and the person's line "Approve
-  at <approvalUrl>; then extension_release_promote with the same arguments and approvalId <id>
-  runs it." (`src/lib/approval-gate.ts`). The reviewer approves at the link as the workspace
-  owner. The second call answers `ok: true` with the release record and the channel now serving
-  the build. The message's reading step names `extension_approvals {action: "status", ...}`,
-  which the hosted server does not serve; the reviewer calls `extension_release_promote` again
-  with the `approvalId` instead. To replay after the www promote: the released answer's exact
-  status and hint.
+  same arguments and approvalId <id>. Nothing was executed." (`src/lib/approval-gate.ts`) and
+  the hint "Open <approvalUrl> in the browser and approve it there, then call
+  extension_release_promote again with the same arguments and approvalId <id>." (`hostedAnswer`
+  in `src/hosted.ts`; the local server's reading step through `extension_approvals` is not
+  named, since the hosted server does not serve it). The reviewer approves at the link as the
+  workspace owner. The second call answers `ok: true` with the release record and the channel
+  now serving the build. To replay after the www promote: the released answer's exact status and
+  hint.
 
 ### Negative 1: Release a Preview build to Stable
 

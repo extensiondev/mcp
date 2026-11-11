@@ -157,6 +157,77 @@ function hostedRefusal(name: string, args: Record<string, unknown>): string | nu
   });
 }
 
+const HOSTED_PROJECTS_STEP =
+  "extension_builds and extension_release_status read the ones this connection's token covers; to cover another project, sign in again from your MCP client, which takes you through the console sign-in on extension.dev.";
+
+const LOCAL_CONFIGURE_SENTENCE =
+  'extension_workspace (action: "configure-project") changes the general, deployment, GitHub and release fields, each a plain call under the owner\'s own token.';
+
+const HOSTED_CONFIGURE_SENTENCE =
+  "the general, deployment, GitHub and release fields change on the project's settings page in the console, or in the local server (npx @extension.dev/mcp).";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function withoutApprovalsTool(text: string): string {
+  return text
+    .split(/(?<=\.)\s+/)
+    .filter((sentence) => !sentence.includes("extension_approvals"))
+    .join(" ");
+}
+
+/* @invariant A HOSTED ANSWER NAMES ONLY STEPS THE HOSTED SERVER SERVES. The
+ * answer builders write for the local server, whose approval step is read
+ * back with extension_approvals and whose projects hint signs in with
+ * extension_auth (action: login); neither is offered here, so a hosted
+ * client told to call them is refused by this same server (ledger 534).
+ * The hosted projection rewrites those sentences after the tool answered
+ * and the track link was attached, keeping that link: an approval-required
+ * answer says to open the approval page in the browser and call the same
+ * tool again with approvalId, and the projects hint names the sign-in from
+ * the MCP client. The local server's answers are not touched.
+ */
+export function hostedAnswer(name: string, answer: string): string {
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(answer);
+  } catch {
+    return answer;
+  }
+
+  if (!isRecord(parsed)) return answer;
+
+  const value = isRecord(parsed.value) ? parsed.value : {};
+  let changed = false;
+
+  if (parsed.status === "approval-required" && typeof value.approvalUrl === "string" && value.approvalUrl) {
+    const approvalId = typeof value.approvalId === "string" && value.approvalId ? value.approvalId : "from the response";
+    const step = `Open ${value.approvalUrl} in the browser and approve it there, then call ${name} again with the same arguments and approvalId ${approvalId}.`;
+
+    parsed.hint = step;
+    if (isRecord(parsed.error) && typeof parsed.error.message === "string") parsed.error.message = withoutApprovalsTool(parsed.error.message);
+    if (isRecord(value.nextStep) && typeof value.nextStep.say === "string") value.nextStep.say = step;
+
+    changed = true;
+  }
+
+  if (name === "extension_workspace" && value.action === "projects" && typeof parsed.hint === "string" && parsed.hint.includes(" loggedIn says")) {
+    const track = parsed.hint.match(/ Track it at \S+$/)?.[0] ?? "";
+
+    parsed.hint = `${parsed.hint.slice(0, parsed.hint.indexOf(" loggedIn says"))} ${HOSTED_PROJECTS_STEP}${track}`;
+    changed = true;
+  }
+
+  if (name === "extension_workspace" && value.action === "settings" && typeof parsed.hint === "string" && parsed.hint.includes(LOCAL_CONFIGURE_SENTENCE)) {
+    parsed.hint = parsed.hint.replace(LOCAL_CONFIGURE_SENTENCE, HOSTED_CONFIGURE_SENTENCE);
+    changed = true;
+  }
+
+  return changed ? JSON.stringify(parsed) : answer;
+}
+
 export interface HostedRegistration {
   credential: RequestCredential | (() => RequestCredential);
   tools?: readonly string[];
@@ -173,14 +244,17 @@ export function registerHostedTools(target: Server | McpServer, setup: HostedReg
     tools: hostedTools(setup.tools),
     options: HOSTED_SERVER_OPTIONS,
     refuse: hostedRefusal,
-    run: (call, _name, args) =>
-      withRequestCredential(
-        {
-          ...credential(),
-          project: typeof args.project === "string" ? args.project : null,
-          ...(setup.onUnauthorized ? { onUnauthorized: setup.onUnauthorized } : {}),
-        },
-        call,
+    run: async (call, name, args) =>
+      hostedAnswer(
+        name,
+        await withRequestCredential(
+          {
+            ...credential(),
+            project: typeof args.project === "string" ? args.project : null,
+            ...(setup.onUnauthorized ? { onUnauthorized: setup.onUnauthorized } : {}),
+          },
+          call,
+        ),
       ),
   });
 }
