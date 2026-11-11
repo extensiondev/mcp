@@ -18,6 +18,7 @@ const NONE = "none";
 const SESSION = "a live dev or start session";
 const CONTROL = "a dev session, which carries control unless started with allowControl: false";
 const EVAL = "a session started with allowEval: true on extension_dev";
+const CHROMIUM_SESSION = "a live Chromium dev or start session with its debug port; no allowEval";
 const PLATFORM = "the server started with --features=local,platform";
 const LOGIN = `${PLATFORM}, and a login`;
 
@@ -47,6 +48,7 @@ export const TOOL_DOCS: Record<string, ToolDocsMeta> = {
   extension_storage: { tier: "act", gate: CONTROL, samplePrompt: "Read chrome.storage.local and set settings.theme to dark" },
   extension_reload: { tier: "act", gate: CONTROL, samplePrompt: "Reload the extension and confirm the worker came back" },
   extension_open: { tier: "act", gate: CONTROL, samplePrompt: "Open the side panel, then trigger the action button" },
+  extension_element: { tier: "act", gate: CHROMIUM_SESSION, samplePrompt: "Click the Save button in the popup, then read the status line" },
   extension_browsers: { tier: "browsers", gate: NONE, samplePrompt: "Which browsers are installed here? Install Firefox if it is missing" },
   extension_auth: { tier: "platform", gate: PLATFORM, samplePrompt: "Log this machine in to the acme/newtab project on extension.dev" },
   extension_workspace_create: { tier: "platform", gate: PLATFORM, samplePrompt: "Create a workspace called acme on extension.dev" },

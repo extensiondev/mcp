@@ -6,6 +6,7 @@ const IMPERATIVE_VERBS = [
   "Analyze",
   "Browse",
   "Build",
+  "Click",
   "Create",
   "Diagnose",
   "Evaluate",

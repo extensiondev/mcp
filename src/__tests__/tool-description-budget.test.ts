@@ -28,6 +28,7 @@ const CEILINGS: Record<string, number> = {
   extension_docs_search: 300,
   extension_doctor: 250,
   extension_dom_snapshot: 200,
+  extension_element: 250,
   extension_eval: 300,
   extension_inspect: 200,
   extension_list_extensions: 100,

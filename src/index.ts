@@ -33,6 +33,7 @@ import * as reload from "./tools/reload";
 import * as network from "./tools/network";
 import * as open from "./tools/open";
 import * as domSnapshot from "./tools/dom-snapshot";
+import * as element from "./tools/element";
 import * as screenshot from "./tools/screenshot";
 import * as publish from "./tools/publish";
 import * as releasePromote from "./tools/release-promote";
@@ -100,6 +101,7 @@ export const tools: ToolModule[] = [
   network,
   open,
   domSnapshot,
+  element,
   screenshot,
   publish,
   releaseStatus,

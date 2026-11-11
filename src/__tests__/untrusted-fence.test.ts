@@ -234,6 +234,7 @@ describe("the server fences tools that read a page or an extension", () => {
       "extension_builds",
       "extension_doctor",
       "extension_dom_snapshot",
+      "extension_element",
       "extension_eval",
       "extension_inspect",
       "extension_list_extensions",

@@ -52,6 +52,7 @@ export const TOOL_TITLES: Record<string, string> = {
   extension_assert: "Assert on a page",
   extension_inspect: "Inspect a live page",
   extension_dom_snapshot: "Snapshot the page",
+  extension_element: "Act on an element",
   extension_screenshot: "Take a screenshot",
   extension_try: "Try a published extension",
   extension_list_extensions: "List the loaded extensions",
@@ -114,6 +115,7 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
     annotations: TOOL_ANNOTATIONS.extension_dom_snapshot,
     untrusted: true,
   },
+  extension_element: { group: "local", annotations: acts(), untrusted: true },
   extension_screenshot: {
     group: "local",
     annotations: TOOL_ANNOTATIONS.extension_screenshot,
