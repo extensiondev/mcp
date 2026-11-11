@@ -36,7 +36,8 @@ const RETIRED_TOOL_NAMES = [
   "extension_preview",
 ];
 
-const COUNT_BEARING_FILES = ["package.json", "server.json", "README.md"];
+const COUNT_BEARING_FILES = ["package.json", "server.json"];
+const TOOL_NAMING_FILES = [...COUNT_BEARING_FILES, "README.md"];
 
 const countsIn = (text: string): number[] =>
   [...text.matchAll(/(\d+)\s+(?:MCP\s+)?tools\b/g)].map((m) => Number(m[1]));
@@ -54,24 +55,19 @@ describe("the tool count is derived, never typed", () => {
     });
   }
 
-  it("carries the count in the README tagline, where npm reads it", () => {
-    const tagline = read("README.md")
-      .split("\n")
-      .find((line) => line.startsWith("> "));
-    expect(tagline).toBeDefined();
-    expect(countsIn(tagline as string)).toEqual([count]);
+  it("states no count in the README, which listings copy and keep after the registry moves", () => {
+    expect(countsIn(read("README.md"))).toEqual([]);
   });
 
-  it("documents every registered tool in the README table, and nothing else", () => {
-    const documented = [
-      ...read("README.md").matchAll(/^\| \w+ \| `(extension_\w+)` \|/gm),
-    ].map((m) => m[1]);
-    expect([...documented].sort()).toEqual(registeredNames);
-    expect(documented.length).toBe(count);
+  it("names only registered tools in the README, which points at the generated reference for the list", () => {
+    const named = [...new Set([...read("README.md").matchAll(/\bextension_[a-z_]+\b/g)].map((m) => m[0]))];
+    expect(named.length).toBeGreaterThan(0);
+    expect(named.filter((name) => !registeredNames.includes(name))).toEqual([]);
+    expect(read("README.md")).toContain("https://docs.extension.dev/tools/mcp#reference");
   });
 
   it("never names a tool the server no longer registers", () => {
-    for (const surface of COUNT_BEARING_FILES) {
+    for (const surface of TOOL_NAMING_FILES) {
       const text = read(surface);
 
       for (const retired of RETIRED_TOOL_NAMES) {

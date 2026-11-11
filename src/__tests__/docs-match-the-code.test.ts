@@ -195,8 +195,7 @@ describe("the docs say what the code does", () => {
     expect(pkg.engines.node).toBe(engine.engines.node);
     const server = require("../../server.json") as { description: string };
     expect(server.description).toContain(`${tools.length} tools, ${REAL_BROWSERS.length} browsers`);
-    const local = Object.values(TOOL_POLICY).filter((p) => p.group === "local").length;
-    expect(read("README.md")).toContain(`exposes the ${local} of its ${tools.length} tools that work on this machine (the ${tools.length - local} platform tools are off)`);
+    expect(read("README.md")).toContain("`--features=local,platform`");
   });
 
   it("lists the registry entry at the version package.json ships", () => {

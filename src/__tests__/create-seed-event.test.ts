@@ -192,6 +192,6 @@ describe("the telemetry is disclosed where a user reads", () => {
   it("names the event in the tool description and points at the README section with the switches", () => {
     expect(create.schema.description).toContain("draft_seeded");
     expect(create.schema.description).toContain("Telemetry section");
-    expect(readme).toContain("### Telemetry");
+    expect(readme).toContain("## Telemetry");
   });
 });
