@@ -35,14 +35,6 @@ write("server.json", (j) => {
   for (const pkg of j.packages || []) pkg.version = version;
 });
 
-write(".claude-plugin/plugin.json", (j) => {
-  j.version = version;
-});
-
-write(".claude-plugin/marketplace.json", (j) => {
-  for (const p of j.plugins || []) p.version = version;
-});
-
 for (const rel of ["docs/tools.json", "docs/clients.json", "docs/store-md-fields.json"]) {
   write(rel, (j) => {
     if ("version" in j) j.version = version;

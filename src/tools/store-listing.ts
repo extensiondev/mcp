@@ -252,7 +252,7 @@ export function readLocalListing(
     content = fs.readFileSync(file, "utf8");
   } catch {
     return {
-      problem: `No ${STORE_MD_FILENAME} at ${file}. Create it with the listing copy first (the extension-dev skill's store-md reference has the shape).`,
+      problem: `No ${STORE_MD_FILENAME} at ${file}. Create it with the listing copy first (the browser-extension skill's store-md reference has the shape).`,
     };
   }
 

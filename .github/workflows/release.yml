@@ -265,7 +265,7 @@ jobs:
           TAG: ${{ steps.validate.outputs.tag }}
           MAIN_MOVED: ${{ steps.source.outputs.main_moved }}
         run: |
-          git add package.json pnpm-lock.yaml server.json .claude-plugin docs/tools.json docs/clients.json docs/store-md-fields.json
+          git add package.json pnpm-lock.yaml server.json docs/tools.json docs/clients.json docs/store-md-fields.json
           if ! git diff --cached --quiet; then
             git commit -m "Release v$VERSION"
           fi
@@ -275,7 +275,7 @@ jobs:
             git fetch origin main
             git checkout --detach origin/main
             node scripts/set-release-version.mjs "$VERSION"
-            git add package.json server.json .claude-plugin docs/tools.json docs/clients.json docs/store-md-fields.json
+            git add package.json server.json docs/tools.json docs/clients.json docs/store-md-fields.json
             if ! git diff --cached --quiet; then
               git commit -m "Release v$VERSION"
             fi
@@ -299,7 +299,7 @@ jobs:
             --notes-file "${{ steps.notes.outputs.file }}"
 
       # The MCP registry entry is a third surface this release moves, alongside
-      # npm and the plugin marketplace, and it is the one an agent reads before
+      # npm, and it is the one an agent reads before
       # it installs anything. It sat at 5.1.2 announcing "31 tools, 11 browsers"
       # for twelve days after 10.3.0 shipped, because publishing it had never
       # been anything but a hand step somebody had to remember. It runs here, in

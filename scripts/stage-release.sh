@@ -33,7 +33,7 @@ PKG="$(node -p 'require("./package.json").name')"
 ACCESS="$(node -p 'require("./package.json").publishConfig?.access || "public"')"
 
 restore() {
-  git checkout --quiet -- package.json server.json .claude-plugin docs/tools.json docs/clients.json docs/store-md-fields.json README.md
+  git checkout --quiet -- package.json server.json docs/tools.json docs/clients.json docs/store-md-fields.json README.md
 }
 trap restore EXIT
 

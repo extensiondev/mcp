@@ -45,7 +45,6 @@
     "dist",
     "bin",
     "claude",
-    ".claude-plugin",
     "server.json",
     "README.md",
     "CHANGELOG.md",
