@@ -12,6 +12,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { CHROME_DEVELOPER_DASHBOARD_URL, CHROME_PUBLISHER_SLOTS_CHECK, CHROME_SLOTS_SENTENCE } from "../lib/chrome-publisher-slots";
 import { buildSummaryPath } from "../lib/session-paths";
 import { REVIEWER_NOTE_TOOLCHAIN_CHECK, reviewerNoteBuildLine, toolchainDifferences, toolchainSentence } from "../lib/store-md-toolchain";
 import { WRITE_FAILURE_REPORT_URL } from "../lib/settings-write";
@@ -300,5 +301,56 @@ describe("506: the preflight compares the Firefox reviewer note's build line wit
         { node: "24.18.1", packageManager: { name: "npm", version: "12.0.2" }, extensionJs: "4.1.39" },
       ),
     ).toEqual(["node", "packageManager", "extensionJs"]);
+  });
+});
+
+describe("510: a first Chrome item is told about the publisher's two default extension slots, which no API call can count", () => {
+  const platform = useProjectRoutes("extdev-510-slots-");
+  const UNLINKED = { kind: "oauth", connectedAs: "owner@example.com", healthy: true, itemLinked: false };
+  const LINKED = { ...UNLINKED, itemLinked: true, itemId: "abcdefghijklmnopabcdefghijklmnop" };
+
+  function chrome(connection: Row): void {
+    platform.login();
+    platform.routes[PREFLIGHT("chrome")] = () => ({ body: { ...report("chrome"), connection } });
+    platform.routes[SETTINGS] = () => ({ body: { enabledBrowsers: { chrome: true } } });
+    platform.routes[BUILD] = () => ({ body: { id: SHA, status: "success", browsers: [{ name: "chrome", status: "success" }] } });
+    platform.routes[`POST ${APPROVALS}`] = () => ({ status: 201, body: { approvalId: "apr_510", approvalUrl: `${API}/device/approve/apr_510` } });
+  }
+
+  async function preflight(): Promise<Row> {
+    return JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], buildSha: SHA, api: API })).value.stores.chrome;
+  }
+
+  it("warns on the preflight of a project with no Chrome item yet, owner you, naming the default and the dashboard step, without blocking on it", async () => {
+    chrome(UNLINKED);
+
+    const view = await preflight();
+    const row = (view.warnings as Row[]).find((check) => check.id === CHROME_PUBLISHER_SLOTS_CHECK)!;
+
+    expect(row).toMatchObject({ owner: "you", severity: "advisory", docsUrl: "https://developer.chrome.com/blog/cws-review-updates-2026" });
+    expect(row.message).toContain("2 extension slots by default");
+    expect(row.message).toContain("no call that lists or counts a publisher's items");
+    expect(row.message).toContain(`request a limit increase in the Chrome Web Store developer dashboard at ${CHROME_DEVELOPER_DASHBOARD_URL}`);
+    expect(view.summary.warn).toBe(1);
+    expect((view.failing as Row[]).map((check) => check.id)).not.toContain(CHROME_PUBLISHER_SLOTS_CHECK);
+  });
+
+  it("says nothing once a Chrome item is linked, since the slot is already held", async () => {
+    chrome(LINKED);
+
+    const view = await preflight();
+
+    expect((view.warnings as Row[]).map((check) => check.id)).not.toContain(CHROME_PUBLISHER_SLOTS_CHECK);
+    expect(view.summary.warn).toBe(0);
+  });
+
+  it("carries the same sentence as a warning on the real submit that stops at the unlinked item, with no approval asked", async () => {
+    chrome(UNLINKED);
+
+    const out = JSON.parse(await submit({ action: "submit", browsers: ["chrome"], buildSha: SHA, dryRun: false, api: API }));
+
+    expect(out.status).toBe("store-item-not-linked");
+    expect(out.warnings).toContain(CHROME_SLOTS_SENTENCE);
+    expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
   });
 });

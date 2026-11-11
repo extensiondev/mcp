@@ -11,6 +11,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import { createServer } from "../index";
+import { CHROME_PUBLISHER_SLOTS_CHECK, CHROME_SLOTS_SENTENCE } from "../lib/chrome-publisher-slots";
 import { PLATFORM_UNAVAILABLE_SENTENCE, PLATFORM_UNAVAILABLE_STATUS } from "../lib/store-run-unavailable";
 import { SHARED_INPUT_NOTE, handler as checkHandler, schema as checkSchema } from "../tools/submit-check";
 import { schema as submitSchema } from "../tools/submit";
@@ -95,6 +96,27 @@ describe("extension_submit_check takes the calls that only read or ask, under a 
     expect(dry.value.approvalRefunded).toBeUndefined();
     expect(sent()).not.toContain("POST /api/cli/approvals");
     expect(sent().filter((call) => call === STORE_SEND)).toHaveLength(2);
+  });
+
+  it("names the publisher's two default extension slots on a first Chrome item as an advisory, and on the real submit's unlinked-item stop (ledger 510)", async () => {
+    world.login();
+    world.routes.push([
+      /^POST \/api\/projects\/[^/]+\/stores\/chrome\/submissions\/preflight$/,
+      () => ({ body: { store: "chrome", summary: { pass: 0, warn: 0, fail: 0, blockingFailures: 0, canSubmit: false }, checks: [], connection: { kind: "oauth", connectedAs: "owner@example.com", healthy: true, itemLinked: false } } }),
+    ]);
+
+    const read = await world.call("extension_submit_check", { action: "preflight", browsers: ["chrome"], ...api });
+    const row = (read.value.stores.chrome.warnings as Array<Record<string, unknown>>).find((check) => check.id === CHROME_PUBLISHER_SLOTS_CHECK)!;
+
+    expect(row).toMatchObject({ owner: "you", severity: "advisory" });
+    expect(String(row.message)).toContain("2 extension slots by default");
+    expect(read.value.stores.chrome.canSubmit).toBe(false);
+
+    const asked = await world.call("extension_submit_check", { browsers: ["chrome"], buildSha: "603fc8a", dryRun: false, ...api });
+
+    expect(asked.status).toBe("store-item-not-linked");
+    expect(asked.warnings).toContain(CHROME_SLOTS_SENTENCE);
+    expect(sent()).not.toContain("POST /api/cli/approvals");
   });
 
   it("refuses a store act, the call spending an approval and a server with its gate off, before anything leaves the machine", async () => {

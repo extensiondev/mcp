@@ -15,6 +15,7 @@ import { API_BASE } from "../lib/common-schema";
 import { resolveCredential } from "../lib/credential-source";
 import { expiredLoginRefusal } from "../lib/login-expired";
 import { chromeItemLeftOf } from "../lib/chrome-item-left";
+import { CHROME_SLOTS_SENTENCE } from "../lib/chrome-publisher-slots";
 import { linkItemAnswer } from "../lib/link-item-answer";
 import { approvalRefundOf, approvalRefundSentence } from "../lib/approval-refund-words";
 import { envelope, type ErrorCode } from "../lib/envelope";
@@ -641,6 +642,7 @@ async function connectionPrecheck(
       nextStep: linkAnswer.nextStep,
     },
     hint: linkAnswer.hint,
+    ...(linked && blocked.browser === "chrome" ? { warnings: [CHROME_SLOTS_SENTENCE] } : {}),
   });
 
   return { refused, modes, reports: read.reports, warnings: [] };

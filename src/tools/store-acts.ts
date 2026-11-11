@@ -120,6 +120,7 @@ import { publishVersion } from "./store-publish-version";
 import { iconPaddingSentences, iconPaddingView } from "../lib/chrome-icon-padding";
 import { builtToolchainFor, reviewerNoteToolchainCheck } from "../lib/store-md-toolchain";
 import { firefoxListingCheck, safariDescriptionCheck, withLocalChecks } from "../lib/store-preflight-local";
+import { chromePublisherSlotsCheck } from "../lib/chrome-publisher-slots";
 import { dryRunStoreRun, platformUnavailableStep, storeRunCheck } from "../lib/store-run-unavailable";
 
 import type { PackageScope } from "../lib/package-address";
@@ -1030,7 +1031,14 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     const read = reads[i];
     if (!read.ok) return null;
 
-    const local = store === "safari" ? [safariDescriptionCheck(text(args.projectPath))] : store === "firefox" ? [firefoxListingCheck(listings[i]), reviewerNoteToolchainCheck(text(args.projectPath), builtToolchain)] : [];
+    const local =
+      store === "safari"
+        ? [safariDescriptionCheck(text(args.projectPath))]
+        : store === "firefox"
+          ? [firefoxListingCheck(listings[i]), reviewerNoteToolchainCheck(text(args.projectPath), builtToolchain)]
+          : store === "chrome"
+            ? [chromePublisherSlotsCheck(read.json)]
+            : [];
 
     return withLocalChecks(relayFirefoxUpdateUrl(read.json, updateManifests[i]), local);
   });
