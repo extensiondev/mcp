@@ -191,7 +191,7 @@ Take a shallow DOM snapshot of one open surface or targetId, or list what is ope
 | `targetId` | string | no |  | A page's targetId (extension_open, or dom_snapshot listTargets); overrides url. |
 | `listTargets` | boolean | no | `false` | List page targets and return. |
 | `listTabs` | boolean | no | `false` | List tabs with ids and return. |
-| `context` | "content" \| "page" \| "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" | no | `"content"` | Surfaces must already be open (extension_open). |
+| `context` | "content" \| "page" \| "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" | no | `"content"` | A closed surface is opened first (as extension_open does); the answer then says opened: true. |
 | `include` | array of "summary" \| "html" | no | `["summary"]` | What to include. |
 | `maxBytes` | number | no | `262144` | Byte cap on the html. |
 | `withConsole` | number \| boolean | no |  | Console lines: a count, or true for 50. |
@@ -206,7 +206,7 @@ Evaluate JavaScript in a running extension's background, surface, content script
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
 | `expression` | string | yes |  | Expression to evaluate. |
-| `context` | "background" \| "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" \| "content" \| "page" | no |  | Default background; surfaces must be open (extension_open). |
+| `context` | "background" \| "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" \| "content" \| "page" | no |  | Default background; a closed surface is opened first (as extension_open does). |
 | `url` | string | no |  | content/page: the tab by url. |
 | `tab` | number | no |  | chrome.tabs id to break a url tie. |
 | `targetId` | string | no |  | A page's targetId (extension_open, or dom_snapshot listTargets); overrides url. |
@@ -398,7 +398,7 @@ Reload the extension's background, or a tab, over the control channel (allowCont
 
 ## extension_screenshot
 
-Take a .png of one open surface, page or targetId in a live session (Safari: pages only); open it with extension_open first.
+Take a .png of one surface, page or targetId in a live session (Safari: pages only); a closed surface is opened first, answering opened: true.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |

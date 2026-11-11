@@ -815,7 +815,7 @@
           "type": "\"content\" | \"page\" | \"popup\" | \"options\" | \"sidebar\" | \"devtools\" | \"newtab\" | \"history\" | \"bookmarks\"",
           "required": false,
           "default": "content",
-          "description": "Surfaces must already be open (extension_open)."
+          "description": "A closed surface is opened first (as extension_open does); the answer then says opened: true."
         },
         {
           "name": "include",
@@ -882,7 +882,7 @@
           "name": "context",
           "type": "\"background\" | \"popup\" | \"options\" | \"sidebar\" | \"devtools\" | \"newtab\" | \"history\" | \"bookmarks\" | \"content\" | \"page\"",
           "required": false,
-          "description": "Default background; surfaces must be open (extension_open)."
+          "description": "Default background; a closed surface is opened first (as extension_open does)."
         },
         {
           "name": "url",
@@ -1761,7 +1761,7 @@
       "name": "extension_screenshot",
       "tier": "see",
       "group": "local",
-      "description": "Take a .png of one open surface, page or targetId in a live session (Safari: pages only); open it with extension_open first.",
+      "description": "Take a .png of one surface, page or targetId in a live session (Safari: pages only); a closed surface is opened first, answering opened: true.",
       "gate": "a live dev or start session",
       "samplePrompt": "Open the popup and take a screenshot of it for the store listing",
       "readOnly": false,
