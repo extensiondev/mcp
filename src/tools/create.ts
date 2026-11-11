@@ -10,17 +10,53 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { extensionCreate } from "extension-create";
-import { wwwNewPath } from "@extension.dev/urls/paths";
 
-import { exactVersion } from "../lib/exec";
-import { mcpOrigins } from "../lib/registry";
+import { engineRefusal, exactVersion } from "../lib/exec";
+import { resolveEngineOverride } from "../lib/engine-override";
 import { captureTemplateSeed } from "../lib/funnel-telemetry";
-import { templateCatalogUrl } from "../lib/template-artifact-source";
+import { pinnedTemplateCommit, templateCatalogUrl } from "../lib/template-artifact-source";
 import { envelope } from "../lib/envelope";
 import { shellPath } from "../lib/publish-link";
 import { scaffoldScripts } from "../lib/scaffold-scripts";
 
 const COMMAND = "extension_create";
+
+const TEMPLATE_REF_ENV = "EXTENSION_CREATE_TEMPLATE_REF";
+
+const SCAFFOLD_RECORD = ".extension-create.json";
+
+let catalogPinHolders = 0;
+
+async function withCatalogPin<T>(run: () => Promise<T>): Promise<T> {
+  if (catalogPinHolders === 0 && process.env[TEMPLATE_REF_ENV]) return run();
+
+  catalogPinHolders += 1;
+  process.env[TEMPLATE_REF_ENV] = pinnedTemplateCommit();
+
+  try {
+    return await run();
+  } finally {
+    catalogPinHolders -= 1;
+    if (catalogPinHolders === 0) delete process.env[TEMPLATE_REF_ENV];
+  }
+}
+
+export function scaffoldSourceCommit(
+  result: { projectPath: string; templateProvenance?: { ref?: string } },
+): string | null {
+  const own = result.templateProvenance?.ref;
+  if (typeof own === "string" && own) return own;
+
+  try {
+    const record = JSON.parse(
+      fs.readFileSync(path.join(result.projectPath, SCAFFOLD_RECORD), "utf8"),
+    ) as { ref?: unknown };
+
+    return typeof record.ref === "string" && record.ref ? record.ref : null;
+  } catch {
+    return null;
+  }
+}
 
 function scaffoldEnginePin(projectPath: string): string | null {
   try {
@@ -178,12 +214,15 @@ export async function handler(args: {
     }
   };
 
+  const requestedRef = process.env[TEMPLATE_REF_ENV] || pinnedTemplateCommit();
   const attempt = () =>
-    extensionCreate(projectInput, {
-      template: args.template ?? "typescript",
-      install: args.install ?? true,
-      logger: { log: capture("log"), error: capture("error") },
-    });
+    withCatalogPin(() =>
+      extensionCreate(projectInput, {
+        template: args.template ?? "typescript",
+        install: args.install ?? true,
+        logger: { log: capture("log"), error: capture("error") },
+      }),
+    );
   const failure = (err: unknown, transient: boolean): string =>
     transient
       ? envelope({
@@ -282,9 +321,18 @@ export async function handler(args: {
     : process.cwd();
   const gitInit = !gitBefore && fs.existsSync(path.join(result.projectPath, ".git"));
 
-  const wwwOrigin = mcpOrigins().www;
-  const deployUrl = `${wwwOrigin}${wwwNewPath({ template: result.template })}`;
   const catalogUrl = templateCatalogUrl(result.template, "mcp-create");
+  const catalogCommit = pinnedTemplateCommit();
+  const sourceCommit = scaffoldSourceCommit(result) ?? requestedRef;
+  const corpusWarning =
+    sourceCommit !== catalogCommit
+      ? `The scaffold came from extension-js/examples at ${sourceCommit} while extension_templates describes ${catalogCommit}, so what was read there can differ from what was written here. Unset ${TEMPLATE_REF_ENV} to scaffold from the catalog's commit.`
+      : undefined;
+  const refusal = engineRefusal();
+  const overrideEnv = resolveEngineOverride()?.env ?? "EXTENSION_MCP_ENGINE_DIR";
+  const openStep = refusal
+    ? `Fix or unset ${overrideEnv} before extension_dev, extension_build or extension_start, which can only refuse until then: ${refusal} extension_doctor shows the paths it expects. Then ask the person "Want me to open it in Chrome so you can try it?" and, on yes, call extension_dev yourself (projectPath: ${result.projectPath}, headless: false).`
+    : `Ask the person "Want me to open it in Chrome so you can try it?" and, on yes, call extension_dev yourself (projectPath: ${result.projectPath}, headless: false so they can see the window); its answer says when the session is ready. Do not hand the person a shell command to run it.`;
 
   return envelope({
     ok: true,
@@ -297,9 +345,16 @@ export async function handler(args: {
       projectName: result.projectName,
       template: result.template,
       templateCatalogUrl: catalogUrl,
+      sourceCommit,
       depsInstalled: result.depsInstalled,
       packageManager: result.depsInstalled ? packageManager : null,
-      deployUrl,
+      ship: {
+        tool: "extension_project_create",
+        needs: [
+          "project: the new '<workspace>/<project>' on extension.dev",
+          "repo: a GitHub '<owner>/<repo>' this scaffold is pushed to; today the platform builds from the pushed repository",
+        ],
+      },
       defaultsApplied: {
         parentDir: args.parentDir
           ? `${resolvedParent} (explicit)`
@@ -319,16 +374,17 @@ export async function handler(args: {
       manualAlternative: `Outside an agent only: cd ${shellPath(result.projectPath)} && ${runDev}`,
       duration: Date.now() - start,
       nextSteps: [
-        `The scaffold is complete and verified (manifest read at ${manifestPath}${result.depsInstalled ? ", dependencies installed" : ""}): it needs no build to check, so do not run a build to verify it.`,
+        `The scaffold is complete and verified (manifest read at ${manifestPath}${result.depsInstalled ? ", dependencies installed" : ""}; template ${result.template} from extension-js/examples at ${sourceCommit}): it needs no build to check, so do not run a build to verify it.`,
         ...(result.depsInstalled
           ? []
           : [`Dependencies were not installed: run \`${packageManager} install\` in ${result.projectPath} first.`]),
-        `Ask the person "Want me to open it in Chrome so you can try it?" and, on yes, call extension_dev yourself (projectPath: ${result.projectPath}, headless: false so they can see the window); its answer says when the session is ready. Do not hand the person a shell command to run it.`,
-        `To ship: extension_create scaffolds and runs locally, it does not host. Open ${deployUrl} to deploy this template to the web.`,
+        openStep,
+        `To ship: extension_create scaffolds and runs locally, it does not host. When the person wants it on extension.dev, push this directory to a GitHub repository and call extension_project_create (project: '<workspace>/${result.projectName}', repo: '<owner>/<repo>'); it answers an approval URL first and the platform builds from the pushed repository. The www /new?template link makes an unrelated project from the pristine template, so never offer it as shipping this one.`,
       ],
     },
     warnings: [
       engineWarning,
+      corpusWarning,
       ...(result.depsInstalled ? [] : logTail()),
     ],
   });

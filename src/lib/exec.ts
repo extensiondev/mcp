@@ -136,6 +136,10 @@ export function resolveExtensionInvocation(projectDir?: string): ExtensionInvoca
   return { command: "npx", prefixArgs: [`extension@${pinnedCliVersion()}`] };
 }
 
+export function engineRefusal(): string | null {
+  return resolveExtensionInvocation().refusal ?? null;
+}
+
 export function runExtensionCli(
   args: string[],
   options?: { cwd?: string; timeoutMs?: number },

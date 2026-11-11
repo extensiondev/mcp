@@ -4,12 +4,16 @@ import path from "node:path";
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 
+import { ENGINE_BIN_ENV, ENGINE_DIR_ENV } from "../lib/engine-override";
+import { PINNED_COMMIT } from "../lib/template-artifact-source";
 
 import { scaffoldScripts } from "./fixtures/scaffolder-answers";
 
 let scaffoldTarget = "";
 let withGit = false;
 let withScripts = false;
+let recordRef: string | null = null;
+let refSeen: string | undefined;
 
 vi.mock("extension-create", () => ({
   extensionCreate: vi.fn(async (_input: string, opts: { template: string }) => {
@@ -18,6 +22,15 @@ vi.mock("extension-create", () => ({
     fs.mkdirSync(manifestDir, { recursive: true });
     fs.writeFileSync(path.join(manifestDir, "manifest.json"), "{}");
     if (withGit) fs.mkdirSync(path.join(scaffoldTarget, ".git"));
+
+    refSeen = process.env.EXTENSION_CREATE_TEMPLATE_REF;
+
+    if (recordRef) {
+      fs.writeFileSync(
+        path.join(scaffoldTarget, ".extension-create.json"),
+        JSON.stringify({ template: opts.template, source: "codeload", ref: recordRef }),
+      );
+    }
 
     if (withScripts) {
       fs.writeFileSync(
@@ -54,9 +67,26 @@ function tmpDir(): string {
   return dir;
 }
 
+const savedEnv = {
+  ref: process.env.EXTENSION_CREATE_TEMPLATE_REF,
+  dir: process.env[ENGINE_DIR_ENV],
+  bin: process.env[ENGINE_BIN_ENV],
+};
+
 afterEach(() => {
   withGit = false;
   withScripts = false;
+  recordRef = null;
+  refSeen = undefined;
+
+  for (const [key, value] of [
+    ["EXTENSION_CREATE_TEMPLATE_REF", savedEnv.ref],
+    [ENGINE_DIR_ENV, savedEnv.dir],
+    [ENGINE_BIN_ENV, savedEnv.bin],
+  ] as const) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
 
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -156,6 +186,71 @@ describe("extension_create defaultsApplied", () => {
     const result = JSON.parse(await create.handler({ projectName: "probe" }));
 
     expect(result.value.defaultsApplied.gitInit).toBe(true);
+  });
+
+  it("490: the ship step names extension_project_create and what it needs, never the /new?template deploy link", async () => {
+    scaffoldTarget = path.join(tmpDir(), "probe");
+
+    const result = JSON.parse(await create.handler({ projectName: "probe", template: "content-react" }));
+    const steps: string[] = result.value.nextSteps;
+    const ship = steps[steps.length - 1]!;
+
+    expect(result.value.deployUrl).toBeUndefined();
+    expect(result.value.ship.tool).toBe("extension_project_create");
+    expect(result.value.ship.needs.join(" ")).toMatch(/project: .*<workspace>\/<project>/);
+    expect(result.value.ship.needs.join(" ")).toMatch(/repo: .*pushed/);
+    expect(ship).toMatch(/^To ship: extension_create scaffolds and runs locally, it does not host\./);
+    expect(ship).toContain("extension_project_create (project: '<workspace>/probe', repo: '<owner>/<repo>')");
+    expect(ship).toContain("push this directory to a GitHub repository");
+    expect(ship).not.toContain("to deploy this template");
+    expect(ship).not.toMatch(/Open https?:\/\//);
+  });
+
+  it("493: the scaffolder is handed the catalog's commit and the answer names the commit the scaffold record carries", async () => {
+    delete process.env.EXTENSION_CREATE_TEMPLATE_REF;
+    recordRef = PINNED_COMMIT;
+    scaffoldTarget = path.join(tmpDir(), "probe");
+
+    const result = JSON.parse(await create.handler({ projectName: "probe", template: "content-react" }));
+
+    expect(refSeen).toBe(PINNED_COMMIT);
+    expect(process.env.EXTENSION_CREATE_TEMPLATE_REF).toBeUndefined();
+    expect(result.value.sourceCommit).toBe(PINNED_COMMIT);
+    expect(result.value.nextSteps[0]).toContain(`template content-react from extension-js/examples at ${PINNED_COMMIT}`);
+    expect(result.warnings.join(" ")).not.toContain("while extension_templates describes");
+  });
+
+  it("493: a scaffold recorded at another commit is named beside the catalog's, and a person's own ref is kept", async () => {
+    const theirs = "6443985200d0a27526662fc7be5d13fe66a0fa2b";
+    process.env.EXTENSION_CREATE_TEMPLATE_REF = theirs;
+    recordRef = theirs;
+    scaffoldTarget = path.join(tmpDir(), "probe");
+
+    const result = JSON.parse(await create.handler({ projectName: "probe", template: "content-react" }));
+
+    expect(refSeen).toBe(theirs);
+    expect(process.env.EXTENSION_CREATE_TEMPLATE_REF).toBe(theirs);
+    expect(result.value.sourceCommit).toBe(theirs);
+    expect(result.warnings).toContainEqual(
+      expect.stringContaining(`The scaffold came from extension-js/examples at ${theirs} while extension_templates describes ${PINNED_COMMIT}`),
+    );
+  });
+
+  it("496: a dead EXTENSION_MCP_ENGINE_DIR turns the open step into fix or unset it, with the refusal's own words", async () => {
+    const empty = tmpDir();
+    process.env[ENGINE_DIR_ENV] = empty;
+    delete process.env[ENGINE_BIN_ENV];
+    scaffoldTarget = path.join(tmpDir(), "probe");
+
+    const result = JSON.parse(await create.handler({ projectName: "probe" }));
+    const steps: string[] = result.value.nextSteps;
+
+    expect(result.ok).toBe(true);
+    expect(steps[1]).toMatch(/^Fix or unset EXTENSION_MCP_ENGINE_DIR before extension_dev, extension_build or extension_start, which can only refuse until then: /);
+    expect(steps[1]).toContain(`EXTENSION_MCP_ENGINE_DIR=${empty} names no engine bin`);
+    expect(steps[1]).toContain("extension_doctor shows the paths it expects");
+    expect(steps[1].indexOf("Fix or unset")).toBeLessThan(steps[1].indexOf("call extension_dev yourself"));
+    expect(result.warnings).toContainEqual(expect.stringContaining(`EXTENSION_MCP_ENGINE_DIR=${empty} names no engine bin`));
   });
 
   it("documents the name alias and the cwd default in the schema itself", () => {
