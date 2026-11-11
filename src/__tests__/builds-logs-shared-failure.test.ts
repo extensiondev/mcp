@@ -63,6 +63,17 @@ const SHARED_FAILURE_LOGS = {
 
 const LEGACY_LOGS = { buildId: "b418732", runUrl: RUN_URL, runUrlAvailable: true, items: PENDING };
 
+const PLATFORM_LINE = "Error: This snapshot does not carry the pinned platform tools";
+const REPORT_URL = "https://github.com/extensiondev/mcp/issues";
+
+const PLATFORM_FAULT_LOGS = {
+  ...SHARED_FAILURE_LOGS,
+  run: {
+    ...SHARED_FAILURE_LOGS.run,
+    failedJob: { name: JOB, step: null, conclusion: "failure", lines: ["Run ./.github/actions/restore-snapshot", PLATFORM_LINE, "Process completed with exit code 1."] },
+  },
+};
+
 const FAILED_DETAIL = {
   id: "b418732",
   buildId: "b418732",
@@ -143,6 +154,48 @@ describe("extension_builds logs names a failure in a step every browser shares",
 
     expect(fenced.indexOf('"untrusted":')).toBeLessThan(fenced.indexOf("Exchange returned 403"));
     expect(fenced.lastIndexOf("Exchange returned 403")).toBeLessThan(fenced.indexOf('"untrustedEnd":"</untrusted-data-b207>"'));
+  });
+
+  it("ledger 507: logs on a build that failed before any project command ran says it is a platform fault, not to rebuild, and where to report it with the line", async () => {
+    if (process.platform === "win32") return;
+
+    routes[`/api/projects/${PROJECT_ID}/builds/b418732`] = { body: { ...FAILED_DETAIL, failureCause: { kind: "no_step_ran", jobName: JOB } } };
+    routes[`/api/projects/${PROJECT_ID}/builds/b418732/logs`] = { body: PLATFORM_FAULT_LOGS };
+
+    const out = await readLogs();
+
+    expect(out.ok).toBe(true);
+    expect(out.hint.startsWith("This is a platform fault, nothing in the project caused it")).toBe(true);
+    expect(out.hint).toContain("do not rebuild");
+    expect(out.hint).toContain(`Report it at ${REPORT_URL} with build b418732`);
+    expect(out.hint).toContain(PLATFORM_LINE);
+    expect(out.hint).toContain("/builds/b418732");
+    expect(out.value.fault).toEqual({ owner: "platform", kind: "no_step_ran", jobName: JOB, buildId: "b418732", reportUrl: REPORT_URL, line: PLATFORM_LINE });
+    expect(out.value.items.map((item: { status: string }) => item.status)).toEqual(["skipped", "skipped", "skipped"]);
+  });
+
+  it("ledger 507: get on the same build carries the platform fault and names logs for the line, while a step_failed build keeps its words", async () => {
+    if (process.platform === "win32") return;
+
+    routes[`/api/projects/${PROJECT_ID}/builds/b418732`] = { body: { ...FAILED_DETAIL, failureCause: { kind: "no_step_ran", jobName: JOB } } };
+
+    const out = JSON.parse(await builds({ action: "get", buildId: "b418732", api: API }));
+
+    expect(out.ok).toBe(true);
+    expect(out.hint).toContain("This is a platform fault, nothing in the project caused it");
+    expect(out.hint).toContain(`Report it at ${REPORT_URL} with build b418732`);
+    expect(out.hint).toContain('extension_builds action:"logs"');
+    expect(out.value.fault).toEqual({ owner: "platform", kind: "no_step_ran", jobName: JOB, buildId: "b418732", reportUrl: REPORT_URL });
+
+    routes[`/api/projects/${PROJECT_ID}/builds/b418732`] = { body: FAILED_DETAIL };
+
+    const stepFailed = JSON.parse(await builds({ action: "get", buildId: "b418732", api: API }));
+    const stepFailedLogs = await readLogs();
+
+    expect(stepFailed.value.fault).toBeUndefined();
+    expect(stepFailed.hint).not.toContain("platform fault");
+    expect(stepFailedLogs.value.fault).toBeUndefined();
+    expect(stepFailedLogs.hint.startsWith(`The run failed in ${JOB} at step ${STEP} before any browser built:`)).toBe(true);
   });
 
   it("answers skipped with the reason and never pending on a concluded run", async () => {

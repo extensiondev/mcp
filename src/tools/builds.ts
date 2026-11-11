@@ -34,7 +34,7 @@ import { CONFIGURE_CHANNEL, DELETE_CHANNEL, configureChannel, deleteChannelConso
 import { DOWNLOAD_ACTION, download, type DownloadArgs } from "./builds-download";
 import { notRecordedYet, readBuildWaiting } from "./builds-get-wait";
 import { DEFAULT_LIMIT, MAX_LIMIT, listBuilds } from "./builds-list";
-import { buildFailures, readLogs } from "./builds-logs";
+import { buildFailures, platformFault, readLogs } from "./builds-logs";
 import { rebuild } from "./builds-rebuild";
 import { recheck } from "./builds-recheck";
 
@@ -327,6 +327,7 @@ async function getBuild(args: HandlerArgs): Promise<string> {
   const failing = Object.entries(integrityByBrowser).filter(([, v]) => (v as Row).ok !== true).map(([k]) => k);
   const failures = buildFailures(detail.json);
   const buildPage = buildConsoleUrl(opened.api, canonical, args.api);
+  const fault = platformFault(detail.json, canonical, [], 'extension_builds action:"logs" with this buildId');
   const derivedRows = unrecorded.map((name) => unrecordedRow(name, isRow(integrityByBrowser[name]) ? (integrityByBrowser[name] as Row) : null));
   const figures = browserFigures(
     derivedRows.length ? { ...detail.json, browsers: [...recordRows, ...derivedRows] } : detail.json,
@@ -360,6 +361,7 @@ async function getBuild(args: HandlerArgs): Promise<string> {
       integrity: integrityByBrowser,
       ...(unchecked.length ? { unchecked } : {}),
       ...(failures ? { failures: failures.value } : {}),
+      ...(fault ? { fault: fault.value } : {}),
       usage: usage.ok ? usageValue(usage.json) : { recorded: "unknown" },
     },
     hint: `${
@@ -374,7 +376,7 @@ async function getBuild(args: HandlerArgs): Promise<string> {
           ? `; ${verdict.join("; ")}`
           : "; every integrity check passed"
         : ""
-    }.${pinned ? ` It is ${pinned}.` : ""}${failures ? ` ${failures.sentence}` : ""} Pass action:"logs" with this buildId for its log lines${
+    }.${pinned ? ` It is ${pinned}.` : ""}${failures ? ` ${failures.sentence}` : ""}${fault ? ` ${fault.sentence}` : ""} Pass action:"logs" with this buildId for its log lines${
       artifactRows.some((row) => isRow(row) && row.download) ? `, or action:"${DOWNLOAD_ACTION}" with a browser to save its package to disk (artifacts[].download names the call)` : ""
     }.`,
     warnings: [

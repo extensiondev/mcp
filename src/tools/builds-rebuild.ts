@@ -46,6 +46,7 @@ import {
   type ActArgs,
   type Row,
 } from "./builds-acts";
+import { platformFault } from "./builds-logs";
 import { ALREADY_RUNNING_CODE, followRunning, followedSentence, heldAsRunning, type FinishedBuild } from "./builds-rebuild-running";
 
 const REBUILD_ACTION = "extension_builds.rebuild";
@@ -312,13 +313,17 @@ async function dispatch(call: RebuildCall, found: FinishedBuild | null): Promise
   const stripWarning = stripped.length ? `The platform left out ${stripped.join(", ")}, which this plan does not build.` : null;
 
   if (waited.failed) {
+    const fault = platformFault(waited.record, commit, [], `extension_builds action:"logs" with buildId ${commit}`);
+
     return envelope({
       ok: false,
       command: COMMAND,
       status: "build-failed",
-      value,
+      value: { ...value, ...(fault ? { fault: fault.value } : {}) },
       error: { code: "E_PLATFORM", name: "BuildFailed", message: `The platform's record of ${named} reads ${waited.outcome.status} after this rebuild.` },
-      hint: `${started} The rebuild finished and failed: read extension_builds action:"logs" with buildId ${commit} for the failed browser and step, and the build page ${buildPage}. ${made}`,
+      hint: fault
+        ? `${started} The rebuild finished and failed. ${fault.sentence} The build page is ${buildPage}. ${made}`
+        : `${started} The rebuild finished and failed: read extension_builds action:"logs" with buildId ${commit} for the failed browser and step, and the build page ${buildPage}. ${made}`,
       warnings: [stripWarning],
     });
   }

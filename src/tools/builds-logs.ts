@@ -10,9 +10,13 @@ import { stampNow } from "../lib/act-outcome";
 import { buildName, buildNumberOf } from "../lib/builds-list-row";
 import { envelope } from "../lib/envelope";
 import { projectApiGet, projectApiReadFailure, type ProjectApi, type ProjectApiRead } from "../lib/project-api";
+import { WRITE_FAILURE_REPORT_URL } from "../lib/settings-write";
 import { COMMAND, isRow, text, type Row } from "./builds-acts";
 
 export const LOG_TAIL = 200;
+
+const NO_STEP_RAN = "no_step_ran";
+const EXIT_LINE = /^Process completed with exit code/i;
 
 const NOT_RUN_REASON = "the run failed before this browser's job started";
 const CANCELLED_REASON = "the run was canceled before this browser's job started";
@@ -148,6 +152,21 @@ function failedJobSentence(failedJob: Row, beforeBrowsers: boolean): string {
   return beforeBrowsers ? `The run failed in ${where} before any browser built:` : `The run failed in ${where}:`;
 }
 
+export function platformFault(detail: unknown, buildId: string, lines: string[], lineSource: string): { value: Row; sentence: string } | null {
+  const cause = isRow(detail) && isRow(detail.failureCause) ? detail.failureCause : null;
+  if (!cause || text(cause.kind) !== NO_STEP_RAN) return null;
+
+  const job = text(cause.jobName);
+  const line = [...lines].reverse().find((said) => said && !EXIT_LINE.test(said)) ?? "";
+  const where = job ? `the platform's ${job} job` : "a platform step";
+  const paste = line ? `the platform's line: ${line}` : `the platform's line from ${lineSource}`;
+
+  return {
+    value: { owner: "platform", kind: NO_STEP_RAN, ...(job ? { jobName: job } : {}), buildId, reportUrl: WRITE_FAILURE_REPORT_URL, ...(line ? { line } : {}) },
+    sentence: `This is a platform fault, nothing in the project caused it: ${where} failed before any project command ran, so do not rebuild. Report it at ${WRITE_FAILURE_REPORT_URL} with build ${buildId} and ${paste}.`,
+  };
+}
+
 function legacyBuildFailed(detail: ProjectApiRead<Row>): { failed: boolean; cause: Row | null } {
   if (!detail.ok || !isRow(detail.json)) return { failed: false, cause: null };
 
@@ -187,11 +206,15 @@ export async function readLogs(read: LogsRead): Promise<string> {
   const cancelled = run?.conclusion === "cancelled" ? cancelledSentence(canonical, run.supersededBy, number) : "";
   const readAt = stampNow();
   const waiting = run && !concluded(run) && !legacy.failed ? items.filter(waitingForLines).map((item) => text(item.browser)) : [];
+  const failedLines = run?.failedJob && Array.isArray(run.failedJob.lines) ? (run.failedJob.lines as string[]) : [];
+  const fault = platformFault(detail.ok ? detail.json : null, canonical, failedLines, `the build page ${read.consoleUrl}`);
 
   let hint: string;
 
   if (cancelled) {
     hint = `${cancelled} The build page is ${read.consoleUrl}.`;
+  } else if (fault) {
+    hint = [fault.sentence, ...(failedLines.length ? ["The platform's lines:", ...failedLines] : []), `The build page is ${read.consoleUrl}.`].join("\n");
   } else if (run?.failedJob) {
     const lines = (run.failedJob.lines as string[]) ?? [];
     hint = [failedJobSentence(run.failedJob, beforeBrowsers), ...lines].join("\n");
@@ -229,6 +252,7 @@ export async function readLogs(read: LogsRead): Promise<string> {
       buildId: canonical,
       ...(number ? { buildNumber: number } : {}),
       ...(run ? { run } : {}),
+      ...(fault ? { fault: fault.value } : {}),
       items,
       trackUrl: read.consoleUrl,
       ...(cancelled ? { sayToPerson: cancelled } : {}),
