@@ -6,6 +6,10 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
 import { PROD_ORIGINS } from "@extension.dev/urls/origins";
 
 import { mcpOrigins } from "./origins";
@@ -179,6 +183,84 @@ export function stripTemplatePathPrefix(
   }
 
   return relativePath;
+}
+
+const TREE_API_BASE = "https://api.github.com/repos/extension-js/examples/git/trees";
+
+const treeMemo = new Map<string, Promise<string[] | null>>();
+
+function treeCacheFile(commit: string, slug: string): string {
+  return path.join(os.homedir(), ".cache", "extension-js", "template-trees", commit, `${slug}.json`);
+}
+
+function readCachedTree(file: string): string[] | null {
+  try {
+    const cached: unknown = JSON.parse(fs.readFileSync(file, "utf8"));
+
+    return Array.isArray(cached) && cached.length > 0 && cached.every((entry) => typeof entry === "string")
+      ? (cached as string[])
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedTree(file: string, files: string[]): void {
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const tmpFile = `${file}.${process.pid}.tmp`;
+    fs.writeFileSync(tmpFile, JSON.stringify(files));
+    fs.renameSync(tmpFile, file);
+  } catch {
+  }
+}
+
+async function fetchTemplateTree(commit: string, slug: string): Promise<string[] | null> {
+  try {
+    const response = await fetch(
+      `${TREE_API_BASE}/${commit}:examples/${encodeURIComponent(slug)}?recursive=1`,
+      { headers: { Accept: "application/vnd.github+json" } },
+    );
+    if (!response.ok) return null;
+
+    const body = (await response.json()) as {
+      truncated?: boolean;
+      tree?: Array<{ type?: string; path?: string }>;
+    };
+    if (body.truncated || !Array.isArray(body.tree)) return null;
+
+    const files = body.tree
+      .filter((entry) => entry.type === "blob" && typeof entry.path === "string")
+      .map((entry) => entry.path as string)
+      .sort();
+
+    return files.length > 0 ? files : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function templateFileTree(slug: string): Promise<string[] | null> {
+  const commit = pinnedTemplateCommit();
+  const key = `${commit}/${slug}`;
+  const pending = treeMemo.get(key);
+  if (pending) return pending;
+
+  const request = (async () => {
+    const file = treeCacheFile(commit, slug);
+    const cached = readCachedTree(file);
+    if (cached) return cached;
+
+    const files = await fetchTemplateTree(commit, slug);
+    if (files) writeCachedTree(file, files);
+    else treeMemo.delete(key);
+
+    return files;
+  })();
+
+  treeMemo.set(key, request);
+
+  return request;
 }
 
 export async function templateFileUrls(

@@ -87,6 +87,53 @@ afterEach(() => {
   else process.env.EXTENSION_TEMPLATES_COMMIT = savedCommit;
 });
 
+describe("492: a template's file tree is read once at the pin", () => {
+  const treeUrl = (commit: string, slug: string) =>
+    `https://api.github.com/repos/extension-js/examples/git/trees/${commit}:examples/${slug}?recursive=1`;
+
+  it("lists the blobs of the pinned tree sorted, serves the second call from the memo and the next process from disk", async () => {
+    const { PINNED_COMMIT, templateFileTree } = await load();
+    const seen = serve({
+      [treeUrl(PINNED_COMMIT, "action")]: {
+        sha: "tree",
+        truncated: false,
+        tree: [
+          { path: "src", type: "tree" },
+          { path: "src/manifest.json", type: "blob" },
+          { path: "package.json", type: "blob" },
+          { path: ".gitignore", type: "blob" },
+        ],
+      },
+    });
+
+    expect(await templateFileTree("action")).toEqual([".gitignore", "package.json", "src/manifest.json"]);
+    expect(await templateFileTree("action")).toEqual([".gitignore", "package.json", "src/manifest.json"]);
+    expect(seen.filter((url) => url.includes("git/trees"))).toHaveLength(1);
+
+    const cached = path.join(cacheDir, "template-trees", PINNED_COMMIT, "action.json");
+    expect(JSON.parse(fs.readFileSync(cached, "utf8"))).toEqual([".gitignore", "package.json", "src/manifest.json"]);
+
+    const fresh = await load();
+    const seenAgain = serve({});
+    expect(await fresh.templateFileTree("action")).toEqual([".gitignore", "package.json", "src/manifest.json"]);
+    expect(seenAgain).toEqual([]);
+  });
+
+  it("answers null on a refused or truncated tree and caches nothing", async () => {
+    const { PINNED_COMMIT, templateFileTree } = await load();
+    const seen = serve({
+      [treeUrl(PINNED_COMMIT, "action")]: 403,
+      [treeUrl(PINNED_COMMIT, "huge")]: { truncated: true, tree: [{ path: "a", type: "blob" }] },
+    });
+
+    expect(await templateFileTree("action")).toBeNull();
+    expect(await templateFileTree("huge")).toBeNull();
+    expect(await templateFileTree("action")).toBeNull();
+    expect(seen.filter((url) => url.endsWith("action?recursive=1"))).toHaveLength(2);
+    expect(fs.existsSync(path.join(cacheDir, "template-trees"))).toBe(false);
+  });
+});
+
 describe("the registry catalog behind extension_templates", () => {
   it("lists the pinned catalog live, downloads included, and asks raw GitHub for nothing", async () => {
     const { PINNED_COMMIT, listTemplatesWithSource, resolvedTemplateCommit } = await load();

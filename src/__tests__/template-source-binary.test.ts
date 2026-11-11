@@ -13,11 +13,14 @@ vi.mock("../lib/templates-cache", () => ({
           permissions: [],
           patternExplanation: "",
           keyFiles: [],
+          configFiles: ["tsconfig.json", "extension.config.js"],
           repositoryUrl: "https://example.invalid/action",
           files: ["action/src/images/icon.png", "action/manifest.json"],
         }
       : null,
 }));
+
+let tree: string[] | null = null;
 
 vi.mock("../lib/template-artifact-source", () => ({
   stripTemplatePathPrefix: (slug: string, file: string) =>
@@ -27,6 +30,7 @@ vi.mock("../lib/template-artifact-source", () => ({
     `https://example.invalid/${slug}/${file}`,
   ],
   resolvedTemplateCommit: async () => "abc1234",
+  templateFileTree: async () => tree,
 }));
 
 const PNG = Buffer.from([
@@ -71,6 +75,53 @@ async function readValue(files: string[]) {
 
   return frame;
 }
+
+describe("492: the file listing names every file the tool can read", () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+    serve();
+  });
+
+  it("lists the template's whole tree at the pin, root files included, and names the scaffolding files", async () => {
+    tree = [
+      ".gitignore",
+      "README.md",
+      "components.json",
+      "extension.config.js",
+      "package.json",
+      "postcss.config.js",
+      "screenshot.png",
+      "src/manifest.json",
+      "template.meta.json",
+      "template.spec.ts",
+      "tsconfig.json",
+    ];
+
+    const frame = JSON.parse(await readTemplateSource({ slug: "action" }));
+
+    expect(frame.status).toBe("file-list");
+    expect(frame.value.filesSource).toBe("tree");
+    expect(frame.value.files).toEqual(tree);
+    expect(frame.value.files).toEqual(expect.arrayContaining(["package.json", "components.json", "postcss.config.js", "tsconfig.json"]));
+    expect(frame.hint).toContain("Every file of the template at sourceCommit");
+    expect(frame.hint).toContain("template.meta.json, template.spec.ts, screenshot.png are catalog scaffolding that extension_create does not copy");
+    expect(frame.warnings).toEqual([]);
+  });
+
+  it("falls back to the catalog's files plus its config files and says what that listing leaves out", async () => {
+    tree = null;
+
+    const frame = JSON.parse(await readTemplateSource({ slug: "action" }));
+
+    expect(frame.value.filesSource).toBe("catalog");
+    expect(frame.value.files).toEqual(["extension.config.js", "manifest.json", "src/images/icon.png", "tsconfig.json"]);
+    expect(frame.warnings).toEqual([
+      expect.stringContaining("leaves out root files such as package.json, README.md and STORE.md"),
+    ]);
+
+    expect(frame.hint).not.toContain("scaffolding");
+  });
+});
 
 describe("a template icon reaches the agent as an image, not as mojibake", () => {
   beforeEach(() => {

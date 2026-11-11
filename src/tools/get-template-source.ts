@@ -10,12 +10,15 @@ import { getTemplateBySlug } from "../lib/templates-cache";
 import {
   stripTemplatePathPrefix,
   templateCatalogUrl,
+  templateFileTree,
   templateFileUrls,
   resolvedTemplateCommit,
 } from "../lib/template-artifact-source";
 import { envelope } from "../lib/envelope";
 
 const COMMAND = "extension_templates";
+
+const SCAFFOLDING_FILES = ["template.meta.json", "template.spec.ts", "screenshot.png"];
 
 const TEXTUAL =
   /\.(json|js|mjs|cjs|ts|tsx|jsx|html|htm|css|scss|sass|less|svg|txt|md|map|vue|svelte|ya?ml)$/i;
@@ -69,17 +72,36 @@ export async function readTemplateSource(args: {
   };
 
   if (!args.files?.length) {
+    const tree = await templateFileTree(template.slug);
+    const catalogFiles = [
+      ...template.files.map((f) => stripTemplatePathPrefix(template.slug, f)),
+      ...(template.configFiles ?? []),
+    ];
+    const files = tree ?? [...new Set(catalogFiles)].sort();
+    const scaffolding = SCAFFOLDING_FILES.filter((name) => files.includes(name));
+
     return envelope({
       ok: true,
       command: COMMAND,
       status: "file-list",
       value: {
         ...meta,
-        files: template.files.map((f) =>
-          stripTemplatePathPrefix(template.slug, f),
-        ),
+        filesSource: tree ? "tree" : "catalog",
+        files,
       },
-      hint: "Pass specific file paths in the files parameter to read their contents.",
+      hint: [
+        tree
+          ? `Every file of the template at sourceCommit. Pass specific file paths in the files parameter to read their contents.`
+          : "Pass specific file paths in the files parameter to read their contents.",
+        ...(scaffolding.length
+          ? [`${scaffolding.join(", ")} ${scaffolding.length === 1 ? "is" : "are"} catalog scaffolding that extension_create does not copy into a project.`]
+          : []),
+      ].join(" "),
+      warnings: tree
+        ? []
+        : [
+            "The template's file tree could not be read from GitHub, so this listing is the catalog's: it names the source and config files and leaves out root files such as package.json, README.md and STORE.md, which the files parameter can still read.",
+          ],
     });
   }
 
