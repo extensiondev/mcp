@@ -299,3 +299,87 @@ describe("a debug-port verb sent during a landing extension_start run answers no
     expect(out.warnings.filter((line: string) => /^This call waited .* for the chrome extension_start run to land/.test(line))).toHaveLength(1);
   }, 15_000);
 });
+
+describe("two calls on one session run in the order they arrived", () => {
+  const sessionSchema = {
+    type: "object",
+    properties: { projectPath: { type: "string" }, browser: { type: "string" }, surface: { type: "string" }, context: { type: "string" } },
+  };
+  const answer = (command: string) => envelope({ ok: true, command, status: "ok", value: null });
+  const parsed = (frame: Awaited<ReturnType<ReturnType<typeof createToolDispatcher>>>) => JSON.parse(frame.content[0]?.text ?? "{}");
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const waitedLine = /^This call waited \d+ ms for the extension_open call ahead of it on the same session to finish before it ran; calls on one session run in the order they arrive\.$/;
+
+  function sessionTools(finished: string[], openFails = false): ToolModule[] {
+    return [
+      {
+        schema: { name: "extension_open", description: "open", inputSchema: sessionSchema },
+        handler: async () => {
+          await sleep(300);
+          finished.push("extension_open");
+          if (openFails) throw new Error("the open fell over");
+
+          return answer("extension_open");
+        },
+      },
+      {
+        schema: { name: "extension_screenshot", description: "shoot", inputSchema: sessionSchema },
+        handler: async () => {
+          finished.push("extension_screenshot");
+
+          return answer("extension_screenshot");
+        },
+      },
+    ];
+  }
+
+  it("a screenshot sent beside an open on the same session runs after the open finishes and says how long it waited", async () => {
+    const project = tmpProject();
+    const finished: string[] = [];
+    const dispatch = createToolDispatcher({ tools: sessionTools(finished), options: { features: ["local"], noShip: false } });
+
+    const [opened, shot] = await Promise.all([
+      dispatch({ name: "extension_open", arguments: { projectPath: project, browser: "chrome", surface: "popup" } }),
+      dispatch({ name: "extension_screenshot", arguments: { projectPath: project, context: "popup" } }),
+    ]);
+
+    expect(finished).toEqual(["extension_open", "extension_screenshot"]);
+    expect(parsed(opened).warnings).toEqual([]);
+    expect(parsed(shot).warnings).toEqual([expect.stringMatching(waitedLine)]);
+  });
+
+  it("calls on another project, another browser, or no project keep running side by side", async () => {
+    const project = tmpProject();
+    const other = tmpProject();
+    const finished: string[] = [];
+    const dispatch = createToolDispatcher({ tools: sessionTools(finished), options: { features: ["local"], noShip: false } });
+
+    const [, otherProject, otherBrowser, noProject] = await Promise.all([
+      dispatch({ name: "extension_open", arguments: { projectPath: project, browser: "chrome", surface: "popup" } }),
+      dispatch({ name: "extension_screenshot", arguments: { projectPath: other, browser: "chrome", context: "popup" } }),
+      dispatch({ name: "extension_screenshot", arguments: { projectPath: project, browser: "firefox", context: "popup" } }),
+      dispatch({ name: "extension_screenshot", arguments: { context: "popup" } }),
+    ]);
+
+    expect(finished).toEqual(["extension_screenshot", "extension_screenshot", "extension_screenshot", "extension_open"]);
+    expect(parsed(otherProject).warnings).toEqual([]);
+    expect(parsed(otherBrowser).warnings).toEqual([]);
+    expect(parsed(noProject).warnings).toEqual([]);
+  });
+
+  it("a call ahead that throws still hands the session to the next call", async () => {
+    const project = tmpProject();
+    const finished: string[] = [];
+    const dispatch = createToolDispatcher({ tools: sessionTools(finished, true), options: { features: ["local"], noShip: false } });
+
+    const [opened, shot] = await Promise.all([
+      dispatch({ name: "extension_open", arguments: { projectPath: project, browser: "chrome", surface: "popup" } }),
+      dispatch({ name: "extension_screenshot", arguments: { projectPath: project, browser: "chrome", context: "popup" } }),
+    ]);
+
+    expect(finished).toEqual(["extension_open", "extension_screenshot"]);
+    expect(parsed(opened).status).toBe("internal-error");
+    expect(parsed(shot).ok).toBe(true);
+    expect(parsed(shot).warnings).toEqual([expect.stringMatching(waitedLine)]);
+  });
+});

@@ -33,6 +33,7 @@ import { withCallApi } from "./origins";
 import { bindCallProject, stampAnsweredFor } from "./project-binding";
 import { followProjectMove, followSentence, movedAnswer } from "./project-move";
 import { scrubRunAnswer } from "./run-privacy";
+import { inSessionOrder, sessionLaneKey } from "./session-order";
 import { secretArgumentRefusal } from "./secret-arguments";
 import { createReloader, handoverState, type ActiveBuild, type BuildImporter, type ListedTool, type RebuiltCall, type ToolFrame } from "./server-reload";
 import { markListStale, reloadedWarning, serverStamp, staleEnvelope, type ServerStampReader } from "./server-stamp";
@@ -333,7 +334,12 @@ export function createToolSurface(setup: ToolHandlerOptions): {
         withApprovalLogin(login.login, () =>
         run(
           async () => {
-            if (!platform) return annotate(await withCallWaits(() => tool.handler(normalizedArgs)), { note: bound.note });
+            if (!platform) {
+              return annotate(
+                await withCallWaits(() => inSessionOrder(sessionLaneKey(normalizedArgs), name, () => tool.handler(normalizedArgs))),
+                { note: bound.note },
+              );
+            }
 
             const scoped = bindCallProject(name, normalizedArgs, tool.schema.inputSchema, options);
 
