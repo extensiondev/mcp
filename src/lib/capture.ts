@@ -38,6 +38,55 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+export interface CssViewport {
+  width: number;
+  height: number;
+}
+
+async function cssViewportOf(cdp: CDPClient, sessionId: string, timeoutMs: number): Promise<CssViewport | null> {
+  const metrics = (await cdp.sendCommand("Page.getLayoutMetrics", {}, sessionId, timeoutMs)) as
+    | { cssLayoutViewport?: { clientWidth?: number; clientHeight?: number } }
+    | undefined;
+  const width = metrics?.cssLayoutViewport?.clientWidth ?? 0;
+  const height = metrics?.cssLayoutViewport?.clientHeight ?? 0;
+
+  return width > 0 && height > 0 ? { width, height } : null;
+}
+
+function needsMeasuring(size: CaptureSize): boolean {
+  return Boolean(size.width || size.height || size.deviceScaleFactor) && (!size.width || !size.height);
+}
+
+async function measureCssViewport(port: number, targetId: string, timeoutMs: number): Promise<CssViewport | null> {
+  const cdp = new CDPClient();
+
+  try {
+    await cdp.connect(await CDPClient.discoverBrowserWsUrl(port));
+    const sessionId = await cdp.attachToTarget(targetId);
+
+    return await cssViewportOf(cdp, sessionId, timeoutMs);
+  } catch {
+    return null;
+  } finally {
+    cdp.disconnect();
+  }
+}
+
+export async function settleCaptureSize(port: number, targetId: string, size: CaptureSize, timeoutMs: number): Promise<CaptureSize> {
+  if (!needsMeasuring(size)) return size;
+
+  const viewport = await measureCssViewport(port, targetId, timeoutMs);
+  if (!viewport) return size;
+
+  return { ...size, width: size.width || viewport.width, height: size.height || viewport.height };
+}
+
+export function askedPixels(size: CaptureSize): CssViewport | null {
+  if (!size.deviceScaleFactor || !size.width || !size.height) return null;
+
+  return { width: Math.round(size.width * size.deviceScaleFactor), height: Math.round(size.height * size.deviceScaleFactor) };
+}
+
 export async function captureCdpTarget(
   port: number,
   targetId: string,
@@ -46,7 +95,8 @@ export async function captureCdpTarget(
 ): Promise<CaptureOutcome> {
   const cdp = new CDPClient();
   let sessionId = "";
-  let overridden = false;
+  let override: Record<string, unknown> | null = null;
+  let answered = false;
 
   try {
     await cdp.connect(await CDPClient.discoverBrowserWsUrl(port));
@@ -56,21 +106,13 @@ export async function captureCdpTarget(
       let { width, height } = size;
 
       if (!width || !height) {
-        const metrics = (await cdp.sendCommand("Page.getLayoutMetrics", {}, sessionId, timeoutMs)) as
-          | { cssLayoutViewport?: { clientWidth?: number; clientHeight?: number } }
-          | undefined;
-        width = width ?? metrics?.cssLayoutViewport?.clientWidth ?? 0;
-        height = height ?? metrics?.cssLayoutViewport?.clientHeight ?? 0;
+        const viewport = await cssViewportOf(cdp, sessionId, timeoutMs);
+        width = width || viewport?.width || 0;
+        height = height || viewport?.height || 0;
       }
 
-      await cdp.sendCommand(
-        "Emulation.setDeviceMetricsOverride",
-        { width, height, deviceScaleFactor: size.deviceScaleFactor ?? 0, mobile: false },
-        sessionId,
-        timeoutMs,
-      );
-
-      overridden = true;
+      override = { width, height, deviceScaleFactor: size.deviceScaleFactor ?? 0, mobile: false };
+      await cdp.sendCommand("Emulation.setDeviceMetricsOverride", override, sessionId, timeoutMs);
     }
 
     const shot = (await cdp.sendCommand(
@@ -79,6 +121,8 @@ export async function captureCdpTarget(
       sessionId,
       timeoutMs,
     )) as { data?: unknown } | undefined;
+
+    answered = true;
 
     if (typeof shot?.data !== "string" || !shot.data) {
       return { ok: false, message: "Page.captureScreenshot answered no image data" };
@@ -90,7 +134,9 @@ export async function captureCdpTarget(
 
     return { ok: false, message, ...(/timed out/i.test(message) ? { timedOut: true } : {}) };
   } finally {
-    if (overridden) {
+    if (override) {
+      if (!answered) await cdp.sendCommand("Emulation.setDeviceMetricsOverride", override, sessionId, 2_000).catch(() => {});
+
       await cdp.sendCommand("Emulation.clearDeviceMetricsOverride", {}, sessionId, 2_000).catch(() => {});
     }
 

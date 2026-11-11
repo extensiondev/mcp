@@ -65,6 +65,83 @@ async function browserWithPageBehindOtherWindows(targets = [PAGE, WORKER]): Prom
   return chrome;
 }
 
+interface Pixels {
+  width: number;
+  height: number;
+}
+
+async function retinaBrowserBehindOtherWindows(answerPixels: (pixels: Pixels) => Pixels = (pixels) => pixels): Promise<{ view: () => Pixels }> {
+  const ratio = 2;
+  let shownTab = 11;
+  let view: Pixels = { width: 1200, height: 762 };
+  let before: Pixels | null = null;
+  let emulated: (Pixels & { deviceScaleFactor: number }) | null = null;
+
+  chrome = await startFakeChrome([PAGE, WORKER], (command) => {
+    if (command.method === "Browser.getWindowForTarget") return { windowId: WINDOW_ID, bounds: { windowState: "normal" } };
+
+    if (command.method === "Runtime.evaluate") {
+      const expression = String(command.params.expression);
+
+      if (expression.includes("chrome.tabs.create")) {
+        shownTab = 99;
+
+        return { result: { type: "object", value: { shownId: 11, blankId: 99 } } };
+      }
+
+      if (expression.includes("chrome.tabs.remove")) {
+        shownTab = 11;
+
+        return { result: { type: "boolean", value: true } };
+      }
+    }
+
+    if (command.method === "Emulation.setDeviceMetricsOverride") {
+      emulated = { width: Number(command.params.width), height: Number(command.params.height), deviceScaleFactor: Number(command.params.deviceScaleFactor) };
+      before ??= view;
+      view = { width: emulated.width, height: emulated.height };
+
+      return {};
+    }
+
+    if (command.method === "Emulation.clearDeviceMetricsOverride") {
+      if (before && emulated && view.width === emulated.width && view.height === emulated.height) view = before;
+
+      before = null;
+      emulated = null;
+
+      return {};
+    }
+
+    if (command.method === "Page.getLayoutMetrics") {
+      const css = emulated ?? view;
+
+      return { cssLayoutViewport: { clientWidth: css.width, clientHeight: css.height } };
+    }
+
+    if (command.method === "Page.captureScreenshot") {
+      const original = view;
+      const dpfactor = emulated ? (emulated.deviceScaleFactor || ratio) / ratio : 1;
+      if (emulated) view = { width: Math.floor(emulated.width * dpfactor), height: Math.floor(emulated.height * dpfactor) };
+      if (shownTab === 11) return HANG;
+
+      const pixels = emulated
+        ? { width: Math.round(emulated.width * dpfactor * ratio), height: Math.round(emulated.height * dpfactor * ratio) }
+        : { width: view.width * ratio, height: view.height * ratio };
+      view = original;
+      const answered = answerPixels(pixels);
+
+      return { data: solidPng(answered.width, answered.height).toString("base64") };
+    }
+
+    return undefined;
+  });
+
+  session(chrome.port);
+
+  return { view: () => view };
+}
+
 function session(port: number): void {
   vi.stubGlobal("fetch", onlyFakeChromeFetch(() => port));
   const file = readyContractPath(dir, "chrome");
@@ -213,4 +290,47 @@ describe("extension_screenshot captures the shown tab of a window behind other w
     expect(result.error.message).toContain("(1500ms)");
     expect((chrome?.commands ?? []).filter((c) => c.method === "Page.captureScreenshot")).toHaveLength(1);
   }, 30_000);
+});
+
+describe("495: deviceScaleFactor alone on a Retina display, when the first capture times out and the blank-tab retry paints", () => {
+  it("answers a 1200x762 image for factor 1 of a 1200x762 viewport, overrides at that size each time, and gives the view its size back", async () => {
+    const retina = await retinaBrowserBehindOtherWindows();
+
+    const result = JSON.parse(await screenshot.handler({ projectPath: dir, targetId: PAGE.id, path: "shots/demo.png", deviceScaleFactor: 1, timeout: 6_000 }));
+
+    expect(result.status).toBe("captured");
+    expect(result.value.behindWindow).toMatchObject({ tried: true, shown: true });
+    expect([result.value.width, result.value.height]).toEqual([1200, 762]);
+    expect(result.warnings.join(" ")).not.toContain("was expected");
+
+    const overrides = (chrome?.commands ?? []).filter((c) => c.method === "Emulation.setDeviceMetricsOverride").map((c) => c.params);
+    expect(overrides.length).toBeGreaterThan(1);
+    for (const override of overrides) expect(override).toMatchObject({ width: 1200, height: 762, deviceScaleFactor: 1 });
+
+    const page = (chrome?.commands ?? []).filter((c) => c.sessionId === `S-${PAGE.id}`).map((c) => c.method);
+    const hung = page.indexOf("Page.captureScreenshot");
+    expect(page.slice(hung, hung + 3)).toEqual(["Page.captureScreenshot", "Emulation.setDeviceMetricsOverride", "Emulation.clearDeviceMetricsOverride"]);
+    expect(retina.view()).toEqual({ width: 1200, height: 762 });
+  }, 20_000);
+
+  it("answers 600x381 for factor 0.5 of the same viewport, the factor times the CSS size", async () => {
+    await retinaBrowserBehindOtherWindows();
+
+    const result = JSON.parse(await screenshot.handler({ projectPath: dir, targetId: PAGE.id, path: "shots/demo.png", deviceScaleFactor: 0.5, timeout: 6_000 }));
+
+    expect(result.status).toBe("captured");
+    expect([result.value.width, result.value.height]).toEqual([600, 381]);
+    const overrides = (chrome?.commands ?? []).filter((c) => c.method === "Emulation.setDeviceMetricsOverride");
+    expect(overrides[overrides.length - 1]?.params).toMatchObject({ width: 1200, height: 762, deviceScaleFactor: 0.5 });
+  }, 20_000);
+
+  it("names the size the browser answered against the one asked when they differ", async () => {
+    await retinaBrowserBehindOtherWindows((pixels) => ({ width: pixels.width / 2, height: Math.floor(pixels.height / 2) }));
+
+    const result = JSON.parse(await screenshot.handler({ projectPath: dir, targetId: PAGE.id, path: "shots/demo.png", deviceScaleFactor: 1, timeout: 6_000 }));
+
+    expect(result.status).toBe("captured");
+    expect([result.value.width, result.value.height]).toEqual([600, 381]);
+    expect(result.warnings.join(" ")).toContain("answered a 600 x 381 image where 1200 x 762 was expected (a 1200 x 762 CSS viewport at deviceScaleFactor 1)");
+  }, 20_000);
 });

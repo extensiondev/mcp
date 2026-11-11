@@ -46,6 +46,7 @@ import {
 import { BEHIND_WINDOW_CAPTURED, captureCdpPage, type BehindWindow } from "../lib/capture-behind-window";
 import { hiddenTabSentence, type HiddenTab } from "../lib/capture-hidden-tab";
 import {
+  askedPixels,
   captureRdpTab,
   pngDimensions,
   resolveScreenshotPath,
@@ -184,12 +185,19 @@ function captured(
   behindWindow?: BehindWindow,
   hiddenTab?: HiddenTab,
   capturedIn: CapturedIn | null = null,
+  asked: CaptureSize | null = null,
 ): string {
   if (!outcome.ok) return captureFailure(outcome, url, behindWindow);
 
   const png = outcome.png;
   const size = pngDimensions(png);
   if (!size) return refuse("capture-failed", "E_CAPTURE_FAILED", `The browser answered data for ${url} that is not a .png image.`);
+
+  const expected = asked ? askedPixels(asked) : null;
+  const sizeNote =
+    expected && asked && (expected.width !== size.width || expected.height !== size.height)
+      ? `The browser answered a ${size.width} x ${size.height} image where ${expected.width} x ${expected.height} was expected (a ${asked.width} x ${asked.height} CSS viewport at deviceScaleFactor ${asked.deviceScaleFactor}); width and height name the image as answered.`
+      : null;
 
   if (args.browserCapture && isCaptureBrowser(browser)) return capturedForBrowser(args, browser, context, png, url, transport, warnings, capturedIn, targetId);
 
@@ -203,7 +211,7 @@ function captured(
     command: COMMAND,
     status: "captured",
     value: { browser, context, url, ...(targetId ? { targetId } : {}), ...(behindWindow?.tried ? { behindWindow } : {}), ...(hiddenTab ? { hiddenTab } : {}), path: file, width: size.width, height: size.height, bytes: png.length, transport },
-    warnings,
+    warnings: [...warnings, sizeNote],
     hint: `The image is ${file} (${size.width} x ${size.height} pixels). Open it with your image reader to look at it.`,
   });
 }
@@ -531,10 +539,10 @@ async function onChromium(args: Args, browser: string, context: string, timeoutM
   }
 
   const capturedIn = args.browserCapture && isCaptureBrowser(browser) ? await capturedInChromium(resolved.port, browser, timeoutMs) : null;
-  const { outcome, behindWindow, hiddenTab } = await captureCdpPage(resolved.port, target.targetId, args, timeoutMs, session);
+  const { outcome, behindWindow, hiddenTab, size } = await captureCdpPage(resolved.port, target.targetId, args, timeoutMs, session);
   const behindNote = behindWindow.tried && behindWindow.shown && outcome.ok ? BEHIND_WINDOW_CAPTURED : null;
 
-  return captured(args, browser, context, outcome, target.url, "cdp", [warning, behindNote, hiddenTabSentence(hiddenTab)], target.targetId, behindWindow, hiddenTab, capturedIn);
+  return captured(args, browser, context, outcome, target.url, "cdp", [warning, behindNote, hiddenTabSentence(hiddenTab)], target.targetId, behindWindow, hiddenTab, capturedIn, size);
 }
 
 async function onGecko(args: Args, browser: string, context: string, timeoutMs: number): Promise<string> {

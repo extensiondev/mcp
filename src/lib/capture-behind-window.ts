@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { captureCdpTarget, type CaptureOutcome, type CaptureSize } from "./capture";
+import { captureCdpTarget, settleCaptureSize, type CaptureOutcome, type CaptureSize } from "./capture";
 import { evaluateOnExtensionPage } from "./cdp-extension-page";
 import { showHiddenTab, type HiddenTab } from "./capture-hidden-tab";
 import { tabsWorkers, windowStateOf } from "./tab-switch-worker";
@@ -20,9 +20,13 @@ export type BehindWindow =
   | { tried: true; shown: false; reason: string; windowState: string | null }
   | { tried: true; shown: true; restored: boolean; windowState: string | null };
 
-export interface BehindWindowCapture {
+interface PaintedCapture {
   outcome: CaptureOutcome;
   behindWindow: BehindWindow;
+}
+
+export interface BehindWindowCapture extends PaintedCapture {
+  size: CaptureSize;
   hiddenTab?: HiddenTab;
 }
 
@@ -37,9 +41,10 @@ export async function captureCdpPage(
   session: { projectPath: string; browser: string },
 ): Promise<BehindWindowCapture> {
   const hidden = await showHiddenTab(port, targetId, session);
-  const capture = await capturePaintedPage(port, targetId, size, timeoutMs, session);
+  const settled = await settleCaptureSize(port, targetId, size, Math.min(timeoutMs, FIRST_CAPTURE_MS));
+  const capture = await capturePaintedPage(port, targetId, settled, timeoutMs, session);
 
-  return { ...capture, hiddenTab: await hidden.restore() };
+  return { ...capture, size: settled, hiddenTab: await hidden.restore() };
 }
 
 /* @invariant THE BLANK TAB IS OPENED FROM THE FIRST BACKGROUND THAT HAS THE
@@ -109,7 +114,7 @@ async function capturePaintedPage(
   size: CaptureSize,
   timeoutMs: number,
   session: { projectPath: string; browser: string },
-): Promise<BehindWindowCapture> {
+): Promise<PaintedCapture> {
   const firstMs = Math.min(timeoutMs, FIRST_CAPTURE_MS);
   const first = await captureCdpTarget(port, targetId, size, firstMs);
 
@@ -118,7 +123,7 @@ async function capturePaintedPage(
   const restMs = timeoutMs - firstMs;
   const { windowId, windowState } = await windowStateOf(port, targetId);
 
-  const giveUp = async (reason: string): Promise<BehindWindowCapture> => {
+  const giveUp = async (reason: string): Promise<PaintedCapture> => {
     const again = restMs > 0 ? wholeBudget(await captureCdpTarget(port, targetId, size, restMs), firstMs, restMs) : first;
 
     return { outcome: again, behindWindow: { tried: true, shown: false, reason, windowState } };
