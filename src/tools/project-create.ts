@@ -106,7 +106,7 @@ export const schema = {
       },
       projectPath: {
         type: "string",
-        description: `Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). ${SOURCE_SKIPPED_FOLDERS.join(", ")}, ${SOURCE_SKIPPED_EXTENSIONS.join(", ")} and .gitignore entries stay out; 4 MB zipped at most.`,
+        description: `Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). ${SOURCE_SKIPPED_FOLDERS.join(", ")}, ${SOURCE_SKIPPED_EXTENSIONS.join(", ")}, .env*, *.pem and .gitignore entries stay out; 4 MB zipped at most.`,
       },
       repo: {
         type: "string",
@@ -207,7 +207,7 @@ function closedLane(name: string, message: string, api: string, prefill: CreateP
 
 type CreateSource =
   | { kind: "github"; repo: string }
-  | { kind: "upload"; root: string; defaulted: boolean; zip: Buffer; bytes: number; files: number };
+  | { kind: "upload"; root: string; defaulted: boolean; zip: Buffer; bytes: number; files: number; leftOut: { secrets: string[] } };
 
 function sourceRequired(apiBase: string): string {
   const cwd = process.cwd();
@@ -287,7 +287,7 @@ function prepareUpload(root: string, defaulted: boolean): { ok: true; source: Cr
     };
   }
 
-  return { ok: true, source: { kind: "upload", root, defaulted, zip: archive.zip, bytes: archive.bytes, files: archive.files } };
+  return { ok: true, source: { kind: "upload", root, defaulted, zip: archive.zip, bytes: archive.bytes, files: archive.files, leftOut: archive.leftOut } };
 }
 
 /* @invariant THE CODE'S DEADLINE IS PART OF THE ASK. The device code lives
@@ -1073,7 +1073,7 @@ async function sendCreate(
       source: ctx.source.kind,
       ...(ctx.source.kind === "github"
         ? { sourceRepo: ctx.source.repo }
-        : { projectPath: ctx.source.root, uploaded: uploaded ?? { bytes: ctx.source.bytes, files: ctx.source.files } }),
+        : { projectPath: ctx.source.root, uploaded: uploaded ?? { bytes: ctx.source.bytes, files: ctx.source.files }, leftOut: ctx.source.leftOut }),
       outcome: recordedOutcome(data.replayed === true ? "created-earlier" : "created"),
       links,
       login: login.login,

@@ -1355,7 +1355,7 @@
           "name": "projectPath",
           "type": "string",
           "required": false,
-          "description": "Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). node_modules, dist, .git, .extension-dev, .zip, .crx, .xpi and .gitignore entries stay out; 4 MB zipped at most."
+          "description": "Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). node_modules, dist, .git, .extension-dev, .zip, .crx, .xpi, .env*, *.pem and .gitignore entries stay out; 4 MB zipped at most."
         },
         {
           "name": "repo",

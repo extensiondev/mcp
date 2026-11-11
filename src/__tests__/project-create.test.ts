@@ -134,6 +134,10 @@ function extensionFolder(name: string, extra: Record<string, string | Buffer> = 
   write("secret.txt", "s");
   write("logs/a.log", "l");
   write("src/old.bak", "b");
+  write(".env", "TOKEN=1");
+  write(".env.example", "TOKEN=");
+  write("config/.env.local", "TOKEN=2");
+  write("certs/key.pem", "-----BEGIN");
 
   for (const [rel, data] of Object.entries(extra)) write(rel, data);
 
@@ -251,7 +255,7 @@ describe("extension_project_create", () => {
     expect(fn).not.toHaveBeenCalled();
   });
 
-  it("489: uploads the folder as a zip with the provisioning grant, leaving out node_modules, dist, .git, archives and .gitignore entries, then creates from the uploadId", async () => {
+  it("489: uploads the folder as a zip with the provisioning grant, leaving out node_modules, dist, .git, archives, .gitignore entries and secrets, then creates from the uploadId", async () => {
     const dir = extensionFolder("ext");
     const { fn, calls } = createFetch({ token: [{ status: 200, body: grantBody }], source: UPLOADED, create: CREATED });
     vi.stubGlobal("fetch", fn);
@@ -272,7 +276,7 @@ describe("extension_project_create", () => {
     fs.writeFileSync(zipFile, zip);
     const listing = readZipEntryNames(zipFile);
     expect(listing.readable).toBe(true);
-    expect(listing.names.sort()).toEqual([".gitignore", "manifest.json", "package.json", "src/content.js"]);
+    expect(listing.names.sort()).toEqual([".env.example", ".gitignore", "manifest.json", "package.json", "src/content.js"]);
     const manifest = readZipEntry(zip, "manifest.json", { maxEntries: 100, maxBytes: 1_000_000 });
     expect(manifest.ok && JSON.parse(manifest.data.toString("utf8")).name).toBe("Ghost");
 
@@ -288,6 +292,7 @@ describe("extension_project_create", () => {
     expect(out.value.projectId).toBe("prj_new");
     expect(out.value.source).toBe("upload");
     expect(out.value.uploaded).toEqual({ bytes: 1234, files: 4 });
+    expect(out.value.leftOut).toEqual({ secrets: [".env", "certs/key.pem", "config/.env.local"] });
     expect(out.value.projectPath).toBe(dir);
     expect(out.value.sourceRepo).toBeUndefined();
     expect(out.value.firstBuild).toEqual({ dispatched: true, spent: 1 });

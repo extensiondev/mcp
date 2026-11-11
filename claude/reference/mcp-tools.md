@@ -312,7 +312,7 @@ Create an extension.dev project from its folder (projectPath, uploaded, no push)
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `project` | string | no |  | New '<workspace>/<project>'. |
-| `projectPath` | string | no |  | Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). node_modules, dist, .git, .extension-dev, .zip, .crx, .xpi and .gitignore entries stay out; 4 MB zipped at most. |
+| `projectPath` | string | no |  | Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). node_modules, dist, .git, .extension-dev, .zip, .crx, .xpi, .env*, *.pem and .gitignore entries stay out; 4 MB zipped at most. |
 | `repo` | string | no |  | GitHub '<owner>/<repo>' the source is pushed to; instead of projectPath. |
 | `installationId` | string | no |  | Omit; the platform finds it or answers a connect link. |
 | `displayName` | string | no |  | Human name; rename later with extension_workspace configure-project. |

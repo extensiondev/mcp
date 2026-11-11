@@ -16,6 +16,8 @@ export const SOURCE_SKIPPED_FOLDERS = ["node_modules", "dist", ".git", ".extensi
 
 export const SOURCE_SKIPPED_EXTENSIONS = [".zip", ".crx", ".xpi"];
 
+export const SOURCE_SECRET_EXAMPLES = [".env.example", ".env.sample", ".env.template"];
+
 const BIGGEST_NAMED = 3;
 
 const LOCAL_SIGNATURE = 0x04034b50;
@@ -144,6 +146,18 @@ export interface SourceFile {
   bytes: number;
 }
 
+export interface SourceListing {
+  files: SourceFile[];
+  leftOut: { secrets: string[] };
+}
+
+export function isSecretFile(name: string): boolean {
+  const lower = name.toLowerCase();
+  if (SOURCE_SECRET_EXAMPLES.includes(lower)) return false;
+
+  return lower === ".env" || lower.startsWith(".env.") || lower.endsWith(".pem");
+}
+
 function readIgnoreFile(dir: string, base: string): IgnoreRule[] {
   try {
     return parseGitignore(fs.readFileSync(path.join(dir, ".gitignore"), "utf8"), base);
@@ -152,8 +166,9 @@ function readIgnoreFile(dir: string, base: string): IgnoreRule[] {
   }
 }
 
-export function collectSourceFiles(root: string): SourceFile[] {
+export function collectSourceFiles(root: string): SourceListing {
   const files: SourceFile[] = [];
+  const secrets: string[] = [];
 
   const walk = (dir: string, relative: string, inherited: IgnoreRule[]) => {
     const rules = [...inherited, ...readIgnoreFile(dir, relative)];
@@ -177,6 +192,12 @@ export function collectSourceFiles(root: string): SourceFile[] {
 
       if (!entry.isFile()) continue;
       if (SKIPPED_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) continue;
+
+      if (isSecretFile(entry.name)) {
+        secrets.push(relativePath);
+        continue;
+      }
+
       if (gitignored(relativePath, false, rules)) continue;
 
       files.push({ path: relativePath, absolute, bytes: fs.statSync(absolute).size });
@@ -185,7 +206,7 @@ export function collectSourceFiles(root: string): SourceFile[] {
 
   walk(root, "", []);
 
-  return files;
+  return { files, leftOut: { secrets } };
 }
 
 export function sourceManifestPath(root: string): string | null {
@@ -223,16 +244,17 @@ export interface ArchivedEntry {
 }
 
 export type SourceArchive =
-  | { ok: true; zip: Buffer; bytes: number; files: number; entries: ArchivedEntry[] }
+  | { ok: true; zip: Buffer; bytes: number; files: number; entries: ArchivedEntry[]; leftOut: { secrets: string[] } }
   | { ok: false; reason: "too-large"; bytes: number; atLeast: boolean; maxBytes: number; files: number; biggest: Array<{ path: string; bytes: number }> }
   | { ok: false; reason: "unreadable"; message: string };
 
 export function buildSourceArchive(root: string, options: { maxBytes?: number } = {}): SourceArchive {
   const maxBytes = options.maxBytes ?? SOURCE_ARCHIVE_MAX_BYTES;
   let files: SourceFile[];
+  let leftOut: { secrets: string[] };
 
   try {
-    files = collectSourceFiles(root);
+    ({ files, leftOut } = collectSourceFiles(root));
   } catch (err: any) {
     return { ok: false, reason: "unreadable", message: err?.message || String(err) };
   }
@@ -322,7 +344,7 @@ export function buildSourceArchive(root: string, options: { maxBytes?: number } 
     return { ok: false, reason: "too-large", bytes, atLeast: entries.length < files.length, maxBytes, files: files.length, biggest };
   }
 
-  return { ok: true, zip: Buffer.concat([...locals, directory, eocd]), bytes, files: entries.length, entries };
+  return { ok: true, zip: Buffer.concat([...locals, directory, eocd]), bytes, files: entries.length, entries, leftOut };
 }
 
 export function megabytes(bytes: number): string {
