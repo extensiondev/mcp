@@ -289,6 +289,9 @@ describe("extension_auth login with projects: one approval, one token per projec
     });
 
     expect(out.hint).toContain("lists all 3 projects");
+    expect(out.hint).toContain("Open value.verificationUriComplete and approve (value.userCode is pre-filled; a page that asks for it is value.verificationUri).");
+    expect(JSON.stringify(out).split("https://extension.dev/device?code=ABCD-1234")).toHaveLength(2);
+    expect(JSON.stringify(out).split("ABCD-1234")).toHaveLength(3);
     expect(out.warnings.join(" ")).toContain("up to a minute");
     expect(h.to("/api/cli/device/code")).toHaveLength(1);
     expect(h.to("/api/cli/device/code")[0]?.body).toEqual({

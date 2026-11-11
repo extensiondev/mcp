@@ -50,8 +50,12 @@ describe("templateCatalogUrl", () => {
 });
 
 describe("extension_templates list emission", () => {
-  it("adds catalogUrl beside repositoryUrl and downloads without replacing them", async () => {
-    const frame = JSON.parse(await searchTemplates({}));
+  it("keeps the per-row URLs behind include: ['urls'], where catalogUrl sits beside repositoryUrl and downloads (ledger 503)", async () => {
+    const plain = JSON.parse(await searchTemplates({}));
+    expect(plain.ok).toBe(true);
+    expect(Object.keys(plain.value.templates[0])).toEqual(["slug", "description", "uiFramework", "frameworkLabel", "surfaces", "tags", "difficulty", "featured", "useCases"]);
+
+    const frame = JSON.parse(await searchTemplates({ include: ["urls"] }));
     expect(frame.ok).toBe(true);
     const t = frame.value.templates[0];
     expect(t.repositoryUrl).toContain("github.com/extension-js/examples");

@@ -393,12 +393,12 @@ describe("swarm-found lies stay fixed", () => {
       await manifestValidate.handler({ projectPath: dir, browsers: ["edge"] }),
     );
     expect(edge.value.valid).toBe(true);
-    expect(JSON.stringify(edge.warnings)).toMatch(/file_browser_handlers.*inert on Edge/);
+    expect(JSON.stringify(edge.value.warnings)).toMatch(/file_browser_handlers.*inert on Edge/);
 
     const chrome = JSON.parse(
       await manifestValidate.handler({ projectPath: dir, browsers: ["chrome"] }),
     );
-    expect(JSON.stringify(chrome.warnings)).not.toContain("inert on Edge");
+    expect(JSON.stringify(chrome.value.warnings)).not.toContain("inert on Edge");
   });
 
   it("build's completeness contract covers every declared surface", async () => {
@@ -486,7 +486,7 @@ describe("manifest_validate verdicts are always explainable", () => {
     );
 
     for (const [browser] of unsupported) {
-      expect(JSON.stringify(result.warnings)).toContain(browser);
+      expect(JSON.stringify(result.value.warnings)).toContain(browser);
     }
   });
 
@@ -741,7 +741,7 @@ describe("wave-2 swarm lies stay fixed", () => {
       await manifestValidate.handler({ projectPath: dir, browsers: ["chrome"] }),
     );
 
-    expect(result.warnings.join(" ")).toContain("128x128");
+    expect(result.value.warnings.join(" ")).toContain("128x128");
   });
 
   it("manifest_validate includes edge in the default target matrix (F28)", async () => {

@@ -154,7 +154,7 @@ describe("manifest-validate handler", () => {
     );
     expect(parsed.value.browserSupport.firefox.supported).toBe(true);
     expect(parsed.value.browserSupport.firefox.issues).toEqual([]);
-    expect(parsed.warnings.join(" ")).toContain("rewrites it to scripts");
+    expect(parsed.value.warnings.join(" ")).toContain("rewrites it to scripts");
   });
 });
 

@@ -1146,6 +1146,12 @@
           "type": "string",
           "required": false,
           "description": "One browser; alias for browsers:[browser]."
+        },
+        {
+          "name": "include",
+          "type": "array of \"similarTemplates\"",
+          "required": false,
+          "description": "Optional sections; similarTemplates adds up to five catalog templates with the same surfaces."
         }
       ]
     },
@@ -2508,6 +2514,12 @@
           "type": "boolean",
           "required": false,
           "description": "list: featured only."
+        },
+        {
+          "name": "include",
+          "type": "array of \"urls\"",
+          "required": false,
+          "description": "list: urls adds each row's repositoryUrl, catalogUrl and downloads."
         }
       ]
     },

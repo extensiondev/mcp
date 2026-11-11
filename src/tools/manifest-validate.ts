@@ -87,6 +87,11 @@ export const schema = {
         description:
           "One browser; alias for browsers:[browser].",
       },
+      include: {
+        type: "array",
+        items: { type: "string", enum: ["similarTemplates"] },
+        description: "Optional sections; similarTemplates adds up to five catalog templates with the same surfaces.",
+      },
     },
     required: [],
   },
@@ -213,7 +218,7 @@ interface ValidationResult {
   errors: string[];
   warnings: string[];
   browserSupport: Record<string, { supported: boolean; issues: string[] }>;
-  similarTemplates: Array<{ slug: string; surfaces: string[] }>;
+  similarTemplates?: Array<{ slug: string; surfaces: string[] }>;
 }
 
 const API_PERMISSION: Record<string, string> = {
@@ -343,11 +348,13 @@ export async function handler(args: {
   projectPath?: string;
   browser?: string;
   browsers?: string[];
+  include?: string[];
 }): Promise<string> {
   if (!args.browsers && typeof (args as { browser?: string }).browser === "string") {
     args = { ...args, browsers: [(args as { browser: string }).browser] };
   }
 
+  const wantsSimilar = Array.isArray(args.include) && args.include.includes("similarTemplates");
   const explicitBrowsers = Array.isArray(args.browsers) && args.browsers.length > 0;
   const browsers = explicitBrowsers ? (args.browsers as string[]) : DEFAULT_BROWSERS;
   const unknownTargets = browsers.filter((b) => !KNOWN_TARGETS.includes(b));
@@ -364,7 +371,7 @@ export async function handler(args: {
       command: COMMAND,
       status: "unknown-browser",
       error: { code: "E_BAD_REQUEST", message: errors[0] },
-      value: { valid: false, errors, browserSupport: {}, similarTemplates: [] },
+      value: { valid: false, errors, browserSupport: {} },
       warnings: [],
     });
   }
@@ -374,7 +381,6 @@ export async function handler(args: {
     errors: [],
     warnings: [],
     browserSupport: {},
-    similarTemplates: [],
   };
 
   const manifestPath =
@@ -397,7 +403,6 @@ export async function handler(args: {
         valid: false,
         errors,
         browserSupport: {},
-        similarTemplates: [],
       },
       warnings: [],
     });
@@ -424,7 +429,6 @@ export async function handler(args: {
         valid: false,
         errors,
         browserSupport: {},
-        similarTemplates: [],
       },
       warnings: [],
     });
@@ -897,7 +901,7 @@ export async function handler(args: {
   const distinctive = surfaces.filter((s) => s !== "background");
   const matchOn = distinctive.length ? distinctive : surfaces;
 
-  if (matchOn.length) {
+  if (wantsSimilar && matchOn.length) {
     try {
       const templates = await listTemplates();
       result.similarTemplates = templates
@@ -945,8 +949,8 @@ export async function handler(args: {
     status: result.valid ? "valid" : "invalid",
     value: {
       ...result,
+      ...(wantsSimilar ? { similarTemplates: result.similarTemplates ?? [] } : {}),
       buildBlocking: result.errors.length > 0,
     },
-    warnings: result.warnings,
   });
 }

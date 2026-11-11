@@ -353,11 +353,11 @@ export function trackFields(command: string, call: TrackCall, projectOnly = fals
   return also.length ? { trackUrl: primary, trackLinks: [primary, ...also] } : { trackUrl: primary };
 }
 
-function trackSentences(fields: TrackFields, hint: string, unreached = false): string[] {
+function trackSentences(fields: TrackFields, hint: string, unreached = false, linkNamed = false): string[] {
   const out: string[] = [];
 
   if (unreached) return hint.includes(fields.trackUrl) ? out : [`The console page is ${fields.trackUrl}.`];
-  if (!hint.includes(fields.trackUrl)) out.push(fields.checkUrl ? `Approve it at ${fields.trackUrl}.` : `Track it at ${fields.trackUrl}.`);
+  if (!linkNamed && !hint.includes(fields.trackUrl)) out.push(fields.checkUrl ? `Approve it at ${fields.trackUrl}.` : `Track it at ${fields.trackUrl}.`);
   if (fields.checkUrl && !hint.includes(fields.checkUrl)) out.push(`Once it is approved and done, check ${fields.checkUrl}.`);
 
   const buildPage = fields.trackLinks?.[1];
@@ -398,6 +398,8 @@ export function attachTrack(command: string, args: Row, result: string): string 
   if (!fields) return result;
 
   const hint = typeof frame.hint === "string" ? frame.hint.trim() : "";
+  const deviceLink = String(frame.status) === "authorization-pending" && [text(value.verificationUriComplete), text(value.verificationUri)].includes(fields.trackUrl);
+  const shown: Partial<TrackFields> = deviceLink ? { ...(fields.checkUrl ? { checkUrl: fields.checkUrl } : {}) } : fields;
   const links = Array.isArray(value.links) && !fields.checkUrl && !value.links.some((row) => isRow(row) && row.url === fields.trackUrl)
     ? { links: [{ kind: "track", url: fields.trackUrl, audience: "workspace members", expiresAt: null, made: false }, ...value.links] }
     : {};
@@ -406,10 +408,10 @@ export function attachTrack(command: string, args: Row, result: string): string 
     ok: frame.ok,
     command: frame.command,
     status: frame.status,
-    value: { ...value, ...fields, ...links },
+    value: { ...value, ...shown, ...links },
     error: frame.error ?? undefined,
     warnings: frame.warnings,
     ...(frame.truncated !== undefined ? { truncated: frame.truncated } : {}),
-    hint: [hint, ...trackSentences(fields, hint, unreached || refusal)].filter(Boolean).join(" "),
+    hint: [hint, ...trackSentences(fields, hint, unreached || refusal, deviceLink)].filter(Boolean).join(" "),
   });
 }

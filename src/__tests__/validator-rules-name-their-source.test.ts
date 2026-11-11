@@ -66,13 +66,13 @@ describe("95a, 95c, 95d: rules the engine folds are not refusals", () => {
     const out = await validate(dir, ["firefox"]);
     expect(out.status).toBe("valid");
     expect(out.value.browserSupport.firefox.supported).toBe(true);
-    expect(out.warnings.join("\n")).toMatch(/rewrites it to scripts: \["sw\.js"\]/);
+    expect(out.value.warnings.join("\n")).toMatch(/rewrites it to scripts: \["sw\.js"\]/);
   });
 
   it("says the engine folds an unprefixed side_panel into sidebar_action instead of telling you to prefix it away", async () => {
     const dir = project({ ...BASE, permissions: ["sidePanel"], side_panel: { default_path: "sidebar/index.html" } }, { "src/sidebar/index.html": "" });
     const out = await validate(dir, ["firefox"]);
-    const text = out.warnings.join("\n");
+    const text = out.value.warnings.join("\n");
     expect(text).toMatch(/folded into sidebar_action/);
     expect(text).not.toMatch(/ships without a sidebar/);
     expect(text).not.toMatch(/Move it under "chromium:side_panel"/);
@@ -81,7 +81,7 @@ describe("95a, 95c, 95d: rules the engine folds are not refusals", () => {
   it("still says a chromium:-prefixed side_panel leaves Firefox without one", async () => {
     const dir = project({ ...BASE, "chromium:permissions": ["sidePanel"], "chromium:side_panel": { default_path: "sidebar/index.html" } }, { "src/sidebar/index.html": "" });
     const out = await validate(dir, ["firefox"]);
-    expect(out.warnings.join("\n")).toMatch(/ships without a sidebar/);
+    expect(out.value.warnings.join("\n")).toMatch(/ships without a sidebar/);
   });
 
   it("does not refuse a Chrome build over a firefox:browser_action asymmetry", async () => {
@@ -89,7 +89,7 @@ describe("95a, 95c, 95d: rules the engine folds are not refusals", () => {
     const out = await validate(dir, ["chrome"]);
     expect(out.status).toBe("valid");
     expect(out.value.browserSupport.chrome.supported).toBe(true);
-    expect(out.warnings.join("\n")).toMatch(/ships no toolbar action/);
+    expect(out.value.warnings.join("\n")).toMatch(/ships no toolbar action/);
   });
 });
 
@@ -97,7 +97,7 @@ describe("95e, 95f, 95g: wording and sources", () => {
   it("tells Edge users to use the chrome: prefix, which the engine scopes to Chrome", async () => {
     const dir = project({ ...BASE, file_browser_handlers: [{ id: "open", default_title: "Open", file_filters: ["filesystem:*.txt"] }] });
     const out = await validate(dir, ["edge"]);
-    const edgeNote = out.warnings.find((w: string) => /inert on Edge/.test(w));
+    const edgeNote = out.value.warnings.find((w: string) => /inert on Edge/.test(w));
 
     expect(edgeNote).toBeDefined();
     expect(edgeNote).toMatch(/"chrome:/);
@@ -109,7 +109,7 @@ describe("95e, 95f, 95g: wording and sources", () => {
     const out = await validate(dir, ["chrome"]);
     expect(out.status).toBe("valid");
     expect(out.value.buildBlocking).toBe(false);
-    const note = out.warnings.find((w: string) => /chrome\.history/.test(w));
+    const note = out.value.warnings.find((w: string) => /chrome\.history/.test(w));
     expect(note).toMatch(/text search/);
   });
 

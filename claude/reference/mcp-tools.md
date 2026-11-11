@@ -266,6 +266,7 @@ Validate a manifest.json across browsers; buildBlocking lists the errors that ma
 | `projectPath` | string | no |  | Project root (manifest at root or src/). |
 | `browsers` | array of string | no | `["chrome","firefox","edge"]` | Browsers to validate against. |
 | `browser` | string | no |  | One browser; alias for browsers:[browser]. |
+| `include` | array of "similarTemplates" | no |  | Optional sections; similarTemplates adds up to five catalog templates with the same surfaces. |
 
 ## extension_open
 
@@ -553,6 +554,7 @@ Browse the template catalog or read a template's files. TypeScript is slug 'type
 | `framework` | "react" \| "vue" \| "svelte" \| "preact" \| "" | no |  | list: UI framework; empty string is vanilla. |
 | `tags` | array of string | no |  | list: tags, e.g. ['ai']. |
 | `featured` | boolean | no |  | list: featured only. |
+| `include` | array of "urls" | no |  | list: urls adds each row's repositoryUrl, catalogUrl and downloads. |
 
 ## extension_theme_verify
 

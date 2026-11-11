@@ -398,7 +398,7 @@ describe("a server that knows it was rebuilt reloads its platform code instead o
     expect(fetchSpy).toHaveBeenCalledTimes(0);
   });
 
-  it("every refusal names the build that answered", async () => {
+  it("the first answer of a process names the build that answered, a refusal included, and the next ones do not repeat it", async () => {
     if (process.platform === "win32") return;
 
     const call = await connect(createServerStamp(entryFile(tmp)), importer);
@@ -412,12 +412,12 @@ describe("a server that knows it was rebuilt reloads its platform code instead o
     const invalid = await call("extension_manifest_validate", { manifestPath: 7 });
 
     expect(invalid.out.status).toBe("invalid-arguments");
-    expect(invalid.out.value.server).toEqual(server);
+    expect(invalid.out.value.server).toBeUndefined();
 
     const refusedByTool = await call("extension_assert", { projectPath: tmp, expect: [{ assert: "no-such-check" }] });
 
     expect(refusedByTool.out.status).toBe("bad-request");
-    expect(refusedByTool.out.value.server).toEqual(server);
+    expect(refusedByTool.out.value.server).toBeUndefined();
     expect(importer).toHaveBeenCalledTimes(0);
   });
 });

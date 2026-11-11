@@ -79,6 +79,9 @@ function comparable(text: string): unknown {
   const boundary = (parsed.untrusted as { boundary?: string } | undefined)?.boundary;
   delete parsed.untrusted;
   delete parsed.untrustedEnd;
+  const value = parsed.value as Record<string, unknown> | null;
+  if (value && typeof value === "object" && (value.server as { pid?: unknown } | undefined)?.pid !== undefined) delete value.server;
+
   const body = JSON.stringify(parsed);
 
   return JSON.parse(boundary ? body.split(boundary).join("<boundary>") : body);

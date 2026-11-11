@@ -59,6 +59,11 @@ export const schema = {
         type: "boolean",
         description: "list: featured only.",
       },
+      include: {
+        type: "array",
+        items: { type: "string", enum: ["urls"] },
+        description: "list: urls adds each row's repositoryUrl, catalogUrl and downloads.",
+      },
     },
     required: [],
   },
@@ -69,6 +74,7 @@ export async function handler(args: {
   slug?: string;
   files?: string[];
   query?: string;
+  include?: string[];
   surface?: string;
   framework?: string;
   tags?: string[];
@@ -97,5 +103,6 @@ export async function handler(args: {
     tags: args.tags,
     featured: args.featured,
     query: args.query,
+    include: args.include,
   });
 }

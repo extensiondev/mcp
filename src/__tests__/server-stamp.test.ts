@@ -37,6 +37,24 @@ describe("every platform answer says which server answered", () => {
     expect(out.warnings).toEqual([]);
   });
 
+  it("says which server answered once per process and on every extension_doctor answer, not on the answers between (ledger 503)", () => {
+    const stamp = createServerStamp(entryFile());
+    const answer = (command: string) => envelope({ ok: true, command, status: "done", value: { n: 1 } });
+    const stamped = { version, commit: null, startedAt: expect.any(String), pid: process.pid, builtAt: "2026-10-20T10:00:00.000Z" };
+
+    expect(JSON.parse(stamp.apply(answer("extension_builds"))).value).toEqual({ n: 1, server: stamped });
+    expect(stamp.apply(answer("extension_builds"))).toBe(answer("extension_builds"));
+    expect(stamp.brand(answer("extension_logs"))).toBe(answer("extension_logs"));
+    expect(JSON.parse(stamp.brand(answer("extension_doctor"))).value).toEqual({ n: 1, server: stamped });
+    expect(JSON.parse(stamp.apply(answer("extension_doctor"))).value).toEqual({ n: 1, server: stamped });
+
+    const fresh = createServerStamp(entryFile());
+    const refusal = JSON.parse(fresh.brand(envelope({ ok: false, command: "extension_assert", status: "bad-request", error: { code: "E_BAD_REQUEST", message: "no" } })));
+
+    expect(refusal.value).toEqual({ server: stamped });
+    expect(fresh.brand(answer("extension_assert"))).toBe(answer("extension_assert"));
+  });
+
   it("warns to reconnect once when the file on disk is newer than the one running", () => {
     const file = entryFile();
     const stamp = createServerStamp(file);
@@ -66,7 +84,7 @@ describe("every platform answer says which server answered", () => {
     }
   });
 
-  it("brands any envelope that carries no server, refusals and null values included, and leaves a stamp another build wrote alone", () => {
+  it("brands the first envelope that carries no server, a refusal with a null value included, and leaves a stamp another build wrote alone", () => {
     const stamp = createServerStamp(entryFile());
     const refusal = JSON.parse(stamp.brand(envelope({ ok: false, command: "extension_assert", status: "bad-request", error: { code: "E_BAD_REQUEST", message: "no" } })));
 
@@ -74,7 +92,7 @@ describe("every platform answer says which server answered", () => {
     expect(refusal.error.code).toBe("E_BAD_REQUEST");
     expect(refusal.warnings).toEqual([]);
 
-    const read = JSON.parse(stamp.brand(envelope({ ok: true, command: "extension_logs", status: "read", value: { lines: [] }, hint: "Read." })));
+    const read = JSON.parse(createServerStamp(entryFile()).brand(envelope({ ok: true, command: "extension_logs", status: "read", value: { lines: [] }, hint: "Read." })));
 
     expect(read.value).toEqual({ lines: [], server: expect.objectContaining({ builtAt: "2026-10-20T10:00:00.000Z" }) });
     expect(read.hint).toBe("Read.");

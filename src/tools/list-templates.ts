@@ -16,8 +16,10 @@ export async function searchTemplates(args: {
   tags?: string[];
   featured?: boolean;
   query?: string;
+  include?: string[];
 }): Promise<string> {
   const { templates, source, note } = await listTemplatesWithSource(args);
+  const withUrls = Array.isArray(args.include) && args.include.includes("urls");
 
   const results = templates.map((t) => ({
     slug: t.slug,
@@ -29,9 +31,7 @@ export async function searchTemplates(args: {
     difficulty: t.difficulty,
     featured: t.featured,
     useCases: t.useCases,
-    repositoryUrl: t.repositoryUrl,
-    catalogUrl: templateCatalogUrl(t.slug),
-    downloads: t.downloads,
+    ...(withUrls ? { repositoryUrl: t.repositoryUrl, catalogUrl: templateCatalogUrl(t.slug), downloads: t.downloads } : {}),
   }));
 
   return envelope({

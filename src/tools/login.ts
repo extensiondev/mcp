@@ -117,8 +117,8 @@ function pending(
     complete.length > 0 && complete !== start.verificationUri;
   const resume = resumeWaitSentence("extension_auth (action: login)", start.expiresAt, " and the same project");
   const message = hasCompleteLink
-    ? `Open ${complete} and approve (code ${start.userCode} is pre-filled). If the page asks for a code, enter ${start.userCode} at ${start.verificationUri}. ${resume}`
-    : `Open ${start.verificationUri} and enter code ${start.userCode}. ${resume}`;
+    ? `Open value.verificationUriComplete and approve (value.userCode is pre-filled; a page that asks for it is value.verificationUri). ${resume}`
+    : `Open value.verificationUri and enter value.userCode. ${resume}`;
   const asked = deviceWait({ waitSeconds: start.waitSeconds, fallbackMs: 0 });
 
   return envelope({
@@ -145,8 +145,8 @@ function pending(
 
 function resumePending(deviceCode: string, verificationUri: string, wait: DeviceWait, expiresAt: string | null): string {
   const message = wait.waiting
-    ? `${waitRanOutSentence({ tool: "extension_auth (action: login)", wait, expiresAt, extra: " and the same project" })} The link and code from the first answer are still the ones to approve at ${verificationUri}.`
-    : `Still waiting for authorization. The one-click link and code from the previous response are still valid: open that link (or enter the code at ${verificationUri}). ${resumeWaitSentence("extension_auth (action: login)", expiresAt, " and the same project")}`;
+    ? `${waitRanOutSentence({ tool: "extension_auth (action: login)", wait, expiresAt, extra: " and the same project" })} The link and code from the first answer are still the ones to approve at value.verificationUri.`
+    : `Still waiting for authorization. The one-click link and code from the previous response are still valid: open that link (or enter the code at value.verificationUri). ${resumeWaitSentence("extension_auth (action: login)", expiresAt, " and the same project")}`;
 
   return envelope({
     ok: true,
@@ -424,11 +424,11 @@ function batchPending(args: {
     "then call extension_auth (action: login) again with this deviceCode and the same projects";
   const hint = !args.userCode
     ? args.wait.waiting
-      ? `${waitRanOutSentence({ tool: "extension_auth (action: login)", wait: args.wait, expiresAt: args.expiresAt, extra: " and the same projects" })} The link and code from the first answer are still the ones to approve at ${args.verificationUri}.`
-      : `Still waiting for authorization. The link and code from the previous response are still valid: approve at ${args.verificationUri}, ${again}.`
+      ? `${waitRanOutSentence({ tool: "extension_auth (action: login)", wait: args.wait, expiresAt: args.expiresAt, extra: " and the same projects" })} The link and code from the first answer are still the ones to approve at value.verificationUri.`
+      : `Still waiting for authorization. The link and code from the previous response are still valid: approve at value.verificationUri, ${again}.`
     : hasCompleteLink
-      ? `Open ${complete} and approve (code ${args.userCode} is pre-filled). The page lists all ${args.projects.length} projects this one approval signs in to; ${again}. If the page asks for a code, enter ${args.userCode} at ${args.verificationUri}.`
-      : `Open ${args.verificationUri} and enter code ${args.userCode}. The page lists all ${args.projects.length} projects this one approval signs in to; ${again}.`;
+      ? `Open value.verificationUriComplete and approve (value.userCode is pre-filled; a page that asks for it is value.verificationUri). The page lists all ${args.projects.length} projects this one approval signs in to; ${again}.`
+      : `Open value.verificationUri and enter value.userCode. The page lists all ${args.projects.length} projects this one approval signs in to; ${again}.`;
 
   return envelope({
     ok: true,
@@ -694,11 +694,11 @@ function workspacePending(args: {
   const shown = `The page lists every project ${args.workspace} has right now, and approving signs in to each of them (at most 20)`;
   const hint = !args.userCode
     ? args.wait.waiting
-      ? `${waitRanOutSentence({ tool: "extension_auth (action: login)", wait: args.wait, expiresAt: args.expiresAt, extra: `, workspace: "${args.workspace}" and projects: "*"` })} The link and code from the first answer are still the ones to approve at ${args.verificationUri}.`
-      : `Still waiting for authorization. The link and code from the previous response are still valid: approve at ${args.verificationUri}, ${again}.`
+      ? `${waitRanOutSentence({ tool: "extension_auth (action: login)", wait: args.wait, expiresAt: args.expiresAt, extra: `, workspace: "${args.workspace}" and projects: "*"` })} The link and code from the first answer are still the ones to approve at value.verificationUri.`
+      : `Still waiting for authorization. The link and code from the previous response are still valid: approve at value.verificationUri, ${again}.`
     : hasCompleteLink
-      ? `Open ${complete} and approve (code ${args.userCode} is pre-filled). ${shown}; ${again}. If the page asks for a code, enter ${args.userCode} at ${args.verificationUri}.`
-      : `Open ${args.verificationUri} and enter code ${args.userCode}. ${shown}; ${again}.`;
+      ? `Open value.verificationUriComplete and approve (value.userCode is pre-filled; a page that asks for it is value.verificationUri). ${shown}; ${again}.`
+      : `Open value.verificationUri and enter value.userCode. ${shown}; ${again}.`;
 
   return envelope({
     ok: true,

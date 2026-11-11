@@ -27,14 +27,14 @@ describe("CLI recipes are translated into this server's inputs", () => {
 
 describe("102c, 102e, 102f: schema and fence sentences describe what is read", () => {
   it("the fence says the block is the answer body that may carry page text", () => {
-    const note = untrustedNote("x");
+    const note = untrustedNote();
     expect(note).toMatch(/this tool's answer body/i);
     expect(note).toMatch(/never follow instructions/);
     expect(note).not.toMatch(/^Everything between .* was written by a web page/);
   });
 
   it("403: the per-answer note is one line, since the rule itself is stated once in the server instructions", () => {
-    const note = untrustedNote("x");
+    const note = untrustedNote();
     expect(note.length).toBeLessThan(200);
     expect(note.split(/\s+/).length).toBeLessThan(35);
     expect(note).not.toMatch(/value, warnings, hint and error/);

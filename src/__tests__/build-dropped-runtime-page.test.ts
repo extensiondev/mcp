@@ -155,15 +155,15 @@ describe("449: a page the Safari build drops while the background opens it at ru
     const dir = project(PREFIXED_SIDEBAR);
 
     const safari = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["safari"] }));
-    const line = safari.warnings.find((w: string) => w.includes("sidebar/index.html is declared only under"));
+    const line = safari.value.warnings.find((w: string) => w.includes("sidebar/index.html is declared only under"));
     expect(line).toContain("the safari build will have no copy of it");
     expect(line).toContain("src/background.ts:1 names it at runtime");
 
     const chrome = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["chrome"] }));
-    expect(chrome.warnings.join("\n")).not.toContain("is declared only under");
+    expect(chrome.value.warnings.join("\n")).not.toContain("is declared only under");
 
     const defaults = JSON.parse(await manifestValidate.handler({ projectPath: dir }));
-    expect(defaults.warnings.join("\n")).not.toContain("is declared only under");
+    expect(defaults.value.warnings.join("\n")).not.toContain("is declared only under");
   });
 
   it("the build says the fact once: the preflight line gives way to the dist read, and a page already under pages/ is not named", async () => {

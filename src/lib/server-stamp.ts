@@ -114,18 +114,20 @@ function mtimeOf(file: string): string | null {
   }
 }
 
-/* @invariant EVERY ANSWER SAYS WHICH SERVER ANSWERED, AND WHETHER A NEWER
- * ONE IS WAITING. The operation rebuilds this server from source on
- * the person's machine several times a night, and the only sign that a fix
- * is live was the person reconnecting on a guess: five reconnects in one
- * session. The stamp is the package version and the build time of the file
- * this process loaded; the warning appears when that file on disk is newer
- * than the one running, which is exactly when a reconnect does something.
- * Since ledger 301 the stamp is on every envelope the dispatcher lets out,
- * refusals included: an agent that read `bad-request` with no version spent
- * a git log and an /mcp round trip finding out which checkout answered, and
- * `brand` adds value.server to any answer that carries none, leaving a stamp
- * a rebuilt build already wrote on its own answer alone.
+/* @invariant A PROCESS SAYS WHICH SERVER ANSWERED ONCE, AND ON EVERY
+ * EXTENSION_DOCTOR ANSWER, AND SAYS ON EVERY ANSWER WHEN A NEWER BUILD IS
+ * WAITING. The operation rebuilds this server from source on the person's
+ * machine several times a night, and the only sign that a fix is live was
+ * the person reconnecting on a guess: five reconnects in one session. The
+ * stamp is the package version and the build time of the file this process
+ * loaded; the rebuilt warning appears when that file on disk is newer than
+ * the one running, which is exactly when a reconnect does something. Since
+ * ledger 301 the first envelope the dispatcher lets out carries the stamp,
+ * a refusal included: an agent that read `bad-request` with no version spent
+ * a git log and an /mcp round trip finding out which checkout answered.
+ * Since ledger 503 the stamp is not repeated on the answers that follow (a
+ * session of 45 calls paid for it 45 times), so `extension_doctor` always
+ * carries it and `brand` leaves a stamp a rebuilt build already wrote alone.
  */
 export function createServerStamp(entry: string): {
   entry: string;
@@ -136,8 +138,18 @@ export function createServerStamp(entry: string): {
 } {
   const loadedAt = mtimeOf(entry);
   const startedAt = processStartedAt();
+  let introduced = false;
 
   const stamp = (): ServerStamp => ({ version: serverVersion(), commit: serverCommit(), builtAt: loadedAt, startedAt, pid: process.pid });
+
+  const stampDue = (command: string): boolean => {
+    if (command === "extension_doctor") return true;
+    if (introduced) return false;
+
+    introduced = true;
+
+    return true;
+  };
 
   const rebuiltSince = (): string | null => {
     const now = mtimeOf(entry);
@@ -158,13 +170,16 @@ export function createServerStamp(entry: string): {
 
     const value: Row = parsed.value && typeof parsed.value === "object" && !Array.isArray(parsed.value) ? { ...(parsed.value as Row) } : {};
     const rebuilt = rebuiltSince();
+    const due = value.server === undefined && stampDue(parsed.command);
+    if (!rebuilt && !due) return result;
+
     const warnings = [...(Array.isArray(parsed.warnings) ? parsed.warnings : []), ...(rebuilt ? [rebuiltWarning(rebuilt)] : [])];
 
     return envelope({
       ok: parsed.ok,
       command: parsed.command,
       status: parsed.status,
-      value: { ...value, server: stamp() },
+      value: due ? { ...value, server: stamp() } : value,
       error: parsed.error,
       warnings,
       ...(parsed.truncated !== undefined ? { truncated: parsed.truncated } : {}),
@@ -178,7 +193,7 @@ export function createServerStamp(entry: string): {
     if (Array.isArray(parsed.value) || (parsed.value !== null && typeof parsed.value !== "object")) return result;
 
     const value: Row = parsed.value ? (parsed.value as Row) : {};
-    if (value.server !== undefined) return result;
+    if (value.server !== undefined || !stampDue(parsed.command)) return result;
 
     return envelope({
       ok: parsed.ok,

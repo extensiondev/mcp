@@ -73,8 +73,8 @@ describe("extension_manifest_validate reads the tree the engine builds from", ()
     const result = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["chrome"] }));
 
     expect(result.value.buildBlocking).toBe(false);
-    expect(result.warnings.find((w: string) => w.includes("ryd.script.js"))).toContain("web_accessible_resources");
-    expect(result.warnings.find((w: string) => w.includes("images/*"))).toBeUndefined();
+    expect(result.value.warnings.find((w: string) => w.includes("ryd.script.js"))).toContain("web_accessible_resources");
+    expect(result.value.warnings.find((w: string) => w.includes("images/*"))).toBeUndefined();
   });
 });
 
@@ -92,7 +92,7 @@ describe("the Firefox report names what Firefox itself would say", () => {
     );
 
     const result = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"] }));
-    const warnings: string[] = result.warnings;
+    const warnings: string[] = result.value.warnings;
 
     expect(result.value.browserSupport.firefox.supported).toBe(true);
     expect(warnings.find((w) => w.includes("gecko.id"))).toContain("new internal id on every launch");
@@ -112,8 +112,8 @@ describe("the Firefox report names what Firefox itself would say", () => {
 
     const result = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"] }));
 
-    expect(result.warnings.find((w: string) => w.includes("gecko.id"))).toBeUndefined();
-    expect(result.warnings.find((w: string) => w.includes("data_collection_permissions"))).toContain('{"required": ["none"]}');
+    expect(result.value.warnings.find((w: string) => w.includes("gecko.id"))).toBeUndefined();
+    expect(result.value.warnings.find((w: string) => w.includes("data_collection_permissions"))).toContain('{"required": ["none"]}');
 
     const complete = project(
       {
@@ -125,7 +125,7 @@ describe("the Firefox report names what Firefox itself would say", () => {
       ["public/images/icon-16.png"],
     );
     const quiet = JSON.parse(await manifestValidate.handler({ projectPath: complete, browsers: ["firefox"] }));
-    expect(quiet.warnings.find((w: string) => w.includes("data_collection_permissions"))).toBeUndefined();
+    expect(quiet.value.warnings.find((w: string) => w.includes("data_collection_permissions"))).toBeUndefined();
   });
 
   it("gives an MV2 Firefox manifest the keys to port for Chromium", async () => {
@@ -143,7 +143,7 @@ describe("the Firefox report names what Firefox itself would say", () => {
     );
 
     const result = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"] }));
-    const porting = result.warnings.find((w: string) => w.includes("stays on Manifest V2"));
+    const porting = result.value.warnings.find((w: string) => w.includes("stays on Manifest V2"));
 
     expect(porting).toContain("chromium:service_worker");
     expect(porting).toContain("chromium:action");
@@ -172,7 +172,7 @@ describe("the Firefox report names what Firefox itself would say", () => {
     );
 
     const result = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"] }));
-    const all = [...result.warnings, ...result.value.errors].join("\n");
+    const all = [...result.value.warnings, ...result.value.errors].join("\n");
 
     expect(all).not.toContain("background.scripts to a single chromium:service_worker");
     expect(all).not.toContain("no service worker for Chromium");
@@ -192,7 +192,7 @@ describe("the Firefox report names what Firefox itself would say", () => {
 
     const result = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"] }));
 
-    expect(result.warnings.find((w: string) => w.includes("stays on Manifest V2"))).toBeUndefined();
+    expect(result.value.warnings.find((w: string) => w.includes("stays on Manifest V2"))).toBeUndefined();
   });
 
   it("still gives a Firefox-only background.scripts manifest the port advice", async () => {
@@ -202,7 +202,7 @@ describe("the Firefox report names what Firefox itself would say", () => {
     );
     const mv2Result = JSON.parse(await manifestValidate.handler({ projectPath: mv2, browsers: ["firefox"] }));
 
-    expect(mv2Result.warnings.find((w: string) => w.includes("stays on Manifest V2"))).toContain(
+    expect(mv2Result.value.warnings.find((w: string) => w.includes("stays on Manifest V2"))).toContain(
       "background.scripts to a single chromium:service_worker",
     );
 
@@ -218,7 +218,7 @@ describe("the Firefox report names what Firefox itself would say", () => {
     );
     const mv3Result = JSON.parse(await manifestValidate.handler({ projectPath: mv3, browsers: ["firefox"] }));
 
-    expect(mv3Result.warnings.find((w: string) => w.includes("no service worker for Chromium"))).toContain(
+    expect(mv3Result.value.warnings.find((w: string) => w.includes("no service worker for Chromium"))).toContain(
       "chromium:service_worker",
     );
   });
@@ -231,12 +231,26 @@ describe("template similarity counts every surface the manifest declares", () =>
       ["public/images/icon-16.png", "src/devtools.html", "src/popup.html"],
     );
 
-    const result = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["chrome"] }));
+    const result = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["chrome"], include: ["similarTemplates"] }));
     const slugs: string[] = result.value.similarTemplates.map((t: { slug: string }) => t.slug);
 
     expect(slugs[0]).toMatch(/^devtools/);
     expect(slugs.filter((s) => s.startsWith("devtools")).length).toBeGreaterThanOrEqual(3);
     expect(slugs.filter((s) => s.startsWith("ai-"))).toEqual([]);
+  });
+
+  it("answers similarTemplates only when include asks, and says each warning once (ledger 503)", async () => {
+    const dir = project(
+      { ...BASE, devtools_page: "devtools.html", "chromium:action": { default_popup: "popup.html" } },
+      ["public/images/icon-16.png", "src/devtools.html", "src/popup.html"],
+    );
+
+    const result = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"] }));
+
+    expect(result.value.similarTemplates).toBeUndefined();
+    expect(result.value.warnings.length).toBeGreaterThan(0);
+    expect(result.warnings).toEqual([]);
+    expect(JSON.stringify(result).split(JSON.stringify(result.value.warnings[0]))).toHaveLength(2);
   });
 });
 

@@ -88,7 +88,7 @@ describe("an unknown browser is refused, an empty list is the default list", () 
   it("says safari is checked as its Chromium source only", async () => {
     const dir = project(MV3);
     const out = await validate(dir, ["safari"]);
-    expect(out.warnings.join("\n")).toMatch(/safari: checked as its Chromium source manifest/);
+    expect(out.value.warnings.join("\n")).toMatch(/safari: checked as its Chromium source manifest/);
   });
 });
 
@@ -117,14 +117,14 @@ describe("the permission scan reaches src/ first and says when it stopped", () =
     fs.mkdirSync(path.join(dir, "src"), { recursive: true });
     fs.writeFileSync(path.join(dir, "src", "x.js"), "chrome.history.search({});");
     const out = await validate(dir, ["chrome"]);
-    expect(out.warnings.join("\n")).toMatch(/chrome\.history/);
-    expect(out.warnings.join("\n")).toMatch(/stopped at its cap/);
+    expect(out.value.warnings.join("\n")).toMatch(/chrome\.history/);
+    expect(out.value.warnings.join("\n")).toMatch(/stopped at its cap/);
   });
 
   it("reports a source file it could not read", async () => {
     const dir = project({ manifest_version: 3, name: "x", version: "1.0.0" }, ["src/ok.js"]);
     fs.symlinkSync("/nowhere/at/all.js", path.join(dir, "src", "gone.js"));
     const out = await validate(dir, ["chrome"]);
-    expect(out.warnings.join("\n")).toMatch(/could not be read.*gone\.js/);
+    expect(out.value.warnings.join("\n")).toMatch(/could not be read.*gone\.js/);
   });
 });
