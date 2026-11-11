@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CHROME_DEVELOPER_DASHBOARD_URL, CHROME_PUBLISHER_SLOTS_CHECK, CHROME_SLOTS_SENTENCE } from "../lib/chrome-publisher-slots";
 import { FIREFOX_AGREEMENT_CHECK, FIREFOX_AGREEMENT_URL } from "../lib/firefox-enterprise";
+import { CHROMEWEBSTORE_MD_CHECK, CHROMEWEBSTORE_MD_PREFILL_CALL } from "../lib/chromewebstore-md";
 import { buildSummaryPath } from "../lib/session-paths";
 import { REVIEWER_NOTE_TOOLCHAIN_CHECK, reviewerNoteBuildLine, toolchainDifferences, toolchainSentence } from "../lib/store-md-toolchain";
 import { WRITE_FAILURE_REPORT_URL } from "../lib/settings-write";
@@ -516,5 +517,91 @@ describe("510: an upload the store's installation test refused is the person's t
     const other = runCauseOf("chrome", { status: "failed", failureReason: "The Chrome Web Store refused the package for item x: PKG_INVALID_MANIFEST: manifest.json is not valid JSON" }, {}, url);
 
     expect(other.nextStep).toBeNull();
+describe("512: a project on Google's path is not asked to retype CHROMEWEBSTORE.md into STORE.md", () => {
+  const platform = useProjectRoutes("extdev-512-");
+
+  const CHROMEWEBSTORE_MD = [
+    "# Chrome Web Store Listing - Widget",
+    "",
+    "## Store Listing",
+    "",
+    "**Extension Name** [REQUIRED]",
+    "Widget",
+    "",
+    "**Short Description** [REQUIRED]",
+    "Blurs names on every open tab.",
+    "",
+    "**Single Purpose** [REQUIRED]",
+    "Blurs names on the pages the user has open.",
+    "",
+    "## Permissions Justification",
+    "",
+    "| Permission | Type | Justification |",
+    "|------------|------|---------------|",
+    "| activeTab | permissions | Reads the open tab to blur it. |",
+    "",
+  ].join("\n");
+
+  function ready(...names: string[]): void {
+    platform.login();
+    for (const store of names) platform.routes[PREFLIGHT(store)] = () => ({ body: report(store) });
+    platform.routes[LISTING("firefox")] = () => ({ body: ON_FILE });
+    platform.routes[SETTINGS] = () => ({ body: { enabledBrowsers: { chrome: true, firefox: true } } });
+    platform.routes[BUILD] = () => ({ body: { id: SHA, status: "success", browsers: [{ name: "chrome", status: "success" }, { name: "firefox", status: "success" }] } });
+    platform.routes[`POST ${APPROVALS}`] = () => ({ status: 201, body: { approvalId: "apr_512", approvalUrl: `${API}/device/approve/apr_512` } });
+  }
+
+  it("warns in the Chrome preflight row, without blocking, that CHROMEWEBSTORE.md already holds the lines no STORE.md carries, and names the preflight that writes them", async () => {
+    ready("chrome");
+    const projectPath = project("Blurs names");
+    fs.writeFileSync(path.join(projectPath, "CHROMEWEBSTORE.md"), CHROMEWEBSTORE_MD);
+
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], api: API, projectPath }));
+    const chrome = out.value.stores.chrome;
+    const row = (chrome.warnings as Row[]).find((item) => item.id === CHROMEWEBSTORE_MD_CHECK)!;
+
+    expect(row).toMatchObject({ severity: "advisory", actual: "no STORE.md; CHROMEWEBSTORE.md holds them", prefill: CHROMEWEBSTORE_MD_PREFILL_CALL });
+    expect((row.heldBy as Row[]).map((held) => [held.line, held.heading])).toEqual([
+      ["- Name:", "**Extension Name**"],
+      ["- Summary:", "**Short Description**"],
+      ["### Single purpose", "**Single Purpose**"],
+      ["### Permissions justification", "## Permissions Justification"],
+    ]);
+
+    expect(row.message).toContain("There is no STORE.md, and CHROMEWEBSTORE.md already holds `- Name:`, `- Summary:`, `### Single purpose` and `### Permissions justification`");
+    expect(row.message).toContain(`run ${CHROMEWEBSTORE_MD_PREFILL_CALL} and value.readiness.listingDraft.storeMd is the STORE.md to save, so nothing is retyped.`);
+    expect(chrome.canSubmit).toBe(true);
+    expect(chrome.summary.warn).toBe(1);
+    expect((chrome.failing as Row[]).map((item) => item.id)).not.toContain(CHROMEWEBSTORE_MD_CHECK);
+  });
+
+  it("carries the same finding as a warning on a real submit and still asks for the approval", async () => {
+    ready("firefox");
+    const projectPath = project("Blurs names");
+    fs.writeFileSync(path.join(projectPath, "CHROMEWEBSTORE.md"), CHROMEWEBSTORE_MD);
+
+    const out = JSON.parse(await submit({ action: "submit", browsers: ["firefox"], buildSha: SHA, dryRun: false, api: API, projectPath }));
+
+    expect(out.status).toBe("approval-required");
+    expect((out.warnings as string[]).some((line) => line.startsWith("firefox: There is no STORE.md, and CHROMEWEBSTORE.md already holds `- Name:` and `- Summary:`"))).toBe(true);
+    expect(platform.sent("POST", APPROVALS)).toHaveLength(1);
+  });
+
+  it("says nothing when STORE.md already carries every line CHROMEWEBSTORE.md holds, or when there is no CHROMEWEBSTORE.md", async () => {
+    ready("chrome");
+    const covered = project("Blurs names");
+    fs.writeFileSync(path.join(covered, "CHROMEWEBSTORE.md"), CHROMEWEBSTORE_MD);
+    fs.writeFileSync(
+      path.join(covered, "STORE.md"),
+      "# Widget\n\n## Listing\n\n- Name: Widget\n- Summary: Blurs names on every open tab.\n\n## Chrome Web Store\n\n### Single purpose\n\nBlurs names on the pages the user has open.\n\n### Permissions justification\n\n- activeTab: Reads the open tab to blur it.\n",
+    );
+
+    const bare = project("Blurs names");
+
+    for (const projectPath of [covered, bare]) {
+      const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], api: API, projectPath }));
+
+      expect((out.value.stores.chrome.warnings as Row[]).map((item) => item.id)).not.toContain(CHROMEWEBSTORE_MD_CHECK);
+    }
   });
 });

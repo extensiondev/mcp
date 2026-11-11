@@ -119,6 +119,7 @@ import {
 import { publishVersion } from "./store-publish-version";
 import { iconPaddingSentences, iconPaddingView } from "../lib/chrome-icon-padding";
 import { builtToolchainFor, reviewerNoteToolchainCheck } from "../lib/store-md-toolchain";
+import { chromeWebStoreMdCheck } from "../lib/chromewebstore-md";
 import { firefoxListingCheck, safariDescriptionCheck, withLocalChecks } from "../lib/store-preflight-local";
 import { chromePublisherSlotsCheck } from "../lib/chrome-publisher-slots";
 import { dryRunStoreRead, platformUnavailableStep, storeRunCheck } from "../lib/store-run-unavailable";
@@ -636,13 +637,15 @@ function checkView(check: Row, withLabel: boolean): Row {
   if (withLabel && text(check.label)) out.label = text(check.label);
   if (text(check.severity)) out.severity = text(check.severity);
 
-  for (const key of ["message", "expected", "actual", "docsUrl", "owner", "reportUrl", "platformLine"]) {
+  for (const key of ["message", "expected", "actual", "docsUrl", "owner", "reportUrl", "platformLine", "prefill"]) {
     if (text(check[key])) out[key] = text(check[key]);
   }
 
   for (const key of ["write", "built"]) {
     if (isRow(check[key])) out[key] = check[key];
   }
+
+  if (Array.isArray(check.heldBy)) out.heldBy = check.heldBy;
 
   const lock = lockView(check.lock);
 
@@ -1040,8 +1043,9 @@ export async function preflight(args: StoreActArgs): Promise<string> {
           : store === "chrome"
             ? [chromePublisherSlotsCheck(read.json)]
             : [];
+    const held = text(args.projectPath) ? chromeWebStoreMdCheck(text(args.projectPath), store as ListingStore, readLocalListing(text(args.projectPath), store as ListingStore)) : null;
 
-    return withLocalChecks(relayFirefoxUpdateUrl(read.json, updateManifests[i]), local);
+    return withLocalChecks(relayFirefoxUpdateUrl(read.json, updateManifests[i]), [...local, held]);
   });
   const shaFor = (json: Row, store: string): string => text(args.buildSha) || text(json.buildId) || buildsReadByPackageChecks(json, store)[0] || "";
   const dryRuns = await Promise.all(

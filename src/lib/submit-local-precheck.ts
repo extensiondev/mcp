@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { chromeWebStoreMdCheck } from "./chromewebstore-md";
 import { envelope } from "./envelope";
 import { FIREFOX_AGREEMENT_CHECK, FIREFOX_AGREEMENT_URL } from "./firefox-enterprise";
 import { projectApiGet, type ProjectApi } from "./project-api";
@@ -15,6 +16,9 @@ import { nextStep } from "./store-connection";
 import { builtToolchainFor, reviewerNoteToolchainCheck } from "./store-md-toolchain";
 import { FIREFOX_LISTING_CHECK, SAFARI_DESCRIPTION_CHECK, SAFARI_DESCRIPTION_MAX, firefoxListingCheck, safariDescriptionCheck } from "./store-preflight-local";
 import { trackUrl as consoleTrackUrl } from "./track-url";
+import { readLocalListing } from "../tools/store-listing";
+
+import type { ListingStore } from "./store-md-declarations";
 
 type Row = Record<string, unknown>;
 
@@ -96,6 +100,11 @@ export async function localSubmitPrecheck(args: LocalPrecheckArgs): Promise<{ re
   const firefox = wantsFirefox ? await firefoxRow(args.api) : null;
   const toolchain = wantsFirefox && projectPath ? reviewerNoteToolchainCheck(projectPath, await builtToolchainFor(args.api, projectPath, args.buildSha)) : null;
   if (toolchain) warnings.push(text(toolchain.message));
+
+  for (const store of projectPath ? args.browsers : []) {
+    const held = chromeWebStoreMdCheck(projectPath, store as ListingStore, readLocalListing(projectPath, store as ListingStore));
+    if (held) warnings.push(`${store}: ${text(held.message)}`);
+  }
 
   const rows = [
     ...(safariRow ? [{ store: "safari", row: safariRow }] : []),

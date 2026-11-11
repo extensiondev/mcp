@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { CHROMEWEBSTORE_MD_CHECK, CHROMEWEBSTORE_MD_PREFILL_CALL } from "../lib/chromewebstore-md";
 import { CHROME_SYNC_CALL } from "../lib/store-md-chrome-reconcile";
 import { handler as submit } from "../tools/submit";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
@@ -138,5 +139,36 @@ describe("a Chrome preflight before the first sync-listing reads STORE.md for wh
 
     expect(text).not.toContain("STORE.md has no `### Permissions justification` bullets");
     expect(text).not.toContain("STORE.md has no `- Visibility:` line");
+  });
+
+  it("warns, without blocking, that a Chrome line STORE.md lacks is already in CHROMEWEBSTORE.md, naming the line and the preflight that prefills it (ledger 512)", async () => {
+    if (process.platform === "win32") return;
+
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-hands-free-512-"));
+    fs.writeFileSync(path.join(root, "STORE.md"), STORE_MD.replace(/### Single purpose\n\n[^\n]+\n\n/, ""));
+    fs.writeFileSync(path.join(root, "CHROMEWEBSTORE.md"), "# Chrome Web Store Listing - Hands-free\n\n## Store Listing\n\n**Single Purpose** [REQUIRED]\n<!-- One sentence. -->\nControl web pages hands-free with your head and face.\n\n**Primary Language** [REQUIRED]\n\n");
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT}`] = () => ({ body: REPORT });
+
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], projectPath: root, detail: true, api: API }));
+    const chrome = out.value.stores.chrome;
+    const row = (chrome.warnings as Array<Record<string, unknown>>).find((item) => item.id === CHROMEWEBSTORE_MD_CHECK)!;
+
+    expect(row).toMatchObject({
+      severity: "advisory",
+      expected: "`### Single purpose` in STORE.md",
+      actual: "not in STORE.md; CHROMEWEBSTORE.md holds it",
+      heldBy: [{ field: "singlePurpose", line: "### Single purpose", section: "## Chrome Web Store", heading: "**Single Purpose**" }],
+      prefill: CHROMEWEBSTORE_MD_PREFILL_CALL,
+    });
+
+    expect(row.message).toBe(
+      `STORE.md has no \`### Single purpose\`, and CHROMEWEBSTORE.md holds it (**Single Purpose**); run ${CHROMEWEBSTORE_MD_PREFILL_CALL} and value.readiness.listingDraft.prefilledFrom carries the line to add, so nothing is retyped.`,
+    );
+
+    expect(chrome.canSubmit).toBe(true);
+    expect(chrome.summary.warn).toBe(REPORT.summary.warn + 1);
+    expect((chrome.failing as Array<Record<string, unknown>>).map((item) => item.id)).not.toContain(CHROMEWEBSTORE_MD_CHECK);
+    expect(out.value.readiness.listingDraft.prefilledFrom).toMatchObject({ file: "CHROMEWEBSTORE.md", fields: ["singlePurpose"] });
   });
 });
