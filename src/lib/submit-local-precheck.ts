@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { envelope } from "./envelope";
+import { FIREFOX_AGREEMENT_CHECK, FIREFOX_AGREEMENT_URL } from "./firefox-enterprise";
 import { projectApiGet, type ProjectApi } from "./project-api";
 import { type ProjectRef } from "./registry";
 import { text } from "./ship-act";
@@ -21,7 +22,7 @@ export const LOCAL_CHECK_FAILED_STATE = "preflight-failed" as const;
 
 export const SAFARI_DESCRIPTION_UNCHECKED = `The Safari manifest description check (${SAFARI_DESCRIPTION_CHECK}: ${SAFARI_DESCRIPTION_MAX} characters or fewer, App Store Connect error 90849) did not run because no projectPath was given; pass projectPath to run it before the approval is asked for.`;
 
-interface LocalPrecheckArgs {
+export interface LocalPrecheckArgs {
   api: ProjectApi | null;
   browsers: string[];
   buildSha: string;
@@ -33,6 +34,7 @@ interface LocalPrecheckArgs {
 const REFUSAL_NAMES: Record<string, { name: string; code: string }> = {
   [SAFARI_DESCRIPTION_CHECK]: { name: "SafariDescriptionTooLong", code: "E_MANIFEST_BLOCKING" },
   [FIREFOX_LISTING_CHECK]: { name: "FirefoxListingMissing", code: "E_PLATFORM" },
+  [FIREFOX_AGREEMENT_CHECK]: { name: "FirefoxAgreementNotAccepted", code: "E_PLATFORM" },
 };
 
 async function firefoxRow(api: ProjectApi | null): Promise<Row | null> {
@@ -41,20 +43,23 @@ async function firefoxRow(api: ProjectApi | null): Promise<Row | null> {
   return firefoxListingCheck(await projectApiGet<Row>(api, "stores/firefox/listing").catch(() => null));
 }
 
-function refusal(rows: Array<{ store: string; row: Row }>, args: LocalPrecheckArgs): string {
+export function localCheckRefusal(rows: Array<{ store: string; row: Row }>, args: LocalPrecheckArgs): string {
   const first = rows[0]!;
   const id = text(first.row.id);
   const named = REFUSAL_NAMES[id] ?? { name: "PreflightFailed", code: "E_PLATFORM" };
   const say = rows.map(({ row }) => text(row.message)).join(" ");
   const sync = id === FIREFOX_LISTING_CHECK;
-  const trackUrl = consoleTrackUrl(
-    sync ? "store" : "build",
-    {
-      ...(args.ref ? { workspace: args.ref.workspace, project: args.ref.project } : {}),
-      ...(sync ? { store: first.store } : { buildId: args.buildSha, browser: first.store }),
-    },
-    args.apiBase,
-  );
+  const agreement = id === FIREFOX_AGREEMENT_CHECK;
+  const trackUrl = agreement
+    ? FIREFOX_AGREEMENT_URL
+    : consoleTrackUrl(
+        sync ? "store" : "build",
+        {
+          ...(args.ref ? { workspace: args.ref.workspace, project: args.ref.project } : {}),
+          ...(sync ? { store: first.store } : { buildId: args.buildSha, browser: first.store }),
+        },
+        args.apiBase,
+      );
 
   return envelope({
     ok: false,
@@ -74,11 +79,13 @@ function refusal(rows: Array<{ store: string; row: Row }>, args: LocalPrecheckAr
       failing: rows.map(({ store, row }) => ({ store, ...row })),
       trackUrl,
       sayToPerson: say,
-      nextStep: nextStep(sync ? "sync-listing" : "resubmit", say, trackUrl),
+      nextStep: nextStep(sync ? "sync-listing" : agreement ? "configure" : "resubmit", say, trackUrl),
     },
     hint: say,
   });
 }
+
+const refusal = localCheckRefusal;
 
 export async function localSubmitPrecheck(args: LocalPrecheckArgs): Promise<{ refused: string | null; warnings: string[] }> {
   const projectPath = text(args.projectPath);

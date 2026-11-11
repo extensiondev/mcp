@@ -42,17 +42,31 @@ export function storeRunUnavailable(status: number, body: unknown): StoreRunUnav
   return null;
 }
 
+export interface DryRunStoreRead {
+  fault: StoreRunUnavailable | null;
+  body: Row | null;
+}
+
+export async function dryRunStoreRead(
+  api: Pick<ProjectApi, "base" | "token" | "command"> & { ref?: CredentialRef | null },
+  browsers: string[],
+  buildSha: string,
+): Promise<DryRunStoreRead> {
+  if (!buildSha || !browsers.length) return { fault: null, body: null };
+
+  const read = await platformApiGet<Row>(api, "/api/cli/stores/submit", undefined, { method: "POST", body: { browsers, buildSha, dryRun: true } }).catch(() => null);
+  if (!read) return { fault: null, body: null };
+  if (read.ok) return { fault: null, body: isRow(read.json) ? read.json : null };
+
+  return { fault: storeRunUnavailable(read.status, read.body), body: null };
+}
+
 export async function dryRunStoreRun(
   api: Pick<ProjectApi, "base" | "token" | "command"> & { ref?: CredentialRef | null },
   browsers: string[],
   buildSha: string,
 ): Promise<StoreRunUnavailable | null> {
-  if (!buildSha || !browsers.length) return null;
-
-  const read = await platformApiGet<Row>(api, "/api/cli/stores/submit", undefined, { method: "POST", body: { browsers, buildSha, dryRun: true } }).catch(() => null);
-  if (!read || read.ok) return null;
-
-  return storeRunUnavailable(read.status, read.body);
+  return (await dryRunStoreRead(api, browsers, buildSha)).fault;
 }
 
 export interface ReportScope {

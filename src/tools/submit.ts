@@ -111,8 +111,10 @@ import {
 } from "../lib/store-connection";
 import { browserBuildRefusal, browserBuildVerdicts } from "../lib/browser-builds";
 import { localSubmitPrecheck } from "../lib/submit-local-precheck";
-import { dryRunStoreRun, platformUnavailableAnswer, storeRunUnavailable } from "../lib/store-run-unavailable";
 import { installRefusedAfterRun, installRefusedAnswer, installRefusedRecords, storeRefusedInstall } from "../lib/store-refused-install";
+import { LOCAL_CHECK_FAILED_STATE, localCheckRefusal, localSubmitPrecheck } from "../lib/submit-local-precheck";
+import { dryRunStoreRead, platformUnavailableAnswer, storeRunUnavailable } from "../lib/store-run-unavailable";
+import { FIREFOX_AGREEMENT_URL, firefoxAgreementCheck, firefoxAgreementOf } from "../lib/firefox-enterprise";
 import { appendWarnings } from "../lib/envelope-warnings";
 import { reviewPromiseFromApproval } from "../lib/review-promise";
 import { SUBMIT_ACTION_SAFETY } from "../lib/submit-action-safety";
@@ -607,10 +609,17 @@ async function connectionPrecheck(
     const local = await localSubmitPrecheck({ api: read.api, browsers, buildSha: scope.buildSha, projectPath: args.projectPath, ref, apiBase: args.api });
     if (local.refused) return { refused: local.refused, modes, reports: read.reports, warnings: local.warnings };
 
-    const unavailable = read.api && !String(args.approvalId ?? "").trim() ? await dryRunStoreRun(read.api, browsers, scope.buildSha) : null;
-    const refused = unavailable ? platformUnavailableAnswer({ command: "extension_submit", found: unavailable, dryRun: false, ref, stores: browsers, buildSha: scope.buildSha }) : null;
+    const dryRun = read.api && !String(args.approvalId ?? "").trim() ? await dryRunStoreRead(read.api, browsers, scope.buildSha) : null;
+    const unavailable = dryRun?.fault ?? null;
+    const agreement = browsers.includes("firefox") && dryRun?.body ? firefoxAgreementCheck(firefoxAgreementOf(dryRun.body)) : null;
+    const refused = unavailable
+      ? platformUnavailableAnswer({ command: "extension_submit", found: unavailable, dryRun: false, ref, stores: browsers, buildSha: scope.buildSha })
+      : agreement && agreement.status === "fail"
+        ? localCheckRefusal([{ store: "firefox", row: agreement }], { api: read.api, browsers, buildSha: scope.buildSha, projectPath: args.projectPath, ref, apiBase: args.api })
+        : null;
+    const warnings = agreement && agreement.status === "warn" ? [...local.warnings, String(agreement.message)] : local.warnings;
 
-    return { refused, modes, reports: read.reports, warnings: local.warnings };
+    return { refused, modes, reports: read.reports, warnings };
   }
 
   const step = connectionStep(blocked, connections[blocked.browser], ctx);
@@ -1277,6 +1286,19 @@ async function answer(args: SubmitToolArgs): Promise<string> {
     result.preflight = rows;
     result.nextStep = verdict.nextStep;
     result.trackUrl = verdict.trackUrl;
+
+    const agreement = browsers.includes("firefox") ? firefoxAgreementCheck(firefoxAgreementOf(data)) : null;
+
+    if (agreement && agreement.status === "fail" && verdict.ok) {
+      ok = false;
+      result.verdict = LOCAL_CHECK_FAILED_STATE;
+      result.nextStep = nextStep("configure", String(agreement.message), FIREFOX_AGREEMENT_URL);
+      result.trackUrl = FIREFOX_AGREEMENT_URL;
+      result.firefoxAgreement = agreement;
+    } else if (agreement) {
+      warnings.push(String(agreement.message));
+    }
+
     if (platformChannel) result.channel = platformChannel;
     else delete result.channel;
 
@@ -1309,7 +1331,9 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       );
     }
 
-    message = `${verdict.say}${checked}${modeLine}${versionLine ? ` ${versionLine}` : ""}`;
+    message = result.firefoxAgreement
+      ? `Not ready for firefox: ${String(agreement?.message)}`
+      : `${verdict.say}${checked}${modeLine}${versionLine ? ` ${versionLine}` : ""}`;
   }
 
   if (!dryRun) {

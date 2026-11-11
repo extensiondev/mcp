@@ -121,7 +121,8 @@ import { iconPaddingSentences, iconPaddingView } from "../lib/chrome-icon-paddin
 import { builtToolchainFor, reviewerNoteToolchainCheck } from "../lib/store-md-toolchain";
 import { firefoxListingCheck, safariDescriptionCheck, withLocalChecks } from "../lib/store-preflight-local";
 import { chromePublisherSlotsCheck } from "../lib/chrome-publisher-slots";
-import { dryRunStoreRun, platformUnavailableStep, storeRunCheck } from "../lib/store-run-unavailable";
+import { dryRunStoreRead, platformUnavailableStep, storeRunCheck } from "../lib/store-run-unavailable";
+import { FIREFOX_AGREEMENT_CHECK, FIREFOX_AGREEMENT_URL, firefoxAgreementCheck, firefoxAgreementOf, firefoxEnterpriseChannelOf } from "../lib/firefox-enterprise";
 
 import type { PackageScope } from "../lib/package-address";
 import type { ListingStore } from "../lib/store-md-listing";
@@ -1043,23 +1044,26 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     return withLocalChecks(relayFirefoxUpdateUrl(read.json, updateManifests[i]), local);
   });
   const shaFor = (json: Row, store: string): string => text(args.buildSha) || text(json.buildId) || buildsReadByPackageChecks(json, store)[0] || "";
-  const platformFaults = await Promise.all(
+  const dryRuns = await Promise.all(
     asked.map((store, i) => {
       const json = checked[i];
       if (!json || !isRow(json.summary) || json.summary.canSubmit !== true) return Promise.resolve(null);
 
-      return dryRunStoreRun(api, [store], shaFor(json, store));
+      return dryRunStoreRead(api, [store], shaFor(json, store));
     }),
   );
+  const platformFaults = dryRuns.map((dryRun) => dryRun?.fault ?? null);
   const platformBlocked = asked.filter((store, i) => platformFaults[i] !== null);
   const platformScope = { ref: api.ref, stores: platformBlocked, buildSha: platformBlocked.length ? shaFor(checked[asked.indexOf(platformBlocked[0]!)]!, platformBlocked[0]!) : "" };
+  const enterpriseChannel = asked.includes("firefox") ? firefoxEnterpriseChannelOf(text(args.projectPath)) : null;
 
   asked.forEach((store, i) => {
     const read = reads[i];
     if (read.ok) {
       const updateManifest = updateManifests[i];
       const fault = platformFaults[i];
-      const json = withLocalChecks(checked[i]!, [fault ? storeRunCheck(fault, { ref: api.ref, stores: [store], buildSha: shaFor(checked[i]!, store) }) : null]);
+      const agreement = store === "firefox" && dryRuns[i]?.body ? firefoxAgreementCheck(firefoxAgreementOf(dryRuns[i]!.body)) : null;
+      const json = withLocalChecks(checked[i]!, [fault ? storeRunCheck(fault, { ref: api.ref, stores: [store], buildSha: shaFor(checked[i]!, store) }) : null, agreement]);
       reports[store] = json;
 
       const block = storePreflightView(json, store, text(args.projectPath) ? readLocalListing(text(args.projectPath), store as ListingStore) : null);
@@ -1082,6 +1086,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
                 firefoxConnectUrl(api.ref, args.api),
               ),
               ...(updateManifest ? { updateManifest } : {}),
+              ...(enterpriseChannel ? { enterpriseChannel } : {}),
             }
           : store === "safari" && safariSigningOf(json)
             ? { ...view, signing: safariSigningOf(json) }
@@ -1139,6 +1144,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
   const sourceLine = [
     firefoxView && isRow(firefoxView.sourceArchive) ? ` ${text(firefoxView.sourceArchive.say)}` : "",
     firefoxView && isRow(firefoxView.updateManifest) ? ` ${text(firefoxView.updateManifest.say)}` : "",
+    firefoxView && isRow(firefoxView.enterpriseChannel) ? ` ${text(firefoxView.enterpriseChannel.say)}` : "",
   ].join("");
   const inputsSay = inputsSentences(stores);
   const workspaceLine = Object.entries(stores)
@@ -1494,6 +1500,10 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     ]),
   );
   const goes = asked.filter((store) => isRow(stores[store]) && (stores[store] as Row).canSubmit === true && (stores[store] as Row).readyForReview !== false);
+  const agreementBlock = reports.firefox && Array.isArray(reports.firefox.checks)
+    ? reports.firefox.checks.filter(isRow).find((check) => text(check.id) === FIREFOX_AGREEMENT_CHECK && text(check.status) === "fail")
+    : undefined;
+  const agreementStep = agreementBlock ? nextStep("configure", text(agreementBlock.message), FIREFOX_AGREEMENT_URL) : null;
   const step = platformBlocked.length
     ? platformUnavailableStep(platformScope)
     : reviewBlocks
@@ -1502,7 +1512,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       ? captureStep
       : green
         ? notReadyStep ?? submitStep(asked, modeIds)
-        : partialSubmitStep(goes, blocked, modeIds) ?? (buildVerdict ? browserBuildStep(buildVerdict) : null);
+        : partialSubmitStep(goes, blocked, modeIds) ?? agreementStep ?? (buildVerdict ? browserBuildStep(buildVerdict) : null);
 
   return envelope({
     ok: true,

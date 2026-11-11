@@ -10,9 +10,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CHROME_DEVELOPER_DASHBOARD_URL, CHROME_PUBLISHER_SLOTS_CHECK, CHROME_SLOTS_SENTENCE } from "../lib/chrome-publisher-slots";
+import { FIREFOX_AGREEMENT_CHECK, FIREFOX_AGREEMENT_URL } from "../lib/firefox-enterprise";
 import { buildSummaryPath } from "../lib/session-paths";
 import { REVIEWER_NOTE_TOOLCHAIN_CHECK, reviewerNoteBuildLine, toolchainDifferences, toolchainSentence } from "../lib/store-md-toolchain";
 import { WRITE_FAILURE_REPORT_URL } from "../lib/settings-write";
@@ -185,6 +186,123 @@ describe("a real submit runs the preflight's two local checks before the approva
     expect(storeRunUnavailable(404, { message: "not found" })).toBeNull();
     expect(storeRunUnavailable(409, { code: "EDGE_PACKAGE_HAS_ARCHIVES", message: "nested archives" })).toBeNull();
     expect(storeRunUnavailable(500, { message: NO_STORE_RUN })).toBeNull();
+  });
+});
+
+describe("511: the Firefox preflight names the updated AMO Distribution Agreement before any approval is asked", () => {
+  const platform = useProjectRoutes("extdev-511-");
+  const DRY = { ok: true, dryRun: true, projectId: "prj_probe", buildId: SHA, browsers: ["firefox"], verdicts: [] };
+
+  function firefoxReady(dryRun: Row): void {
+    platform.login();
+    platform.routes[PREFLIGHT("firefox")] = () => ({ body: report("firefox") });
+    platform.routes[LISTING("firefox")] = () => ({ body: ON_FILE });
+    platform.routes[SETTINGS] = () => ({ body: { enabledBrowsers: { chrome: true, edge: true, firefox: true, safari: true } } });
+    platform.routes[BUILD] = () => ({ body: { id: SHA, status: "success", browsers: ["chrome", "firefox"].map((name) => ({ name, status: "success" })) } });
+    platform.routes[`POST ${APPROVALS}`] = () => ({ status: 201, body: { approvalId: "apr_511", approvalUrl: `${API}/device/approve/apr_511` } });
+    platform.routes[`POST ${DISPATCH}`] = () => ({ body: dryRun });
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function preflightRow(): Promise<{ view: Row; row: Row | undefined; out: Row }> {
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["firefox"], buildSha: SHA, api: API }));
+    const view = out.value.stores.firefox as Row;
+    const rows = [...((view.failing as Row[]) ?? []), ...((view.warnings as Row[]) ?? [])];
+
+    return { view, row: rows.find((check) => check.id === FIREFOX_AGREEMENT_CHECK), out };
+  }
+
+  it("blocks with owner you and the AMO agreement page once the day has passed and AMO dates the acceptance before it, and the real submit refuses before any approval POST", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-12-02T12:00:00.000Z"));
+    firefoxReady({ ...DRY, firefox: { agreementAccepted: false, agreementAcceptedAt: "2026-03-09T10:00:00.000Z", agreementChangeDate: "2026-12-01" } });
+
+    const { view, row, out } = await preflightRow();
+
+    expect(view.canSubmit).toBe(false);
+    expect(row).toMatchObject({ owner: "you", severity: "blocking", docsUrl: FIREFOX_AGREEMENT_URL });
+    expect(row!.message).toContain("AMO records the agreement accepted on 2026-03-09, before the updated one");
+    expect(row!.message).toContain(`Accept it at ${FIREFOX_AGREEMENT_URL}`);
+    expect(out.value.nextStep.say).toContain(FIREFOX_AGREEMENT_URL);
+
+    const real = JSON.parse(await submit({ action: "submit", browsers: ["firefox"], buildSha: SHA, dryRun: false, api: API }));
+
+    expect(real.ok).toBe(false);
+    expect(real.status).toBe(LOCAL_CHECK_FAILED_STATE);
+    expect(real.error).toMatchObject({ name: "FirefoxAgreementNotAccepted", checkId: FIREFOX_AGREEMENT_CHECK });
+    expect(real.value).toMatchObject({ refusedBeforeApproval: true, trackUrl: FIREFOX_AGREEMENT_URL });
+    expect(real.value.nextStep).toMatchObject({ kind: "configure", url: FIREFOX_AGREEMENT_URL });
+    expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
+  });
+
+  it("warns, and still asks for the approval, while the day has not come", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-11T12:00:00.000Z"));
+    firefoxReady({ ...DRY, firefox: { agreementAccepted: false, agreementAcceptedAt: "2026-03-09T10:00:00.000Z", agreementChangeDate: "2026-12-01" } });
+
+    const { view, row } = await preflightRow();
+
+    expect(view.canSubmit).toBe(true);
+    expect(row).toMatchObject({ owner: "you", severity: "warning" });
+    expect(row!.message).toContain("December 1, 2026");
+    expect(row!.message).toContain(FIREFOX_AGREEMENT_URL);
+
+    const real = JSON.parse(await submit({ action: "submit", browsers: ["firefox"], buildSha: SHA, dryRun: false, api: API }));
+
+    expect(real.status).toBe("approval-required");
+    expect((real.warnings as string[]).some((line) => line.includes(FIREFOX_AGREEMENT_URL))).toBe(true);
+  });
+
+  it("says the acceptance could not be read, as a warning before the day and a block after it, and says nothing once AMO dates it after the updated agreement", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-11T12:00:00.000Z"));
+    firefoxReady({ ...DRY, firefox: { agreementAccepted: "unknown", agreementAcceptedAt: null, agreementChangeDate: "2026-12-01", agreementDetail: "Firefox Add-ons refused the API key (HTTP 401)" } });
+
+    const before = await preflightRow();
+
+    expect(before.view.canSubmit).toBe(true);
+    expect(before.row).toMatchObject({ severity: "warning" });
+    expect(before.row!.message).toContain("could not be read: Firefox Add-ons refused the API key (HTTP 401)");
+
+    vi.setSystemTime(new Date("2026-12-01T00:00:00.000Z"));
+    firefoxReady({ ...DRY, firefox: { agreementAccepted: "unknown", agreementAcceptedAt: null, agreementChangeDate: "2026-12-01", agreementDetail: "Firefox Add-ons refused the API key (HTTP 401)" } });
+
+    const after = await preflightRow();
+
+    expect(after.view.canSubmit).toBe(false);
+    expect(after.row).toMatchObject({ severity: "blocking", owner: "you", docsUrl: FIREFOX_AGREEMENT_URL });
+    expect(after.row!.message).toContain("could not be read");
+
+    firefoxReady({ ...DRY, firefox: { agreementAccepted: true, agreementAcceptedAt: "2026-12-01T09:00:00.000Z", agreementChangeDate: "2026-12-01" } });
+
+    const accepted = await preflightRow();
+
+    expect(accepted.view.canSubmit).toBe(true);
+    expect(accepted.row).toBeUndefined();
+  });
+
+  it("names the enterprise channel in the Firefox summary when the manifest sets admin_install_only true", async () => {
+    firefoxReady({ ...DRY, firefox: { agreementAccepted: true, agreementAcceptedAt: "2026-12-01T09:00:00.000Z", agreementChangeDate: "2026-12-01" } });
+    const projectPath = project("Widget");
+    fs.writeFileSync(
+      path.join(projectPath, "src", "manifest.json"),
+      JSON.stringify({ manifest_version: 3, name: "Widget", version: "0.1.0", "firefox:browser_specific_settings": { gecko: { id: "w@example.com", admin_install_only: true } } }),
+    );
+
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["firefox"], buildSha: SHA, api: API, projectPath }));
+    const view = out.value.stores.firefox as Row;
+
+    expect(view.enterpriseChannel).toMatchObject({ adminInstallOnly: true, channel: "enterprise", from: "2026-12-01", readFrom: "the source src/manifest.json" });
+    expect(out.value.sayToPerson).toContain("enterprise channel, which is neither listed nor unlisted");
+    expect(out.value.sayToPerson).toContain("from December 1, 2026");
+
+    const plain = JSON.parse(await submit({ action: "preflight", browsers: ["firefox"], buildSha: SHA, api: API, projectPath: project("Widget") }));
+
+    expect(plain.value.stores.firefox.enterpriseChannel).toBeUndefined();
+    expect(plain.value.sayToPerson).not.toContain("enterprise channel");
   });
 });
 
