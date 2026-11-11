@@ -60,6 +60,7 @@ import {
   productionSessionCommand,
 } from "../lib/extension-surfaces";
 import { surfaceDocument } from "./open";
+import { readOpeningIfClosed, surfaceOpening } from "../lib/open-if-closed";
 import { listBridgeTabs, matchTabsByUrl } from "../lib/bridge-tabs";
 import { lacksScriptingOnMv3, readGeckoTabWithoutScripting } from "../lib/gecko-no-scripting";
 
@@ -100,7 +101,7 @@ export const schema = {
         enum: ["content", "page", "popup", "options", "sidebar", "devtools", "newtab", "history", "bookmarks"],
         default: "content",
         description:
-          "Surfaces must already be open (extension_open).",
+          "A closed surface is opened first (as extension_open does); the answer then says opened: true.",
       },
       include: {
         type: "array",
@@ -420,7 +421,11 @@ async function cdpPortOrError(
   return { port: resolved.port };
 }
 
-export async function handler(
+export async function handler(args: Parameters<typeof snapshot>[0]): Promise<string> {
+  return readOpeningIfClosed(() => snapshot(args), surfaceOpening(schema.name, args));
+}
+
+async function snapshot(
   args: ActArgs & {
     tab?: number;
     url?: string;

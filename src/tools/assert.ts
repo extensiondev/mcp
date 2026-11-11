@@ -83,6 +83,8 @@ import {
   type NoOutsideRequestsClause,
 } from "./assert-network";
 import { serverVersion } from "../lib/producer-version";
+import { openCall, openClosedSurface, openFailedSentence } from "../lib/open-if-closed";
+import { notReadyCheck } from "../lib/verdict-not-ready";
 
 const COMMAND = "extension_assert";
 
@@ -753,9 +755,36 @@ export function renderedFromEvidence(evidence: {
   return elements > 0 && (text > 0 || elements > 1);
 }
 
+async function openThenAssertSurface(
+  clause: SurfaceClause,
+  stage: Stage,
+  document: string,
+  why: string,
+  evidence: Record<string, unknown> = {},
+): Promise<CheckResult> {
+  const request = { command: COMMAND, projectPath: stage.projectPath, browser: stage.browser, surface: clause.surface, timeout: stage.timeout };
+  const open = await openClosedSurface(request);
+
+  if (!open.opened) {
+    return notReadyCheck(
+      SURFACE,
+      clause.subject,
+      `The ${clause.surface} is declared (${document}) but nothing is rendering it: ${why}, and opening it from this check did not land it (${openFailedSentence(open.answer)}).`,
+      `Open it with ${openCall(request)}, wait for it to render, then assert again.`,
+      { ...evidence, document, opened: false },
+    );
+  }
+
+  await stage.refreshTargets();
+  const again = await assertSurfaceRendered(clause, stage, true);
+
+  return { ...again, evidence: { ...(again.evidence ?? {}), opened: true } };
+}
+
 async function assertSurfaceRendered(
   clause: SurfaceClause,
   stage: Stage,
+  opened = false,
 ): Promise<CheckResult> {
   const id = SURFACE;
   const subject = clause.subject;
@@ -848,10 +877,12 @@ async function assertSurfaceRendered(
     const message = String(parsed?.error?.message ?? raw);
 
     if (parsed?.error?.code === "E_TARGET_NOT_FOUND" || /\bis not open\b/i.test(message)) {
+      if (!opened) return openThenAssertSurface(clause, stage, document, "the surface relay has no open document to answer from");
+
       return failCheck(
         id,
         subject,
-        `The ${clause.surface} is declared (${document}) but nothing is rendering it: the surface relay has no open document to answer from. Open it with extension_open (surface: '${clause.surface}') before asserting.`,
+        `The ${clause.surface} is declared (${document}) but nothing is rendering it: the surface relay has no open document to answer from, although this check opened it (extension_open answered ok). Open it with extension_open (surface: '${clause.surface}') and assert again.`,
         { document },
       );
     }
@@ -906,16 +937,15 @@ async function assertSurfaceRendered(
   }
 
   if (!target) {
+    const openPages = targets.filter((candidate) => candidate.type === "page").map((candidate) => candidate.url);
+    const why = `no page target for ${wanted} is open in the session`;
+    if (!opened) return openThenAssertSurface(clause, stage, document, why, { expectedUrl: wanted, openPages });
+
     return failCheck(
       id,
       subject,
-      `The ${clause.surface} is declared (${document}) but nothing is rendering it: no page target for ${wanted} is open in the session. Open it with extension_open (surface: '${clause.surface}', asTab: true) before asserting.`,
-      {
-        expectedUrl: wanted,
-        openPages: targets
-          .filter((candidate) => candidate.type === "page")
-          .map((candidate) => candidate.url),
-      },
+      `The ${clause.surface} is declared (${document}) but nothing is rendering it: ${why}, although this check opened it (extension_open answered ok). Open it as a tab with extension_open (surface: '${clause.surface}', asTab: true) and assert again.`,
+      { expectedUrl: wanted, openPages },
     );
   }
 

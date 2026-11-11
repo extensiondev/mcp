@@ -123,17 +123,20 @@ describe("extension_screenshot context sidebar on Firefox captures the open pane
     expect(out.warnings.join("\n")).toMatch(/real sidebar panel at the panel's own 360x700 CSS px/);
   }, 20_000);
 
-  it("names the closed panel and the open call that fixes it when no tab shows the document either", async () => {
+  it("518: opens the closed panel through the browser's sidebar controller, the way extension_open does, then captures it and says opened: true", async () => {
     const fake = await firefox();
     const dir = project(MV2, fake.port);
 
     const out = JSON.parse(await screenshot.handler({ projectPath: dir, browser: "firefox", context: "sidebar", timeout: 15000 }));
 
-    expect(out.ok).toBe(false);
-    expect(out.error.code).toBe("E_NO_TARGET");
-    expect(out.error.message).toContain("the sidebar panel is not open");
-    expect(out.hint).toContain('extension_open surface: "sidebar"');
-    expect(fake.captures).toHaveLength(0);
+    expect(out.ok).toBe(true);
+    expect(out.value).toMatchObject({ context: "sidebar", url: SIDEBAR_URL, transport: "rdp", opened: true });
+    expect(calls.map((cli) => cli[0])).toEqual(["open", "inspect"]);
+    expect(fake.opens).toBe(1);
+    expect(fake.sidebarOpen()).toBe(true);
+    expect(fake.captures).toHaveLength(1);
+    expect(out.warnings.join("\n")).toMatch(/opened the real panel through the browser's own sidebar controller/);
+    expect(out.warnings.join("\n")).toContain('The sidebar was closed, so this call opened it the way extension_open surface: "sidebar" does, then read it');
   }, 20_000);
 });
 

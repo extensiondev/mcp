@@ -36,6 +36,25 @@ vi.mock("../lib/cdp-port", async (importOriginal) => {
   return { ...actual, resolveCdpPort: async () => null };
 });
 
+const opens: unknown[] = [];
+vi.mock("../tools/open", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+
+  return {
+    ...actual,
+    handler: async (args: unknown) => {
+      opens.push(args);
+
+      return JSON.stringify({
+        ok: false,
+        command: "extension_open",
+        status: "no-session",
+        error: { code: "E_NO_SESSION", name: "NoSession", message: "no live session answers in this cell" },
+      });
+    },
+  };
+});
+
 const evalTool = await import("../tools/eval");
 const relay = await import("../lib/relay-eval");
 
@@ -215,8 +234,10 @@ describe("extension_eval on a relay surface never hands the relay a promise", ()
     );
 
     expect(result.ok).toBe(false);
-    expect(result.error.code).toBe("E_TARGET_NOT_FOUND");
+    expect(opens).toHaveLength(1);
+    expect(result.error.code).toBe("E_NO_SESSION");
     expect(result.error.message).toContain('extension_open with surface: "newtab"');
+    expect(result.error.message).toContain("no live session answers in this cell");
     expect(result.error.message).not.toContain("extension open newtab");
   });
 

@@ -72,6 +72,26 @@ vi.mock("../lib/act", async (importOriginal) => {
   return { ...actual, runActVerb: async () => live.storageFrame };
 });
 
+const opens = vi.hoisted(() => ({
+  calls: [] as Array<Record<string, unknown>>,
+  answer: null as null | ((args: Record<string, unknown>) => string),
+}));
+
+vi.mock("../tools/open", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+
+  return {
+    ...actual,
+    handler: async (args: Record<string, unknown>) => {
+      opens.calls.push(args);
+
+      return opens.answer
+        ? opens.answer(args)
+        : JSON.stringify({ ok: false, command: "extension_open", status: "no-session", error: { code: "E_NO_SESSION", name: "NoSession", message: "no live session answers in this cell" } });
+    },
+  };
+});
+
 const { handler } = await import("../tools/assert");
 const { matchPatternCovers, contentScriptsForbidden } = await import(
   "../lib/match-patterns"
@@ -124,6 +144,8 @@ async function assertOnce(clause: Record<string, unknown>) {
 
 beforeEach(() => {
   project = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-assert-"));
+  opens.calls = [];
+  opens.answer = null;
   live.targets = [];
   live.runtimeIds = {};
   live.render = null;
@@ -358,18 +380,79 @@ describe("surface-rendered", () => {
     expect(check.outcome).toBe("fail");
     expect(check.detail).toContain("declares no popup");
     expect(check.detail).toContain("options");
+    expect(opens.calls).toEqual([]);
   });
 
-  it("fails when the surface is declared but nothing is rendering it", async () => {
+  it("518: opens a closed popup the way extension_open does, reads it and passes with opened: true", async () => {
     writeManifest(withPopup);
     liveSession();
-    live.targets = [{ id: "tab", type: "page", url: "https://example.test/" }];
+    live.targets = [
+      { id: "sw", type: "service_worker", url: `chrome-extension://${GUEST_ID}/background/service_worker.js` },
+      { id: "tab", type: "page", url: "https://example.test/" },
+    ];
+
+    live.render = { readyState: "complete", bodyElementCount: 5, textLength: 9 };
+
+    opens.answer = () => {
+      live.targets = [...live.targets, { id: "popup", type: "page", url: `chrome-extension://${GUEST_ID}/popup.html` }];
+
+      return JSON.stringify({ ok: true, command: "extension_open", status: "ok", value: { surface: "popup", opened: true } });
+    };
+
     const { check } = await assertOnce({
       assert: "surface-rendered",
       surface: "popup",
     });
+
+    expect(opens.calls).toEqual([{ projectPath: project, browser: BROWSER, surface: "popup", timeout: undefined }]);
+    expect(check.outcome).toBe("pass");
+    expect(check.evidence.opened).toBe(true);
+    expect(check.detail).toContain("rendering");
+  });
+
+  it("518: is not ready, naming the open's own reason, when the closed popup does not open", async () => {
+    writeManifest(withPopup);
+    liveSession();
+    live.targets = [{ id: "tab", type: "page", url: "https://example.test/" }];
+    opens.answer = () =>
+      JSON.stringify({
+        ok: false,
+        command: "extension_open",
+        status: "surface-did-not-open",
+        error: { code: "E_SURFACE_DID_NOT_OPEN", name: "SurfaceDidNotOpen", message: "The engine reported the popup as opened, but no document for it appeared within 3s." },
+      });
+
+    const { check } = await assertOnce({
+      assert: "surface-rendered",
+      surface: "popup",
+    });
+
+    expect(opens.calls).toHaveLength(1);
+    expect(check.outcome).toBe("inconclusive");
+    expect(check.reason).toBe("not-ready");
+    expect(check.detail).toContain("no page target");
+    expect(check.detail).toContain("extension_open answered surface-did-not-open: The engine reported the popup as opened, but no document for it appeared within 3s.");
+    expect(check.evidence).toMatchObject({ opened: false });
+    expect(check.settledBy).toContain('extension_open surface: "popup"');
+  });
+
+  it("518: fails on the read that follows the open when the popup still has no page target", async () => {
+    writeManifest(withPopup);
+    liveSession();
+    live.targets = [{ id: "tab", type: "page", url: "https://example.test/" }];
+    opens.answer = () => JSON.stringify({ ok: true, command: "extension_open", status: "ok", value: { surface: "popup", opened: true } });
+
+    const { check } = await assertOnce({
+      assert: "surface-rendered",
+      surface: "popup",
+    });
+
+    expect(opens.calls).toHaveLength(1);
     expect(check.outcome).toBe("fail");
     expect(check.detail).toContain("no page target");
+    expect(check.detail).toContain("this check opened it");
+    expect(check.detail).not.toContain("before asserting");
+    expect(check.evidence.opened).toBe(true);
   });
 
   it("passes on a new tab override Chrome lists as chrome://newtab/ once the page answers with this extension's id", async () => {
@@ -387,7 +470,7 @@ describe("surface-rendered", () => {
     expect(check.outcome).toBe("pass");
   });
 
-  it("still fails when the chrome://newtab/ page belongs to Chrome or another extension", async () => {
+  it("never takes a chrome://newtab/ page that belongs to Chrome or another extension for ours, and opens our own instead", async () => {
     writeManifest({ chrome_url_overrides: { newtab: "newtab.html" } });
     liveSession();
     live.targets = [
@@ -399,7 +482,9 @@ describe("surface-rendered", () => {
     live.render = { readyState: "complete", bodyElementCount: 12, textLength: 40 };
 
     const { check } = await assertOnce({ assert: "surface-rendered", surface: "newtab" });
-    expect(check.outcome).toBe("fail");
+    expect(opens.calls).toEqual([{ projectPath: project, browser: BROWSER, surface: "newtab", timeout: undefined }]);
+    expect(check.outcome).toBe("inconclusive");
+    expect(check.reason).toBe("not-ready");
     expect(check.detail).toContain("no page target");
   });
 
@@ -1005,6 +1090,12 @@ describe("the verdict document", () => {
       { id: "popup", type: "page", url: `chrome-extension://${GUEST_ID}/popup.html` },
     ];
 
+    opens.answer = () => {
+      live.targets = [...live.targets, { id: "options", type: "page", url: `chrome-extension://${GUEST_ID}/options.html` }];
+
+      return JSON.stringify({ ok: true, command: "extension_open", status: "ok", value: { surface: "options", opened: true } });
+    };
+
     live.render = { readyState: "complete", bodyElementCount: 5, textLength: 9 };
     const frame = JSON.parse(
       await handler({
@@ -1023,8 +1114,10 @@ describe("the verdict document", () => {
 
     expect(frame.value.checks.map((c: { outcome: string }) => c.outcome)).toEqual([
       "pass",
-      "fail",
+      "pass",
     ]);
+
+    expect(frame.value.checks.map((c: { evidence: { opened?: boolean } }) => c.evidence.opened)).toEqual([undefined, true]);
   });
 
   it("names the checks it knows when handed one it does not", async () => {

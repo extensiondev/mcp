@@ -50,6 +50,23 @@ vi.mock("../lib/cdp-port", async (importOriginal) => {
   return { ...actual, resolveCdpPort: async () => null, resolveRdpPort: async () => null };
 });
 
+const opens: Array<Record<string, unknown>> = [];
+let openReply: () => string = () =>
+  JSON.stringify({ ok: false, command: "extension_open", status: "no-session", error: { code: "E_NO_SESSION", name: "NoSession", message: "no live session answers in this cell" } });
+
+vi.mock("../tools/open", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+
+  return {
+    ...actual,
+    handler: async (args: Record<string, unknown>) => {
+      opens.push(args);
+
+      return openReply();
+    },
+  };
+});
+
 const assertTool = await import("../tools/assert");
 
 const dirs: string[] = [];
@@ -80,6 +97,10 @@ function check(result: any, id: string) {
 
 afterEach(() => {
   actCalls.length = 0;
+  opens.length = 0;
+  openReply = () =>
+    JSON.stringify({ ok: false, command: "extension_open", status: "no-session", error: { code: "E_NO_SESSION", name: "NoSession", message: "no live session answers in this cell" } });
+
   controlChannel = "answers";
   inspectReply = () =>
     envelope({
@@ -168,16 +189,25 @@ describe("extension_assert reads Gecko through the control channel instead of an
     expect(JSON.stringify(leg)).toContain("4 body child elements");
   });
 
-  it("fails surface-rendered when the relay has no open document to answer from", async () => {
-    inspectReply = () =>
-      actVerbAnswer(
-        actFailure(
-          "inspect",
-          { code: "E_TARGET_NOT_FOUND", name: "Unsupported", message: "surface 'newtab' is not open", engine: "firefox" },
-          "not-found",
-        ),
-        "extension_assert",
-      );
+  const closedReply = () =>
+    actVerbAnswer(
+      actFailure(
+        "inspect",
+        { code: "E_TARGET_NOT_FOUND", name: "Unsupported", message: "surface 'newtab' is not open", engine: "firefox" },
+        "not-found",
+      ),
+      "extension_assert",
+    );
+
+  it("518: opens the surface the way extension_open does when the relay has no open document, then passes on the document it answers", async () => {
+    const openDocument = inspectReply;
+    inspectReply = closedReply;
+
+    openReply = () => {
+      inspectReply = openDocument;
+
+      return envelope({ ok: true, command: "extension_open", status: "ok", value: { surface: "newtab", opened: true } });
+    };
 
     const result = JSON.parse(
       await assertTool.handler({
@@ -188,8 +218,30 @@ describe("extension_assert reads Gecko through the control channel instead of an
     );
     const leg = check(result, "surface-rendered");
 
-    expect(leg.outcome ?? leg.status ?? leg.verdict).toMatch(/fail/i);
+    expect(opens).toHaveLength(1);
+    expect(opens[0]).toMatchObject({ browser: "firefox", surface: "newtab" });
+    expect(leg.outcome ?? leg.status ?? leg.verdict).toMatch(/pass/i);
+    expect(leg.evidence.opened).toBe(true);
+    expect(actCalls.filter((cli) => cli[0] === "inspect")).toHaveLength(2);
+  });
+
+  it("518: is not ready with the open's own reason when the relay has no open document and the open fails", async () => {
+    inspectReply = closedReply;
+
+    const result = JSON.parse(
+      await assertTool.handler({
+        projectPath: project(),
+        browser: "firefox",
+        expect: [{ assert: "surface-rendered", surface: "newtab" }],
+      }),
+    );
+    const leg = check(result, "surface-rendered");
+
+    expect(opens).toHaveLength(1);
+    expect(leg.outcome ?? leg.status ?? leg.verdict).toMatch(/inconclusive/i);
+    expect(leg.reason).toBe("not-ready");
     expect(JSON.stringify(leg)).toContain("nothing is rendering it");
+    expect(JSON.stringify(leg)).toContain("extension_open answered no-session: no live session answers in this cell");
   });
 
   it("keeps a selector clause inconclusive on Gecko and names the tool that reads it", async () => {

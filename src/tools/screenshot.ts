@@ -83,6 +83,7 @@ import {
   type CapturedIn,
 } from "../lib/browser-captures";
 import { capturedInChromium, capturedInGecko, capturedInWebKit } from "../lib/captured-in";
+import { readOpeningIfClosed, surfaceOpening } from "../lib/open-if-closed";
 import { resolveExtensionId, surfaceDocument, SURFACE_MANIFEST_KEYS } from "./open";
 
 import type { ListingStore } from "../lib/store-md-declarations";
@@ -94,7 +95,7 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 export const schema = {
   name: COMMAND,
   description:
-    "Take a .png of one open surface, page or targetId in a live session (Safari: pages only); open it with extension_open first.",
+    "Take a .png of one surface, page or targetId in a live session (Safari: pages only); a closed surface is opened first, answering opened: true.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -520,7 +521,7 @@ async function onChromium(args: Args, browser: string, context: string, timeoutM
         "no-target",
         "E_NO_TARGET",
         `No open page at ${wanted}, so there is nothing to capture. An extension page has a target only while it is open.`,
-        context === "page" ? "Open it first with extension_open (url: this address), then retry." : `Open it first with extension_open surface: "${context}", then retry.`,
+        context === "page" ? "Open it first with extension_open (url: this address), then retry." : `This call opens a closed ${context} before capturing; if it closed again first, open it as a tab (extension_open surface: "${context}", asTab: true) and pass its targetId.`,
       );
     }
 
@@ -590,7 +591,7 @@ async function onGecko(args: Args, browser: string, context: string, timeoutMs: 
         "no-target",
         "E_NO_TARGET",
         `No ${browser} tab shows ${doc.document}${panel ? `, and ${panel.closed}` : ""}. The debugger protocol captures pages shown in tabs${panel ? " and the open sidebar panel" : ""}; a popup in its own window is not a tab.`,
-        context === "sidebar" ? 'Open the real panel with extension_open surface: "sidebar", then retry.' : `Open the page in a tab with extension_open (url: "${doc.document}"), then retry.`,
+        context === "sidebar" ? 'This call opens a closed panel before capturing; if it closed again first, open it with extension_open surface: "sidebar" and retry.' : `This call opens a closed ${context} in a tab before capturing; if that tab closed again first, open it with extension_open surface: "${context}", asTab: true and retry.`,
       );
   } else if (args.url && /^moz-extension:\/\//.test(args.url)) {
     tab = choose(geckoExtensionTabsByUrl(tabs, args.url), args.url);
@@ -725,9 +726,11 @@ export async function handler(args: Args): Promise<string> {
 
   const timeoutMs = args.timeout ?? DEFAULT_TIMEOUT_MS;
 
+  const opening = surfaceOpening(COMMAND, { ...args, browser, context }, (surface, family) => isGeckoFamily(family) && surface !== "sidebar");
+
   if (WEBKIT_FAMILY.has(browser)) return onWebKit(args, browser, context, timeoutMs);
-  if (isGeckoFamily(browser)) return onGecko(args, browser, context, timeoutMs);
-  if (isChromiumFamily(browser)) return onChromium(args, browser, context, timeoutMs);
+  if (isGeckoFamily(browser)) return readOpeningIfClosed(() => onGecko(args, browser, context, timeoutMs), opening);
+  if (isChromiumFamily(browser)) return readOpeningIfClosed(() => onChromium(args, browser, context, timeoutMs), opening);
 
   return refuse("unsupported-browser", "E_UNSUPPORTED_BROWSER", `${browser} is neither a Chromium, a Gecko nor a WebKit browser, so this tool has no protocol to ask it for pixels.`);
 }

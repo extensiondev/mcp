@@ -15,8 +15,13 @@ import { solidPng } from "./fixtures/png";
 import { rgbaPng } from "./fixtures/png-alpha";
 
 import type * as ActModule from "../lib/act";
+import type * as OpenModule from "../tools/open";
 
 const engineCalls = vi.hoisted(() => [] as string[][]);
+const opens = vi.hoisted(() => ({
+  calls: [] as Array<Record<string, unknown>>,
+  answer: null as null | ((args: Record<string, unknown>) => string),
+}));
 
 vi.mock("../lib/act", async (importOriginal) => {
   const actual = await importOriginal<typeof ActModule>();
@@ -31,6 +36,23 @@ vi.mock("../lib/act", async (importOriginal) => {
   };
 });
 
+vi.mock("../tools/open", async (importOriginal) => {
+  const actual = await importOriginal<typeof OpenModule>();
+
+  return {
+    ...actual,
+    handler: async (args: Record<string, unknown>) => {
+      opens.calls.push(args);
+
+      return opens.answer ? opens.answer(args) : openRefusal("no-session", "E_NO_SESSION", "no live session answers in this cell");
+    },
+  };
+});
+
+function openRefusal(status: string, code: string, message: string, hint?: string): string {
+  return JSON.stringify({ ok: false, command: "extension_open", status, error: { code, name: code, message }, ...(hint ? { hint } : {}) });
+}
+
 const screenshot = await import("../tools/screenshot");
 
 const GECKO_UUID = "1e5c8097-57a9-4052-bd54-d5d37a7086de";
@@ -39,6 +61,8 @@ const cleanups: Array<() => Promise<void> | void> = [];
 
 afterEach(async () => {
   engineCalls.length = 0;
+  opens.calls.length = 0;
+  opens.answer = null;
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
@@ -258,18 +282,53 @@ describe("extension_screenshot on Chromium captures the page over CDP", () => {
     );
   });
 
-  it("refuses a surface that is not open and names extension_open, writing nothing", async () => {
+  it("518: opens a closed sidebar the way extension_open does, captures it and says opened: true", async () => {
+    let targets: Array<{ id: string; type: string; url: string }> = [];
+    const { dir, id } = await chromeSession((extensionId) => (targets = [{ id: "P1", type: "page", url: `chrome-extension://${extensionId}/action/index.html` }]));
+
+    opens.answer = () => {
+      targets.push({ id: "S1", type: "page", url: `chrome-extension://${id}/sidebar/index.html` });
+
+      return JSON.stringify({ ok: true, command: "extension_open", status: "ok", value: { surface: "sidebar", opened: true } });
+    };
+
+    const out = await run({ projectPath: dir, browser: "chrome", context: "sidebar" });
+
+    expect(opens.calls).toEqual([{ projectPath: dir, browser: "chrome", surface: "sidebar", timeout: undefined }]);
+    expect(out.ok).toBe(true);
+    expect(out.value.opened).toBe(true);
+    expect(out.value.url).toBe(`chrome-extension://${id}/sidebar/index.html`);
+    expect(out.warnings.join(" ")).toContain('opened it the way extension_open surface: "sidebar" does');
+  });
+
+  it("518: refuses with the open's own reason when the closed sidebar does not open, writing nothing", async () => {
     const { dir, chrome } = await chromeSession((extensionId) => [
       { id: "P1", type: "page", url: `chrome-extension://${extensionId}/action/index.html` },
     ]);
+    opens.answer = () =>
+      openRefusal("surface-did-not-open", "E_SURFACE_DID_NOT_OPEN", "The engine reported the sidebar as opened, but no document for it appeared within 3s.", "Retry with asTab: true to render the surface document in a tab instead.");
 
     const out = await run({ projectPath: dir, browser: "chrome", context: "sidebar" });
 
     expect(out.ok).toBe(false);
-    expect(out.error.code).toBe("E_NO_TARGET");
-    expect(out.hint).toContain("extension_open");
+    expect(out.status).toBe("surface-did-not-open");
+    expect(out.error.code).toBe("E_SURFACE_DID_NOT_OPEN");
+    expect(out.error.message).toContain("The sidebar was not open (No open page at");
+    expect(out.error.message).toContain("no document for it appeared within 3s");
+    expect(out.hint).toBe("Retry with asTab: true to render the surface document in a tab instead.");
+    expect(out.value).toMatchObject({ surface: "sidebar", opened: false });
     expect(chrome.methods).not.toContain("Page.captureScreenshot");
     expect(fs.existsSync(path.join(browserArtifactsDir(dir, "chrome"), "screenshots"))).toBe(false);
+  });
+
+  it("518: never opens a surface the manifest does not declare", async () => {
+    const { dir } = await chromeSession(() => []);
+
+    const out = await run({ projectPath: dir, browser: "chrome", context: "newtab" });
+
+    expect(out.ok).toBe(false);
+    expect(out.error.code).toBe("E_NO_SURFACE_DOCUMENT");
+    expect(opens.calls).toEqual([]);
   });
 
   it("asks which page when several web pages are open and no url names one", async () => {
@@ -322,18 +381,38 @@ describe("extension_screenshot on Firefox captures the tab over the debugger pro
     expect(pngSize(out.value.path)).toEqual({ width: 600, height: 400 });
   });
 
-  it("says a sidebar no tab shows cannot be reached, instead of capturing another page", async () => {
+  it("518: opens a sidebar no tab shows as the real panel, and refuses with the open's reason when that fails, instead of capturing another page", async () => {
     const firefox = await fakeFirefox([{ url: "https://example.com/", selected: true }]);
     const dir = project("firefox", readyContract("dev", "firefox", { rdpPort: firefox.port }));
 
     const out = await run({ projectPath: dir, browser: "firefox", context: "sidebar" });
 
+    expect(opens.calls).toEqual([{ projectPath: dir, browser: "firefox", surface: "sidebar", timeout: undefined }]);
     expect(out.ok).toBe(false);
-    expect(out.error.code).toBe("E_NO_TARGET");
+    expect(out.error.code).toBe("E_NO_SESSION");
     expect(out.error.message).toContain("sidebar/index.html");
-    expect(out.error.message).toContain("the add-on could not be named to the browser");
+    expect(out.error.message).toContain("no live session answers in this cell");
     expect(engineCalls.map((cli) => cli[0])).toEqual(["eval"]);
     expect(firefox.captures).toHaveLength(0);
+  });
+
+  it("518: opens a closed options page as a tab on Firefox, since the debugger protocol captures tabs, then captures it", async () => {
+    const tabs: Array<{ url: string; selected?: boolean }> = [{ url: "https://example.com/", selected: true }];
+    const firefox = await fakeFirefox(tabs);
+    const dir = project("firefox", readyContract("dev", "firefox", { rdpPort: firefox.port }));
+
+    opens.answer = () => {
+      tabs.push({ url: `moz-extension://${GECKO_UUID}/options/index.html` });
+
+      return JSON.stringify({ ok: true, command: "extension_open", status: "navigated", value: { renderedAsTab: { surface: "options" } } });
+    };
+
+    const out = await run({ projectPath: dir, browser: "firefox", context: "options" });
+
+    expect(opens.calls).toEqual([{ projectPath: dir, browser: "firefox", surface: "options", timeout: undefined, asTab: true }]);
+    expect(out.ok).toBe(true);
+    expect(out.value).toMatchObject({ opened: true, transport: "rdp", url: `moz-extension://${GECKO_UUID}/options/index.html` });
+    expect(firefox.captures).toHaveLength(1);
   });
 });
 

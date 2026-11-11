@@ -30,6 +30,26 @@ vi.mock("../lib/act", async (importOriginal) => {
   };
 });
 
+const opens: unknown[] = [];
+vi.mock("../tools/open", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+
+  return {
+    ...actual,
+    handler: async (args: unknown) => {
+      opens.push(args);
+
+      return JSON.stringify({
+        ok: false,
+        command: "extension_open",
+        status: "surface-did-not-open",
+        error: { code: "E_SURFACE_DID_NOT_OPEN", name: "SurfaceDidNotOpen", message: "no document for the newtab appeared within 3s" },
+        hint: 'Retry with asTab: true to render the surface document in a tab instead.',
+      });
+    },
+  };
+});
+
 let cdpPort: { port: number; source: "contract" } | null = { port: 9222, source: "contract" };
 vi.mock("../lib/cdp-port", async (importOriginal) => {
   const actual = await importOriginal<typeof CdpPortModule>();
@@ -198,11 +218,13 @@ describe("extension_eval reaches an MV3 extension page over CDP, which the page 
     expect(result.ok).toBe(true);
   });
 
-  it("says the page is not open and how to open it, instead of a misleading error", async () => {
+  it("518: opens a closed page the way extension_open does, and names the open's own reason when that fails, instead of a misleading error", async () => {
     const p = project(MV3);
     cdpTargets = [
       { id: "web", type: "page", url: "https://example.com/", title: "Example" },
     ];
+
+    opens.length = 0;
 
     const result = JSON.parse(
       await evalTool.handler({
@@ -214,13 +236,17 @@ describe("extension_eval reaches an MV3 extension page over CDP, which the page 
     );
 
     expect(cliCalls).toEqual([]);
+    expect(opens).toEqual([{ projectPath: p.dir, browser: "chrome", surface: "newtab", timeout: undefined }]);
     expect(result.ok).toBe(false);
-    expect(result.error.code).toBe("E_NO_TARGET");
+    expect(result.status).toBe("surface-did-not-open");
+    expect(result.error.code).toBe("E_SURFACE_DID_NOT_OPEN");
     expect(result.error.message).toContain(
       `chrome-extension://${p.id}/chrome_url_overrides/newtab.html`,
     );
 
-    expect(result.hint).toContain('extension_open surface: "newtab"');
+    expect(result.error.message).toContain('opening it the way extension_open surface: "newtab" does did not land it: no document for the newtab appeared within 3s');
+    expect(result.value).toMatchObject({ surface: "newtab", opened: false });
+    expect(result.hint).toBe("Retry with asTab: true to render the surface document in a tab instead.");
     expect(evaluations).toEqual([]);
   });
 

@@ -61,7 +61,6 @@ import {
   CDP_PORT_MISSING_HINT,
 } from "../lib/cdp-port";
 import { rdpEvaluateInTab, rdpListTabs, type RdpTab } from "../lib/rdp";
-import type { RdpPortRead } from "../lib/rdp-port-notes";
 import { matchPatternCovers } from "../lib/match-patterns";
 import {
   evaluateOnExtensionPage,
@@ -118,6 +117,9 @@ import {
   overProtocolNote,
 } from "../lib/gecko-no-scripting";
 import { SAFARI_EVAL_LIMIT, safariContextRefusal } from "../lib/safari-eval";
+import { readOpeningIfClosed, surfaceOpening } from "../lib/open-if-closed";
+
+import type { RdpPortRead } from "../lib/rdp-port-notes";
 
 const pageRef = (t: { targetId: string; url: string }): TargetRef => ({ targetId: t.targetId, url: t.url });
 
@@ -137,7 +139,7 @@ export const schema = {
         type: "string",
         enum: ["background", "popup", "options", "sidebar", "devtools", "newtab", "history", "bookmarks", "content", "page"],
         description:
-          "Default background; surfaces must be open (extension_open).",
+          "Default background; a closed surface is opened first (as extension_open does).",
       },
       url: { type: "string", description: "content/page: the tab by url." },
       tab: { type: "number", description: "chrome.tabs id to break a url tie." },
@@ -430,7 +432,7 @@ async function evaluateOnChromiumExtensionPage(
       hint:
         context === "page"
           ? "Open it first with extension_open (url: this address), then retry. extension_dom_snapshot with listTargets: true lists what is open."
-          : `Open it first with extension_open surface: "${context}", then retry.${sidebarWords} extension_dom_snapshot with listTargets: true lists what is open.`,
+          : `This call opens a closed ${context} before evaluating; if it closed again first, open it as a tab (extension_open surface: "${context}", asTab: true) and pass its targetId.${sidebarWords} extension_dom_snapshot with listTargets: true lists what is open.`,
     });
   }
 
@@ -1578,7 +1580,7 @@ async function evaluateOnce(
   args: ActArgs & { expression: string; targetId?: string },
 ): Promise<string> {
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
-  const raw = await evaluateRouted(args, browser);
+  const raw = await readOpeningIfClosed(() => evaluateRouted(args, browser), surfaceOpening(schema.name, { ...args, browser }));
 
   return safariContextRefusal(schema.name, raw, browser, args.context, readWebDriverSession(args.projectPath, browser) !== null) ?? raw;
 }
@@ -1675,7 +1677,7 @@ async function evaluateRouted(
         message: `${args.url} is a page inside the extension, which script injection cannot reach, and it matches none of the surface documents the manifest declares${declared.length ? ` (${declared.join(", ")})` : ""}.`,
       },
       hint: declared.length
-        ? `Evaluate in a declared surface with context: "${declared[0]}" (open it first with extension_open), or read a web page by url.`
+        ? `Evaluate in a declared surface with context: "${declared[0]}" (a closed one is opened first), or read a web page by url.`
         : "Declare the page as a surface in the manifest (action.default_popup, options_ui.page, sidebar_action.default_panel or chrome_url_overrides) and rebuild.",
     });
   }

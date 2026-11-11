@@ -5,8 +5,10 @@ import nodePath from "node:path";
 import { describe, it, expect, afterEach, vi } from "vitest";
 
 import type * as ActModule from "../lib/act";
+import type * as OpenModule from "../tools/open";
 
 const calls: string[][] = [];
+const engineAnswers: Array<() => string> = [];
 vi.mock("../lib/act", async (importOriginal) => {
   const actual = await importOriginal<typeof ActModule>();
 
@@ -15,7 +17,24 @@ vi.mock("../lib/act", async (importOriginal) => {
     runActVerb: async (cli: string[]) => {
       calls.push(cli);
 
-      return JSON.stringify({ ok: true });
+      return engineAnswers.length ? engineAnswers.shift()!() : JSON.stringify({ ok: true });
+    },
+  };
+});
+
+const opens: unknown[] = [];
+let openReply: null | (() => string) = null;
+vi.mock("../tools/open", async (importOriginal) => {
+  const actual = await importOriginal<typeof OpenModule>();
+
+  return {
+    ...actual,
+    handler: async (args: Parameters<typeof actual.handler>[0]) => {
+      if (!openReply) return actual.handler(args);
+
+      opens.push(args);
+
+      return openReply();
     },
   };
 });
@@ -26,6 +45,68 @@ const openTool = await import("../tools/open");
 
 afterEach(() => {
   calls.length = 0;
+  engineAnswers.length = 0;
+  opens.length = 0;
+  openReply = null;
+});
+
+const closedPopup = () =>
+  JSON.stringify({
+    schema: 1,
+    ok: false,
+    command: "extension_dom_snapshot",
+    status: "not-found",
+    value: null,
+    error: { code: "E_TARGET_NOT_FOUND", name: "Unsupported", message: "surface 'popup' is not open", engine: "chromium" },
+    warnings: [],
+  });
+
+describe("518: dom_snapshot opens a closed surface before reading it", () => {
+  it("opens the popup the way extension_open does, reads it again and says opened: true", async () => {
+    engineAnswers.push(closedPopup, () => JSON.stringify({ ok: true, value: { url: "chrome-extension://abc/popup.html", summary: { bodyChildCount: 2 } } }));
+    openReply = () => JSON.stringify({ ok: true, command: "extension_open", status: "ok", value: { surface: "popup", opened: true } });
+
+    const result = JSON.parse(await domSnapshot.handler({ projectPath: "/p", browser: "chrome", context: "popup" }));
+
+    expect(opens).toEqual([{ projectPath: "/p", browser: "chrome", surface: "popup", timeout: undefined }]);
+    expect(calls.filter((cli) => cli[0] === "inspect")).toHaveLength(2);
+    expect(result.ok).toBe(true);
+    expect(result.value).toMatchObject({ url: "chrome-extension://abc/popup.html", opened: true });
+    expect(result.warnings.join(" ")).toContain('opened it the way extension_open surface: "popup" does');
+  });
+
+  it("refuses with the open's own reason when the popup does not open, reading nothing twice", async () => {
+    engineAnswers.push(closedPopup);
+    openReply = () =>
+      JSON.stringify({
+        ok: false,
+        command: "extension_open",
+        status: "no-surface",
+        error: { code: "E_NO_SURFACE_DOCUMENT", name: "NoSurfaceDocument", message: "This extension declares no popup: nothing in its manifest sets action.default_popup." },
+        hint: "Open one of the declared surfaces instead.",
+      });
+
+    const result = JSON.parse(await domSnapshot.handler({ projectPath: "/p", browser: "chrome", context: "popup" }));
+
+    expect(opens).toHaveLength(1);
+    expect(calls.filter((cli) => cli[0] === "inspect")).toHaveLength(1);
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("no-surface");
+    expect(result.error.code).toBe("E_NO_SURFACE_DOCUMENT");
+    expect(result.error.message).toContain("The popup was not open (surface 'popup' is not open)");
+    expect(result.error.message).toContain("declares no popup");
+    expect(result.hint).toBe("Open one of the declared surfaces instead.");
+    expect(result.value).toMatchObject({ surface: "popup", opened: false });
+  });
+
+  it("never opens for a targetId read or a content read", async () => {
+    openReply = () => JSON.stringify({ ok: true, command: "extension_open", status: "ok", value: {} });
+    engineAnswers.push(closedPopup);
+
+    await domSnapshot.handler({ projectPath: "/p", browser: "chrome", context: "content" });
+
+    expect(opens).toEqual([]);
+  });
 });
 
 describe("dom_snapshot targeting", () => {
