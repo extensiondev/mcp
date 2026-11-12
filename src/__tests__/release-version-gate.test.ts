@@ -166,7 +166,7 @@ describe("the release rails fail closed", () => {
     return { built, later, run, runOnSocket, remove };
   };
 
-  it("tags the commit npm published on a resumed release and names what main gained since", () => {
+  it.skipIf(process.platform === "win32")("tags the commit npm published on a resumed release and names what main gained since (the cell runs scripts/release-commit.sh through /bin/sh, which Windows has not)", () => {
     const yml = read(".github/workflows/release.yml");
     const resolveAt = yml.indexOf("name: Check out the commit npm published");
     expect(resolveAt).toBeGreaterThan(yml.indexOf("name: Check published version"));
@@ -196,7 +196,7 @@ describe("the release rails fail closed", () => {
     }
   });
 
-  it("writes the summary to a standard output that is a socket when no step summary file is set", () => {
+  it.skipIf(process.platform === "win32")("writes the summary to a standard output that is a socket when no step summary file is set (the cell needs /bin/sh and a python3 socketpair a child can inherit, which Windows has not)", () => {
     expect(read("scripts/release-commit.sh")).not.toMatch(/\/dev\/std(out|err)/);
     expect(read("scripts/stage-release.sh")).not.toMatch(/\/dev\/std(out|err)/);
     const { built, later, runOnSocket, remove } = stagedRelease();
