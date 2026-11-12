@@ -226,7 +226,7 @@
      "id": "chrome.store_icon",
      "label": "Store icon",
      "required": true,
-     "format": "128x128 px PNG; the artwork fills 96x96 px inside a 16 px transparent margin.",
+     "format": "128x128 px PNG.",
      "status": "unknown",
      "satisfiedBy": "store-dashboard",
      "how": "Upload it on the Store listing tab of the item's dashboard; the build carries the 128 px icon the manifest names, which is the file to upload.",
