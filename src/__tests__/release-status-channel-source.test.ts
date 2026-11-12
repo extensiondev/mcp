@@ -196,6 +196,15 @@ describe("extension_publish CHANNEL_HAS_NO_BUILD names the read that predicts it
     expect(out.hint).not.toContain("extension_release_promote");
   });
 
+  it("ledger 541: the environment fill sentence names rebuild first, which needs no push, and a push only as the repository alternative", () => {
+    const sentence = channelFillSentence("preview");
+
+    expect(sentence).toContain("build once with extension_builds action:'rebuild' (no push needed");
+    expect(sentence).toContain("an uploaded project has no repository to push to");
+    expect(sentence.indexOf("action:'rebuild'")).toBeLessThan(sentence.indexOf("a push"));
+    expect(sentence).not.toMatch(/push a commit/i);
+  });
+
   it("sends a stable refusal to extension_release_promote", async () => {
     stubPublish("CHANNEL_HAS_NO_BUILD");
 

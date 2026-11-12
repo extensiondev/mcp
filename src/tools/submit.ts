@@ -151,7 +151,7 @@ export function storeMdWarnings(browsers: string[], cwd: string): string[] {
     content = fs.readFileSync(filePath, "utf8");
   } catch {
     return [
-      `No ${STORE_MD_FILENAME} found in the current working directory. Platform submissions read ${STORE_MD_FILENAME} from the project's source repository at the built commit, so this may not apply here; make sure ${STORE_MD_FILENAME} exists there for Firefox reviewer notes and Edge certification notes. See the extension-dev skill's store-md reference.`,
+      `No ${STORE_MD_FILENAME} found in the current working directory. Platform submissions read ${STORE_MD_FILENAME} from the source the platform holds at the built commit (an uploaded project's stored tree, or the repository at that commit), so this may not apply here; make sure ${STORE_MD_FILENAME} exists there for Firefox reviewer notes and Edge certification notes. See the extension-dev skill's store-md reference.`,
     ];
   }
 
@@ -172,7 +172,7 @@ export function storeMdWarnings(browsers: string[], cwd: string): string[] {
 
   if (warnings.length === 0) {
     warnings.push(
-      `The notes above were read from ${filePath}. The submission reads ${STORE_MD_FILENAME} from the project's source repository at the built commit, so an uncommitted or unpushed edit here does not travel with it.`,
+      `The notes above were read from ${filePath}. The submission reads ${STORE_MD_FILENAME} from the source the platform holds at the built commit (an uploaded project's stored tree, or the repository at that commit), so an edit here travels only with the next source the platform receives: a re-seed with extension_project_create (a new upload) for an uploaded project, or a commit pushed for a project built from a repository.`,
     );
   }
 

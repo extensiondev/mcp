@@ -488,6 +488,8 @@ describe("storeMdWarnings", () => {
     const warnings = storeMdWarnings(["firefox", "edge"], tmp);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("No STORE.md");
+    expect(warnings[0]).toContain("the source the platform holds at the built commit (an uploaded project's stored tree, or the repository at that commit)");
+    expect(warnings[0]).not.toContain("source repository");
   });
 
   it("warns per store for empty or absent note fields", () => {
@@ -524,7 +526,9 @@ describe("storeMdWarnings", () => {
     const warnings = storeMdWarnings(["firefox", "edge"], tmp);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain(path.join(tmp, "STORE.md"));
-    expect(warnings[0]).toContain("source repository at the built commit");
+    expect(warnings[0]).toContain("the source the platform holds at the built commit (an uploaded project's stored tree, or the repository at that commit)");
+    expect(warnings[0]).toContain("a re-seed with extension_project_create (a new upload) for an uploaded project");
+    expect(warnings[0]).not.toContain("unpushed");
   });
 
   it("warns on prefixed note headings, which the platform does not read", () => {

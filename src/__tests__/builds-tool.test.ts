@@ -158,6 +158,13 @@ describe("extension_builds reads the platform's builds with the project's own to
     });
   }
 
+  it("ledger 541: the waitSeconds input says get waits for a build's verdict, a rebuild before a push, never a push alone", () => {
+    const description = String(schema.inputSchema.properties.waitSeconds.description);
+
+    expect(description).toContain("get waits for a build's verdict (a rebuild or a push)");
+    expect(description).not.toContain("push's verdict");
+  });
+
   it("fences its answer as untrusted CI output, and its reads ship nothing", () => {
     expect(TOOL_POLICY.extension_builds).toMatchObject({ group: "platform", untrusted: true });
     expect(TOOL_POLICY.extension_builds.ships).toBeUndefined();

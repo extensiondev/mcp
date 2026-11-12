@@ -103,7 +103,7 @@ export function browserBuildVerdict(read: BrowserBuildRead | undefined, ctx: Con
   const settingsUrl = consoleProjectUrl(ctx.ref, ConsoleProjectPage.projectSettingsSection("build"), ctx.api);
   const configureCall = `extension_builds {action: "configure", buildSettings: {${browser}: {enabled: true}}}`;
   const rebuildCall = `extension_builds {action: "rebuild"${buildSha ? `, buildSha: "${buildSha}"` : ""}}`;
-  const buildOnce = `build once (a push, or ${rebuildCall}) and submit the build that carries the ${browser} artifact`;
+  const buildOnce = `build once with ${rebuildCall} (no push needed; a project built from a repository also builds on a push) and submit the build that carries the ${browser} artifact`;
   const base = { browser, buildSha, enabled: read.enabled, artifact: read.artifact, configureCall, rebuildCall, settingsUrl };
 
   if (!read.enabled) {

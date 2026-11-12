@@ -114,7 +114,7 @@ Read, download, rebuild and configure platform builds. list/get rows: env is the
 | `to` | string | no |  | download: directory (default the cache). |
 | `limit` | number | no |  | list: 1 to 50 (default 10). |
 | `project` | string | no |  | Stored login '<workspace>/<project>' when several exist. |
-| `waitSeconds` | number | no |  | Seconds to wait for the result, 0 to 600 (default 180), and with approvalId for the approval. get waits for a push's verdict. |
+| `waitSeconds` | number | no |  | Seconds to wait for the result, 0 to 600 (default 180), and with approvalId for the approval. get waits for a build's verdict (a rebuild or a push). |
 | `api` | string | no |  | Platform URL; default EXTENSION_DEV_API_URL. |
 
 ## extension_create

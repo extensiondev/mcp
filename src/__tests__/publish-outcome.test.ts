@@ -68,6 +68,15 @@ describe("extension_publish says what the share serves", () => {
     expect(out.warnings[0]).toContain("serves NO build");
   });
 
+  it("ledger 541: the no-build note names rebuild first, which needs no push, and never leads with a commit", async () => {
+    stubPublish(publishAnswer({ buildSha: null, version: null, builtAt: null, previewCommands: {} }));
+    const out = JSON.parse(await handler({}));
+
+    expect(out.warnings[0]).toContain('Build first with extension_builds action:"rebuild", which needs no push');
+    expect(out.warnings[0]).toContain("an uploaded project has no repository to push to");
+    expect(out.warnings[0]).not.toMatch(/push a commit|extension_build then/i);
+  });
+
   it.each([["an empty object", {}], ["a page of html", "<html>ok</html>"], ["an empty body", ""]])(
     "calls %s unconfirmed, never published",
     async (_label, body) => {

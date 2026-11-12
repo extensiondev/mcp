@@ -69,6 +69,8 @@ describe("the Safari preflight reads whether the project builds Safari at all (l
     expect(safari.failing[0]).toMatchObject({ id: "safari.builds", label: "Safari builds", severity: "blocking", message: "Safari builds are off for this project, so no build carries a safari artifact." });
     expect(safari.failing[0].fix).toContain(CONFIGURE_CALL);
     expect(safari.failing[0].fix).toContain("under Browser builds at http://console.extension.localhost/acme/widget/project-settings");
+    expect(safari.failing[0].fix).toContain("build once with extension_builds {action: \"rebuild\"} (no push needed");
+    expect(safari.failing[0].fix).not.toContain("a push, or");
     expect(safari.browserBuilds).toMatchObject({ state: "browser-builds-off", enabled: false, configureCall: CONFIGURE_CALL });
     expect(out.value.nextStep.kind).toBe("configure");
     expect(out.value.nextStep.url).toContain("/acme/widget/project-settings");

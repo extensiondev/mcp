@@ -64,7 +64,7 @@ export function channelSource(key: string): ChannelSource {
 
 export function channelFillSentence(name: string): string {
   return channelSource(name) === "environment"
-    ? `${name} fills by environment: the next successful build lands there with no promotion, so build once (push a commit, or extension_builds action:'rebuild'), then publish its channel link.`
+    ? `${name} fills by environment: the next successful build lands there with no promotion, so build once with extension_builds action:'rebuild' (no push needed; an uploaded project has no repository to push to, and a project built from a repository also builds on a push), then publish its channel link.`
     : `Promote a successful build to ${name} with extension_release_promote, then publish its channel link.`;
 }
 

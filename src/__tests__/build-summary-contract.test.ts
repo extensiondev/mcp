@@ -177,4 +177,18 @@ describe("build consumes the engine's persisted BuildSummary when the frame on s
       setServerOptions(DEFAULT_SERVER_OPTIONS);
     }
   });
+
+  it("ledger 541: the platform sentence names rebuild as the push-free way to the platform build, never a pushed source", async () => {
+    setServerOptions({ features: ["local", "platform"], noShip: false });
+
+    try {
+      const result = JSON.parse(await build.handler({ projectPath: completeProject() }));
+
+      expect(result.ok).toBe(true);
+      expect(result.hint).toContain('the platform builds the source it holds, not this folder: extension_builds action:"rebuild" starts that build with no push');
+      expect(result.hint).not.toContain("pushed source");
+    } finally {
+      setServerOptions(DEFAULT_SERVER_OPTIONS);
+    }
+  });
 });

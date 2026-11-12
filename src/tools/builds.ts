@@ -111,7 +111,7 @@ export const schema = {
       project: PROJECT_TOKEN_INPUT,
       waitSeconds: {
         ...WAIT_SECONDS_INPUT,
-        description: `${WAIT_SECONDS_INPUT.description} get waits for a push's verdict.`,
+        description: `${WAIT_SECONDS_INPUT.description} get waits for a build's verdict (a rebuild or a push).`,
       },
       api: API_BASE,
     },

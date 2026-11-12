@@ -519,7 +519,7 @@ export async function handler(args: {
   const short = linkIsShort(send, String(sendUrl ?? ""), runs);
   const noBuild = data.buildSha == null;
   const noBuildNote = noBuild
-    ? "This share serves NO build: the platform minted the link but named no build sha, which means the project has no successful build yet (or its build index could not be read). Anyone opening the link gets nothing to run. Build first (push a commit, or extension_build then a platform build), then publish again."
+    ? "This share serves NO build: the platform minted the link but named no build sha, which means the project has no successful build yet (or its build index could not be read). Anyone opening the link gets nothing to run. Build first with extension_builds action:\"rebuild\", which needs no push (an uploaded project has no repository to push to; a project built from a repository also builds on a push), then publish again."
     : null;
 
   const sharePage =
