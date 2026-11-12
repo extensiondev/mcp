@@ -116,6 +116,56 @@ describe("the release rails fail closed", () => {
     expect(timeout * 60).toBeGreaterThan(attempts * seconds);
   });
 
+  const stagedRelease = () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-release-commit-"));
+    const bin = path.join(dir, "bin");
+    fs.mkdirSync(bin);
+    fs.writeFileSync(path.join(bin, "npm"), "#!/bin/sh\n[ -n \"$FAKE_GITHEAD\" ] && echo \"$FAKE_GITHEAD\"\nexit 0\n", { mode: 0o755 });
+    const git = (...args: string[]) =>
+      spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], { cwd: dir, encoding: "utf8" }).stdout.trim();
+    git("init", "-q", "-b", "main");
+    git("commit", "-q", "--allow-empty", "-m", "Built into the tarball");
+    const built = git("rev-parse", "HEAD");
+    git("commit", "-q", "--allow-empty", "-m", "Landed after staging");
+    const later = git("rev-parse", "--short", "HEAD");
+    const script = fileURLToPath(new URL("../../scripts/release-commit.sh", import.meta.url));
+    const env = (extra: Record<string, string>) => ({
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH}`,
+      PKG: "@x/y",
+      VERSION: "1.0.0",
+      MAIN_REF: "main",
+      GITHUB_OUTPUT: "",
+      GITHUB_STEP_SUMMARY: "",
+      RELEASE_COMMIT: "",
+      FAKE_GITHEAD: "",
+      ...extra,
+    });
+    const run = (extra: Record<string, string>) => spawnSync(script, [], { cwd: dir, encoding: "utf8", env: env(extra) });
+    const runOnSocket = (extra: Record<string, string>) =>
+      spawnSync(
+        "python3",
+        [
+          "-I",
+          "-c",
+          [
+            "import socket, subprocess, sys",
+            "ours, theirs = socket.socketpair()",
+            "child = subprocess.run([sys.argv[1]], stdout=theirs.fileno(), stderr=subprocess.PIPE)",
+            "theirs.close()",
+            "sys.stdout.write(ours.makefile('rb').read().decode())",
+            "sys.stderr.write(child.stderr.decode())",
+            "sys.exit(child.returncode)",
+          ].join("\n"),
+          script,
+        ],
+        { cwd: dir, encoding: "utf8", env: env(extra) },
+      );
+    const remove = () => fs.rmSync(dir, { recursive: true, force: true });
+
+    return { built, later, run, runOnSocket, remove };
+  };
+
   it("tags the commit npm published on a resumed release and names what main gained since", () => {
     const yml = read(".github/workflows/release.yml");
     const resolveAt = yml.indexOf("name: Check out the commit npm published");
@@ -123,27 +173,9 @@ describe("the release rails fail closed", () => {
     expect(resolveAt).toBeLessThan(yml.indexOf("name: Update package version"));
     expect(resolveAt).toBeLessThan(yml.indexOf("name: Extract release notes from CHANGELOG.md"));
 
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-release-commit-"));
-    const bin = path.join(dir, "bin");
-    fs.mkdirSync(bin);
-    fs.writeFileSync(path.join(bin, "npm"), "#!/bin/sh\n[ -n \"$FAKE_GITHEAD\" ] && echo \"$FAKE_GITHEAD\"\nexit 0\n", { mode: 0o755 });
-    const git = (...args: string[]) =>
-      spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], { cwd: dir, encoding: "utf8" }).stdout.trim();
-    const script = fileURLToPath(new URL("../../scripts/release-commit.sh", import.meta.url));
-    const run = (env: Record<string, string>) =>
-      spawnSync(script, [], {
-        cwd: dir,
-        encoding: "utf8",
-        env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, PKG: "@x/y", VERSION: "1.0.0", MAIN_REF: "main", GITHUB_OUTPUT: "", GITHUB_STEP_SUMMARY: "", RELEASE_COMMIT: "", FAKE_GITHEAD: "", ...env },
-      });
+    const { built, later, run, remove } = stagedRelease();
 
     try {
-      git("init", "-q", "-b", "main");
-      git("commit", "-q", "--allow-empty", "-m", "Built into the tarball");
-      const built = git("rev-parse", "HEAD");
-      git("commit", "-q", "--allow-empty", "-m", "Landed after staging");
-      const later = git("rev-parse", "--short", "HEAD");
-
       const fromGitHead = run({ FAKE_GITHEAD: built });
       expect(fromGitHead.status, fromGitHead.stderr).toBe(0);
       expect(fromGitHead.stdout).toContain(`commit=${built}`);
@@ -160,7 +192,23 @@ describe("the release rails fail closed", () => {
       expect(disagree.status).not.toBe(0);
       expect(disagree.stderr).toMatch(/different commits/);
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      remove();
+    }
+  });
+
+  it("writes the summary to a standard output that is a socket when no step summary file is set", () => {
+    expect(read("scripts/release-commit.sh")).not.toMatch(/\/dev\/std(out|err)/);
+    expect(read("scripts/stage-release.sh")).not.toMatch(/\/dev\/std(out|err)/);
+    const { built, later, runOnSocket, remove } = stagedRelease();
+
+    try {
+      const onSocket = runOnSocket({ FAKE_GITHEAD: built });
+      expect(onSocket.status, onSocket.stderr).toBe(0);
+      expect(onSocket.stdout).toContain(`### @x/y@1.0.0 was built from`);
+      expect(onSocket.stdout).toContain(`${later} Landed after staging`);
+      expect(onSocket.stdout).toContain(`commit=${built}`);
+    } finally {
+      remove();
     }
   });
 

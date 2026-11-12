@@ -50,9 +50,8 @@ fi
 
 SHORT="$(git rev-parse --short "$COMMIT")"
 AHEAD="$(git log --format='%h %s' "$COMMIT..$MAIN_REF" 2>/dev/null || true)"
-SUMMARY="${GITHUB_STEP_SUMMARY:-/dev/stdout}"
 
-{
+emit_summary() {
   echo "### $PKG@$VERSION was built from $SHORT"
   echo
   echo "Read from $SOURCE. The release commit and tag v$VERSION are cut on $SHORT, so the tag, the GitHub release and the npm tarball are one tree."
@@ -62,7 +61,13 @@ SUMMARY="${GITHUB_STEP_SUMMARY:-/dev/stdout}"
     echo
     printf '%s\n' "$AHEAD" | sed 's/^/- /'
   fi
-} >> "$SUMMARY"
+}
+
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+  emit_summary >> "$GITHUB_STEP_SUMMARY"
+else
+  emit_summary
+fi
 
 if [ -n "$AHEAD" ]; then
   echo "::warning::$MAIN_REF moved past $SHORT; v$VERSION is cut on $SHORT and leaves out: $(printf '%s\n' "$AHEAD" | cut -d' ' -f1 | xargs)"
