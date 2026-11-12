@@ -101,6 +101,30 @@ describe("the release rails fail closed", () => {
     expect(yml).not.toMatch(/npm view "\$PKG@\$VER" version --registry https:\/\/registry\.npmjs\.org\/ >\/dev\/null 2>&1; then/);
   });
 
+  it("tracks no npm credential and no interpolated value at the repository root", () => {
+    const npmrc = fileURLToPath(new URL("../../.npmrc", import.meta.url));
+
+    if (fs.existsSync(npmrc)) {
+      const text = fs.readFileSync(npmrc, "utf8");
+      expect(text).not.toMatch(/\$\{[^}]*\}/);
+      expect(text).not.toContain("_authToken");
+    }
+
+    for (const rel of ["release.yml", "ci.yml", "publish-mcp.yml", "sync-templates.yml"]) {
+      expect(read(`.github/workflows/${rel}`), rel).not.toContain("NPM_TOKEN");
+    }
+  });
+
+  it("publishes through the GitHub OIDC token and never through a tracked npm credential", () => {
+    const yml = read(".github/workflows/release.yml");
+    expect(yml).toMatch(/^permissions:\n(?: {2}.*\n)* {2}id-token: write$/m);
+    const publishAt = yml.indexOf("name: Publish to npm with provenance");
+    expect(publishAt).toBeGreaterThan(-1);
+    expect(yml.slice(publishAt)).toMatch(/run: npm publish --provenance /);
+    expect(yml).not.toMatch(/NODE_AUTH_TOKEN:\s*\$\{\{/);
+    expect(yml).not.toContain(".npmrc");
+  });
+
   it("lets the nightly alert need every job it judges", () => {
     const yml = read(".github/workflows/ci.yml");
     const needs = /nightly-alert:[\s\S]*?needs: \[([^\]]+)\]/.exec(yml)?.[1] ?? "";
