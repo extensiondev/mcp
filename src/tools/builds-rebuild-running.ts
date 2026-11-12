@@ -32,7 +32,7 @@ export const ALREADY_RUNNING_CODE = "BUILD_ALREADY_RUNNING";
 const RUNNING_WORDS: Record<string, string> = {
   in_progress: "is already building",
   queued: "is already queued to build",
-  starting: "was just pushed and its build is starting",
+  starting: "is just starting to build",
 };
 
 export interface FinishedBuild {

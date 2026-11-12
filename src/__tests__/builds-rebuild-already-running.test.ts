@@ -109,6 +109,22 @@ describe("extension_builds rebuild of a commit whose build is already running", 
     expect(calls.filter((call) => call.method === "POST")).toHaveLength(1);
   });
 
+  it("ledger 540: a build the platform reads as starting is said to be starting, never pushed", async () => {
+    if (process.platform === "win32") return;
+
+    routes[`POST ${DISPATCH_ROUTE}`] = () => running({ state: "starting", startedAt: "2026-10-24T23:51:05.000Z" });
+    routes[`GET ${BUILD_ROUTE}`] = () => ({ body: { buildId: "4478aff", status: "in_progress", startedAt: "2026-10-24T23:51:05.000Z" } });
+
+    const out = JSON.parse(await builds({ action: "rebuild", buildId: "4478aff", waitSeconds: 0, api: API }));
+
+    expect(out.ok).toBe(true);
+    expect(out.status).toBe("build-already-running");
+    expect(out.value.running).toMatchObject({ state: "starting" });
+    expect(out.hint).toContain("is just starting to build");
+    expect(out.hint).not.toMatch(/pushed|a push/);
+    expect(calls.filter((call) => call.method === "POST")).toHaveLength(1);
+  });
+
   it("sends the rebuild once that build has finished, and says it finished without calling it building", async () => {
     if (process.platform === "win32") return;
 

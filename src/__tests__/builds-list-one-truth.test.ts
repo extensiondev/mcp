@@ -314,9 +314,23 @@ describe("extension_builds answers one truth per build", () => {
 
     expect(out.value.builds).toEqual([]);
     expect(out.value.lastPush).toBeUndefined();
-    expect(out.hint).toContain("that import produced no first build");
+    expect(out.hint).toContain("has produced no build yet");
     expect(out.hint).toContain('extension_builds action:"rebuild"');
     expect(out.hint).not.toContain("Push a commit");
+  });
+
+  it("ledger 540: an empty list with no push record never says the source was imported or names a branch head, and names rebuild of the stored tree", async () => {
+    if (process.platform === "win32") return;
+
+    body = { items: [] };
+
+    const out = await list();
+
+    expect(out.value.builds).toEqual([]);
+    expect(out.hint).not.toMatch(/import produced|build the branch head|was pushed|pushed and/);
+    expect(out.hint).toContain("an upload (no repository, nothing to push)");
+    expect(out.hint).toContain('extension_builds action:"rebuild"');
+    expect(out.hint).toContain("stored tree");
   });
 
   it("ledger 498: an empty list with a push record keeps the push sentence and still names rebuild", async () => {

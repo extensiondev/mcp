@@ -46,10 +46,10 @@ function emptyListHint(project: string, lastPush: unknown, buildsPageUrl: string
   const dispatched = dispatchSentence(dispatch);
   if (dispatched) return `No builds are recorded for ${project} yet. ${dispatched}`;
 
-  const rebuild = `Call extension_builds action:"rebuild" to build the branch head now; it needs no push, and ${buildsPageUrl} tracks the run.`;
+  const rebuild = `Call extension_builds action:"rebuild" to build the source the platform holds now (an uploaded project's stored tree, or the build branch head of a project built from a repository); it needs no push, and ${buildsPageUrl} tracks the run.`;
 
   if (!lastPush) {
-    return `No builds are recorded for ${project} yet, and the platform has received no push since the project was created, so the source arrived with the project and that import produced no first build. ${rebuild}`;
+    return `No builds are recorded for ${project} yet, and no push has reached the platform since the project was created, so its source is the tree it arrived with, an upload (no repository, nothing to push) or a repository as imported, and that tree has produced no build yet. ${rebuild}`;
   }
 
   return `No builds are recorded for ${project} yet.${noted.length ? ` ${noted.join(" ")}` : ""} ${rebuild}`;
