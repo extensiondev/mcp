@@ -14,7 +14,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 
 import { handler } from "../tools/wait";
 import { registerSession, removeSession, removeSessionMarker } from "../lib/process-manager";
-import { parsePluginkitList, safariEnableFrame, safariEnableProbes } from "../lib/safari-enable-read";
+import { parseSafariEngineSays } from "../lib/safari-enable-log";
+import { parsePluginkitList, readSafariEnable, safariEnableFrame, safariEnableProbes } from "../lib/safari-enable-read";
 import { writeCompiledUnattachedContract } from "./fixtures/ready-contract";
 import { extensionsPlistXml, TEAM, TEAM_SIGNED_CODESIGN } from "./fixtures/safari-extensions-plist";
 
@@ -87,6 +88,37 @@ describe("the pluginkit listing of Safari web extensions", () => {
     expect(rows[1]).toMatchObject({ enabled: false, bundleId: NEW_ID });
     expect(rows[1]!.path).toBe(path.join(release(), "Visionario.app", "Contents", "PlugIns", "Visionario Extension.appex"));
     expect(parsePluginkitList("  (no matches)\n")).toEqual([]);
+  });
+
+  it("matches a Windows-style registration to the built app and names the appex and the earlier app with forward slashes (ledger 549)", () => {
+    const winRelease = "C:\\Users\\pat\\visionario\\dist\\safari-xcode\\.derived\\Build\\Products\\Release";
+    const row = (mark: string, id: string, app: string) =>
+      `${mark}    ${id}(1.0)\t3E3BBEFD-8E88-414A-B1B4-4BA28401048E\t2026-11-06 18:15:33 +0000\t${winRelease}\\${app}\\Contents\\PlugIns\\${app.replace(/\.app$/, "")} Extension.appex`;
+    const pluginkit = parsePluginkitList(`${row("+", OLD_ID, "Hands-free.app")}\n${row(" ", NEW_ID, "Visionario.app")}\n (2 plug-ins)\n`);
+
+    const { safari, hint } = readSafariEnable({
+      projectPath: "C:\\Users\\pat\\visionario",
+      browser: "safari",
+      appName: "Visionario",
+      appPath: `${winRelease}\\Visionario.app`,
+      extensionId: NEW_ID,
+      enableExtension: true,
+      engineSays: parseSafariEngineSays(""),
+      pluginkit,
+      rows: null,
+      plistReason: "Extensions.plist could not be read: plutil exited 1",
+      identity: "ad-hoc",
+      personSteps: [],
+      automation: null,
+      safariRunning: null,
+      hostApp: "",
+      appExists: true,
+    });
+
+    expect(safari.registeredPath).toBe("C:/Users/pat/visionario/dist/safari-xcode/.derived/Build/Products/Release/Visionario.app/Contents/PlugIns/Visionario Extension.appex");
+    expect(safari.earlierBundleIds).toEqual([OLD_ID]);
+    expect(hint).toContain(`pluginkit lists ${NEW_ID} off at Visionario.app, which is the registration, not Safari's own switch`);
+    expect(hint).toContain(`The earlier enable was for ${OLD_ID} (Hands-free.app), a different bundle id; this build registers ${NEW_ID}, so it does not carry over.`);
   });
 });
 

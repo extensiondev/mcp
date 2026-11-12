@@ -28,7 +28,7 @@ import { parseSafariEngineSays } from "./safari-enable-log";
 import { describeIdentity, parseSafariExtensionsPlist, plistIdentityOf, UNSIGNED_IDENTITY, type SafariExtensionRow } from "./safari-extensions-plist";
 import { safariPersonSteps, type SafariPersonStep } from "./safari-person-steps";
 import { parseCodesignIdentity, safariAppPath, type SigningIdentity } from "./safari-signing";
-import { readyContractPath } from "./session-paths";
+import { posixPath, readyContractPath } from "./session-paths";
 
 export { safariEnableProbes, SAFARI_WEB_EXTENSION_PROTOCOL, type AutomationProbe, type SafariEnableProbes } from "./safari-enable-probes";
 export { manualSteps, type SafariBlocker, type SafariBlockerKind } from "./safari-enable-blockers";
@@ -85,22 +85,25 @@ export interface SafariEnableInput extends SafariBlockerInput {
 }
 
 function appOf(appexPath: string): string {
-  const app = appexPath.match(/\/([^/]+\.app)\//);
+  const app = posixPath(appexPath).match(/\/([^/]+\.app)\//);
 
   return app ? app[1]! : path.basename(appexPath);
+}
+
+function registeredUnder(entry: PluginkitEntry, root: string | null): boolean {
+  return root !== null && posixPath(entry.path).startsWith(`${posixPath(root).replace(/\/+$/, "")}/`);
 }
 
 const NOT_CONNECTED = "The background has not connected yet: call extension_wait again; if it stays unattached, open a page the extension matches with extension_open url.";
 
 export function readSafariEnable(input: SafariEnableInput): { safari: SafariEnableValue; hint: string } {
   const entries = input.pluginkit ?? [];
-  const under = (entry: PluginkitEntry, root: string | null): boolean => root !== null && entry.path.startsWith(`${root.replace(/[\\/]+$/, "")}/`);
   const current =
-    entries.find((entry) => under(entry, input.appPath)) ??
+    entries.find((entry) => registeredUnder(entry, input.appPath)) ??
     entries.find((entry) => input.extensionId !== null && entry.bundleId === input.extensionId) ??
     null;
-  const releaseDir = input.appPath ? path.dirname(input.appPath) : null;
-  const earlier = entries.filter((entry) => entry !== current && under(entry, releaseDir) && entry.bundleId !== current?.bundleId);
+  const releaseDir = input.appPath ? path.posix.dirname(posixPath(input.appPath)) : null;
+  const earlier = entries.filter((entry) => entry !== current && registeredUnder(entry, releaseDir) && entry.bundleId !== current?.bundleId);
   const bundleId = current?.bundleId ?? input.extensionId;
   const fresh = plistIdentityOf(input.identity);
   const rows = bundleId !== null && input.rows ? input.rows.filter((row) => row.bundleId === bundleId) : [];
@@ -113,7 +116,7 @@ export function readSafariEnable(input: SafariEnableInput): { safari: SafariEnab
     bundleId,
     identity: fresh,
     appPath: input.appPath,
-    registeredPath: current?.path ?? null,
+    registeredPath: current ? posixPath(current.path) : null,
     rows,
     earlierBundleIds: earlier.map((entry) => entry.bundleId),
     personSteps: input.personSteps,
@@ -226,7 +229,7 @@ export function safariEnableFrame(
   const plist = probes.extensionsPlist();
   const rows = plist.xml === null ? null : parseSafariExtensionsPlist(plist.xml);
   const identity = options.identity && options.identity !== "unknown" ? options.identity : parseCodesignIdentity(appExists ? probes.codesign(appPath) : null);
-  const bundleId = pluginkit?.find((entry) => entry.path.startsWith(`${appPath}/`))?.bundleId ?? extensionId;
+  const bundleId = pluginkit?.find((entry) => registeredUnder(entry, appPath))?.bundleId ?? extensionId;
   const fresh = plistIdentityOf(identity);
   const own = rows?.filter((row) => row.bundleId === bundleId) ?? [];
   const freshRow = fresh !== null ? own.find((row) => row.identity === fresh) : own.length === 1 ? own[0] : undefined;

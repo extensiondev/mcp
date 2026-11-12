@@ -10,7 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { readBuiltManifest } from "./project-manifest";
-import { engineProjectRoot } from "./session-paths";
+import { engineProjectRoot, posixPath } from "./session-paths";
 
 export type SafariPromptKind = "camera" | "microphone" | "geolocation";
 
@@ -90,7 +90,7 @@ export function safariPersonSteps(projectPath: string, browser: string, distPath
     const source = readBounded(file);
     if (!source) continue;
 
-    const name = path.relative(root, file);
+    const name = posixPath(path.relative(root, file));
 
     if (/\bgetUserMedia\s*\(|\bgetDisplayMedia\s*\(/.test(source)) {
       const audioOnly = /\baudio\s*:/.test(source) && !/\bvideo\s*:/.test(source);

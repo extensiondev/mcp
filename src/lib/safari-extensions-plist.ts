@@ -9,12 +9,14 @@
 import os from "node:os";
 import path from "node:path";
 
+import { posixPath } from "./session-paths";
+
 import type { SigningIdentity } from "./safari-signing";
 
 export const UNSIGNED_IDENTITY = "UNSIGNED";
 
 export function safariExtensionsPlistPath(home: string = os.homedir()): string {
-  return path.join(home, "Library", "Containers", "com.apple.Safari", "Data", "Library", "Safari", "WebExtensions", "Extensions.plist");
+  return path.posix.join(posixPath(home), "Library", "Containers", "com.apple.Safari", "Data", "Library", "Safari", "WebExtensions", "Extensions.plist");
 }
 
 export type PlistValue = string | number | boolean | PlistValue[] | { [key: string]: PlistValue } | null;

@@ -21,6 +21,10 @@ export const EXTENSION_CONFIG_FILENAMES = [
   "extension.config.cjs",
 ];
 
+export function posixPath(file: string): string {
+  return file.replace(/\\/g, "/");
+}
+
 function isFile(file: string): boolean {
   try {
     return fs.statSync(file).isFile();

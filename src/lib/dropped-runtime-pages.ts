@@ -12,6 +12,7 @@ import path from "node:path";
 import { WEBKIT_FAMILY } from "./browser-family";
 import { engineManifestView } from "./engine-manifest-view";
 import { sourceManifest } from "./manifest-by-browser";
+import { posixPath } from "./session-paths";
 import { scanRoots } from "./store-code-facts";
 
 type Manifest = Record<string, unknown>;
@@ -145,7 +146,7 @@ function sitesNaming(files: string[], root: string, pages: string[]): Map<string
       if (found.length >= MAX_SITES || !body.includes(page)) continue;
 
       const line = lines.findIndex((text) => pattern.test(text));
-      if (line >= 0) found.push(`${path.relative(root, file) || file}:${line + 1}`);
+      if (line >= 0) found.push(`${posixPath(path.relative(root, file) || file)}:${line + 1}`);
     }
   }
 

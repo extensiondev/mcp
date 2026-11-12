@@ -16,6 +16,7 @@ import { handler } from "../tools/wait";
 import { registerSession, removeSession, removeSessionMarker } from "../lib/process-manager";
 import { safariEnableFrame, safariEnableProbes } from "../lib/safari-enable-read";
 import { parseSafariExtensionsPlist, safariExtensionsPlistPath } from "../lib/safari-extensions-plist";
+import { posixPath } from "../lib/session-paths";
 import { writeCompiledUnattachedContract } from "./fixtures/ready-contract";
 import { AD_HOC_CODESIGN, extensionsPlistXml, TEAM, TEAM_SIGNED_CODESIGN } from "./fixtures/safari-extensions-plist";
 
@@ -100,6 +101,13 @@ describe("Safari's WebExtensions Extensions.plist", () => {
     expect(parseSafariExtensionsPlist("<plist version=\"1.0\"><dict/></plist>")).toEqual([]);
     expect(parseSafariExtensionsPlist("not a plist")).toEqual([]);
     expect(safariExtensionsPlistPath("/Users/pat")).toBe("/Users/pat/Library/Containers/com.apple.Safari/Data/Library/Safari/WebExtensions/Extensions.plist");
+  });
+
+  it("builds the plist path with forward slashes on every OS, from a Windows-style home and from the real one (ledger 549)", () => {
+    expect(safariExtensionsPlistPath("C:\\Users\\pat")).toBe("C:/Users/pat/Library/Containers/com.apple.Safari/Data/Library/Safari/WebExtensions/Extensions.plist");
+    expect(safariExtensionsPlistPath("C:\\Users\\pat\\")).toBe("C:/Users/pat/Library/Containers/com.apple.Safari/Data/Library/Safari/WebExtensions/Extensions.plist");
+    expect(safariExtensionsPlistPath()).toBe(`${posixPath(os.homedir())}/Library/Containers/com.apple.Safari/Data/Library/Safari/WebExtensions/Extensions.plist`);
+    expect(safariExtensionsPlistPath()).not.toContain("\\");
   });
 });
 
