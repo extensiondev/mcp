@@ -12,6 +12,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { localState } from "./local-state";
+import { processStartedAt } from "./process-identity";
 
 import type { ProcessInfo } from "./types";
 
@@ -158,11 +159,15 @@ export function registerSession(info: ProcessInfo): string | null {
   const key = sessionKey(info.projectPath, info.browser);
   const { sessions, registrations } = localState();
   const prior = registrations.get(key);
-  const at = prior && prior.pid === info.pid ? prior.at : Date.now();
-  registrations.set(key, { pid: info.pid, at });
-  sessions.set(key, info);
+  const samePid = prior !== undefined && prior.pid === info.pid;
+  const at = samePid ? prior.at : Date.now();
+  const startedAt =
+    info.processStartedAt ?? (samePid ? prior.startedAt : undefined) ?? processStartedAt(info.pid) ?? undefined;
+  const recorded: ProcessInfo = startedAt ? { ...info, processStartedAt: startedAt } : info;
+  registrations.set(key, { pid: info.pid, at, ...(startedAt ? { startedAt } : {}) });
+  sessions.set(key, recorded);
 
-  return writeMarkerBestEffort(info, at);
+  return writeMarkerBestEffort(recorded, at);
 }
 
 export function sessionSinceMs(

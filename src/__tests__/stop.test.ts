@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -13,6 +13,7 @@ import {
   listSessions,
 } from "../lib/process-manager";
 import { resolveExtensionInvocation } from "../lib/exec";
+import { pidState, processStartedAt } from "../lib/process-identity";
 import { liveNetworkStubs, openNetworkStubs, stubLinks } from "../lib/network-stubs";
 import { readyContract } from "./fixtures/engine-answers";
 
@@ -483,4 +484,82 @@ describe("extension_stop with a browser ends only that browser's session", () =>
     },
     15_000,
   );
+});
+
+describe("extension_stop judges a session by its pid and its start time", () => {
+  function spawnHeldVictim(): ChildProcess {
+    const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+
+    return child;
+  }
+
+  it(
+    "reports a pid whose start time no longer matches the record as gone and signals nothing",
+    async () => {
+      const projectPath = tmpProject();
+      const child = spawnHeldVictim();
+      const pid = child.pid!;
+
+      try {
+        registerSession({
+          pid,
+          processStartedAt: "2001-01-01T00:00:00.000Z",
+          browser: "chrome",
+          projectPath,
+          command: "dev",
+        });
+
+        const result = JSON.parse(await stop.handler({ projectPath, browser: "chrome" }));
+
+        expect(result.status).toBe("stopped");
+        expect(result.value.stopped).toBe(true);
+        expect(result.value.staleRecord).toBeUndefined();
+        expect(result.value.detail).toContain("Process was already gone");
+        expect(result.value.detail).toContain(`pid ${pid} now belongs to a process started at`);
+        expect(result.value.detail).not.toContain("Terminated");
+        expect(child.exitCode).toBeNull();
+        expect(child.signalCode).toBeNull();
+        expect(isAlive(pid)).toBe(true);
+        expect(inMemorySession(projectPath, "chrome")).toBeUndefined();
+      } finally {
+        child.kill("SIGKILL");
+      }
+    },
+    15_000,
+  );
+
+  it(
+    "records the start time of the process it registers and ends that process",
+    async () => {
+      const projectPath = tmpProject();
+      const pid = spawnVictim();
+      registerSession({ pid, browser: "chrome", projectPath, command: "dev" });
+
+      const recorded = inMemorySession(projectPath, "chrome")?.processStartedAt;
+      expect(typeof recorded).toBe("string");
+      expect(Math.abs(Date.parse(recorded!) - Date.now())).toBeLessThan(60_000);
+      const marker = listSessionMarkers().find(
+        (m) => path.resolve(m.projectPath) === path.resolve(projectPath) && m.browser === "chrome",
+      );
+      expect(marker?.processStartedAt).toBe(recorded);
+      expect(pidState(pid, recorded)).toBe("alive");
+
+      const result = JSON.parse(await stop.handler({ projectPath, browser: "chrome" }));
+
+      expect(result.value.stopped).toBe(true);
+      expect(result.value.detail).toContain("Terminated");
+      expect(await waitGone(pid)).toBe(true);
+    },
+    15_000,
+  );
+
+  it("calls this process dead under a start time it never had and alive under its own", () => {
+    expect(pidState(process.pid, "2001-01-01T00:00:00.000Z")).toBe("dead");
+    expect(pidState(process.pid, processStartedAt(process.pid))).toBe("alive");
+    expect(pidState(process.pid)).toBe("alive");
+  });
 });

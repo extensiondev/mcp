@@ -84,17 +84,122 @@ export function processCommand(pid: number): string {
   }
 }
 
-export function pidState(pid: number): PidState {
+const SAME_START_TOLERANCE_MS = 2_000;
+
+function isoStart(text: string): string | null {
+  const parsed = Date.parse(text.trim());
+
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+}
+
+function windowsProcessStartTimes(pids: number[]): Map<number, string> {
+  const found = new Map<number, string>();
+  const filter = pids.map((pid) => `ProcessId = ${pid}`).join(" OR ");
+
+  try {
+    const out = execFileSync(
+      "powershell",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        `Get-CimInstance Win32_Process -Filter "${filter}" | ForEach-Object { "$($_.ProcessId)\`t$($_.CreationDate.ToUniversalTime().ToString('o'))" }`,
+      ],
+      { encoding: "utf8", windowsHide: true },
+    );
+
+    for (const line of out.split(/\r?\n/)) {
+      const [pidText, stamp = ""] = line.split("\t");
+      const pid = Number.parseInt(pidText ?? "", 10);
+      const iso = isoStart(stamp);
+
+      if (Number.isInteger(pid) && pid > 0 && iso) found.set(pid, iso);
+    }
+  } catch {
+  }
+
+  return found;
+}
+
+function posixProcessStartTimes(pids: number[]): Map<number, string> {
+  const found = new Map<number, string>();
+  let out = "";
+
+  try {
+    out = execFileSync("ps", ["-o", "pid=,lstart=", "-p", pids.join(",")], {
+      encoding: "utf8",
+      env: { ...process.env, LC_ALL: "C" },
+    });
+  } catch (err) {
+    const stdout = (err as { stdout?: unknown })?.stdout;
+    out = typeof stdout === "string" ? stdout : "";
+  }
+
+  for (const line of out.split("\n")) {
+    const match = /^\s*(\d+)\s+(.+?)\s*$/.exec(line);
+    if (!match) continue;
+
+    const pid = Number.parseInt(match[1], 10);
+    const iso = isoStart(match[2]);
+
+    if (Number.isInteger(pid) && pid > 0 && iso) found.set(pid, iso);
+  }
+
+  return found;
+}
+
+export function processStartTimes(pids: number[]): Map<number, string> {
+  const wanted = [...new Set(pids.filter((pid) => Number.isInteger(pid) && pid > 0))];
+  if (wanted.length === 0) return new Map();
+
+  return process.platform === "win32"
+    ? windowsProcessStartTimes(wanted)
+    : posixProcessStartTimes(wanted);
+}
+
+export function processStartedAt(pid: number): string | null {
+  return processStartTimes([pid]).get(pid) ?? null;
+}
+
+export function sameProcessStart(recorded: string, current: string): boolean {
+  const a = Date.parse(recorded);
+  const b = Date.parse(current);
+
+  return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= SAME_START_TOLERANCE_MS;
+}
+
+export function pidRecycled(pid: number, startedAt: string | null | undefined): boolean {
+  if (!startedAt) return false;
+
+  const current = processStartedAt(pid);
+
+  return current !== null && !sameProcessStart(startedAt, current);
+}
+
+export function pidState(pid: number, startedAt?: string | null): PidState {
   try {
     process.kill(pid, 0);
   } catch (err) {
-    return (err as NodeJS.ErrnoException)?.code === "EPERM" ? "foreign" : "dead";
+    if ((err as NodeJS.ErrnoException)?.code !== "EPERM") return "dead";
+
+    return pidRecycled(pid, startedAt) ? "dead" : "foreign";
   }
+
+  if (pidRecycled(pid, startedAt)) return "dead";
 
   const command = processCommand(pid);
   if (command && !PLAUSIBLE_SESSION_BINARY.test(command)) return "foreign";
 
   return "alive";
+}
+
+export function describeRecycledPid(pid: number, startedAt: string | null | undefined): string | null {
+  if (!startedAt) return null;
+
+  const current = processStartedAt(pid);
+  if (current === null || sameProcessStart(startedAt, current)) return null;
+
+  return `pid ${pid} now belongs to a process started at ${current}, not the session process started at ${startedAt}`;
 }
 
 export function describeForeignPid(pid: number): string {

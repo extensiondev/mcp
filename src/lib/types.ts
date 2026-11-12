@@ -113,6 +113,7 @@ export interface ReadyContract {
 
 export interface ProcessInfo {
   pid: number;
+  processStartedAt?: string;
   browser: string;
   port?: number;
   projectPath: string;

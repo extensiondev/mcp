@@ -46,7 +46,7 @@ export function onlyLiveSession(): OnlyLiveSession {
   const candidates = new Map<string, ProcessInfo>();
 
   for (const s of listSessions()) {
-    if (pidState(s.pid) !== "alive") continue;
+    if (pidState(s.pid, s.processStartedAt) !== "alive") continue;
 
     candidates.set(`${path.resolve(s.projectPath)}::${s.browser}`, s);
   }
@@ -56,7 +56,7 @@ export function onlyLiveSession(): OnlyLiveSession {
   for (const m of markersRead.markers) {
     const foreign =
       typeof m.serverPid === "number" && m.serverPid !== process.pid && pidState(m.serverPid) === "alive";
-    if (foreign || pidState(m.pid) !== "alive") continue;
+    if (foreign || pidState(m.pid, m.processStartedAt) !== "alive") continue;
 
     const key = `${path.resolve(m.projectPath)}::${m.browser}`;
     if (!candidates.has(key)) candidates.set(key, m);

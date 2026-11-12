@@ -15,7 +15,9 @@ import { PROJECT_PATH } from "../lib/common-schema";
 import {
   PLAUSIBLE_SESSION_BINARY,
   describeForeignPid,
+  describeRecycledPid,
   pidState,
+  processStartTimes,
   readWindowsProcessTable,
   type WindowsProcessRow,
   processCommand,
@@ -271,6 +273,8 @@ async function reapSessionProcesses(
   const { pids } = sessionProcessPids(projectPath, browser, hints);
   if (pids.length === 0) return { reaped: [], unconfirmed: [] };
 
+  const startedAt = processStartTimes(pids);
+
   for (const pid of pids) {
     if (process.platform === "win32") {
       killWindowsTree(pid);
@@ -288,7 +292,7 @@ async function reapSessionProcesses(
   const unconfirmed: number[] = [];
 
   for (const pid of pids) {
-    (pidState(pid) === "dead" ? reaped : unconfirmed).push(pid);
+    (pidState(pid, startedAt.get(pid)) === "dead" ? reaped : unconfirmed).push(pid);
   }
 
   return { reaped, unconfirmed };
@@ -343,6 +347,7 @@ export async function stopOne(
   dropNetworkStubs(projectPath, browser);
   const session = findSessionInfo(projectPath, browser);
   const pid = session?.pid ?? pidFromReadyContract(projectPath, browser);
+  const startedAt = session?.processStartedAt ?? null;
   const hints = contractProcessHints(projectPath, browser);
   const browserPid = contractBrowserPid(projectPath, browser);
   const noBrowser = session?.noBrowser === true;
@@ -375,7 +380,7 @@ export async function stopOne(
   }
 
   let detail: string;
-  const state = pidState(pid);
+  const state = pidState(pid, startedAt);
 
   if (state === "foreign") {
     removeSession(projectPath, browser);
@@ -402,25 +407,33 @@ export async function stopOne(
   }
 
   if (state === "dead") {
-    detail = "Process was already gone; cleaned up session records.";
+    const recycled = describeRecycledPid(pid, startedAt);
+    detail = recycled
+      ? `Process was already gone: ${recycled}, so nothing was signalled; cleaned up session records.`
+      : "Process was already gone; cleaned up session records.";
   } else {
     signal(pid, "SIGTERM");
     await sleep(1500);
+    let after = pidState(pid, startedAt);
 
-    if (isAlive(pid)) {
+    if (after === "alive") {
       signal(pid, "SIGKILL");
       await sleep(250);
+      after = pidState(pid, startedAt);
     }
 
-    detail = isAlive(pid)
-      ? "Sent SIGTERM and SIGKILL but the process still reports alive; it may be exiting."
-      : "Terminated.";
+    detail =
+      after === "alive"
+        ? "Sent SIGTERM and SIGKILL but the process still reports alive; it may be exiting."
+        : after === "foreign"
+          ? `Sent SIGTERM; ${describeForeignPid(pid)}, so it was not signalled again.`
+          : "Terminated.";
   }
 
   const { reaped } = await reapSessionProcesses(projectPath, browser, hints);
 
   const { pids: survivors, verified } = sessionProcessPids(projectPath, browser, hints);
-  const dead = pidState(pid) === "dead";
+  const dead = pidState(pid, startedAt) === "dead";
   const ended = endedProcesses(dead, browserPid);
   const stopped = dead && verified && survivors.length === 0 && ended.browserGone !== false;
 

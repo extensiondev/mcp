@@ -11,6 +11,7 @@ import type { ProcessInfo } from "./types";
 export interface RegistrationStamp {
   pid: number;
   at: number;
+  startedAt?: string;
 }
 
 export interface LocalState {

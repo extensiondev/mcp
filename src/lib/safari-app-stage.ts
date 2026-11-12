@@ -93,7 +93,7 @@ export function safariAppBuilding(projectPath: string, browser: string): SafariA
   if (!isSafariTarget(browser)) return null;
 
   const session = findSessionInfo(projectPath, browser);
-  if (!session?.logPath || pidState(session.pid) === "dead") return null;
+  if (!session?.logPath || pidState(session.pid, session.processStartedAt) === "dead") return null;
 
   let log: string;
 
