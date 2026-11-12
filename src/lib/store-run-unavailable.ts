@@ -29,14 +29,23 @@ export interface StoreRunUnavailable {
   status: number;
   code: string;
   platformLine: string;
+  ownSentence?: string;
 }
 
+/* @invariant A STORE ACT THE PLATFORM NAMES AS NOT ON ITS LANE YET IS SAID IN
+ * THE PLATFORM'S OWN SENTENCE. A 409 MIRRORS_FROZEN that names its store and
+ * act (a Safari submit while only Chrome, Edge and Firefox run on the lane)
+ * is not an outage to report: the platform says which store to leave out or
+ * the store's own hand path, and that sentence is what the person reads
+ * (ledger 567). Every other platform fault keeps the generic report sentence.
+ */
 export function storeRunUnavailable(status: number, body: unknown): StoreRunUnavailable | null {
   const row = isRow(body) ? body : {};
   const code = text(row.code);
   const platformLine = text(row.message);
+  const own = code === MIRRORS_FROZEN_CODE && text(row.act) && platformLine ? { ownSentence: platformLine } : {};
 
-  if (status === 409 && (code === STORE_RUN_UNAVAILABLE_CODE || code === MIRRORS_FROZEN_CODE)) return { status, code, platformLine };
+  if (status === 409 && (code === STORE_RUN_UNAVAILABLE_CODE || code === MIRRORS_FROZEN_CODE)) return { status, code, platformLine, ...own };
   if (status === 404 && MISSING_STORE_RUN.test(platformLine)) return { status, code, platformLine };
 
   return null;
@@ -73,6 +82,7 @@ export interface ReportScope {
   ref: CredentialRef | null | undefined;
   stores: string[];
   buildSha: string;
+  ownSentence?: string;
 }
 
 export function reportSentence(scope: ReportScope): string {
@@ -92,13 +102,15 @@ export function storeRunCheck(found: StoreRunUnavailable, scope: ReportScope): R
     owner: "platform",
     expected: "the submit route's dry run takes the store",
     actual: `the dry run answered ${found.status}${found.code ? ` ${found.code}` : ""}`,
-    message: `${PLATFORM_UNAVAILABLE_SENTENCE}. ${reportSentence(scope)}`,
-    reportUrl: WRITE_FAILURE_REPORT_URL,
+    message: found.ownSentence ?? `${PLATFORM_UNAVAILABLE_SENTENCE}. ${reportSentence(scope)}`,
+    ...(found.ownSentence ? {} : { reportUrl: WRITE_FAILURE_REPORT_URL }),
     platformLine: found.platformLine,
   };
 }
 
 export function platformUnavailableStep(scope: ReportScope) {
+  if (scope.ownSentence) return nextStep("watch", scope.ownSentence);
+
   return nextStep("watch", `${PLATFORM_UNAVAILABLE_SENTENCE}. ${reportSentence(scope)}`, WRITE_FAILURE_REPORT_URL);
 }
 
@@ -129,8 +141,9 @@ function approvalSentence(args: PlatformUnavailableAnswer): { say: string; refun
 export function platformUnavailableAnswer(args: PlatformUnavailableAnswer): string {
   const beforeApproval = !args.dryRun && !text(args.approvalId);
   const approval = approvalSentence(args);
-  const report = reportSentence(args);
-  const say = `${PLATFORM_UNAVAILABLE_SENTENCE}.${approval.say ? ` ${approval.say}` : ""}`;
+  const own = args.found.ownSentence;
+  const report = own ? "" : reportSentence(args);
+  const say = own ?? `${PLATFORM_UNAVAILABLE_SENTENCE}.${approval.say ? ` ${approval.say}` : ""}`;
 
   return envelope({
     ok: false,
@@ -139,7 +152,7 @@ export function platformUnavailableAnswer(args: PlatformUnavailableAnswer): stri
     error: {
       code: "E_PLATFORM",
       name: "PlatformUnavailable",
-      message: `${PLATFORM_UNAVAILABLE_SENTENCE}. Nothing was sent to the store${beforeApproval ? " and no approval was asked for" : ""}.`,
+      message: own ?? `${PLATFORM_UNAVAILABLE_SENTENCE}. Nothing was sent to the store${beforeApproval ? " and no approval was asked for" : ""}.`,
       ...(args.found.code ? { platformCode: args.found.code } : {}),
     },
     value: {
@@ -149,11 +162,11 @@ export function platformUnavailableAnswer(args: PlatformUnavailableAnswer): stri
       owner: "platform",
       ...(beforeApproval ? { refusedBeforeApproval: true } : {}),
       ...(approval.refunded ? { approvalId: text(args.approvalId), approvalRefunded: approval.refunded } : {}),
-      reportUrl: WRITE_FAILURE_REPORT_URL,
+      ...(own ? {} : { reportUrl: WRITE_FAILURE_REPORT_URL }),
       platformLine: args.found.platformLine,
       sayToPerson: say,
-      nextStep: platformUnavailableStep(args),
+      nextStep: platformUnavailableStep({ ...args, ...(own ? { ownSentence: own } : {}) }),
     },
-    hint: `${say} ${report}`,
+    hint: report ? `${say} ${report}` : say,
   });
 }

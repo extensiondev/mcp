@@ -182,11 +182,33 @@ describe("a real submit runs the preflight's two local checks before the approva
     expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
 
     expect(storeRunUnavailable(409, { code: "MIRRORS_FROZEN", message: "The mirrors are frozen." })).toMatchObject({ code: "MIRRORS_FROZEN" });
+    expect(storeRunUnavailable(409, { code: "MIRRORS_FROZEN", message: "The mirrors are frozen." })).not.toHaveProperty("ownSentence");
     expect(storeRunUnavailable(404, { message: "No store submission workflow (store.yml) found on the project's mirror repository." })).toMatchObject({ status: 404 });
     expect(storeRunUnavailable(404, { message: "Build not found", code: "UNKNOWN_BUILD" })).toBeNull();
     expect(storeRunUnavailable(404, { message: "not found" })).toBeNull();
     expect(storeRunUnavailable(409, { code: "EDGE_PACKAGE_HAS_ARCHIVES", message: "nested archives" })).toBeNull();
     expect(storeRunUnavailable(500, { message: NO_STORE_RUN })).toBeNull();
+  });
+
+  it("567: says a Safari submit the platform cannot run yet in the platform's own words, with no approval and no report link", async () => {
+    const frozen =
+      "Submitting to the App Store does not run on the extension.dev lane yet, and the old run path it used is frozen, so nothing was sent to the store and no approval was asked for or spent. Leave safari out of this call until the lane runs it.";
+
+    stores("safari");
+    platform.routes[`POST ${DISPATCH}`] = () => ({
+      status: 409,
+      body: { ok: false, code: "MIRRORS_FROZEN", store: "safari", act: "submit", refusedBeforeApproval: true, message: frozen },
+    });
+
+    const out = await real(["safari"]);
+
+    expect(out.status).toBe(PLATFORM_UNAVAILABLE_STATUS);
+    expect(out.error).toMatchObject({ platformCode: "MIRRORS_FROZEN", message: frozen });
+    expect(out.value.sayToPerson).toBe(frozen);
+    expect(out.value.nextStep.say).toBe(frozen);
+    expect(out.value).not.toHaveProperty("reportUrl");
+    expect(out.hint).toBe(frozen);
+    expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
   });
 });
 

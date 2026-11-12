@@ -59,6 +59,15 @@ describe("414: a Safari lock is answered as the owner's decision, with what Appl
     expect(said).toContain('withdraw it now with extension_submit {action: "cancel", store: "safari", submissionId: "d725c641-0957-4766-bb79-8443e8a58eab"} and send the new build as 0.3.0.');
   });
 
+  it("567: names App Store Connect's Remove from Review, never a cancel call, while the platform cannot run the withdrawal", () => {
+    const block = safariBlock("AFTER_APPROVAL");
+    const said = safariLockSentences({ ...block, heldSubmissionId: "d725c641", lock: { ...block.lock, withdrawOnPlatform: false } }, NOW);
+
+    expect(said).toContain('or withdraw it now by hand with "Remove from Review" in App Store Connect, since the platform cannot run that withdrawal yet, and send the new build as 0.3.0.');
+    expect(said).toContain("The lock clears when the version leaves App Review.");
+    expect(said).not.toContain('action: "cancel"');
+  });
+
   it("says a manual release stays held and says no age for a read under an hour old", () => {
     const said = safariLockSentences(safariBlock("MANUAL", "2026-11-05T21:30:00.000Z"), NOW);
 

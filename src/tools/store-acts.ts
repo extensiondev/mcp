@@ -714,7 +714,10 @@ function safariOnApproval(release: Row | null): string {
  * "queued, never failed" said neither (ledger 414). The paragraph names the
  * version and build in review (from the approval sentence and the lock), what
  * Apple's approval does to it (from the release read), both ways out, when the
- * lock clears on its own, and the age of a read older than an hour.
+ * lock clears on its own, and the age of a read older than an hour. While
+ * the platform marks the lock `withdrawOnPlatform: false` (its old run path
+ * is frozen and the cancel is refused before approval, ledger 567), the way
+ * out is App Store Connect's "Remove from Review", never a cancel call.
  */
 export function safariLockSentences(block: Row, now = Date.now()): string {
   const lock = lockOf(block);
@@ -728,7 +731,10 @@ export function safariLockSentences(block: Row, now = Date.now()): string {
   const later = version ? bumpedPatch(version) : "";
   const subject = `${version ? `version ${version}` : "a version"}${build ? ` (build ${build})` : ""}`;
   const held = text(block.heldSubmissionId);
-  const withdrawal = `extension_submit {action: "cancel", store: "safari"${held ? `, submissionId: "${held}"` : ""}}`;
+  const byHand = lock.withdrawOnPlatform === false;
+  const withdrawal = byHand
+    ? `by hand with "Remove from Review" in App Store Connect, since the platform cannot run that withdrawal yet,`
+    : `with extension_submit {action: "cancel", store: "safari"${held ? `, submissionId: "${held}"` : ""}}`;
   const readAt = text(lock.readAt);
   const hours = readAt ? Math.floor((now - Date.parse(readAt)) / HOUR_MS) : 0;
   const age =
@@ -736,7 +742,7 @@ export function safariLockSentences(block: Row, now = Date.now()): string {
       ? ` App Store Connect answered this ${hours} ${hours === 1 ? "hour" : "hours"} ago (${readAt}); extension_submit_check {action: "status", browsers: ["safari"], waitSeconds: 60} reads it fresh.`
       : "";
 
-  return `safari: ${subject} is waiting for Apple (${text(lock.storeWord) || text(lock.kind)}) and ${safariOnApproval(isRow(block.release) ? block.release : null)}. Either let Apple finish and send the new build as ${later ? `${later} or higher` : "the next version"} afterward, since App Store Connect takes no new build on a version it has released, or withdraw it now with ${withdrawal} and send the new build as ${next || version || "this version"}. The lock clears when ${clears}.${age}`;
+  return `safari: ${subject} is waiting for Apple (${text(lock.storeWord) || text(lock.kind)}) and ${safariOnApproval(isRow(block.release) ? block.release : null)}. Either let Apple finish and send the new build as ${later ? `${later} or higher` : "the next version"} afterward, since App Store Connect takes no new build on a version it has released, or withdraw it now ${withdrawal} and send the new build as ${next || version || "this version"}. The lock clears when ${byHand ? "the version leaves App Review" : clears}.${age}`;
 }
 
 export function nextVersionSentences(storePreflight: Record<string, Row>): string {
@@ -1064,7 +1070,8 @@ async function preflightRead(args: StoreActArgs): Promise<string> {
   );
   const platformFaults = dryRuns.map((dryRun) => dryRun?.fault ?? null);
   const platformBlocked = asked.filter((store, i) => platformFaults[i] !== null);
-  const platformScope = { ref: api.ref, stores: platformBlocked, buildSha: platformBlocked.length ? shaFor(checked[asked.indexOf(platformBlocked[0]!)]!, platformBlocked[0]!) : "" };
+  const ownSentence = platformFaults.find((fault) => fault?.ownSentence)?.ownSentence;
+  const platformScope = { ref: api.ref, stores: platformBlocked, buildSha: platformBlocked.length ? shaFor(checked[asked.indexOf(platformBlocked[0]!)]!, platformBlocked[0]!) : "", ...(ownSentence ? { ownSentence } : {}) };
   const enterpriseChannel = asked.includes("firefox") ? firefoxEnterpriseChannelOf(text(args.projectPath)) : null;
 
   asked.forEach((store, i) => {
