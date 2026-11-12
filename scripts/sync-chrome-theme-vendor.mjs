@@ -14,7 +14,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const pkgRoot = path.resolve(here, "..");
 const SOURCE_DIR = path.resolve(
   pkgRoot,
-  "../extensiondev-emulator/src/browser-ui/lib",
+  "../../packages/extensiondev-emulator/src/browser-ui/lib",
 );
 const VENDOR_DIR = path.resolve(pkgRoot, "src/lib/vendor/chrome-theme");
 
@@ -29,7 +29,7 @@ function header(file) {
     "// VENDORED FILE - DO NOT HAND-EDIT.",
     "//",
     `// Synced verbatim from packages/extensiondev-emulator/src/browser-ui/lib/${file}`,
-    "// by packages/public-extensiondev-mcp/scripts/sync-chrome-theme-vendor.mjs.",
+    "// by public/mcp/scripts/sync-chrome-theme-vendor.mjs.",
     "//",
     "// The published @extension.dev/mcp must not take a workspace dependency on",
     "// @extension.dev/emulator (the carrier ships decoupled), so this pure resolver",

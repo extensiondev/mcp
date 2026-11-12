@@ -35,7 +35,9 @@ interface Pin {
 
 const pin: Pin = JSON.parse(fs.readFileSync(pinFile, "utf8"));
 
-const SELF_SUBMODULE = "packages/public-extensiondev-mcp";
+const SELF_SUBMODULE = "public/mcp";
+
+const NO_SUPERPROJECT = `no .gitmodules above this checkout declares path = ${SELF_SUBMODULE}, so the superproject half of this contract is not checked here`;
 
 const findDeclaringRoot = (): string | null => {
   const packageRoot = path.resolve(here, "..", "..");
@@ -188,8 +190,8 @@ describe("the ported grammar against @extension.dev/preview-verdict", () => {
     ).toBe(true);
   });
 
-  it("agrees with the upstream on the outcome vocabulary", async () => {
-    if (!monorepoRoot) return;
+  it("agrees with the upstream on the outcome vocabulary", async (ctx) => {
+    if (!monorepoRoot) return ctx.skip(NO_SUPERPROJECT);
 
     const upstream = await loadUpstream();
     expect(
@@ -205,8 +207,8 @@ describe("the ported grammar against @extension.dev/preview-verdict", () => {
     expect(CHECK_OUTCOMES).toEqual(pin.outcomes);
   });
 
-  it("declares its checks the way the upstream registry declares its own", async () => {
-    if (!monorepoRoot) return;
+  it("declares its checks the way the upstream registry declares its own", async (ctx) => {
+    if (!monorepoRoot) return ctx.skip(NO_SUPERPROJECT);
 
     const upstream = await loadUpstream();
     expect(upstream.CHECKS.length).toBeGreaterThan(0);
@@ -221,8 +223,8 @@ describe("the ported grammar against @extension.dev/preview-verdict", () => {
     }
   });
 
-  it("shapes a check result and a document the way the upstream evaluator does", async () => {
-    if (!monorepoRoot) return;
+  it("shapes a check result and a document the way the upstream evaluator does", async (ctx) => {
+    if (!monorepoRoot) return ctx.skip(NO_SUPERPROJECT);
 
     const upstream = await loadUpstream();
     const document = upstream.evaluateVerdict({ envelope: null }) as {
@@ -245,8 +247,8 @@ describe("the ported grammar against @extension.dev/preview-verdict", () => {
     }
   });
 
-  it("aggregates outcomes exactly as the upstream verifier recomputes them", async () => {
-    if (!monorepoRoot) return;
+  it("aggregates outcomes exactly as the upstream verifier recomputes them", async (ctx) => {
+    if (!monorepoRoot) return ctx.skip(NO_SUPERPROJECT);
 
     const upstream = await loadUpstream();
     const required = upstream.requiredChecksForVersion(
@@ -283,8 +285,8 @@ describe("the ported grammar against @extension.dev/preview-verdict", () => {
     }
   });
 
-  it("keeps the two lanes' id spaces disjoint", async () => {
-    if (!monorepoRoot) return;
+  it("keeps the two lanes' id spaces disjoint", async (ctx) => {
+    if (!monorepoRoot) return ctx.skip(NO_SUPERPROJECT);
 
     const upstream = await loadUpstream();
     const upstreamIds = new Set(upstream.CHECKS.map((check) => check.id));
@@ -297,8 +299,8 @@ describe("the ported grammar against @extension.dev/preview-verdict", () => {
     }
   });
 
-  it("names a live upstream check as each counterpart, or explains the absence", async () => {
-    if (!monorepoRoot) return;
+  it("names a live upstream check as each counterpart, or explains the absence", async (ctx) => {
+    if (!monorepoRoot) return ctx.skip(NO_SUPERPROJECT);
 
     const upstream = await loadUpstream();
     const byId = new Map(upstream.CHECKS.map((check) => [check.id, check]));
@@ -333,8 +335,8 @@ describe("the ported grammar against @extension.dev/preview-verdict", () => {
     }
   });
 
-  it("produces a document the upstream verifier refuses to accept as its own", async () => {
-    if (!monorepoRoot) return;
+  it("produces a document the upstream verifier refuses to accept as its own", async (ctx) => {
+    if (!monorepoRoot) return ctx.skip(NO_SUPERPROJECT);
 
     const upstream = await loadUpstream();
     const document = assertVerdict({

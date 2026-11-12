@@ -1,7 +1,7 @@
 // VENDORED FILE - DO NOT HAND-EDIT.
 //
 // Synced verbatim from packages/extensiondev-emulator/src/browser-ui/lib/chrome-theme-resolve.ts
-// by packages/public-extensiondev-mcp/scripts/sync-chrome-theme-vendor.mjs.
+// by public/mcp/scripts/sync-chrome-theme-vendor.mjs.
 //
 // The published @extension.dev/mcp must not take a workspace dependency on
 // @extension.dev/emulator (the carrier ships decoupled), so this pure resolver

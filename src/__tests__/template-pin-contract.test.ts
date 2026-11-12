@@ -9,7 +9,9 @@ import { PINNED_COMMIT } from "../lib/template-artifact-source";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(here, "..", "..");
 
-const THIS_SUBMODULE = "packages/public-extensiondev-mcp";
+const THIS_SUBMODULE = "public/mcp";
+
+const NO_SUPERPROJECT = `no .gitmodules above this checkout declares path = ${THIS_SUBMODULE}, so the superproject half of this contract is not checked here`;
 
 const SHA_PATTERN = /\b[0-9a-f]{40}\b/g;
 const SOURCE_EXTENSIONS = [".ts", ".tsx", ".mjs", ".js"];
@@ -17,14 +19,14 @@ const SOURCE_EXTENSIONS = [".ts", ".tsx", ".mjs", ".js"];
 const SCANNED_ROOTS = [
   "apps/web/code.extension.dev/src",
   "apps/web/templates.extension.dev/build-scripts",
-  "packages/public-extensiondev-mcp/src/lib",
+  "public/mcp/src/lib",
 ];
 
 const DECLARED_SOURCES = [
   "apps/web/code.extension.dev/src/generate/template-artifact-source.ts",
   "apps/web/templates.extension.dev/build-scripts/assert-template-fidelity.mjs",
   "apps/web/templates.extension.dev/build-scripts/fetch-examples-data.mjs",
-  "packages/public-extensiondev-mcp/src/lib/template-artifact-source.ts",
+  "public/mcp/src/lib/template-artifact-source.ts",
 ].sort();
 
 const DECLARED_JSON: Array<{ file: string; field: string }> = [
@@ -130,8 +132,8 @@ describe("the corpus pin agrees across every declaration", () => {
     ).toBeGreaterThanOrEqual(SOURCES_OUTSIDE_THIS_SUBMODULE + 1);
   });
 
-  it("finds every declared source the checkout contains", () => {
-    if (!monorepoRoot) return;
+  it("finds every declared source the checkout contains", (ctx) => {
+    if (!monorepoRoot) return ctx.skip(NO_SUPERPROJECT);
 
     for (const relative of DECLARED_SOURCES) {
       const file = path.join(monorepoRoot, relative);
@@ -142,8 +144,8 @@ describe("the corpus pin agrees across every declaration", () => {
     }
   });
 
-  it("discovers no pin site that nobody declared", () => {
-    if (!monorepoRoot) return;
+  it("discovers no pin site that nobody declared", (ctx) => {
+    if (!monorepoRoot) return ctx.skip(NO_SUPERPROJECT);
 
     const swept = [...sweepDeclarations(monorepoRoot).keys()].sort();
     expect(
@@ -152,8 +154,8 @@ describe("the corpus pin agrees across every declaration", () => {
     ).toEqual(DECLARED_SOURCES);
   });
 
-  it("reads exactly one sha, and the same one, from every source", () => {
-    if (!monorepoRoot) return;
+  it("reads exactly one sha, and the same one, from every source", (ctx) => {
+    if (!monorepoRoot) return ctx.skip(NO_SUPERPROJECT);
 
     const swept = sweepDeclarations(monorepoRoot);
     expect(swept.size).toBe(DECLARED_SOURCES.length);
@@ -171,8 +173,8 @@ describe("the corpus pin agrees across every declaration", () => {
     }
   });
 
-  it("reads the same sha from every declared json field", () => {
-    if (!monorepoRoot) return;
+  it("reads the same sha from every declared json field", (ctx) => {
+    if (!monorepoRoot) return ctx.skip(NO_SUPERPROJECT);
 
     for (const { file, field } of DECLARED_JSON) {
       const full = path.join(monorepoRoot, file);
@@ -197,7 +199,7 @@ describe("the corpus pin agrees across every declaration", () => {
    * checkout with no network skips rather than passing on nothing.
    */
   it("agrees with the catalog pointer the templates app publishes", async (ctx) => {
-    if (!monorepoRoot) return;
+    if (!monorepoRoot) return ctx.skip(NO_SUPERPROJECT);
 
     const committed = path.join(monorepoRoot, CATALOG_POINTER_FILE);
 
