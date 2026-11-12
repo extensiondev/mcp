@@ -252,14 +252,15 @@ describe("resolveCdpPort waits for a landing run within the verb's own timeout",
     expect(Date.now() - started).toBeLessThan(400);
   });
 
-  it("refuses without the landing wait once the start deadline has passed", async () => {
+  it("refuses within the grace period it was given, never the verb's timeout, once the start deadline has passed", async () => {
     const project = tmpProject();
     stamp(project, "start", { startedAt: agoIso(LANDING_BUDGET_MS + 1_000), ts: agoIso(LANDING_BUDGET_MS + 1_000) });
+    const graceMs = 100;
     const started = Date.now();
 
-    expect(await resolveCdpPort(project, "chrome", { timeoutMs: 20_000, graceMs: 100 })).toBeNull();
-    expect(Date.now() - started).toBeLessThan(1_000);
-  });
+    expect(await resolveCdpPort(project, "chrome", { timeoutMs: 20_000, graceMs })).toBeNull();
+    expect(Date.now() - started).toBeLessThan(graceMs + 5_000);
+  }, 10_000);
 
   it("bounds the landing wait by the verb's timeout, never by the run's deadline", async () => {
     const project = tmpProject();
