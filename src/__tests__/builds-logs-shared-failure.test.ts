@@ -65,6 +65,7 @@ const LEGACY_LOGS = { buildId: "b418732", runUrl: RUN_URL, runUrlAvailable: true
 
 const PLATFORM_LINE = "Error: This snapshot does not carry the pinned platform tools";
 const REPORT_URL = "https://github.com/extensiondev/mcp/issues";
+const LANE_LINE = "lane: the runner was lost before the job started";
 
 const PLATFORM_FAULT_LOGS = {
   ...SHARED_FAILURE_LOGS,
@@ -196,6 +197,37 @@ describe("extension_builds logs names a failure in a step every browser shares",
     expect(stepFailed.hint).not.toContain("platform fault");
     expect(stepFailedLogs.value.fault).toBeUndefined();
     expect(stepFailedLogs.hint.startsWith(`The run failed in ${JOB} at step ${STEP} before any browser built:`)).toBe(true);
+  });
+
+  it("ledger 538: logs and get on a build the platform never started say it is a platform fault, keep the commit, and name rebuild as the retry", async () => {
+    if (process.platform === "win32") return;
+
+    routes[`/api/projects/${PROJECT_ID}/builds/b418732`] = { body: { ...FAILED_DETAIL, failureCause: { kind: "not_started", jobName: "Build" } } };
+    routes[`/api/projects/${PROJECT_ID}/builds/b418732/logs`] = {
+      body: { ...SHARED_FAILURE_LOGS, run: { status: "completed", conclusion: "failure", failedJob: { name: "Build", step: null, conclusion: "failure", lines: [LANE_LINE] } } },
+    };
+
+    const out = await readLogs();
+
+    expect(out.ok).toBe(true);
+    expect(out.hint.startsWith("This is a platform fault, nothing in the project caused it")).toBe(true);
+    expect(out.hint).toContain("never started");
+    expect(out.hint).toContain("do not change the commit");
+    expect(out.hint).toContain('extension_builds action:"rebuild"');
+    expect(out.hint).not.toContain("do not rebuild");
+    expect(out.hint).toContain(`report it at ${REPORT_URL} with build b418732`);
+    expect(out.hint).toContain(LANE_LINE);
+    expect(out.value.fault).toEqual({ owner: "platform", kind: "not_started", jobName: "Build", buildId: "b418732", reportUrl: REPORT_URL, line: LANE_LINE });
+    expect(out.value.items.map((item: { status: string }) => item.status)).toEqual(["skipped", "skipped", "skipped"]);
+
+    const got = JSON.parse(await builds({ action: "get", buildId: "b418732", api: API }));
+
+    expect(got.ok).toBe(true);
+    expect(got.hint).toContain("This is a platform fault, nothing in the project caused it");
+    expect(got.hint).toContain("do not change the commit");
+    expect(got.hint).toContain('extension_builds action:"rebuild"');
+    expect(got.hint).not.toContain("do not rebuild");
+    expect(got.value.fault).toEqual({ owner: "platform", kind: "not_started", jobName: "Build", buildId: "b418732", reportUrl: REPORT_URL });
   });
 
   it("answers skipped with the reason and never pending on a concluded run", async () => {

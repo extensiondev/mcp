@@ -16,6 +16,8 @@ import { COMMAND, isRow, text, type Row } from "./builds-acts";
 export const LOG_TAIL = 200;
 
 const NO_STEP_RAN = "no_step_ran";
+const NOT_STARTED = "not_started";
+const PLATFORM_FAULT_KINDS = new Set([NO_STEP_RAN, NOT_STARTED]);
 const EXIT_LINE = /^Process completed with exit code/i;
 
 const NOT_RUN_REASON = "the run failed before this browser's job started";
@@ -154,16 +156,22 @@ function failedJobSentence(failedJob: Row, beforeBrowsers: boolean): string {
 
 export function platformFault(detail: unknown, buildId: string, lines: string[], lineSource: string): { value: Row; sentence: string } | null {
   const cause = isRow(detail) && isRow(detail.failureCause) ? detail.failureCause : null;
-  if (!cause || text(cause.kind) !== NO_STEP_RAN) return null;
+  const kind = cause ? text(cause.kind) : "";
+  if (!cause || !PLATFORM_FAULT_KINDS.has(kind)) return null;
 
   const job = text(cause.jobName);
   const line = [...lines].reverse().find((said) => said && !EXIT_LINE.test(said)) ?? "";
   const where = job ? `the platform's ${job} job` : "a platform step";
   const paste = line ? `the platform's line: ${line}` : `the platform's line from ${lineSource}`;
+  const reportAt = `${WRITE_FAILURE_REPORT_URL} with build ${buildId} and ${paste}`;
+  const sentence =
+    kind === NOT_STARTED
+      ? `This is a platform fault, nothing in the project caused it: ${where} never started, so do not change the commit. Rebuild it to try again with extension_builds action:"rebuild" and this buildId; if it fails the same way, report it at ${reportAt}.`
+      : `This is a platform fault, nothing in the project caused it: ${where} failed before any project command ran, so do not rebuild. Report it at ${reportAt}.`;
 
   return {
-    value: { owner: "platform", kind: NO_STEP_RAN, ...(job ? { jobName: job } : {}), buildId, reportUrl: WRITE_FAILURE_REPORT_URL, ...(line ? { line } : {}) },
-    sentence: `This is a platform fault, nothing in the project caused it: ${where} failed before any project command ran, so do not rebuild. Report it at ${WRITE_FAILURE_REPORT_URL} with build ${buildId} and ${paste}.`,
+    value: { owner: "platform", kind, ...(job ? { jobName: job } : {}), buildId, reportUrl: WRITE_FAILURE_REPORT_URL, ...(line ? { line } : {}) },
+    sentence,
   };
 }
 

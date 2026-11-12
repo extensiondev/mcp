@@ -89,6 +89,30 @@ describe(SUITE, () => {
     expect(out.hint).toContain("Build #1 (4cec881) now reads success");
   });
 
+  it("ledger 538: a rebuild the platform never started fails as a platform fault that keeps the commit and names rebuild as the retry", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+    world.routes[`POST ${DISPATCH_ROUTE}`] = () => ({
+      body: { ok: true, branch: "main", commit: FRESH_SHA, browsers: "chrome", origin: "mcp", dispatchedAt: DISPATCHED_AT },
+    });
+
+    world.routes[`GET ${FRESH_ROUTE}`] = () => ({
+      body: { buildId: FRESH_SHA, buildNumber: 2, status: "failed", failureCause: { kind: "not_started", jobName: "Build" } },
+    });
+
+    const out = JSON.parse(await builds({ action: "rebuild", buildId: FRESH_SHA, waitSeconds: 30, api: API }));
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("build-failed");
+    expect(out.value.fault).toMatchObject({ owner: "platform", kind: "not_started", jobName: "Build", buildId: FRESH_SHA });
+    expect(out.hint).toContain("This is a platform fault, nothing in the project caused it");
+    expect(out.hint).toContain("do not change the commit");
+    expect(out.hint).toContain('extension_builds action:"rebuild"');
+    expect(out.hint).not.toContain("do not rebuild");
+    expect(out.hint).toContain(`extension_builds action:"logs" with buildId ${FRESH_SHA}`);
+  });
+
   it("rebuild refuses an unknown build environment before asking the platform", async () => {
     login();
 
