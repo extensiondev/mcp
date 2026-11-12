@@ -44,7 +44,3 @@ export function iconPng(opaque: (x: number, y: number) => boolean, size = 128): 
     chunk("IEND", Buffer.alloc(0)),
   ]);
 }
-
-export const square = (side: number, at = (128 - side) / 2) => (x: number, y: number) => x >= at && x < at + side && y >= at && y < at + side;
-
-export const circle = (diameter: number) => (x: number, y: number) => (x + 0.5 - 64) ** 2 + (y + 0.5 - 64) ** 2 <= (diameter / 2) ** 2;

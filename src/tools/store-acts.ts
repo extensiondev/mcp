@@ -118,7 +118,6 @@ import {
   storeMdAdvisory,
 } from "./store-listing";
 import { publishVersion } from "./store-publish-version";
-import { iconPaddingSentences, iconPaddingView } from "../lib/chrome-icon-padding";
 import { builtToolchainFor, reviewerNoteToolchainCheck } from "../lib/store-md-toolchain";
 import { chromeWebStoreMdCheck } from "../lib/chromewebstore-md";
 import { firefoxListingCheck, safariDescriptionCheck, withLocalChecks } from "../lib/store-preflight-local";
@@ -940,7 +939,6 @@ function readinessView(
             "problem" in local
               ? { missing: local.problem }
               : storeMdAdvisory(local, open, settled, requirements, record),
-          ...iconPaddingView(store, "problem" in local ? undefined : local.patch.icons),
         }
       : {}),
   };
@@ -1169,9 +1167,8 @@ async function preflightRead(args: StoreActArgs): Promise<string> {
     .map(([store]) => store);
   const lockLine = lockSentences(storePreflight);
   const versionLine = nextVersionSentences(storePreflight);
-  const iconSay = iconPaddingSentences(stores);
   const signingSay = safariSigningSentence(stores);
-  const packageSay = `${packageLine ? ` ${packageLine}` : ""}${iconSay ? ` ${iconSay}` : ""}${signingSay ? ` ${signingSay}` : ""}`;
+  const packageSay = `${packageLine ? ` ${packageLine}` : ""}${signingSay ? ` ${signingSay}` : ""}`;
   const readinessHint = blocked.length
     ? `${blocked.join(", ")} cannot be submitted yet; each failing check says what to fix.${syncLine}${sourceLine}${lockLine ? ` ${lockLine}` : ""}${versionLine ? ` ${versionLine}` : ""}${packageSay} This read wrote nothing.`
     : `${notReady.length ? "Every store read here can take an upload." : "Every store read here is ready to submit."}${buildLine}${sourceLine}${workspaceLine}${lockLine ? ` ${lockLine}` : ""}${versionLine ? ` ${versionLine}` : ""}${packageSay} This read wrote nothing; extension_submit with dryRun:false submits.`;

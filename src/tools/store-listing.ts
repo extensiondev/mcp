@@ -85,7 +85,6 @@ import {
   type StagedImage,
 } from "../lib/listing-image-stage";
 import { firefoxCategoryCover } from "../lib/firefox-category-cover";
-import { iconPaddingView } from "../lib/chrome-icon-padding";
 import { CHROMEWEBSTORE_MD_FILENAME, CHROMEWEBSTORE_MD_PREFILL_CALL, chromeWebStoreHeld, chromeWebStoreHeldSentence, readChromeWebStoreMd, type ChromeWebStoreHeld } from "../lib/chromewebstore-md";
 import { STORE_MD_FILENAME } from "../lib/store-md";
 import { blockingWords, withStoreMdNamedForPerson } from "../lib/store-md-words";
@@ -1249,7 +1248,6 @@ async function syncListingRun(args: ListingArgs): Promise<string> {
   const readProblems: string[] = [];
   const said: string[] = [];
   const categoryRows: StoreCategoryRow[] = [];
-  const iconAdvice: string[] = [];
   const screenshotsLine = [...locals.values()].map((local) => local.screenshotsLine).find(Boolean) ?? "";
 
   let plain = false;
@@ -1265,9 +1263,6 @@ async function syncListingRun(args: ListingArgs): Promise<string> {
     if (store === "safari") await adoptAppRecordName(api, local);
 
     await adoptBuildIcon(builds, store, local);
-
-    const padding = iconPaddingView(store, local.patch.icons);
-    if (padding.iconPadding) iconAdvice.push(padding.iconPadding.say);
 
     const notFound = linesNotFound(local);
     const held = chromeWebStoreHeld(chromeWebStoreMd, store, notFound.map((row) => row.field));
@@ -1371,7 +1366,7 @@ async function syncListingRun(args: ListingArgs): Promise<string> {
     };
   }
 
-  said.push(...categoriesSentences(categoryRows), ...iconAdvice);
+  said.push(...categoriesSentences(categoryRows));
 
   const wanted = (Object.values(stores) as Row[]).filter((row) => row.status === "approval-wanted");
 
