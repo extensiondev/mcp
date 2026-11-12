@@ -673,6 +673,7 @@ export function storePreflightView(json: Row, store: string, local: LocalListing
     ...(checks.length ? { checks } : {}),
     lock,
     ...(text(block.approval) ? { approval: text(block.approval) } : {}),
+    ...(isRow(block.inFlight) && text(block.inFlight.submissionId) ? { heldSubmissionId: text(block.inFlight.submissionId) } : {}),
     ...(nextVersionOf(json, store) ?? {}),
     ...(isRow(block.release) && text(block.release.type) ? { release: releaseReadView(block.release) } : {}),
   };
@@ -726,6 +727,8 @@ export function safariLockSentences(block: Row, now = Date.now()): string {
   const next = text(block.nextVersion);
   const later = version ? bumpedPatch(version) : "";
   const subject = `${version ? `version ${version}` : "a version"}${build ? ` (build ${build})` : ""}`;
+  const held = text(block.heldSubmissionId);
+  const withdrawal = `extension_submit {action: "cancel", store: "safari"${held ? `, submissionId: "${held}"` : ""}}`;
   const readAt = text(lock.readAt);
   const hours = readAt ? Math.floor((now - Date.parse(readAt)) / HOUR_MS) : 0;
   const age =
@@ -733,7 +736,7 @@ export function safariLockSentences(block: Row, now = Date.now()): string {
       ? ` App Store Connect answered this ${hours} ${hours === 1 ? "hour" : "hours"} ago (${readAt}); extension_submit_check {action: "status", browsers: ["safari"], waitSeconds: 60} reads it fresh.`
       : "";
 
-  return `safari: ${subject} is waiting for Apple (${text(lock.storeWord) || text(lock.kind)}) and ${safariOnApproval(isRow(block.release) ? block.release : null)}. Either let Apple finish and send the new build as ${later ? `${later} or higher` : "the next version"} afterward, since App Store Connect takes no new build on a version it has released, or withdraw it now with extension_submit {action: "cancel", store: "safari"} and send the new build as ${next || version || "this version"}. The lock clears when ${clears}.${age}`;
+  return `safari: ${subject} is waiting for Apple (${text(lock.storeWord) || text(lock.kind)}) and ${safariOnApproval(isRow(block.release) ? block.release : null)}. Either let Apple finish and send the new build as ${later ? `${later} or higher` : "the next version"} afterward, since App Store Connect takes no new build on a version it has released, or withdraw it now with ${withdrawal} and send the new build as ${next || version || "this version"}. The lock clears when ${clears}.${age}`;
 }
 
 export function nextVersionSentences(storePreflight: Record<string, Row>): string {

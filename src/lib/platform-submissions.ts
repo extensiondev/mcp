@@ -21,6 +21,8 @@ import { storeReadsOf, type StoreReadView } from "./store-reads";
 
 import type { ListingStore } from "./store-md-declarations";
 
+const IN_REVIEW_STATUSES: ReadonlySet<string> = new Set(["pending", "submitted"]);
+
 export const RETRIED_SENTENCE = "GitHub canceled the run before upload; the platform started it again.";
 
 export interface SubmissionRun {
@@ -612,6 +614,24 @@ export async function readSubmissionRecord(
       : parsed[0];
 
   return { ok: true, record: found ?? null };
+}
+
+export async function readSubmissionsInReview(
+  api: Pick<ProjectApi, "base" | "token" | "command">,
+  store: string,
+): Promise<RecordRead<PlatformSubmission[]>> {
+  const read = await platformApiGet<{ submissions?: unknown }>(api, "/api/cli/stores/submissions");
+  if (!read.ok) return missedRead(read);
+
+  const rows = Array.isArray(read.json.submissions) ? read.json.submissions : null;
+  if (!rows) return { ok: false, message: `${api.base}/api/cli/stores/submissions answered without a list of submissions` };
+
+  const inReview = rows
+    .filter((raw): raw is Record<string, unknown> => Boolean(raw) && typeof raw === "object")
+    .map(toSubmission)
+    .filter((row): row is PlatformSubmission => row !== null && row.store === store && Boolean(row.id) && IN_REVIEW_STATUSES.has(str(row.status)?.toLowerCase() ?? ""));
+
+  return { ok: true, record: inReview };
 }
 
 export async function readSubmissionRecords(

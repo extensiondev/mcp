@@ -53,6 +53,12 @@ describe("414: a Safari lock is answered as the owner's decision, with what Appl
     expect(said).not.toContain("queued behind");
   });
 
+  it("566: names the withdrawal with the id of the submission in review when the platform gives it", () => {
+    const said = safariLockSentences({ ...safariBlock("AFTER_APPROVAL"), heldSubmissionId: "d725c641-0957-4766-bb79-8443e8a58eab" }, NOW);
+
+    expect(said).toContain('withdraw it now with extension_submit {action: "cancel", store: "safari", submissionId: "d725c641-0957-4766-bb79-8443e8a58eab"} and send the new build as 0.3.0.');
+  });
+
   it("says a manual release stays held and says no age for a read under an hour old", () => {
     const said = safariLockSentences(safariBlock("MANUAL", "2026-11-05T21:30:00.000Z"), NOW);
 
@@ -89,7 +95,7 @@ describe("414: a Safari lock is answered as the owner's decision, with what Appl
 
       safari.summary = { ...safari.summary, fail: 1, blockingFailures: 1, canSubmit: false };
       safari.checks.push({ id: "store.safari_app_review_lock", label: "App Review lock", status: "locked", severity: "blocking", stage: "review", message: "Apple is reviewing 0.3.0 (build 18).", lock: safariBlock("AFTER_APPROVAL").lock });
-      safari.safariPreflight = safariBlock("AFTER_APPROVAL", new Date(Date.now() - 4 * 3_600_000).toISOString());
+      safari.safariPreflight = { ...safariBlock("AFTER_APPROVAL", new Date(Date.now() - 4 * 3_600_000).toISOString()), inFlight: { submissionId: "d725c641", version: "0.3.0", buildNumber: "18", storeState: "WAITING_FOR_REVIEW" } };
       platform.login();
 
       for (const store of STORES) platform.routes[`POST ${PREFLIGHT(store)}`] = () => ({ body: reports[store] });
@@ -99,7 +105,8 @@ describe("414: a Safari lock is answered as the owner's decision, with what Appl
 
       expect(out.status).toBe("preflight-read");
       expect(said).toContain("safari: version 0.3.0 (build 18) is waiting for Apple (WAITING_FOR_REVIEW) and goes on sale the moment Apple approves it");
-      expect(said).toContain('withdraw it now with extension_submit {action: "cancel", store: "safari"} and send the new build as 0.3.0');
+      expect(said).toContain('withdraw it now with extension_submit {action: "cancel", store: "safari", submissionId: "d725c641"} and send the new build as 0.3.0');
+      expect(out.value.storePreflight.safari.heldSubmissionId).toBe("d725c641");
       expect(said).toContain("answered this 4 hours ago");
       expect(said).not.toContain("safari: the next upload carries version 0.3.0.");
       expect(said).not.toContain("never failed");

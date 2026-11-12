@@ -8,26 +8,44 @@
 
 import { awaitRecordedOutcome, dispatchedHint, madeSentence, missedRead, stampNow } from "../lib/act-outcome";
 import { envelope } from "../lib/envelope";
-import { readSubmissionRecord, type PlatformSubmission, type SubmissionDispatch } from "../lib/platform-submissions";
-import { projectApiGet } from "../lib/project-api";
+import { readSubmissionRecord, readSubmissionsInReview, type PlatformSubmission, type SubmissionDispatch } from "../lib/platform-submissions";
+import { projectApiGet, type ProjectApi } from "../lib/project-api";
 import { badShipRequest, isRow, openShipApi, runShipAct, text } from "../lib/ship-act";
 import { actLinks, judgeCancel, judgeRollout, trackOf } from "../lib/store-act-outcome";
 import { COMMAND, storeOf, storesRead, type Row, type StoreActArgs } from "./store-acts";
+
+async function submissionInReview(api: ProjectApi, store: string, args: StoreActArgs): Promise<{ submissionId: string } | { refused: string }> {
+  const read = await readSubmissionsInReview(api, store);
+  const refuse = (why: string) => ({
+    refused: badShipRequest(COMMAND, "cancel", "CancelInputError", `${why} Nothing was sent.`),
+  });
+
+  if (!read.ok) return refuse(`cancel without submissionId reads the ${store} submission in review, and that read failed: ${read.message}. Pass submissionId; ${storesRead(args)} lists them.`);
+
+  const ids = (read.record ?? []).map((row) => text(row.id));
+
+  if (ids.length === 1) return { submissionId: ids[0]! };
+  if (!ids.length) return refuse(`There is no ${store} submission in review to withdraw; ${storesRead(args)} reads each store's latest submission and its review state.`);
+
+  const calls = ids.map((id) => `extension_submit {action: "cancel", store: "${store}", submissionId: "${id}"}`).join(" or ");
+
+  return refuse(`${ids.length} ${store} submissions are in review, so cancel needs the one to withdraw: ${calls}.`);
+}
 
 export async function cancelSubmission(args: StoreActArgs): Promise<string> {
   const picked = storeOf(args, "cancel");
   if ("refused" in picked) return picked.refused;
 
-  const submissionId = text(args.submissionId);
-
-  if (!submissionId) {
-    return badShipRequest(COMMAND, "cancel", "CancelInputError", `cancel needs submissionId, the platform's id of the submission to withdraw from review; ${storesRead(args)} lists them. Nothing was sent.`);
-  }
-
   const { store } = picked;
   const safari = store === "safari";
-  const opened = await openShipApi(COMMAND, args, { action: "cancel", store, submissionId });
+  const named = text(args.submissionId);
+  const opened = await openShipApi(COMMAND, args, { action: "cancel", store, ...(named ? { submissionId: named } : {}) });
   if ("refused" in opened) return opened.refused;
+
+  const resolved = named ? { submissionId: named } : await submissionInReview(opened.api, store, args);
+  if ("refused" in resolved) return resolved.refused;
+
+  const { submissionId } = resolved;
 
   const ran = await runShipAct(
     {

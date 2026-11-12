@@ -54,11 +54,55 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
     expect(ships({ browsers: ["chrome"], buildSha: "abc" })).toBe(false);
   });
 
-  it("cancel needs a submission id and asks nothing without one", async () => {
-    const out = JSON.parse(await submit({ action: "cancel", api: API }));
+  it("566: cancel with a store and no id withdraws the one submission that store has in review", async () => {
+    if (process.platform === "win32") return;
 
-    expect(out.status).toBe("bad-request");
-    expect(platform.calls).toHaveLength(0);
+    const route = `${PROJECT_ROUTE}/stores/safari/submissions/d725c641/cancel`;
+    const scope = { store: "safari", submissionId: "d725c641" };
+    platform.login();
+    platform.routes["GET /api/cli/stores/submissions"] = () => ({
+      body: {
+        submissions: [
+          { id: "d725c641", store: "safari", status: "submitted", version: "0.3.0" },
+          { id: "c0ffee11", store: "safari", status: "draft", version: "0.2.0" },
+          { id: SUBMISSION, store: "chrome", status: "submitted", version: "0.3.0" },
+        ],
+      },
+    });
+
+    platform.routes[`POST ${route}`] = () => approvalRequired("extension_store.cancel", scope);
+    platform.routes[`POST ${APPROVALS}`] = () => ({ status: 201, body: { approvalId: "apr_s", approvalUrl: `${API}/approve/apr_s` } });
+
+    const out = JSON.parse(await submit({ action: "cancel", store: "safari", api: API }));
+
+    expect(platform.sent("POST", route)).toHaveLength(1);
+    expect(platform.sent("POST", APPROVALS)[0].body.scope).toEqual(scope);
+    expect(out.status).toBe("approval-required");
+  });
+
+  it("566: cancel with no id refuses with the ids when the store has none or several in review, and sends nothing", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes["GET /api/cli/stores/submissions"] = () => ({
+      body: {
+        submissions: [
+          { id: "sub_a", store: "chrome", status: "submitted" },
+          { id: "sub_b", store: "chrome", status: "pending" },
+          { id: "sub_c", store: "safari", status: "draft" },
+        ],
+      },
+    });
+
+    const several = JSON.parse(await submit({ action: "cancel", store: "chrome", api: API }));
+    const none = JSON.parse(await submit({ action: "cancel", store: "safari", api: API }));
+
+    expect(several.status).toBe("bad-request");
+    expect(several.error.message).toContain('submissionId: "sub_a"');
+    expect(several.error.message).toContain('submissionId: "sub_b"');
+    expect(none.status).toBe("bad-request");
+    expect(none.error.message).toContain("no safari submission in review");
+    expect(platform.calls.filter((call) => call.method === "POST")).toHaveLength(0);
   });
 
   it("cancel of a submission the store is not reviewing says how to find one that is", async () => {
