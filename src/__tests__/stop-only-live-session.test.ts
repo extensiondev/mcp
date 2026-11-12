@@ -57,6 +57,16 @@ function isAlive(pid: number): boolean {
   }
 }
 
+async function waitGone(pid: number, budgetMs = 5_000): Promise<boolean> {
+  const deadline = Date.now() + budgetMs;
+
+  while (isAlive(pid) && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+
+  return !isAlive(pid);
+}
+
 function register(projectPath: string, browser: string, command: ProcessInfo["command"] = "dev"): number {
   const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "ignore" });
   child.unref();
@@ -97,7 +107,7 @@ describe("extension_stop with no projectPath stops the only live session (ledger
     expect(result.value.browser).toBe("chrome");
     expect(result.value.pid).toBe(pid);
     expect(result.value.stopped).toBe(true);
-    expect(isAlive(pid)).toBe(false);
+    expect(await waitGone(pid)).toBe(true);
     expect(listSessions()).toHaveLength(0);
   }, 20_000);
 

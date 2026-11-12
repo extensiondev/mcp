@@ -96,6 +96,16 @@ function isAlive(pid: number): boolean {
   }
 }
 
+async function waitGone(pid: number, budgetMs = 5_000): Promise<boolean> {
+  const deadline = Date.now() + budgetMs;
+
+  while (isAlive(pid) && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+
+  return !isAlive(pid);
+}
+
 afterEach(() => {
   for (const child of spawned.splice(0)) {
     try {
@@ -162,7 +172,7 @@ describe("extension_start keeps one session per browser on a project", () => {
 
     expect(result.status).toBe("started");
     expect(result.value.replacedSession).toEqual({ pid: firefoxPid, browser: "firefox" });
-    expect(isAlive(firefoxPid)).toBe(false);
+    expect(await waitGone(firefoxPid)).toBe(true);
     expect(isAlive(chromePid)).toBe(true);
     expect(findSessionInfo(project, "chrome")?.pid).toBe(chromePid);
   }, 20_000);

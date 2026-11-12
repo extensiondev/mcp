@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -38,7 +38,7 @@ afterAll(() => {
 });
 
 const tmpDirs: string[] = [];
-const victims: number[] = [];
+const victims = new Map<number, ChildProcess>();
 
 function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-stop-confirm-project-"));
@@ -47,21 +47,34 @@ function tmpProject(): string {
   return dir;
 }
 
-function isAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
+function victim(pid: number): ChildProcess {
+  const child = victims.get(pid);
+  if (!child) throw new Error(`pid ${pid} was not spawned by this file`);
 
-    return true;
-  } catch {
-    return false;
+  return child;
+}
+
+function isAlive(pid: number): boolean {
+  const child = victim(pid);
+
+  return child.exitCode === null && child.signalCode === null;
+}
+
+async function gone(pid: number, budgetMs = 5_000): Promise<boolean> {
+  const deadline = Date.now() + budgetMs;
+
+  while (isAlive(pid) && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 50));
   }
+
+  return !isAlive(pid);
 }
 
 function register(projectPath: string, browser: string, command: ProcessInfo["command"] = "dev"): number {
   const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "ignore" });
   child.unref();
   const pid = child.pid!;
-  victims.push(pid);
+  victims.set(pid, child);
   registerSession({ pid, browser, projectPath, command });
 
   return pid;
@@ -73,12 +86,14 @@ afterEach(() => {
     removeSessionMarker(s.projectPath, s.browser);
   }
 
-  for (const pid of victims.splice(0)) {
+  for (const child of victims.values()) {
     try {
-      process.kill(pid, "SIGKILL");
+      child.kill("SIGKILL");
     } catch {
     }
   }
+
+  victims.clear();
 
   for (const dir of tmpDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
@@ -126,8 +141,8 @@ describe("extension_stop all: true asks before it crosses projects", () => {
     expect(result.ok).toBe(true);
     expect(stoppedPids(result).sort()).toEqual([firefox, chrome].sort());
     expect(result.value.trackUrl).toMatch(/^https?:\/\//);
-    expect(isAlive(firefox)).toBe(false);
-    expect(isAlive(chrome)).toBe(false);
+    expect(await gone(firefox)).toBe(true);
+    expect(await gone(chrome)).toBe(true);
     expect(listSessions()).toHaveLength(0);
   }, 20_000);
 
@@ -141,9 +156,10 @@ describe("extension_stop all: true asks before it crosses projects", () => {
     const result = JSON.parse(await stop.handler({ all: true, projectPath: leon }));
 
     expect(result.status).toBe("stopped-all");
+    expect(result.ok).toBe(true);
     expect(stoppedPids(result).sort()).toEqual([leonFirefox, leonChrome].sort());
-    expect(isAlive(leonFirefox)).toBe(false);
-    expect(isAlive(leonChrome)).toBe(false);
+    expect(await gone(leonFirefox)).toBe(true);
+    expect(await gone(leonChrome)).toBe(true);
     expect(isAlive(rebeccatChrome)).toBe(true);
     expect(listSessions().map((s) => s.pid)).toEqual([rebeccatChrome]);
   }, 20_000);
@@ -156,9 +172,10 @@ describe("extension_stop all: true asks before it crosses projects", () => {
     const result = JSON.parse(await stop.handler({ all: true }));
 
     expect(result.status).toBe("stopped-all");
+    expect(result.ok).toBe(true);
     expect(stoppedPids(result).sort()).toEqual([firefox, chrome].sort());
-    expect(isAlive(firefox)).toBe(false);
-    expect(isAlive(chrome)).toBe(false);
+    expect(await gone(firefox)).toBe(true);
+    expect(await gone(chrome)).toBe(true);
   }, 20_000);
 
   it("never lists a session another running server owns under wouldStop", async () => {

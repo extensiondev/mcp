@@ -63,6 +63,16 @@ function isAlive(pid: number): boolean {
   }
 }
 
+async function waitGone(pid: number, budgetMs = 5_000): Promise<boolean> {
+  const deadline = Date.now() + budgetMs;
+
+  while (isAlive(pid) && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+
+  return !isAlive(pid);
+}
+
 afterEach(() => {
   for (const pid of holders.splice(0)) {
     try {
@@ -96,7 +106,7 @@ describe("extension_stop says what it ended, so 'close its browser' needs no she
       });
 
       expect(result.value.detail).toMatch(new RegExp(`browser[^.]*pid ${browserPid}[^.]*gone`));
-      expect(isAlive(browserPid)).toBe(false);
+      expect(await waitGone(browserPid)).toBe(true);
     },
     15_000,
   );

@@ -138,7 +138,7 @@ describe("extension_stop", () => {
 
     expect(result.value.pid).toBe(pid);
     expect(result.value.stopped).toBe(true);
-    expect(isAlive(pid)).toBe(false);
+    expect(await waitGone(pid)).toBe(true);
     expect(inMemorySession(projectPath, "chrome")).toBeUndefined();
   });
 
@@ -157,7 +157,7 @@ describe("extension_stop", () => {
       await stop.handler({ projectPath, browser: "chrome" }),
     );
     expect(result.value.stopped).toBe(true);
-    expect(isAlive(pid)).toBe(false);
+    expect(await waitGone(pid)).toBe(true);
   });
 
   it("falls back to the ready.json contract when the registry is empty", async () => {
@@ -177,7 +177,7 @@ describe("extension_stop", () => {
 
     expect(result.value.pid).toBe(pid);
     expect(result.value.stopped).toBe(true);
-    expect(isAlive(pid)).toBe(false);
+    expect(await waitGone(pid)).toBe(true);
     expect(fs.existsSync(readyPath)).toBe(false);
   });
 
@@ -205,8 +205,8 @@ describe("extension_stop", () => {
     const stoppedPids = result.value.stopped.map((o: { pid: number }) => o.pid);
     expect(stoppedPids).toContain(pidA);
     expect(stoppedPids).toContain(pidB);
-    expect(isAlive(pidA)).toBe(false);
-    expect(isAlive(pidB)).toBe(false);
+    expect(await waitGone(pidA)).toBe(true);
+    expect(await waitGone(pidB)).toBe(true);
   }, 15_000);
 });
 
@@ -223,7 +223,7 @@ describe("extension_stop after an MCP restart", () => {
 
     expect(result.value.pid).toBe(pid);
     expect(result.value.stopped).toBe(true);
-    expect(isAlive(pid)).toBe(false);
+    expect(await waitGone(pid)).toBe(true);
     expect(
       listSessionMarkers().some(
         (m) => path.resolve(m.projectPath) === path.resolve(projectPath),

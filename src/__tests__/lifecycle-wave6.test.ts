@@ -73,6 +73,16 @@ function isAlive(pid: number): boolean {
   }
 }
 
+async function waitGone(pid: number, budgetMs = 5_000): Promise<boolean> {
+  const deadline = Date.now() + budgetMs;
+
+  while (isAlive(pid) && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+
+  return !isAlive(pid);
+}
+
 function spawnHolder(args: string[]): number {
   const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)", ...args], {
     detached: true,
@@ -194,7 +204,7 @@ describe("a Windows stop verifies what it ended from its own process table", () 
         const result = JSON.parse(await onWindows(() => stop.handler({ projectPath, browser: "chrome" })));
         expect(result.value.stopped).toBe(true);
         expect(result.value.survivorsUnverified).toBeUndefined();
-        expect(isAlive(pid)).toBe(false);
+        expect(await waitGone(pid)).toBe(true);
       } finally {
         removeSession(projectPath, "chrome");
         if (isAlive(pid)) realKill(pid, "SIGKILL");

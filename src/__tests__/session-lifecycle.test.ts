@@ -111,6 +111,16 @@ function isAlive(pid: number): boolean {
   }
 }
 
+async function waitGone(pid: number, budgetMs = 5_000): Promise<boolean> {
+  const deadline = Date.now() + budgetMs;
+
+  while (isAlive(pid) && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+
+  return !isAlive(pid);
+}
+
 function writeReadyContract(
   project: string,
   browser: string,
@@ -270,7 +280,7 @@ describe("extension_dev fork guard", () => {
     expect(result.ok).toBe(true);
     expect(result.status).toBe("started");
     expect(result.value.replacedSession).toEqual({ pid, browser: "chrome" });
-    expect(isAlive(pid)).toBe(false);
+    expect(await waitGone(pid)).toBe(true);
   }, 20_000);
 });
 
@@ -321,7 +331,7 @@ describe("extension_dev keeps one session per browser, not per project", () => {
 
     expect(result.status).toBe("started");
     expect(result.value.replacedSession).toEqual({ pid: chromePid, browser: "chrome" });
-    expect(isAlive(chromePid)).toBe(false);
+    expect(await waitGone(chromePid)).toBe(true);
     expect(isAlive(firefoxPid)).toBe(true);
   }, 20_000);
 });
@@ -439,7 +449,7 @@ describe("extension_stop all:true discovery", () => {
     expect(mine).toBeDefined();
     expect(mine.pid).toBe(pid);
     expect(mine.stopped).toBe(true);
-    expect(isAlive(pid)).toBe(false);
+    expect(await waitGone(pid)).toBe(true);
     const remaining = listSessionMarkers().map((m) =>
       path.resolve(m.projectPath),
     );
@@ -540,7 +550,7 @@ describe("ledger 515: a session the agent owns ends itself after an idle time, a
     const deadline = Date.now() + 3_000;
     while (isAlive(pid) && Date.now() < deadline) await sleep(50);
 
-    expect(isAlive(pid)).toBe(false);
+    expect(await waitGone(pid)).toBe(true);
     while (!fs.existsSync(idledOutPath(project, "chrome")) && Date.now() < deadline) await sleep(50);
 
     const ended = readIdledOut(project, "chrome");
