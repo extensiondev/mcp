@@ -6,6 +6,7 @@ import path from "node:path";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 
 import { registerSession, removeSession, readSessionMarkers, sessionStateDir } from "../lib/process-manager";
+import { processStartedAt } from "../lib/process-identity";
 import { handler as stop } from "../tools/stop";
 import { TOOL_POLICY } from "../lib/tool-policy";
 import { contractControlState } from "../lib/session-browser";
@@ -56,6 +57,7 @@ describe("stop all keeps to this server's sessions", () => {
     try {
       const marker = readSessionMarkers().markers.find((m) => path.resolve(m.projectPath) === path.resolve(project));
       expect(marker?.serverPid).toBe(process.pid);
+      expect(marker?.serverStartedAt).toBe(processStartedAt(process.pid));
     } finally {
       removeSession(project, "chrome");
     }
@@ -76,6 +78,30 @@ describe("stop all keeps to this server's sessions", () => {
 
     const forced = JSON.parse(await stop({ all: true, includeOtherServers: true } as never));
     expect(forced.value.skippedForeign).toBeUndefined();
+  });
+
+  it("stops a session whose marker names a server pid that now belongs to a process started at another time", async () => {
+    const dir = sessionStateDir();
+    fs.mkdirSync(dir, { recursive: true });
+    const project = tmpDir("mcp-recycled-server-proj-");
+    fs.writeFileSync(
+      path.join(dir, "recycled.json"),
+      JSON.stringify({
+        pid: 999_999,
+        browser: "chrome",
+        projectPath: project,
+        command: "dev",
+        serverPid: process.ppid,
+        serverStartedAt: "2001-01-01T00:00:00.000Z",
+        registeredAt: new Date().toISOString(),
+      }),
+    );
+
+    const out = JSON.parse(await stop({ all: true } as never));
+    expect(out.status).toBe("stopped-all");
+    expect(out.value.skippedForeign).toBeUndefined();
+    expect(out.value.stopped.map((o: { projectPath: string; browser: string }) => [o.projectPath, o.browser])).toEqual([[project, "chrome"]]);
+    expect(out.warnings.join("\n")).not.toMatch(/other MCP servers that are still running/);
   });
 
   it("marks stop and auth destructive", () => {

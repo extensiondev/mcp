@@ -19,7 +19,7 @@ import {
 import { sessionGuestIdentity } from "./extension-identity";
 import { localState } from "./local-state";
 import { verifyGuestLoaded } from "./guest-load-oracle";
-import { pidState } from "./process-identity";
+import { contractPidState } from "./contract-pids";
 import { readyContractPath } from "./session-paths";
 
 import type { ReadyContract } from "./types";
@@ -151,8 +151,7 @@ export async function recoverUnattachedOnce(input: {
   const key = `${input.projectPath}\u0000${input.browser}\u0000${input.contract.runId ?? input.contract.startedAt ?? input.contract.pid ?? ""}`;
   if (localState().recoveredSessions.has(key)) return null;
 
-  const browserPid = typeof input.contract.browserPid === "number" ? input.contract.browserPid : null;
-  if (browserPid !== null && pidState(browserPid) === "dead") return null;
+  if (contractPidState(input.projectPath, input.browser, input.contract, "browser") === "dead") return null;
 
   const guest = await verifyGuestLoaded(input.projectPath, input.browser, { timeoutMs: 2_000 });
   if (!guest.checked || !guest.loaded) return null;

@@ -10,6 +10,7 @@ import { BridgeController, readControlToken } from "extension-develop/bridge";
 
 import { isChromiumFamily, isGeckoFamily } from "./browser-family";
 import { CDPClient } from "./cdp";
+import { contractPidStartedAt } from "./contract-pids";
 import { describeForeignPid, pidState } from "./process-identity";
 import { waitCall } from "./production-receipt";
 import { engineProjectRoot } from "./session-paths";
@@ -96,14 +97,14 @@ function readyContractLeg(receipt: ProductionReceipt, projectPath: string, brows
   }
 }
 
-function serverProcessLeg(receipt: ProductionReceipt): DoctorLeg {
+function serverProcessLeg(receipt: ProductionReceipt, startedAt: string | null): DoctorLeg {
   const pid = receipt.contract.pid;
 
   if (typeof pid !== "number") {
     return { check: "server-process", status: "skip", detail: "skipped: the contract has no pid, so the engine process cannot be checked" };
   }
 
-  const state = pidState(pid);
+  const state = pidState(pid, startedAt);
 
   if (state === "alive") {
     return { check: "server-process", status: "pass", detail: `engine process pid ${pid} (extension ${receipt.verb}) is alive` };
@@ -267,7 +268,7 @@ async function controlLegs(projectPath: string, browser: string, receipt: Produc
   }
 }
 
-function browserLeg(receipt: ProductionReceipt): DoctorLeg {
+function browserLeg(receipt: ProductionReceipt, startedAt: string | null): DoctorLeg {
   const { contract } = receipt;
   const binary = typeof contract.binary === "string" && contract.binary ? ` (${contract.binary})` : "";
 
@@ -284,7 +285,7 @@ function browserLeg(receipt: ProductionReceipt): DoctorLeg {
     return { check: "browser", status: "skip", detail: "skipped: the contract has not recorded a browser launch yet (no browserPid); extension_wait reads it once the build and the launch land" };
   }
 
-  const state = pidState(contract.browserPid);
+  const state = pidState(contract.browserPid, startedAt);
 
   return state === "alive"
     ? { check: "browser", status: "pass", detail: `browser pid ${contract.browserPid} is alive${binary}` }
@@ -329,13 +330,20 @@ async function debugPortLeg(browser: string, receipt: ProductionReceipt): Promis
 
 export async function productionSessionChecks(projectPath: string, browser: string, receipt: ProductionReceipt): Promise<DoctorLeg[]> {
   const ready = readyContractLeg(receipt, projectPath, browser);
-  const server = serverProcessLeg(receipt);
+  const server = serverProcessLeg(receipt, contractPidStartedAt(projectPath, browser, receipt.contract, "engine"));
   const live = ready.status === "pass" && server.status === "pass";
   const control = live
     ? await controlLegs(projectPath, browser, receipt)
     : [skipped("control-channel", ready.status === "pass" ? "server-process" : "ready-contract"), skipped("eval-token", "control-channel"), skipped("executor", "control-channel")];
 
-  return [ready, server, portAgreementLeg(receipt), ...control, browserLeg(receipt), await debugPortLeg(browser, receipt)];
+  return [
+    ready,
+    server,
+    portAgreementLeg(receipt),
+    ...control,
+    browserLeg(receipt, contractPidStartedAt(projectPath, browser, receipt.contract, "browser")),
+    await debugPortLeg(browser, receipt),
+  ];
 }
 
 export function spliceProductionLegs<T extends { check: string }>(engineChecks: T[], production: DoctorLeg[]): Array<T | DoctorLeg> {

@@ -20,6 +20,7 @@ import {
   removeSession,
   removeSessionMarker,
 } from "../lib/process-manager";
+import { processStartedAt } from "../lib/process-identity";
 
 import type { ProcessInfo } from "../lib/types";
 
@@ -148,6 +149,40 @@ describe("extension_stop with no projectPath stops the only live session (ledger
     expect(result.hint).toContain("Nothing was stopped");
     expect(result.value.trackUrl).toMatch(/^https?:\/\//);
   });
+
+  it("falls through to a marker whose owning server pid now belongs to a process started at another time", async () => {
+    const handsFree = tmpProject();
+    const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "ignore" });
+    child.unref();
+    const pid = child.pid!;
+    victims.push(pid);
+    const marker = path.join(sessionDir, "recycled-server.json");
+    fs.writeFileSync(
+      marker,
+      JSON.stringify({
+        pid,
+        processStartedAt: processStartedAt(pid),
+        browser: "chrome",
+        projectPath: handsFree,
+        command: "dev",
+        serverPid: process.ppid,
+        serverStartedAt: "2001-01-01T00:00:00.000Z",
+        registeredAt: new Date().toISOString(),
+      }),
+    );
+
+    try {
+      const result = JSON.parse(await stop.handler({}));
+
+      expect(result.status).toBe("stopped");
+      expect(result.value.projectPath).toBe(handsFree);
+      expect(result.value.pid).toBe(pid);
+      expect(result.value.stopped).toBe(true);
+      expect(await waitGone(pid)).toBe(true);
+    } finally {
+      fs.rmSync(marker, { force: true });
+    }
+  }, 20_000);
 
   it("keeps the browser-required refusal when the only live project runs two browsers", async () => {
     const leon = tmpProject();

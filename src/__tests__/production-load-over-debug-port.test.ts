@@ -1,8 +1,11 @@
 import http from "node:http";
+import os from "node:os";
+import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 import { productionDebugPortOutlook, productionLaunchEvidence, readLoadOverDebugPort } from "../lib/production-launch";
+import { registerSession, removeSession, removeSessionMarker } from "../lib/process-manager";
 
 const ID = "fmhfemkaalplhcedidcihmjfeniembgf";
 const servers: http.Server[] = [];
@@ -18,8 +21,15 @@ function debugPort(targets: Array<{ type: string; url: string }>): Promise<numbe
   });
 }
 
+const projects: string[] = [];
+
 afterEach(() => {
   for (const s of servers.splice(0)) s.close();
+
+  for (const projectPath of projects.splice(0)) {
+    removeSession(projectPath, "chrome");
+    removeSessionMarker(projectPath, "chrome");
+  }
 });
 
 const contract = (cdpPort: number | undefined) => ({ browserPid: process.pid, extensionId: ID, ...(cdpPort ? { cdpPort } : {}) }) as never;
@@ -82,5 +92,27 @@ describe("a production launch says the debug port will be read instead of claimi
     expect(productionDebugPortOutlook(null, true)).toEqual({ kind: "opens", version: null });
     expect(productionDebugPortOutlook(null)).toEqual({ kind: "unknown" });
     expect(productionDebugPortOutlook({ toolchainVersion: "not a version" } as never)).toEqual({ kind: "unknown" });
+  });
+});
+
+describe("a production launch judges the browser pid by the start time the session recorded for it", () => {
+  it("calls the browser gone when the pid now belongs to a process started at another time, never alive", () => {
+    const projectPath = path.join(os.tmpdir(), `mcp-production-launch-${process.pid}`);
+    projects.push(projectPath);
+    registerSession({
+      pid: process.pid,
+      browser: "chrome",
+      projectPath,
+      command: "start",
+      browserPid: process.pid,
+      browserStartedAt: "2001-01-01T00:00:00.000Z",
+    });
+
+    const evidence = productionLaunchEvidence(contract(undefined), false, { projectPath, browser: "chrome" });
+
+    expect(evidence.browserPid).toBe(process.pid);
+    expect(evidence.browserAlive).toBe(false);
+    expect(evidence.loadEvidence).toContain("that process is gone");
+    expect(productionLaunchEvidence(contract(undefined)).browserAlive).toBe(true);
   });
 });

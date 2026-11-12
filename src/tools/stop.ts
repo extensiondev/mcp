@@ -35,7 +35,8 @@ import {
 } from "../lib/session-browser";
 import { browserProfileRootDir, readyContractPath } from "../lib/session-paths";
 import { removeCarrier } from "../lib/carrier";
-import { contractBrowserPid, describeEnded, endedProcesses } from "../lib/stop-ended";
+import { contractPidStartedAt } from "../lib/contract-pids";
+import { contractBrowserPid, describeEnded, endedProcesses, readReadyContract } from "../lib/stop-ended";
 import { sweepCarriers, type CarrierSweepEntry } from "../lib/carrier-exit";
 import { readRememberedCarriers } from "../lib/carrier-registry";
 import { envelope } from "../lib/envelope";
@@ -159,30 +160,35 @@ function projectPathForms(projectPath: string): string[] {
 export interface ContractProcessHints {
   profilePath?: string;
   pids: number[];
+  startedAt?: Record<number, string>;
 }
 
 export function contractProcessHints(
   projectPath: string,
   browser: string,
 ): ContractProcessHints {
-  try {
-    const contract: ReadyContract = JSON.parse(
-      fs.readFileSync(readyContractPath(projectPath, browser), "utf8"),
-    );
-    const pids = [contract.browserPid, contract.launcherPid].filter(
-      (pid): pid is number =>
-        typeof pid === "number" && Number.isInteger(pid) && pid > 0,
-    );
+  const contract = readReadyContract(projectPath, browser);
+  if (!contract) return { pids: [] };
 
-    return {
-      ...(typeof contract.profilePath === "string" && contract.profilePath.trim()
-        ? { profilePath: contract.profilePath }
-        : {}),
-      pids,
-    };
-  } catch {
-    return { pids: [] };
+  const pids = [contract.browserPid, contract.launcherPid].filter(
+    (pid): pid is number =>
+      typeof pid === "number" && Number.isInteger(pid) && pid > 0,
+  );
+  const startedAt: Record<number, string> = {};
+
+  for (const role of ["browser", "launcher"] as const) {
+    const stamp = contractPidStartedAt(projectPath, browser, contract, role);
+    const pid = role === "browser" ? contract.browserPid : contract.launcherPid;
+    if (stamp && typeof pid === "number") startedAt[pid] = stamp;
   }
+
+  return {
+    ...(typeof contract.profilePath === "string" && contract.profilePath.trim()
+      ? { profilePath: contract.profilePath }
+      : {}),
+    pids,
+    ...(Object.keys(startedAt).length > 0 ? { startedAt } : {}),
+  };
 }
 
 function commandLineOf(
@@ -242,7 +248,7 @@ function sessionProcessPids(
   }
 
   for (const pid of hints.pids) {
-    if (pid !== process.pid && isAlive(pid)) pids.add(pid);
+    if (pid !== process.pid && pidState(pid, hints.startedAt?.[pid]) !== "dead") pids.add(pid);
   }
 
   for (const form of projectPathForms(projectPath)) {
@@ -275,6 +281,8 @@ async function reapSessionProcesses(
 
   const startedAt = processStartTimes(pids);
 
+  for (const [pid, stamp] of Object.entries(hints.startedAt ?? {})) startedAt.set(Number(pid), stamp);
+
   for (const pid of pids) {
     if (process.platform === "win32") {
       killWindowsTree(pid);
@@ -296,16 +304,6 @@ async function reapSessionProcesses(
   }
 
   return { reaped, unconfirmed };
-}
-
-function isAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function signal(pid: number, sig: NodeJS.Signals): boolean {
@@ -350,12 +348,13 @@ export async function stopOne(
   const startedAt = session?.processStartedAt ?? null;
   const hints = contractProcessHints(projectPath, browser);
   const browserPid = contractBrowserPid(projectPath, browser);
+  const browserStartedAt = contractPidStartedAt(projectPath, browser, readReadyContract(projectPath, browser), "browser");
   const noBrowser = session?.noBrowser === true;
 
   if (pid == null) {
     const { reaped, unconfirmed } = await reapSessionProcesses(projectPath, browser, hints);
     removeSessionMarker(projectPath, browser);
-    const ended = endedProcesses(null, browserPid);
+    const ended = endedProcesses(null, browserPid, browserStartedAt);
     let detail: string;
 
     if (unconfirmed.length) {
@@ -391,7 +390,7 @@ export async function stopOne(
     } catch {
     }
 
-    const ended = endedProcesses(null, browserPid);
+    const ended = endedProcesses(null, browserPid, browserStartedAt);
 
     return {
       projectPath,
@@ -434,7 +433,7 @@ export async function stopOne(
 
   const { pids: survivors, verified } = sessionProcessPids(projectPath, browser, hints);
   const dead = pidState(pid, startedAt) === "dead";
-  const ended = endedProcesses(dead, browserPid);
+  const ended = endedProcesses(dead, browserPid, browserStartedAt);
   const stopped = dead && verified && survivors.length === 0 && ended.browserGone !== false;
 
   if (!verified) {
@@ -496,7 +495,7 @@ export async function handler(args: {
 
       const key = `${path.resolve(m.projectPath)}::${m.browser}`;
       const foreign =
-        typeof m.serverPid === "number" && m.serverPid !== process.pid && pidState(m.serverPid) === "alive";
+        typeof m.serverPid === "number" && m.serverPid !== process.pid && pidState(m.serverPid, m.serverStartedAt) === "alive";
 
       if (foreign && !args.includeOtherServers) {
         skippedForeign.push({ projectPath: m.projectPath, browser: m.browser, serverPid: m.serverPid as number });

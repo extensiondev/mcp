@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { isChromiumFamily, isGeckoFamily, WEBKIT_FAMILY } from "./browser-family";
+import { contractPidStartedAt } from "./contract-pids";
 import { pidState } from "./process-identity";
 import { envelope, sessionCommandSinceEnvelopeOwnsCommand } from "./envelope";
 import {
@@ -34,7 +35,10 @@ function recordedWebDriver(contract: ReadyContract): WebDriverSessionInfo | null
     : null;
 }
 
-export async function readDetachedVerdict(contract: ReadyContract): Promise<DetachedVerdict> {
+export async function readDetachedVerdict(
+  contract: ReadyContract,
+  session?: { projectPath: string; browser: string },
+): Promise<DetachedVerdict> {
   const info = recordedWebDriver(contract);
 
   if (info) {
@@ -49,7 +53,9 @@ export async function readDetachedVerdict(contract: ReadyContract): Promise<Deta
 
   const pid = typeof contract.browserPid === "number" && contract.browserPid > 0 ? contract.browserPid : null;
 
-  if (pid === null || pidState(pid) !== "alive") {
+  const startedAt = session ? contractPidStartedAt(session.projectPath, session.browser, contract, "browser") : null;
+
+  if (pid === null || pidState(pid, startedAt) !== "alive") {
     return { kind: "gone", evidence: pid === null ? null : `the browser pid the launcher recorded (${pid}) is gone` };
   }
 

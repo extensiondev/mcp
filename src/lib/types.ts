@@ -121,6 +121,11 @@ export interface ProcessInfo {
   noBrowser?: boolean;
   profileReused?: boolean;
   serverPid?: number;
+  serverStartedAt?: string;
+  browserPid?: number;
+  browserStartedAt?: string;
+  launcherPid?: number;
+  launcherStartedAt?: string;
   headless?: boolean;
   idleMinutes?: number | null;
   allowControl?: boolean;

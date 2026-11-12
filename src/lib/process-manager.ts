@@ -136,7 +136,17 @@ export function listSessionMarkers(): ProcessInfo[] {
   return readSessionMarkers().markers;
 }
 
+let serverStartedAtCache: string | null | undefined;
+
+function serverStartedAt(): string | null {
+  if (serverStartedAtCache === undefined) serverStartedAtCache = processStartedAt(process.pid);
+
+  return serverStartedAtCache;
+}
+
 function writeMarkerBestEffort(info: ProcessInfo, registeredAtMs: number): string | null {
+  const startedAt = serverStartedAt();
+
   try {
     fs.mkdirSync(markerDir(), { recursive: true });
     fs.writeFileSync(
@@ -145,6 +155,7 @@ function writeMarkerBestEffort(info: ProcessInfo, registeredAtMs: number): strin
         ...info,
         projectPath: path.resolve(info.projectPath),
         serverPid: process.pid,
+        ...(startedAt ? { serverStartedAt: startedAt } : {}),
         registeredAt: new Date(registeredAtMs).toISOString(),
       }),
     );
@@ -155,6 +166,24 @@ function writeMarkerBestEffort(info: ProcessInfo, registeredAtMs: number): strin
   }
 }
 
+export type ContractPidRecord = Partial<
+  Pick<ProcessInfo, "browserPid" | "browserStartedAt" | "launcherPid" | "launcherStartedAt">
+>;
+
+const CONTRACT_PID_FIELDS = ["browserPid", "browserStartedAt", "launcherPid", "launcherStartedAt"] as const;
+
+function contractPidsOf(info: ProcessInfo | undefined): ContractPidRecord {
+  const out: ContractPidRecord = {};
+  if (!info) return out;
+
+  for (const field of CONTRACT_PID_FIELDS) {
+    const value = info[field];
+    if (value !== undefined) Object.assign(out, { [field]: value });
+  }
+
+  return out;
+}
+
 export function registerSession(info: ProcessInfo): string | null {
   const key = sessionKey(info.projectPath, info.browser);
   const { sessions, registrations } = localState();
@@ -163,11 +192,30 @@ export function registerSession(info: ProcessInfo): string | null {
   const at = samePid ? prior.at : Date.now();
   const startedAt =
     info.processStartedAt ?? (samePid ? prior.startedAt : undefined) ?? processStartedAt(info.pid) ?? undefined;
-  const recorded: ProcessInfo = startedAt ? { ...info, processStartedAt: startedAt } : info;
+  const carried = samePid ? contractPidsOf(sessions.get(key)) : {};
+  const recorded: ProcessInfo = { ...carried, ...info, ...(startedAt ? { processStartedAt: startedAt } : {}) };
   registrations.set(key, { pid: info.pid, at, ...(startedAt ? { startedAt } : {}) });
   sessions.set(key, recorded);
 
   return writeMarkerBestEffort(recorded, at);
+}
+
+export function recordContractPids(projectPath: string, browser: string, record: ContractPidRecord): void {
+  const key = sessionKey(projectPath, browser);
+  const { sessions } = localState();
+  const inMemory = sessions.get(key);
+  if (inMemory) sessions.set(key, { ...inMemory, ...record });
+
+  const file = markerPath(projectPath, browser);
+
+  try {
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (!parsed || typeof parsed !== "object") return;
+    if (inMemory && typeof parsed.pid === "number" && parsed.pid !== inMemory.pid) return;
+
+    fs.writeFileSync(file, JSON.stringify({ ...parsed, ...record }));
+  } catch {
+  }
 }
 
 export function sessionSinceMs(

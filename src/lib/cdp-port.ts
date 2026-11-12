@@ -11,7 +11,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import { noteCallWait } from "./call-waits";
 import { readyContractPath } from "./session-paths";
-import { pidState } from "./process-identity";
+import { contractPidState } from "./contract-pids";
 import { rdpPortErrorReason } from "./rdp-port-notes";
 import { landingRun, type LandingRun } from "./start-landing";
 
@@ -71,7 +71,8 @@ async function resolveContractPort(
       contractSeen = true;
       if (contractSeenAt == null) contractSeenAt = now;
 
-      const engineGone = typeof contract.pid === "number" && pidState(contract.pid) !== "alive";
+      const engineState = contractPidState(projectPath, browser, contract, "engine");
+      const engineGone = engineState !== null && engineState !== "alive";
 
       if (!engineGone && typeof contract[field] === "number") {
         if (landing) noteCallWait(waitedForStartLine(landing, browser, now - start));

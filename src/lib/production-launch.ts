@@ -10,6 +10,7 @@ import fs from "node:fs";
 
 import { CDPClient } from "./cdp";
 import { compareVersions, parseVersion } from "./engine-version";
+import { contractPidStartedAt } from "./contract-pids";
 import { pidState } from "./process-identity";
 import { waitCall } from "./session-receipt";
 import { readyContractPath } from "./session-paths";
@@ -103,12 +104,14 @@ export function readFreshContract(
 export function productionLaunchEvidence(
   contract: ReadyContract | null,
   controlRequested = false,
+  session?: { projectPath: string; browser: string },
 ): ProductionLaunchEvidence {
   const browserPid =
     typeof contract?.browserPid === "number" && contract.browserPid > 0
       ? contract.browserPid
       : null;
-  const browserAlive = browserPid === null ? null : pidState(browserPid) === "alive";
+  const browserStartedAt = session ? contractPidStartedAt(session.projectPath, session.browser, contract, "browser") : null;
+  const browserAlive = browserPid === null ? null : pidState(browserPid, browserStartedAt) === "alive";
   const extensionId =
     typeof contract?.extensionId === "string" && contract.extensionId
       ? contract.extensionId

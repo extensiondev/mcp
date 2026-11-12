@@ -8,7 +8,7 @@
 
 import fs from "node:fs";
 
-import { pidState } from "./process-identity";
+import { contractPidState } from "./contract-pids";
 import { findSessionInfo } from "./process-manager";
 import { readyContractPath } from "./session-paths";
 
@@ -39,8 +39,9 @@ function port(value: unknown): number | null {
   return typeof value === "number" && value > 0 ? value : null;
 }
 
-function phaseOf(contract: ReadyContract): ProductionPhase {
-  if (typeof contract.pid === "number" && pidState(contract.pid) !== "alive") return "engine-gone";
+function phaseOf(projectPath: string, browser: string, contract: ReadyContract): ProductionPhase {
+  const engine = contractPidState(projectPath, browser, contract, "engine");
+  if (engine !== null && engine !== "alive") return "engine-gone";
   if (contract.status === "error") return "error";
   if (contract.status === "stopped") return "stopped";
 
@@ -84,7 +85,7 @@ export function readSessionReceipt(projectPath: string, browser: string): Sessio
     controlPort,
     cdpPort: port(contract.cdpPort),
     attachedAt: typeof contract.executorAttachedAt === "string" && contract.executorAttachedAt ? contract.executorAttachedAt : null,
-    phase: phaseOf(contract),
+    phase: phaseOf(projectPath, browser, contract),
   };
 }
 

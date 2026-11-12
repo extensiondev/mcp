@@ -406,7 +406,7 @@ export async function handler(
   }
 
   const loaded = resolveLoadedId(identity, freshContract);
-  const evidence = productionLaunchEvidence(freshContract, allowControl);
+  const evidence = productionLaunchEvidence(freshContract, allowControl, { projectPath: args.projectPath, browser });
   const launch = await readLoadOverDebugPort(freshContract, {
     ...evidence,
     ...(loaded.extensionId ? { extensionId: loaded.extensionId } : {}),

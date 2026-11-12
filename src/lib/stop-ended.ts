@@ -8,6 +8,7 @@
 
 import fs from "node:fs";
 
+import { contractPid } from "./contract-pids";
 import { pidState } from "./process-identity";
 import { readyContractPath } from "./session-paths";
 
@@ -19,27 +20,29 @@ export interface EndedProcesses {
   browserGone: boolean | null;
 }
 
-export function contractBrowserPid(projectPath: string, browser: string): number | null {
+export function readReadyContract(projectPath: string, browser: string): ReadyContract | null {
   try {
-    const contract: ReadyContract = JSON.parse(
-      fs.readFileSync(readyContractPath(projectPath, browser), "utf8"),
-    );
-    const pid = contract.browserPid;
+    const contract = JSON.parse(fs.readFileSync(readyContractPath(projectPath, browser), "utf8")) as unknown;
 
-    return typeof pid === "number" && Number.isInteger(pid) && pid > 0 ? pid : null;
+    return contract && typeof contract === "object" ? (contract as ReadyContract) : null;
   } catch {
     return null;
   }
 }
 
+export function contractBrowserPid(projectPath: string, browser: string): number | null {
+  return contractPid(readReadyContract(projectPath, browser), "browser");
+}
+
 export function endedProcesses(
   serverGone: boolean | null,
   browserPid: number | null,
+  browserStartedAt: string | null = null,
 ): EndedProcesses {
   return {
     serverGone,
     browserPid,
-    browserGone: browserPid === null ? null : pidState(browserPid) !== "alive",
+    browserGone: browserPid === null ? null : pidState(browserPid, browserStartedAt) !== "alive",
   };
 }
 

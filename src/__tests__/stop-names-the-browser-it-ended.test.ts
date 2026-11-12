@@ -6,7 +6,7 @@ import path from "node:path";
 import { describe, it, expect, afterEach, afterAll } from "vitest";
 
 import * as stop from "../tools/stop";
-import { registerSession } from "../lib/process-manager";
+import { findSessionInfo, listSessionMarkers, registerSession } from "../lib/process-manager";
 import { readyContractPath } from "../lib/session-paths";
 import { attachedDevContract, readyContract } from "./fixtures/engine-answers";
 
@@ -133,4 +133,74 @@ describe("extension_stop says what it ended, so 'close its browser' needs no she
   it("tells the agent in the description that the answer carries the browser's state", () => {
     expect(stop.schema.description).toMatch(/browser pid it ended/i);
   });
+});
+
+describe("extension_stop judges the contract's browser and launcher pids by their start times", () => {
+  posixOnly(
+    "reads a browser pid whose start time no longer matches the record as gone and leaves that process alone",
+    async () => {
+      const projectPath = tmpProject();
+      const serverPid = spawnHolder("server");
+      const browserPid = spawnHolder("browser");
+      registerSession({
+        pid: serverPid,
+        browser: "chrome",
+        projectPath,
+        command: "dev",
+        browserPid,
+        browserStartedAt: "2001-01-01T00:00:00.000Z",
+        launcherPid: browserPid,
+        launcherStartedAt: "2001-01-01T00:00:00.000Z",
+      });
+
+      writeContract(projectPath, attachedDevContract("chrome", { pid: serverPid, browserPid, launcherPid: browserPid }));
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      const result = JSON.parse(await stop.handler({ projectPath, browser: "chrome" }));
+
+      expect(result.value).toMatchObject({ pid: serverPid, serverGone: true, browserPid, browserGone: true, stopped: true });
+      expect(result.value.reaped).not.toContain(browserPid);
+      expect(result.value.detail).toMatch(new RegExp(`browser[^.]*pid ${browserPid}[^.]*gone`));
+      expect(isAlive(browserPid)).toBe(true);
+    },
+    15_000,
+  );
+
+  posixOnly(
+    "stamps the browser and launcher pids with their start times the first time it reads the contract and keeps them in the record",
+    async () => {
+      const projectPath = tmpProject();
+      const serverPid = spawnHolder("server");
+      const browserPid = spawnHolder("browser");
+      const launcherPid = spawnHolder("launcher");
+      registerSession({ pid: serverPid, browser: "chrome", projectPath, command: "dev" });
+      writeContract(projectPath, attachedDevContract("chrome", { pid: serverPid, browserPid, launcherPid }));
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      expect(stop.contractProcessHints(projectPath, "chrome").pids).toEqual([browserPid, launcherPid]);
+
+      const recorded = findSessionInfo(projectPath, "chrome");
+      expect(recorded).toMatchObject({ browserPid, launcherPid });
+      expect(typeof recorded?.browserStartedAt).toBe("string");
+      expect(typeof recorded?.launcherStartedAt).toBe("string");
+      expect(Math.abs(Date.parse(recorded!.browserStartedAt!) - Date.now())).toBeLessThan(60_000);
+      const marker = listSessionMarkers().find(
+        (m) => path.resolve(m.projectPath) === path.resolve(projectPath) && m.browser === "chrome",
+      );
+      expect(marker).toMatchObject({
+        browserPid,
+        browserStartedAt: recorded?.browserStartedAt,
+        launcherPid,
+        launcherStartedAt: recorded?.launcherStartedAt,
+      });
+
+      const result = JSON.parse(await stop.handler({ projectPath, browser: "chrome" }));
+
+      expect(result.value).toMatchObject({ browserPid, browserGone: true, stopped: true });
+      expect(result.value.reaped).toEqual(expect.arrayContaining([browserPid, launcherPid]));
+      expect(await waitGone(browserPid)).toBe(true);
+      expect(await waitGone(launcherPid)).toBe(true);
+    },
+    15_000,
+  );
 });

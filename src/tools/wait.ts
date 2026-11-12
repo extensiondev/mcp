@@ -12,7 +12,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { PROJECT_PATH, SESSION_BROWSER } from "../lib/common-schema";
 import { findSessionInfo, sessionSinceMs } from "../lib/process-manager";
 import { ambiguousSessionRefusal, resolveSessionBrowser } from "../lib/session-browser";
-import { pidState } from "../lib/process-identity";
+import { contractPidState } from "../lib/contract-pids";
 import { readyContractPath } from "../lib/session-paths";
 import { productionLaunchEvidence, readLoadOverDebugPort } from "../lib/production-launch";
 import { productionWaitHint } from "../lib/production-wait-words";
@@ -36,8 +36,6 @@ const SAFE_CEILING_MS = 50_000;
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MIN_TIMEOUT_MS = 1_000;
 const CONTRACT_MTIME_GRANULARITY_SLACK_MS = 2_000;
-
-const isAlive = (pid: number): boolean => pidState(pid) !== "dead";
 
 export const schema = {
   name: "extension_wait",
@@ -119,7 +117,7 @@ export async function handler(args: {
         since === null &&
         contract.status !== "ready" &&
         typeof contract.pid === "number" &&
-        !isAlive(contract.pid);
+        contractPidState(args.projectPath, browser, contract, "engine") === "dead";
 
       if (stampedBeforeSession || deadOrphanStamp) {
         staleContractNote = stampedBeforeSession
@@ -161,7 +159,7 @@ export async function handler(args: {
       }
 
       if (contract.status === "ready") {
-        if (typeof contract.pid === "number" && !isAlive(contract.pid)) {
+        if (contractPidState(args.projectPath, browser, contract, "engine") === "dead") {
           return envelope({
             ok: false,
             command: schema.name,
@@ -183,7 +181,7 @@ export async function handler(args: {
           contract.runtime === "detached" ||
           typeof (contract as { browserExitedAt?: unknown }).browserExitedAt === "string";
 
-        const verdict = browserGone ? await readDetachedVerdict(contract) : null;
+        const verdict = browserGone ? await readDetachedVerdict(contract, { projectPath: args.projectPath, browser }) : null;
 
         if (verdict && verdict.kind !== "gone") {
           return detachedVerdictFrame(schema.name, contract, verdict, {
@@ -261,7 +259,7 @@ export async function handler(args: {
         }
 
         if (!attached && (contract.command === "start" || contract.command === "preview")) {
-          const launch = await readLoadOverDebugPort(contract, productionLaunchEvidence(contract));
+          const launch = await readLoadOverDebugPort(contract, productionLaunchEvidence(contract, false, { projectPath: args.projectPath, browser }));
 
           return envelope({
             ok: true,

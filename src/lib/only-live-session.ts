@@ -55,7 +55,7 @@ export function onlyLiveSession(): OnlyLiveSession {
 
   for (const m of markersRead.markers) {
     const foreign =
-      typeof m.serverPid === "number" && m.serverPid !== process.pid && pidState(m.serverPid) === "alive";
+      typeof m.serverPid === "number" && m.serverPid !== process.pid && pidState(m.serverPid, m.serverStartedAt) === "alive";
     if (foreign || pidState(m.pid, m.processStartedAt) !== "alive") continue;
 
     const key = `${path.resolve(m.projectPath)}::${m.browser}`;

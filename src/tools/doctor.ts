@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
+import { contractPidState } from "../lib/contract-pids";
 import { runExtensionCli } from "../lib/exec";
 import { nodeCheck } from "../lib/node-engine";
 import {
@@ -283,19 +284,10 @@ interface DoctorCheck {
 const CONTROL_OFF_BY_CHOICE =
   /\brefused: control is off in the session that answered\b/i;
 
-function pidIsAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function reconcileRelaunchedBrowser(
   checks: DoctorCheck[],
-  contract: { browserPid?: number | null } | null,
+  contract: ReadyContract | null,
+  session: { projectPath: string; browser: string },
 ): boolean {
   const exitedLeg = checks.find(
     (leg) =>
@@ -308,8 +300,8 @@ function reconcileRelaunchedBrowser(
   const executorAnswered = checks.some(
     (leg) => leg.check === "executor" && leg.status === "pass",
   );
-  const browserAlive =
-    typeof contract?.browserPid === "number" && pidIsAlive(contract.browserPid);
+  const browserState = contractPidState(session.projectPath, session.browser, contract, "browser");
+  const browserAlive = browserState !== null && browserState !== "dead";
   if (!executorAnswered && !browserAlive) return false;
 
   exitedLeg.status = "warn";
@@ -467,7 +459,7 @@ export async function handler(args: {
       healthy = !checks.some((leg) => leg.status === "fail");
     }
 
-    const relaunched = reconcileRelaunchedBrowser(checks, contract);
+    const relaunched = reconcileRelaunchedBrowser(checks, contract, { projectPath, browser });
 
     if (relaunched) {
       healthy = !checks.some((leg) => leg.status === "fail");

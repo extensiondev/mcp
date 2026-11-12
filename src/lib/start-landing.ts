@@ -26,8 +26,12 @@ export interface LandingRun {
   seen: string;
 }
 
-function alive(pid: number | undefined): boolean {
-  return typeof pid === "number" && pidState(pid) === "alive";
+function alive(pid: number | undefined, startedAt: string | null | undefined): boolean {
+  return typeof pid === "number" && pidState(pid, startedAt) === "alive";
+}
+
+function enginePidStartedAt(contract: ReadyContract, registered: ProcessInfo | undefined): string | null {
+  return registered !== undefined && registered.pid === contract.pid ? (registered.processStartedAt ?? null) : null;
 }
 
 function contractStamp(contract: ReadyContract): number | null {
@@ -60,7 +64,7 @@ export function landingRun(projectPath: string, browser: string, now = Date.now(
   if (receipt.kind === "build") return null;
 
   const registered = findSessionInfo(projectPath, browser);
-  const registeredAlive = registered !== undefined && alive(registered.pid);
+  const registeredAlive = registered !== undefined && alive(registered.pid, registered.processStartedAt);
   const since = sessionSinceMs(projectPath, browser);
 
   if (receipt.kind === "none") {
@@ -86,7 +90,7 @@ export function landingRun(projectPath: string, browser: string, now = Date.now(
     return landing(receipt.verb, runSince(contract, registered, since), now, `read status ${contract.status} when the call arrived`);
   }
 
-  if (!alive(contract.pid) || contract.status !== "starting" || typeof contract.cdpPort === "number") return null;
+  if (!alive(contract.pid, enginePidStartedAt(contract, registered)) || contract.status !== "starting" || typeof contract.cdpPort === "number") return null;
 
   return landing("dev", runSince(contract, registered, since), now, "read status starting when the call arrived");
 }
