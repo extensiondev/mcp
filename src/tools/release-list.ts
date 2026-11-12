@@ -208,7 +208,7 @@ export async function readReleases(args: {
             ]
               .filter(Boolean)
               .join("; ")}), so whether channels or builds exist is unknown. The console Builds page is the record: ${buildsPageUrl}.`
-          : `No channels or builds are recorded on the registry yet for ${ref.workspace}/${ref.project}. Push a commit to produce a build, then check ${buildsPageUrl}.`,
+          : `No channels or builds are recorded on the registry yet for ${ref.workspace}/${ref.project}. Build once with extension_builds action:"rebuild" (no push needed; an uploaded project has no repository to push to, and a project built from a repository also builds on a push), then check ${buildsPageUrl}.`,
     warnings: [
       publicUrlNote,
       visibilityNote,

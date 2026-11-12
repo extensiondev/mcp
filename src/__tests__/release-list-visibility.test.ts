@@ -169,6 +169,23 @@ describe("extension_release_status include releases answers the platform's proje
     expect(out.warnings.join(" ")).toContain("could not be read either");
   });
 
+  it("ledger 542: the empty registry names rebuild first, which needs no push, and a push only as the repository alternative", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+    registry["channels.json"] = { body: {} };
+
+    const out = JSON.parse(await readReleases({ api: API }));
+
+    expect(out.ok).toBe(true);
+    expect(out.hint).toContain("No channels or builds are recorded on the registry yet for acme/alpha");
+    expect(out.hint).toContain('extension_builds action:"rebuild"');
+    expect(out.hint).toContain("no push needed");
+    expect(out.hint).toContain("an uploaded project has no repository to push to");
+    expect(out.hint.indexOf('action:"rebuild"')).toBeLessThan(out.hint.indexOf("a push"));
+    expect(out.hint).not.toMatch(/push a commit/i);
+  });
+
   it("treats any value but public or private as no answer", () => {
     expect(asProjectVisibility(" Public ")).toBe("public");
     expect(asProjectVisibility("private")).toBe("private");
