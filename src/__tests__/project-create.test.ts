@@ -1067,6 +1067,125 @@ describe("extension_project_create", () => {
     expect(out.error.message).toContain("rolled back");
   });
 
+  const RESEEDED = {
+    status: 200,
+    body: {
+      success: true,
+      projectId: "prj_old",
+      projectSlug: "ghost-app",
+      workspaceSlug: "acme",
+      reseeded: true,
+      createdByThisRequest: false,
+      files: { written: 12, removed: 3 },
+      initialBuild: { dispatched: true, buildUrl: "https://console.test/acme/ghost-app/builds/b-42" },
+      tokenIssued: false,
+      tokenCode: "PROJECT_TOKEN_NOT_ISSUED",
+      tokenMessage: "The project was created, but its access token could not be issued.",
+    },
+  };
+
+  async function reseedCall(create: Route, loggedIn: boolean) {
+    if (loggedIn) {
+      const { writeCredentials } = await import("../lib/credentials");
+      writeCredentials({ version: 1, token: "ghost.sig", workspaceSlug: "acme", projectSlug: "ghost-app", expiresAt: FUTURE + 3600, api: API });
+    }
+
+    const dir = extensionFolder("ext");
+    const { fn } = createFetch({ token: [{ status: 200, body: grantBody }], source: UPLOADED, create });
+    const routed = vi.fn(async (url: any, init?: RequestInit) => {
+      if (String(url).endsWith("/api/workspaces/acme/plan")) {
+        return jsonResponse({ plan: "pro", limits: { buildsPerMonth: 350, projects: 10 }, used: { buildsThisMonth: 10, projects: 3 } });
+      }
+
+      return fn(url, init);
+    });
+    vi.stubGlobal("fetch", routed);
+
+    return JSON.parse(await handler({ project: "acme/ghost-app", projectPath: dir, deviceCode: "dev-code" }));
+  }
+
+  it("539: a new archive on an existing uploaded project re-seeds it: says the files written and removed, names the dispatched build and asks no login approval", async () => {
+    const out = await reseedCall(RESEEDED, true);
+
+    expect(out.ok).toBe(true);
+    expect(out.status).toBe("reseeded");
+    expect(out.value.reseeded).toBe(true);
+    expect(out.value.files).toEqual({ written: 12, removed: 3 });
+    expect(out.value.outcome.status).toBe("reseeded");
+    expect(out.value.firstBuild).toEqual({ dispatched: true, buildUrl: "https://console.test/acme/ghost-app/builds/b-42", spent: 1 });
+    expect(out.value.login).toMatchObject({ stored: false, held: true, reason: "reseeded" });
+    expect(out.value.links.map((link: { url: string }) => link.url)).toContain("https://console.test/acme/ghost-app/builds/b-42");
+    expect(out.hint).toContain("re-seeded from the upload of");
+    expect(out.hint).toContain("wrote 12 files and removed 3");
+    expect(out.hint).toContain("Its build was dispatched; https://console.test/acme/ghost-app/builds/b-42 tracks it.");
+    expect(out.hint).toContain("login this machine already holds for acme/ghost-app still serves it");
+    expect(out.hint).not.toContain("one more approval");
+    expect(out.hint).not.toContain("first build");
+    expect(out.value.nextSteps.join(" ")).not.toContain("extension_auth");
+    expect(out.warnings ?? []).toEqual([]);
+    expect(readCredentials({ project: "acme/ghost-app" })?.token).toBe("ghost.sig");
+  });
+
+  it("539: the same archive uploaded twice says the project already built that tree and names the existing build, asking for no upload and no login", async () => {
+    const out = await reseedCall(
+      {
+        status: 200,
+        body: {
+          ...RESEEDED.body,
+          files: { written: 0, removed: 0 },
+          initialBuild: { dispatched: false, reason: "already_dispatched", hint: "This archive is the tree the project already built." },
+        },
+      },
+      true,
+    );
+
+    expect(out.ok).toBe(true);
+    expect(out.status).toBe("reseeded");
+    expect(out.value.firstBuild).toEqual({ dispatched: false, reason: "already_dispatched" });
+    expect(out.hint).toContain("the archive is the same tree the project already built, so the build it has stands");
+    expect(out.hint).toContain("extension_builds (action: list, project: 'acme/ghost-app') names that build");
+    expect(out.hint).toContain("nothing to upload again");
+    expect(out.hint).not.toContain("No first build was dispatched");
+    expect(out.hint).not.toContain("the platform's reason is already_dispatched");
+    expect(out.hint).not.toContain("one more approval");
+    expect(out.value.nextSteps.join(" ")).not.toContain("extension_auth");
+    expect(out.warnings ?? []).toEqual([]);
+  });
+
+  it("539: a re-seed on a machine with no login for the project names the login call without calling it one more approval", async () => {
+    const out = await reseedCall(RESEEDED, false);
+
+    expect(out.status).toBe("reseeded");
+    expect(out.value.login).toMatchObject({ stored: false, held: false, reason: "reseeded" });
+    expect(out.hint).toContain("this machine holds no login for acme/ghost-app");
+    expect(out.hint).not.toContain("one more approval");
+    expect(out.value.nextSteps[0]).toContain("extension_auth (action: login, project: 'acme/ghost-app')");
+  });
+
+  it("539: PROJECT_EXISTS on an upload says a new archive re-seeds only an uploaded project, and names rebuild rather than a push", async () => {
+    const dir = extensionFolder("ext");
+    const { fn } = createFetch({
+      token: [{ status: 200, body: grantBody }],
+      source: UPLOADED,
+      create: { status: 409, body: { code: "PROJECT_EXISTS", message: "Project acme/ghost-app already exists." } },
+    });
+    vi.stubGlobal("fetch", fn);
+
+    const out = JSON.parse(await handler({ project: "acme/ghost-app", projectPath: dir, deviceCode: "dev-code" }));
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("project-exists");
+    expect(out.hint).toContain("re-seeds from a new archive only a project whose source was uploaded");
+    expect(out.hint).toContain("extension_builds (action: rebuild, project: 'acme/ghost-app')");
+    expect(out.hint).not.toContain("push");
+  });
+
+  it("539: says in its description that projectPath on an existing uploaded project re-seeds and rebuilds it", () => {
+    expect(schema.description).toContain("again: re-seed and rebuild");
+    expect(schema.inputSchema.properties.projectPath.description).toContain("re-seeds it from the new archive and rebuilds it");
+    expect(schema.inputSchema.properties.projectPath.description).toContain("extension_builds rebuild rebuilds its stored tree without a new upload");
+  });
+
   it("reports the names the platform registered, not the ones asked for", async () => {
     const out = await createdWith({
       projectSlug: "ghost-app-2",

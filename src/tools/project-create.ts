@@ -84,6 +84,7 @@ import {
   firstBuildSentence,
   firstBuildValue,
   readFirstBuild,
+  reseedBuildSentence,
   withheldBecause,
 } from "../lib/first-build";
 
@@ -96,7 +97,7 @@ const CREATE_STUCK_MINUTES = CREATE_STUCK_AFTER_SECONDS / 60;
 export const schema = {
   name: "extension_project_create",
   description:
-    `Create an extension.dev project from its folder (projectPath, uploaded, no push) or a pushed GitHub repo, BEFORE extension_auth. First call: a URL a signed-in workspace member approves; resume with deviceCode and waitSeconds, the login is stored too. The first build spends one build of the workspace's monthly allowance, running the build command exactly as stored. projects: up to ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} per approval, at most ${PLATFORM_CREATES_PER_HOUR} per hour, never split silently.`,
+    `Create an extension.dev project from a folder (projectPath, uploaded, no push; again: re-seed and rebuild) or a GitHub repo, BEFORE extension_auth. First call: a URL a signed-in workspace member approves; resume with deviceCode and waitSeconds, the login is stored too. The first build spends one build of the workspace's monthly allowance, build command exactly as stored. projects: up to ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} per approval, at most ${PLATFORM_CREATES_PER_HOUR} per hour, never split silently.`,
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -106,7 +107,7 @@ export const schema = {
       },
       projectPath: {
         type: "string",
-        description: `Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). ${SOURCE_SKIPPED_FOLDERS.join(", ")}, ${SOURCE_SKIPPED_EXTENSIONS.join(", ")}, .env*, *.pem and .gitignore entries stay out; 4 MB zipped at most.`,
+        description: `Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). ${SOURCE_SKIPPED_FOLDERS.join(", ")}, ${SOURCE_SKIPPED_EXTENSIONS.join(", ")}, .env*, *.pem and .gitignore entries stay out; 4 MB zipped at most. On a project whose source was uploaded, this re-seeds it from the new archive and rebuilds it (no token comes back); extension_builds rebuild rebuilds its stored tree without a new upload.`,
       },
       repo: {
         type: "string",
@@ -990,7 +991,10 @@ async function sendCreate(
           code: "E_PLATFORM",
           message: String(data.message || `Project ${ctx.project} already exists.`),
         },
-        hint: `Run extension_auth (action: login) with project '${ctx.project}'.`,
+        hint:
+          ctx.source.kind === "upload"
+            ? `Project ${ctx.project} exists and was not re-seeded from this upload: the platform re-seeds from a new archive only a project whose source was uploaded. Run extension_auth (action: login) with project '${ctx.project}'; extension_builds (action: rebuild, project: '${ctx.project}') builds it again from the source it holds.`
+            : `Run extension_auth (action: login) with project '${ctx.project}'. extension_builds (action: rebuild, project: '${ctx.project}') builds its head again without a push.`,
       });
     }
 
@@ -1031,6 +1035,10 @@ async function sendCreate(
     ctx.apiBase,
   );
   const firstBuild = readFirstBuild(data);
+  const reseeded = data.reseeded === true;
+  const fileCounts = data.files && typeof data.files === "object" && !Array.isArray(data.files) ? (data.files as Record<string, unknown>) : {};
+  const reseedFiles = { written: Number(fileCounts.written) || 0, removed: Number(fileCounts.removed) || 0 };
+  const buildWord = reseeded ? "build" : "first build";
   rememberCreatedProject(ctx.apiBase, `${finalWorkspace}/${finalProject}`);
   const buildsPageUrl = consoleProjectUrl(
     { workspace: finalWorkspace, project: finalProject },
@@ -1038,8 +1046,8 @@ async function sendCreate(
     ctx.apiBase,
   );
   const links = linksOf([
-    { kind: "project", url: consoleUrl, made: true },
-    ...(firstBuild.state === "dispatched" ? [{ kind: "build" as const, url: buildsPageUrl }] : []),
+    { kind: "project", url: consoleUrl, made: !reseeded },
+    ...(firstBuild.state === "dispatched" ? [{ kind: "build" as const, url: firstBuild.buildUrl || buildsPageUrl, made: reseeded }] : []),
   ]);
   const login = readCreateLogin({
     data,
@@ -1048,23 +1056,34 @@ async function sendCreate(
     login: wantsCreateLogin(ctx.args.login),
   });
   const ref = `${finalWorkspace}/${finalProject}`;
+  const signedIn = login.login.stored || login.login.held === true;
+  const followBuild = reseeded
+    ? firstBuild.state === "dispatched"
+      ? "follows the build of the new archive"
+      : "names the build the project has"
+    : "follows the first build of the upload";
   const buildStep =
     ctx.source.kind === "upload"
-      ? `extension_builds (action: list, project: '${ref}') to follow the first build, then extension_publish`
+      ? `extension_builds (action: list, project: '${ref}') to follow the ${buildWord}, then extension_publish`
       : firstBuild.state === "dispatched"
         ? "extension_publish"
         : `extension_release_status (include: ['releases'], project: '${ref}') until a build is listed, then extension_publish`;
   const buildNext =
     ctx.source.kind === "upload"
-      ? `extension_builds (action: list, project: '${ref}') follows the first build of the upload; extension_publish shares it once it is listed.`
+      ? `extension_builds (action: list, project: '${ref}') ${followBuild}; extension_publish shares it once it is listed.`
       : firstBuild.state === "dispatched"
         ? "extension_publish to share it."
         : "extension_release_status until a build is listed; extension_publish has nothing to share until a build exists.";
+  const uploadWords = ctx.source.kind === "upload" ? `the upload of ${ctx.source.root} (${uploaded?.files ?? ctx.source.files} files, ${megabytes(uploaded?.bytes ?? ctx.source.bytes)} zipped), nothing was pushed` : "";
+  const opening = reseeded
+    ? `Project ${ref} was re-seeded from ${uploadWords}: the platform wrote ${reseedFiles.written} files and removed ${reseedFiles.removed} the new archive no longer holds, and created nothing, since the project already existed.`
+    : `Project ${ref} exists${uploadWords ? `, created from ${uploadWords}` : ""}.${data.replayed === true ? " The platform read this back from its record of the earlier create request with this grant; nothing was created twice." : ""}`;
+  const act = reseeded ? "This re-seed" : "This project creation";
 
   return envelope({
     ok: true,
     command: COMMAND,
-    status: "created",
+    status: reseeded ? "reseeded" : "created",
     value: {
       workspaceSlug: finalWorkspace,
       projectSlug: finalProject,
@@ -1074,29 +1093,30 @@ async function sendCreate(
       ...(ctx.source.kind === "github"
         ? { sourceRepo: ctx.source.repo }
         : { projectPath: ctx.source.root, uploaded: uploaded ?? { bytes: ctx.source.bytes, files: ctx.source.files }, leftOut: ctx.source.leftOut }),
-      outcome: recordedOutcome(data.replayed === true ? "created-earlier" : "created"),
+      ...(reseeded ? { reseeded: true, files: reseedFiles } : {}),
+      outcome: recordedOutcome(reseeded ? "reseeded" : data.replayed === true ? "created-earlier" : "created"),
       links,
       login: login.login,
       firstBuild: { ...firstBuildValue(firstBuild), ...(firstBuild.state === "dispatched" ? { spent: 1 } : {}) },
       allowance: firstBuildSpendNarration({
         what:
           firstBuild.state === "dispatched"
-            ? "This project creation, including its first build,"
+            ? `${act}, including its ${buildWord},`
             : firstBuild.state === "withheld"
-              ? "This project creation, with no first build dispatched,"
-              : "This project creation, and its first build if the platform dispatched one,",
+              ? `${act}, with no ${buildWord} dispatched,`
+              : `${act}, and its ${buildWord} if the platform dispatched one,`,
         body: data,
         api: ctx.apiBase,
         dispatched: firstBuild.state === "dispatched",
         before: allowanceBefore,
       }),
       nextSteps: [
-        ...(login.login.stored ? [] : [`extension_auth (action: login, project: '${ref}')`]),
+        ...(signedIn ? [] : [`extension_auth (action: login, project: '${ref}')`]),
         buildStep,
       ],
     },
-    hint: `Project ${ref} exists${ctx.source.kind === "upload" ? `, created from the upload of ${ctx.source.root} (${uploaded?.files ?? ctx.source.files} files, ${megabytes(uploaded?.bytes ?? ctx.source.bytes)} zipped), nothing was pushed` : ""}.${data.replayed === true ? " The platform read this back from its record of the earlier create request with this grant; nothing was created twice." : ""} ${firstBuildSentence(firstBuild, buildsPageUrl)} ${login.sentence} The provisioning grant is spent and not kept on this machine; the other files this tool leaves are its install id (install.json) and a note that ${ref} exists on this server (created-projects.json), so extension_auth does not doubt it. Next: ${
-      login.login.stored ? "" : `extension_auth (action: login, project: '${ref}') to mint the project token, then `
+    hint: `${opening} ${reseeded ? reseedBuildSentence(firstBuild, ref, buildsPageUrl) : firstBuildSentence(firstBuild, buildsPageUrl)} ${login.sentence} The provisioning grant is spent and not kept on this machine; the other files this tool leaves are its install id (install.json) and a note that ${ref} exists on this server (created-projects.json), so extension_auth does not doubt it. Next: ${
+      signedIn ? "" : `extension_auth (action: login, project: '${ref}') to mint the project token, then `
     }${buildNext} ${madeSentence(links)}`,
     warnings: [
       ...(ctx.source.kind === "upload" && ctx.source.defaulted
@@ -1107,12 +1127,12 @@ async function sendCreate(
             `The platform registered this project as ${finalWorkspace}/${finalProject}, not the ${ctx.project} that was asked for. Use the name it has.`,
           ]
         : []),
-      ...(firstBuild.state === "dispatched"
+      ...(firstBuild.state === "dispatched" || (reseeded && firstBuild.state === "withheld" && firstBuild.reason === "already_dispatched")
         ? []
         : [
             firstBuild.state === "withheld"
-              ? `No first build was dispatched for ${finalWorkspace}/${finalProject}: ${withheldBecause(firstBuild.reason)}.`
-              : `The platform did not say whether a first build was dispatched for ${finalWorkspace}/${finalProject}.`,
+              ? `No ${buildWord} was dispatched for ${finalWorkspace}/${finalProject}: ${withheldBecause(firstBuild.reason)}.`
+              : `The platform did not say whether a ${buildWord} was dispatched for ${finalWorkspace}/${finalProject}.`,
           ]),
     ],
   });

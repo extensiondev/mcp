@@ -24,6 +24,19 @@ describe(SUITE, () => {
     expect(world.calls.some((call) => call.url.includes("/api/cli/approvals"))).toBe(false);
   });
 
+  it("539: configure names rebuild as the next build and never says a push is needed, since an uploaded project has nothing to push", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+    world.routes[`PUT ${SETTINGS_ROUTE}`] = () => ({ body: { ok: true } });
+
+    const out = JSON.parse(await builds({ action: "configure", buildSettings: { firefox: { enabled: true } }, api: API }));
+
+    expect(out.status).toBe("build-configured");
+    expect(out.hint).toContain('extension_builds action:"rebuild" (no push needed');
+    expect(out.hint).not.toContain("a push, or");
+  });
+
   it("configure is refused OWNER_REQUIRED when the token's minter is not an owner, before any approval is asked", async () => {
     if (process.platform === "win32") return;
 

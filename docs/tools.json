@@ -1555,7 +1555,7 @@
       "name": "extension_project_create",
       "tier": "platform",
       "group": "platform",
-      "description": "Create an extension.dev project from its folder (projectPath, uploaded, no push) or a pushed GitHub repo, BEFORE extension_auth. First call: a URL a signed-in workspace member approves; resume with deviceCode and waitSeconds, the login is stored too. The first build spends one build of the workspace's monthly allowance, running the build command exactly as stored. projects: up to 10 per approval, at most 10 per hour, never split silently.",
+      "description": "Create an extension.dev project from a folder (projectPath, uploaded, no push; again: re-seed and rebuild) or a GitHub repo, BEFORE extension_auth. First call: a URL a signed-in workspace member approves; resume with deviceCode and waitSeconds, the login is stored too. The first build spends one build of the workspace's monthly allowance, build command exactly as stored. projects: up to 10 per approval, at most 10 per hour, never split silently.",
       "gate": "the server started with --features=local,platform",
       "samplePrompt": "Create the extension.dev project for this build under acme",
       "readOnly": false,
@@ -1574,7 +1574,7 @@
           "name": "projectPath",
           "type": "string",
           "required": false,
-          "description": "Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). node_modules, dist, .git, .extension-dev, .zip, .crx, .xpi, .env*, *.pem and .gitignore entries stay out; 4 MB zipped at most."
+          "description": "Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). node_modules, dist, .git, .extension-dev, .zip, .crx, .xpi, .env*, *.pem and .gitignore entries stay out; 4 MB zipped at most. On a project whose source was uploaded, this re-seeds it from the new archive and rebuilds it (no token comes back); extension_builds rebuild rebuilds its stored tree without a new upload."
         },
         {
           "name": "repo",

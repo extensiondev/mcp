@@ -352,12 +352,12 @@ Preview a build in the web emulator; share:true returns a link anyone opens with
 
 ## extension_project_create
 
-Create an extension.dev project from its folder (projectPath, uploaded, no push) or a pushed GitHub repo, BEFORE extension_auth. First call: a URL a signed-in workspace member approves; resume with deviceCode and waitSeconds, the login is stored too. The first build spends one build of the workspace's monthly allowance, running the build command exactly as stored. projects: up to 10 per approval, at most 10 per hour, never split silently.
+Create an extension.dev project from a folder (projectPath, uploaded, no push; again: re-seed and rebuild) or a GitHub repo, BEFORE extension_auth. First call: a URL a signed-in workspace member approves; resume with deviceCode and waitSeconds, the login is stored too. The first build spends one build of the workspace's monthly allowance, build command exactly as stored. projects: up to 10 per approval, at most 10 per hour, never split silently.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `project` | string | no |  | New '<workspace>/<project>'. |
-| `projectPath` | string | no |  | Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). node_modules, dist, .git, .extension-dev, .zip, .crx, .xpi, .env*, *.pem and .gitignore entries stay out; 4 MB zipped at most. |
+| `projectPath` | string | no |  | Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). node_modules, dist, .git, .extension-dev, .zip, .crx, .xpi, .env*, *.pem and .gitignore entries stay out; 4 MB zipped at most. On a project whose source was uploaded, this re-seeds it from the new archive and rebuilds it (no token comes back); extension_builds rebuild rebuilds its stored tree without a new upload. |
 | `repo` | string | no |  | GitHub '<owner>/<repo>' the source is pushed to; instead of projectPath. |
 | `installationId` | string | no |  | Omit; the platform finds it or answers a connect link. |
 | `displayName` | string | no |  | Human name; rename later with extension_workspace configure-project. |

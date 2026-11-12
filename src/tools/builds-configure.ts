@@ -144,7 +144,7 @@ function unconfirmedConfigure(args: {
       command: COMMAND,
       status: "build-configured",
       value: { action: "configure", project, buildSettings: unconfirmed.state ?? merged, trackUrl: settingsPage },
-      hint: `${project}'s build settings now read as buildSettings: the platform answered ${sent.status} to the write, but the settings read back with the change in place, so nothing needs sending again. The next build runs them: a push, or extension_builds action:"rebuild".`,
+      hint: `${project}'s build settings now read as buildSettings: the platform answered ${sent.status} to the write, but the settings read back with the change in place, so nothing needs sending again. The next build runs them: extension_builds action:"rebuild" (no push needed; an uploaded project has no repository to push to), or a push to the build branch of a project built from a repository.`,
       warnings: [`${sent.message}; the change was saved anyway.`],
     });
   }
@@ -263,6 +263,6 @@ export async function configure(args: ActArgs): Promise<string> {
       ...(Object.keys(recorded.notes).length ? { notes: recorded.notes } : {}),
       trackUrl: settingsPage,
     },
-    hint: `${project}'s build settings now read as buildSettings.${gateLine}${defaultedLine}${noteLines} The next build runs them: a push, or extension_builds action:"rebuild".`,
+    hint: `${project}'s build settings now read as buildSettings.${gateLine}${defaultedLine}${noteLines} The next build runs them: extension_builds action:"rebuild" (no push needed; an uploaded project has no repository to push to), or a push to the build branch of a project built from a repository.`,
   });
 }

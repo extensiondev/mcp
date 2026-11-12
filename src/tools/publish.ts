@@ -321,7 +321,7 @@ export async function handler(args: {
           message: result.error.message,
           platformCode: code,
         },
-        hint: "This private project has no completed build yet, so there is no build link to make: a build link opens one build. Push a commit or start one with extension_builds (action: 'rebuild'), then publish again once extension_builds lists it as successful.",
+        hint: "This private project has no completed build yet, so there is no build link to make: a build link opens one build. Start one with extension_builds (action: 'rebuild'), which needs no push (an uploaded project has no repository to push to; a project built from a repository also builds on a push), then publish again once extension_builds lists it as successful.",
       });
     }
 

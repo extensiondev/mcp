@@ -528,6 +528,8 @@ describe("extension_publish envelope compatibility", () => {
         expect(out.error.platformCode).toBe("NO_BUILD_TO_SHARE");
         expect(out.hint).toMatch(/build link/);
         expect(out.hint).toMatch(/extension_builds/);
+        expect(out.hint).toMatch(/needs no push/);
+        expect(out.hint).not.toMatch(/Push a commit/);
       } finally {
         global.fetch = prevFetch;
       }

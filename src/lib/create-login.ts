@@ -6,10 +6,12 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { readCredentials } from "./credentials";
 import { persistTokenResponse } from "./login-flow";
 
 export interface CreateLogin {
   stored: boolean;
+  held?: boolean;
   project: string;
   expiresAt?: string;
   reason?: string;
@@ -47,6 +49,18 @@ export function readCreateLogin(args: {
     return {
       login: { stored: false, project, reason: "not-asked" },
       sentence: `No login was stored for ${project} (login: false)${issued ? ", and the token the platform answered was discarded" : ""}; ${loginCall(project)} mints one with its own approval.`,
+    };
+  }
+
+  if (args.data.reseeded === true) {
+    const held = readCredentials({ project, api: args.apiBase }) !== null;
+    const noToken = `A re-seed mints no token (the platform answered ${String(args.data.tokenCode || "").trim() || "no token"}, as it does for a project that already existed)`;
+
+    return {
+      login: { stored: false, held, project, reason: "reseeded" },
+      sentence: held
+        ? `${noToken}, and none is needed: the login this machine already holds for ${project} still serves it.`
+        : `${noToken}; this machine holds no login for ${project}, so ${loginCall(project)} signs it in before a token-scoped call.`,
     };
   }
 
