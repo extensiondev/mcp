@@ -16,7 +16,7 @@ import type { ListingStore } from "./store-md-listing";
 type Row = Record<string, unknown>;
 
 const PUSH_STATUSES = ["dispatched", "failed", "unchanged", "landed", "locked"] as const;
-const RUN_STATES = ["queued", "running", "failed", "landed", "locked", "unknown"] as const;
+const RUN_STATES = ["queued", "running", "failed", "landed", "locked", "unanswered", "unknown"] as const;
 
 export type PushStatus = (typeof PUSH_STATUSES)[number];
 export type RunState = (typeof RUN_STATES)[number];
@@ -104,14 +104,19 @@ export function readPushState(raw: unknown): PushState | null {
 const landedBefore = (state: PushState | null): boolean =>
   Boolean(state && (state.runState === "landed" || state.landedAt));
 
+const resendable = (state: PushState | null): boolean =>
+  state?.status === "unchanged" && state.runState !== "unanswered" && !landedBefore(state);
+
 function neverLanded(sent: ProjectApiRead<Row>): boolean {
   if (sent.ok) {
-    const state = readPushState(sent.json.appStoreConnect);
-
-    return state?.status === "unchanged" && !landedBefore(state);
+    return resendable(readPushState(sent.json.appStoreConnect));
   }
 
-  return sent.code === "NO_CHANGE" && !landedBefore(readPushState(isRow(sent.body) ? sent.body.appStoreConnect : null));
+  if (sent.code !== "NO_CHANGE") return false;
+
+  const held = readPushState(isRow(sent.body) ? sent.body.appStoreConnect : null);
+
+  return held?.runState !== "unanswered" && !landedBefore(held);
 }
 
 /* @invariant AN UNCHANGED SAFARI LISTING WHOSE PUSH NEVER LANDED IS SENT
@@ -217,6 +222,8 @@ export function pushSentence(state: PushState, resend: Resend): string {
 
   if (resend === "refused") {
     sentence = `The listing is unchanged and no App Store Connect push has landed; the platform cannot resend an unchanged listing yet.`;
+  } else if (state.runState === "unanswered") {
+    sentence = "The build lane did not answer for the recorded App Store Connect push, so nothing was sent again; say preflight in a minute and I read it again.";
   } else if (effective === "locked") {
     return state.reason ? closed(state.reason) : lockedSentence(state);
   } else if (effective === "dispatched") {

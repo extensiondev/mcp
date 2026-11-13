@@ -9,7 +9,7 @@
 import { describe, expect, it } from "vitest";
 
 import { listingPushOpen, listingPushView } from "../lib/safari-listing-push-read";
-import { pushSentence, readPushState } from "../lib/store-listing-push";
+import { pushSentence, readPushState, sendListing } from "../lib/store-listing-push";
 import { usePlatformWorld, WORLD_API, WORLD_PROJECT_ID } from "./fixtures/platform-world";
 
 const LOCKED_MESSAGE =
@@ -25,6 +25,15 @@ const LOCKED = {
   message: LOCKED_MESSAGE,
 };
 const RETRY = /sync-listing|sends it again|again\.$/;
+const UNANSWERED = {
+  status: "unchanged",
+  runState: "unanswered",
+  dispatched: false,
+  dispatchedAt: "2026-11-13T12:00:00.000Z",
+  message: "The push dispatched at 12:00 could not be read because the build lane did not answer.",
+};
+const UNANSWERED_LINE =
+  "The build lane did not answer for the recorded App Store Connect push, so nothing was sent again; say preflight in a minute and I read it again.";
 
 describe("a locked App Store listing reads as locked, never as a push to retry", () => {
   it("reads the lock, its version and state, and says the platform's own sentence with no resend", () => {
@@ -80,6 +89,36 @@ describe("a locked App Store listing reads as locked, never as a push to retry",
 
 const world = usePlatformWorld("extdev-listing-locked-");
 const LISTING = new RegExp(`^GET /api/projects/${WORLD_PROJECT_ID}/stores/safari/listing$`);
+const LISTING_PUT = new RegExp(`^PUT /api/projects/${WORLD_PROJECT_ID}/stores/safari/listing$`);
+
+describe("a listing push the build lane did not answer for is named, never read as unchanged", () => {
+  it("keeps the unanswered run state and says nothing was sent again", () => {
+    const state = readPushState(UNANSWERED)!;
+
+    expect(state).toMatchObject({ status: "unchanged", runState: "unanswered" });
+    expect(pushSentence(state, "none")).toBe(UNANSWERED_LINE);
+  });
+
+  it("the release status read names the lane and offers no resend", () => {
+    const view = listingPushView(readPushState(UNANSWERED)!);
+
+    expect(view.state).toBe("unanswered");
+    expect(view.say).toContain("the build lane did not answer");
+    expect(view.say).toContain("nothing was sent again");
+    expect(view.say).not.toMatch(RETRY);
+    expect(listingPushOpen(view)).toBe(false);
+  });
+
+  it("sync-listing sends the unchanged listing once and never forces it again", async () => {
+    world.routes.push([LISTING_PUT, () => ({ body: { store: "safari", appStoreConnect: UNANSWERED } })]);
+    const api = { base: WORLD_API, token: "t", projectId: WORLD_PROJECT_ID, ref: { workspace: "w", project: "p" }, command: "extension_submit" } as any;
+    const { resend } = await sendListing(api, "safari", { title: "Cat" });
+
+    expect(resend).toBe("none");
+    expect(world.calls.filter((call) => call.method === "PUT")).toHaveLength(1);
+  });
+});
+
 const safariRow = (out: any) => (out.value.stores.value.stores as Array<Record<string, any>>).find((row) => row.store === "safari");
 
 describe("the store reads tell a locked listing push without a warning or a retry", () => {

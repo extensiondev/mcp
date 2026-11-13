@@ -12,7 +12,7 @@ import { lockedSentence, readPushState, type OwedField, type PushState } from ".
 
 type Row = Record<string, unknown>;
 
-export type ListingPushState = "queued" | "running" | "failed" | "landed" | "locked" | "unknown";
+export type ListingPushState = "queued" | "running" | "failed" | "landed" | "locked" | "unanswered" | "unknown";
 
 export interface ListingPushView {
   state: ListingPushState;
@@ -69,6 +69,10 @@ function sentence(view: Omit<ListingPushView, "say">, message: string | undefine
 
   if (view.state === "queued" || view.state === "running") {
     return `${head} is ${view.state}; read the release status again in a minute for what landed`;
+  }
+
+  if (view.state === "unanswered") {
+    return `${head} could not be read because the build lane did not answer; nothing was sent again, so read the release status again in a minute`;
   }
 
   if (view.state === "landed") {
