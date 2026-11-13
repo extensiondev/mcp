@@ -171,7 +171,7 @@ describe("the ported verdict grammar is internally sound and pinned to the upstr
   });
 });
 
-describe("the ported grammar against @extension.dev/preview-verdict", () => {
+describe("the ported grammar against @extension.dev/lab/preview-verdict", () => {
   it("resolves the upstream file whenever this is a monorepo checkout", () => {
     if (!monorepoRoot) {
       expect(pin.outcomes.length).toBeGreaterThan(0);

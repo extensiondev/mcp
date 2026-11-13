@@ -1,6 +1,6 @@
 {
-  "upstreamPackage": "@extension.dev/preview-verdict",
-  "upstreamPath": "packages/extensiondev-preview-verdict/src/index.js",
+  "upstreamPackage": "@extension.dev/lab/preview-verdict",
+  "upstreamPath": "packages/extensiondev-lab/src/preview-verdict/index.js",
   "why": "That package is private to the monorepo (C11) and this one publishes to npm, so its grammar is ported here and pinned rather than imported. Regenerate this pin only after reading the upstream and deciding, check by check, that the port still means the same thing.",
   "outcomes": ["pass", "fail", "inconclusive", "skipped"],
   "verdictOutcomes": ["pass", "fail", "inconclusive"],
