@@ -21,7 +21,6 @@ export interface StoreConfigView {
   configured: boolean;
   credentialsConfigured: boolean;
   missingCredentials: string[];
-  credentialsUnverified?: true;
   storeUrl?: string;
   storeId?: string;
   bundleId?: string;
@@ -85,8 +84,6 @@ export function storeConfigView(raw: unknown, store?: string): StoreConfigView |
       .map((name) => String(name ?? "").trim())
       .filter((name) => CREDENTIAL_NAME.test(name)),
   };
-
-  if (raw.credentialsVerified === false) view.credentialsUnverified = true;
 
   for (const key of ["storeUrl", "storeId", "bundleId", "releaseChannel"] as const) {
     const value = str(raw[key]);

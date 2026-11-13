@@ -45,10 +45,10 @@ const SAFARI_RECORD: Row = {
 };
 
 const STORE_CONFIG = {
-  chrome: { enabled: false, configured: false, credentialsConfigured: false, credentialsVerified: true, missingSecrets: [] },
-  firefox: { enabled: false, configured: false, credentialsConfigured: false, credentialsVerified: true, missingSecrets: [] },
-  edge: { enabled: false, configured: false, credentialsConfigured: false, credentialsVerified: true, missingSecrets: [] },
-  safari: { enabled: true, configured: true, credentialsConfigured: true, credentialsVerified: true, missingSecrets: [] },
+  chrome: { enabled: false, configured: false, credentialsConfigured: false, missingSecrets: [] },
+  firefox: { enabled: false, configured: false, credentialsConfigured: false, missingSecrets: [] },
+  edge: { enabled: false, configured: false, credentialsConfigured: false, missingSecrets: [] },
+  safari: { enabled: true, configured: true, credentialsConfigured: true, missingSecrets: [] },
 };
 
 function serve(): typeof fetch {

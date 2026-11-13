@@ -40,7 +40,7 @@ function rows(value: unknown, keys: string[]): Row[] {
 function missingOf(json: Row): string[] | null {
   const config = isRow(json.storeConfig) ? json.storeConfig : null;
 
-  if (!config || config.credentialsVerified === false || !Array.isArray(config.missingSecrets)) return null;
+  if (!config || !Array.isArray(config.missingSecrets)) return null;
 
   return config.missingSecrets.map(text).filter(Boolean);
 }

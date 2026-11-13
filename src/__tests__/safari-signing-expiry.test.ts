@@ -34,7 +34,7 @@ function report(args: { missing: string[]; endsInDays?: number }): Row {
 
   return {
     ...base,
-    storeConfig: { credentialsVerified: true, missingSecrets: args.missing, bundleId: "dev.extension.widget" },
+    storeConfig: { missingSecrets: args.missing, bundleId: "dev.extension.widget" },
     ...(expires
       ? {
           safariSigningAssets: {

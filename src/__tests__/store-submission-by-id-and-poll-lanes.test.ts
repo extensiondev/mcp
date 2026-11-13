@@ -59,8 +59,8 @@ const UNLISTED_FIREFOX = {
   submittedAt: "2026-10-29T19:02:00Z",
 };
 
-const ENABLED = { enabled: true, configured: true, credentialsConfigured: true, credentialsVerified: true, missingSecrets: [] };
-const OFF = { enabled: false, configured: false, credentialsConfigured: false, credentialsVerified: true, missingSecrets: [] };
+const ENABLED = { enabled: true, configured: true, credentialsConfigured: true, missingSecrets: [] };
+const OFF = { enabled: false, configured: false, credentialsConfigured: false, missingSecrets: [] };
 
 function statusDoc(lanes: Record<string, unknown>) {
   return {

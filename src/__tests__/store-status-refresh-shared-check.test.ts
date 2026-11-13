@@ -46,7 +46,7 @@ function record(store: string, readAt: string): Row {
 }
 
 const STORE_CONFIG = Object.fromEntries(
-  ALL.map((store) => [store, { enabled: true, configured: true, credentialsConfigured: true, credentialsVerified: true, missingSecrets: [] }]),
+  ALL.map((store) => [store, { enabled: true, configured: true, credentialsConfigured: true, missingSecrets: [] }]),
 );
 
 interface Served {

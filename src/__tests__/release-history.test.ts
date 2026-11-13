@@ -85,7 +85,6 @@ const STORE_CONFIG = {
     enabled: true,
     configured: true,
     credentialsConfigured: false,
-    credentialsVerified: true,
     missingSecrets: ["STORE_CHROME_REFRESH_TOKEN"],
     storeUrl: "https://chromewebstore.google.com/detail/abc",
     storeId: "abc",
@@ -93,9 +92,9 @@ const STORE_CONFIG = {
     sharedProjectData: { fields: [{ key: "project.description", value: "do-not-relay-this-either" }] },
     submissionMode: { id: "public", label: "Public publish" },
   },
-  firefox: { enabled: false, configured: false, credentialsConfigured: false, credentialsVerified: true, missingSecrets: ["STORE_FIREFOX_API_KEY"] },
-  edge: { enabled: false, configured: false, credentialsConfigured: false, credentialsVerified: true, missingSecrets: [] },
-  safari: { enabled: false, configured: false, credentialsConfigured: false, credentialsVerified: true, missingSecrets: [] },
+  firefox: { enabled: false, configured: false, credentialsConfigured: false, missingSecrets: ["STORE_FIREFOX_API_KEY"] },
+  edge: { enabled: false, configured: false, credentialsConfigured: false, missingSecrets: [] },
+  safari: { enabled: false, configured: false, credentialsConfigured: false, missingSecrets: [] },
 };
 
 describe("extension_release_status reads release history and store records from the platform", () => {
