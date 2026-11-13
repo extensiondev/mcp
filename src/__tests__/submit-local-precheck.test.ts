@@ -37,7 +37,6 @@ const BUILD = `GET ${PROJECT_ROUTE}/builds/${SHA}`;
 const SETTINGS = `GET ${PROJECT_ROUTE}/settings/build`;
 
 const NO_STORE_RUN = "No store submission workflow (the store run) found on the project's build environment";
-const LANE_NOT_TAKING = "Store submissions for this project run on the build lane, which is not taking them yet. Nothing was sent to the store, and your approval was not spent.";
 const ON_FILE = { store: "firefox", listing: { title: "Widget" }, media: {}, updatedAt: "2026-11-06T23:19:00.000Z" };
 
 const said = (out: Row): string => JSON.stringify(out, (key, value) => (key === "platformLine" ? undefined : value));
@@ -168,19 +167,7 @@ describe("a real submit runs the preflight's two local checks before the approva
     expect(said(read)).not.toMatch(/workflow|store\.yml/i);
   });
 
-  it("treats a 409 STORE_RUN_UNAVAILABLE or MIRRORS_FROZEN as the same platform fault with no approval asked, and leaves every other refusal alone", async () => {
-    stores("firefox");
-    platform.routes[LISTING("firefox")] = () => ({ body: ON_FILE });
-    platform.routes[`POST ${DISPATCH}`] = () => ({ status: 409, body: { code: "STORE_RUN_UNAVAILABLE", approvalRefunded: true, message: LANE_NOT_TAKING } });
-
-    const out = await real(["firefox"]);
-
-    expect(out.status).toBe(PLATFORM_UNAVAILABLE_STATUS);
-    expect(out.error.platformCode).toBe("STORE_RUN_UNAVAILABLE");
-    expect(out.value.approvalRefunded).toBeUndefined();
-    expect(out.error.message).toContain("no approval was asked for");
-    expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
-
+  it("treats a 409 MIRRORS_FROZEN or STORE_ACT_NOT_ON_LANE as a platform fault and leaves every other refusal alone", () => {
     expect(storeRunUnavailable(409, { code: "MIRRORS_FROZEN", message: "The mirrors are frozen." })).toMatchObject({ code: "MIRRORS_FROZEN" });
     expect(storeRunUnavailable(409, { code: "MIRRORS_FROZEN", message: "The mirrors are frozen." })).not.toHaveProperty("ownSentence");
     expect(storeRunUnavailable(409, { code: "STORE_ACT_NOT_ON_LANE", store: "safari", act: "submit", message: "Submitting to the App Store does not run on the extension.dev lane yet." })).toMatchObject({
@@ -506,7 +493,6 @@ describe("510: a first Chrome item is told about the publisher's two default ext
 describe("510: an upload the store's installation test refused is the person's to fix, never the platform's fault", () => {
   const INSTALL_LINE = "The Chrome Web Store refused the package for item abcdefghijklmnopabcdefghijklmnop: ITEM_INSTALL_FAILED: The extension could not be installed. Service worker file background.js was not found in the package.";
   const INSTALL_BODY = { ok: false, code: "CHROME_UPLOAD_FAILED", store: "chrome", message: INSTALL_LINE, approvalRefunded: false };
-  const LANE_BODY = { code: "STORE_RUN_UNAVAILABLE", approvalRefunded: true, message: LANE_NOT_TAKING };
   const RUN_BODY = { message: NO_STORE_RUN };
 
   it("keeps the install family and the 508 platform family disjoint on both sample bodies, and matches nothing else", () => {
@@ -515,8 +501,6 @@ describe("510: an upload the store's installation test refused is the person's t
     expect(storeRunUnavailable(409, INSTALL_BODY)).toBeNull();
     expect(storeRunUnavailable(404, INSTALL_BODY)).toBeNull();
 
-    expect(storeRunUnavailable(409, LANE_BODY)).toMatchObject({ code: "STORE_RUN_UNAVAILABLE" });
-    expect(storeRefusedInstall(409, LANE_BODY)).toBeNull();
     expect(storeRunUnavailable(404, RUN_BODY)).toMatchObject({ status: 404 });
     expect(storeRefusedInstall(404, RUN_BODY)).toBeNull();
 

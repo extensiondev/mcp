@@ -78,26 +78,6 @@ describe("extension_submit_check takes the calls that only read or ask, under a 
     expect(world.calls.filter((call) => `${call.method} ${call.path}` === STORE_SEND).map((call) => call.body.dryRun)).toEqual([true]);
   });
 
-  it("asks no human while the platform cannot take the submission: a dry run answering STORE_RUN_UNAVAILABLE is platform-unavailable with no approval POST (ledger 508)", async () => {
-    world.login();
-    world.routes.push([
-      /^POST \/api\/cli\/stores\/submit$/,
-      () => ({ status: 409, body: { code: "STORE_RUN_UNAVAILABLE", approvalRefunded: true, message: "Store submissions for this project run on the build lane, which is not taking them yet." } }),
-    ]);
-
-    const asked = await world.call("extension_submit_check", { browsers: ["chrome"], buildSha: "603fc8a", dryRun: false, ...api });
-    const dry = await world.call("extension_submit_check", { browsers: ["chrome"], buildSha: "603fc8a", ...api });
-
-    expect(asked.command).toBe("extension_submit_check");
-    expect(asked.status).toBe(PLATFORM_UNAVAILABLE_STATUS);
-    expect(asked.value).toMatchObject({ owner: "platform", refusedBeforeApproval: true });
-    expect(asked.hint).toContain(PLATFORM_UNAVAILABLE_SENTENCE);
-    expect(dry.status).toBe(PLATFORM_UNAVAILABLE_STATUS);
-    expect(dry.value.approvalRefunded).toBeUndefined();
-    expect(sent()).not.toContain("POST /api/cli/approvals");
-    expect(sent().filter((call) => call === STORE_SEND)).toHaveLength(2);
-  });
-
   it("names the publisher's two default extension slots on a first Chrome item as an advisory, and on the real submit's unlinked-item stop (ledger 510)", async () => {
     world.login();
     world.routes.push([

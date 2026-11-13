@@ -18,7 +18,6 @@ type Row = Record<string, unknown>;
 
 export const PLATFORM_UNAVAILABLE_STATUS = "platform-unavailable";
 export const STORE_RUN_CHECK = "platform.store_run";
-export const STORE_RUN_UNAVAILABLE_CODE = "STORE_RUN_UNAVAILABLE";
 export const MIRRORS_FROZEN_CODE = "MIRRORS_FROZEN";
 export const STORE_ACT_NOT_ON_LANE_CODE = "STORE_ACT_NOT_ON_LANE";
 export const PLATFORM_UNAVAILABLE_SENTENCE =
@@ -48,7 +47,7 @@ export function storeRunUnavailable(status: number, body: unknown): StoreRunUnav
   const actRefusal = code === MIRRORS_FROZEN_CODE || code === STORE_ACT_NOT_ON_LANE_CODE;
   const own = actRefusal && text(row.act) && platformLine ? { ownSentence: platformLine } : {};
 
-  if (status === 409 && (code === STORE_RUN_UNAVAILABLE_CODE || actRefusal)) return { status, code, platformLine, ...own };
+  if (status === 409 && actRefusal) return { status, code, platformLine, ...own };
   if (status === 404 && MISSING_STORE_RUN.test(platformLine)) return { status, code, platformLine };
 
   return null;

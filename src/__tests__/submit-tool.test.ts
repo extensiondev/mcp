@@ -356,22 +356,18 @@ describe("extension_submit: platform submit handler", () => {
     expect(JSON.stringify(out, (key, value) => (key === "platformLine" ? undefined : value))).not.toMatch(/workflow|store\.yml|fix the cause/i);
   });
 
-  it("reads approvalRefunded from a 409 STORE_RUN_UNAVAILABLE answer and says the approval was not spent", async () => {
+  it("answers a 503 with a code it does not know, such as an older platform's STORE_RUN_UNAVAILABLE, as a plain submit failure in the platform's words", async () => {
     process.env.EXTENSION_DEV_TOKEN = claimsToken("acme", "widget");
-    global.fetch = (async () =>
-      jsonResponse(
-        { code: "STORE_RUN_UNAVAILABLE", approvalRefunded: true, message: "Store submissions for this project run on the build lane, which is not taking them yet. Nothing was sent to the store, and your approval was not spent." },
-        false,
-        409,
-      )) as unknown as typeof fetch;
+    const line = "Store submissions for this project run on the build lane, which is not taking them yet.";
+    global.fetch = (async () => jsonResponse({ code: "STORE_RUN_UNAVAILABLE", message: line }, false, 503)) as unknown as typeof fetch;
 
-    const out = JSON.parse(await handler({ browsers: ["firefox"], buildSha: "4cec881", dryRun: false, approvalId: "apr_508" }));
+    const out = JSON.parse(await handler({ browsers: ["firefox"], buildSha: "4cec881" }));
 
-    expect(out.status).toBe(PLATFORM_UNAVAILABLE_STATUS);
-    expect(out.error.platformCode).toBe("STORE_RUN_UNAVAILABLE");
-    expect(out.value.approvalRefunded).toBe(true);
-    expect(out.hint).toContain("approval apr_508 was not spent");
-    expect(out.hint).not.toContain("extension_approvals");
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("submit-failed");
+    expect(out.error).toMatchObject({ code: "E_PLATFORM", name: "SubmitError", platformCode: "STORE_RUN_UNAVAILABLE" });
+    expect(out.error.message).toBe(`preflight failed (503): ${line}`);
+    expect(JSON.stringify(out)).not.toContain("undefined");
   });
 });
 
