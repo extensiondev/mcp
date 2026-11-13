@@ -491,4 +491,44 @@ describe("extension_builds answers one truth per build", () => {
     expect(out.hint).not.toContain("preview");
     expect(out.hint).not.toContain("held by");
   });
+
+  const UNAVAILABLE_SENTENCES = {
+    lane_runs: "The build lane did not answer, so runs without a registry record, such as a build still running, are missing from this list.",
+    channel_pins: "Channel pins did not answer, so no row shows its channel right now.",
+    history: "The former names' history did not answer, so builds published before a rename may be missing.",
+    head: "The head could not be read, so whether the latest push is owed a build is not known.",
+  } as const;
+  const READ_AGAIN = 'Call extension_builds action:"list" again shortly to read the list once they answer.';
+
+  it.each(Object.entries(UNAVAILABLE_SENTENCES))("ledger 588: a list whose %s read did not answer says so and asks to read again shortly", async (code, sentence) => {
+    body = { items: [TWO_STAMPS], unavailable: [code] };
+
+    const out = await list();
+
+    expect(out.value.unavailable).toEqual([code]);
+    expect(out.value.sayToPerson).toBe(sentence);
+    expect(out.hint).toContain(`${sentence} ${READ_AGAIN}`);
+  });
+
+  it("ledger 588: speaks every missing read once, in one fixed order, and drops codes it does not know", async () => {
+    body = { items: [TWO_STAMPS], unavailable: ["head", "registry_moon", "lane_runs", "head"] };
+
+    const out = await list();
+
+    expect(out.value.unavailable).toEqual(["lane_runs", "head"]);
+    expect(out.value.sayToPerson).toBe(`${UNAVAILABLE_SENTENCES.lane_runs} ${UNAVAILABLE_SENTENCES.head}`);
+  });
+
+  it("ledger 588: an answer without unavailable reads as complete, exactly as before", async () => {
+    for (const extra of [{}, { unavailable: [] }, { unavailable: "lane_runs" }]) {
+      body = { items: [TWO_STAMPS], ...extra };
+
+      const out = await list();
+
+      expect(out.value).not.toHaveProperty("unavailable");
+      expect(out.value).not.toHaveProperty("sayToPerson");
+      expect(out.hint).not.toContain("again shortly");
+      expect(out.hint).toBe('1 recent build of acme/hands, newest first; the latest is 603fc8a (success). Pass action:"get" or action:"logs" with a buildId to read one.');
+    }
+  });
 });

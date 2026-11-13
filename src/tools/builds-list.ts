@@ -19,8 +19,11 @@ import {
   listRow,
   oneStampWarning,
   pinsWords,
+  READ_AGAIN_SENTENCE,
   rowWords,
   text,
+  unavailableReads,
+  unavailableSentences,
 } from "../lib/builds-list-row";
 import { consoleProjectUrl } from "../lib/registry";
 import { envelope } from "../lib/envelope";
@@ -66,6 +69,7 @@ export async function listBuilds(command: string, args: ListArgs): Promise<strin
     pushRefusal?: unknown;
     lastPush?: unknown;
     headLag?: unknown;
+    unavailable?: unknown;
   }>(opened.api, "builds", { limit });
 
   if (!read.ok) return projectApiReadFailure(command, read, { api: args.api, name: "Builds", value: { action: "list" } });
@@ -77,7 +81,9 @@ export async function listBuilds(command: string, args: ListArgs): Promise<strin
   const cancelledSentences = rows.filter((row) => row.status === "cancelled").map((row) => cancelledSentence(text(row.buildId), row.supersededBy, buildNumberOf(row)));
   const push = lastPushView(isRow(read.json?.lastPush) ? read.json.lastPush : null, rows);
   const headLag = headLagView(isRow(read.json?.headLag) && text(read.json.headLag.message) ? read.json.headLag : null);
-  const spoken = [...(headLag ? [text(headLag.message)] : []), ...cancelledSentences];
+  const unavailable = unavailableReads(read.json?.unavailable);
+  const missing = unavailableSentences(unavailable);
+  const spoken = [...missing, ...(headLag ? [text(headLag.message)] : []), ...cancelledSentences];
   const noted = [push.sentence, browsersPendingSentence(rows)].filter((s): s is string => Boolean(s));
   const latest = rows[0];
   const latestPins = latest ? pinsWords(channelsOf(latest)) : null;
@@ -101,12 +107,13 @@ export async function listBuilds(command: string, args: ListArgs): Promise<strin
       ...(read.json?.pushRefusal ? { pushRefusal: read.json.pushRefusal } : {}),
       ...(push.lastPush ? { lastPush: push.lastPush } : {}),
       ...(headLag ? { headLag } : {}),
+      ...(unavailable.length ? { unavailable } : {}),
       ...(unlisted ? { dispatched: { buildId: unlisted.sha, dispatchedAt: unlisted.dispatchedAt } } : {}),
       buildsPageUrl,
       trackUrl: buildsPageUrl,
       ...(spoken.length ? { sayToPerson: spoken.join(" ") } : {}),
     },
-    hint: `${headLag ? `${text(headLag.message)} ` : ""}${
+    hint: `${missing.length ? `${missing.join(" ")} ${READ_AGAIN_SENTENCE} ` : ""}${headLag ? `${text(headLag.message)} ` : ""}${
       latest
         ? `${rows.length} recent build${rows.length === 1 ? "" : "s"} of ${project}, newest first; the latest is ${rowWords(latest, text(latest.status) || "status unknown")}${latestPins ? `, ${latestPins}` : ""}. Pass action:"get" or action:"logs" with a buildId to read one.${
             rows.some((row) => row.status === "partial") ? " A partial build finished with at least one browser failed; failedBrowsers names them." : ""
