@@ -1,10 +1,19 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, parse } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { defineConfig } from "vitest/config";
 
 const here = dirname(fileURLToPath(import.meta.url));
+
+const runTmp = mkdtempSync(join(tmpdir(), "mcp-test-"));
+Object.assign(process.env, { TMPDIR: runTmp, TMP: runTmp, TEMP: runTmp });
+process.once("exit", () => {
+  try {
+    rmSync(runTmp, { recursive: true, force: true });
+  } catch {}
+});
 
 const findPackageDir = (pkg: string) => {
   const { root } = parse(here);
