@@ -9,6 +9,7 @@
 import { projectApiSend, type ProjectApi, type ProjectApiRead } from "./project-api";
 import { spokenDate } from "./publish-link";
 import { isRow, text } from "./ship-act";
+import { byHandFields, byHandSentence, STORE_ACT_NOT_ON_LANE_CODE } from "./store-act-by-hand";
 import { STORE_MD_FILENAME } from "./store-md";
 
 import type { ListingStore } from "./store-md-listing";
@@ -35,6 +36,10 @@ export interface PushState {
   dispatchedAt?: string;
   retryHint?: string;
   reason?: string;
+  code?: string;
+  handPath?: string;
+  handUrl?: string;
+  notOnLane?: true;
   fieldsWritten?: number;
   checkedAt?: string;
   landedAt?: string;
@@ -65,6 +70,15 @@ function owedOf(value: unknown): OwedField[] {
  * the run, a run id or a mirror. An older platform answers dispatched true
  * or false with a reason, which reads as dispatched or failed here.
  */
+const NOT_ON_LANE = "not-on-lane";
+
+const NOT_ON_LANE_SENTENCE =
+  "Pushing the App Store listing does not run on the extension.dev lane yet, so the listing was saved here and not pushed to the store.";
+
+export function notOnLaneSentence(state: Pick<PushState, "reason" | "handPath">): string {
+  return byHandSentence(state.reason || NOT_ON_LANE_SENTENCE, { ...(state.handPath ? { handPath: state.handPath } : {}) });
+}
+
 export function readPushState(raw: unknown): PushState | null {
   if (!isRow(raw)) return null;
 
@@ -90,6 +104,10 @@ export function readPushState(raw: unknown): PushState | null {
   if (text(raw.dispatchedAt)) state.dispatchedAt = text(raw.dispatchedAt);
   if (text(raw.retryHint)) state.retryHint = text(raw.retryHint);
   if (reason) state.reason = reason;
+  if (text(raw.code)) state.code = text(raw.code);
+  if (text(raw.handPath)) state.handPath = text(raw.handPath);
+  if (text(raw.handUrl)) state.handUrl = text(raw.handUrl);
+  if (text(raw.reason) === NOT_ON_LANE || state.code === STORE_ACT_NOT_ON_LANE_CODE) state.notOnLane = true;
   if (fields !== undefined) state.fieldsWritten = fields;
   if (text(raw.checkedAt)) state.checkedAt = text(raw.checkedAt);
   if (text(raw.landedAt)) state.landedAt = text(raw.landedAt);
@@ -145,7 +163,9 @@ export function pushAnswer(raw: unknown, resend: Resend, trackUrl: string): Row 
   const state = readPushState(raw);
   if (!state && resend !== "refused") return null;
 
-  return { ...(state ?? { status: "unchanged" }), ...(resend === "refused" ? { resend: "refused" } : {}), trackUrl };
+  const byHand = state?.notOnLane && state.handPath ? { nextStep: byHandFields(notOnLaneSentence(state), state).nextStep } : {};
+
+  return { ...(state ?? { status: "unchanged" }), ...(resend === "refused" ? { resend: "refused" } : {}), trackUrl, ...byHand };
 }
 
 const STORE_MD_LINES: Record<string, string> = {
@@ -211,6 +231,8 @@ export function heldSentence(landedAt: string | undefined): string {
 }
 
 export function pushSentence(state: PushState, resend: Resend): string {
+  if (state.notOnLane) return notOnLaneSentence(state);
+
   const at = state.landedAt || state.checkedAt;
   const when = at ? ` at ${spokenDate(at)}` : "";
   const effective =

@@ -10,6 +10,7 @@ import { envelope } from "./envelope";
 import { platformApiGet, type ProjectApi } from "./project-api";
 import { WRITE_FAILURE_REPORT_URL } from "./settings-write";
 import { isRow, text } from "./ship-act";
+import { byHandFields, byHandSentence, offLaneHandOf, STORE_ACT_NOT_ON_LANE_CODE, type StoreActByHand } from "./store-act-by-hand";
 import { nextStep } from "./store-connection";
 
 import type { CredentialRef } from "./credential-source";
@@ -19,7 +20,7 @@ type Row = Record<string, unknown>;
 export const PLATFORM_UNAVAILABLE_STATUS = "platform-unavailable";
 export const STORE_RUN_CHECK = "platform.store_run";
 export const MIRRORS_FROZEN_CODE = "MIRRORS_FROZEN";
-export const STORE_ACT_NOT_ON_LANE_CODE = "STORE_ACT_NOT_ON_LANE";
+export { STORE_ACT_NOT_ON_LANE_CODE };
 export const PLATFORM_UNAVAILABLE_SENTENCE =
   "The platform cannot take this store submission right now; nothing in your project causes it, and no approval will be asked until it can";
 
@@ -30,6 +31,7 @@ export interface StoreRunUnavailable {
   code: string;
   platformLine: string;
   ownSentence?: string;
+  hand?: StoreActByHand;
 }
 
 /* @invariant A STORE ACT THE PLATFORM NAMES AS NOT ON ITS LANE YET IS SAID IN
@@ -45,7 +47,8 @@ export function storeRunUnavailable(status: number, body: unknown): StoreRunUnav
   const code = text(row.code);
   const platformLine = text(row.message);
   const actRefusal = code === MIRRORS_FROZEN_CODE || code === STORE_ACT_NOT_ON_LANE_CODE;
-  const own = actRefusal && text(row.act) && platformLine ? { ownSentence: platformLine } : {};
+  const hand = status === 409 ? offLaneHandOf(code, row) : null;
+  const own = hand ? { ownSentence: byHandSentence(platformLine, hand), hand } : actRefusal && text(row.act) && platformLine ? { ownSentence: platformLine } : {};
 
   if (status === 409 && actRefusal) return { status, code, platformLine, ...own };
   if (status === 404 && MISSING_STORE_RUN.test(platformLine)) return { status, code, platformLine };
@@ -85,6 +88,7 @@ export interface ReportScope {
   stores: string[];
   buildSha: string;
   ownSentence?: string;
+  hand?: StoreActByHand;
 }
 
 export function reportSentence(scope: ReportScope): string {
@@ -111,6 +115,7 @@ export function storeRunCheck(found: StoreRunUnavailable, scope: ReportScope): R
 }
 
 export function platformUnavailableStep(scope: ReportScope) {
+  if (scope.ownSentence && scope.hand) return byHandFields(scope.ownSentence, scope.hand).nextStep;
   if (scope.ownSentence) return nextStep("watch", scope.ownSentence);
 
   return nextStep("watch", `${PLATFORM_UNAVAILABLE_SENTENCE}. ${reportSentence(scope)}`, WRITE_FAILURE_REPORT_URL);
@@ -167,7 +172,8 @@ export function platformUnavailableAnswer(args: PlatformUnavailableAnswer): stri
       ...(own ? {} : { reportUrl: WRITE_FAILURE_REPORT_URL }),
       platformLine: args.found.platformLine,
       sayToPerson: say,
-      nextStep: platformUnavailableStep({ ...args, ...(own ? { ownSentence: own } : {}) }),
+      nextStep: platformUnavailableStep({ ...args, ...(own ? { ownSentence: own } : {}), ...(args.found.hand ? { hand: args.found.hand } : {}) }),
+      ...(own && args.found.hand ? byHandFields(own, args.found.hand) : {}),
     },
     hint: report ? `${say} ${report}` : say,
   });

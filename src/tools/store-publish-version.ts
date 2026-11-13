@@ -21,6 +21,7 @@ import { envelope, isEnvelope } from "../lib/envelope";
 import { projectApiReadFailure, projectApiSend, tokenRefusal } from "../lib/project-api";
 import { consoleProjectUrl } from "../lib/registry";
 import { badShipRequest, isRow, openShipApi, text } from "../lib/ship-act";
+import { byHandFields, byHandSentence, offLaneHandOf, type ByHandFields } from "../lib/store-act-by-hand";
 import { nextStep } from "../lib/store-connection";
 
 type Row = Record<string, unknown>;
@@ -51,7 +52,7 @@ type StoreRow = {
   buildId?: string;
   approvalRefunded?: boolean;
   lines: ApprovalLineRow[];
-};
+} & Partial<Pick<ByHandFields, "handPath" | "handUrl" | "nextStep">>;
 
 function withApproveStep(out: string, stores: string[]): string {
   let parsed: unknown;
@@ -163,12 +164,15 @@ export async function publishVersion(args: PublishVersionArgs, stores: string[])
     }
 
     const body = isRow(sent.body) ? sent.body : {};
+    const hand = offLaneHandOf(sent.code, body);
+    const message = hand ? byHandSentence(text(body.message) || sent.message, hand) : sent.message;
 
     rows.push({
       store,
       status: "refused",
       code: sent.code,
-      message: sent.message,
+      message,
+      ...(hand ? { ...hand, nextStep: byHandFields(message, hand).nextStep } : {}),
       ...(body.approvalRefunded === true ? { approvalRefunded: true } : {}),
       lines: readLines(body.lines),
     });
@@ -192,6 +196,7 @@ export async function publishVersion(args: PublishVersionArgs, stores: string[])
   ]
     .filter(Boolean)
     .join(" ");
+  const byHand = sent.length === 0 && refused.some((row) => row.handPath);
   const status = sent.length === 0 ? "publish-failed" : queued.length === rows.length ? "publish-queued" : "publish-dispatched";
 
   return envelope({
@@ -207,7 +212,7 @@ export async function publishVersion(args: PublishVersionArgs, stores: string[])
       lines,
       trackUrl: storesPageUrl,
       sayToPerson: say,
-      nextStep: nextStep("done", say, storesPageUrl),
+      nextStep: byHand ? nextStep("dashboard", say, refused.find((row) => row.handUrl)?.handUrl) : nextStep("done", say, storesPageUrl),
     },
     ...(sent.length === 0
       ? {

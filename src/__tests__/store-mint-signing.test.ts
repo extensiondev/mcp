@@ -73,6 +73,25 @@ describe("extension_submit mint-signing runs the Safari signing mint under one o
     expect(platform.calls.filter((sent) => sent.path.endsWith("/stores/config"))).toHaveLength(0);
   });
 
+  it("604: a mint the lane does not run names the Apple Developer hand path as the next step and asks for nothing", async () => {
+    const handPath = "open Certificates, Identifiers and Profiles in the Apple Developer account and create the signing certificate and provisioning profile";
+    const message = `Minting App Store signing assets does not run on the extension.dev lane yet, so nothing was minted and no approval was asked for or spent. To do it now, ${handPath}.`;
+    platform.login();
+    platform.routes[`POST ${MINT}`] = () => ({
+      status: 409,
+      body: { code: "STORE_ACT_NOT_ON_LANE", store: "safari", act: "mint", handPath, refusedBeforeApproval: true, message },
+    });
+
+    const out = await call({ action: "mint-signing", store: "safari" });
+
+    expect(out.status).toBe("mint-signing-refused");
+    expect(out.error).toMatchObject({ platformCode: "STORE_ACT_NOT_ON_LANE", message });
+    expect(out.value).toMatchObject({ owner: "store", handPath, sayToPerson: message, refusedBeforeApproval: true });
+    expect(out.value.nextStep).toEqual({ kind: "dashboard", say: message, url: null });
+    expect(out.hint.startsWith(message)).toBe(true);
+    expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
+  });
+
   it("answers mint-dispatched with the record's fields and the track page once the approvalId is carried", async () => {
     platform.login();
     platform.routes[`POST ${MINT}`] = () => ({ status: 202, body: DISPATCHED });

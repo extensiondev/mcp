@@ -19,6 +19,7 @@ import { identityHeaders } from "./session-identity";
 import { STORE_LABELS } from "./store-categories";
 import { storeReadsOf, type StoreReadView } from "./store-reads";
 
+import type { StoreActByHand } from "./store-act-by-hand";
 import type { ListingStore } from "./store-md-declarations";
 
 const IN_REVIEW_STATUSES: ReadonlySet<string> = new Set(["pending", "submitted"]);
@@ -616,10 +617,7 @@ export async function readSubmissionRecord(
   return { ok: true, record: found ?? null };
 }
 
-export interface StoreActByHand {
-  handPath?: string;
-  handUrl?: string;
-}
+export type { StoreActByHand } from "./store-act-by-hand";
 
 /* @invariant AN ACT THE PLATFORM SAYS IT CANNOT RUN IS NAMED BY HAND BEFORE
  * ANY APPROVAL IS ASKED. The submissions read answers `storeActs` per store

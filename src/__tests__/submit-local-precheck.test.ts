@@ -182,6 +182,17 @@ describe("a real submit runs the preflight's two local checks before the approva
     expect(storeRunUnavailable(500, { message: NO_STORE_RUN })).toBeNull();
   });
 
+  it("604: reads the hand path and its address off a STORE_ACT_NOT_ON_LANE refusal, and none off a body without one", () => {
+    const handPath = "open the app in App Store Connect and add the build for review";
+    const message = "Submitting to the App Store does not run on the extension.dev lane yet, so nothing was sent to the store and no approval was asked for or spent.";
+    const found = storeRunUnavailable(409, { code: "STORE_ACT_NOT_ON_LANE", store: "safari", act: "submit", handPath, handUrl: "https://appstoreconnect.apple.com/apps", message })!;
+
+    expect(found.hand).toEqual({ handPath, handUrl: "https://appstoreconnect.apple.com/apps" });
+    expect(found.ownSentence).toBe(`${message} To do it now, ${handPath}.`);
+    expect(storeRunUnavailable(409, { code: "STORE_ACT_NOT_ON_LANE", store: "safari", act: "submit", message })).not.toHaveProperty("hand");
+    expect(storeRunUnavailable(409, { code: "MIRRORS_FROZEN", act: "submit", handPath, message })).not.toHaveProperty("hand");
+  });
+
   it("567: says a Safari submit the platform cannot run yet in the platform's own words, with no approval and no report link", async () => {
     const frozen =
       "Submitting to the App Store does not run on the extension.dev lane yet, and the old run path it used is frozen, so nothing was sent to the store and no approval was asked for or spent. Leave safari out of this call until the lane runs it.";

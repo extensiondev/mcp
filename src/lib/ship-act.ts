@@ -25,6 +25,7 @@ import {
   type ProjectApiRefusal,
 } from "./project-api";
 import { pricedRefusal } from "./platform-hold";
+import { byHandFields, byHandSentence, offLaneHandOf } from "./store-act-by-hand";
 
 type Row = Record<string, unknown>;
 
@@ -212,7 +213,9 @@ function storeStateFields(code: string, body: Row): Row {
 function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string {
   const body = isRow(read.body) ? read.body : {};
   const before = body.refusedBeforeApproval === true;
-  const hint = act.hints?.(read.code, read.retryAfterSeconds) ?? shipRefusalHint(read.code, read.retryAfterSeconds, text(act.value?.store), read.body);
+  const hand = offLaneHandOf(read.code, body);
+  const handSay = hand ? byHandSentence(text(body.message) || read.message, hand) : "";
+  const hint = handSay || (act.hints?.(read.code, read.retryAfterSeconds) ?? shipRefusalHint(read.code, read.retryAfterSeconds, text(act.value?.store), read.body));
   const upgradeUrl = pricedRefusal(read.code, read.body)?.upgradeUrl;
   const ownerOnly = read.code === OWNER_REQUIRED_CODE;
   const status = ownerOnly
@@ -273,13 +276,14 @@ function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string
         : {}),
       ...(read.retryAfterSeconds ? { retryAfterSeconds: read.retryAfterSeconds } : {}),
       ...(upgradeUrl ? { upgradeUrl } : {}),
+      ...(hand ? byHandFields(handSay, hand) : {}),
       ...(refunded ? { approvalId: act.approvalId, approvalRefunded: true, sayToPerson: REFUNDED_SAY, nextStep: REFUNDED_STEP } : {}),
     },
     error: {
       code,
       name: ownerOnly ? "OwnerRequired" : "ActRefused",
       ...(read.code ? { platformCode: read.code } : {}),
-      message: before ? `${closed(read.message)} Nothing ran and no approval was requested.` : read.message,
+      message: hand ? handSay : before ? `${closed(read.message)} Nothing ran and no approval was requested.` : read.message,
     },
     ...(ownerOnly
       ? { hint: "Only a login approved by a workspace owner may do this. Ask an owner to sign in with extension_auth and run it, or to do it in the console." }

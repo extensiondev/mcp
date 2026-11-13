@@ -8,7 +8,7 @@
 
 import { loginMissing, openProjectApi, projectApiGet } from "./project-api";
 import { spokenDate } from "./publish-link";
-import { lockedSentence, readPushState, type OwedField, type PushState } from "./store-listing-push";
+import { lockedSentence, notOnLaneSentence, readPushState, type OwedField, type PushState } from "./store-listing-push";
 
 type Row = Record<string, unknown>;
 
@@ -92,6 +92,8 @@ export function listingPushView(push: PushState): ListingPushView {
   if (push.lockedVersion) view.lockedVersion = push.lockedVersion;
   if (push.lockedState) view.lockedState = push.lockedState;
   if (push.owed?.length) view.owed = push.owed;
+
+  if (push.notOnLane) return { ...view, say: unclosed(notOnLaneSentence(push)) };
 
   return { ...view, say: sentence(view, view.state === "locked" ? push.reason : undefined) };
 }

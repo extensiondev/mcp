@@ -9,7 +9,7 @@
 import { describe, expect, it } from "vitest";
 
 import { listingPushOpen, listingPushView } from "../lib/safari-listing-push-read";
-import { pushSentence, readPushState, sendListing } from "../lib/store-listing-push";
+import { pushAnswer, pushSentence, readPushState, sendListing } from "../lib/store-listing-push";
 import { usePlatformWorld, WORLD_API, WORLD_PROJECT_ID } from "./fixtures/platform-world";
 
 const LOCKED_MESSAGE =
@@ -84,6 +84,47 @@ describe("a locked App Store listing reads as locked, never as a push to retry",
 
     expect(view.say).toContain("Apple refused keywords (Keywords are longer than 100 characters)");
     expect(view.say).not.toContain("Nothing reached App Store Connect");
+  });
+});
+
+const NOT_ON_LANE_HAND = "open the app in App Store Connect and edit the version information";
+const NOT_ON_LANE_MESSAGE = `Pushing the App Store listing does not run on the extension.dev lane yet, so the listing was saved here and not pushed to the store. To do it now, ${NOT_ON_LANE_HAND}.`;
+const NOT_ON_LANE = {
+  status: "failed",
+  runState: "unknown",
+  dispatched: false,
+  reason: "not-on-lane",
+  code: "STORE_ACT_NOT_ON_LANE",
+  message: NOT_ON_LANE_MESSAGE,
+  handPath: NOT_ON_LANE_HAND,
+};
+
+describe("a listing push the lane does not run names App Store Connect by hand, never a sync-listing retry (ledger 604)", () => {
+  it("reads the code and the hand path, says the platform's sentence and offers no resend", () => {
+    const state = readPushState(NOT_ON_LANE)!;
+    const view = listingPushView(state);
+
+    expect(state).toMatchObject({ status: "failed", code: "STORE_ACT_NOT_ON_LANE", handPath: NOT_ON_LANE_HAND, notOnLane: true });
+    expect(pushSentence(state, "none")).toBe(NOT_ON_LANE_MESSAGE);
+    expect(view.say).not.toMatch(RETRY);
+    expect(view.say).toContain(NOT_ON_LANE_HAND);
+  });
+
+  it("the sync answer carries the hand path as a dashboard step, with no retry hint", () => {
+    const answer = pushAnswer(NOT_ON_LANE, "none", "https://console.extension.dev/w/p/stores/safari")!;
+
+    expect(answer).toMatchObject({ code: "STORE_ACT_NOT_ON_LANE", handPath: NOT_ON_LANE_HAND, nextStep: { kind: "dashboard", say: NOT_ON_LANE_MESSAGE, url: null } });
+    expect(answer).not.toHaveProperty("retryHint");
+    expect(JSON.stringify(answer)).not.toContain('action: \\"sync-listing\\"');
+  });
+
+  it("a failed push from a platform that sends neither field answers as before", () => {
+    const { code: _code, handPath: _hand, reason: _reason, ...older } = NOT_ON_LANE;
+    const state = readPushState({ ...older, message: "App Store Connect took none of the listing." })!;
+
+    expect(state).not.toHaveProperty("notOnLane");
+    expect(pushAnswer(older, "none", "https://console.extension.dev/w/p/stores/safari")).not.toHaveProperty("nextStep");
+    expect(pushSentence(state, "none")).toMatch(RETRY);
   });
 });
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { actionFingerprint } from "../lib/approval-gate";
+import { VERSION_ACTION, versionScopeFor } from "../lib/approval-lines";
 import { TOOL_POLICY } from "../lib/tool-policy";
 import { handler as status } from "../tools/release-status";
 import { handler as submit, schema } from "../tools/submit";
@@ -128,6 +129,117 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
 
     expect(named.value.submissionId).toBe("d725c641");
     expect(platform.calls.filter((call) => call.method === "POST")).toHaveLength(0);
+  });
+
+  const offLane = (store: string, act: string, subject: string, handPath?: string, handUrl?: string) => ({
+    status: 409,
+    body: {
+      code: "STORE_ACT_NOT_ON_LANE",
+      store,
+      act,
+      refusedBeforeApproval: true,
+      message: `${subject} does not run on the extension.dev lane yet, so nothing was sent to the store and no approval was asked for or spent. ${handPath ? `To do it now, ${handPath}.` : `Leave ${store} out of this call until the lane runs it.`}`,
+      ...(handPath ? { handPath } : {}),
+      ...(handUrl ? { handUrl } : {}),
+    },
+  });
+
+  const expectByHand = (out: any, handPath: string, handUrl?: string) => {
+    expect(out.ok).toBe(false);
+    expect(out.error.platformCode).toBe("STORE_ACT_NOT_ON_LANE");
+    expect(out.value).toMatchObject({ owner: "store", refusedBeforeApproval: true, handPath });
+    expect(out.value.nextStep).toEqual({ kind: "dashboard", say: out.value.sayToPerson, url: handUrl ?? null });
+    expect(out.value.sayToPerson).toContain(`To do it now, ${handPath}.`);
+    expect(out.hint).toBe(out.value.sayToPerson);
+    expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
+  };
+
+  it("604: publish the lane does not run names the dashboard's hand path as the next step", async () => {
+    if (process.platform === "win32") return;
+
+    const handPath = 'open the item in the Chrome Web Store Developer Dashboard and choose "Submit for review"';
+    platform.login();
+    platform.routes[`POST ${PROJECT_ROUTE}/stores/chrome/publish`] = () => offLane("chrome", "publish", "Sending the Chrome Web Store draft to review", handPath);
+
+    const out = JSON.parse(await submit({ action: "publish", browsers: ["chrome"], api: API }));
+
+    expectByHand(out, handPath);
+    expect(out.status).toBe("publish-refused");
+  });
+
+  it("604: a publish of several stores the lane does not run carries each store's hand path", async () => {
+    if (process.platform === "win32") return;
+
+    const chrome = 'open the item in the Chrome Web Store Developer Dashboard and choose "Submit for review"';
+    const edge = 'open the extension in Partner Center and choose "Publish"';
+    platform.login();
+    const fingerprint = actionFingerprint(VERSION_ACTION, versionScopeFor([{ store: "chrome", act: "publish" }, { store: "edge", act: "publish" }], "603fc8a", ""));
+    platform.routes[`GET ${APPROVALS}/apr_v`] = () => ({ body: { status: "approved", used: false, fingerprint, expiresAt: "2099-01-01T00:00:00.000Z" } });
+    platform.routes[`POST ${PROJECT_ROUTE}/stores/chrome/publish`] = () => offLane("chrome", "publish", "Sending the Chrome Web Store draft to review", chrome);
+    platform.routes[`POST ${PROJECT_ROUTE}/stores/edge/publish`] = () => offLane("edge", "publish", "Sending the Edge Add-ons draft to review", edge, "https://partner.microsoft.com/dashboard/microsoftedge/overview");
+
+    const out = JSON.parse(await submit({ action: "publish", browsers: ["chrome", "edge"], buildSha: "603fc8a", approvalId: "apr_v", api: API }));
+
+    expect(out.status).toBe("publish-failed");
+    expect(out.value.stores.chrome).toMatchObject({ handPath: chrome, nextStep: { kind: "dashboard", url: null } });
+    expect(out.value.stores.edge).toMatchObject({ handPath: edge, handUrl: "https://partner.microsoft.com/dashboard/microsoftedge/overview" });
+    expect(out.value.nextStep).toMatchObject({ kind: "dashboard", url: "https://partner.microsoft.com/dashboard/microsoftedge/overview" });
+  });
+
+  it("604: release the lane does not run names App Store Connect's hand path and its address", async () => {
+    if (process.platform === "win32") return;
+
+    const handPath = 'open the version in App Store Connect and choose "Release This Version"';
+    const handUrl = "https://appstoreconnect.apple.com/apps";
+    platform.login();
+    platform.routes[`POST ${PROJECT_ROUTE}/stores/safari/release`] = () => offLane("safari", "release", "Releasing the App Store version", handPath, handUrl);
+
+    const out = JSON.parse(await submit({ action: "release", browsers: ["safari"], api: API }));
+
+    expectByHand(out, handPath, handUrl);
+    expect(out.value.handUrl).toBe(handUrl);
+    expect(out.status).toBe("release-refused");
+  });
+
+  it("604: rollout the lane does not run names the dashboard's distribution step", async () => {
+    if (process.platform === "win32") return;
+
+    const handPath = 'open the item in the Chrome Web Store Developer Dashboard and raise the percentage under "Distribution"';
+    platform.login();
+    platform.routes[`POST ${ROLLOUT}`] = () => offLane("chrome", "rollout", "Raising the Chrome Web Store rollout", handPath);
+
+    const out = JSON.parse(await submit({ action: "rollout", deployPercentage: 50, api: API }));
+
+    expectByHand(out, handPath);
+    expect(out.status).toBe("rollout-refused");
+  });
+
+  it("604: cancel the route refuses off the lane names the same hand path as the read does", async () => {
+    if (process.platform === "win32") return;
+
+    const handPath = 'open the item in the Chrome Web Store Developer Dashboard and choose "Cancel review"';
+    platform.login();
+    platform.routes[`POST ${CANCEL}`] = () => offLane("chrome", "cancel", "Withdrawing a Chrome Web Store submission from review", handPath);
+
+    const out = JSON.parse(await submit({ action: "cancel", submissionId: SUBMISSION, api: API }));
+
+    expectByHand(out, handPath);
+  });
+
+  it("604: an off-lane refusal with no hand path answers exactly as before, with no dashboard step", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${ROLLOUT}`] = () => offLane("firefox", "rollout", "Raising the Firefox Add-ons rollout");
+
+    const out = JSON.parse(await submit({ action: "rollout", deployPercentage: 50, api: API }));
+
+    expect(out.status).toBe("rollout-refused");
+    expect(out.error.platformCode).toBe("STORE_ACT_NOT_ON_LANE");
+    expect(out.error.message).toContain("Nothing ran and no approval was requested.");
+    expect(out.value).not.toHaveProperty("handPath");
+    expect(out.value).not.toHaveProperty("nextStep");
+    expect(out.value).not.toHaveProperty("owner");
   });
 
   it("cancel of a submission the store is not reviewing says how to find one that is", async () => {
