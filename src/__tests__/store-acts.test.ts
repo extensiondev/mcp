@@ -251,6 +251,10 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
     expect(shipRefusalHint("STORE_ACT_NOT_ON_LANE", undefined, "", chrome)).toBeUndefined();
     expect(shipRefusalHint("PUBLISH_STORE_NOT_SUPPORTED")).toBeUndefined();
     expect(shipRefusalHint("CANCEL_STORE_NOT_SUPPORTED")).toBeUndefined();
+
+    for (const code of ["CANCEL_WORKFLOW_UNSUPPORTED", "ROLLOUT_WORKFLOW_UNSUPPORTED", "PUBLISH_WORKFLOW_UNSUPPORTED", "RELEASE_WORKFLOW_UNSUPPORTED"]) {
+      expect(shipRefusalHint(code)).toBeUndefined();
+    }
   });
 
   it("610: a project with no lane key is named in lane words, and an older www's NO_MIRROR promises no first build", () => {
