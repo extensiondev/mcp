@@ -8,17 +8,52 @@
 
 import { awaitRecordedOutcome, dispatchedHint, madeSentence, missedRead, stampNow } from "../lib/act-outcome";
 import { envelope } from "../lib/envelope";
-import { readSubmissionRecord, readSubmissionsInReview, type PlatformSubmission, type SubmissionDispatch } from "../lib/platform-submissions";
+import { readStoreActByHand, readSubmissionRecord, readSubmissionsInReview, type PlatformSubmission, type StoreActByHand, type SubmissionDispatch } from "../lib/platform-submissions";
+import { nextStep } from "../lib/store-connection";
 import { projectApiGet, type ProjectApi } from "../lib/project-api";
 import { badShipRequest, isRow, openShipApi, runShipAct, text } from "../lib/ship-act";
 import { actLinks, judgeCancel, judgeRollout, trackOf } from "../lib/store-act-outcome";
 import { COMMAND, storeOf, storesRead, type Row, type StoreActArgs } from "./store-acts";
+
+const STORE_TITLES: Record<string, string> = {
+  chrome: "Chrome Web Store",
+  edge: "Edge Add-ons",
+  firefox: "Firefox Add-ons",
+  safari: "App Store",
+};
+
+function cancelByHand(store: string, submissionId: string, byHand: StoreActByHand): string {
+  const title = STORE_TITLES[store] ?? store;
+  const subject = store === "safari" ? "Removing a version from App Review" : `Withdrawing a ${title} submission from review`;
+  const say = `${subject} does not run on the extension.dev platform yet, so nothing was sent and no approval was asked for. ${byHand.handPath ? `To do it now, ${byHand.handPath}.` : `Withdraw it in the ${title}'s own dashboard.`}`;
+
+  return envelope({
+    ok: false,
+    command: COMMAND,
+    status: "cancel-by-hand",
+    value: {
+      action: "cancel",
+      store,
+      ...(submissionId ? { submissionId } : {}),
+      owner: "store",
+      refusedBeforeApproval: true,
+      ...(byHand.handPath ? { handPath: byHand.handPath } : {}),
+      ...(byHand.handUrl ? { handUrl: byHand.handUrl } : {}),
+      sayToPerson: say,
+      nextStep: nextStep("dashboard", say, byHand.handUrl),
+    },
+    error: { code: "E_PLATFORM", name: "CancelNotOnPlatform", message: say },
+    hint: say,
+  });
+}
 
 async function submissionInReview(api: ProjectApi, store: string, args: StoreActArgs): Promise<{ submissionId: string } | { refused: string }> {
   const read = await readSubmissionsInReview(api, store);
   const refuse = (why: string) => ({
     refused: badShipRequest(COMMAND, "cancel", "CancelInputError", `${why} Nothing was sent.`),
   });
+
+  if (read.ok && read.byHand) return { refused: cancelByHand(store, "", read.byHand) };
 
   if (!read.ok) return refuse(`cancel without submissionId reads the ${store} submission in review, and that read failed: ${read.message}. Pass submissionId; ${storesRead(args)} lists them.`);
 
@@ -41,6 +76,9 @@ export async function cancelSubmission(args: StoreActArgs): Promise<string> {
   const named = text(args.submissionId);
   const opened = await openShipApi(COMMAND, args, { action: "cancel", store, ...(named ? { submissionId: named } : {}) });
   if ("refused" in opened) return opened.refused;
+
+  const byHand = named && !text(args.approvalId) ? await readStoreActByHand(opened.api, store, "cancel") : null;
+  if (byHand) return cancelByHand(store, named, byHand);
 
   const resolved = named ? { submissionId: named } : await submissionInReview(opened.api, store, args);
   if ("refused" in resolved) return resolved.refused;

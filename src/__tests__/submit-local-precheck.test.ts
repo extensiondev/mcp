@@ -183,6 +183,11 @@ describe("a real submit runs the preflight's two local checks before the approva
 
     expect(storeRunUnavailable(409, { code: "MIRRORS_FROZEN", message: "The mirrors are frozen." })).toMatchObject({ code: "MIRRORS_FROZEN" });
     expect(storeRunUnavailable(409, { code: "MIRRORS_FROZEN", message: "The mirrors are frozen." })).not.toHaveProperty("ownSentence");
+    expect(storeRunUnavailable(409, { code: "STORE_ACT_NOT_ON_LANE", store: "safari", act: "submit", message: "Submitting to the App Store does not run on the extension.dev lane yet." })).toMatchObject({
+      code: "STORE_ACT_NOT_ON_LANE",
+      ownSentence: "Submitting to the App Store does not run on the extension.dev lane yet.",
+    });
+
     expect(storeRunUnavailable(404, { message: "No store submission workflow (store.yml) found on the project's mirror repository." })).toMatchObject({ status: 404 });
     expect(storeRunUnavailable(404, { message: "Build not found", code: "UNKNOWN_BUILD" })).toBeNull();
     expect(storeRunUnavailable(404, { message: "not found" })).toBeNull();

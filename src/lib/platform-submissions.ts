@@ -616,12 +616,50 @@ export async function readSubmissionRecord(
   return { ok: true, record: found ?? null };
 }
 
+export interface StoreActByHand {
+  handPath?: string;
+  handUrl?: string;
+}
+
+/* @invariant AN ACT THE PLATFORM SAYS IT CANNOT RUN IS NAMED BY HAND BEFORE
+ * ANY APPROVAL IS ASKED. The submissions read answers `storeActs` per store
+ * and act from the same decision that refuses the act with 409 (ledger 573);
+ * a store act it marks `onPlatform: false` answers the store's own hand path,
+ * and a read that carries no verdict leaves the act to the route, which
+ * stays the backstop.
+ */
+export function storeActByHandOf(json: unknown, store: string, act: "submit" | "cancel"): StoreActByHand | null {
+  const acts = json && typeof json === "object" ? (json as { storeActs?: unknown }).storeActs : null;
+  const perStore = acts && typeof acts === "object" ? (acts as Record<string, unknown>)[store] : null;
+  const verdict = perStore && typeof perStore === "object" ? (perStore as Record<string, unknown>)[act] : null;
+
+  if (!verdict || typeof verdict !== "object" || (verdict as { onPlatform?: unknown }).onPlatform !== false) return null;
+
+  const handPath = str((verdict as { handPath?: unknown }).handPath);
+  const handUrl = str((verdict as { handUrl?: unknown }).handUrl);
+
+  return { ...(handPath ? { handPath } : {}), ...(handUrl ? { handUrl } : {}) };
+}
+
+export async function readStoreActByHand(
+  api: Pick<ProjectApi, "base" | "token" | "command">,
+  store: string,
+  act: "submit" | "cancel",
+): Promise<StoreActByHand | null> {
+  const read = await platformApiGet<Record<string, unknown>>(api, "/api/cli/stores/submissions").catch(() => null);
+
+  return read && read.ok ? storeActByHandOf(read.json, store, act) : null;
+}
+
 export async function readSubmissionsInReview(
   api: Pick<ProjectApi, "base" | "token" | "command">,
   store: string,
-): Promise<RecordRead<PlatformSubmission[]>> {
+): Promise<RecordRead<PlatformSubmission[]> & { byHand?: StoreActByHand | null }> {
   const read = await platformApiGet<{ submissions?: unknown }>(api, "/api/cli/stores/submissions");
   if (!read.ok) return missedRead(read);
+
+  const byHand = storeActByHandOf(read.json, store, "cancel");
+  if (byHand) return { ok: true, record: [], byHand };
 
   const rows = Array.isArray(read.json.submissions) ? read.json.submissions : null;
   if (!rows) return { ok: false, message: `${api.base}/api/cli/stores/submissions answered without a list of submissions` };

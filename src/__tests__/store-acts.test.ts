@@ -105,6 +105,31 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
     expect(platform.calls.filter((call) => call.method === "POST")).toHaveLength(0);
   });
 
+  it("573: cancel the platform cannot run names the store's hand path and sends no cancel and no approval", async () => {
+    if (process.platform === "win32") return;
+
+    const handPath = 'open the version in App Store Connect and choose "Remove from Review"';
+    const handUrl = "https://appstoreconnect.apple.com/apps";
+    const storeActs = { safari: { submit: { onPlatform: false }, cancel: { onPlatform: false, handPath, handUrl } } };
+    platform.login();
+    platform.routes["GET /api/cli/stores/submissions"] = () => ({
+      body: { submissions: [{ id: "d725c641", store: "safari", status: "submitted", version: "0.3.0" }], storeActs },
+    });
+
+    const named = JSON.parse(await submit({ action: "cancel", store: "safari", submissionId: "d725c641", api: API }));
+    const unnamed = JSON.parse(await submit({ action: "cancel", store: "safari", api: API }));
+
+    for (const out of [named, unnamed]) {
+      expect(out.status).toBe("cancel-by-hand");
+      expect(out.value).toMatchObject({ refusedBeforeApproval: true, handPath, handUrl });
+      expect(out.value.nextStep).toEqual({ kind: "dashboard", say: out.hint, url: handUrl });
+      expect(out.hint).toContain(`To do it now, ${handPath}.`);
+    }
+
+    expect(named.value.submissionId).toBe("d725c641");
+    expect(platform.calls.filter((call) => call.method === "POST")).toHaveLength(0);
+  });
+
   it("cancel of a submission the store is not reviewing says how to find one that is", async () => {
     if (process.platform === "win32") return;
 

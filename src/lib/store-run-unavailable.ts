@@ -20,6 +20,7 @@ export const PLATFORM_UNAVAILABLE_STATUS = "platform-unavailable";
 export const STORE_RUN_CHECK = "platform.store_run";
 export const STORE_RUN_UNAVAILABLE_CODE = "STORE_RUN_UNAVAILABLE";
 export const MIRRORS_FROZEN_CODE = "MIRRORS_FROZEN";
+export const STORE_ACT_NOT_ON_LANE_CODE = "STORE_ACT_NOT_ON_LANE";
 export const PLATFORM_UNAVAILABLE_SENTENCE =
   "The platform cannot take this store submission right now; nothing in your project causes it, and no approval will be asked until it can";
 
@@ -33,19 +34,21 @@ export interface StoreRunUnavailable {
 }
 
 /* @invariant A STORE ACT THE PLATFORM NAMES AS NOT ON ITS LANE YET IS SAID IN
- * THE PLATFORM'S OWN SENTENCE. A 409 MIRRORS_FROZEN that names its store and
- * act (a Safari submit while only Chrome, Edge and Firefox run on the lane)
- * is not an outage to report: the platform says which store to leave out or
- * the store's own hand path, and that sentence is what the person reads
- * (ledger 567). Every other platform fault keeps the generic report sentence.
+ * THE PLATFORM'S OWN SENTENCE. A 409 MIRRORS_FROZEN or STORE_ACT_NOT_ON_LANE
+ * that names its store and act (a Safari submit while only Chrome, Edge and
+ * Firefox run on the lane) is not an outage to report: the platform says
+ * which store to leave out or the store's own hand path, and that sentence
+ * is what the person reads (ledger 567). Every other platform fault keeps
+ * the generic report sentence.
  */
 export function storeRunUnavailable(status: number, body: unknown): StoreRunUnavailable | null {
   const row = isRow(body) ? body : {};
   const code = text(row.code);
   const platformLine = text(row.message);
-  const own = code === MIRRORS_FROZEN_CODE && text(row.act) && platformLine ? { ownSentence: platformLine } : {};
+  const actRefusal = code === MIRRORS_FROZEN_CODE || code === STORE_ACT_NOT_ON_LANE_CODE;
+  const own = actRefusal && text(row.act) && platformLine ? { ownSentence: platformLine } : {};
 
-  if (status === 409 && (code === STORE_RUN_UNAVAILABLE_CODE || code === MIRRORS_FROZEN_CODE)) return { status, code, platformLine, ...own };
+  if (status === 409 && (code === STORE_RUN_UNAVAILABLE_CODE || actRefusal)) return { status, code, platformLine, ...own };
   if (status === 404 && MISSING_STORE_RUN.test(platformLine)) return { status, code, platformLine };
 
   return null;
