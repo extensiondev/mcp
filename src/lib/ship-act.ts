@@ -25,7 +25,7 @@ import {
   type ProjectApiRefusal,
 } from "./project-api";
 import { pricedRefusal } from "./platform-hold";
-import { byHandFields, byHandSentence, offLaneHandOf } from "./store-act-by-hand";
+import { byHandFields, byHandSentence, offLaneHandOf, offLaneTruthOf } from "./store-act-by-hand";
 
 type Row = Record<string, unknown>;
 
@@ -87,8 +87,6 @@ function oneOf(words: string[]): string {
   return words.length > 1 ? `${words.slice(0, -1).join(", ")} or ${words[words.length - 1]}` : words.join("");
 }
 
-const PUBLISH_STORE_WORDS = oneOf(Object.values(DRAFT_LABELS));
-
 export const PUBLISH_BROWSERS_WORDS = oneOf(PUBLISH_STORES.map((store) => `["${store}"]`));
 
 const HINTS: Record<string, string> = {
@@ -100,11 +98,11 @@ const HINTS: Record<string, string> = {
   ROLLBACK_HISTORY_UNREADABLE: "The platform could not read the channel's history just now, so it did not guess. Call again in a moment.",
   ROLLBACK_TARGET_MOVED: "The channel's history moved since this was asked. Call again with no approvalId for an approval of the build it would return to now.",
   RELEASE_WORKFLOW_NOT_FOUND: "The platform has no release setup for this project yet. Saving the project settings in the console sets it up again.",
-  NO_MIRROR: "The project is not set up for releases yet; its first build sets it up.",
+  NO_MIRROR: "The platform could not resolve this project's build lane, so nothing ran. Open the project in the console to confirm it still exists, then call again.",
+  NO_LANE_KEY: "This project has no lane key, so the queued upload had nowhere to run: nothing was sent to the store and the approval went back. Open the project in the console to confirm it still exists, then submit the build again.",
   SUBMISSION_NOT_IN_REVIEW: `Only a submission the store is still reviewing can be withdrawn. Read each store's latest submission and its review state with ${STORES_READ}.`,
   SUBMISSION_NOT_FOUND: `Read the submission ids with ${STORES_READ} and pass one as submissionId.`,
   SUBMISSION_NOT_JOINABLE: `The platform cannot tie this submission to its store record, so it did not act on it. Read it with ${STORES_READ}.`,
-  CANCEL_STORE_NOT_SUPPORTED: "Withdrawing a submission from review is offered here for the Chrome Web Store and for Safari's App Review; Firefox and Edge withdrawals are handled in their own dashboards.",
   ROLLOUT_STORE_NOT_SUPPORTED: "A staged rollout is a Chrome Web Store feature; no other store exposes one.",
   ROLLOUT_NOT_STAGED: "Chrome publishes this project to everyone at once, so there is no rollout to raise. Staged publish is turned on in the project's Chrome store settings in the console and applies from the next submission.",
   ROLLOUT_NOT_HIGHER: 'Pass a deployPercentage above the current one; extension_release_status (include: ["rollout"]) reads it.',
@@ -119,7 +117,6 @@ const HINTS: Record<string, string> = {
   SAFARI_BUILD_NOT_FOUND: `No Safari submission carries the TestFlight build number named, so nothing was sent and no approval was requested; value.knownBuildNumbers lists the builds on record. Call publish with one of them, or with no buildNumber to send the newest; ${STORES_READ} shows each submission's build.`,
   SAFARI_BUILD_NUMBER_INVALID: "buildNumber is the TestFlight build number Apple shows, a whole number above zero. Nothing was sent.",
   SAFARI_VERSION_IN_REVIEW: `Apple holds another App Store version of this app for review and creates no other version meanwhile, so the draft was not sent and no approval was spent. Ask for its withdrawal with extension_submit_check {action: "cancel", store: "safari", submissionId: value.heldSubmissionId}, run it with extension_submit and that approvalId once a workspace owner approves it, then call publish again; ${STORES_READ} shows the held version.`,
-  PUBLISH_STORE_NOT_SUPPORTED: `Sending a draft to review is a ${PUBLISH_STORE_WORDS} act here: call publish with browsers ${PUBLISH_BROWSERS_WORDS}. Firefox has no publish act; AMO reviews a Firefox version when it is submitted.`,
   PUBLISH_IN_FLIGHT: `The publish you asked for is already on its way and nothing was dispatched again. Read the record with ${STORES_READ}, or call extension_submit_check {action: "status"} when it exists, and never send the draft again while it is on its way.`,
   SAFARI_NOT_PENDING_RELEASE: `App Store Connect holds no version waiting for a developer release, so nothing was released and no approval was requested; the message names the state Apple last reported. A version goes on sale here only after Apple approves it under manual release; ${STORES_READ} shows each Safari submission's state.`,
   SAFARI_RELEASE_NOT_MANUAL: "App Store Connect reads this version as releasing on its own after approval, so there is no manual release to make and no approval was requested. The release mode is changed in App Store Connect.",
@@ -163,6 +160,10 @@ export function shipRefusalHint(code: string, retryAfterSeconds?: number, store 
   const drafted = storeDraftHint(code, store);
 
   if (drafted) return drafted;
+
+  const truth = offLaneTruthOf(code, body);
+
+  if (truth) return truth;
 
   if (code === "burst_cap") return `The workspace dispatched too many runs in the last hour.${wait} Nothing ran.`;
   if (code === "monthly_cap") return `The workspace's build allowance for this month is spent, so nothing ran.${wait} The console's workspace settings show the allowance.`;

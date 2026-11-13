@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { actionFingerprint } from "../lib/approval-gate";
 import { VERSION_ACTION, versionScopeFor } from "../lib/approval-lines";
+import { shipRefusalHint } from "../lib/ship-act";
 import { TOOL_POLICY } from "../lib/tool-policy";
 import { handler as status } from "../tools/release-status";
 import { handler as submit, schema } from "../tools/submit";
@@ -240,6 +241,30 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
     expect(out.value).not.toHaveProperty("handPath");
     expect(out.value).not.toHaveProperty("nextStep");
     expect(out.value).not.toHaveProperty("owner");
+  });
+
+  it("610: a Firefox publish off the lane says Firefox has no publish act and AMO reviews a version when it is submitted", () => {
+    const firefox = offLane("firefox", "publish", "Sending the Firefox Add-ons draft to review").body;
+    const chrome = offLane("chrome", "publish", "Sending the Chrome Web Store draft to review").body;
+
+    expect(shipRefusalHint("STORE_ACT_NOT_ON_LANE", undefined, "", firefox)).toContain("Firefox has no publish act; AMO reviews a Firefox version when it is submitted.");
+    expect(shipRefusalHint("STORE_ACT_NOT_ON_LANE", undefined, "", chrome)).toBeUndefined();
+    expect(shipRefusalHint("PUBLISH_STORE_NOT_SUPPORTED")).toBeUndefined();
+    expect(shipRefusalHint("CANCEL_STORE_NOT_SUPPORTED")).toBeUndefined();
+  });
+
+  it("610: a project with no lane key is named in lane words, and an older www's NO_MIRROR promises no first build", () => {
+    const laneKey = shipRefusalHint("NO_LANE_KEY") ?? "";
+    const mirror = shipRefusalHint("NO_MIRROR") ?? "";
+
+    expect(laneKey).toContain("nothing was sent to the store");
+    expect(laneKey).toContain("Open the project in the console to confirm it still exists");
+
+    for (const hint of [laneKey, mirror]) {
+      expect(hint).not.toMatch(/first build|\bmirror\b/i);
+    }
+
+    expect(mirror).toContain("Open the project in the console to confirm it still exists");
   });
 
   it("cancel of a submission the store is not reviewing says how to find one that is", async () => {

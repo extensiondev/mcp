@@ -43,6 +43,20 @@ export function offLaneHandOf(code: unknown, body: unknown): StoreActByHand | nu
   return { handPath, ...(handUrl ? { handUrl } : {}) };
 }
 
+const OFF_LANE_TRUTHS: Record<string, Record<string, string>> = {
+  firefox: {
+    publish: 'Firefox has no publish act; AMO reviews a Firefox version when it is submitted. Leave firefox out of publish, and submit the version with extension_submit (browsers: ["firefox"], dryRun: false).',
+  },
+};
+
+export function offLaneTruthOf(code: unknown, body: unknown): string | null {
+  if (str(code) !== STORE_ACT_NOT_ON_LANE_CODE) return null;
+
+  const row = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+
+  return OFF_LANE_TRUTHS[str(row.store)]?.[str(row.act)] ?? null;
+}
+
 export function byHandSentence(message: string, hand: StoreActByHand): string {
   const said = closed(str(message));
   if (!hand.handPath || said.includes(hand.handPath)) return said;
