@@ -108,7 +108,6 @@ const HINTS: Record<string, string> = {
   ROLLOUT_NOT_HIGHER: 'Pass a deployPercentage above the current one; extension_release_status (include: ["rollout"]) reads it.',
   ROLLOUT_PERCENTAGE_INVALID: "Pass deployPercentage as a whole number from 1 to 100.",
   ROLLOUT_PERCENTAGE_OUT_OF_RANGE: "Pass deployPercentage as a whole number from 1 to 100; stopping a rollout is done in the Chrome Web Store dashboard.",
-  CANCEL_WORKFLOW_UNSUPPORTED: "Saving the project settings in the console brings the project's platform setup up to date; then call again.",
   ROLLOUT_WORKFLOW_UNSUPPORTED: "Saving the project settings in the console brings the project's platform setup up to date; then call again.",
   PUBLISH_WORKFLOW_UNSUPPORTED: "Saving the project settings in the console brings the project's platform setup up to date; then call again.",
   SAFARI_NEWER_BUILD: `A newer Safari TestFlight build is a draft, so the older build was not sent and no approval was spent. Call publish with no submissionId, or with newerSubmissionId, so the approval names the newer build; ${STORES_READ} lists both.`,
