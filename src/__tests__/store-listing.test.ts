@@ -871,9 +871,9 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
         "The App Store Connect push is dispatched; say preflight in a minute and I read what landed.",
       ],
       [
-        { dispatched: false, reason: "workflow-stale", message: "This project's store workflow does not know the listing push yet." },
-        { status: "failed", reason: "This project's store workflow does not know the listing push yet." },
-        "The App Store Connect push failed: This project's store workflow does not know the listing push yet. Say sync-listing again.",
+        { dispatched: false, reason: "lane-refused", message: "The build lane refused the listing push." },
+        { status: "failed", reason: "The build lane refused the listing push." },
+        "The App Store Connect push failed: The build lane refused the listing push. Say sync-listing again.",
       ],
     ];
 
