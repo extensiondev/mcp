@@ -64,7 +64,7 @@ export interface ToolModule {
     inputSchema: Record<string, unknown>;
   };
   handler: (args: any) => Promise<string>;
-  invalidArgumentsHint?: (issues: InputIssue[]) => string | undefined;
+  invalidArgumentsHint?: (issues: InputIssue[], args: Record<string, unknown>) => string | undefined;
   approvalRecord?: (args: Record<string, unknown>) => Promise<MintedApproval | null>;
   title?: string;
   annotations?: ToolAnnotations;
@@ -358,7 +358,7 @@ export function createToolSurface(setup: ToolHandlerOptions): {
      * still did (ledger 448).
      */
     if (issues.length) {
-      const refusal = inputValidationError(name, issues, tool.schema.inputSchema, tool.invalidArgumentsHint?.(issues));
+      const refusal = inputValidationError(name, issues, tool.schema.inputSchema, tool.invalidArgumentsHint?.(issues, normalizedArgs));
       const scoped = platform ? bindCallProject(name, normalizedArgs, tool.schema.inputSchema, options) : null;
 
       if (!scoped || "refused" in scoped || !scoped.answeredFor) return refused(refusal);

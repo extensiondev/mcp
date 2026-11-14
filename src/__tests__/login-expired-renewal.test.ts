@@ -15,10 +15,16 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { writeCredentials } from "../lib/credentials";
 import { forgetLoginRenewals } from "../lib/login-expired";
 import { handler as auth } from "../tools/auth";
-import { handler as builds } from "../tools/builds";
-import { handler as publish } from "../tools/publish";
-import { handler as promote } from "../tools/release-promote";
-import { handler as submit } from "../tools/submit-local";
+import * as buildsTool from "../tools/builds";
+import * as publishTool from "../tools/publish";
+import * as promoteTool from "../tools/release-promote";
+import * as submitTool from "../tools/submit";
+import { forwardable } from "../lib/hosted-forwarder";
+
+const submit = forwardable(submitTool).handler;
+const builds = forwardable(buildsTool).handler;
+const publish = forwardable(publishTool).handler;
+const promote = forwardable(promoteTool).handler;
 
 const API = "https://www.extension.dev";
 const NOW = Math.floor(Date.now() / 1000);

@@ -6,35 +6,31 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { runAskingOnly } from "../lib/ask-only";
-import { SUBMIT_CHECK_ACTIONS, SUBMIT_CHECK_TOOL, answeredAs, submitCheckRefused } from "../lib/submit-action-safety";
-import { handler as submitHandler, schema as submitSchema, type SubmitToolArgs } from "./submit";
-
-import type { SubmitFacts } from "../lib/submit-facts";
-
-const submitProperties = submitSchema.inputSchema.properties as Record<string, Record<string, unknown>>;
-
-const SHARED = Object.keys(submitProperties).filter((key) => key !== "action" && key !== "approvalId" && key !== "dryRun");
-
-const SHAPE_KEYS = ["type", "enum", "items", "default", "minimum"];
-
-export const SHARED_INPUT_NOTE = "As in extension_submit.";
-
-const sharedProperty = (key: string): Record<string, unknown> => ({
-  ...Object.fromEntries(Object.entries(submitProperties[key]!).filter(([field]) => SHAPE_KEYS.includes(field))),
-  description: SHARED_INPUT_NOTE,
-});
+import { hostedOnly } from "../lib/hosted-only";
 
 export const schema = {
-  name: SUBMIT_CHECK_TOOL,
-  description:
-    "Read a store's state or ask for an approval, with extension_submit's inputs: preflight, status and a dry-run submit answer here; any other action only asks the owner's approval and answers value.approvalUrl, and the call carrying that approvalId runs through extension_submit. It executes nothing.",
+  name: "extension_submit_check",
+  description: "Read a store's state or ask for an approval, with extension_submit's inputs: preflight, status and a dry-run submit answer here; any other action only asks the owner's approval and answers value.approvalUrl, and the call carrying that approvalId runs through extension_submit. It executes nothing.",
   inputSchema: {
     type: "object" as const,
     properties: {
       action: {
         type: "string",
-        enum: [...SUBMIT_CHECK_ACTIONS],
+        enum: [
+          "preflight",
+          "status",
+          "submit",
+          "publish",
+          "review",
+          "cancel",
+          "rollout",
+          "release",
+          "sync-listing",
+          "mint-signing",
+          "configure-store",
+          "connect",
+          "first-submission",
+        ],
         default: "submit",
         description: "The read, or the act to ask approval for.",
       },
@@ -43,12 +39,91 @@ export const schema = {
         default: true,
         description: "true reads only; false only asks the owner's approval of the real submit.",
       },
-      ...Object.fromEntries(SHARED.map((key) => [key, sharedProperty(key)])),
+      project: {
+        type: "string",
+        description: "As in extension_submit.",
+      },
+      browsers: {
+        type: "array",
+        items: {
+          type: "string",
+          enum: ["chrome", "firefox", "edge", "safari"],
+        },
+        description: "As in extension_submit.",
+      },
+      buildSha: {
+        type: "string",
+        description: "As in extension_submit.",
+      },
+      version: {
+        type: "string",
+        description: "As in extension_submit.",
+      },
+      projectPath: {
+        type: "string",
+        description: "As in extension_submit.",
+      },
+      screenshots: {
+        type: "array",
+        items: {
+          type: "string",
+        },
+        description: "As in extension_submit.",
+      },
+      useBuild: {
+        type: "string",
+        description: "As in extension_submit.",
+      },
+      detail: {
+        type: ["boolean", "array"],
+        items: {
+          type: "string",
+        },
+        description: "As in extension_submit.",
+      },
+      api: {
+        type: "string",
+        description: "As in extension_submit.",
+      },
+      store: {
+        type: "string",
+        enum: ["chrome", "firefox", "edge", "safari"],
+        description: "As in extension_submit.",
+      },
+      storeSettings: {
+        type: "object",
+        description: "As in extension_submit.",
+      },
+      submissionId: {
+        type: "string",
+        description: "As in extension_submit.",
+      },
+      buildNumber: {
+        type: "integer",
+        minimum: 1,
+        description: "As in extension_submit.",
+      },
+      deployPercentage: {
+        type: "number",
+        description: "As in extension_submit.",
+      },
+      connectSession: {
+        type: "string",
+        description: "As in extension_submit.",
+      },
+      replace: {
+        type: "boolean",
+        description: "As in extension_submit.",
+      },
+      waitSeconds: {
+        type: "number",
+        description: "As in extension_submit.",
+      },
     },
     required: [],
   },
 };
 
-export async function handler(args: SubmitToolArgs, facts: SubmitFacts): Promise<string> {
-  return submitCheckRefused(args as Record<string, unknown>) ?? answeredAs(await runAskingOnly(() => submitHandler(args, facts)), SUBMIT_CHECK_TOOL, submitSchema.name);
-}
+export const SHARED_INPUT_NOTE = "As in extension_submit.";
+
+export const handler = hostedOnly(schema.name);

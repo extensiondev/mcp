@@ -40,9 +40,10 @@ import * as releasePromote from "./tools/release-promote";
 import * as releaseStatus from "./tools/release-status";
 import * as approvals from "./tools/approvals";
 import * as buildsTool from "./tools/builds";
+import * as buildsAct from "./tools/builds-act";
 import * as workspaceTool from "./tools/workspace";
-import * as submitTool from "./tools/submit-local";
-import * as submitCheck from "./tools/submit-check-local";
+import * as submitTool from "./tools/submit";
+import * as submitCheck from "./tools/submit-check";
 import * as wait from "./tools/wait";
 import * as addFeature from "./tools/add-feature";
 import * as auth from "./tools/auth";
@@ -114,6 +115,7 @@ export const tools: ToolModule[] = [
   forwardable(releaseStatus),
   forwardable(approvals),
   forwardable(buildsTool),
+  forwardable(buildsAct),
   forwardable(workspaceTool),
   forwardable(releasePromote),
   forwardable(submitTool),
@@ -298,7 +300,7 @@ export async function runCli(cmd: string, args: string[]): Promise<number> {
         return 1;
       }
 
-      const out = await releasePromote.handler({
+      const out = await forwardable(releasePromote).handler({
         buildId,
         channel,
         sourceChannel: flag("source-channel"),

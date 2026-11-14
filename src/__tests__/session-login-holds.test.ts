@@ -15,7 +15,6 @@ import { clearCredentials, credentialKey, credentialsPath, listCredentials, writ
 import { handler as builds } from "../tools/builds";
 import { handler as publish } from "../tools/publish";
 import { handler as promote } from "../tools/release-promote";
-import { handler as submit } from "../tools/submit-local";
 import { readIdentity } from "../tools/whoami";
 import { API, useProjectRoutes, type Call } from "./fixtures/project-routes";
 
@@ -107,80 +106,6 @@ describe("a server keeps the login it first resolved while another process signs
     const status = JSON.parse(await readIdentity(undefined, API));
     expect(status.value.projectSlug).toBe("leon");
     expect(status.warnings.join(" ")).toContain("rebeccat was signed in later by another process");
-  });
-
-  it("extension_release_promote with no project promotes leon's build with leon's token, never rebeccat's", async () => {
-    if (process.platform === "win32") return;
-
-    walkStartsOnLeon();
-    const at = new Date().toISOString();
-    platform.routes["POST /api/cli/release/promote"] = () => ({ body: { ok: true, status: "ok", queuedBrowsers: ["chrome"], dispatchedAt: at } });
-    platform.routes[`GET /api/projects/${LEON_ID}/releases`] = () => ({
-      body: { items: [{ id: "rel_1", channel: "preview", buildId: BUILD, status: "promoted", createdAt: at }] },
-    });
-
-    const out = JSON.parse(await promote({ buildId: BUILD, channel: "preview", browsers: ["chrome"], api: API }));
-
-    expect(out.status).toBe("promoted");
-    expect(platform.sent("POST", "/api/cli/release/promote")[0]?.auth).toBe(`Bearer ${LEON}`);
-    expect(platform.sent("GET", `/api/projects/${LEON_ID}/releases`)).toHaveLength(1);
-    onlyLeonWasSent(platform.calls);
-    expect(out.warnings.join(" ")).toContain("keeps using cezaraugusto/leon");
-  });
-
-  it("extension_publish with no project mints the link with leon's token", async () => {
-    if (process.platform === "win32") return;
-
-    walkStartsOnLeon();
-    platform.routes["POST /api/cli/publish"] = () => ({ body: { url: "https://leon.userland.extension.dev/b/717bad0", expiresAt: "2026-10-29T00:00:00.000Z" } });
-
-    await publish({ api: API });
-
-    expect(platform.sent("POST", "/api/cli/publish")[0]?.auth).toBe(`Bearer ${LEON}`);
-    onlyLeonWasSent(platform.calls);
-  });
-
-  it("extension_submit with no project sends the dry run with leon's token", async () => {
-    if (process.platform === "win32") return;
-
-    walkStartsOnLeon();
-    platform.routes["POST /api/cli/stores/submit"] = () => ({ body: { dryRun: true, results: [] } });
-
-    await submit({ browsers: ["chrome"], buildSha: BUILD, api: API });
-
-    expect(platform.sent("POST", "/api/cli/stores/submit")[0]?.auth).toBe(`Bearer ${LEON}`);
-    onlyLeonWasSent(platform.calls);
-  });
-
-  it("extension_submit publish with no project addresses leon's store route", async () => {
-    if (process.platform === "win32") return;
-
-    walkStartsOnLeon();
-    platform.routes[`POST /api/projects/${LEON_ID}/stores/chrome/publish`] = () => ({
-      status: 403,
-      body: { code: "STORE_NOT_CONNECTED", message: "Connect the Chrome Web Store first.", refusedBeforeApproval: true },
-    });
-
-    await submit({ action: "publish", browsers: ["chrome"], api: API });
-
-    expect(platform.sent("POST", `/api/projects/${LEON_ID}/stores/chrome/publish`)).toHaveLength(1);
-    onlyLeonWasSent(platform.calls);
-  });
-
-  it("extension_builds configure with no project writes leon's build settings", async () => {
-    if (process.platform === "win32") return;
-
-    walkStartsOnLeon();
-    platform.routes[`GET /api/projects/${LEON_ID}/settings/build`] = () => ({ body: { buildSettings: SETTINGS } });
-    platform.routes[`PUT /api/projects/${LEON_ID}/settings/build`] = () => ({
-      status: 403,
-      body: { code: "SETTINGS_INVALID", message: "firefox.buildCommand is required when firefox is enabled.", refusedBeforeApproval: true },
-    });
-
-    await builds({ action: "configure", buildSettings: { firefox: { enabled: true } }, api: API });
-
-    expect(platform.sent("PUT", `/api/projects/${LEON_ID}/settings/build`)).toHaveLength(1);
-    onlyLeonWasSent(platform.calls);
   });
 
   it("a named project still wins, and a login or logout made through this server moves the default", async () => {

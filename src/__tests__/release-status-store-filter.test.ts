@@ -85,18 +85,6 @@ describe("extension_release_status include stores answers only the store named (
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
-  it("answers the firefox row alone when store names firefox", async () => {
-    if (process.platform === "win32") return;
-
-    const all = await call({ include: ["stores"], project: "cezaraugusto/rebeccat" });
-    const one = await call({ include: ["stores"], project: "cezaraugusto/rebeccat", store: "firefox" });
-
-    expect(all.value.stores.value.stores.map((row: { store: string }) => row.store)).toEqual(["chrome", "firefox", "edge", "safari"]);
-    expect(one.ok).toBe(true);
-    expect(one.value.stores.value.stores.map((row: { store: string }) => row.store)).toEqual(["firefox"]);
-    expect(one.value.stores.hint).not.toMatch(/\b(chrome|edge|safari)\b:/);
-  });
-
   it("refuses a store it does not know before reading anything", async () => {
     const out = await call({ include: ["stores"], project: "cezaraugusto/rebeccat", store: "opera" });
 

@@ -9,7 +9,22 @@
 import { packageFileName, packageFileOf, printedPackageAddress, type PackageScope } from "./package-address";
 import { text } from "./row";
 
-import type { RequirementRow } from "./store-requirements";
+export interface RequirementRow {
+  id: string;
+  label: string;
+  required: boolean;
+  format: string;
+  status: "have" | "missing" | "unknown";
+  satisfiedBy: string;
+  how: string;
+  docs?: string;
+  actual?: string;
+  value?: string;
+  push?: string;
+  pushError?: string;
+  dashboardTab?: string;
+  dashboardUrl?: string;
+}
 
 export interface HandUpload {
   browser: string;

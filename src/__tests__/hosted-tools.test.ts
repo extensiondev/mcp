@@ -10,12 +10,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { HOSTED_TOOL_NAMES, createHostedServer, registerHostedTools } from "../hosted";
 import { setApprovalOpener } from "../lib/approval-open";
 import { loginIdOf } from "../lib/credential-source";
 import { credentialsPath, writeCredentials } from "../lib/credentials";
@@ -30,44 +26,12 @@ import { tools } from "../index";
 import { solidPng } from "./fixtures/png";
 import { APPROVAL, PROJECT, WWW, stubPlatformFetch } from "./hosted-platform-fetch";
 
-const REQUEST_TOKEN = "request-bearer-token";
-const credential = { token: REQUEST_TOKEN, api: WWW, projects: [PROJECT], expiresAt: 4102444800 };
-
-const ALLOWED = [
-  "extension_auth",
-  "extension_builds",
-  "extension_project_create",
-  "extension_release_promote",
-  "extension_release_status",
-  "extension_workspace",
-];
-
-const NEVER = [
-  "extension_shares",
-  "extension_publish",
-  "extension_submit",
-  "extension_preview_web",
-  "extension_workspace_create",
-  "extension_dev",
-  "extension_start",
-  "extension_browsers",
-  "extension_inspect",
-  "extension_reload",
-  "extension_build",
-  "extension_eval",
-  "extension_storage",
-  "extension_network",
-  "extension_open",
-  "extension_logs",
-  "extension_create",
-];
-
 let tmp = "";
 const saved: Record<string, string | undefined> = {};
 
 beforeEach(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-hosted-"));
-  for (const key of ["XDG_CONFIG_HOME", "EXTENSION_DEV_TOKEN", "EXTENSION_DEV_PROJECT", "EXTENSION_DEV_API_URL", "EXTENSION_DEV_HOSTED"]) saved[key] = process.env[key];
+  for (const key of ["XDG_CONFIG_HOME", "EXTENSION_DEV_TOKEN", "EXTENSION_DEV_PROJECT", "EXTENSION_DEV_API_URL"]) saved[key] = process.env[key];
   process.env.XDG_CONFIG_HOME = tmp;
   delete process.env.EXTENSION_DEV_TOKEN;
   delete process.env.EXTENSION_DEV_PROJECT;
@@ -88,286 +52,9 @@ afterEach(() => {
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-async function hostedClient(): Promise<Client> {
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  await createHostedServer({ credential }).connect(serverTransport);
-  const client = new Client({ name: "hosted-probe", version: "0.0.0" });
-  await client.connect(clientTransport);
-
-  return client;
-}
-
-async function call(client: Client, name: string, args: Record<string, unknown>) {
-  const result = await client.callTool({ name, arguments: args });
-  const text = (result.content as Array<{ text: string }>)[0]?.text ?? "";
-
-  return { result, envelope: JSON.parse(text) };
-}
-
-describe("hosted tool surface", () => {
-  it("lists exactly the allowed platform tools", async () => {
-    const listed = (await (await hostedClient()).listTools()).tools.map((tool) => tool.name).sort();
-
-    expect(listed).toEqual(ALLOWED);
-    expect([...HOSTED_TOOL_NAMES].sort()).toEqual(ALLOWED);
-  });
-
-  it("lists none of the local, login, publish or submit tools", async () => {
-    const listed = (await (await hostedClient()).listTools()).tools.map((tool) => tool.name);
-
-    for (const name of NEVER) expect(listed).not.toContain(name);
-
-    for (const tool of tools) {
-      if (!ALLOWED.includes(tool.schema.name)) expect(listed).not.toContain(tool.schema.name);
-    }
-  });
-
-  it("offers no api or local path input, only status on auth, and no usage on workspace", async () => {
-    const listed = (await (await hostedClient()).listTools()).tools;
-
-    for (const tool of listed) {
-      const properties = Object.keys(tool.inputSchema.properties ?? {});
-      expect(properties).not.toContain("api");
-      expect(properties).not.toContain("projectPath");
-    }
-
-    const auth = listed.find((tool) => tool.name === "extension_auth")!;
-    expect((auth.inputSchema.properties as any).action.enum).toEqual(["status"]);
-    expect(auth.description).not.toMatch(/action:'login'/);
-    const workspace = listed.find((tool) => tool.name === "extension_workspace")!;
-    expect((workspace.inputSchema.properties as any).action.enum).not.toContain("usage");
-    const create = listed.find((tool) => tool.name === "extension_project_create")!;
-    expect(Object.keys(create.inputSchema.properties ?? {})).not.toContain("projects");
-  });
-
-  it("lists a title and explicit hints on every tool, read-only where the hosted actions only read", async () => {
-    const listed = (await (await hostedClient()).listTools()).tools;
-    const readOnly = new Set(["extension_auth", "extension_workspace", "extension_release_status"]);
-
-    for (const tool of listed) {
-      expect(tool.title, tool.name).toMatch(/^[A-Z]/);
-      expect(tool.annotations, tool.name).not.toHaveProperty("title");
-
-      for (const hint of ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"]) {
-        expect(typeof (tool.annotations as Record<string, unknown> | undefined)?.[hint], `${tool.name}.${hint}`).toBe("boolean");
-      }
-
-      expect(tool.annotations?.readOnlyHint, tool.name).toBe(readOnly.has(tool.name));
-
-      if (readOnly.has(tool.name)) expect(tool.annotations?.destructiveHint, tool.name).toBe(false);
-
-      expect(tool.name.length, tool.name).toBeLessThanOrEqual(64);
-    }
-
-    const auth = listed.find((tool) => tool.name === "extension_auth")!;
-    expect(auth.title).toBe("Read the signed-in identity");
-    const workspace = listed.find((tool) => tool.name === "extension_workspace")!;
-    expect(workspace.title).toBe("Read the workspace");
-    expect(workspace.description).not.toMatch(/change a project's settings/);
-    expect(workspace.description).not.toMatch(/every project|build allowance and what is used/);
-    const builds = listed.find((tool) => tool.name === "extension_builds")!;
-    expect((builds.inputSchema.properties as any).action.enum).not.toContain("download");
-    expect(Object.keys(builds.inputSchema.properties ?? {})).not.toContain("to");
-  });
-
-  it("answers approval-required with the approval page and the same call again, naming no tool the hosted server does not serve", async () => {
-    stubPlatformFetch();
-    const client = await hostedClient();
-    const { result, envelope } = await call(client, "extension_release_promote", { buildId: "abc1234", channel: "stable" });
-    const text = (result.content as Array<{ text: string }>)[0]?.text ?? "";
-
-    expect(envelope.status).toBe("approval-required");
-    expect(envelope.value.approvalId).toBe(APPROVAL.approvalId);
-    expect(envelope.hint).toBe(
-      `Open ${APPROVAL.approvalUrl} in the browser and approve it there, then call extension_release_promote again with the same arguments and approvalId ${APPROVAL.approvalId}.`,
-    );
-
-    expect(envelope.error.message).toContain("Nothing was executed.");
-    expect(text).not.toContain("extension_approvals");
-  });
-
-  it("names the console sign-in, not a login action, in the hosted projects hint", async () => {
-    stubPlatformFetch();
-    const client = await hostedClient();
-    const { result, envelope } = await call(client, "extension_workspace", { action: "projects" });
-    const text = (result.content as Array<{ text: string }>)[0]?.text ?? "";
-
-    expect(envelope.status).toBe("listed");
-    expect(envelope.hint.startsWith("acme has 2 projects; the last build failed for acme/web.")).toBe(true);
-    expect(envelope.hint).toContain("sign in again from your MCP client");
-    expect(text).not.toMatch(/extension_auth|action: "login"|on this machine/);
-  });
-
-  it("never names a tool or action the hosted list does not serve in a hint, a next step or a spoken line", async () => {
-    stubPlatformFetch();
-    const client = await hostedClient();
-    const listed = (await client.listTools()).tools;
-    const served = new Map(
-      listed.map((tool) => [tool.name, ((tool.inputSchema.properties as any)?.action?.enum as string[] | undefined) ?? null]),
-    );
-    const calls: Array<[string, Record<string, unknown>]> = [
-      ["extension_auth", {}],
-      ["extension_workspace", { action: "info" }],
-      ["extension_workspace", { action: "projects" }],
-      ["extension_workspace", { action: "settings" }],
-      ["extension_builds", { action: "list" }],
-      ["extension_release_status", {}],
-      ["extension_release_promote", { buildId: "abc1234", channel: "stable" }],
-      ["extension_project_create", { repo: "acme/new", workspace: "acme", name: "new" }],
-    ];
-
-    for (const [name, args] of calls) {
-      const { envelope } = await call(client, name, args);
-      const value = envelope.value && typeof envelope.value === "object" ? envelope.value : {};
-      const spoken = [envelope.hint, envelope.error?.message, value.nextStep?.say, value.sayToPerson, ...(envelope.warnings ?? [])].filter(
-        (line): line is string => typeof line === "string",
-      );
-
-      for (const line of spoken) {
-        for (const match of line.matchAll(/(extension_[a-z_]+)(?:\s*[({]\s*action:\s*"([a-z-]+)")?/g)) {
-          const [, tool, action] = match;
-
-          expect([...served.keys()], `${name}: ${line}`).toContain(tool);
-
-          if (action) expect(served.get(tool) ?? [action], `${name}: ${line}`).toContain(action);
-        }
-      }
-    }
-  });
-
-  it("answers unknown-tool for a forbidden tool called by name", async () => {
-    const client = await hostedClient();
-
-    for (const name of ["extension_publish", "extension_submit", "extension_dev"]) {
-      const { result, envelope } = await call(client, name, {});
-      expect(result.isError).toBe(true);
-      expect(envelope.error.code).toBe("E_UNKNOWN_TOOL");
-    }
-  });
-
-  it("refuses login, logout and an api override before any request is made", async () => {
-    const seen = stubPlatformFetch();
-    const client = await hostedClient();
-
-    for (const action of ["login", "logout"]) {
-      const { result, envelope } = await call(client, "extension_auth", { action, project: "acme/web" });
-      expect(result.isError).toBe(true);
-      expect(envelope.status).toBe("hosted-unavailable");
-    }
-
-    const redirected = await call(client, "extension_builds", { action: "list", api: "https://www.extension.dev.evil.example" });
-    expect(redirected.envelope.status).toBe("hosted-unavailable");
-    expect(redirected.envelope.value.inputs).toEqual(["api"]);
-    expect(seen).toEqual([]);
-  });
-
-  it("covers workspace and project together, so a covered slug beside another workspace is refused before any request", async () => {
-    const seen = stubPlatformFetch();
-    const client = await hostedClient();
-    const other = PROJECT.workspace === "other" ? "elsewhere" : "other";
-
-    for (const args of [
-      { workspace: other, project: PROJECT.project },
-      { workspace: other, project: `${PROJECT.workspace}/${PROJECT.project}` },
-      { project: `${other}/${PROJECT.project}` },
-      { workspace: other },
-      { project: `${PROJECT.workspace}/` },
-    ]) {
-      for (const tool of ["extension_release_status", "extension_builds", "extension_workspace"]) {
-        const { envelope } = await call(client, tool, args);
-
-        expect(envelope.ok, `${tool} ${JSON.stringify(args)}`).toBe(false);
-        if (tool === "extension_release_status") expect(envelope, JSON.stringify(args)).toMatchObject({ status: "auth-refused", error: { code: "E_NO_LOGIN_FOR_PROJECT" } });
-      }
-    }
-
-    expect(seen).toEqual([]);
-
-    for (const args of [{ project: PROJECT.project }, { workspace: PROJECT.workspace, project: PROJECT.project }, { project: `${PROJECT.workspace}/${PROJECT.project}` }, {}]) {
-      expect((await call(client, "extension_release_status", args)).envelope.error?.code, JSON.stringify(args)).not.toBe("E_NO_LOGIN_FOR_PROJECT");
-    }
-  });
-
-  it("forwards the request Bearer unchanged and never the token stored on disk", async () => {
-    writeCredentials({ version: 1, token: "disk-token", workspaceSlug: "acme", projectSlug: "web", expiresAt: 4102444800, api: WWW });
-    const seen = stubPlatformFetch();
-    const client = await hostedClient();
-
-    await call(client, "extension_builds", { action: "list" });
-    await call(client, "extension_release_status", {});
-    await call(client, "extension_auth", {});
-
-    const toWww = seen.filter((request) => request.url.startsWith(WWW));
-    expect(toWww.length).toBeGreaterThan(2);
-    for (const request of toWww) expect(request.authorization).toBe(`Bearer ${REQUEST_TOKEN}`);
-    expect(seen.map((request) => request.authorization)).not.toContain("Bearer disk-token");
-  });
-
-  it("names the project on every platform call, so one connected-app token reaches each of its projects", async () => {
-    const seen = stubPlatformFetch();
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    await createHostedServer({
-      credential: { token: "oauth-multi", api: WWW, projects: [PROJECT, { workspace: "acme", project: "docs" }], expiresAt: 4102444800 },
-    }).connect(serverTransport);
-
-    const client = new Client({ name: "hosted-probe", version: "0.0.0" });
-    await client.connect(clientTransport);
-
-    for (const [project, projectId, expected] of [
-      ["acme/docs", "prj_hosted2", "acme/docs"],
-      ["docs", "prj_hosted2", "acme/docs"],
-      [undefined, "prj_hosted1", "acme/web"],
-    ] as const) {
-      seen.length = 0;
-      const { envelope } = await call(client, "extension_builds", { action: "list", ...(project ? { project } : {}) });
-
-      expect(envelope.ok).toBe(true);
-      const toWww = seen.filter((request) => request.url.startsWith(WWW));
-      expect(toWww.length).toBeGreaterThan(0);
-      for (const request of toWww) expect(request.project).toBe(expected);
-      expect(toWww.some((request) => request.url.includes(`/api/projects/${projectId}/builds`))).toBe(true);
-      expect(seen.filter((request) => !request.url.startsWith(WWW)).every((request) => request.project === null)).toBe(true);
-    }
-  });
-
-  it("describes the connection, not CLI token lifetimes, in a hosted status", async () => {
-    stubPlatformFetch();
-    const client = await hostedClient();
-    const { result, envelope } = await call(client, "extension_auth", {});
-    const text = (result.content as Array<{ text: string }>)[0]?.text ?? "";
-
-    expect(envelope.ok).toBe(true);
-    expect(text).not.toMatch(/7 days|re-mint|Access tokens page|CLI tokens/i);
-    expect(text).not.toMatch(/stored on this machine/);
-    expect(envelope.warnings).toContain(
-      "This connection renews on its own. Revoke it under the project's Settings, Connected apps: https://console.extension.dev/acme/web/settings/connected-apps",
-    );
-  });
-
-  it("stores and removes no login on disk while a request credential is in scope", async () => {
-    stubPlatformFetch();
-    const client = await hostedClient();
-
-    await call(client, "extension_auth", {});
-    expect(fs.existsSync(credentialsPath())).toBe(false);
-  });
-
-  it("registers the same set on an McpServer instance", async () => {
-    const mcp = new McpServer({ name: "app", version: "0.0.0" }, { capabilities: { tools: {} } });
-    registerHostedTools(mcp, { credential, tools: ["extension_release_status"] });
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    await mcp.connect(serverTransport);
-    const client = new Client({ name: "hosted-probe", version: "0.0.0" });
-    await client.connect(clientTransport);
-
-    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(["extension_release_status"]);
-    expect(() => registerHostedTools(new McpServer({ name: "x", version: "0" }), { credential, tools: ["extension_publish"] })).toThrow(/Not a hosted tool/);
-  });
-});
-
 const LANE = "https://mcp.extension.dev/mcp/forward";
 const LISTED = JSON.parse(envelopeOf({ ok: true, command: "extension_builds", status: "listed", value: { builds: [] } }));
-const FORWARDING = { env: { EXTENSION_DEV_HOSTED: "1" }, version: "11.0.0", resolveLogin: () => ({ token: "device-login", ref: PROJECT }) };
+const FORWARDING = { env: {}, version: "11.0.0", resolveLogin: () => ({ token: "device-login", ref: PROJECT }) };
 
 function stubLane(answers: unknown[], exchange = 200) {
   const seen: Array<{ url: string; headers: Record<string, string>; body: any }> = [];
@@ -485,7 +172,6 @@ describe("the forwarder", () => {
   }
 
   async function dispatched(name: string, args: Record<string, unknown>) {
-    vi.stubEnv("EXTENSION_DEV_HOSTED", "1");
 
     try {
       const frame = await createToolDispatcher({ tools, options: { features: ["local", "platform"], noShip: false }, openApprovals: false })({ name, arguments: args });
@@ -646,7 +332,7 @@ describe("the forwarder", () => {
       expect(opened).toEqual([keyPage, connectUrl]);
       expect(out.value).toEqual({ connectUrl, opened: true });
 
-      const headless = { ...FORWARDING, platform: "darwin" as const, env: { EXTENSION_DEV_HOSTED: "1", EXTENSION_HEADLESS: "1" } };
+      const headless = { ...FORWARDING, platform: "darwin" as const, env: { EXTENSION_HEADLESS: "1" } };
       const held = JSON.parse(await forwardCall("extension_submit", { action: "connect", store: "firefox", projectPath: tmp }, local, headless));
 
       expect(lane()[1]?.body.args.local.pageOpening.block).toContain("EXTENSION_HEADLESS=1");
@@ -692,7 +378,6 @@ describe("the forwarder", () => {
   it("sends an ask-only call under the check tool's name, so the lane's dispatcher marks it asking only", async () => {
     const { lane } = stubLane([LISTED, LISTED]);
     writeCredentials({ version: 1, token: "disk-token", workspaceSlug: "acme", projectSlug: "web", expiresAt: 4102444800, api: WWW });
-    process.env.EXTENSION_DEV_HOSTED = "1";
     const dispatch = createToolDispatcher({ tools, options: { features: ["local", "platform"], noShip: false }, openApprovals: false });
     const asked = { action: "submit", browsers: ["chrome"], project: "acme/web", buildSha: "abc1234", dryRun: false };
 
@@ -700,7 +385,7 @@ describe("the forwarder", () => {
     await dispatch({ name: "extension_submit", arguments: asked });
 
     expect(lane().map((hit) => hit.body.tool)).toEqual(["extension_submit_check", "extension_submit"]);
-    expect(await runAskingOnly(() => forwardCall("extension_release_promote", { project: "acme/web" }, async () => "local", FORWARDING))).toBe("local");
+    expect(JSON.parse(await runAskingOnly(() => forwardCall("extension_release_promote", { project: "acme/web" }, async () => "local", FORWARDING)))).toMatchObject({ ok: false, status: "ask-only" });
     expect(lane()).toHaveLength(2);
   });
 
@@ -738,7 +423,7 @@ describe("the forwarder", () => {
       return new Response(JSON.stringify(laneAnswers.shift() ?? JSON.parse(envelopeOf({ ok: true, command: "extension_submit", status: "listing-synced", value: { file: "{projectPath}/STORE.md" }, hint: "Read {projectPath}/STORE.md. Then go on." }))), { status: 200 });
     });
 
-    const login = { env: { EXTENSION_DEV_HOSTED: "1" }, version: "11.0.0" };
+    const login = { env: {}, version: "11.0.0" };
     const syncArgs = { action: "sync-listing", browsers: ["chrome"], project: "acme/web", projectPath: root, screenshots: [path.join(root, "store", "screenshots", "chrome", "1.png")] };
     const out = JSON.parse(await forwardCall("extension_submit", syncArgs, async () => "local", login));
     const judged = JSON.parse(laneBodies[0]!).args.local.facts.project;
@@ -916,7 +601,7 @@ describe("the forwarder gives the person the wait they asked for and keeps what 
   it("carries what the lane's tools remembered into the next call and never shows it to the agent", async () => {
     const memory = { "build-dispatches": [["https://www.extension.dev\nprj_1", [{ sha: "abc1234", dispatchedAt: "2026-11-14T12:00:00Z" }]]] };
     const { lane } = stubLane([{ ...LISTED, memory }, { ...LISTED, memory: {} }, LISTED]);
-    const first = await forwarded("extension_builds", { action: "rebuild", buildId: "abc1234", project: "acme/web" });
+    const first = await forwarded("extension_builds_act", { action: "rebuild", buildId: "abc1234", project: "acme/web" });
     await forwarded("extension_builds", { action: "list", project: "acme/web" });
     await forwarded("extension_builds", { action: "list", project: "acme/web" });
 

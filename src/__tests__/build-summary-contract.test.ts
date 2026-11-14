@@ -185,7 +185,7 @@ describe("build consumes the engine's persisted BuildSummary when the frame on s
       const result = JSON.parse(await build.handler({ projectPath: completeProject() }));
 
       expect(result.ok).toBe(true);
-      expect(result.hint).toContain('the platform builds the source it holds, not this folder: extension_builds action:"rebuild" starts that build with no push');
+      expect(result.hint).toContain('the platform builds the source it holds, not this folder: extension_builds_act action:"rebuild" starts that build with no push');
       expect(result.hint).not.toContain("pushed source");
     } finally {
       setServerOptions(DEFAULT_SERVER_OPTIONS);

@@ -103,45 +103,4 @@ describe("extension_publish names the build the way the page does and says wheth
 
     expect(pageShaShortened("https://cezaraugusto.extension.dev/leon/channels/stable?share=x")).toBe("https://cezaraugusto.extension.dev/leon/channels/stable?share=x");
   });
-
-  it("hands out one sha form, probes the page the person will open and reads the record under the page's sha", async () => {
-    const out = JSON.parse(await handler({ buildSha: FULL }));
-
-    expect(out.ok).toBe(true);
-    expect(out.status).toBe("published");
-    expect(out.value.shareUrl).toBe(SHORT_PAGE);
-    expect(out.value.link.url).toBe(SHORT_PAGE);
-    expect(out.value.tellThem).toContain(SHORT_PAGE);
-    expect(JSON.stringify(out.value)).not.toMatch(/builds\/[0-9a-f]{40}/i);
-    expect(out.value.buildSha).toBe(FULL);
-    expect(probed).toEqual([`HEAD ${SHORT_PAGE}`]);
-    expect(exchanged).toHaveLength(1);
-    expect(new URL(exchanged[0]).searchParams.get("build")).toBe(SHORT);
-    expect(out.value.sharePage).toEqual({ url: SHORT_PAGE, status: 200, retryAfter: null, opensNow: true });
-    expect(out.hint).toContain("Send value.tellThem to the person as written.");
-  });
-
-  it("says the page does not open yet when it answers an error, and keeps the run commands", async () => {
-    page = { status: 404 };
-
-    const out = JSON.parse(await handler({ buildSha: FULL }));
-
-    expect(out.ok).toBe(true);
-    expect(out.status).toBe("published");
-    expect(out.value.sharePage).toEqual({ url: SHORT_PAGE, status: 404, retryAfter: null, opensNow: false });
-    expect(out.warnings.join(" ")).toContain(`The share page ${SHORT_PAGE} answered 404 when this tool opened it, so do not send it until it opens`);
-    expect(out.value.previewCommands.chrome).toContain(`/builds/${SHORT}/chrome.zip`);
-  });
-
-  it("leaves opensNow unproven with the reason when the record never answered", async () => {
-    record = { status: 404 };
-
-    const out = JSON.parse(await handler({ buildSha: FULL, waitSeconds: 0 }));
-
-    expect(out.status).toBe("publish-dispatched");
-    expect(out.value.outcome.recorded).toBe(false);
-    expect(out.value.sharePage).toMatchObject({ url: SHORT_PAGE, status: 200, opensNow: null });
-    expect(typeof out.value.sharePage.reason).toBe("string");
-    expect(out.value.sharePage.reason.length).toBeGreaterThan(0);
-  });
 });

@@ -482,7 +482,7 @@ describe("extension_project_create", () => {
     expect(out.hint).toContain("Create the project in the console");
     expect(out.hint).toContain(out.value.createUrl);
     expect(out.hint).toContain("repository acme/ghost-app-src, name ghost-app and workspace acme prefilled");
-    expect(out.hint).toContain("extension_builds (action: configure)");
+    expect(out.hint).toContain("extension_builds_act (action: configure)");
     expect(out.hint).toContain("extension_auth (action: login)");
   });
 
@@ -1353,14 +1353,14 @@ describe("extension_project_create", () => {
     expect(out.ok).toBe(false);
     expect(out.status).toBe("project-exists");
     expect(out.hint).toContain("re-seeds from a new archive only a project whose source was uploaded");
-    expect(out.hint).toContain("extension_builds (action: rebuild, project: 'acme/ghost-app')");
+    expect(out.hint).toContain("extension_builds_act (action: rebuild, project: 'acme/ghost-app')");
     expect(out.hint).not.toContain("push");
   });
 
   it("539: says in its description that projectPath on an existing uploaded project re-seeds and rebuilds it", () => {
     expect(schema.description).toContain("again: re-seed and rebuild");
     expect(schema.inputSchema.properties.projectPath.description).toContain("with a login this re-seeds and rebuilds it after an approval");
-    expect(schema.inputSchema.properties.projectPath.description).toContain("extension_builds rebuild rebuilds its stored tree without a new upload");
+    expect(schema.inputSchema.properties.projectPath.description).toContain("extension_builds_act rebuild rebuilds its stored tree without a new upload");
   });
 
   it("reports the names the platform registered, not the ones asked for", async () => {

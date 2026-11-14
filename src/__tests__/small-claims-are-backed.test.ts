@@ -5,22 +5,11 @@ import path from "node:path";
 
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 
-import { contradictoryRef } from "../tools/store-status";
-import { readReleases as releaseList } from "../tools/release-list";
 import { handler as analyze } from "../tools/analyze";
 import { handler as docsSearch } from "../tools/docs-search";
 import { schema as sharesSchema } from "../tools/shares";
 
 describe("the smaller sentences are cut to what was read or name their source", () => {
-  it("names a workspace and project that disagree instead of saying there is no project", async () => {
-    expect(contradictoryRef({ workspace: "acme", project: "other/widget" })).toMatch(/name different workspaces/);
-    expect(contradictoryRef({ workspace: "acme", project: "acme/widget" })).toBeNull();
-    expect(contradictoryRef({ project: "other/widget" })).toBeNull();
-    const out = JSON.parse(await releaseList({ workspace: "acme", project: "other/widget" }));
-    expect(out.ok).toBe(false);
-    expect(out.error.message).toMatch(/name different workspaces/);
-    expect(out.error.message).not.toMatch(/No project to list/);
-  });
 
   it("dates no share-id claim", () => {
     const text = JSON.stringify(sharesSchema);

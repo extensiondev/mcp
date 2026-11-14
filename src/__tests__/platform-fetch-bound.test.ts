@@ -134,68 +134,6 @@ describe("every platform call is one bounded fetch", () => {
   });
 });
 
-describe("extension_builds list answers at the read bound", () => {
-  let tmp: string;
-  let prevXdg: string | undefined;
-  let prevApi: string | undefined;
-  let calls: string[];
-
-  beforeEach(() => {
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-fetch-bound-"));
-    prevXdg = process.env.XDG_CONFIG_HOME;
-    prevApi = process.env.EXTENSION_DEV_API_URL;
-    delete process.env.EXTENSION_DEV_API_URL;
-    process.env.XDG_CONFIG_HOME = tmp;
-    calls = [];
-
-    vi.stubGlobal("fetch", (async (url: string) => {
-      const target = String(url);
-      calls.push(target);
-
-      if (new URL(target).pathname === "/api/cli/whoami") {
-        return jsonResponse({ login: "acme/widget", live: true, projectId: PROJECT_ID, workspaceSlug: "acme", projectSlug: "widget" });
-      }
-
-      return neverSettles();
-    }) as unknown as typeof fetch);
-
-    writeCredentials({
-      version: 1,
-      token: "claims.sig",
-      workspaceSlug: "acme",
-      projectSlug: "widget",
-      expiresAt: Math.floor(Date.now() / 1000) + 3600,
-      api: API,
-    });
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-    vi.unstubAllGlobals();
-    if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
-    else process.env.XDG_CONFIG_HOME = prevXdg;
-    if (prevApi === undefined) delete process.env.EXTENSION_DEV_API_URL;
-    else process.env.EXTENSION_DEV_API_URL = prevApi;
-
-    fs.rmSync(tmp, { recursive: true, force: true });
-  });
-
-  it("answers E_NETWORK with the bound it hit when the builds index never answers", async () => {
-    if (process.platform === "win32") return;
-
-    const pending = builds({ api: API, action: "list", limit: 2 });
-    await vi.advanceTimersByTimeAsync(PLATFORM_READ_TIMEOUT_MS);
-    const out = JSON.parse(await pending);
-
-    expect(out.ok).toBe(false);
-    expect(out.status).toBe("unavailable");
-    expect(out.error.code).toBe("E_NETWORK");
-    expect(out.error.message).toBe(`could not reach ${API}/api/projects/${PROJECT_ID}/builds?limit=2: the platform did not answer within 15 s`);
-    expect(calls).toEqual([`${API}/api/cli/whoami`, `${API}/api/projects/${PROJECT_ID}/builds?limit=2`]);
-  });
-});
-
 describe("a bearer never follows a platform redirect", () => {
   let tmp: string;
   let prevXdg: string | undefined;
@@ -255,19 +193,6 @@ describe("a bearer never follows a platform redirect", () => {
     else process.env.EXTENSION_DEV_API_URL = prevApi;
 
     fs.rmSync(tmp, { recursive: true, force: true });
-  });
-
-  it("refuses a 302 as an unreachable platform and never sends the bearer to the Location", async () => {
-    const out = JSON.parse(await builds({ api: base, action: "list", limit: 2 }));
-
-    expect(seen.map((hit) => hit.path)).not.toContain("/collect");
-    expect(seen.every((hit) => hit.authorization === "Bearer claims.sig")).toBe(true);
-    expect(out.ok).toBe(false);
-    expect(out.status).toBe("unavailable");
-    expect(out.error.code).toBe("E_NETWORK");
-    expect(out.error.message).toBe(
-      `could not reach ${base}/api/projects/${PROJECT_ID}/builds?limit=2: the platform answered a 302 redirect, and a credential is never sent to a redirect`,
-    );
   });
 
   it("refuses the redirect on a direct bearer call and still follows one that carries no bearer", async () => {
@@ -343,18 +268,5 @@ describe("the forwarder's login goes only to its own www and its own lane", () =
 
     status = 401;
     expect(await forwardCredential(input)).toMatchObject({ ok: false, status: 401 });
-  });
-
-  it("keeps the in-process path while the switch is off, and refuses with the switch's name when www has no open lane", async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse({ code: "FORWARD_LANE_CLOSED", message: "The lane is off." }, 503)) as unknown as typeof fetch;
-    const deps = { env: { EXTENSION_DEV_HOSTED: "1" }, fetchImpl, resolveLogin: () => ({ token: "device-login", ref: { workspace: "acme", project: "web" } }) };
-    const local: (args: Record<string, unknown>) => Promise<string> = async () => "local";
-
-    expect(await forwardable({ schema: { name: "extension_builds", description: "", inputSchema: {} }, handler: local }, { ...deps, env: {} }).handler({})).toBe("local");
-    expect(fetchImpl).not.toHaveBeenCalled();
-
-    const off = JSON.parse(await forwardCall("extension_release_status", {}, local, deps));
-    expect(off).toMatchObject({ ok: false, status: "hosted-off", error: { code: "E_PLATFORM" }, hint: expect.stringContaining("Unset EXTENSION_DEV_HOSTED") });
-    expect(JSON.parse(await forwardCall("extension_release_status", { api: "https://staging.extension.dev" }, local, deps))).toMatchObject({ status: "hosted-unpaired" });
   });
 });

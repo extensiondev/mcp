@@ -5,7 +5,6 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { handler as workspace, schema } from "../tools/workspace";
-import { includesOf } from "../tools/workspace-reads";
 import { trackFields } from "../lib/track-url";
 import { writeCredentials } from "../lib/credentials";
 
@@ -159,75 +158,6 @@ describe("extension_workspace include reads the team, members, tokens, apps and 
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
-  it("offers include with the five sections and keeps the action enum", () => {
-    const props = schema.inputSchema.properties as unknown as Record<string, { enum?: string[]; description?: string; items?: { enum: string[] } }>;
-
-    expect(props.include.items?.enum).toEqual(["team", "members", "tokens", "apps", "activity", "environment", "storeAccounts"]);
-    expect(props.action.enum).toEqual(["info", "projects", "usage", "settings", "set-visibility", "configure-project", "set-environment"]);
-    expect(props.include.description).toContain("Read-only");
-    expect(includesOf(["team", "team", "nope", 3])).toEqual({ sections: ["team"], bad: ["nope", "3"] });
-  });
-
-  it("adds every section to the info answer, each with its console page", async () => {
-    if (process.platform === "win32") return;
-
-    const raw = await workspace({ include: ["team", "members", "tokens", "apps", "activity"], api: API });
-    const out = JSON.parse(raw);
-
-    expect(out.ok).toBe(true);
-    expect(out.status).toBe("read");
-    expect(out.value.action).toBe("info");
-    expect(out.value.workspace.slug).toBe("acme");
-    expect(out.value.project).toBe("acme/alpha");
-
-    expect(out.value.team.members).toEqual([
-      { login: "octocat", role: "owner", joinedAt: "2026-01-01T00:00:00.000Z" },
-      { login: "hubot", role: "member", joinedAt: "2026-02-01T00:00:00.000Z" },
-    ]);
-
-    expect(out.value.team.invites).toEqual([{ id: "inv_1", email: "a***@acme.test", role: "member", invitedBy: "octocat", createdAt: "2026-10-01T00:00:00.000Z", expiresAt: "2026-10-08T00:00:00.000Z" }]);
-    expect(out.value.team.consoleUrl).toContain("/acme/alpha/");
-    expect(out.value.team.consoleUrl).toContain("team");
-
-    expect(out.value.members.members).toHaveLength(2);
-    expect(out.value.members.invites).toEqual([]);
-    expect(out.value.members.consoleUrl).toContain("/acme/settings/members");
-
-    expect(out.value.tokens.tokens).toEqual([
-      { id: "tokA1234567", label: "mcp", kind: "api", createdAt: "2026-10-20T10:00:00.000Z", expiresAt: "2099-10-27T10:00:00.000Z", notAfter: null, issuedBy: "octocat", build: null, lastUsedAt: null, revoked: false, revokedAt: null, revokedBy: null },
-      { id: "shrB1234567", label: "testers", kind: "share", createdAt: "2026-10-21T10:00:00.000Z", expiresAt: "2099-10-28T10:00:00.000Z", notAfter: null, issuedBy: "octocat", build: "0c7471e", lastUsedAt: null, revoked: true, revokedAt: "2026-10-22T10:00:00.000Z", revokedBy: "octocat" },
-    ]);
-
-    expect(out.value.tokens.consoleUrl).toContain("access-tokens");
-
-    expect(out.value.apps.apps).toEqual([
-      { id: "grant_1", name: "Claude Code", redirectHost: "localhost", connectedBy: "octocat", projects: ["alpha"], connectedAt: "2026-10-15T10:00:00.000Z", lastRefreshedAt: null, expiresAt: "2027-10-15T10:00:00.000Z" },
-    ]);
-
-    expect(out.value.apps.consoleUrl).toContain("connected-apps");
-
-    expect(out.value.activity.total).toBe(2);
-    expect(out.value.activity.entries[0]).toEqual({
-      id: "0c7471e",
-      category: "builds",
-      event: "build_succeeded",
-      status: "success",
-      at: "2026-10-22T10:00:00.000Z",
-      details: { commit: "0c7471e", message: "Ship it", branch: "main", browsers: [{ name: "chrome", status: "success" }], actor: { login: "octocat", displayName: "Octo" } },
-    });
-
-    expect(out.value.activity.entries[1].details).toEqual({ version: "1.2.0", channel: "stable", browser: "chrome" });
-    expect(out.value.activity.consoleUrl).toContain("/acme/alpha/activity");
-
-    expect(out.hint).toContain("The project team has 2 members and 1 pending invite");
-    expect(out.hint).toContain("acme has 2 members and 0 pending invites");
-    expect(out.hint).toContain("1 of 2 access tokens");
-    expect(out.hint).toContain("1 connected app holds");
-    expect(out.hint).toContain("2 newest entries (of 2)");
-    expect(calls.find((call) => call.pathname.endsWith("/activity"))?.search).toBe("?limit=50");
-    expect(calls.every((call) => call.auth === "Bearer alpha.sig")).toBe(true);
-  });
-
   it("never answers a token value, a share link, a mirror repository or a workflow run", async () => {
     if (process.platform === "win32") return;
 
@@ -240,65 +170,6 @@ describe("extension_workspace include reads the team, members, tokens, apps and 
     expect(raw).not.toContain("workflowName");
     expect(raw).not.toContain("octo@acme.test");
     expect(raw).not.toContain('"source"');
-  });
-
-  it("lists the workspace's store accounts by name and never a key", async () => {
-    if (process.platform === "win32") return;
-
-    routes["/api/workspaces/acme/store-accounts"] = {
-      body: {
-        workspace: "acme",
-        storeAccounts: {
-          chrome: null,
-          firefox: { kind: "keys", connectedAs: "user:1:2", connectedAt: "2026-10-24T01:00:00.000Z", checkedAt: "2026-10-24T01:00:00.000Z", healthy: true, secret: "never-answered" },
-          edge: null,
-          safari: null,
-        },
-      },
-    };
-
-    const raw = await workspace({ include: ["storeAccounts"], api: API });
-    const out = JSON.parse(raw);
-
-    expect(out.ok).toBe(true);
-    expect(out.value.storeAccounts.accounts).toEqual([
-      { store: "chrome", connected: false, connectedAs: null, connectedAt: null, checkedAt: null, healthy: null },
-      { store: "firefox", connected: true, connectedAs: "user:1:2", connectedAt: "2026-10-24T01:00:00.000Z", checkedAt: "2026-10-24T01:00:00.000Z", healthy: true },
-      { store: "edge", connected: false, connectedAs: null, connectedAt: null, checkedAt: null, healthy: null },
-      { store: "safari", connected: false, connectedAs: null, connectedAt: null, checkedAt: null, healthy: null },
-    ]);
-
-    expect(out.value.storeAccounts.consoleUrl).toContain("/acme/settings/store-accounts");
-    expect(out.hint).toContain("acme has a store account for Firefox Add-ons (user:1:2)");
-    expect(raw).not.toContain("never-answered");
-  });
-
-  it("names a section the platform did not answer and keeps the others", async () => {
-    if (process.platform === "win32") return;
-
-    routes["/api/workspaces/acme/members"] = { body: { message: "not found" }, status: 404 };
-    routes[`/api/projects/${ALPHA_ID}/team/invites`] = { body: { message: "Only workspace owners can do that.", code: "OWNER_REQUIRED" }, status: 403 };
-
-    const out = JSON.parse(await workspace({ include: ["members", "team"], api: API }));
-
-    expect(out.ok).toBe(true);
-    expect(out.value.members).toBeUndefined();
-    expect(out.value.team.members).toHaveLength(2);
-    expect(out.value.team.invites).toBeNull();
-    expect(out.value.team.invitesNote).toContain("403");
-    expect(out.warnings.join(" ")).toContain("The workspace members could not be read: the platform in front of this server does not answer it to a token yet");
-    expect(out.warnings.join(" ")).toContain("/acme/settings/members");
-  });
-
-  it("refuses an unknown section before reading anything", async () => {
-    if (process.platform === "win32") return;
-
-    const out = JSON.parse(await workspace({ include: ["billing"], api: API }));
-
-    expect(out.ok).toBe(false);
-    expect(out.status).toBe("bad-request");
-    expect(out.error.message).toContain("team, members, tokens, apps, activity");
-    expect(calls).toHaveLength(0);
   });
 
   it("leaves the answer untouched without include", async () => {

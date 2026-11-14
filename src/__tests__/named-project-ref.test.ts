@@ -14,7 +14,6 @@ import { FEATURE_GROUPS } from "../lib/tool-policy";
 import { handler as publish } from "../tools/publish";
 import { handler as promote } from "../tools/release-promote";
 import { handler as releaseStatus } from "../tools/release-status";
-import { handler as submit } from "../tools/submit-local";
 import { promoteAnswer } from "./fixtures/platform-answers";
 
 const KEYS = ["XDG_CONFIG_HOME", "EXTENSION_DEV_PROJECT", "EXTENSION_DEV_TOKEN", "EXTENSION_DEV_API_URL", "EXTENSION_DEV_APPROVAL_GATE"];
@@ -166,116 +165,6 @@ describe("resolveProjectRef", () => {
       workspace: "acme",
       project: "app",
     });
-  });
-});
-
-describe("extension_publish with project", () => {
-  it("returns the registry address of the project it was called for", async () => {
-    platform({ publish: { shareUrl: "https://share.test/x", buildSha: "abc1234", version: "9.9.9", builtAt: "2026-10-05T09:00:00.000Z" } });
-    const out = JSON.parse(await publish({ project: NAMED }));
-
-    expect(out.ok).toBe(true);
-    expect(out.value.registryUrl).toBe(
-      `https://registry.extension.land/${WS}/refined-github/_extension-dev/builds/index.json`,
-    );
-
-    expect(JSON.stringify(out)).not.toContain(ACTIVE_SLUG);
-    expect([...new Set(bearers)]).toEqual(["Bearer token-for-refined-github"]);
-  });
-
-  it("fills a missing build sha and version from the named project's index, never the active one's", async () => {
-    platform({ publish: { shareUrl: "https://share.test/x", visibility: "private" } });
-    const out = JSON.parse(await publish({ project: NAMED }));
-
-    expect(out.value.buildSha).toBe("sha-of-refined-github");
-    expect(out.value.version).toBe("1.0.0-refined-github");
-    expect(registryReads()).toHaveLength(1);
-    expect(registryReads()[0]).toContain("/refined-github/");
-  });
-
-  it("does the same for each of several named projects in turn", async () => {
-    platform({ publish: { shareUrl: "https://share.test/x" } });
-
-    for (const slug of ["refined-github", "vue-devtools", ACTIVE_SLUG]) {
-      const out = JSON.parse(await publish({ project: `${WS}/${slug}` }));
-      expect(out.value.registryUrl).toContain(`/${slug}/_extension-dev/`);
-      expect(out.value.buildSha).toBe(`sha-of-${slug}`);
-    }
-  });
-
-  it("still describes the active login when no project is named", async () => {
-    platform({ publish: { shareUrl: "https://share.test/x" } });
-    const out = JSON.parse(await publish({}));
-
-    expect(out.value.registryUrl).toContain(`/${ACTIVE_SLUG}/_extension-dev/`);
-  });
-});
-
-describe("the sibling tools that take project", () => {
-  it("extension_release_promote points a failed promote at the named project's builds and channels", async () => {
-    platform({ promote: { status: 404, body: { message: "unknown build", code: "UNKNOWN_BUILD" } } });
-    const out = JSON.parse(
-      await promote({ project: NAMED, buildId: "abc1234", channel: "preview" } as never),
-    );
-
-    expect(out.ok).toBe(false);
-    expect(out.value.buildsPageUrl).toContain(`/${WS}/refined-github`);
-    expect(out.value.registryChannelsUrl).toContain("/refined-github/_extension-dev/channels.json");
-    expect(out.value.validChannelShas).toEqual({ stable: "stable-of-refined-github" });
-    expect(JSON.stringify(out)).not.toContain(ACTIVE_SLUG);
-  });
-
-  it("extension_release_promote returns the named project's public pages on success", async () => {
-    platform({ promote: { status: 200, body: promoteAnswer() } });
-    const out = JSON.parse(
-      await promote({ project: NAMED, buildId: "abc1234", channel: "preview" } as never),
-    );
-
-    expect(out.ok).toBe(true);
-    expect(JSON.stringify(out.value)).toContain("refined-github");
-    expect(JSON.stringify(out)).not.toContain(ACTIVE_SLUG);
-  });
-
-  it("extension_submit names the named project's console page on a dry run", async () => {
-    platform({ submit: { ok: true, results: [] } });
-    const out = await submit({
-      project: NAMED,
-      buildSha: "abc1234",
-      browsers: ["chrome"],
-    } as never);
-
-    expect(out).toContain(`/${WS}/refined-github/`);
-    expect(out).not.toContain(ACTIVE_SLUG);
-  });
-
-  it("extension_release_status reads the project named as '<workspace>/<project>'", async () => {
-    platform();
-    await releaseStatus({ project: "acme/app", include: ["releases"] });
-
-    expect(registryReads().length).toBeGreaterThan(0);
-
-    for (const url of registryReads()) {
-      expect(url).toContain("registry.extension.land/acme/app/_extension-dev/");
-      expect(url).not.toContain("%2F");
-    }
-  });
-
-  it("extension_release_status on a pinned server reads the pinned project, not a glued address", async () => {
-    platform();
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    await createServer({ features: [...FEATURE_GROUPS], noShip: false, project: NAMED }).connect(serverTransport);
-    const client = new Client({ name: "named-ref-probe", version: "0.0.0" });
-    await client.connect(clientTransport);
-    process.env.EXTENSION_DEV_PROJECT = NAMED;
-
-    await client.callTool({ name: "extension_release_status", arguments: { include: ["releases"] } });
-
-    expect(registryReads().length).toBeGreaterThan(0);
-
-    for (const url of registryReads()) {
-      expect(url).toContain(`registry.extension.land/${WS}/refined-github/_extension-dev/`);
-      expect(url).not.toContain("%2F");
-    }
   });
 });
 

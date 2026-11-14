@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 import { describe, it, expect, vi, afterEach, afterAll } from "vitest";
 
 import * as stop from "../tools/stop";
-import * as releasePromote from "../tools/release-promote";
+import { writeCredentials } from "../lib/credentials";
 import { registerSession, removeSession } from "../lib/process-manager";
 import { runCli } from "../index";
 
@@ -262,15 +262,28 @@ describe("a marker that did not land is said", () => {
 });
 
 describe("release promote exits non-zero on an unreadable answer", () => {
-  it("exits 1 when the handler output is not an envelope", async () => {
-    vi.spyOn(releasePromote, "handler").mockResolvedValue("<html>gateway</html>");
-    vi.spyOn(process.stderr, "write").mockImplementation(() => true);
-    expect(await runCli("release", ["promote", "--build", "abc", "--channel", "beta"])).toBe(1);
-  });
+  it("exits 1 when the platform answers the forwarder with a page instead of an envelope", async () => {
+    const previous = process.env.XDG_CONFIG_HOME;
+    const seen: string[] = [];
 
-  it("exits 0 only on ok: true", async () => {
-    vi.spyOn(releasePromote, "handler").mockResolvedValue(JSON.stringify({ ok: true }));
+    process.env.XDG_CONFIG_HOME = tmpProject();
+    writeCredentials({ version: 1, token: "claims.sig", workspaceSlug: "acme", projectSlug: "widget", expiresAt: Math.floor(Date.now() / 1000) + 3600, api: "https://www.extension.dev" });
+    vi.stubGlobal("fetch", async (url: unknown) => {
+      seen.push(String(url));
+
+      return new Response("<html>gateway</html>", { status: 502 });
+    });
+
     vi.spyOn(process.stderr, "write").mockImplementation(() => true);
-    expect(await runCli("release", ["promote", "--build", "abc", "--channel", "beta"])).toBe(0);
+
+    try {
+      expect(await runCli("release", ["promote", "--build", "abc", "--channel", "beta"])).toBe(1);
+      expect(seen.length).toBeGreaterThan(0);
+    } finally {
+      vi.unstubAllGlobals();
+
+      if (previous === undefined) delete process.env.XDG_CONFIG_HOME;
+      else process.env.XDG_CONFIG_HOME = previous;
+    }
   });
 });

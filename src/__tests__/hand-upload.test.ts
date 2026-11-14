@@ -6,7 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -16,7 +15,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { writeCredentials } from "../lib/credentials";
 import { handUploadHow, handUploadOf, handUploadSentence } from "../lib/hand-upload";
 import { namesRegistryOrToken } from "../lib/package-address";
-import { handler as submit } from "../tools/submit-local";
 
 type Row = Record<string, unknown>;
 
@@ -68,94 +66,5 @@ describe("the hand-upload sentence is one helper for every store that takes a fi
     expect(edge).toContain(`${VERSION_NOTE}; the next one is 0.1.0.1.`);
     expect(edge).toContain("Product ID");
     expect(handUploadHow("firefox.add_on_id", handUploadOf({ ref: REF, sha: SHA, api: PROD, browser: "firefox" }))).toBe("");
-  });
-});
-
-describe("extension_submit preflight: the chrome.item and edge.product rows say one sentence, with no registry address and no token", () => {
-  let tmp: string;
-  let routes: Record<string, () => { status?: number; body: unknown }>;
-  const saved: Record<string, string | undefined> = {};
-  const envKeys = ["XDG_CONFIG_HOME", "EXTENSION_DEV_API_URL", "EXTENSION_DEV_APPROVAL_GATE", "EXTENSION_DEV_TOKEN", "EXTENSION_DEV_REGISTRY_URL"];
-
-  beforeEach(() => {
-    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-hand-upload-"));
-    for (const key of envKeys) saved[key] = process.env[key];
-    for (const key of envKeys) delete process.env[key];
-
-    process.env.XDG_CONFIG_HOME = tmp;
-    process.env.EXTENSION_DEV_API_URL = PROD;
-    process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
-    writeCredentials({ version: 1, token: "claims.sig", workspaceSlug: "acme", projectSlug: "widget", expiresAt: Math.floor(Date.now() / 1000) + 3600, api: PROD });
-    routes = {
-      "GET /api/cli/whoami": () => ({ body: { login: "acme/widget", live: true, projectId: PROJECT_ID, workspaceSlug: "acme", projectSlug: "widget" } }),
-      [`POST /api/projects/${PROJECT_ID}/stores/chrome/submissions/preflight`]: () => ({
-        body: report("chrome", [requirement("chrome.item", "Create the item on the Chrome Web Store dashboard and paste its dashboard address on the project's store settings page.")]),
-      }),
-      [`POST /api/projects/${PROJECT_ID}/stores/edge/submissions/preflight`]: () => ({
-        body: report(
-          "edge",
-          [
-            requirement(
-              "edge.product",
-              `extension_builds (action: 'download', buildId: '${SHA}', browser: 'edge') saves it from the build, byte-identical to what the integrity report describes, or take ${REGISTRY("edge")}; then paste the Product ID. The product will list the hand upload (0.1.0) and the platform's 0.1.0.1.`,
-            ),
-          ],
-          { edgePreflight: { act: "upload", checks: [], blocking: [], warnings: [], lock: null, nextVersion: "0.1.0.1" } },
-        ),
-      }),
-    };
-
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-        const url = new URL(String(input instanceof Request ? input.url : input));
-        const method = String(init?.method ?? "GET").toUpperCase();
-        const route = routes[`${method} ${url.pathname}`];
-        const answer = route ? route() : { status: 404, body: { message: "not found" } };
-
-        return new Response(JSON.stringify(answer.body), { status: answer.status ?? 200, headers: { "content-type": "application/json" } });
-      }),
-    );
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-
-    for (const [key, value] of Object.entries(saved)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
-
-    fs.rmSync(tmp, { recursive: true, force: true });
-  });
-
-  it("both rows carry the hand-upload sentence for their own package, the version note, and their store's paste step", async () => {
-    const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome", "edge"], api: PROD }));
-    const rowOf = (store: string, id: string) => (out.value.stores[store].requirements.items as Row[]).find((row) => row.id === id) as Row;
-    const chrome = String(rowOf("chrome", "chrome.item").how);
-    const edge = String(rowOf("edge", "edge.product").how);
-
-    expect(out.status).toBe("preflight-read");
-    expect(chrome).toContain(SENTENCE("chrome"));
-    expect(edge).toContain(SENTENCE("edge"));
-    expect(chrome).toContain(`${VERSION_NOTE}.`);
-    expect(edge).toContain(`${VERSION_NOTE}; the next one is 0.1.0.1.`);
-    expect(chrome).toContain("paste the item's dashboard address");
-    expect(edge).toContain("Product ID");
-    expect(edge).not.toContain("byte-identical");
-    expect(namesRegistryOrToken(chrome)).toEqual([]);
-    expect(namesRegistryOrToken(edge)).toEqual([]);
-    expect(JSON.stringify(out)).not.toContain("eyJ");
-  });
-
-  it("a row the project already has keeps the platform's own words", async () => {
-    routes[`POST /api/projects/${PROJECT_ID}/stores/edge/submissions/preflight`] = () => ({
-      body: report("edge", [{ ...requirement("edge.product", "The product exists in Partner Center (Product ID 1111) and the platform uploads to it through the Publish API."), status: "have" }]),
-    });
-
-    const out = JSON.parse(await submit({ action: "preflight", browsers: ["edge"], detail: true, api: PROD }));
-    const row = (out.value.stores.edge.requirements.items as Row[]).find((item) => item.id === "edge.product") as Row;
-
-    expect(row.how).toBe("The product exists in Partner Center (Product ID 1111) and the platform uploads to it through the Publish API.");
   });
 });

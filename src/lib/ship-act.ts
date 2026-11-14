@@ -89,7 +89,7 @@ export const PUBLISH_BROWSERS_WORDS = oneOf(PUBLISH_STORES.map((store) => `["${s
 const HINTS: Record<string, string> = {
   BUILD_DISPATCH_DISABLED: "Dispatch is paused for every project right now, so nothing ran. Try again later.",
   NO_SOURCE_REPO: "This project has no source repository connected, so there is no repository to open a pull request in. Connect one in the console's project settings.",
-  UNKNOWN_CHANNEL: 'Pass one of the channels the message lists, or add this one with extension_builds (action: "create-channel") first.',
+  UNKNOWN_CHANNEL: 'Pass one of the channels the message lists, or add this one with extension_builds_act (action: "create-channel") first.',
   CHANNEL_STATE_INDETERMINATE: "The platform could not read the project's channels just now. Call again in a moment.",
   NO_ROLLBACK_TARGET: "This channel has served no earlier build, so there is nothing to return to. To change what it serves, promote another build with extension_release_promote (buildId, channel).",
   ROLLBACK_HISTORY_UNREADABLE: "The platform could not read the channel's history just now, so it did not guess. Call again in a moment.",

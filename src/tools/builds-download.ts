@@ -181,7 +181,7 @@ export async function download(args: DownloadArgs, local: DownloadLocal): Promis
   };
 
   if (verified === false) {
-    const say = `The saved ${describe(browser)} for build ${sha} at ${filePath} is not the file the integrity report describes: its sha256 is ${actual}, the report says ${expected}. Do not upload it; rerun the checks with extension_builds (action: "recheck", buildId: "${sha}") or rebuild with action: "rebuild" first.`;
+    const say = `The saved ${describe(browser)} for build ${sha} at ${filePath} is not the file the integrity report describes: its sha256 is ${actual}, the report says ${expected}. Do not upload it; rerun the checks with extension_builds_act (action: "recheck", buildId: "${sha}") or rebuild with action: "rebuild" first.`;
 
     return envelope({
       ok: false,
@@ -204,6 +204,6 @@ export async function download(args: DownloadArgs, local: DownloadLocal): Promis
     status: "downloaded",
     value: { ...common, sayToPerson: say },
     hint: `${say} The build page is ${buildPage}.`,
-    warnings: [verified === "no-report" ? `Run extension_builds (action: "recheck", buildId: "${sha}") to have the platform record a digest for this build.` : null],
+    warnings: [verified === "no-report" ? `Run extension_builds_act (action: "recheck", buildId: "${sha}") to have the platform record a digest for this build.` : null],
   });
 }

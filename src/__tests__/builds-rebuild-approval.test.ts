@@ -57,7 +57,7 @@ function digestOf(settings: Record<string, any>): string {
   return sha256(JSON.stringify(canonical));
 }
 
-describe("extension_builds rebuild through the hosted connection asks an owner first", () => {
+describe("extension_builds_act rebuild through the hosted connection asks an owner first", () => {
   let tmp: string;
   let prevXdg: string | undefined;
   let prevApi: string | undefined;
@@ -124,42 +124,6 @@ describe("extension_builds rebuild through the hosted connection asks an owner f
   const rebuildFingerprint = (buildEnv: string) =>
     sha256(`extension_builds.rebuild\nbuildEnv=${buildEnv}\ncommit=${FULL_SHA}`);
 
-  it("rebuild a connected app starts asks an owner to approve that exact commit and hands back the link", async () => {
-    if (process.platform === "win32") return;
-
-    login();
-    const approvalRequest = {
-      action: "extension_builds.rebuild",
-      scope: { commit: FULL_SHA, buildEnv: "staging" },
-      fingerprint: rebuildFingerprint("staging"),
-    };
-    routes[`POST ${DISPATCH_ROUTE}`] = () => ({
-      body: { code: "APPROVAL_REQUIRED", message: "needs approval", approvalRequest },
-      status: 403,
-    });
-
-    routes["POST /api/cli/approvals"] = () => ({
-      status: 201,
-      body: {
-        approvalId: "apr_r1",
-        approvalUrl: "http://localhost:3100/device/approve/apr_r1",
-        expiresAt: "2026-10-15T20:00:00.000Z",
-        description: "Rebuild widget at 603fc8a for staging.",
-      },
-    });
-
-    const out = JSON.parse(await builds({ action: "rebuild", api: API }));
-    const post = calls.find((call) => call.method === "POST" && call.url.endsWith("/api/cli/approvals"));
-
-    expect(post?.body).toMatchObject(approvalRequest);
-    expect(out.ok).toBe(false);
-    expect(out.status).toBe("approval-required");
-    expect(out.value).toMatchObject({ approvalId: "apr_r1", approvalUrl: "http://localhost:3100/device/approve/apr_r1" });
-    expect(out.error.message).toContain("apr_r1");
-    expect(out.error.message).toContain(FULL_SHA);
-    expect(calls.filter((call) => call.url.endsWith("/builds/dispatch"))).toHaveLength(1);
-  });
-
   it("rebuild refuses an approval request whose fingerprint this server cannot reproduce", async () => {
     if (process.platform === "win32") return;
 
@@ -177,65 +141,5 @@ describe("extension_builds rebuild through the hosted connection asks an owner f
 
     expect(out.ok).toBe(false);
     expect(calls.some((call) => call.url.endsWith("/api/cli/approvals"))).toBe(false);
-  });
-
-  it("rebuild with an approvalId needs the full commit sha the approval names", async () => {
-    if (process.platform === "win32") return;
-
-    login();
-    const out = JSON.parse(await builds({ action: "rebuild", approvalId: "apr_r1", buildId: "603fc8a", api: API }));
-
-    expect(out.status).toBe("bad-request");
-    expect(calls.some((call) => call.url.endsWith("/builds/dispatch"))).toBe(false);
-  });
-
-  it("rebuild with a pending approval dispatches nothing", async () => {
-    if (process.platform === "win32") return;
-
-    login();
-    routes["GET /api/cli/approvals/apr_r1"] = () => ({ body: { status: "pending", used: false } });
-
-    const out = JSON.parse(await builds({ action: "rebuild", approvalId: "apr_r1", buildId: FULL_SHA, api: API }));
-
-    expect(out.status).toBe("approval-pending");
-    expect(calls.some((call) => call.url.endsWith("/builds/dispatch"))).toBe(false);
-  });
-
-  it("rebuild with an approved approval dispatches once, naming the commit and the approval", async () => {
-    if (process.platform === "win32") return;
-
-    login();
-    routes["GET /api/cli/approvals/apr_r1"] = () => ({
-      body: { status: "approved", used: false, fingerprint: rebuildFingerprint("production"), expiresAt: new Date(Date.now() + 60_000).toISOString() },
-    });
-
-    routes[`POST ${DISPATCH_ROUTE}`] = () => ({
-      body: { commit: "603fc8a", branch: "main", browsers: "chrome", origin: "mcp" },
-    });
-
-    const out = JSON.parse(
-      await builds({ action: "rebuild", approvalId: "apr_r1", buildId: FULL_SHA, buildEnv: "production", api: API }),
-    );
-    const dispatches = calls.filter((call) => call.url.endsWith("/builds/dispatch"));
-
-    expect(dispatches).toHaveLength(1);
-    expect(dispatches[0].body).toEqual({ origin: "mcp", buildEnv: "production", commitSha: FULL_SHA, approvalId: "apr_r1" });
-    expect(out.ok).toBe(true);
-    expect(out.status).toBe("rebuild-dispatched");
-  });
-
-  it("rebuild with a used approval says the run may already exist and dispatches nothing", async () => {
-    if (process.platform === "win32") return;
-
-    login();
-    routes["GET /api/cli/approvals/apr_r1"] = () => ({
-      body: { status: "approved", used: true, fingerprint: rebuildFingerprint("staging"), expiresAt: new Date(Date.now() + 60_000).toISOString() },
-    });
-
-    const out = JSON.parse(await builds({ action: "rebuild", approvalId: "apr_r1", buildId: FULL_SHA, api: API }));
-
-    expect(out.ok).toBe(false);
-    expect(out.error.name).toBe("ApprovalConsumed");
-    expect(calls.some((call) => call.url.endsWith("/builds/dispatch"))).toBe(false);
   });
 });

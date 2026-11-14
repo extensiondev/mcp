@@ -10,7 +10,7 @@ import { repairEdgeStoreUrl } from "./edge-listing";
 import { loginMissing, openProjectApi, projectApiGet } from "./project-api";
 import { storeReviewOfRow } from "./review-beside-submission";
 
-import type { StoreReview } from "./platform-submissions";
+import type { StoreReview } from "./review-beside-submission";
 
 const HISTORY_PER_STORE = 5;
 

@@ -306,25 +306,4 @@ describe("sync-captures refuses the set on this machine before anything is sent"
 
     expect(out.error).toMatchObject({ message: "captures/chrome/page-01.png is 639x400; a browser capture is at least 640 pixels wide. Nothing was sent." });
   });
-
-  it("a browser the build pages do not show, a missing projectPath, and an approvalId with several browsers", async () => {
-    if (process.platform === "win32") return;
-
-    const brave = await sync({ projectPath: root, browsers: ["brave"] });
-
-    expect(brave.error.message).toContain("brave is not a browser the public build page shows captures for; use chrome, firefox, edge, safari");
-
-    const noPath = await sync({});
-
-    expect(noPath.error.message).toContain("sync-captures needs projectPath");
-
-    const two = await sync({ projectPath: root, browsers: ["chrome", "firefox"], approvalId: "apr_c" });
-
-    expect(two.error.message).toContain("pass one browser with its approvalId");
-
-    const other = JSON.parse(await publish({ action: "nope", api: API }));
-
-    expect(other.error.message).toContain("action must be publish or sync-captures");
-    expect(platform.calls).toHaveLength(0);
-  });
 });

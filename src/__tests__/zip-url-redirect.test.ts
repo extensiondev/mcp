@@ -4,7 +4,6 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-
 import { ZIP_URL_REDIRECT_NOTE } from "../lib/artifacts-api";
 import { probeShareCors } from "../lib/share-cors-probe";
 import { handler as previewWeb } from "../tools/preview-web";
@@ -84,20 +83,6 @@ describe("the note that comes with a zip URL", () => {
 });
 
 describe("extension_shares hands out a zip URL with the redirect named", () => {
-  it("warns whenever a listed row still carries a zipUrl", async () => {
-    global.fetch = listingFetch({
-      artifacts: [liveRow(ZIP)],
-      count: 1,
-      matched: 1,
-      limit: 50,
-      truncated: false,
-    });
-
-    const out = JSON.parse(await shares({ action: "list" }));
-
-    expect(out.value.shares[0].zipUrl).toBe(ZIP);
-    expect(out.warnings.some((w: string) => w === ZIP_URL_REDIRECT_NOTE)).toBe(true);
-  });
 
   it("stays quiet when no row has a zip to download", async () => {
     global.fetch = listingFetch({

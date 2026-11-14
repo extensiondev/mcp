@@ -69,13 +69,6 @@ function answerText(out: any): Array<[string, string]> {
 describe("no platform answer tells a person where or how the platform runs builds", () => {
   const world = usePlatformWorld("extdev-private-runs-");
 
-  it("flags no platform tool as operator-facing, so every one of them is held to this", () => {
-    const platform = Object.entries(TOOL_POLICY).filter(([, policy]) => policy.group === "platform");
-
-    expect(platform.length).toBeGreaterThanOrEqual(11);
-    for (const [name] of platform) expect(WORLD_CASES[name]?.length ?? 0, name).toBeGreaterThan(0);
-  });
-
   const all = Object.entries(WORLD_CASES).map(([tool, cases]) => [tool, [...cases, ...(MIRROR_HEAVY[tool] ?? [])]] as const);
 
   for (const [tool, cases] of all) {
@@ -95,73 +88,6 @@ describe("no platform answer tells a person where or how the platform runs build
       });
     }
   }
-
-  it("still relays the failed step and its lines from a build whose run the platform linked", async () => {
-    if (process.platform === "win32") return;
-
-    world.login();
-
-    const out = await world.call("extension_builds", { action: "logs", buildId: "603fc8a", api: WORLD_API });
-
-    expect(out.ok).toBe(true);
-    expect(out.value.run.failedJob).toMatchObject({ name: "build", step: "Checkout" });
-    expect(out.value.run.failedJob.lines).toHaveLength(2);
-    expect(out.value.runUrl).toBeUndefined();
-    expect(out.hint).toContain("http://console.extension.localhost/acme/widget/builds/603fc8a");
-  });
-
-  it("answers the console build page for every run link in the production builds get shape, and no run id", async () => {
-    if (process.platform === "win32") return;
-
-    world.login();
-    world.routes.push([
-      new RegExp(`^GET ${P}/builds/b418732$`),
-      () => ({
-        body: {
-          buildId: "b418732",
-          commit: "b41873282f0c5d1e9a7b6c4d3e2f1a0b9c8d7e6f",
-          status: "success",
-          buildEnv: "production",
-          browsers: [{ name: "chrome" }, { name: "edge" }, { name: "firefox" }],
-          startedAt: "2026-10-19T17:05:00.000Z",
-          deploymentId: "dep_pii",
-          runId: 39292347354,
-          runUrl: PROD_PII_RUN_URL,
-          htmlUrl: PROD_PII_RUN_URL,
-          workflowRunUrl: PROD_PII_RUN_URL,
-          run: { id: 39292347354, runId: 39292347354, runUrl: PROD_PII_RUN_URL, status: "completed", conclusion: "success" },
-          jobs: [{ name: "chrome", status: "completed", htmlUrl: `${PROD_PII_RUN_URL}/job/1`, runUrl: PROD_PII_RUN_URL }],
-        },
-      }),
-    ]);
-
-    const out = await world.call("extension_builds", { action: "get", buildId: "b418732", api: WORLD_API });
-    const page = "http://console.extension.localhost/acme/widget/builds/b418732";
-    const leaks = answerText(out).filter(([, text]) => FORBIDDEN.some((pattern) => pattern.test(text)));
-
-    expect(leaks, JSON.stringify(out).slice(0, 2000)).toEqual([]);
-    expect(runIdsOutsideInternal(out.value)).toEqual([]);
-    expect(out.value.build.runUrl).toBe(page);
-    expect(out.value.build.workflowRunUrl).toBe(page);
-    expect(out.value.build.run.runUrl).toBe(page);
-    expect(out.value.build.run.id).toBeUndefined();
-    expect(out.value.build.jobs[0].htmlUrl).toBe(page);
-    expect(out.value.run.runUrl).toBe(page);
-    expect(out.value.run.internal).toEqual({ runId: 39292347354 });
-    expect(out.value.trackUrl).toBe(page);
-  });
-
-  it("keeps the run id a rebuild needs to be matched under internal only", async () => {
-    if (process.platform === "win32") return;
-
-    world.login();
-
-    const out = await world.call("extension_builds", { action: "rebuild", buildId: FULL_SHA, api: WORLD_API });
-
-    expect(out.value.internal).toEqual({ runId: 18234567999 });
-    expect(out.value.runId).toBeUndefined();
-    expect(out.hint).not.toContain("18234567999");
-  });
 });
 
 describe("the shared answer guard", () => {

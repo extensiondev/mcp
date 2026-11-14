@@ -119,7 +119,7 @@ export const schema = {
       },
       projectPath: {
         type: "string",
-        description: `Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). ${SOURCE_SKIPPED_FOLDERS.join(", ")}, ${SOURCE_SKIPPED_EXTENSIONS.join(", ")}, .env*, key files and .gitignore entries stay out; 4 MB zipped at most. On an uploaded project with a login this re-seeds and rebuilds it after an approval; extension_builds rebuild rebuilds its stored tree without a new upload.`,
+        description: `Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). ${SOURCE_SKIPPED_FOLDERS.join(", ")}, ${SOURCE_SKIPPED_EXTENSIONS.join(", ")}, .env*, key files and .gitignore entries stay out; 4 MB zipped at most. On an uploaded project with a login this re-seeds and rebuilds it after an approval; extension_builds_act rebuild rebuilds its stored tree without a new upload.`,
       },
       repo: {
         type: "string",
@@ -1109,8 +1109,8 @@ async function sendCreate(
         },
         hint:
           ctx.source.kind === "upload"
-            ? `Project ${ctx.project} exists and was not re-seeded from this upload: the platform re-seeds from a new archive only a project whose source was uploaded. Run extension_auth (action: login) with project '${ctx.project}'; extension_builds (action: rebuild, project: '${ctx.project}') builds it again from the source it holds.`
-            : `Run extension_auth (action: login) with project '${ctx.project}'. extension_builds (action: rebuild, project: '${ctx.project}') builds its head again without a push.`,
+            ? `Project ${ctx.project} exists and was not re-seeded from this upload: the platform re-seeds from a new archive only a project whose source was uploaded. Run extension_auth (action: login) with project '${ctx.project}'; extension_builds_act (action: rebuild, project: '${ctx.project}') builds it again from the source it holds.`
+            : `Run extension_auth (action: login) with project '${ctx.project}'. extension_builds_act (action: rebuild, project: '${ctx.project}') builds its head again without a push.`,
       });
     }
 

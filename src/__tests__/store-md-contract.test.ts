@@ -8,7 +8,6 @@ import { describe, expect, it } from "vitest";
 
 import { STORE_MD_FILENAME, parseStoreMd, type StoreMdData } from "../lib/store-md";
 import { storeMdAt } from "../lib/store-facts-local";
-import { storeMdWarnings } from "../tools/submit";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fixturesDir = path.join(here, "fixtures", "store-md");
@@ -66,28 +65,6 @@ describe("STORE.md contract corpus, where an upstream declared in .gitmodules an
   it.each(fixtures)("this package parses %s exactly as the pin", (name) => {
     expect(parseStoreMd(read(name))).toEqual(pin.expected[name]);
   });
-
-  it.each(fixtures)(
-    "the submit advisory for %s follows the pin, never its own reading",
-    (name) => {
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-storemd-pin-"));
-
-      try {
-        fs.writeFileSync(path.join(dir, STORE_MD_FILENAME), read(name));
-        const warnings = storeMdWarnings(["firefox", "edge"], storeMdAt(dir));
-        const expected = pin.expected[name]!;
-        expect(
-          warnings.some((w) => w.includes("no Firefox reviewer notes")),
-        ).toBe(!expected.firefox?.approvalNotes);
-
-        expect(
-          warnings.some((w) => w.includes("no Edge certification notes")),
-        ).toBe(!expected.edge?.certificationNotes);
-      } finally {
-        fs.rmSync(dir, { recursive: true, force: true });
-      }
-    },
-  );
 });
 
 describe("STORE.md contract against the platform parser", () => {

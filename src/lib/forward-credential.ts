@@ -12,7 +12,6 @@ import { serverOf } from "./credential-server";
 import { bearerFetch } from "./platform-fetch";
 import { PROJECT_HEADER } from "./request-fetch";
 
-export const HOSTED_SWITCH = "EXTENSION_DEV_HOSTED";
 export const FORWARD_URL_OVERRIDE = "EXTENSION_DEV_FORWARD_URL";
 export const FORWARD_PATH = "/mcp/forward";
 export const EXCHANGE_PATH = "/api/cli/forward/exchange";
@@ -25,10 +24,6 @@ export const FORWARD_PAIRS: Readonly<Record<string, string>> = Object.freeze({
 });
 
 type Env = Record<string, string | undefined>;
-
-export function hostedForwarding(env: Env = process.env): boolean {
-  return String(env[HOSTED_SWITCH] ?? "").trim() === "1";
-}
 
 function loopback(url: URL): boolean {
   const host = url.hostname.toLowerCase();

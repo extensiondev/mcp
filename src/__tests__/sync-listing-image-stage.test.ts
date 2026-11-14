@@ -15,7 +15,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { STAGED_IMAGE_MAX_BYTES, STAGED_IMAGES_PER_STORE, stageListingImages, stagedImageGuard } from "../lib/listing-image-stage";
 import { forwardSubmitFacts, imagesTheLaneWants, type StageImage } from "../lib/submit-facts-forward";
 import { handler as hosted } from "../tools/submit";
-import { handler as submit } from "../tools/submit-local";
 import { solidPng } from "./fixtures/png";
 import { API, PROJECT_ID, PROJECT_ROUTE, useProjectRoutes, type Call } from "./fixtures/project-routes";
 
@@ -52,9 +51,6 @@ function shot(root: string, name: string, pad: number): string {
   return relative;
 }
 
-async function sync(root: string, screenshots: string[]): Promise<any> {
-  return JSON.parse(await submit({ action: "sync-listing", browsers: ["safari"], projectPath: root, screenshots, api: API }));
-}
 
 function image(source: string, bytes: number): ListingImage {
   return { sha256: `local-${source}`, width: 2560, height: 1600, bytes: Buffer.alloc(bytes), size: bytes, source };
@@ -85,73 +81,6 @@ describe("sync-listing stages each image through the listing images door, then w
         },
       };
     };
-  });
-
-  it("stages three screenshots as three PUTs, then sends one listing PUT naming the answered shas, never the local ones", async () => {
-    if (process.platform === "win32") return;
-
-    const out = await sync(root, [shot(root, "a.png", 1), shot(root, "b.png", 2), shot(root, "c.png", 3)]);
-    const stages = platform.sent("PUT", IMAGES);
-    const shots = stages.filter((call) => call.body.kind === "screenshots");
-    const put = platform.sent("PUT", LISTING);
-
-    expect(out.ok).toBe(true);
-    expect(shots).toHaveLength(3);
-    expect(Buffer.from(shots[0]!.body.dataBase64, "base64").length).toBe(solidPng(2560, 1600).length + 1);
-    expect(put).toHaveLength(1);
-
-    const callOrder = platform.calls.map((call) => `${call.method} ${call.path}`);
-    expect(callOrder.lastIndexOf(`PUT ${IMAGES}`)).toBeLessThan(callOrder.indexOf(`PUT ${LISTING}`));
-
-    const answered = stages.map((_, index) => `answered-${index + 1}`);
-    const shas = put[0]!.body.media.screenshots.map((row: any) => row.sha256);
-    expect(shas).toEqual(answered.slice(stages.length - 3));
-    expect(put[0]!.body.media.screenshots[0]).toEqual({ sha256: shas[0], width: 2560, height: 1600 });
-    expect(JSON.stringify(put[0]!.body)).not.toContain("dataBase64");
-
-    const images = out.value.listing.images.filter((row: any) => row.kind === "screenshots");
-    expect(images.map((row: any) => row.name)).toEqual(["shots/a.png", "shots/b.png", "shots/c.png"]);
-    expect(images[0]).toMatchObject({ name: "shots/a.png", sha256: shas[0], width: 2560, height: 1600 });
-    expect(out.value.listing.staged).toBe(stages.length);
-    expect(out.value.sayToPerson).toContain(`${stages.length} images were staged one per request`);
-    expect(out.warnings ?? []).not.toContain(expect.stringContaining("no listing images door"));
-  });
-
-  it("stops at a stage refused with INVALID_LISTING, naming the file, the code and the fix, and sends no listing PUT", async () => {
-    if (process.platform === "win32") return;
-
-    platform.routes[`PUT ${IMAGES}`] = (call: Call) =>
-      call.body.kind === "screenshots"
-        ? { status: 400, body: { code: "INVALID_LISTING", message: "The screenshot is not a PNG or JPEG the store takes." } }
-        : { body: { ok: true, image: { sha256: "icon-sha", width: 128, height: 128, bytes: 10 } } };
-
-    const out = await sync(root, [shot(root, "bad.png", 0), shot(root, "next.png", 0)]);
-
-    expect(out.ok).toBe(false);
-    expect(out.status).toBe("sync-listing-refused");
-    expect(out.error.code).toBe("E_BAD_REQUEST");
-    expect(out.error.message).toContain("shots/bad.png");
-    expect(out.error.message).toContain("INVALID_LISTING");
-    expect(out.value.image).toEqual({ name: "shots/bad.png", kind: "screenshots" });
-    expect(out.hint).toContain("fix the file");
-    expect(platform.sent("PUT", IMAGES).filter((call) => call.body.kind === "screenshots")).toHaveLength(1);
-    expect(platform.sent("PUT", LISTING)).toHaveLength(0);
-  });
-
-  it("falls back to the single listing body with a warning when the platform answers 404 on the images door", async () => {
-    if (process.platform === "win32") return;
-
-    delete platform.routes[`PUT ${IMAGES}`];
-    const out = await sync(root, [shot(root, "a.png", 0), shot(root, "b.png", 0)]);
-    const put = platform.sent("PUT", LISTING);
-
-    expect(out.ok).toBe(true);
-    expect(platform.sent("PUT", IMAGES)).toHaveLength(1);
-    expect(put).toHaveLength(1);
-    expect(put[0]!.body.media.screenshots).toHaveLength(2);
-    expect(Buffer.from(put[0]!.body.media.screenshots[0].dataBase64, "base64").equals(solidPng(2560, 1600))).toBe(true);
-    expect(out.value.listing).toBeUndefined();
-    expect(out.warnings).toEqual(expect.arrayContaining([expect.stringContaining("no listing images door yet (it answered 404 or 405)")]));
   });
 
   it("refuses an image over 3 MB as listing-too-large, naming the file, before any network call", () => {
@@ -189,42 +118,6 @@ describe("sync-listing stages each image through the listing images door, then w
 
     expect(first).toEqual(again);
     expect(platform.sent("PUT", IMAGES)).toHaveLength(1);
-  });
-
-  it("743: the hosted half names the images it would write before any upload or listing write, and a call it refuses names none", async () => {
-    if (process.platform === "win32") return;
-
-    const args = { action: "sync-listing", browsers: ["safari"], projectPath: root, screenshots: [shot(root, "a.png", 1)], api: API };
-    const uploads: string[] = [];
-
-    const door: StageImage = async (_store, kind, sent) => {
-      uploads.push(kind);
-
-      return { ok: true, json: { image: { sha256: `uploaded-${uploads.length}`, width: sent.width, height: sent.height, bytes: sent.size } } };
-    };
-
-    const asked = JSON.parse(await hosted(args, await forwardSubmitFacts(args)));
-    const wanted = imagesTheLaneWants(asked) ?? [];
-
-    expect(asked).toMatchObject({ ok: false, status: "sync-listing-refused", value: { platformCode: "IMAGE_BYTES_NOT_SENT" } });
-    expect(wanted.map((entry) => [entry.store, entry.kind])).toEqual([["safari", "icons"], ["safari", "screenshots"]]);
-    expect(asked.error.message).toContain("no listing was written and no approval was spent");
-    expect(platform.sent("PUT", LISTING)).toHaveLength(0);
-    expect(uploads).toEqual([]);
-
-    const written = JSON.parse(await hosted(args, await forwardSubmitFacts(args, { wanted, stage: door })));
-
-    expect(written.ok).toBe(true);
-    expect(uploads).toEqual(["icons", "screenshots"]);
-    expect(platform.sent("PUT", IMAGES)).toHaveLength(0);
-    expect(platform.sent("PUT", LISTING)[0]!.body.media.screenshots.map((row: any) => row.sha256)).toEqual(["uploaded-2"]);
-
-    fs.writeFileSync(path.join(root, "STORE.md"), STORE_MD.replace("Hide personal information", "Hide personal information ".repeat(40)));
-    const refused = JSON.parse(await hosted(args, await forwardSubmitFacts(args)));
-
-    expect(refused.ok).toBe(false);
-    expect(imagesTheLaneWants(refused)).toBeNull();
-    expect(platform.sent("PUT", LISTING)).toHaveLength(1);
   });
 
   it("names an image the forwarder uploaded by the door's answer, with no bytes and no request of its own", async () => {

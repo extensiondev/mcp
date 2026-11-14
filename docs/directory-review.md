@@ -1,11 +1,26 @@
 # Directory review: the hosted server
 
-The hosted server at `https://mcp.extension.dev/mcp` serves six tools of this package through
-`src/hosted.ts`. This page is the audit of those six against the Claude connector review
+The hosted server at `https://mcp.extension.dev/mcp` serves seven tools from its own platform
+code (`apps/web/mcp.extension.dev/server/mcp-platform.ts` in the extension.dev monorepo; this
+package's `src/hosted.ts` and `./hosted` export left with 11.0.0). This page is the audit of
+those seven against the Claude connector review
 (https://claude.com/docs/connectors/building/review-criteria, read 2026-11-11) and the OpenAI
 plugin review (https://developers.openai.com/apps-sdk/app-submission-guidelines, read 2026-11-11).
-It is kept current by `src/__tests__/hosted-tools.test.ts`, which pins the title and the four
-hints of every hosted tool.
+It is kept current by the hosted server's endpoint spec, which pins the title and the four hints
+of every hosted tool.
+
+## What leaves the machine
+
+Since 11.0.0 the local server holds no platform code. A platform tool it lists is answered by
+the hosted lane at `https://mcp.extension.dev/mcp/forward`: the local server exchanges the
+stored login at www.extension.dev for a credential that lasts ten minutes, and sends the lane
+that credential, the tool's arguments and the project ref. The login itself, `projectPath` and
+`api` never leave. A store check or a listing sync also sends the facts it read from the project
+folder (the text of `STORE.md`, icon and screenshot sizes and digests, the git HEAD), and listing
+image bytes go to www.extension.dev only when the lane says the listing write needs them. Steps
+that touch the machine run there and never on the lane: sign in, sign out and status, a create
+and its device approval, a web preview, a build download, a capture sync, a share create and
+every upload. A call with no stored login is refused locally and sends nothing.
 
 ## The tools
 
@@ -14,20 +29,21 @@ hints of every hosted tool.
 | `extension_auth` | 14 | Read the signed-in identity | true | false | true | true | No: hosted serves `status` alone | None |
 | `extension_workspace` | 19 | Read the workspace | true | false | true | true | No: hosted serves `info`, `projects`, `settings`, all reads | None of its own since this audit; `value.plan` relays the platform's allowance record as the console shows it |
 | `extension_project_create` | 24 | Create a project | false | false | false | true | No: one operation | None; a refused create relays the platform's sentence, and a spent monthly allowance answers the limit reached, when it resets and the billing page (`value.limitReached`, `value.resetsAt`, `value.billingUrl`), never a price or an upgrade link |
-| `extension_builds` | 16 | Read and rebuild builds | false | true | false | true | Yes: `list`, `get`, `logs` read; `rebuild`, `recheck`, `configure`, `create-channel`, `configure-channel`, `delete-channel` write | None; a spent monthly allowance answers the limit reached, when it resets and the billing page (`value.limitReached`, `value.resetsAt`, `value.billingUrl`), never a price or an upgrade link |
+| `extension_builds` | 16 | Read builds | true | false | true | true | No: hosted serves `list`, `get`, `logs`, all reads | None; a spent allowance answers its reset and the billing page |
+| `extension_builds_act` | 20 | Rebuild and configure builds | false | true | false | true | No: `rebuild`, `recheck`, `configure`, `create-channel`, `configure-channel` all write; `delete-channel` answers console only | None; a spent allowance answers its reset and the billing page |
 | `extension_release_status` | 24 | Read the release status | true | false | true | true | No: one read with `include` | None |
 | `extension_release_promote` | 25 | Promote a release | false | true | false | true | No: `promote`, `cut`, `rollback` all write | None; a spent monthly allowance answers the limit reached, when it resets and the billing page (`value.limitReached`, `value.resetsAt`, `value.billingUrl`), never a price or an upgrade link |
 
 Every hosted answer names only steps the hosted server serves: an `approval-required` answer
 says to open the approval page in the browser and call the same tool again with `approvalId`,
 the projects hint names the sign-in from the MCP client, and the settings hint names the
-console's project settings page (`hostedAnswer` in `src/hosted.ts`, pinned by a scan of every
-hint, warning, error message, next step and spoken line in `hosted-tools.test.ts`).
+console's project settings page (`hostedAnswer` in the hosted server's `mcp-platform.ts`, pinned by a scan of every
+hint, warning, error message, next step and spoken line in the hosted server's endpoint spec).
 
 Every tool lists its title once, as the tool's `title` (MCP 2025-06-18); `annotations` carries
 the four hints and no `title`, so a client that reads only `annotations.title` shows the tool's
 name. Every hint is an explicit boolean (`listedToolEntry` in `src/lib/tool-dispatch.ts`). A hosted projection with fewer actions than its module names its own
-title and hints in `src/hosted.ts`; the rest come from the table in `src/lib/tool-annotations.ts` through `src/lib/tool-policy.ts`. The `download`
+title and hints in the hosted server's `mcp-platform.ts`; the rest come from the table in `src/lib/tool-annotations.ts` through `src/lib/tool-policy.ts`. The `download`
 action and its `to` input are not served hosted: they save a package to the caller's disk, which
 a hosted server does not have.
 
@@ -55,13 +71,11 @@ a hosted server does not have.
 
 ## Open items
 
-1. `extension_builds` mixes reads and writes under one `action` input. The MCP specification
-   carries one `annotations` object per tool and none per action, so a `tools/list` cannot label
-   `list` read-only and `rebuild` destructive on the same tool; the tool is listed non-read-only
-   and destructive, which is what the Claude review's "Separate read and write tools" rule flags
-   and what the OpenAI review's "expose each operation as a separate tool" rule reads the same
-   way. The fix is a split at the policy table: a read-only `extension_builds` (`list`, `get`,
-   `logs`) and a write tool for `rebuild`, `recheck`, `configure` and the channel actions.
+1. Closed in 11.0.0 (ledger 525, ruled 2026-11-14): `extension_builds` was split. The read tool
+   keeps `list`, `get` and `logs` hosted (and `download` on the local server, where it is listed
+   as not read-only because it writes a package to disk); `extension_builds_act` takes `rebuild`,
+   `recheck`, `configure` and the channel actions and is annotated as a destructive act. An act
+   name sent to the read tool is refused with a hint naming the act tool.
 2. The platform's refusals for a plan that does not include a macOS runner
    (`MACOS_RUNNER_NOT_INCLUDED`, `MACOS_NOTARIZATION_NOT_INCLUDED`) still end with "Upgrade this
    workspace ..." and the pricing page address in the sentence a tool relays. No hosted tool
@@ -123,7 +137,7 @@ promote lands. The tests in `src/__tests__/docs-match-the-code.test.ts` pin the 
   on its own. Revoke it under the project's Settings, Connected apps:
   https://console.extension.dev/<workspace>/<project>/settings/connected-apps". The answer never
   says "7 days", "re-mint", "Access tokens" or "stored on this machine", and never returns the
-  token (`src/tools/whoami.ts`, pinned by `hosted-tools.test.ts`).
+  token (`src/tools/whoami.ts`, pinned by the hosted server's endpoint spec).
 
 ### Positive 2: Which projects does the workspace hold
 
@@ -134,7 +148,7 @@ promote lands. The tests in `src/__tests__/docs-match-the-code.test.ts` pin the 
   when one did (`readProjects` in `src/tools/workspace.ts`), closing with "extension_builds
   and extension_release_status read the ones this connection's token covers; to cover another
   project, sign in again from your MCP client, which takes you through the console sign-in on
-  extension.dev." (`hostedAnswer` in `src/hosted.ts`). To replay after the www promote: the
+  extension.dev." (`hostedAnswer` in the hosted server's `mcp-platform.ts`). To replay after the www promote: the
   exact row fields.
 
 ### Positive 3: Did the latest build pass
@@ -180,7 +194,7 @@ promote lands. The tests in `src/__tests__/docs-match-the-code.test.ts` pin the 
   same arguments and approvalId <id>. Nothing was executed." (`src/lib/approval-gate.ts`) and
   the hint "Open <approvalUrl> in the browser and approve it there, then call
   extension_release_promote again with the same arguments and approvalId <id>." (`hostedAnswer`
-  in `src/hosted.ts`; the local server's reading step through `extension_approvals` is not
+  in the hosted server's `mcp-platform.ts`; the local server's reading step through `extension_approvals` is not
   named, since the hosted server does not serve it). The reviewer approves at the link as the
   workspace owner. The second call answers `ok: true` with the release record and the channel
   now serving the build. To replay after the www promote: the released answer's exact status and
@@ -194,7 +208,7 @@ promote lands. The tests in `src/__tests__/docs-match-the-code.test.ts` pin the 
   Stable (`buildEnv: "production"`), and the server answers `ok: false`,
   `status: "promote-failed"`, `error.platformCode: "BUILD_ENV_MISMATCH"` and the hint "Preview
   takes any build; Stable and every other channel take Stable builds, and this build is not one.
-  Rebuild this commit for Stable (Builds, Rebuild in the console, or extension_builds
+  Rebuild this commit for Stable (Builds, Rebuild in the console, or extension_builds_act
   action:\"rebuild\" with this buildId and buildEnv:\"production\"), wait for it to pass, then
   release it again. To ship this build as it is, release it to Preview instead."
   (`promoteRefusalHint` in `src/tools/release-promote.ts`). Why: a Stable release is what the
@@ -206,7 +220,7 @@ promote lands. The tests in `src/__tests__/docs-match-the-code.test.ts` pin the 
 
 - Prompt: "Rebuild the latest commit of <workspace>/<project>." on a workspace whose monthly
   build allowance is spent.
-- Expected tools: `extension_builds` (`action: "rebuild"`).
+- Expected tools: `extension_builds_act` (`action: "rebuild"`).
 - Expected refusal: `ok: false`, `status: "rate-limited"`, `error.code: "E_PLATFORM"`,
   `error.name: "BuildsRefused"`, `error.platformCode: "monthly_cap"`, `value.retryAfterSeconds`,
   `value.limitReached` (for example "monthly build limit (100 builds)"), `value.resetsAt` (the

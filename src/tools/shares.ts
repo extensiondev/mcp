@@ -7,45 +7,14 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { API_BASE } from "../lib/common-schema";
-import {
-  ZIP_URL_REDIRECT_NOTE,
-  listArtifacts,
-  parseArtifactRef,
-  revokeArtifact,
-  wwwRevokeUrl,
-  type ArtifactOwner,
-  type ArtifactPublisher,
-  type ListedArtifact,
-} from "../lib/artifacts-api";
-import { envelope } from "../lib/envelope";
+import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
+import { hostedOnly } from "../lib/hosted-only";
 import { createShareFromBuild, type SharesLocal } from "./shares-create";
 import { SHARES_LOCAL } from "./shares-local";
-import { listBuildLinkShares, namesBuildLink, revokeBuildLinkShare, withBuildLinks } from "./shares-build-links";
-import { resolveCredential } from "../lib/credential-source";
-import { expiredLoginRefusal } from "../lib/login-expired";
-import { resolveToken } from "../lib/publish";
-import { LOGIN_STEPS, PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
-import {
-  approvalGateEnabled,
-  evaluateApproval,
-  requestApprovalAfterRefusal,
-} from "../lib/approval-gate";
-import {
-  PLATFORM_HOLD_CODE,
-  PLATFORM_HOLD_STILL_WORKS,
-  platformHoldEnvelope,
-  templatesOrigin,
-} from "../lib/platform-hold";
-import { namedRefusalOf } from "../lib/named-refusal";
-
-import type { SharedPreviewEntry } from "../lib/share-record";
-
-const LOGIN_HINT = LOGIN_STEPS;
 
 export const schema = {
   name: "extension_shares",
-  description:
-    "List, create and revoke emulator preview links for a tester, and list and revoke build links (a build link or channel link comes from extension_publish). A revoke is permanent and needs an owner's approval.",
+  description: "List, create and revoke emulator preview links for a tester, and list and revoke build links (a build link or channel link comes from extension_publish). A revoke is permanent and needs an owner's approval.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -54,8 +23,7 @@ export const schema = {
         type: "string",
         enum: ["build-link", "preview", "both"],
         default: "both",
-        description:
-          "Which kind of share.",
+        description: "Which kind of share.",
       },
       tokenId: {
         type: "string",
@@ -65,13 +33,11 @@ export const schema = {
         type: "string",
         enum: ["list", "create", "revoke"],
         default: "list",
-        description:
-          "create: share a build; revoke: one share, for good.",
+        description: "create: share a build; revoke: one share, for good.",
       },
       buildId: {
         type: "string",
-        description:
-          "create: build commit sha.",
+        description: "create: build commit sha.",
       },
       browser: {
         type: "string",
@@ -79,35 +45,29 @@ export const schema = {
       },
       artifactId: {
         type: "string",
-        description:
-          "revoke: the gen_... id.",
+        description: "revoke: the gen_... id.",
       },
       url: {
         type: "string",
-        description:
-          "revoke: any URL of the share.",
+        description: "revoke: any URL of the share.",
       },
       approvalId: {
         type: "string",
-        description:
-          "revoke: approved approval id.",
+        description: "revoke: approved approval id.",
       },
       projectPath: {
         type: "string",
-        description:
-          "Project root.",
+        description: "Project root.",
       },
       status: {
         type: "string",
         enum: ["all", "live"],
         default: "all",
-        description:
-          "all or live.",
+        description: "all or live.",
       },
       limit: {
         type: "number",
-        description:
-          "1 to 200 (default 100).",
+        description: "1 to 200 (default 100).",
       },
       api: API_BASE,
     },
@@ -115,541 +75,20 @@ export const schema = {
   },
 };
 
-type Ownership = "project" | "personal" | "unknown";
-
-interface ShareAttribution {
-  ownership: Ownership;
-  ownerPath?: string;
-  credit: string;
-  creditSource: "login" | "tokenId" | "none";
-  revocableBy: string;
-}
-
-const REVOCABLE_BY: Record<Ownership, string> = {
-  project:
-    "Any member of the owning workspace, and any token scoped to the owning project, can revoke this share.",
-  personal:
-    "This is one person's personal share. Only that person can see it and revoke it, so a project token cannot pull it back.",
-  unknown:
-    "The platform did not disclose an owner for this share, so who may revoke it cannot be stated here.",
-};
-
-function text(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function ownershipOf(owner: ArtifactOwner | null | undefined): Ownership {
-  const kind = text(owner?.kind);
-  if (kind === "project") return "project";
-  if (kind === "user") return "personal";
-
-  return "unknown";
-}
-
-function creditOf(sharedBy: ArtifactPublisher | null | undefined): {
-  credit: string;
-  creditSource: "login" | "tokenId" | "none";
-} {
-  const login = text(sharedBy?.login);
-  if (login) return { credit: login, creditSource: "login" };
-
-  const tokenId = text(sharedBy?.tokenId);
-
-  if (tokenId) {
-    return { credit: `CLI token ${tokenId}`, creditSource: "tokenId" };
-  }
-
-  return {
-    credit: sharedBy
-      ? "not recorded: the platform could not resolve who published this share"
-      : "not recorded: this share predates publisher attribution",
-    creditSource: "none",
-  };
-}
-
-function attributionOf(artifact: ListedArtifact): ShareAttribution {
-  const ownership = ownershipOf(artifact.owner);
-  const owner = artifact.owner;
-  const ownerPath =
-    ownership === "project" && owner && owner.kind === "project"
-      ? [text(owner.workspace), text(owner.project)].filter(Boolean).join("/")
-      : "";
-
-  return {
-    ownership,
-    ...(ownerPath ? { ownerPath } : {}),
-    ...creditOf(artifact.sharedBy),
-    revocableBy: REVOCABLE_BY[ownership],
-  };
-}
-
-function localIndex(entries: SharedPreviewEntry[]): Map<string, SharedPreviewEntry> {
-  const index = new Map<string, SharedPreviewEntry>();
-
-  for (const entry of entries) {
-    const existing = index.get(entry.artifactId);
-
-    if (!existing || String(entry.sharedAt) > String(existing.sharedAt)) {
-      index.set(entry.artifactId, entry);
-    }
-  }
-
-  return index;
-}
-
-function localShares(entries: SharedPreviewEntry[]): SharedPreviewEntry[] {
-  return [...localIndex(entries).values()];
-}
-
-type Completeness = "whole" | "cut" | "unsaid";
-
-function localOnlyStatus(
-  entry: SharedPreviewEntry,
-  completeness: Completeness,
-  liveFiltered: boolean,
-  now: number,
-): string {
-  if (completeness === "cut") {
-    return "unknown: the platform list was cut short, so this share may simply be past the returned window.";
-  }
-
-  if (completeness === "unsaid") {
-    return "unknown: the platform did not say whether that list was whole, so this share may simply be past the returned window.";
-  }
-
-  const expiresAt = entry.expiresAt ? Date.parse(entry.expiresAt) : NaN;
-
-  if (Number.isFinite(expiresAt) && expiresAt <= now) {
-    return "expired: its own expiresAt has passed, and the platform no longer lists it.";
-  }
-
-  if (liveFiltered) {
-    return 'not in this live-only listing: the platform was asked for live shares only, so this one may be expired or revoked rather than not owned. Rerun with status:"all" to tell.';
-  }
-
-  return "not owned by this token: expired and pruned, revoked long ago, or shared while logged in to a different project.";
-}
-
-async function listShares(args: {
-  projectPath?: string;
-  status?: string;
-  limit?: number;
-  api?: string;
-  project?: string;
-}, localHalf: SharesLocal): Promise<string> {
-  const liveFiltered = args.status === "live";
-  const local = args.projectPath
-    ? localHalf.readSharedPreviews(args.projectPath)
-    : undefined;
-  const localRecord = local
-    ? {
-        path: local.path,
-        exists: local.exists,
-        entries: local.entries.length,
-        shares: localIndex(local.entries).size,
-        countsNote:
-          "entries is rows in the append-only file and shares is distinct artifact ids in it. They differ when a build was re-shared unchanged, which appends a second row for the same link. shares is the number of links this project ever minted.",
-        ...(local.unreadable
-          ? {
-              unreadable:
-                "The file exists but could not be parsed, so no local reconciliation was possible.",
-            }
-          : {}),
-      }
-    : {
-        path: null,
-        note: "Pass projectPath to reconcile this list against the project's own share record.",
-      };
-
-  const listing = await listArtifacts({
-    liveOnly: liveFiltered,
-    ...(args.limit != null ? { limit: args.limit } : {}),
-    ...(args.api ? { api: args.api } : {}),
-    ...(args.project ? { token: resolveToken({ project: args.project, api: args.api }) } : {}),
-    ref: resolveCredential({ project: args.project, api: args.api }).ref,
-  });
-
-  if (!listing.ok) {
-    const isAuth = listing.error.name === "SharesAuthError";
-
-    return envelope({
-      ok: true,
-      command: "extension_shares",
-      status: "listed-local-only",
-      value: {
-        action: "list",
-        server: {
-          listed: false,
-          errorName: listing.error.name,
-          reason: listing.error.message,
-          ...(listing.held
-            ? {
-                held: true,
-                platformCode: PLATFORM_HOLD_CODE,
-                stillWorks: PLATFORM_HOLD_STILL_WORKS,
-                openSurface: templatesOrigin(args.api),
-              }
-            : {}),
-          ...(isAuth ? { loginHint: LOGIN_HINT } : {}),
-        },
-        shares: [],
-        localOnly: localShares(local?.entries ?? []).map((entry) => ({
-          ...entry,
-          ...(entry.revokeUrl
-            ? { revokeUrl: wwwRevokeUrl(entry.revokeUrl) }
-            : {}),
-        })),
-        localRecord,
-      },
-      warnings: [
-        isAuth
-          ? `The platform was not asked, so live and dead cannot be told apart here. ${LOGIN_HINT} localOnly is this project's own record of every link it ever shared, revoke handles included.`
-          : `The platform did not list shares (${listing.error.message}), so localOnly below is this project's own record and not a statement about what is still live.`,
-      ],
-    });
-  }
-
-  const now = Date.now();
-  const byId = localIndex(local?.entries ?? []);
-  const seen = new Set<string>();
-
-  const shares = listing.data.artifacts.map((artifact: ListedArtifact) => {
-    seen.add(artifact.artifactId);
-    const entry = byId.get(artifact.artifactId);
-
-    return {
-      ...artifact,
-      owner: artifact.owner ?? null,
-      sharedBy: artifact.sharedBy ?? null,
-      attribution: attributionOf(artifact),
-      recordedLocally: Boolean(entry),
-      ...(entry
-        ? {
-            sharedAt: entry.sharedAt,
-            ...(entry.browser ? { browser: entry.browser } : {}),
-            ...(entry.distDir ? { distDir: entry.distDir } : {}),
-          }
-        : local
-          ? {
-              remoteOnly:
-                "Not in this project's record: shared from another machine or another checkout of the project.",
-            }
-          : {}),
-    };
-  });
-
-  const completeness: Completeness = !listing.data.truncatedReported
-    ? "unsaid"
-    : listing.data.truncated
-      ? "cut"
-      : "whole";
-
-  const localOnly = [...byId.values()]
-    .filter((entry) => !seen.has(entry.artifactId))
-    .map((entry) => ({
-      ...entry,
-      ...(entry.revokeUrl ? { revokeUrl: wwwRevokeUrl(entry.revokeUrl) } : {}),
-      status: localOnlyStatus(entry, completeness, liveFiltered, now),
-    }));
-
-  const handsOutAZip =
-    shares.some((share) => Boolean(share.zipUrl)) ||
-    localOnly.some((entry) => Boolean(entry.zipUrl));
-
-  const liveCount = shares.filter((share) => share.live).length;
-  const ownership = {
-    project: shares.filter((s) => s.attribution.ownership === "project").length,
-    personal: shares.filter((s) => s.attribution.ownership === "personal")
-      .length,
-    unknown: shares.filter((s) => s.attribution.ownership === "unknown").length,
-  };
-
-  const truncatedNote =
-    completeness === "cut"
-      ? `This is not the whole set: ${listing.data.count} of ${listing.data.matched} matched shares came back at limit ${listing.data.limit}. truncated also goes true when the server spent its budget working out which shares you are entitled to see, so matched is a floor and not a total. Raise limit (max 200) or pass status:"live" to narrow it, and do not read a missing share as revoked.`
-      : completeness === "unsaid"
-        ? `This listing cannot be called whole: the platform returned no truncated field, so whether ${listing.data.count} shares are all of them is unstated. A share missing from it is unaccounted for rather than dead, and no missing share is reported as revoked or unowned here.`
-        : null;
-
-  return envelope({
-    ok: true,
-    command: "extension_shares",
-    status: "listed",
-    value: {
-      action: "list",
-      server: {
-        listed: true,
-        count: listing.data.count,
-        matched: listing.data.matched,
-        limit: listing.data.limit,
-        truncated: listing.data.truncated,
-        truncatedReported: listing.data.truncatedReported,
-        scanned: listing.data.scanned,
-        scannedNote:
-          "count and matched are shares: count is the shares on this page, matched is how many shares the filter found, and matched is a floor when truncated is true. scanned is not a share count and must not be read as one: it is how many stored records the platform opened to answer, including records that turned out to belong to someone else or to be filtered out. It tracks the platform's work, so it can sit above or beside these numbers by coincidence. ownership breaks the shares on this page down by who may revoke them and sums to the number of rows in shares.",
-        ownership,
-        ...(truncatedNote ? { truncatedNote } : {}),
-      },
-      shares,
-      ...(local ? { localOnly } : {}),
-      localRecord,
-    },
-    hint: `${liveCount} of ${shares.length} listed shares still resolve${
-      local
-        ? `; ${localOnly.length} recorded ${
-            localOnly.length === 1 ? "share is" : "shares are"
-          } ${
-            completeness !== "whole"
-              ? "not in this listing, which is not known to be whole (see the warning), so they may simply be past the returned window"
-              : liveFiltered
-                ? 'not in this live-only listing (possibly dead rather than not owned; rerun with status:"all" to tell)'
-                : "without an artifact behind them"
-          }`
-        : ""
-    }. Revoke one with action:"revoke" and its artifactId or any of its URLs.`,
-    warnings: [
-      "previewUrl and zipUrl are null for a share that is no longer live, because a revoked or expired link cannot resolve for anyone. revokeUrl stays on every row. Revocation is permanent: a revoked id is burned, and re-sharing that build mints a different link. Re-sharing a build that was NOT revoked returns its existing link instead.",
-      "attribution.ownership says who the share belongs to and therefore who may revoke it: project means the owning workspace holds it and any member can pull it back, personal means one person holds it alone. attribution.credit names the publisher and is attribution only, granting and restricting nothing. A credit of \"CLI token ...\" means the platform could not resolve which human minted that token, and a credit of \"not recorded\" means it never knew; neither is a name, and neither should be reported as one.",
-      handsOutAZip ? ZIP_URL_REDIRECT_NOTE : null,
-      truncatedNote,
-      listing.data.malformedRows
-        ? `${listing.data.malformedRows} row(s) of the platform's listing carried no artifact id and were left out, so the list may be short by that many.`
-        : null,
-    ],
-  });
-}
-
-async function revokeShare(args: {
-  artifactId?: string;
-  url?: string;
-  projectPath?: string;
-  approvalId?: string;
-  api?: string;
-  project?: string;
-}, localHalf: SharesLocal): Promise<string> {
-  const supplied = String(args.artifactId || args.url || "").trim();
-  const ref = parseArtifactRef(supplied);
-
-  if (!ref) {
-    return envelope({
-      ok: false,
-      command: "extension_shares",
-      status: "bad-request",
-      value: { action: "revoke", ...(supplied ? { ref: supplied } : {}) },
-      error: {
-        code: "E_BAD_REQUEST",
-        name: "SharesInputError",
-        message: supplied
-          ? `The reference is malformed and nothing was sent to the platform: no share id could be read out of ${JSON.stringify(
-              supplied.length > 200 ? `${supplied.slice(0, 200)}...` : supplied,
-            )}. A share id is gen_ followed by exactly 64 lowercase hex characters (the platform's retired derived form was 32), and a url revokes only when it contains one whole. Check the ref for a copy-paste cut, or run action:"list" and copy the exact artifactId.`
-          : 'Nothing to revoke. Pass artifactId (a gen_... id) or url (the previewUrl, zipUrl, viewUrl, or revokeUrl of the share). Run action:"list" to see both.',
-      },
-    });
-  }
-
-  const credential = resolveCredential({ project: args.project, api: args.api });
-  const token = credential.token;
-
-  if (!token && credential.expired) {
-    return expiredLoginRefusal({ command: "extension_shares", expired: credential.expired, api: args.api, extra: { action: "revoke", artifactId: ref } });
-  }
-
-  const gateInput = {
-    command: "extension_shares",
-    action: "extension_shares.revoke",
-    scope: { artifactId: ref },
-    description: `Permanently revoke share ${ref}, killing the link for everyone with no way to restore it.`,
-    approvalId: args.approvalId,
-    token: token || "",
-    ref: credential.ref,
-    api: args.api,
-    refusedStatus: "revoke-failed",
-    irreversible: true,
-  };
-
-  if (token) {
-    const gate = await evaluateApproval({
-      ...gateInput,
-      enabled: approvalGateEnabled(true),
-    });
-    if (gate.blocked) return gate.envelope;
-  }
-
-  if (!token) {
-    return envelope({
-      ok: false,
-      command: "extension_shares",
-      status: "auth-required",
-      value: { action: "revoke", artifactId: ref },
-      error: {
-        code: "E_AUTH_REQUIRED",
-        name: "SharesAuthError",
-        message: args.project
-          ? noStoredLoginHint(args.project)
-          : "No token. Run extension_auth (action: login), or set EXTENSION_DEV_TOKEN.",
-      },
-    });
-  }
-
-  const result = await revokeArtifact({
-    artifactId: ref,
-    token,
-    ref: credential.ref,
-    ...(args.approvalId ? { approvalId: args.approvalId } : {}),
-    ...(args.api ? { api: args.api } : {}),
-  });
-
-  const local = args.projectPath
-    ? localHalf.readSharedPreviews(args.projectPath)
-    : undefined;
-  const entry = local ? localIndex(local.entries).get(ref) : undefined;
-  const recordNote = local
-    ? local.unreadable
-      ? `${local.path} exists but could not be parsed, so whether this project recorded the share is unknown.`
-      : entry
-      ? `${local.path} still lists this share as its own append-only history and was not rewritten, so the entry stays with its original sharedAt. The platform is the truth for whether a link resolves.`
-      : `${local.path} has no entry for this share, so it was made from another machine or another checkout.`
-    : undefined;
-
-  if (!result.ok) {
-    if (result.held) {
-      return platformHoldEnvelope({
-        command: "extension_shares",
-        name: result.error.name,
-        body: result.body,
-        api: args.api,
-        value: { action: "revoke", artifactId: ref },
-      });
-    }
-
-    if (
-      token &&
-      !args.approvalId &&
-      result.error.status === 403 &&
-      result.error.code === "APPROVAL_REQUIRED"
-    ) {
-      return requestApprovalAfterRefusal(gateInput);
-    }
-
-    const isAuth = result.error.name === "SharesAuthError";
-    const named = namedRefusalOf(result.error.code);
-
-    return envelope({
-      ok: false,
-      command: "extension_shares",
-      status: named?.status ?? "revoke-failed",
-      value: {
-        action: "revoke",
-        artifactId: ref,
-        ...(named ? { sayToPerson: named.say, nextStep: named.nextStep } : {}),
-      },
-      error: {
-        code: named ? "E_PLATFORM" : isAuth ? "E_AUTH_REQUIRED" : "E_PLATFORM",
-        name: named?.name ?? result.error.name,
-        ...(named ? { platformCode: result.error.code } : {}),
-        message: result.error.message,
-      },
-      ...(named ? { hint: named.hint } : isAuth ? { hint: LOGIN_HINT } : {}),
-      warnings: [recordNote],
-    });
-  }
-
-  if (result.data.revoked !== true) {
-    return envelope({
-      ok: true,
-      command: "extension_shares",
-      status: "revoke-unconfirmed",
-      value: {
-        action: "revoke",
-        artifactId: ref,
-        revoked: false,
-        ...(result.data.revokedAt ? { revokedAt: result.data.revokedAt } : {}),
-      },
-      warnings: [
-        `The platform accepted the request but did not confirm the revocation (revoked came back false), so do not treat this link as dead yet. Run action:"list" to see whether ${ref} still resolves, and retry the revoke if it does.`,
-        recordNote,
-      ],
-    });
-  }
-
-  return envelope({
-    ok: true,
-    command: "extension_shares",
-    status: "revoked",
-    value: {
-      action: "revoke",
-      artifactId: ref,
-      revoked: result.data.revoked,
-      ...(result.data.revokedAt ? { revokedAt: result.data.revokedAt } : {}),
-    },
-    warnings: [
-      "The platform reports the share revoked: the id no longer resolves and anyone holding the link gets nothing. Whether the stored zip was deleted is not reported by that answer. Sharing the same build later returns a different link.",
-      recordNote,
-    ],
-  });
-}
-
-interface SharesArgs {
+export interface SharesCreateArgs extends Record<string, unknown> {
   action?: string;
-  kind?: string;
-  tokenId?: string;
   buildId?: string;
   browser?: string;
-  artifactId?: string;
-  url?: string;
-  projectPath?: string;
-  approvalId?: string;
-  status?: string;
-  limit?: number;
-  api?: string;
   project?: string;
+  api?: string;
 }
 
-export async function handler(args: SharesArgs): Promise<string> {
+export async function sharesWith(args: SharesCreateArgs, local: SharesLocal): Promise<string> {
+  if (args.action !== "create") return hostedOnly(schema.name)(args);
+
+  return createShareFromBuild({ buildId: args.buildId, browser: args.browser, project: args.project, api: args.api }, local);
+}
+
+export async function handler(args: SharesCreateArgs): Promise<string> {
   return sharesWith(args, SHARES_LOCAL);
-}
-
-export async function sharesWith(args: SharesArgs, local: SharesLocal): Promise<string> {
-  if (args.action === "create") {
-    return createShareFromBuild({ buildId: args.buildId, browser: args.browser, project: args.project, api: args.api }, local);
-  }
-
-  if (args.action === "revoke" && namesBuildLink(args)) {
-    return revokeBuildLinkShare({
-      ...(args.tokenId ? { tokenId: args.tokenId } : {}),
-      ...(args.url ? { url: args.url } : {}),
-      ...(args.approvalId ? { approvalId: args.approvalId } : {}),
-      ...(args.api ? { api: args.api } : {}),
-      ...(args.project ? { project: args.project } : {}),
-    });
-  }
-
-  if (args.action === "revoke") {
-    return revokeShare({
-      ...(args.artifactId ? { artifactId: args.artifactId } : {}),
-      ...(args.url ? { url: args.url } : {}),
-      ...(args.projectPath ? { projectPath: args.projectPath } : {}),
-      ...(args.approvalId ? { approvalId: args.approvalId } : {}),
-      ...(args.api ? { api: args.api } : {}),
-      ...(args.project ? { project: args.project } : {}),
-    }, local);
-  }
-
-  const kind = String(args.kind ?? "both").trim() || "both";
-  const linkArgs = {
-    ...(args.status ? { status: args.status } : {}),
-    ...(args.api ? { api: args.api } : {}),
-    ...(args.project ? { project: args.project } : {}),
-  };
-
-  if (kind === "build-link") return listBuildLinkShares(linkArgs);
-
-  const previews = await listShares({
-    ...(args.projectPath ? { projectPath: args.projectPath } : {}),
-    ...linkArgs,
-    ...(args.limit != null ? { limit: args.limit } : {}),
-  }, local);
-
-  return kind === "preview" ? previews : withBuildLinks(previews, await listBuildLinkShares(linkArgs));
 }

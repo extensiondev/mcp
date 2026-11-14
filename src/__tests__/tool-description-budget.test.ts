@@ -23,6 +23,7 @@ const CEILINGS: Record<string, number> = {
   extension_browsers: 200,
   extension_build: 150,
   extension_builds: 300,
+  extension_builds_act: 300,
   extension_create: 300,
   extension_dev: 250,
   extension_docs_search: 300,

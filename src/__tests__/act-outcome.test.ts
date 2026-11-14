@@ -19,11 +19,9 @@ import {
   outcomeClock,
   waitBound,
 } from "../lib/act-outcome";
-import { latestBuildDispatch, rememberBuildDispatch } from "../lib/build-dispatches";
 import { withCallMemory } from "../lib/call-memory";
 import { underCallDeadline, withCallDeadline, type CallDeadline } from "../lib/outcome-clock";
 import { handler as builds } from "../tools/builds";
-import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 const FULL_SHA = "603fc8a".padEnd(40, "0");
@@ -60,23 +58,6 @@ describe("a host that ends every call at a fixed time cuts every wait to the tim
     expect(withCallDeadline(deadline, () => [underCallDeadline("dispatch", 90_000), underCallDeadline("dispatch", 60_000), underCallDeadline("read", 15_000)]).map((ms) => Math.ceil(ms / 1000))).toEqual([45, 45, 15]);
     expect(Math.ceil(withCallDeadline({ ...deadline, readsEndAt: now + 9_000 }, () => underCallDeadline("read", 15_000)) / 1000)).toBe(9);
     expect(underCallDeadline("dispatch", 90_000)).toBe(90_000);
-  });
-});
-
-describe("what a tool remembers between two calls travels with the caller on a host that keeps no state", () => {
-  const scope = { base: API, projectId: "prj_1" };
-
-  it("starts each hosted call from what was carried in and hands back what the tool remembered", async () => {
-    const first = await withCallMemory(undefined, async () => rememberBuildDispatch(scope, "603fc8a", "2026-11-14T12:00:00Z"));
-    const cold = await withCallMemory({}, async () => latestBuildDispatch(scope));
-    const carried = await withCallMemory(JSON.parse(JSON.stringify(first.memory)), async () => latestBuildDispatch(scope));
-    const forged = await withCallMemory({ "build-dispatches": [[`${API}\nprj_1`, "not a dispatch list"]], "unconfirmed-writes": [["k", "2"]] }, async () => latestBuildDispatch(scope));
-
-    expect(cold.result).toBeNull();
-    expect(carried.result).toMatchObject({ sha: "603fc8a" });
-    expect(carried.memory).toEqual(first.memory);
-    expect(forged.result).toBeNull();
-    expect(latestBuildDispatch(scope)).toBeNull();
   });
 });
 
@@ -287,177 +268,5 @@ describe("links name every URL an act made or touched", () => {
     expect(dispatchedHint({ acceptedAt: "2026-10-20T12:37:00.000Z", trackUrl: "https://console.test/p", readCall: 'extension_release_status (include: ["stores"])' })).toBe(
       'The platform accepted the act at 2026-10-20T12:37:00.000Z; its record has not confirmed the result yet. Watch https://console.test/p; call extension_release_status (include: ["stores"]) to read it.',
     );
-  });
-});
-
-describe("store acts and builds answer the recorded outcome", () => {
-  const platform = useProjectRoutes("extdev-act-outcome-");
-
-  it("cancel answers canceled once the record leaves the live statuses, and cancel-dispatched before", async () => {
-    if (process.platform === "win32") return;
-
-    platform.login();
-    process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
-    platform.routes[`POST ${PROJECT_ROUTE}/stores/chrome/submissions/sub_7/cancel`] = () => ({ body: { ok: true, dispatched: true, store: "chrome", submissionId: "sub_7" } });
-    let reads = 0;
-
-    platform.routes["GET /api/cli/stores/submissions"] = () => {
-      reads += 1;
-
-      return { body: { submissions: [{ id: "sub_7", store: "chrome", status: reads < 3 ? "submitted" : "withdrawn" }] } };
-    };
-
-    const out = JSON.parse(await submit({ action: "cancel", submissionId: "sub_7", approvalId: "apr_c", api: API }));
-
-    expect(out.status).toBe("canceled");
-    expect(out.value.outcome).toMatchObject({ recorded: true, status: "withdrawn", waitedSeconds: 10 });
-    expect(out.value.links).toEqual([{ kind: "submission", url: expect.stringMatching(/\/submissions\/chrome\/sub_7$/), audience: "workspace members", expiresAt: null, made: false }]);
-    expect(out.hint).toContain("Made: no new links.");
-
-    reads = -100;
-    const early = JSON.parse(await submit({ action: "cancel", submissionId: "sub_7", approvalId: "apr_c", waitSeconds: 0, api: API }));
-
-    expect(early.status).toBe("cancel-dispatched");
-    expect(early.value.outcome).toMatchObject({ recorded: false, status: "submitted" });
-    expect(early.hint).toContain("its record has not confirmed the result yet");
-  });
-
-  it("rollout answers rolled-out when the rollout record reads the asked percentage", async () => {
-    if (process.platform === "win32") return;
-
-    platform.login();
-    process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
-    platform.routes[`POST ${PROJECT_ROUTE}/stores/chrome/rollout`] = () => ({ body: { ok: true, dispatched: true, store: "chrome", deployPercentage: 50 } });
-    platform.routes[`GET ${PROJECT_ROUTE}/stores/chrome/rollout`] = () => ({ body: { rollout: { stagedPublish: true, percentage: 50, canRaise: true } } });
-
-    const out = JSON.parse(await submit({ action: "rollout", deployPercentage: 50, approvalId: "apr_r", api: API }));
-
-    expect(out.status).toBe("rolled-out");
-    expect(out.value.outcome).toMatchObject({ recorded: true, status: "rollout-raised", storeState: "50%" });
-    expect(out.value.links[0]).toMatchObject({ kind: "track", url: expect.stringMatching(/\/submissions\/chrome$/) });
-  });
-
-  it("a real submit answers submit-failed when the record reads failed, with the store's reason", async () => {
-    if (process.platform === "win32") return;
-
-    platform.login();
-    process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
-    platform.routes["POST /api/cli/stores/submit"] = () => ({ body: { ok: true, submissions: [{ id: "sub_9", store: "chrome", status: "pending" }] } });
-    platform.routes["GET /api/cli/stores/submissions"] = () => ({ body: { submissions: [{ id: "sub_9", store: "chrome", status: "failed", failureReason: "The run died before the store step." }] } });
-
-    const out = JSON.parse(await submit({ browsers: ["chrome"], buildSha: "b418732", dryRun: false, api: API }));
-
-    expect(out.ok).toBe(false);
-    expect(out.status).toBe("submit-failed");
-    expect(out.error.message).toContain("chrome: The run died before the store step.");
-    expect(out.value.outcome).toMatchObject({ recorded: true, status: "failed" });
-    expect(out.value.links[0]).toMatchObject({ kind: "submission", made: true });
-    expect(out.value.nextStep.kind).toBe("resubmit");
-    expect(out.value.nextStep.say).toContain("did not reach the Chrome Web Store; nothing is in review");
-    expect(out.value.nextStep.say).toContain("The store answered: chrome: The run died before the store step. Fix the cause");
-    expect(out.value.nextStep.say).not.toContain("recorded the submission");
-    expect(out.value.nextStep.say).not.toContain("review comes after this");
-    expect(out.value.sayToPerson).toBe(out.value.nextStep.say);
-    expect(out.value.nextStep.url).toMatch(/\/submissions\//);
-  });
-
-  it("a listed Firefox upload AMO refused answers the store's own words in the next step", async () => {
-    if (process.platform === "win32") return;
-
-    platform.login();
-    process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
-    const reason =
-      'HTTP 400 Bad Request, POST https://addons.mozilla.org/api/v5/addons/addon/rebeccat@extension.dev/versions/ {"license":["This field, or custom_license, is required for listed versions."]}';
-    platform.routes["POST /api/cli/stores/submit"] = () => ({ body: { ok: true, submissions: [{ id: "sub_ff", store: "firefox", status: "pending" }] } });
-    platform.routes["GET /api/cli/stores/submissions"] = () => ({ body: { submissions: [{ id: "sub_ff", store: "firefox", status: "failed", failureReason: reason }] } });
-
-    const out = JSON.parse(await submit({ browsers: ["firefox"], buildSha: "6d9e10c", dryRun: false, api: API }));
-
-    expect(out.status).toBe("submit-failed");
-    expect(out.value.nextStep.kind).toBe("resubmit");
-    expect(out.value.nextStep.say).toContain("did not reach Firefox AMO; nothing is in review");
-    expect(out.value.nextStep.say).toContain("required for listed versions");
-    expect(out.value.nextStep.say).toContain("submit the same build again");
-    expect(out.value.nextStep.say).not.toContain("review comes after this");
-    expect(JSON.stringify(out)).not.toMatch(/extension-user-land-dev|\/actions\/runs\//);
-  });
-
-  it("a real submit answers the version the store received once the record names it, where the dispatch answer had none", async () => {
-    if (process.platform === "win32") return;
-
-    platform.login();
-    process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
-    const received = { packaged: "0.2.0.8", displayed: "0.2.0", source: "platform", buildNumber: 8 };
-    platform.routes["POST /api/cli/stores/submit"] = () => ({
-      body: { ok: true, submissions: [{ id: "sub_ff8", store: "firefox", status: "pending", storeVersion: null }] },
-    });
-
-    platform.routes["GET /api/cli/stores/submissions"] = () => ({
-      body: { submissions: [{ id: "sub_ff8", store: "firefox", status: "submitted", storeVersion: received }] },
-    });
-
-    const out = JSON.parse(await submit({ browsers: ["firefox"], buildSha: "069d4b8", dryRun: false, api: API }));
-
-    expect(out.value.outcome).toMatchObject({ recorded: true, storeVersions: { firefox: "0.2.0.8" } });
-    expect(out.value.submissions[0].storeVersion).toEqual(received);
-    expect(out.value.submissions[0].version).toBe("0.2.0.8");
-    expect(out.value.outcomes.firefox).toMatchObject({ recorded: true, status: "submitted", storeVersion: "0.2.0.8", submissionId: "sub_ff8" });
-  });
-
-  it("a real submit answers each row's version as the store version it sent, never the sha", async () => {
-    if (process.platform === "win32") return;
-
-    platform.login();
-    process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
-    const sent = { packaged: "0.1.0.3", displayed: "0.1.0", source: "platform", buildNumber: 3 };
-    platform.routes["POST /api/cli/stores/submit"] = () => ({
-      body: { ok: true, submissions: [{ id: "sub_c3", store: "chrome", status: "pending", version: "63f0d41", storeVersion: sent }] },
-    });
-
-    platform.routes["GET /api/cli/stores/submissions"] = () => ({
-      body: { submissions: [{ id: "sub_c3", store: "chrome", status: "submitted", version: "0.1.0", storeVersion: sent }] },
-    });
-
-    const out = JSON.parse(await submit({ browsers: ["chrome"], buildSha: "63f0d41", dryRun: false, api: API }));
-
-    expect(out.value.submissions[0].version).toBe("0.1.0.3");
-    expect(out.value.submissions[0].storeVersion).toEqual(sent);
-    expect(out.value.outcomes.chrome.storeVersion).toBe("0.1.0.3");
-    expect(JSON.stringify(out.value.submissions)).not.toContain("63f0d41");
-  });
-
-  it("rebuild answers built when the build record shows this run finished, and build-failed when it failed", async () => {
-    if (process.platform === "win32") return;
-
-    platform.login();
-    platform.routes[`POST ${PROJECT_ROUTE}/builds/dispatch`] = () => ({
-      body: { ok: true, commit: FULL_SHA, browsers: "chrome", branch: "main", deploymentId: "dep_9", dispatchedAt: "2026-10-20T10:05:00.000Z" },
-    });
-
-    let reads = 0;
-
-    platform.routes[`GET ${PROJECT_ROUTE}/builds/${FULL_SHA}`] = () => {
-      reads += 1;
-
-      return reads < 2
-        ? { body: { buildId: "603fc8a", status: "success", deploymentId: "dep_1", startedAt: "2026-10-20T09:00:00.000Z" } }
-        : { body: { buildId: "603fc8a", status: "success", deploymentId: "dep_9", startedAt: "2026-10-20T10:05:30.000Z" } };
-    };
-
-    const out = JSON.parse(await builds({ action: "rebuild", buildId: FULL_SHA, api: API }));
-
-    expect(out.status).toBe("built");
-    expect(reads).toBe(2);
-    expect(out.value.outcome).toMatchObject({ recorded: true, status: "success", waitedSeconds: 5 });
-    expect(out.value.links).toEqual([{ kind: "build", url: expect.stringMatching(/\/acme\/widget\/builds\/603fc8a$/), audience: "workspace members", expiresAt: null, made: false }]);
-    expect(out.hint).toContain("now reads success");
-
-    platform.routes[`GET ${PROJECT_ROUTE}/builds/${FULL_SHA}`] = () => ({ body: { buildId: "603fc8a", status: "failed", deploymentId: "dep_9", startedAt: "2026-10-20T10:05:30.000Z" } });
-    const failed = JSON.parse(await builds({ action: "rebuild", buildId: FULL_SHA, api: API }));
-
-    expect(failed.ok).toBe(false);
-    expect(failed.status).toBe("build-failed");
-    expect(failed.value.outcome).toMatchObject({ recorded: true, status: "failed" });
-    expect(failed.hint).toContain('action:"logs"');
   });
 });

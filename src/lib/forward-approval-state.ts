@@ -124,7 +124,7 @@ export class ForwardLaneClosedError extends Error {
 
   constructor(door: string, code: string) {
     super(
-      `The hosted lane's ${door} door is closed: ${LANE_SWITCHES[code] ?? "the platform answered 503 without naming a switch"}. This login is fine; the record was neither read nor written, so nothing here says it does not exist. Run this from the local server without EXTENSION_DEV_HOSTED, or try again once the lane is open.`,
+      `The hosted lane's ${door} door is closed: ${LANE_SWITCHES[code] ?? "the platform answered 503 without naming a switch"}. This login is fine; the record was neither read nor written, so nothing here says it does not exist. Try again once the lane is open; the local tools keep working meanwhile.`,
     );
 
     this.name = "ForwardLaneClosedError";

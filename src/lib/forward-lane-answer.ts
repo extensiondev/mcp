@@ -8,7 +8,6 @@
 
 import { readCarriedMemory, type CarriedMemory } from "./call-memory";
 import { envelope } from "./envelope";
-import { HOSTED_SWITCH } from "./forward-credential";
 
 type Args = Record<string, unknown>;
 
@@ -18,6 +17,7 @@ export const ACT_SETTLE_WINDOW_MS = 65_000;
 export const IN_FLIGHT_RECHECK_MS = 5_000;
 export const MEMORY_KEY = "memory";
 export const HOSTED_WAIT_KEY = "hostedWait";
+export const LOCAL_TOOLS_STILL_WORK = "The local tools keep working without the hosted lane.";
 
 const LOST_STATUSES = new Set([502, 504]);
 
@@ -102,14 +102,13 @@ function refusal(command: string, status: string, code: "E_PLATFORM" | "E_NETWOR
 export function lostAnswer(args: { command: string; sent: Args; key: string; reads: boolean; resource: string; httpStatus: number; reason: string }): string {
   const { command, key, resource, httpStatus, reason } = args;
   const how = httpStatus ? `answered ${httpStatus}${reason ? ` (${reason})` : ""}` : `did not answer${reason ? ` (${reason})` : ""}`;
-  const local = `Unset ${HOSTED_SWITCH} to run ${command} in this process.`;
 
   if (args.reads) {
     if (!httpStatus) {
-      return refusal(command, "offline", "E_NETWORK", `Platform tools need the network to reach ${new URL(resource).host}; it ${how} twice. The local tools still work.`, `Nothing was changed: this call only reads. Try again shortly. ${local}`, { lane: resource });
+      return refusal(command, "offline", "E_NETWORK", `Platform tools need the network to reach ${new URL(resource).host}; it ${how} twice.`, `Nothing was changed: this call only reads. Try again shortly. ${LOCAL_TOOLS_STILL_WORK}`, { lane: resource });
     }
 
-    return refusal(command, "platform-unavailable", "E_PLATFORM", `The hosted lane at ${resource} ${how} twice for this read.`, `Nothing was changed: this call only reads. Try again shortly. ${local}`, { lane: resource, httpStatus });
+    return refusal(command, "platform-unavailable", "E_PLATFORM", `The hosted lane at ${resource} ${how} twice for this read.`, `Nothing was changed: this call only reads. Try again shortly. ${LOCAL_TOOLS_STILL_WORK}`, { lane: resource, httpStatus });
   }
 
   const read = recordToRead(command, args.sent);
@@ -126,7 +125,6 @@ export function lostAnswer(args: { command: string; sent: Args; key: string; rea
 
 export function unreadableAnswer(args: { command: string; resource: string; read: Extract<LaneRead, { kind: "unreadable" }>; sentBytes: number; factsBytes: number }): string {
   const { command, resource, read, sentBytes, factsBytes } = args;
-  const local = `Unset ${HOSTED_SWITCH} to run ${command} in this process.`;
 
   if (read.httpStatus === 413) {
     const kb = Math.ceil(sentBytes / 1024);
@@ -137,7 +135,7 @@ export function unreadableAnswer(args: { command: string; resource: string; read
       "payload-too-large",
       "E_BAD_REQUEST",
       `The hosted lane refused this call's body as too large (413): ${kb} KB was sent.${facts}`,
-      `Nothing ran. ${factsBytes ? "Send fewer or smaller listing images, or name one browser per call. " : "Send smaller arguments. "}${local}`,
+      `Nothing ran. ${factsBytes ? "Send fewer or smaller listing images, or name one browser per call. " : "Send smaller arguments. "}${LOCAL_TOOLS_STILL_WORK}`,
       { lane: resource, httpStatus: 413, sentBytes, ...(factsBytes ? { localFactsBytes: factsBytes } : {}) },
     );
   }
@@ -148,7 +146,7 @@ export function unreadableAnswer(args: { command: string; resource: string; read
       "hosted-off",
       "E_PLATFORM",
       `The hosted lane at ${resource} answered 503${read.said ? `: ${read.said}` : ", so it is switched off or not deployed"}`,
-      `Nothing ran. Try again ${read.retryAfterSeconds ? `in ${read.retryAfterSeconds} s` : "shortly"}. ${local}`,
+      `Nothing ran. Try again ${read.retryAfterSeconds ? `in ${read.retryAfterSeconds} s` : "shortly"}. ${LOCAL_TOOLS_STILL_WORK}`,
       { lane: resource, httpStatus: 503, ...(read.retryAfterSeconds ? { retryAfterSeconds: read.retryAfterSeconds } : {}) },
     );
   }
@@ -158,7 +156,7 @@ export function unreadableAnswer(args: { command: string; resource: string; read
     "platform-unavailable",
     "E_PLATFORM",
     `The hosted lane at ${resource} answered ${read.httpStatus} with a body that is not one of its answers${read.said ? ` (${read.said})` : ""}.`,
-    `Try again shortly. ${local}`,
+    `Try again shortly. ${LOCAL_TOOLS_STILL_WORK}`,
     { lane: resource, httpStatus: read.httpStatus },
   );
 }
@@ -207,6 +205,17 @@ const carried = new Map<string, CarriedMemory>();
  */
 export function carriedMemory(resource: string): CarriedMemory {
   return carried.get(resource) ?? {};
+}
+
+export function carriedRow(shelf: string, key: string): unknown {
+  if (!key) return null;
+
+  for (const memory of carried.values()) {
+    const row = (memory[shelf] ?? []).find(([name]) => name === key);
+    if (row) return row[1];
+  }
+
+  return null;
 }
 
 export function takeMemory(resource: string, body: Args): Args {

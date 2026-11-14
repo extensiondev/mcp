@@ -24,7 +24,7 @@ import {
 } from "./store-md-declarations";
 import { HOST_BULLET_EXAMPLE, STORE_OWN_LINES_PLACE } from "./store-md-bullets";
 
-import type { LocalListing } from "../tools/store-listing";
+import type { LocalListing } from "./store-listing-local";
 
 export type StoreMdField = ListingField;
 

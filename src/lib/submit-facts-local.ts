@@ -26,7 +26,7 @@ import {
 import { STORE_MD_FILENAME } from "./store-md";
 import { LISTING_STORES, type ListingStore } from "./store-md-declarations";
 import { emptyProjectFacts, type ProjectFacts, type StoreMdRead, type SubmitFacts } from "./submit-facts";
-import { localListingOf } from "../tools/store-listing";
+import { localListingOf } from "./store-listing-local";
 
 import type { ListingImage } from "./store-listing-media";
 

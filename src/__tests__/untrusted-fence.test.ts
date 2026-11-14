@@ -232,6 +232,7 @@ describe("the server fences tools that read a page or an extension", () => {
     expect(fenced).toEqual([
       "extension_assert",
       "extension_builds",
+      "extension_builds_act",
       "extension_doctor",
       "extension_dom_snapshot",
       "extension_element",

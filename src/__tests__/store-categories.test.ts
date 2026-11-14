@@ -15,7 +15,6 @@ import {
 import { storeMdSectionOf } from "../lib/store-md-fields";
 import { listingForStore, parseStoreMdListing } from "../lib/store-md-listing";
 import { readLocalListing } from "../lib/submit-facts-local";
-import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 const LISTING = (store: string) => `${PROJECT_ROUTE}/stores/${store}/listing`;
@@ -206,51 +205,5 @@ describe("sync-listing sends each store its own category", () => {
 
     expect(local.patch.listing.categories).toEqual(["Other"]);
     expect(local.categories).toEqual({ categories: ["Other"], from: "section" });
-  });
-
-  it("carries the Firefox section's category in the firefox body and the Listing value in the chrome and edge bodies, and says so", async () => {
-    if (process.platform === "win32") return;
-
-    fs.writeFileSync(path.join(root, "STORE.md"), FIREFOX_OTHER);
-
-    const out = JSON.parse(await submit({ action: "sync-listing", browsers: ["chrome", "edge", "firefox"], projectPath: root, api: API }));
-
-    expect(out.status).toBe("listing-synced");
-    expect(platform.sent("PUT", LISTING("firefox"))[0]!.body.listing.categories).toEqual(["Other"]);
-    expect(platform.sent("PUT", LISTING("chrome"))[0]!.body.listing.categories).toEqual(["Accessibility"]);
-    expect(platform.sent("PUT", LISTING("edge"))[0]!.body.listing.categories).toEqual(["Accessibility"]);
-    expect(out.value.stores.firefox.categories).toEqual({ sent: ["Other"], from: "section" });
-    expect(out.value.stores.chrome.categories).toEqual({ sent: ["Accessibility"], from: "listing" });
-    expect(out.value.sayToPerson).toContain("Firefox category: Other (from the Firefox Add-ons section); Chrome and Edge: Accessibility (from Listing).");
-    expect(out.hint).toContain("Firefox category: Other (from the Firefox Add-ons section); Chrome and Edge: Accessibility (from Listing).");
-    expect(out.value.sayToPerson).not.toContain("has no Accessibility category");
-  });
-
-  it("sends AMO's Other for a Listing Accessibility with no Firefox line and prints the mapping", async () => {
-    if (process.platform === "win32") return;
-
-    fs.writeFileSync(path.join(root, "STORE.md"), HEAD);
-
-    const out = JSON.parse(await submit({ action: "sync-listing", browsers: ["firefox"], projectPath: root, api: API }));
-
-    expect(out.status).toBe("listing-synced");
-    expect(platform.sent("PUT", LISTING("firefox"))[0]!.body.listing.categories).toEqual(["Other"]);
-    expect(out.value.stores.firefox.categories).toEqual({ sent: ["Other"], from: "mapping", mapped: [{ from: "Accessibility", to: "Other" }] });
-    expect(out.value.sayToPerson).toContain("Firefox category: Other (mapped from Accessibility in Listing).");
-    expect(out.value.sayToPerson).toContain(
-      "Firefox has no Accessibility category, so Other was sent; add `- Category:` under `## Firefox Add-ons` to choose another.",
-    );
-  });
-
-  it("says nothing about categories when every store reads the same Listing value", async () => {
-    if (process.platform === "win32") return;
-
-    fs.writeFileSync(path.join(root, "STORE.md"), HEAD.replace("- Category: Accessibility", "- Category: Privacy & Security"));
-
-    const out = JSON.parse(await submit({ action: "sync-listing", browsers: ["chrome", "firefox"], projectPath: root, api: API }));
-
-    expect(out.status).toBe("listing-synced");
-    expect(platform.sent("PUT", LISTING("firefox"))[0]!.body.listing.categories).toEqual(["Privacy & Security"]);
-    expect(out.value.sayToPerson ?? "").not.toMatch(/category:|has no .* category/);
   });
 });

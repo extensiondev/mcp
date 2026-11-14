@@ -12,7 +12,6 @@ import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { runCommandsOf, runText, shellUrl } from "../lib/publish-link";
-import { withPackageAddresses } from "../lib/publish-package-commands";
 
 const PROD = "https://www.extension.dev";
 const LOCAL = "http://localhost:3100";
@@ -28,34 +27,10 @@ function firstWordAfterPrefix(shell: string, command: string): string {
   return execFileSync(shell, ["-c", script], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 }
 
-function commandsOf(api: string, previewCommands: Record<string, string>): Record<string, string> {
-  const data: Record<string, unknown> = { previewCommands, shareUrl: `https://acme.extension.dev/widget?share=k3x9q` };
-  withPackageAddresses(data, REF, "k3x9q", api);
-
-  return data.previewCommands as Record<string, string>;
-}
 
 describe("every run command extension_publish prints passes its URL whole through sh and zsh (ledger 371)", () => {
   it.skipIf(process.platform === "win32")("has a shell to run the commands in on a POSIX host (Windows has no /bin/sh)", () => {
     expect(SHELLS).toContain("/bin/sh");
-  });
-
-  it("quotes the package address the subdomain rewrite prints, so zsh does not answer no matches found", () => {
-    const out = commandsOf(PROD, {
-      chrome: `${PREFIX}https://acme.extension.dev/widget/builds/${SHA}/chrome.zip?share=k3x9q --browser=chrome`,
-    });
-    const url = `https://acme.extension.dev/widget/builds/${SHA}/chrome.zip?share=k3x9q`;
-
-    expect(out.chrome).toBe(`${PREFIX}"${url}" --browser=chrome`);
-    for (const shell of SHELLS) expect(firstWordAfterPrefix(shell, out.chrome!)).toBe(url);
-  });
-
-  it("quotes a platform command it passes through in path mode, with ? and & in the URL", () => {
-    const url = `${LOCAL}/api/local-registry/acme/widget/builds/${SHA}/chrome.zip?t=abc.def&x=1`;
-    const out = commandsOf(LOCAL, { chrome: `${PREFIX}${url} --browser=chrome` });
-
-    expect(out.chrome).toBe(`${PREFIX}"${url}" --browser=chrome`);
-    for (const shell of SHELLS) expect(firstWordAfterPrefix(shell, out.chrome!)).toBe(url);
   });
 
   it("single-quotes a URL that holds a character double quotes would expand, and reads it back whole", () => {

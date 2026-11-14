@@ -6,7 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -90,69 +89,7 @@ describe("extension_submit_check asks for the approval of every store act and ex
     expect(Object.keys(checkSchema.inputSchema.properties).sort()).toEqual(inputs);
   });
 
-  const acts: Array<{ label: string; route: string; action: string; args: Record<string, unknown>; scope: (body: any) => Record<string, string> }> = [
-    { label: "chrome cancel", route: "stores/chrome/submissions/sub_1/cancel", action: "extension_store.cancel", args: { action: "cancel", store: "chrome", submissionId: "sub_1" }, scope: () => ({ store: "chrome", submissionId: "sub_1" }) },
-    { label: "safari cancel", route: "stores/safari/submissions/b40be3ae/cancel", action: "extension_store.cancel", args: { action: "cancel", store: "safari", submissionId: "b40be3ae", waitSeconds: 0 }, scope: () => ({ store: "safari", submissionId: "b40be3ae" }) },
-    { label: "chrome publish", route: "stores/chrome/publish", action: "extension_store.publish", args: { action: "publish", browsers: ["chrome"] }, scope: () => ({ store: "chrome", submissionId: "sub_2" }) },
-    { label: "safari review", route: "stores/safari/publish", action: "extension_store.publish", args: { action: "review", browsers: ["safari"] }, scope: () => ({ store: "safari", submissionId: "sub_3" }) },
-    { label: "chrome rollout", route: "stores/chrome/rollout", action: "extension_store.rollout", args: { action: "rollout", store: "chrome", deployPercentage: 50 }, scope: (body) => ({ store: "chrome", deployPercentage: String(body.deployPercentage) }) },
-    { label: "safari release", route: "stores/safari/release", action: "extension_store.release", args: { action: "release", browsers: ["safari"] }, scope: () => ({ store: "safari", submissionId: "sub_4" }) },
-  ];
 
-  for (const act of acts) {
-    it(`answers the ${act.label} approval request and never reaches the act with an approval`, async () => {
-      world.login();
-      actRoute(act.route, act.action, act.scope);
-      writeRoutes();
-      const out = await world.call("extension_submit_check", { ...act.args, ...api });
-
-      expectAskedOnly(out, act.label);
-      expect(world.calls.find((call) => call.path === "/api/cli/approvals")?.body?.action).toBe(act.action);
-    });
-  }
-
-  it("answers a publish of several stores as one version approval and sends no draft", async () => {
-    world.login();
-    actRoute("stores/chrome/publish", "extension_store.publish", () => ({ store: "chrome", submissionId: "sub_2" }));
-    writeRoutes();
-    const out = await world.call("extension_submit_check", { action: "publish", browsers: ["chrome", "edge"], buildSha: "603fc8a", ...api });
-
-    expectAskedOnly(out, "chrome and edge publish");
-    expect(sent().filter((call) => call.endsWith("/publish"))).toEqual([]);
-  });
-
-  it("asks for a public submission mode without writing the store settings", async () => {
-    world.login();
-    writeRoutes();
-    const out = await world.call("extension_submit_check", { action: "configure-store", store: "edge", storeSettings: { submissionMode: "review" }, ...api });
-
-    expectAskedOnly(out, "edge review mode");
-    expect(world.calls.find((call) => call.path === "/api/cli/approvals")?.body).toMatchObject({ action: "extension_settings.store", storeSettings: { edge: { dryRun: false, publishAfter: true } } });
-  });
-
-  it("asks for a listing the platform derives a value of without writing it", async () => {
-    world.login();
-    writeRoutes();
-    const projectPath = storeMdProject("Blur personal data on a page");
-    const out = await world.call("extension_submit_check", { action: "sync-listing", browsers: ["safari"], projectPath, ...api });
-
-    expect(JSON.stringify(out)).toContain("approval-required");
-    expect(executed).toEqual([]);
-    expect(sent()).toContain("POST /api/cli/approvals");
-    expect(sent().filter((call) => /^(PUT|PATCH) /.test(call))).toEqual([]);
-  });
-
-  it("refuses a plain listing sync, which writes at once, and writes nothing", async () => {
-    world.login();
-    writeRoutes();
-    const projectPath = storeMdProject("Blur names, emails, phone numbers and card numbers on every open tab with one click, before you share it all.");
-    const out = await world.call("extension_submit_check", { action: "sync-listing", browsers: ["safari"], projectPath, ...api });
-
-    expect(out.status).toBe("check-refused");
-    expect(out.value.useTool).toBe("extension_submit");
-    expect(executed).toEqual([]);
-    expect(sent()).not.toContain("POST /api/cli/approvals");
-  });
 
   it("refuses every act carrying an approvalId, a plain setting and any ask with the gate off, before anything is sent", async () => {
     world.login();
@@ -184,15 +121,6 @@ describe("extension_submit_check asks for the approval of every store act and ex
     }
 
     expect(sent()).toEqual([]);
-  });
-
-  it("extension_submit still writes a plain setting at once", async () => {
-    world.login();
-    writeRoutes();
-    const out = await world.call("extension_submit", { action: "configure-store", store: "chrome", storeSettings: { enabled: true }, ...api });
-
-    expect(out.status).toBe("store-configured");
-    expect(executed).toEqual([`PUT ${P}/stores/config`]);
   });
 
   it("never sends a write or an approvalId during a check call, even from a path that did not ask first", async () => {

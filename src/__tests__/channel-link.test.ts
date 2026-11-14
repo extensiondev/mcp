@@ -16,7 +16,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { serverInstructions, tools } from "../index";
 import { handler as publish, schema as publishSchema } from "../tools/publish";
 import { handler as promote, schema as promoteSchema } from "../tools/release-promote";
-import { readReleases } from "../tools/release-list";
 import { schema as releaseStatusSchema } from "../tools/release-status";
 import { promoteAnswer, publishAnswer } from "./fixtures/platform-answers";
 
@@ -79,65 +78,6 @@ afterEach(() => {
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-describe("a public project's answers carry the link that follows a release channel", () => {
-  it("extension_publish names the channel that serves the published build", async () => {
-    registry("public");
-    const out = JSON.parse(await publish({ api: API }));
-
-    expect(out.ok).toBe(true);
-    expect(out.value.channelUrl).toBe(`${PROJECT}/stable`);
-  });
-
-  it("extension_release_status links each channel, per browser where the channel is", async () => {
-    registry("public");
-    const out = JSON.parse(await readReleases({ workspace: "acme", project: "widget", api: API }));
-    const byName = Object.fromEntries(
-      (out.value.channels as Array<{ channel: string; channelUrl?: string }>).map((c) => [c.channel, c.channelUrl]),
-    );
-
-    expect(byName).toEqual({
-      "chrome-stable": `${PROJECT}/stable/chrome`,
-      "firefox-stable": `${PROJECT}/stable/firefox`,
-      beta: `${PROJECT}/beta`,
-    });
-  });
-
-  it("extension_release_promote names the channel it moved", async () => {
-    registry("public");
-    const out = JSON.parse(
-      await promote({ buildId: "abc1234", channel: "stable", browsers: ["chrome", "firefox"], api: API } as never),
-    );
-
-    expect(out.status).toBe("promoted");
-    expect(out.value.outcome).toMatchObject({ recorded: true, status: "completed" });
-    expect(out.value.channelUrl).toBe(`${PROJECT}/stable`);
-    expect(out.value.links).toContainEqual({ kind: "channel", url: `${PROJECT}/stable`, audience: "anyone with the link", expiresAt: null, made: false });
-  });
-});
-
-describe("a private project's answers withhold the channel link and say why", () => {
-  it.each([
-    ["extension_publish", () => publish({ api: API })],
-    ["extension_release_status", () => readReleases({ workspace: "acme", project: "widget", api: API })],
-    [
-      "extension_release_promote",
-      () => promote({ buildId: "abc1234", channel: "stable", browsers: ["chrome", "firefox"], api: API } as never),
-    ],
-  ])("%s", async (_tool, call) => {
-    registry("private");
-    const out = JSON.parse(await call());
-    const said = JSON.stringify(out);
-
-    expect(out.ok).toBe(true);
-    expect(said).not.toContain("/channels/");
-    expect(out.value.channelUrlWithheld).toMatch(/private/);
-    expect(out.value.channelUrlWithheld).toContain("extension_publish");
-    expect(out.value.channelUrlWithheld).toContain("extension.dev project settings");
-    expect(out.value.channelUrlWithheld).toMatch(/console Settings, Visibility section/);
-    expect(out.value.channelUrlWithheld).not.toMatch(/repositor/i);
-  });
-});
-
 describe("the tools tell an agent which link to send testers", () => {
   it.each([
     ["extension_publish", publishSchema.description],
@@ -148,32 +88,6 @@ describe("the tools tell an agent which link to send testers", () => {
 });
 
 describe("extension_release_status carries each channel's audience when the platform records it", () => {
-  it("passes audience through on a channel row and leaves it off a row that has none", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: unknown) => {
-        const href = String(url);
-        const json = (body: unknown) =>
-          new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
-
-        if (href.endsWith("/channels.json")) {
-          return json({ "chrome-stable": { sha: "abc1234", audience: "public" }, beta: { sha: "bead5ee", audience: "private" }, nightly: { sha: "c0ffee1" } });
-        }
-
-        if (href.endsWith("/meta.json")) return json({ name: "Widget", visibility: "public" });
-        if (href.endsWith("/builds/index.json")) return json({ items: [] });
-
-        return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
-      }),
-    );
-
-    const out = JSON.parse(await readReleases({ workspace: "acme", project: "widget", api: API }));
-    const byName = Object.fromEntries(
-      (out.value.channels as Array<{ channel: string; audience?: string }>).map((c) => [c.channel, c.audience ?? null]),
-    );
-
-    expect(byName).toEqual({ "chrome-stable": "public", beta: "private", nightly: null });
-  });
 
   it("says where a build link's validity is read today", () => {
     expect(releaseStatusSchema.description).toMatch(/channels/);

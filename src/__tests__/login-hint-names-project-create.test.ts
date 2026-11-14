@@ -58,25 +58,12 @@ const namesProjectCreate = (text: unknown) => {
 };
 
 describe("a missing login names extension_project_create, since an extension with no project cannot log in at all", () => {
-  it("extension_publish", async () => {
-    const result = JSON.parse(await publish({}));
-
-    expect(result.status).toBe("auth-required");
-    namesProjectCreate(result.error.message);
-  });
 
   it("extension_preview_web share:true", async () => {
     const result = JSON.parse(await previewWeb({ projectPath: dir, distPath: distDir(), share: true }));
 
     expect(result.ok).toBe(false);
     namesProjectCreate(JSON.stringify(result));
-  });
-
-  it("extension_shares", async () => {
-    const result = JSON.parse(await shares({ action: "list" } as Parameters<typeof shares>[0]));
-
-    expect(result.status).toBe("listed-local-only");
-    namesProjectCreate(result.value.server.loginHint);
   });
 
   it("the shares listing call", async () => {

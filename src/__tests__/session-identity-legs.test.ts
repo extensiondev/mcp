@@ -9,7 +9,6 @@ import { uploadPreview } from "../lib/preview-upload";
 import { publish } from "../lib/publish";
 import { RegistryAccessTokens } from "../lib/registry-access";
 import { fetchRegistryJson } from "../lib/registry";
-import { handler as submitHandler } from "../tools/submit-local";
 import {
   INSTALL_HEADER,
   SESSION_HEADER,
@@ -167,24 +166,6 @@ describe("the six legs that terminate at www, their header names spelled as www 
     expect(out.ok).toBe(true);
     expect(captured.url).toBe(`${API}/api/cli/publish`);
     expectIdentity(captured.init, "extension_publish");
-  });
-
-  it("leg 5: submit POSTs /api/cli/stores/submit as extension_submit", async () => {
-    let captured: any = null;
-    globalThis.fetch = (async (url: any, init: any) => {
-      if (String(url).endsWith("/api/cli/stores/submit")) captured = { url: String(url), init };
-
-      return jsonResponse({ ok: true, dryRun: true, message: "Preflight OK" });
-    }) as unknown as typeof fetch;
-
-    await submitHandler({
-      browsers: ["chrome"],
-      buildSha: "abc1234",
-      api: API,
-    } as any);
-
-    expect(captured.url).toBe(`${API}/api/cli/stores/submit`);
-    expectIdentity(captured.init, "extension_submit");
   });
 
   it("leg 6: access grant POSTs /api/access-grant as extension_registry_access", async () => {

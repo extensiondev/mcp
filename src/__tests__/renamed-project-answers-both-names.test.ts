@@ -144,29 +144,6 @@ afterEach(() => {
 });
 
 describe("a login stored under the old slug answers reads under both names", () => {
-  it("lists builds under the new slug and under the old slug, the old one with the move said each time", async () => {
-    if (process.platform === "win32") return;
-
-    await loginThenRename();
-    const client = await freshServer();
-
-    const underNew = await call(client, "extension_builds", { action: "list", limit: 2, project: "acme/lion" });
-    expect(underNew.status).toBe("listed");
-    expect(underNew.warnings ?? []).not.toContain(LOGIN_MOVED);
-
-    for (let read = 0; read < 3; read += 1) {
-      const underOld = await call(client, "extension_builds", { action: "list", limit: 2, project: "acme/leon" });
-
-      expect(underOld.ok).toBe(true);
-      expect(underOld.status).toBe("listed");
-      expect(underOld.status).not.toBe("auth-required");
-      expect(underOld.value.project).toBe("acme/lion");
-      expect(underOld.warnings).toContain(LOGIN_MOVED);
-    }
-
-    const { readCredentials } = await import("../lib/credentials");
-    expect(readCredentials({ project: "acme/leon", api: API })).toMatchObject({ projectSlug: "lion", movedFrom: "acme/leon" });
-  });
 
   it("resolves the old slug, the new slug and the bare slugs to one project with its current name", async () => {
     await loginThenRename();
@@ -231,24 +208,6 @@ describe("an approval minted under the new slug binds to the project under eithe
     expect(out.value).toMatchObject({ mintedFor: "acme/lion", named: "acme/rebeccat" });
 
     expect("refused" in (await bind({ project: "acme/ghost" }))).toBe(true);
-  });
-
-  it("answers an approval status read under the new slug and under the old one", async () => {
-    if (process.platform === "win32") return;
-
-    await loginThenRename();
-    await mint();
-    const client = await freshServer();
-
-    const underNew = await call(client, "extension_approvals", { action: "status", approvalId: APPROVAL_ID, project: "acme/lion" });
-    expect(underNew.ok).toBe(true);
-    expect(underNew.status).toBe("approved-unused");
-
-    const underOld = await call(client, "extension_approvals", { action: "status", approvalId: APPROVAL_ID, project: "acme/leon" });
-    expect(underOld.ok).toBe(true);
-    expect(underOld.status).toBe("approved-unused");
-    expect(underOld.value.note).toContain("acme/leon is now acme/lion");
-    expect(approvalReads).toHaveLength(2);
   });
 
   it("marks a record that kept the old slug replaced by a fresh mint of the same act under the new one", async () => {

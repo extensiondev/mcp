@@ -7,8 +7,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { listingDigest } from "../lib/store-listing-media";
 import { storeMdFieldRows } from "../lib/store-md-fields";
 import { LISTING_TEXT_FIELDS, listingForStore, parseStoreMdListing } from "../lib/store-md-listing";
-import { PLAIN_LISTING_SENTENCE } from "../tools/store-listing";
-import { handler as submit } from "../tools/submit-local";
 import { storeMdNamedForPerson } from "../lib/store-md-words";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
@@ -82,56 +80,5 @@ describe("the App Store name line (ledger 158)", () => {
     const reordered = listingDigest({ listing: { subtitle: "Blur", appStoreName: "Leon: Blur Faces", title: "Leon" } } as never);
 
     expect(withName).toBe(reordered);
-  });
-});
-
-describe("sync-listing's App Store title (ledger 160)", () => {
-  const platform = useProjectRoutes("extdev-app-store-name-");
-  let root = "";
-  let sent: Array<Record<string, unknown>> = [];
-
-  beforeEach(() => {
-    root = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-app-store-name-"));
-    fs.writeFileSync(path.join(root, "STORE.md"), LEON.replace("- App Store name: Leon: Blur Faces", ""));
-    sent = [];
-  });
-
-  const routes = (config: unknown) => {
-    platform.routes[`GET ${PROJECT_ROUTE}/stores/config`] = () => ({ body: config });
-    platform.routes[`POST ${PROJECT_ROUTE}/stores/safari/submissions/preflight`] = () => ({ body: { checks: [] } });
-
-    platform.routes[`PUT ${PROJECT_ROUTE}/stores/safari/listing`] = (call) => {
-      sent.push(call.body.listing);
-
-      return { body: { ok: true, store: "safari", changes: [{ field: "title", line: 'title: "" -> "Leon: Blur Faces"', derived: false }] } };
-    };
-  };
-
-  const sync = () => submit({ action: "sync-listing", browsers: ["safari"], projectPath: root, api: API });
-
-  it("sends the app record's name as the title when STORE.md has no App Store name line, and says the sync was a plain act", async () => {
-    if (process.platform === "win32") return;
-
-    platform.login();
-    routes({ safari: { bundleId: "com.cezaraugusto.leon", appRecord: { id: "6826486337", name: "Leon: Blur Faces", bundleId: "com.cezaraugusto.leon" } } });
-
-    const answer = JSON.parse(await sync());
-
-    expect(answer.status).toBe("listing-synced");
-    expect(sent[0]).toMatchObject({ title: "Leon: Blur Faces" });
-    expect(answer.value.stores.safari).not.toHaveProperty("skipped");
-    expect(answer.value.sayToPerson).toContain(storeMdNamedForPerson(PLAIN_LISTING_SENTENCE));
-  });
-
-  it("sends no title over 30 characters when no record name is known", async () => {
-    if (process.platform === "win32") return;
-
-    platform.login();
-    routes({ safari: { bundleId: "com.cezaraugusto.leon", appRecord: null } });
-
-    const answer = JSON.parse(await sync());
-
-    expect(sent[0]).not.toHaveProperty("title");
-    expect(answer.value.stores.safari.skipped[0]).toContain("over the 30 the App Store takes");
   });
 });

@@ -1,7 +1,7 @@
 {
   "generatedFrom": "src/index.ts schemas, src/lib/tool-policy.ts, src/lib/docs-meta.ts; regenerate with pnpm docs:tools",
-  "version": "10.22.0",
-  "count": 40,
+  "version": "11.0.0",
+  "count": 41,
   "tools": [
     {
       "name": "extension_add_feature",
@@ -374,9 +374,79 @@
       "name": "extension_builds",
       "tier": "platform",
       "group": "platform",
-      "description": "Read, download, rebuild and configure platform builds. list/get rows: env is the build environment, channels the pins holding it now. A rebuild spends allowance; a push, only on the build branch when it changes the root directory ([skip build] pushes, docs-only, other branches spend nothing).",
-      "gate": "the server started with --features=local,platform, and a login; a public channel audience needs a workspace owner's approval; delete-channel stays in the console",
+      "description": "Read and download platform builds. list/get rows: env is the build environment, channels the pins holding it now. To rebuild, recheck or configure, call extension_builds_act.",
+      "gate": "the server started with --features=local,platform, and a login",
       "samplePrompt": "Why did the last build fail? Show me the Firefox log",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": true,
+      "untrusted": true,
+      "inputs": [
+        {
+          "name": "action",
+          "type": "\"list\" | \"get\" | \"logs\" | \"download\"",
+          "required": false,
+          "default": "list",
+          "description": "list: recent builds, lastPush; get: one build; logs; download: a verified package."
+        },
+        {
+          "name": "buildId",
+          "type": "string",
+          "required": false,
+          "description": "Commit sha, never the build number; required for get, logs, download."
+        },
+        {
+          "name": "browser",
+          "type": "string",
+          "required": false,
+          "description": "chrome, edge, firefox, safari; download requires it and takes source."
+        },
+        {
+          "name": "projectPath",
+          "type": "string",
+          "required": false,
+          "description": "Project directory; picks its login."
+        },
+        {
+          "name": "to",
+          "type": "string",
+          "required": false,
+          "description": "download: directory (default the cache)."
+        },
+        {
+          "name": "limit",
+          "type": "number",
+          "required": false,
+          "description": "list: 1 to 50 (default 10)."
+        },
+        {
+          "name": "project",
+          "type": "string",
+          "required": false,
+          "description": "Stored login '<workspace>/<project>' when several exist."
+        },
+        {
+          "name": "waitSeconds",
+          "type": "number",
+          "required": false,
+          "description": "get: seconds to wait for a build's verdict (a rebuild or a push), 0 to 600 (default 180)."
+        },
+        {
+          "name": "api",
+          "type": "string",
+          "required": false,
+          "description": "Platform URL; default from env."
+        }
+      ]
+    },
+    {
+      "name": "extension_builds_act",
+      "tier": "platform",
+      "group": "platform",
+      "description": "Run a build act on the platform: rebuild, recheck, configure the build settings or a channel; read builds with extension_builds. A rebuild spends allowance; a push, only on the build branch when it changes the root directory ([skip build] pushes, docs-only, other branches spend nothing).",
+      "gate": "the server started with --features=local,platform, and a login; a public channel audience needs a workspace owner's approval; delete-channel stays in the console",
+      "samplePrompt": "Rebuild the last commit for Stable",
       "readOnly": false,
       "destructive": true,
       "idempotent": false,
@@ -385,16 +455,15 @@
       "inputs": [
         {
           "name": "action",
-          "type": "\"list\" | \"get\" | \"logs\" | \"download\" | \"rebuild\" | \"recheck\" | \"configure\" | \"create-channel\" | \"configure-channel\" | \"delete-channel\"",
-          "required": false,
-          "default": "list",
-          "description": "list: recent builds, lastPush; get: one build; logs; download: a verified package; recheck: rerun integrity; rebuild; configure: buildSettings; create-, configure-channel; delete-channel: console only."
+          "type": "\"rebuild\" | \"recheck\" | \"configure\" | \"create-channel\" | \"configure-channel\" | \"delete-channel\"",
+          "required": true,
+          "description": "rebuild; recheck: rerun integrity; configure: buildSettings; create-, configure-channel; delete-channel: console only."
         },
         {
           "name": "buildId",
           "type": "string",
           "required": false,
-          "description": "Commit sha, never the build number; required for get, logs, download, recheck."
+          "description": "Commit sha, never the build number; required for recheck."
         },
         {
           "name": "buildEnv",
@@ -442,25 +511,13 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "chrome, edge, firefox, safari; download requires it and takes source."
+          "description": "recheck: chrome, edge, firefox or safari (default all)."
         },
         {
           "name": "projectPath",
           "type": "string",
           "required": false,
           "description": "Project directory; picks its login."
-        },
-        {
-          "name": "to",
-          "type": "string",
-          "required": false,
-          "description": "download: directory (default the cache)."
-        },
-        {
-          "name": "limit",
-          "type": "number",
-          "required": false,
-          "description": "list: 1 to 50 (default 10)."
         },
         {
           "name": "project",
@@ -472,7 +529,7 @@
           "name": "waitSeconds",
           "type": "number",
           "required": false,
-          "description": "Seconds to wait for the result (with approvalId, the approval), 0 to 600 (default 180). get waits for a build's verdict (a rebuild or a push)."
+          "description": "Seconds to wait for the result (with approvalId, the approval), 0 to 600 (default 180)."
         },
         {
           "name": "api",
@@ -1574,7 +1631,7 @@
           "name": "projectPath",
           "type": "string",
           "required": false,
-          "description": "Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). node_modules, dist, .git, .extension-dev, .zip, .crx, .xpi, .env*, key files and .gitignore entries stay out; 4 MB zipped at most. On an uploaded project with a login this re-seeds and rebuilds it after an approval; extension_builds rebuild rebuilds its stored tree without a new upload."
+          "description": "Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). node_modules, dist, .git, .extension-dev, .zip, .crx, .xpi, .env*, key files and .gitignore entries stay out; 4 MB zipped at most. On an uploaded project with a login this re-seeds and rebuilds it after an approval; extension_builds_act rebuild rebuilds its stored tree without a new upload."
         },
         {
           "name": "repo",

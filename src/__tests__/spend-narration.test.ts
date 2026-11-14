@@ -8,7 +8,6 @@ import { ALLOWANCE_PHRASE } from "../lib/allowance";
 import { handler as previewWeb } from "../tools/preview-web";
 import { handler as publish } from "../tools/publish";
 import { handler as promote } from "../tools/release-promote";
-import { handler as submit } from "../tools/submit-local";
 import { handler as projectCreate } from "../tools/project-create";
 import { promoteAnswer, submitAnswer } from "./fixtures/platform-answers";
 
@@ -134,58 +133,6 @@ describe("every spending lane counts the allowance out loud in its result", () =
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
-  });
-
-  it("narrates the publish spend without inventing a count", async () => {
-    global.fetch = (async () =>
-      jsonResponse({
-        shareUrl: "https://userland.extension.dev/acme/app",
-        visibility: "public",
-      })) as unknown as typeof fetch;
-
-    const out = JSON.parse(await publish({}));
-    expect(out.ok).toBe(true);
-    expectNarrated(out.value.allowance, "This publish");
-    expect(out.value.allowance.remains).not.toMatch(/\d/);
-  });
-
-  it("narrates the promote spend and relays the platform's numbers", async () => {
-    global.fetch = (async () =>
-      jsonResponse(
-        promoteAnswer({
-          targetChannel: "stable",
-          allowance: { used: 9, limit: 100 },
-        }),
-      )) as unknown as typeof fetch;
-
-    const out = JSON.parse(
-      await promote({ buildId: "a1b2c3d", channel: "stable" }),
-    );
-    expect(out.ok).toBe(true);
-    expectNarrated(out.value.allowance, "This promote");
-    expect(out.value.allowance.remains).toBe(
-      "The platform reports 9 of 100 used.",
-    );
-  });
-
-  it("narrates a real submission and stays silent on a dry run", async () => {
-    global.fetch = (async () =>
-      jsonResponse(submitAnswer(["chrome"]))) as unknown as typeof fetch;
-
-    const real = JSON.parse(
-      await submit({ browsers: ["chrome"], buildSha: "a1b2c3d", dryRun: false }),
-    );
-    expect(real.status).toBe("submit-dispatched");
-    expectNarrated(real.value.allowance, "This submission");
-
-    global.fetch = (async () =>
-      jsonResponse({ ok: true, message: "preflight ok", buildId: "a1b2c3d" })) as unknown as typeof fetch;
-
-    const dry = JSON.parse(
-      await submit({ browsers: ["chrome"], buildSha: "a1b2c3d" }),
-    );
-    expect(dry.status).toBe("preflight");
-    expect(dry.value.allowance).toBeUndefined();
   });
 
   it("narrates the project creation spend, first build included", async () => {

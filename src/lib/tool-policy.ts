@@ -72,7 +72,8 @@ export const TOOL_TITLES: Record<string, string> = {
   extension_publish: "Publish a build link",
   extension_release_status: "Read the release status",
   extension_approvals: "Read or revoke an approval",
-  extension_builds: "Read and rebuild builds",
+  extension_builds: "Read and download builds",
+  extension_builds_act: "Rebuild and configure builds",
   extension_workspace: "Read or change the workspace",
   extension_release_promote: "Promote a release",
   extension_submit: "Submit to a store",
@@ -202,6 +203,11 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
   extension_builds: {
     group: "platform",
     annotations: TOOL_ANNOTATIONS.extension_builds,
+    untrusted: true,
+  },
+  extension_builds_act: {
+    group: "platform",
+    annotations: TOOL_ANNOTATIONS.extension_builds_act,
     untrusted: true,
   },
   extension_workspace: {

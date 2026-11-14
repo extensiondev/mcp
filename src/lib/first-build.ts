@@ -111,7 +111,7 @@ export function reseedBuildSentence(
   }
 
   if (build.state === "withheld") {
-    return `No build was dispatched: ${withheldBecause(build.reason)}. The project holds the new tree without a build of it; extension_builds (action: rebuild, project: '${ref}') builds the stored tree once that is resolved.`;
+    return `No build was dispatched: ${withheldBecause(build.reason)}. The project holds the new tree without a build of it; extension_builds_act (action: rebuild, project: '${ref}') builds the stored tree once that is resolved.`;
   }
 
   return `The platform's answer did not say whether a build was dispatched, so none is claimed here; ${buildsPageUrl} shows whether one is running.`;

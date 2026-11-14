@@ -12,7 +12,7 @@ import { stripQuotes } from "./store-md-bullets";
 import { STORE_FIELDS, type ListingField, type ListingStore, type ListingText, type PermissionJustification } from "./store-md-declarations";
 import { linesNotFound, storeMdLineOf, storeMdSectionOf } from "./store-md-fields";
 
-import type { LocalListingRead } from "./store-requirements";
+import type { LocalListingRead } from "./store-listing-local";
 
 type Row = Record<string, unknown>;
 

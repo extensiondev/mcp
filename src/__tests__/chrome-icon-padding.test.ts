@@ -13,7 +13,6 @@ import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { handler as validate } from "../tools/manifest-validate";
-import { handler as submit } from "../tools/submit-local";
 import { iconPng } from "./fixtures/icon-art";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
@@ -45,23 +44,6 @@ describe("the MCP never comments on how a full-bleed 128 px logo is drawn (ledge
 
   it("extension_manifest_validate for a Chromium target says nothing about padding, margin or 96 px", async () => {
     const answer = await validate({ projectPath: project(FULL_BLEED), browsers: ["chrome"] });
-
-    expect(answer).not.toMatch(ART_ADVICE);
-  });
-
-  it("preflight carries no icon art field and no sentence about padding, margin or 96 px", async () => {
-    if (process.platform === "win32") return;
-
-    const answer = await submit({ action: "preflight", browsers: ["chrome"], projectPath: project(FULL_BLEED), api: API });
-
-    expect(JSON.parse(answer).value.stores.chrome).not.toHaveProperty("iconPadding");
-    expect(answer).not.toMatch(ART_ADVICE);
-  });
-
-  it("sync-listing sends the icon as it is and says nothing about padding, margin or 96 px", async () => {
-    if (process.platform === "win32") return;
-
-    const answer = await submit({ action: "sync-listing", browsers: ["chrome"], projectPath: project(FULL_BLEED), api: API });
 
     expect(answer).not.toMatch(ART_ADVICE);
   });

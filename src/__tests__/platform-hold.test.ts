@@ -13,7 +13,6 @@ import {
 import { fetchRegistryJson } from "../lib/registry";
 import { handler as publishHandler } from "../tools/publish";
 import { handler as promoteHandler } from "../tools/release-promote";
-import { handler as submitHandler } from "../tools/submit-local";
 
 const srcDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -112,60 +111,6 @@ describe("the published client had no hold awareness at all, so this file is the
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  it("answers a held publish with the condition, what still works, and a way back", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => heldResponse()),
-    );
-
-    const out = JSON.parse(await publishHandler({}));
-
-    expect(out.ok).toBe(false);
-    expect(out.status).toBe("platform-held");
-    expect(out.error.platformCode).toBe(PLATFORM_HOLD_CODE);
-
-    expect(out.error.message).toContain(
-      "extension.dev is not open to the public yet",
-    );
-
-    expect(out.error.message).toContain("extension_create");
-    expect(out.error.message).toContain("extension_build");
-    expect(out.error.message).toContain("need no account and nothing from the platform");
-    expect(out.error.message).toContain("https://templates.extension.dev");
-
-    expect(out.value.stillWorks).toContain("extension_dev");
-    expect(out.value.openSurface).toBe("https://templates.extension.dev");
-    expect(out.hint).toContain("templates.extension.dev");
-  });
-
-  it("sends a held reader to no held surface, on any lane", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => heldResponse()),
-    );
-
-    const frames = [
-      JSON.parse(await publishHandler({})),
-      JSON.parse(
-        await promoteHandler({ buildId: "abc1234", channel: "stable" }),
-      ),
-      JSON.parse(
-        await submitHandler({ browsers: ["chrome"], buildSha: "abc1234" }),
-      ),
-    ];
-
-    for (const frame of frames) {
-      const text = JSON.stringify(frame);
-      expect(frame.status).toBe("platform-held");
-
-      for (const host of HELD_HOSTS) {
-        expect(text, `${frame.command} points at ${host}`).not.toContain(host);
-      }
-
-      expect(text).toContain("templates.extension.dev");
-    }
-  });
-
   it("names no date, and the source tree holds none to name", () => {
     const message = platformHoldMessage(HELD_BODY);
     expect(message).not.toMatch(/\b20\d\d-\d\d-\d\d\b/);
@@ -200,57 +145,6 @@ describe("the published client had no hold awareness at all, so this file is the
       opensAt: "a day the platform named",
     });
     expect(message).not.toContain("a day the platform named");
-  });
-
-  it("reads the machine field and not the sentence, so www may reword the refusal", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async () =>
-          new Response(
-            JSON.stringify({
-              message: "some other wording entirely",
-              code: PLATFORM_HOLD_CODE,
-            }),
-            { status: 403 },
-          ),
-      ),
-    );
-
-    const out = JSON.parse(await publishHandler({}));
-    expect(out.status).toBe("platform-held");
-    expect(out.error.message).toContain("some other wording entirely");
-    expect(out.error.message).toContain("templates.extension.dev");
-  });
-
-  it("does not read our own way through the hold as a refusal", async () => {
-    const enroll = new Response(JSON.stringify({ message: "nope" }), {
-      status: 403,
-      headers: { "x-extensiondev-hold": "operator-enroll" },
-    });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => enroll),
-    );
-
-    const out = JSON.parse(await publishHandler({}));
-    expect(out.status).toBe("publish-failed");
-  });
-
-  it("leaves an ordinary platform failure alone", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async () =>
-          new Response(JSON.stringify({ message: "project not found" }), {
-            status: 404,
-          }),
-      ),
-    );
-
-    const out = JSON.parse(await publishHandler({}));
-    expect(out.status).toBe("publish-failed");
-    expect(out.error.message).toContain("project not found");
   });
 });
 

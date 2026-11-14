@@ -115,28 +115,3 @@ describe("extension_templates dispatch", () => {
     expect(out.hint).toContain("extension_templates");
   });
 });
-
-describe("extension_release_status sections", () => {
-  it("nests only the requested section", async () => {
-    const prevFetch = global.fetch;
-    global.fetch = vi.fn(async () => ({
-      ok: false,
-      status: 404,
-      text: async () => "{}",
-    })) as unknown as typeof fetch;
-
-    try {
-      const out = JSON.parse(
-        await releaseStatus.handler({
-          include: ["stores"],
-          workspace: "acme",
-          project: "widget",
-        }),
-      );
-      expect(out.value.stores).toBeDefined();
-      expect(out.value.releases).toBeUndefined();
-    } finally {
-      global.fetch = prevFetch;
-    }
-  });
-});

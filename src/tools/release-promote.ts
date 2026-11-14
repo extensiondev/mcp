@@ -6,42 +6,13 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { UserlandProjectPage } from "@extension.dev/urls/userland";
-
-import { WAIT_SECONDS_INPUT, dispatchedHint, madeSentence, stampNow, text as plain } from "../lib/act-outcome";
 import { API_BASE } from "../lib/common-schema";
-import { billingUrl } from "../lib/console-urls";
-import { awaitPromoteRecord, promoteLinks, releasesPage, unknownBuildEnrichment } from "../lib/promote-record";
-import { resolveCredential } from "../lib/credential-source";
-import { bearerHeaders } from "../lib/request-fetch";
-import { expiredLoginRefusal } from "../lib/login-expired";
-import { envelope, type ErrorCode } from "../lib/envelope";
-import { PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
-import { resolveApiBase, safeApiBase } from "../lib/login-flow";
-import { platformFetch } from "../lib/platform-fetch";
-import { allowanceRefusal, allowanceValue, platformHoldEnvelope, pricedRefusal, readPlatformMessage, sawPlatformHold } from "../lib/platform-hold";
-import {
-  approvalGateEnabled,
-  evaluateApproval,
-  platformRequiresApproval,
-  requestApprovalAfterRefusal,
-} from "../lib/approval-gate";
-import { spendNarration } from "../lib/allowance";
-import { approvalRoundTrip } from "../lib/approval-outcome";
-import {
-  notarizationNotes,
-  partialPromoteWarnings,
-  readPromoteOutcome,
-} from "../lib/promote-outcome";
-import { userlandProjectUrl } from "../lib/registry";
-import { cut, rollback, type ReleaseActArgs } from "./release-acts";
-import { channelLinkFields, readVisibility } from "../lib/channel-link";
-import { firefoxChannelFields, firefoxChannelSentence, servedOfAnswer } from "../lib/firefox-update-url";
+import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
+import { hostedOnly } from "../lib/hosted-only";
 
 export const schema = {
   name: "extension_release_promote",
-  description:
-    "Release a build to a channel on extension.dev. A release needs a workspace owner's token and approval of that exact release, every time (approval-required, then the same call with approvalId). Preview takes any build; Stable and every other channel take Stable builds. Tokens live 7 days.",
+  description: "Release a build to a channel on extension.dev. A release needs a workspace owner's token and approval of that exact release, every time (approval-required, then the same call with approvalId). Preview takes any build; Stable and every other channel take Stable builds. Tokens live 7 days.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -49,8 +20,7 @@ export const schema = {
         type: "string",
         enum: ["promote", "cut", "rollback"],
         default: "promote",
-        description:
-          "promote: channel to buildId; cut: version-bump pull request; rollback: previous build.",
+        description: "promote: channel to buildId; cut: version-bump pull request; rollback: previous build.",
       },
       project: PROJECT_TOKEN_INPUT,
       buildId: {
@@ -59,8 +29,7 @@ export const schema = {
       },
       channel: {
         type: "string",
-        description:
-          "Target channel, e.g. stable, preview.",
+        description: "Target channel, e.g. stable, preview.",
       },
       level: {
         type: "string",
@@ -69,14 +38,14 @@ export const schema = {
       },
       sourceChannel: {
         type: "string",
-        description:
-          "Channel to promote from (inferred).",
+        description: "Channel to promote from (inferred).",
       },
       browsers: {
         type: "array",
-        items: { type: "string" },
-        description:
-          "Browsers; default the build's index, which falls back to chrome alone.",
+        items: {
+          type: "string",
+        },
+        description: "Browsers; default the build's index, which falls back to chrome alone.",
       },
       version: {
         type: "string",
@@ -88,361 +57,16 @@ export const schema = {
       },
       approvalId: {
         type: "string",
-        description:
-          "Approved approval id; every release needs a workspace owner's approval.",
+        description: "Approved approval id; every release needs a workspace owner's approval.",
       },
-      waitSeconds: WAIT_SECONDS_INPUT,
+      waitSeconds: {
+        type: "number",
+        description: "Seconds to wait for the result (with approvalId, the approval), 0 to 600 (default 180).",
+      },
       api: API_BASE,
     },
     required: [],
   },
 };
 
-function fail(
-  name: string,
-  message: string,
-  status: string,
-  code: ErrorCode,
-): string {
-  return envelope({
-    ok: false,
-    command: "extension_release_promote",
-    status,
-    error: { code, name, message },
-  });
-}
-
-const RETIRED_SOURCE_CHANNEL = "canary";
-
-function retiredSourceChannelMessage(channel: string): string {
-  return `This project does not declare a "${RETIRED_SOURCE_CHANNEL}" channel to promote from: ${RETIRED_SOURCE_CHANNEL} was retired as a release channel on 2026-11-03. Promote from one of the project's channels (extension_release_status lists them), or leave sourceChannel unset to promote from ${channel === "preview" ? "preview" : `${channel} itself`}. Nothing was sent.`;
-}
-
-function promoteRefusalHint(platformCode: string, body?: unknown): string | undefined {
-  if (platformCode === "APPROVER_NOT_OWNER") {
-    return "A release needs a workspace owner's approval, and whoever approved this one is not an owner of the workspace now, so it was not used and nothing was released. Call again without approvalId to request a fresh approval, then have a workspace owner approve it.";
-  }
-
-  if (platformCode !== "BUILD_ENV_MISMATCH" && platformCode !== "UNSTAMPED_BUILD_BLOCKED") {
-    return undefined;
-  }
-
-  const priced = pricedRefusal(platformCode, body);
-  if (priced) return priced.hint;
-
-  return `Preview takes any build; Stable and every other channel take Stable builds, and this build is not one. Rebuild this commit for Stable (Builds, Rebuild in the console, or extension_builds action:"rebuild" with this buildId and buildEnv:"production"), wait for it to pass, then release it again. To ship this build as it is, release it to Preview instead.`;
-}
-
-export async function handler(args: ReleaseActArgs & {
-  buildId?: string;
-  channel?: string;
-  sourceChannel?: string;
-  browsers?: string[];
-  version?: string;
-  releaseNotes?: string;
-  approvalId?: string;
-  waitSeconds?: unknown;
-  api?: string;
-  project?: string;
-}): Promise<string> {
-  if (args.action === "cut") return cut(args);
-  if (args.action === "rollback") return rollback(args);
-
-  if (args.action !== undefined && args.action !== "promote") {
-    return fail("ReleaseInputError", `action must be promote, cut or rollback; got "${args.action}". Nothing was sent.`, "bad-request", "E_BAD_REQUEST");
-  }
-
-  const credential = resolveCredential({ project: args.project, api: args.api });
-  const token = credential.token;
-
-  if (!token && credential.expired) {
-    return expiredLoginRefusal({ command: "extension_release_promote", expired: credential.expired, api: args.api, extra: { action: "promote" } });
-  }
-
-  if (!token && args.project) {
-    return fail("PromoteAuthError", noStoredLoginHint(args.project), "auth-required", "E_AUTH_REQUIRED");
-  }
-
-  if (!token) {
-    return fail(
-      "ReleaseAuthError",
-      "No token. Set EXTENSION_DEV_TOKEN to a release token (create one in the extension.dev dashboard under project settings -> Access tokens; tokens live at most 7 days, so CI must re-mint before expiry), or run extension_auth (action: login).",
-      "auth-required",
-      "E_AUTH_REQUIRED",
-    );
-  }
-
-  const buildId = String(args.buildId || "").trim();
-  const channel = String(args.channel || "").trim();
-
-  if (!buildId || !channel) {
-    return fail(
-      "ReleaseInputError",
-      "buildId and channel are required.",
-      "bad-request",
-      "E_BAD_REQUEST",
-    );
-  }
-
-  const apiCheck = safeApiBase(resolveApiBase(args.api), args.api);
-
-  if (!apiCheck.ok) {
-    return fail(
-      "ReleaseConfigError",
-      apiCheck.message,
-      "bad-config",
-      "E_CONFIG",
-    );
-  }
-
-  const url = `${apiCheck.base}/api/cli/release/promote`;
-
-  const sourceChannel = args.sourceChannel
-    ? String(args.sourceChannel).trim()
-    : "";
-
-  if (sourceChannel === RETIRED_SOURCE_CHANNEL) {
-    return fail("ReleaseInputError", retiredSourceChannelMessage(channel), "bad-request", "E_BAD_REQUEST");
-  }
-
-  const gateBrowsers = (Array.isArray(args.browsers) ? args.browsers : [])
-    .map((b) => String(b).trim())
-    .filter(Boolean);
-  const gateInput = {
-    command: "extension_release_promote",
-    action: "extension_release_promote",
-    scope: {
-      buildId: buildId.toLowerCase(),
-      channel,
-      ...(sourceChannel ? { sourceChannel } : {}),
-      ...(gateBrowsers.length ? { browsers: [...gateBrowsers].sort() } : {}),
-    },
-    description: `Release build ${buildId} to the ${channel} channel.`,
-    approvalId: args.approvalId,
-    token,
-    ref: credential.ref,
-    api: args.api,
-    refusedStatus: "promote-failed",
-    refusalHint: promoteRefusalHint,
-    irreversible: true,
-  };
-  const gate = await evaluateApproval({
-    ...gateInput,
-    enabled: approvalGateEnabled(channel === "stable"),
-  });
-  if (gate.blocked) return gate.envelope;
-
-  const body: Record<string, unknown> = { buildId, channel };
-  const approvalId = gate.approvalId ?? (args.approvalId ? String(args.approvalId).trim() : "");
-  if (approvalId) body.approvalId = approvalId;
-  if (args.sourceChannel) body.sourceChannel = String(args.sourceChannel).trim();
-
-  if (Array.isArray(args.browsers) && args.browsers.length) {
-    body.browsers = args.browsers.map((b) => String(b).trim()).filter(Boolean);
-  }
-
-  if (args.version) body.version = String(args.version).trim();
-  if (args.releaseNotes) body.releaseNotes = String(args.releaseNotes);
-
-  const sent = await platformFetch(
-    url,
-    {
-      method: "POST",
-      headers: {
-        ...bearerHeaders(token, credential.ref),
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(body),
-    },
-    { kind: "dispatch" },
-  );
-
-  if (!sent.ok) return fail("ReleaseNetworkError", sent.unreached.message, "network-failed", "E_NETWORK");
-
-  const res = sent.res;
-
-  const text = await res.text();
-  let data: any;
-
-  try {
-    data = JSON.parse(text);
-  } catch {
-    data = { message: text };
-  }
-
-  if (!res.ok) {
-    if (sawPlatformHold(res, data)) {
-      return platformHoldEnvelope({
-        command: "extension_release_promote",
-        name: "ReleaseHeld",
-        body: data,
-        api: args.api,
-        value: { channel, buildId },
-      });
-    }
-
-    if (!args.approvalId && platformRequiresApproval(res, data)) {
-      return requestApprovalAfterRefusal(gateInput);
-    }
-
-    const code = typeof data?.code === "string" ? data.code : undefined;
-    const answered = approvalId
-      ? approvalRoundTrip({
-          command: "extension_release_promote",
-          platformCode: code ?? "",
-          message: readPlatformMessage(data),
-          approvalId,
-          undone: "Nothing was promoted by this call.",
-          api: args.api,
-          value: { channel, buildId },
-          stateRead: "extension_release_status",
-        })
-      : undefined;
-
-    if (answered) return answered;
-
-    const unknownBuild = res.status === 404 || code === "UNKNOWN_BUILD";
-    const enrich = unknownBuild ? await unknownBuildEnrichment(credential.ref, args.api) : {};
-    const hint = unknownBuild
-      ? "Run extension_release_status to see this project's channels, their promoted shas, and recent builds."
-      : (code && promoteRefusalHint(code, data)) || "";
-    const allowance = allowanceRefusal(data, billingUrl(credential.ref?.workspace, args.api));
-
-    return envelope({
-      ok: false,
-      command: "extension_release_promote",
-      status: "promote-failed",
-      error: {
-        code: "E_PLATFORM",
-        name: "ReleaseError",
-        message: allowance ? allowance.message : `promote failed (${res.status}): ${data?.message || text || "unknown error"}`,
-        ...(code ? { platformCode: code } : {}),
-      },
-      value: { ...enrich, ...allowanceValue(allowance) },
-      hint,
-    });
-  }
-
-  const promotedRef = credential.ref;
-  const visibility = promotedRef ? await readVisibility(promotedRef, args.api) : null;
-  const channelLink = promotedRef
-    ? channelLinkFields(promotedRef, visibility, channel, args.api)
-    : {};
-  const publicBuildUrl = userlandProjectUrl(
-    promotedRef,
-    UserlandProjectPage.build(buildId),
-    args.api,
-  );
-  const allowance = spendNarration({
-    what: "This promote",
-    body: data,
-    api: args.api,
-  });
-  const enriched: Record<string, unknown> =
-    data && typeof data === "object" && !Array.isArray(data)
-      ? {
-          ...data,
-          ...channelLink,
-          ...(publicBuildUrl ? { publicBuildUrl } : {}),
-          allowance,
-        }
-      : { platform: data, allowance };
-  const outcome = readPromoteOutcome(data);
-  const statusRead = `extension_release_status (include: ['releases']${
-    args.project ? `, project: '${args.project}'` : ""
-  })`;
-
-  if (outcome.state === "unconfirmed") {
-    return envelope({
-      ok: false,
-      command: "extension_release_promote",
-      status: "promote-unconfirmed",
-      error: {
-        code: "E_PLATFORM",
-        name: "PromoteUnconfirmed",
-        message: `The platform answered ${res.status} but ${outcome.why}, so whether ${channel} now serves build ${buildId} is unknown.`,
-      },
-      value: { channel, buildId, platform: data },
-      hint: `Do not promote again blind: a promote that did go through would be dispatched a second time. Read ${statusRead} and promote again only if ${channel} does not name ${buildId}.`,
-    });
-  }
-
-  const acceptedAt = plain(data?.dispatchedAt) || stampNow();
-  const waited = await awaitPromoteRecord({
-    command: "extension_release_promote",
-    project: args.project,
-    api: args.api,
-    channel,
-    buildId,
-    acceptedAt,
-    waitSeconds: args.waitSeconds,
-  });
-  const releaseId = plain(waited.record?.id);
-  const links = promoteLinks({
-    command: "extension_release_promote",
-    callArgs: { ...args, action: "promote" } as Record<string, unknown>,
-    value: enriched,
-    releaseId,
-    channelUrl: enriched.channelUrl,
-    publicBuildUrl,
-  });
-  const firefox = visibility === "public" ? firefoxChannelFields(promotedRef, channel, outcome.queuedBrowsers, args.api, servedOfAnswer(data)) : {};
-  const made = [madeSentence(links), firefoxChannelSentence(firefox)].filter(Boolean).join(" ");
-  const trackPage = links.find((link) => link.kind === "release")?.url ?? releasesPage(promotedRef, args.api);
-  const value = { ...enriched, ...firefox, ...(releaseId ? { releaseId } : {}), outcome: waited.outcome, links };
-
-  if (waited.failed) {
-    return envelope({
-      ok: false,
-      command: "extension_release_promote",
-      status: "promote-failed",
-      value,
-      error: { code: "E_PLATFORM", name: "PromoteFailed", message: `The platform's release record for ${channel} at build ${buildId} reads ${waited.outcome.status}, so the channel does not serve it.` },
-      hint: `Read the release page for the failed step, fix the cause and promote again; ${statusRead} reads the record. ${made}`,
-      warnings: [credential.note],
-    });
-  }
-
-  if (outcome.state === "partial") {
-    return envelope({
-      ok: true,
-      command: "extension_release_promote",
-      status: waited.outcome.recorded ? "promoted-partially" : "promote-dispatched",
-      value: {
-        ...value,
-        incomplete: {
-          failedBrowsers: outcome.failedBrowsers,
-          pendingMirrors: outcome.pendingMirrors,
-          githubReleaseFailed: outcome.githubReleaseFailed,
-          githubReleaseAssetErrors: outcome.githubReleaseAssetErrors,
-        },
-      },
-      hint: `${
-        waited.outcome.recorded
-          ? `The platform's release record for ${channel} reads ${waited.outcome.status} for ${outcome.queuedBrowsers.join(", ")}, and part of this promote did not happen: read the warnings.`
-          : `${dispatchedHint({ acceptedAt, trackUrl: trackPage, readCall: statusRead })} Part of this promote did not happen: read the warnings.`
-      } Do not repeat the whole promote; confirm what ${channel} serves with ${statusRead}. ${made}`,
-      warnings: [...partialPromoteWarnings(outcome, channel), credential.note],
-    });
-  }
-
-  if (!waited.outcome.recorded) {
-    return envelope({
-      ok: true,
-      command: "extension_release_promote",
-      status: "promote-dispatched",
-      value,
-      hint: `${dispatchedHint({ acceptedAt, trackUrl: trackPage, readCall: statusRead })} The release workflow was dispatched for ${outcome.queuedBrowsers.join(", ")} toward the ${channel} channel at build ${buildId}. ${made}`,
-      warnings: [...notarizationNotes(outcome.notarization), credential.note],
-    });
-  }
-
-  return envelope({
-    ok: true,
-    command: "extension_release_promote",
-    status: "promoted",
-    value,
-    hint: `The platform's release record confirms the ${channel} channel at build ${buildId} (${waited.outcome.status}) for ${outcome.queuedBrowsers.join(", ")}. ${statusRead} reads what the channel serves. ${made}`,
-    warnings: [...notarizationNotes(outcome.notarization), credential.note],
-  });
-}
+export const handler = hostedOnly(schema.name);

@@ -2,7 +2,7 @@
 
 Generated from the schemas the server registers (`src/index.ts`); do not edit by hand. Regenerate with `pnpm docs:tools`. A test fails when this file and the schemas disagree.
 
-40 tools.
+41 tools.
 
 ## extension_add_feature
 
@@ -96,12 +96,28 @@ Build the extension on this machine into dist/<browser>/; never for sharing (ext
 
 ## extension_builds
 
-Read, download, rebuild and configure platform builds. list/get rows: env is the build environment, channels the pins holding it now. A rebuild spends allowance; a push, only on the build branch when it changes the root directory ([skip build] pushes, docs-only, other branches spend nothing).
+Read and download platform builds. list/get rows: env is the build environment, channels the pins holding it now. To rebuild, recheck or configure, call extension_builds_act.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "list" \| "get" \| "logs" \| "download" \| "rebuild" \| "recheck" \| "configure" \| "create-channel" \| "configure-channel" \| "delete-channel" | no | `"list"` | list: recent builds, lastPush; get: one build; logs; download: a verified package; recheck: rerun integrity; rebuild; configure: buildSettings; create-, configure-channel; delete-channel: console only. |
-| `buildId` | string | no |  | Commit sha, never the build number; required for get, logs, download, recheck. |
+| `action` | "list" \| "get" \| "logs" \| "download" | no | `"list"` | list: recent builds, lastPush; get: one build; logs; download: a verified package. |
+| `buildId` | string | no |  | Commit sha, never the build number; required for get, logs, download. |
+| `browser` | string | no |  | chrome, edge, firefox, safari; download requires it and takes source. |
+| `projectPath` | string | no |  | Project directory; picks its login. |
+| `to` | string | no |  | download: directory (default the cache). |
+| `limit` | number | no |  | list: 1 to 50 (default 10). |
+| `project` | string | no |  | Stored login '<workspace>/<project>' when several exist. |
+| `waitSeconds` | number | no |  | get: seconds to wait for a build's verdict (a rebuild or a push), 0 to 600 (default 180). |
+| `api` | string | no |  | Platform URL; default from env. |
+
+## extension_builds_act
+
+Run a build act on the platform: rebuild, recheck, configure the build settings or a channel; read builds with extension_builds. A rebuild spends allowance; a push, only on the build branch when it changes the root directory ([skip build] pushes, docs-only, other branches spend nothing).
+
+| input | type | required | default | description |
+| --- | --- | --- | --- | --- |
+| `action` | "rebuild" \| "recheck" \| "configure" \| "create-channel" \| "configure-channel" \| "delete-channel" | yes |  | rebuild; recheck: rerun integrity; configure: buildSettings; create-, configure-channel; delete-channel: console only. |
+| `buildId` | string | no |  | Commit sha, never the build number; required for recheck. |
 | `buildEnv` | "staging" \| "production" | no |  | rebuild: staging (default, Preview) or production (Stable, stores). |
 | `buildSettings` | object | no |  | configure: per-browser changes, e.g. { firefox: { buildCommand: 'pnpm build' } }. |
 | `approvalId` | string | no |  | Approved approval id. |
@@ -109,12 +125,10 @@ Read, download, rebuild and configure platform builds. list/get rows: env is the
 | `description` | string | no |  | Channel description, max 200 chars. |
 | `color` | string | no |  | Channel color, #rrggbb. |
 | `audience` | "public" \| "private" | no |  | private, or public (owner approval); default the project's visibility. |
-| `browser` | string | no |  | chrome, edge, firefox, safari; download requires it and takes source. |
+| `browser` | string | no |  | recheck: chrome, edge, firefox or safari (default all). |
 | `projectPath` | string | no |  | Project directory; picks its login. |
-| `to` | string | no |  | download: directory (default the cache). |
-| `limit` | number | no |  | list: 1 to 50 (default 10). |
 | `project` | string | no |  | Stored login '<workspace>/<project>' when several exist. |
-| `waitSeconds` | number | no |  | Seconds to wait for the result (with approvalId, the approval), 0 to 600 (default 180). get waits for a build's verdict (a rebuild or a push). |
+| `waitSeconds` | number | no |  | Seconds to wait for the result (with approvalId, the approval), 0 to 600 (default 180). |
 | `api` | string | no |  | Platform URL; default from env. |
 
 ## extension_create
@@ -357,7 +371,7 @@ Create an extension.dev project from a folder (projectPath, uploaded, no push; a
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `project` | string | no |  | New '<workspace>/<project>'. |
-| `projectPath` | string | no |  | Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). node_modules, dist, .git, .extension-dev, .zip, .crx, .xpi, .env*, key files and .gitignore entries stay out; 4 MB zipped at most. On an uploaded project with a login this re-seeds and rebuilds it after an approval; extension_builds rebuild rebuilds its stored tree without a new upload. |
+| `projectPath` | string | no |  | Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). node_modules, dist, .git, .extension-dev, .zip, .crx, .xpi, .env*, key files and .gitignore entries stay out; 4 MB zipped at most. On an uploaded project with a login this re-seeds and rebuilds it after an approval; extension_builds_act rebuild rebuilds its stored tree without a new upload. |
 | `repo` | string | no |  | GitHub '<owner>/<repo>' the source is pushed to; instead of projectPath. |
 | `installationId` | string | no |  | Omit; the platform finds it or answers a connect link. |
 | `displayName` | string | no |  | Human name; rename later with extension_workspace configure-project. |

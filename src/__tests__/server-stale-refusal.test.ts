@@ -132,20 +132,4 @@ describe("a server that knows it was rebuilt and has no loader refuses platform 
     expect(status.out.error.code).toBe("E_SERVER_STALE");
     expect(fetchSpy).toHaveBeenCalledTimes(0);
   });
-
-  it("a fresh server reads the platform as before and carries its stamp", async () => {
-    if (process.platform === "win32") return;
-
-    const stamp = createServerStamp(entryFile(tmp));
-
-    const { isError, out } = await call(stamp, "extension_builds", { action: "list", api: API });
-
-    expect(isError).toBe(false);
-    expect(out.ok).toBe(true);
-    expect(out.status).toBe("listed");
-    expect(out.value.builds).toHaveLength(1);
-    expect(out.value.server).toEqual({ version, commit: null, startedAt: expect.any(String), pid: process.pid, builtAt: "2026-10-23T14:19:47.654Z" });
-    expect(out.warnings).toEqual([]);
-    expect(fetchSpy.mock.calls.map((args) => new URL(String(args[0])).pathname)).toEqual(["/api/cli/whoami", `/api/projects/${PROJECT_ID}/builds`]);
-  });
 });

@@ -15,8 +15,6 @@ import { withApproveStep } from "../lib/store-connection";
 import { answeredAs } from "../lib/submit-action-safety";
 import { installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
 import { createToolDispatcher } from "../lib/tool-dispatch";
-import * as submitModule from "../tools/submit-local";
-import * as submitCheckModule from "../tools/submit-check-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 installPlatformKernelHooks();
@@ -117,68 +115,11 @@ describe("410: an approval names the call that spends it with its tool and the r
     expect(answeredAs(made, "extension_submit_check", "extension_builds")).toBe(made);
     expect(answeredAs("not json", "extension_submit_check", "extension_submit")).toBe("not json");
   });
-
-  describe("through extension_submit_check", () => {
-    const platform = useProjectRoutes("extdev-approval-next-call-");
-
-    function serve(): void {
-      platform.login();
-      platform.routes[`POST ${PREFLIGHT}`] = () => ({ body: report() });
-      platform.routes[`POST ${APPROVALS}`] = () => ({ status: 201, body: { approvalId: APPROVAL_ID, approvalUrl: `${API}/device/approve/${APPROVAL_ID}`, description: DESCRIPTION, approverRole: "owner" } });
-    }
-
-    it("answers with the check tool as its command and names extension_submit as the call that spends the approval", async () => {
-      if (process.platform === "win32") return;
-
-      serve();
-
-      const out = JSON.parse(await submitCheckModule.handler({ action: "submit", browsers: ["chrome"], buildSha: "c2b67f5", dryRun: false, api: API }));
-
-      expect(out.status).toBe("approval-required");
-      expect(out.command).toBe("extension_submit_check");
-      expect(out.error.message).toContain(`then call extension_submit {action: "submit", dryRun: false, browsers: ["chrome"], buildSha: "c2b67f5", approvalId: "${APPROVAL_ID}"}`);
-      expect(out.error.message).toContain(`extension_approvals {action: "status", approvalId: "${APPROVAL_ID}"} reads whether a workspace owner has approved it`);
-      expect(out.error.message).not.toContain("this tool");
-    });
-
-    it("the dispatcher's alias path names the check tool too", async () => {
-      if (process.platform === "win32") return;
-
-      serve();
-
-      const dispatch = createToolDispatcher({ tools: [submitModule, submitCheckModule], options: { features: ["local", "platform"], noShip: false } });
-      const frame = await dispatch({ name: "extension_submit_check", arguments: { action: "submit", browsers: ["chrome"], buildSha: "c2b67f5", dryRun: false, api: API } });
-      const out = JSON.parse(frame.content[0]?.text ?? "{}");
-
-      expect(out.status).toBe("approval-required");
-      expect(out.command).toBe("extension_submit_check");
-      expect(out.hint).toContain(`extension_submit {action: "submit", dryRun: false, browsers: ["chrome"], buildSha: "c2b67f5", approvalId: "${APPROVAL_ID}"} runs it.`);
-    });
-  });
 });
 
 describe("478: the approve step names the call that spends the approval, with its id", () => {
   const platform = useProjectRoutes("extdev-approve-step-");
   const FOLLOW_UP = `Once approved, call extension_submit again with the same arguments plus approvalId "${APPROVAL_ID}"; never request a fresh approval while this one stands.`;
-
-  it("tells the agent the follow-up call in nextStep.say and sayToPerson, not only the approval page", async () => {
-    if (process.platform === "win32") return;
-
-    platform.login();
-    platform.routes[`POST ${PREFLIGHT}`] = () => ({ body: report() });
-    platform.routes[`POST ${APPROVALS}`] = () => ({
-      status: 201,
-      body: { approvalId: APPROVAL_ID, approvalUrl: `${API}/device/approve/${APPROVAL_ID}`, expiresAt: "2026-11-09T23:00:00.000Z" },
-    });
-
-    const out = JSON.parse(await submitModule.handler({ action: "submit", browsers: ["chrome"], buildSha: "c2b67f5", dryRun: false, api: API }));
-
-    expect(out.status).toBe("approval-required");
-    expect(out.value.nextStep.kind).toBe("approve");
-    expect(out.value.nextStep.say).toContain(FOLLOW_UP);
-    expect(out.value.nextStep.say.indexOf(`${API}/device/approve/${APPROVAL_ID}`)).toBeLessThan(out.value.nextStep.say.indexOf(FOLLOW_UP));
-    expect(out.value.sayToPerson).toBe(out.value.nextStep.say);
-  });
 
   it("gives an approval still waiting for the owner the same approve step, naming the id that waits", () => {
     const pending = pendingApproval({ command: "extension_submit", approvalId: APPROVAL_ID, message: "Approval has not been granted yet.", undone: "Nothing was executed.", api: API });

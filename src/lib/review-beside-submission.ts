@@ -6,7 +6,17 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import type { StoreReview } from "./platform-submissions";
+export interface StoreReview {
+  state: string;
+  checkedAt?: string;
+  source?: string;
+  visibility?: string;
+  crxVersion?: string;
+  liveState?: string;
+  liveCrxVersion?: string;
+  versionState?: string;
+  reviewSubmissionState?: string;
+}
 
 export interface ReviewView {
   status?: string;

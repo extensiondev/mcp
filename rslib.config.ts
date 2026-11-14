@@ -36,7 +36,7 @@ const distRoot = process.env.EXTENSION_MCP_DIST_ROOT || "dist";
  * shared chunk or runtime file beside it would come back from the loader's
  * cache as the OLD build, with its module cache keyed by the same ids. So the
  * server entry is bundled alone, with no chunk split and no runtime chunk,
- * and the hosted and clients entries are bundled apart from it.
+ * and the clients and kernel entries are bundled apart from it.
  */
 export default defineConfig({
   output: { distPath: { root: distRoot } },
@@ -62,7 +62,6 @@ export default defineConfig({
       source: {
         entry: {
           clients: path.resolve(__dirname, "./src/clients/index.ts"),
-          hosted: path.resolve(__dirname, "./src/hosted.ts"),
           kernel: path.resolve(__dirname, "./src/kernel.ts"),
         },
       },

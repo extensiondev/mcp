@@ -126,47 +126,6 @@ afterEach(() => {
 });
 
 describe("a PROJECT_MOVED answer is followed once by the records this server keeps", () => {
-  it("rewrites the created record and the pin, retries once under the new slug, and says so once", async () => {
-    if (process.platform === "win32") return;
-
-    await login();
-    await created("acme/leon", "acme/other");
-    process.env.EXTENSION_DEV_PROJECT = "acme/leon";
-    const client = await freshServer("acme/leon");
-
-    const out = await call(client, "extension_builds", { action: "list", limit: 2 });
-
-    expect(out.ok).toBe(true);
-    expect(out.status).toBe("listed");
-    expect(out.value.project).toBe("acme/lion");
-    expect(out.warnings).toContain(SENTENCE);
-    expect(out.warnings.filter((line: string) => line === SENTENCE)).toHaveLength(1);
-    expect(buildsReads).toHaveLength(2);
-    expect(await createdRefs()).toEqual(["acme/lion", "acme/other"]);
-    expect(process.env.EXTENSION_DEV_PROJECT).toBe("acme/lion");
-
-    const { listCredentials } = await import("../lib/credentials");
-    expect(listCredentials().map((entry) => `${entry.workspaceSlug}/${entry.projectSlug}`)).toEqual(["acme/lion"]);
-
-    const pinnedNew = await call(client, "extension_builds", { action: "list", limit: 2, project: "acme/lion" });
-    expect(pinnedNew.status).toBe("listed");
-  });
-
-  it("does not follow a second move answered in the same call", async () => {
-    if (process.platform === "win32") return;
-
-    await login();
-    await created("acme/leon");
-    movesAnswered = 2;
-
-    const out = await call(await freshServer(), "extension_builds", { action: "list", limit: 2 });
-
-    expect(out.ok).toBe(false);
-    expect(out.status).toBe("moved");
-    expect(out.error.name).toBe("BuildsProjectMoved");
-    expect(buildsReads).toHaveLength(2);
-    expect(await createdRefs()).toEqual(["acme/lion"]);
-  });
 
   it("rewrites nothing when the move names a project this server never recorded or pinned", async () => {
     if (process.platform === "win32") return;

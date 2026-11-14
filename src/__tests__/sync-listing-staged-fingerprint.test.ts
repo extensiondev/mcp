@@ -16,7 +16,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { actionFingerprint } from "../lib/approval-gate";
 import { stagedPatch, type StagedImage } from "../lib/listing-image-stage";
 import { listingDigest, type ListingPatch } from "../lib/store-listing-media";
-import { handler as submit } from "../tools/submit-local";
 import { solidPng } from "./fixtures/png";
 import { API, PROJECT_ROUTE, useProjectRoutes, type Call } from "./fixtures/project-routes";
 
@@ -126,9 +125,6 @@ function askFor(call: Call) {
   };
 }
 
-async function sync(root: string): Promise<any> {
-  return JSON.parse(await submit({ action: "sync-listing", browsers: ["safari"], projectPath: root, screenshots: ["shots/a.png", "shots/b.png"], api: API }));
-}
 
 describe("the listing approval fingerprint hashes the exact media the listing write carries, as www's storeListingDigest does", () => {
   const platform = useProjectRoutes("extdev-staged-fingerprint-api-");
@@ -174,56 +170,5 @@ describe("the listing approval fingerprint hashes the exact media the listing wr
 
     expect(listingDigest(stagedPatch(local, answered))).toBe(WWW_STORE_LISTING_DIGEST);
     expect(listingDigest(local)).not.toBe(WWW_STORE_LISTING_DIGEST);
-  });
-
-  it("asks for approval with the fingerprint of the answered shas, in the order stage, listing write, ask", async () => {
-    if (process.platform === "win32") return;
-
-    const out = await sync(root);
-    const put = platform.sent("PUT", LISTING);
-    const asks = platform.sent("POST", APPROVALS);
-
-    expect(out.value.stores.safari.status).toBe("approval-required");
-    expect(put).toHaveLength(1);
-    expect(asks).toHaveLength(1);
-
-    const shots = put[0]!.body.media.screenshots.map((row: ImageRow) => row.sha256);
-    expect(shots.every((value: string) => /^[1-9]{64}$/.test(value))).toBe(true);
-
-    const expected = wwwRecipe(put[0]!.body);
-    expect(asks[0]!.body.scope).toEqual({ store: "safari", listingDigest: expected });
-    expect(asks[0]!.body.fingerprint).toBe(actionFingerprint(ACTION, { store: "safari", listingDigest: expected }));
-    expect(asks[0]!.body.media.screenshots.map((row: ImageRow) => row.sha256)).toEqual(shots);
-    expect(expected).not.toBe(wwwRecipe(localBody(root, put[0]!.body.listing)));
-
-    const order = platform.calls.map((call) => `${call.method} ${call.path}`);
-    expect(order.lastIndexOf(`PUT ${IMAGES}`)).toBeLessThan(order.indexOf(`PUT ${LISTING}`));
-    expect(order.indexOf(`PUT ${LISTING}`)).toBeLessThan(order.indexOf(`POST ${APPROVALS}`));
-  });
-
-  it("keeps the local-sha fingerprint when the platform has no images door and the single body is what it hashes", async () => {
-    if (process.platform === "win32") return;
-
-    delete platform.routes[`PUT ${IMAGES}`];
-
-    platform.routes[`PUT ${LISTING}`] = (call: Call) => {
-      if (call.body.approvalId) return { body: { changes: ["screenshots"] } };
-
-      const scope = { store: "safari", listingDigest: wwwRecipe(localBody(root, call.body.listing)) };
-
-      return {
-        status: 403,
-        body: { code: "APPROVAL_REQUIRED", message: "Needs approval.", approvalRequest: { action: ACTION, scope, fingerprint: actionFingerprint(ACTION, scope) } },
-      };
-    };
-
-    const out = await sync(root);
-    const put = platform.sent("PUT", LISTING);
-    const asks = platform.sent("POST", APPROVALS);
-
-    expect(out.value.stores.safari.status).toBe("approval-required");
-    expect(put[0]!.body.media.screenshots[0].dataBase64).toBeTruthy();
-    expect(asks).toHaveLength(1);
-    expect(asks[0]!.body.scope.listingDigest).toBe(wwwRecipe(localBody(root, put[0]!.body.listing)));
   });
 });

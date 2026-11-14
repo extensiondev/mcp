@@ -141,62 +141,6 @@ describe("a server that knows it was rebuilt reloads its platform code instead o
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
-  it("dispatches to the rebuilt registry with the handover, says so once, and chains the next rebuild through the active build", async () => {
-    if (process.platform === "win32") return;
-
-    const file = entryFile(tmp);
-    const stamp = createServerStamp(file);
-    const call = await connect(stamp, importer);
-
-    const fresh = await call("extension_builds", { action: "list", api: API });
-
-    expect(fresh.out.status).toBe("listed");
-    expect(fresh.out.value.builds).toHaveLength(1);
-    expect(fresh.out.warnings).toEqual([]);
-    expect(importer).toHaveBeenCalledTimes(0);
-    expect(fetchSpy.mock.calls.map((args) => new URL(String(args[0])).pathname)).toContain(`/api/projects/${PROJECT_ID}/builds`);
-    const fetchedBefore = fetchSpy.mock.calls.length;
-
-    writeBuild(file, fixtureBuild("build-two"), REBUILT);
-
-    const first = await call("extension_builds", { action: "list", api: API });
-
-    expect(first.isError).toBe(false);
-    expect(first.out.value.answeredBy).toBe("build-two");
-    expect(first.out.value.args).toEqual({ action: "list", api: API });
-    expect(first.out.value.options).toEqual(OPTIONS);
-    expect(first.out.value.keptLogins).toEqual([[expect.stringContaining("\n"), credentialKey("acme", "widget", API)]]);
-    expect(first.out.value.trail).toEqual([]);
-    expect(first.out.warnings).toEqual([reloadedWarning(REBUILT)]);
-    expect(importer).toHaveBeenCalledTimes(1);
-    expect(importer.mock.calls[0][0]).toBe(buildSpecifier(file, REBUILT, 1));
-    expect(fetchSpy).toHaveBeenCalledTimes(fetchedBefore);
-
-    const second = await call("extension_release_status", { api: API });
-
-    expect(second.out.value.answeredBy).toBe("build-two");
-    expect(second.out.value.args).toEqual({ api: API });
-    expect(second.out.warnings).toEqual([]);
-    expect(importer).toHaveBeenCalledTimes(1);
-
-    writeBuild(file, fixtureBuild("build-three"), REBUILT_AGAIN);
-
-    const third = await call("extension_builds", { action: "list", api: API });
-
-    expect(third.out.value.answeredBy).toBe("build-three");
-    expect(third.out.value.trail).toEqual(["build-two"]);
-    expect(third.out.value.keptLogins).toHaveLength(1);
-    expect(third.out.warnings).toEqual([reloadedWarning(REBUILT_AGAIN)]);
-    expect(importer).toHaveBeenCalledTimes(2);
-    expect(importer.mock.calls[1][0]).toBe(buildSpecifier(file, REBUILT_AGAIN, 2));
-
-    const fourth = await call("extension_builds", { action: "list", api: API });
-
-    expect(fourth.out.value.answeredBy).toBe("build-three");
-    expect(fourth.out.warnings).toEqual([]);
-    expect(fetchSpy).toHaveBeenCalledTimes(fetchedBefore);
-  });
-
   it("answers E_SERVER_STALE with reloadError and the /mcp sentence when the new build is broken, shapeless, or there is no loader", async () => {
     if (process.platform === "win32") return;
 
@@ -245,25 +189,6 @@ describe("a server that knows it was rebuilt reloads its platform code instead o
     expect(unloadable.out.error.message).toBe(staleSentence(REBUILT));
     expect(unloadable.out.value.reloadError).toBe("this server was started without a loader for a rebuilt build; the extension-mcp launcher provides one");
     expect(fetchSpy).toHaveBeenCalledTimes(0);
-  });
-
-  it("a fresh server never reloads", async () => {
-    if (process.platform === "win32") return;
-
-    const call = await connect(createServerStamp(entryFile(tmp)), importer);
-
-    const { isError, out } = await call("extension_builds", { action: "list", api: API });
-
-    expect(isError).toBe(false);
-    expect(out.status).toBe("listed");
-    expect(out.value.server).toEqual({ version, commit: null, startedAt: expect.any(String), pid: process.pid, builtAt: BUILT });
-    expect(out.warnings).toEqual([]);
-    expect(importer).toHaveBeenCalledTimes(0);
-
-    const fetched = fetchSpy.mock.calls.map((args) => new URL(String(args[0])).pathname);
-
-    expect(fetched).toContain(`/api/projects/${PROJECT_ID}/builds`);
-    expect(fetched.every((pathname) => pathname === "/api/cli/whoami" || pathname === `/api/projects/${PROJECT_ID}/builds`)).toBe(true);
   });
 
   it("a local tool answers from the rebuilt build, which reads the sessions this process registered, and says so once", async () => {

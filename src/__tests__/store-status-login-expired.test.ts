@@ -17,8 +17,6 @@ import { forgetLoginRenewals } from "../lib/login-expired";
 import { fetchRegistryJson } from "../lib/registry";
 import { RegistryAccessTokens } from "../lib/registry-access";
 import { handler as releaseStatus } from "../tools/release-status";
-import { readStores } from "../tools/store-status";
-import { storeVersionStatus } from "../tools/store-version-status";
 
 const API = "https://www.extension.dev";
 const NOW = Math.floor(Date.now() / 1000);
@@ -104,82 +102,6 @@ describe("a store status read under an expired login names the expiry instead of
 
     global.fetch = prevFetch;
     fs.rmSync(tmp, { recursive: true, force: true });
-  });
-
-  it("extension_submit status answers not-signed-in with the expiry, the login call and the store page, and reads nothing", async () => {
-    if (process.platform === "win32") return;
-
-    const out = JSON.parse(await storeVersionStatus({ project: "acme/widget", browsers: ["safari"], waitSeconds: 180 }));
-
-    expect(out.ok).toBe(false);
-    expect(out.command).toBe("extension_submit");
-    expect(out.status).toBe("not-signed-in");
-    expect(out.error.code).toBe("E_AUTH_EXPIRED");
-    expect(out.error.name).toBe("LoginExpired");
-    expect(out.error.message).toContain(`The login for acme/widget expired at ${EXPIRED_ISO} (9 h 29 min ago)`);
-    expect(out.error.message).toContain("this server drops an expired token instead of sending it, and the platform would have read the call as missing-token");
-    expect(out.error.message).not.toMatch(/no stores configured|slugs may be wrong|StoreStatusNotFound/);
-    const elapsed = Math.floor(Date.now() / 1000) - NOW;
-    expect(out.value.login).toEqual({ project: "acme/widget", expiresAt: EXPIRED_ISO, expiredForSeconds: 34119 + elapsed, sent: false, renew: RENEW });
-    expect(out.value.nextStep.kind).toBe("login");
-    expect(out.value.nextStep.say).toContain(`Sign in again with ${LOGIN_CALL}, then call this again`);
-    expect(out.value.trackUrl).toBe("https://console.extension.dev/acme/widget/submissions/safari");
-    expect(out.value.nextStep.url).toBe(out.value.trackUrl);
-    expect(out.hint).toContain(out.value.trackUrl);
-    expect(out.hint).toContain(LOGIN_CALL);
-    expect(calls).toEqual(RENEWAL_ATTEMPT);
-  });
-
-  it("extension_release_status include stores answers the same refusal in its stores section and reads nothing", async () => {
-    if (process.platform === "win32") return;
-
-    const out = JSON.parse(await releaseStatus({ include: ["stores"], project: "acme/widget" }));
-    const stores = out.value.stores;
-
-    expect(out.ok).toBe(false);
-    expect(stores.status).toBe("not-signed-in");
-    expect(stores.error.code).toBe("E_AUTH_EXPIRED");
-    expect(stores.error.message).toContain(`expired at ${EXPIRED_ISO}`);
-    expect(stores.value.trackUrl).toBe("https://console.extension.dev/acme/widget/submissions");
-    expect(stores.value.nextStep.say).toContain(LOGIN_CALL);
-    expect(calls).toEqual(RENEWAL_ATTEMPT);
-  });
-
-  it("with no project named, the default login's own expiry is the one refused", async () => {
-    if (process.platform === "win32") return;
-
-    const out = JSON.parse(await storeVersionStatus({ browsers: ["safari"] }));
-
-    expect(out.status).toBe("not-signed-in");
-    expect(out.error.message).toContain("The login for acme/widget expired at");
-    expect(calls).toEqual(RENEWAL_ATTEMPT);
-  });
-
-  it("a private project with no login of its own answers the exact login call in one sentence, never three guesses", async () => {
-    if (process.platform === "win32") return;
-
-    login(NOW + 3600);
-    const out = JSON.parse(await readStores({ project: "acme/other" }));
-    const sentence =
-      'No stored login covers acme/other: a login is minted per project, and the login stored for acme (acme/widget) does not read it, so run extension_auth {action: "login", project: "acme/other"}, or extension_auth {action: "login", workspace: "acme", projects: "*"} to cover every project of the workspace in one approval.';
-
-    expect(out.ok).toBe(false);
-    expect(out.status).toBe("auth-required");
-    expect(out.error).toEqual({ code: "E_AUTH_REQUIRED", name: "LoginRequired", message: sentence, retry: "no" });
-    expect(out.value.login).toEqual({ project: "acme/other", sent: false, renew: { tool: "extension_auth", args: { action: "login", project: "acme/other" } } });
-    expect(out.value.nextStep).toEqual({ kind: "login", say: `${sentence} Then call this again.`, url: "https://console.extension.dev/acme/other/submissions" });
-    expect(out.value.trackUrl).toBe("https://console.extension.dev/acme/other/submissions");
-    expect(JSON.stringify(out)).not.toMatch(/no stores configured|slugs may be wrong|StoreStatusNotFound|set EXTENSION_DEV_TOKEN/);
-  });
-
-  it("EXTENSION_DEV_TOKEN covering the project lets the read go on", async () => {
-    if (process.platform === "win32") return;
-
-    process.env.EXTENSION_DEV_TOKEN = claimsToken("acme", "widget");
-    const out = JSON.parse(await readStores({ project: "acme/widget" }));
-
-    expect(out.status).not.toBe("not-signed-in");
-    expect(calls.length).toBeGreaterThan(0);
   });
 
   it("a registry refusal under an expired login says the token expired and was not sent, never that the project is private", async () => {

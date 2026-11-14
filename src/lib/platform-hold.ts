@@ -242,7 +242,7 @@ export interface LaneClosedFacts {
 }
 
 export const CREATE_FORM_SETTINGS_LATER =
-  "the install command, build command and output directory are set after creation with extension_builds (action: configure)";
+  "the install command, build command and output directory are set after creation with extension_builds_act (action: configure)";
 
 function createForm(www: string, prefill: CreatePrefill): Required<Pick<LaneClosedFacts, "createUrl" | "prefilled" | "askedOnTheForm">> {
   const [workspace = "", name = ""] = prefill.project.split("/");

@@ -236,9 +236,15 @@ export const TRACK_ACTS: Record<string, (call: TrackCall) => TrackPlan | null> =
     const action = text(call.args.action) || "list";
     const buildId = buildOf(call);
 
-    if (action === "get") return { track: { page: "build", target: { buildId } } };
+    if (action === "get" || action === "download") return { track: { page: "build", target: { buildId } } };
     if (action === "logs") return { track: { page: "build", target: { buildId, browser: text(call.args.browser).toLowerCase() } } };
-    if (action === "rebuild" || action === "recheck" || action === "download") return { track: { page: "build", target: { buildId } } };
+
+    return { track: { page: "builds" } };
+  },
+  extension_builds_act: (call) => {
+    const action = text(call.args.action);
+
+    if (action === "rebuild" || action === "recheck") return { track: { page: "build", target: { buildId: buildOf(call) } } };
     if (action === "configure") return { track: { page: "build-settings" } };
     if (action === "create-channel") return { track: { page: "channels" } };
 

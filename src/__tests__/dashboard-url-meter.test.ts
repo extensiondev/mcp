@@ -16,8 +16,6 @@ import {
   meterComposedDashboardUrls,
 } from "../lib/dashboard-url-meter";
 import { envelope } from "../lib/envelope";
-import { STORE_KEY_PAGES } from "../lib/connect-session";
-import { partnerCenterProductUrl } from "../lib/edge-first-submission";
 import { AMO_API_KEY_PAGE } from "../lib/firefox-store";
 import { chromeItemUrl, itemLinkUrls } from "../lib/store-connection";
 import { readStoreSettingsChange } from "../lib/store-settings";
@@ -67,32 +65,6 @@ describe("a store dashboard address this server composes is counted once per ans
     expect(dashboardStoreOf("https://acme.extension.dev/widget/builds/abc1234")).toBeNull();
   });
 
-  it("counts an answer carrying a composed address, naming the tool, the status, the stores and the hosts", async () => {
-    const productPage = partnerCenterProductUrl("prod-123");
-    const keyPage = composedDashboardUrl("https://appstoreconnect.apple.com/access/integrations/api");
-
-    const properties = await meterComposedDashboardUrls(
-      {
-        command: "extension_submit",
-        status: "store-not-ready",
-        value: { partnerCenterUrl: productPage, nextStep: { url: keyPage } },
-        hint: `Create the product once at ${productPage}.`,
-      },
-      capture,
-    );
-
-    expect(properties).toEqual({
-      tool: "extension_submit",
-      status: "store-not-ready",
-      stores: "edge,safari",
-      dashboard_hosts: "partner.microsoft.com,appstoreconnect.apple.com",
-      count: 2,
-      composed_by: "mcp",
-    });
-
-    expect(sent).toEqual([{ event: DASHBOARD_URL_COMPOSED_EVENT, properties }]);
-  });
-
   it("counts nothing for a dashboard address the platform sent, even one the composed address prefixes", async () => {
     const newItem = itemLinkUrls([], "https://console.extension.dev/acme/widget/settings");
     const received = `${newItem.newItemUrl}/pub-1/item-1/edit`;
@@ -115,16 +87,6 @@ describe("a store dashboard address this server composes is counted once per ans
     expect(inSentence).toMatchObject({ stores: "firefox", dashboard_hosts: "addons.mozilla.org", count: 1 });
     expect(none).toBeNull();
     expect(sent).toHaveLength(1);
-  });
-
-  it("registers every composer: the Chrome dashboard and item page, the Edge and App Store key pages, the AMO key page and the Partner Center product page", () => {
-    const chromeItem = chromeItemUrl({ itemId: "abcdefghijklmnopabcdefghijklmnop", publisherId: "pub-1" });
-    const chromeDashboard = chromeItemUrl({ itemId: "abcdefghijklmnopabcdefghijklmnop" });
-    const product = partnerCenterProductUrl("prod-123");
-
-    expect(chromeItemUrl({ itemUrl: "https://chrome.google.com/webstore/devconsole/given" })).toBe("https://chrome.google.com/webstore/devconsole/given");
-    expect(composedDashboardUrls()).toEqual(expect.arrayContaining([chromeItem, chromeDashboard, product, STORE_KEY_PAGES.edge, STORE_KEY_PAGES.safari, AMO_API_KEY_PAGE]));
-    expect(composedDashboardUrls()).not.toContain("https://chrome.google.com/webstore/devconsole/given");
   });
 
   it("counts the Chrome dashboard address form a store settings refusal names in its sentence", async () => {
