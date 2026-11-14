@@ -10,6 +10,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 
 import { withRequestCredential, type RequestCredential } from "./lib/credential-scope";
 import { envelope } from "./lib/envelope";
+import { installPlatformKernelHooks } from "./lib/platform-kernel-hooks";
 import { installRequestFetch } from "./lib/request-fetch";
 import { installToolHandlers, type ToolModule } from "./lib/tool-dispatch";
 import * as auth from "./tools/auth";
@@ -25,6 +26,8 @@ import type { ServerOptions, ToolAnnotations } from "./lib/tool-policy";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 export { withRequestCredential, requestCredential, type RequestCredential, type ScopedProject } from "./lib/credential-scope";
+
+installPlatformKernelHooks();
 
 interface HostedProjection {
   module: ToolModule;

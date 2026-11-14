@@ -7,14 +7,13 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { approvalLogin } from "./approval-scope";
-import { connectSessionProject } from "./connect-session-projects";
 import { envToken, requestCredential } from "./credential-scope";
 import { resolveCredential } from "./credential-source";
 import { pinnedProject, readCredentials } from "./credentials";
 import { envelope, isEnvelope } from "./envelope";
+import { kernelHook } from "./kernel-hooks";
 import { noLoginForProjectRefusal } from "./no-login-for-project";
 import { clientProjectDir } from "./client-roots";
-import { loginForOrigin, loginForPath, serverLogins } from "./path-project";
 import { TOOL_POLICY, type ServerOptions } from "./tool-policy";
 
 type Args = Record<string, unknown>;
@@ -108,16 +107,16 @@ export function bindCallProject(
   if (held) return { args, answeredFor: refOf(held) };
   if (named) return { args, answeredFor: namedRef(named, text(args.workspace), api) };
 
-  const sessionProject = name === "extension_submit" ? connectSessionProject(args.connectSession) : null;
+  const sessionProject = name === "extension_submit" ? kernelHook("connectSessionProject")(args.connectSession) : null;
   if (sessionProject) return { args: { ...args, project: sessionProject }, answeredFor: sessionProject };
   if (options.project || pinnedProject() || requestCredential() || envToken()) return { args, answeredFor: resolvedRef(api) };
 
-  const logins = serverLogins(api);
+  const logins = kernelHook("serverLogins")(api);
   const projectPath = takesPath(inputSchema) ? text(args.projectPath) : "";
   const fallback = logins.kept ?? (logins.live.length === 1 ? (logins.live[0] ?? null) : null);
 
   if (projectPath) {
-    const found = loginForPath(projectPath, api);
+    const found = kernelHook("loginForPath")(projectPath, api);
 
     if (found.state === "match") {
       const other = fallback && fallback !== found.project ? fallback : null;
@@ -141,7 +140,7 @@ export function bindCallProject(
 
   if (!fallback && logins.live.length > 1) {
     const dir = text(args.projectPath) || clientProjectDir();
-    const origin = dir ? loginForOrigin(dir, api) : null;
+    const origin = dir ? kernelHook("loginForOrigin")(dir, api) : null;
 
     if (dir && origin) {
       return {

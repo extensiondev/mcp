@@ -13,12 +13,12 @@ import {
 
 import { bindApprovalLogin } from "./approval-login";
 import { runAskingOnly } from "./ask-only";
-import { openApprovalOnce } from "./approval-open";
 import { answerOnceDecided } from "./approval-wait";
 import { bindApprovalProject } from "./approval-record";
 import { withAnsweredProject, withApprovalLogin } from "./approval-scope";
 import { withCallWaits } from "./call-waits";
 import { envelope } from "./envelope";
+import { kernelHook } from "./kernel-hooks";
 import { crashAnswerFields, watchCall } from "./server-crash-log";
 import { resolveApiBase } from "./login-flow";
 import { stubbedReadWarning } from "./network-stubs";
@@ -41,7 +41,6 @@ import { withSessionIdle } from "./session-idle";
 import { createReloader, handoverState, type ActiveBuild, type BuildImporter, type ListedTool, type RebuiltCall, type ToolFrame } from "./server-reload";
 import { markListStale, reloadedWarning, serverStamp, staleEnvelope, type ServerStampReader } from "./server-stamp";
 import { markStaleLocal, noLocalCarryReason, predatedChecks, predatesCheckEnvelope, type HeldLocal } from "./stale-local";
-import { shapeStoreAnswer } from "./store-answer";
 import { answeredAs } from "./submit-action-safety";
 import { annotate, frameText, refusedFrame, toolResultFrame } from "./tool-frames";
 import { attachTrack } from "./track-url";
@@ -235,7 +234,7 @@ export function createToolSurface(setup: ToolHandlerOptions): {
 
     const text = frameText(outcome.frame);
     const said = annotate(
-      setup.openApprovals ? openApprovalOnce(text, options) : text,
+      setup.openApprovals ? kernelHook("openApprovalOnce")(text, options) : text,
       outcome.reloaded ? { warning: reloadedWarning(outcome.reloaded) } : {},
     );
     const told = stale ? markListStale(said, listedAt, rebuilt) : said;
@@ -391,10 +390,10 @@ export function createToolSurface(setup: ToolHandlerOptions): {
             const followed = await withAnsweredProject(scoped.answeredFor, () => followedOnce(answered, callArgs, tool.handler));
             const answer = annotate(annotate(followed, { note: bound.note }), { note: scoped.note });
             const shaped = stamp.apply(
-              scrubRunAnswer(attachTrack(name, callArgs, shapeStoreAnswer(name, callArgs, stampAnsweredFor(answer, scoped.answeredFor)))),
+              scrubRunAnswer(attachTrack(name, callArgs, kernelHook("shapeStoreAnswer")(name, callArgs, stampAnsweredFor(answer, scoped.answeredFor)))),
             );
 
-            return setup.openApprovals ? openApprovalOnce(shaped, options) : shaped;
+            return setup.openApprovals ? kernelHook("openApprovalOnce")(shaped, options) : shaped;
           },
           name,
           normalizedArgs,

@@ -15,7 +15,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { pendingApproval } from "../lib/approval-outcome";
 import { writeCredentials } from "../lib/credentials";
 import { envelope } from "../lib/envelope";
+import { installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
 import { createToolDispatcher, type ToolModule } from "../lib/tool-dispatch";
+
+installPlatformKernelHooks();
 
 const API = "http://localhost:3100";
 const APPROVAL_ID = "apr_oSA5_UlubgsXJACljtVfT8RskyWvv2SN";

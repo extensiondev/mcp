@@ -13,8 +13,11 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { writeCredentials } from "../lib/credentials";
+import { installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
 import { createToolDispatcher, type ToolModule } from "../lib/tool-dispatch";
 import * as releaseStatus from "../tools/release-status";
+
+installPlatformKernelHooks();
 
 const READ_AT = "2026-11-06T12:40:00.000Z";
 

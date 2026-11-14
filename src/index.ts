@@ -70,8 +70,11 @@ import { type ServerStampReader } from "./lib/server-stamp";
 import { createToolDispatcher, installToolHandlers, listedTools, type ToolModule } from "./lib/tool-dispatch";
 import { isProjectRef } from "./lib/credentials";
 import { installCrashGuard } from "./lib/server-crash-guard";
+import { installPlatformKernelHooks } from "./lib/platform-kernel-hooks";
 
 import { version } from "../package.json";
+
+installPlatformKernelHooks();
 
 export { version };
 export { renderToolsDoc } from "./lib/docs-tools";

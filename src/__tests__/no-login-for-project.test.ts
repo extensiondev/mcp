@@ -16,9 +16,12 @@ import { rememberCreatedProject } from "../lib/created-projects";
 import { credentialKey, credentialsPath } from "../lib/credentials";
 import { saveHeldBatch } from "../lib/held-batches";
 import { forgetPendingCreate, pendingCreate, pendingCreatesPath, rememberPendingCreate } from "../lib/pending-creates";
+import { installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
 import { createToolDispatcher, type ToolModule } from "../lib/tool-dispatch";
 import * as shares from "../tools/shares";
 import * as submit from "../tools/submit";
+
+installPlatformKernelHooks();
 
 const API = "http://localhost:3100";
 const WORKSPACE = "cezaraugusto";

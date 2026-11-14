@@ -17,10 +17,14 @@ import { clientDirs, setClientRoots } from "../lib/client-roots";
 import { resolveCredential } from "../lib/credential-source";
 import { credentialKey, credentialsPath, writeCredentials } from "../lib/credentials";
 import { loginForPath, pathIdentity } from "../lib/path-project";
+import { PLATFORM_KERNEL_HOOKS, installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
 import { createToolDispatcher, type ToolModule } from "../lib/tool-dispatch";
 import * as builds from "../tools/builds";
 import * as releaseStatus from "../tools/release-status";
 import * as submit from "../tools/submit";
+import * as kernel from "../kernel";
+
+installPlatformKernelHooks();
 
 const API = "http://localhost:3100";
 const WORKSPACE = "cezaraugusto";
@@ -333,5 +337,34 @@ describe("ledger 467: every tool that takes projectPath binds the project the fo
     expect(out.error.code).toBe("E_PROJECT_AMBIGUOUS");
     expect(out.value.logins).toEqual(["cezaraugusto/hands-free", "cezaraugusto/rebeccat"]);
     expect(sent).toEqual([]);
+  });
+});
+
+describe("the kernel export binds a call through the hooks its host registers", () => {
+  it("answers a folder's binding from the registered hooks, and the platform set fills all eight", async () => {
+    const dir = path.join(tmp, "anywhere");
+    fs.mkdirSync(dir, { recursive: true });
+
+    expect(kernel.createToolDispatcher).toBe(createToolDispatcher);
+    expect([...kernel.registeredKernelHooks()].sort()).toEqual(Object.keys(PLATFORM_KERNEL_HOOKS).sort());
+    expect(Object.keys(PLATFORM_KERNEL_HOOKS)).toHaveLength(8);
+
+    kernel.registerKernelHooks({
+      serverLogins: () => ({ live: [], kept: null }),
+      loginForPath: () => ({ state: "unmatched", named: ["cezaraugusto/hosted-only"] }),
+      unloggedProjectStep: (ref) => ({ hint: `registered step for ${ref}`, value: { registered: true } }),
+    });
+
+    try {
+      const out = await call("extension_builds", { action: "list", limit: 3, projectPath: dir, api: API });
+
+      expect(out.status).toBe("no-login-for-project");
+      expect(out.value.named).toEqual(["cezaraugusto/hosted-only"]);
+      expect(out.value.registered).toBe(true);
+      expect(out.hint).toBe("registered step for cezaraugusto/hosted-only");
+      expect(sent).toEqual([]);
+    } finally {
+      installPlatformKernelHooks();
+    }
   });
 });

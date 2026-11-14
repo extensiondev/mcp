@@ -14,9 +14,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { NO_AUTO_OPEN_ENV } from "../lib/approval-open";
 import { forgetConnectSessions } from "../lib/connect-session-projects";
 import { credentialKey, credentialsPath } from "../lib/credentials";
+import { installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
 import { createToolDispatcher, type ToolModule } from "../lib/tool-dispatch";
 import * as submitTool from "../tools/submit";
 import { API, useProjectRoutes } from "./fixtures/project-routes";
+
+installPlatformKernelHooks();
 
 const PROJECTS: Record<string, string> = { widget: "prj_widget", gadget: "prj_gadget" };
 const SESSION = (slug: string) => `/api/projects/${PROJECTS[slug]}/stores/firefox/connect-session`;

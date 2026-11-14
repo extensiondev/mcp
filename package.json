@@ -34,6 +34,10 @@
     "./hosted": {
       "types": "./dist/src/hosted.d.ts",
       "import": "./dist/hosted.js"
+    },
+    "./kernel": {
+      "types": "./dist/src/kernel.d.ts",
+      "import": "./dist/kernel.js"
     }
   },
   "main": "./dist/module.js",

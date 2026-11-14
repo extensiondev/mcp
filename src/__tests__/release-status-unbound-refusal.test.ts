@@ -14,10 +14,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { clientDirs, setClientRoots } from "../lib/client-roots";
 import { credentialKey, credentialsPath } from "../lib/credentials";
+import { installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
 import { createToolDispatcher, type ToolModule } from "../lib/tool-dispatch";
 import * as releaseStatus from "../tools/release-status";
 import * as submit from "../tools/submit";
 import * as submitCheck from "../tools/submit-check";
+
+installPlatformKernelHooks();
 
 const API = "http://localhost:3100";
 const WORKSPACE = "cezaraugusto";

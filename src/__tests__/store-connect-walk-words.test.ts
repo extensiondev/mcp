@@ -13,9 +13,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { NO_AUTO_OPEN_ENV, setApprovalOpener } from "../lib/approval-open";
 import { setConnectCheckPause } from "../lib/connect-existing";
+import { installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
 import { createToolDispatcher, type ToolModule } from "../lib/tool-dispatch";
 import * as submitTool from "../tools/submit";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
+
+installPlatformKernelHooks();
 
 type Row = Record<string, any>;
 

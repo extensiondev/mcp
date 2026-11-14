@@ -63,6 +63,7 @@ export default defineConfig({
         entry: {
           clients: path.resolve(__dirname, "./src/clients/index.ts"),
           hosted: path.resolve(__dirname, "./src/hosted.ts"),
+          kernel: path.resolve(__dirname, "./src/kernel.ts"),
         },
       },
     },
