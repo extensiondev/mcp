@@ -268,6 +268,78 @@ For Greg, on the token seam.
 4. The first code, which is public and changes no behavior: cut the eleven kernel edges into hooks the private package registers, and add the `./kernel` export the private package will import. It ships inside a later 10.x or inside 11.0.0, never inside the launch freeze.
 5. A www decision on where standing approvals, held create grants and pending creates live once hosted. This is the only step 3 item that touches www, and it does not touch `src/auth.ts`.
 
+## Seams review (Greg)
+
+Verdict: safe with changes. The forward lane adds no authority a CLI token does not already have at www, and every stranger path I could reach today is refused. It is not safe as written: two of the mechanisms in Sections 6 and 7 open a hole the moment they are coded in the obvious way, and the passthrough widens who can lose a seven-day token. The changes below come before any code. The token exchange comes before 11.0.0 ships.
+
+### What I attacked
+
+Live, as a stranger, with forged and malformed credentials only, on 2026-11-13:
+
+| Attempt | Result |
+| --- | --- |
+| `POST mcp.extension.dev/mcp` with no token, a forged project token, a token in the query, a token in a cookie, a lowercase `bearer` scheme, a GET | 401 every time, with the OAuth challenge |
+| Two `Authorization` headers on `/mcp` | 400 at the edge |
+| `/mcp/forward` and `/api/mcp/forward` | 404, the lane does not exist yet |
+| www `/api/cli/whoami` with no token, a forged token, a token in the query, a POST, a forged token plus a spoofed `x-forwarded-for` and a project header | 401 with the same bytes every time |
+
+Offline, against copies of today's `server/token.ts` and `server/log.ts`:
+
+- Cross-lane cache. `check(token)` caches the verdict of `isConnectedAppFor`, not the facts whoami returned, under a key with no lane in it. I added a lane the way Sections 5 and 6.2 describe (one extra parameter, the lane predicate inside `ask`). A member token checked first on `/mcp/forward` was then served "valid" on `/mcp` from the cache, with one whoami call in total. In the other order, a cold refusal on `/mcp` blocked the same token on `/mcp/forward` for 10 seconds.
+- Logging. `scrubFields` dropped the `tokenKind` field Section 7 wants to add, because the key matches `/token/i`. A string that quotes a token without the word `Bearer` in front passed through unredacted.
+
+### What I read in the code that changes the plan
+
+- The `a` claim on every www token is the authority environment (`production:<repo>`), not a resource. A CLI token carries no audience that names mcp.extension.dev or www as a server. Only OAuth tokens carry a resource (`r`). So "audience binding" for the forward lane can only be enforced by the hosted server's own check on whoami's answer, or by a token that names the lane.
+- `/mcp` already passes OAuth bearers through to www. Passthrough is not new with this move. What is new is the kind of token: a one-hour OAuth token for a few projects becomes a seven-day member token for up to the device batch cap of projects.
+- www refuses connected-app tokens only at publish, submit and Safari signing assets. Every other door accepts them. The six-tool projection on `/mcp` is a UX layer, not a boundary: an OAuth client that wants more already sends the bearer to www directly.
+- www's choke point refuses share, registry, provision and signed-in lane tokens before whoami answers, so the "no tokenKind" row in 6.2 is only the tracked project token. That claim in Section 7 holds.
+- `safeOrigin`, cited in Section 7, does not exist in this clone. The HTTPS-or-loopback rule lives in `login-flow.ts` and covers the login flow only.
+- Stored logins are keyed by the `api` origin that minted them (`credentialKey`, `serverOf`). That is the binding that keeps a token on its own server today, and the forwarder must not loosen it.
+- No mutating door, in www or in the MCP, takes an idempotency key.
+- The only IP-keyed limit on www's CLI doors is on `device/code`. The rest key on the token or the login, which survive forwarding.
+
+### Must change before any code lands
+
+1. **Cache the facts, decide the lane after.** The validator caches whoami's answer as facts (`tokenKind`, `resource`, `projects`, `expiresAt`, `login`) and nothing else. The lane predicate runs on every request after the cache read, never inside `ask`. A spec in `tests/units.spec.ts` warms a member token on `/mcp/forward` and asserts `/mcp` refuses it, then the reverse order. This is the bypass I reproduced, and the obvious diff walks into it.
+2. **No OAuth on `/mcp/forward`.** The ruling says the forwarder holds the device login and no local OAuth, so no legitimate caller sends OAuth to the forward lane. Accepting it hands a third-party client all 13 tools with every action as ready-made calls, and mixes two principals in one lane's logs. The table in 6.2 becomes: OAuth for this resource on `/mcp` only; member and project tokens on `/mcp/forward` only.
+3. **Accept by a positive fact, not an absence.** The project-token row is accepted only when the answer carries `login`, `projectId` and exactly one project, and no `resource`, `tokenKind` or `projects` list. Better, www whoami answers `tokenKind: "project"` explicitly. That is a one-line www change outside `src/auth.ts`, and it means a future token kind cannot fall into the accept row by omitting a field.
+4. **Pair the forward origin to the credential's origin, from a closed table.** The forwarder derives the hosted origin from the stored login's `api`: `https://www.extension.dev` pairs with `https://mcp.extension.dev`, and a loopback www pairs with a loopback hosted server. An override is accepted only for loopback. No environment variable may point a production login at another HTTPS origin. Reason: environment variables are a project file in practice, since a project's `.mcp.json` sets them, and templates may now carry `.mcp.json` (Cezar 11-11). Under the rule in Section 7 as written, a cloned repository could set the override to its own HTTPS host and receive the person's production login on their first platform call.
+5. **Never follow a redirect with a bearer.** Every fetch that carries the bearer, in the forwarder and in the hosted code, sets `redirect: "manual"` and treats a 3xx as an error. The audit in Section 7 covers origins; it must cover redirects too, or a same-origin URL that redirects becomes the leak.
+6. **Per-IP limit before whoami, done right.** Key it on the platform's client address (`x-real-ip`, as www's `client-ip.ts` does), never on a value the client can set. Apply it to every request whose token is not in the valid cache. Before it, refuse locally anything that is not shaped like a www token (two base64url parts, sane length), which costs no whoami call. Keep invalid entries in their own bounded map, so a flood of random tokens cannot evict live entries and turn into a whoami storm. Be honest about what this is for: tokens are HMAC-signed, so there is no guessing a valid one; the limit protects cost, not the gate. Add a Vercel Firewall rule on the forward path as the cross-instance layer, or accept per-instance limits in writing.
+7. **Nothing IP-keyed on www is reached through the hosted server.** `extension_workspace_create`'s device start (Section 3.2 proposes running it hosted) hits `device/code`, which limits by IP. Hosted, every user shares mcp.extension.dev's egress addresses, and one stranger exhausts the start for everyone. Keep the device start in the forwarder, or key that limit on the bearer when one is present.
+8. **The cache is only an entry check.** The 60-second valid entry is safe only because www re-decides on every call. So no hosted tool may answer from hosted state alone with a cached token; each answer that carries data comes from a www call made with the bearer in that request. A spec revokes a token, then calls each of the 13 tools within the cache window and expects www's refusal. Keep the 10-second invalid entry, and keep never caching an unavailable answer.
+9. **Logging.** Rename the field to `credentialKind`, or extend the scrubber's exception list, or the kind never reaches the log. Redact anything shaped like a www token (`<base64url>.<base64url>` of token length) inside strings, not only text after `Bearer`. Cap and charset-check `x-extensiondev-forwarder` before it is logged. Keep error names only, `tokenId` only, and no arguments. The local `secretArgumentRefusal` before send stays as Section 7 says.
+10. **Replay of acts, not just tokens.** A captured bearer is a seven-day credential and nothing in this design changes that; that is the token exchange below. The new replay class is the forwarder's own retry: with a 50-second hosted cap, a submit, promote or revoke that timed out may have run. The forwarder never retries a mutating call on its own; it sends an idempotency key per act, and the hosted half passes it to www, which keeps the first outcome for that key. Confirm that an approval is consumed by the act it approved, so a replayed call cannot spend one approval twice.
+11. **Headers to www are an allowlist.** The hosted half sends www the bearer, `x-extensiondev-project`, `content-type` and `accept`. Nothing the client sent is copied through, `x-forwarded-for` least of all.
+12. **No CORS on `/mcp/forward`.** Only a Node forwarder calls it. `/mcp` answers `access-control-allow-origin: *` for directory clients; the forward lane has no reason to be callable from a page.
+13. **A kill switch per lane,** so the forward lane can be turned off without taking `/mcp` down, and the reverse.
+
+### The token exchange: mint now
+
+Yes. Build it before 11.0.0 ships, and build the forward lane against it from the first line of code. Four reasons:
+
+- **The first forwarder fixes the contract.** Whatever 11.0.0 sends to mcp.extension.dev, the hosted server accepts until the last 11.x is gone. Raw CLI tokens on the forward lane, shipped once, become a lane nobody can close without a major.
+- **Blast radius.** mcp.extension.dev is a separate deployment with its own private dependency tree and its own logs. With raw passthrough, a compromise there, or one log line that slips, yields live seven-day member tokens that work from anywhere straight at www. With an exchange, it yields tokens that die in minutes and name one lane.
+- **www can tell forwarded calls apart.** A distinct lane lets www revoke every hosted token at once, apply per-door policy the way it does for OAuth today, and attribute in its own logs.
+- **It does not touch `src/auth.ts`.** It is a new `api/cli` route over `mintAccessToken` and `resolveReleaseTokenProject`, the same shape as the OIDC exchange route. The reason Section 7 gives for deferring it does not apply.
+
+The shape: the forwarder posts its stored login to a www exchange route, on the www origin it already trusts, naming the forward resource. www checks the login live (revocation, membership), then mints a token with its own lane, the forward resource as `r`, at most the parent's project list, a life of ten minutes or less, and the parent's nonce, so revoking the parent kills the child at every door. The forwarder keeps the short token in memory and sends only that to mcp.extension.dev. The forward lane accepts only that lane with its own resource. Section 6.4's refusals stay as they are; `E_AUTH_DENIED` is answered by the exchange instead of by whoami.
+
+This changes the letter of the 11-13 seam ruling (the hosted server would accept a token minted from the CLI token, not the CLI token itself) while keeping its intent (one device sign-in, no local OAuth). That is Cezar's call, so take it to him. If he keeps raw passthrough, the risk he accepts is stated plainly: anyone who reads one request off mcp.extension.dev holds that person's workspace login for up to seven days.
+
+### Corrections to Sections 6 and 7
+
+- Section 7 cites `safeOrigin`; the guard is in `login-flow.ts` and covers login only. The forwarder needs its own guard, per item 4.
+- Section 7's "the hosted server adds no authority" holds for each token's reach at www. It does not hold for who can lose the token: the hosted server becomes a second place a seven-day token is visible.
+- Section 6.2's table needs items 2 and 3 applied.
+- Section 7's per-IP note needs items 6 and 7.
+
+### Not covered here
+
+- OAuth connected-app tokens reach every www door that is not marked `refuse`, whatever `/mcp` projects. The consent screen asks the person for projects, not actions. Whether a third-party app may promote, revoke shares or create workspaces is a product decision for Cezar and the board, not a seam fix, and it exists today with or without this move.
+- I did not test whether Vercel overwrites a client-sent `x-real-ip` on mcp.extension.dev. Item 6 assumes it does, as www's `client-ip.ts` does; step 3 proves it with a probe before the limit ships.
+
 ## Appendix A. Every file under src/tools and src/lib
 
 
