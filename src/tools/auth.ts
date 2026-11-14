@@ -27,7 +27,7 @@ export const schema = {
         type: "string",
         enum: ["status", "login", "logout"],
         default: "status",
-        description: "status lists logins; login signs in; logout deletes the local login.",
+        description: "logout deletes only the local login.",
       },
       project: {
         type: "string",

@@ -50,7 +50,7 @@ export const schema = {
         enum: ["promote", "cut", "rollback"],
         default: "promote",
         description:
-          "promote (default): channel to buildId; cut: version-bump pull request; rollback: previous build.",
+          "promote: channel to buildId; cut: version-bump pull request; rollback: previous build.",
       },
       project: PROJECT_TOKEN_INPUT,
       buildId: {

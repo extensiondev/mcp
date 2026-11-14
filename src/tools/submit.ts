@@ -251,43 +251,43 @@ export const schema = {
       },
       version: {
         type: "string",
-        description: "Optional label; default the built manifest's version.",
+        description: "Label; default the built manifest's version.",
       },
       dryRun: {
         type: "boolean",
         default: true,
         description:
-          "true (the default) sends nothing and spends no approval or quota; false submits once approved and stops at the draft under the default modes.",
+          "true sends nothing and spends no approval or quota; false submits once approved and stops at the draft under the default modes.",
       },
       projectPath: {
         type: "string",
-        description: "Project root; sync-listing needs it; nothing local is uploaded.",
+        description: "Project root, for sync-listing; nothing local is uploaded.",
       },
       approvalId: {
         type: "string",
         description:
-          "From an approval-required answer, once approved; same arguments again. A real submission needs a workspace owner's approval every time.",
+          "Once approved, with the same arguments; a real submission needs a workspace owner's approval every time.",
       },
       screenshots: {
         type: "array",
         items: { type: "string" },
         description:
-          "With sync-listing, PNG screenshots in projectPath; a wrong size or weight is answered with what the store accepts.",
+          "sync-listing: PNG screenshots in projectPath.",
       },
       useBuild: {
         type: "string",
-        description: "With sync-listing, a completed build's sha to take icons from.",
+        description: "sync-listing: a completed build's sha for icons.",
       },
       detail: {
         type: ["boolean", "array"],
         items: { type: "string" },
-        description: 'With preflight, true or a list like ["chrome", "safari.subtitle"] answers those rows in full.',
+        description: 'preflight: true, or ["chrome", "safari.subtitle"], answers those rows in full.',
       },
       api: API_BASE,
       store: {
         type: "string",
         enum: ["chrome", "firefox", "edge", "safari"],
-        description: "With cancel or rollout (default chrome), release (safari) or configure-store (required).",
+        description: "cancel, rollout (default chrome), release (safari), configure-store (required).",
       },
       storeSettings: {
         type: "object",
@@ -296,10 +296,10 @@ export const schema = {
           submissionMode: { type: "string", description: "chrome draft-until-public|draft|public|staged, edge draft|review, firefox unlisted|listed, safari draft|review, or dry-run; public, staged, review and listed publish on review." },
           sourceArchive: { type: "string", enum: ["repository", "none"], description: "Firefox: attach the source at the built commit." },
           releaseChannel: { type: "string", enum: ["listed", "unlisted"], description: "Firefox: the AMO channel." },
-          chromeItemId: { type: "string", description: "Chrome: the 32-letter item id." },
+          chromeItemId: { type: "string", description: "The 32-letter item id." },
           publisherId: { type: "string", description: "Chrome: the publisher id after /devconsole/." },
-          edgeProductId: { type: "string", description: "Edge: the Partner Center Product ID." },
-          firefoxAddonGuid: { type: "string", description: "Firefox: the add-on GUID, never a slug." },
+          edgeProductId: { type: "string", description: "The Partner Center Product ID." },
+          firefoxAddonGuid: { type: "string", description: "The add-on GUID, never a slug." },
           appStoreId: { type: "string", description: "Safari: the app's Apple ID." },
           bundleId: { type: "string", description: "Safari: the reverse-DNS bundle id." },
           firstSubmitted: { type: "boolean", description: "Edge: submitted once in Partner Center." },
@@ -307,11 +307,11 @@ export const schema = {
           dashboardPasted: { type: "boolean", description: "Chrome: dashboard-only fields pasted." },
         },
         description:
-          "With configure-store, only what changes; a publishing mode asks approval; no credentials; Safari release mode is STORE.md's `- Release:` line.",
+          "configure-store: only what changes; a publishing mode asks approval; no credentials; Safari release mode is STORE.md's `- Release:` line.",
       },
       submissionId: {
         type: "string",
-        description: "With cancel, publish or release, which submission; default the newest.",
+        description: "cancel, publish, release: the submission; default newest.",
       },
       buildNumber: {
         type: "integer",
@@ -320,15 +320,15 @@ export const schema = {
       },
       deployPercentage: {
         type: "number",
-        description: "With rollout, the new share of users, 1 to 100, above the current one.",
+        description: "rollout: new share of users, 1 to 100, above the current one.",
       },
       connectSession: {
         type: "string",
-        description: "With connect, value.connectSession to wait on with waitSeconds.",
+        description: "connect: value.connectSession to wait on with waitSeconds.",
       },
       replace: {
         type: "boolean",
-        description: "With connect, true replaces a working key; only when asked.",
+        description: "connect: true replaces a working key; only when asked.",
       },
       waitSeconds: WAIT_SECONDS_INPUT,
     },

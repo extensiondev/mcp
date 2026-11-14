@@ -27,7 +27,7 @@ export const OUTCOME_POLL_MS = 5_000;
 export const WAIT_SECONDS_INPUT = {
   type: "number",
   description:
-    "Seconds to wait for the result, 0 to 600 (default 180), and with approvalId for the approval.",
+    "Seconds to wait for the result (with approvalId, the approval), 0 to 600 (default 180).",
 };
 
 export interface ActOutcome {

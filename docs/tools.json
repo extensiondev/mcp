@@ -90,7 +90,7 @@
           "type": "\"status\" | \"revoke\"",
           "required": false,
           "default": "status",
-          "description": "status (default) or revoke."
+          "description": "Read or revoke."
         },
         {
           "name": "approvalId",
@@ -108,7 +108,7 @@
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default EXTENSION_DEV_API_URL."
+          "description": "Platform URL; default from env."
         }
       ]
     },
@@ -169,7 +169,7 @@
           "type": "\"status\" | \"login\" | \"logout\"",
           "required": false,
           "default": "status",
-          "description": "status lists logins; login signs in; logout deletes the local login."
+          "description": "logout deletes only the local login."
         },
         {
           "name": "project",
@@ -211,7 +211,7 @@
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default EXTENSION_DEV_API_URL."
+          "description": "Platform URL; default from env."
         }
       ]
     },
@@ -219,7 +219,7 @@
       "name": "extension_browsers",
       "tier": "browsers",
       "group": "local",
-      "description": "Find, install and remove browsers Extension.js launches. detect (default) scans system and managed ones; install downloads hundreds of MB in one blocking call; uninstall never touches a system install.",
+      "description": "Find, install and remove browsers Extension.js launches. detect scans system and managed ones; install downloads hundreds of MB in one blocking call; uninstall never touches a system install.",
       "gate": "none",
       "samplePrompt": "Which browsers are installed here? Install Firefox if it is missing",
       "readOnly": false,
@@ -472,13 +472,13 @@
           "name": "waitSeconds",
           "type": "number",
           "required": false,
-          "description": "Seconds to wait for the result, 0 to 600 (default 180), and with approvalId for the approval. get waits for a build's verdict (a rebuild or a push)."
+          "description": "Seconds to wait for the result (with approvalId, the approval), 0 to 600 (default 180). get waits for a build's verdict (a rebuild or a push)."
         },
         {
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default EXTENSION_DEV_API_URL."
+          "description": "Platform URL; default from env."
         }
       ]
     },
@@ -722,7 +722,7 @@
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default EXTENSION_DEV_API_URL."
+          "description": "Platform URL; default from env."
         }
       ]
     },
@@ -794,7 +794,7 @@
           "name": "targetId",
           "type": "string",
           "required": false,
-          "description": "A page's targetId (extension_open, or dom_snapshot listTargets); overrides url."
+          "description": "targetId from extension_open or dom_snapshot listTargets; overrides url."
         },
         {
           "name": "listTargets",
@@ -857,7 +857,7 @@
       "name": "extension_element",
       "tier": "act",
       "group": "local",
-      "description": "Click, fill, read or wait for one element by CSS selector, or send trusted mouse and key input (move, press, release, type, key, scroll) in an open surface, a page by url or a targetId. Runs no caller code, so no allowEval; Chromium only.",
+      "description": "Click, fill, read or wait for one element by CSS selector, or send trusted mouse and key input in an open surface, a page by url or a targetId. Runs no caller code, so no allowEval; Chromium only.",
       "gate": "a live Chromium dev or start session with its debug port; no allowEval",
       "samplePrompt": "Click the Save button in the popup, then read the status line",
       "readOnly": false,
@@ -960,7 +960,7 @@
           "name": "targetId",
           "type": "string",
           "required": false,
-          "description": "A page's targetId (extension_open, or dom_snapshot listTargets); overrides url."
+          "description": "targetId from extension_open or dom_snapshot listTargets; overrides url."
         },
         {
           "name": "browser",
@@ -1023,14 +1023,14 @@
           "name": "targetId",
           "type": "string",
           "required": false,
-          "description": "A page's targetId (extension_open, or dom_snapshot listTargets); overrides url."
+          "description": "targetId from extension_open or dom_snapshot listTargets; overrides url."
         },
         {
           "name": "observe",
           "type": "boolean | string",
           "required": false,
           "default": false,
-          "description": "true also answers value.observation: the surface's elements once it loaded and settled; a surface name (popup, options, sidebar...) reads that one."
+          "description": "true adds value.observation, the surface's elements once settled; a surface name (popup, options...) reads that one."
         },
         {
           "name": "browser",
@@ -1081,7 +1081,7 @@
           "name": "targetId",
           "type": "string",
           "required": false,
-          "description": "A page's targetId (extension_open, or dom_snapshot listTargets); overrides url."
+          "description": "targetId from extension_open or dom_snapshot listTargets; overrides url."
         },
         {
           "name": "probe",
@@ -1287,7 +1287,7 @@
           "name": "include",
           "type": "array of \"similarTemplates\"",
           "required": false,
-          "description": "Optional sections; similarTemplates adds up to five catalog templates with the same surfaces."
+          "description": "similarTemplates adds up to five catalog templates with the same surfaces."
         }
       ]
     },
@@ -1295,7 +1295,7 @@
       "name": "extension_network",
       "tier": "test",
       "group": "local",
-      "description": "Stub a network response on a Chromium session: add a rule (method, URL or glob, status, body or json), list or clear the rules, or read which requests hit one or missed. Rules last until extension_stop. Firefox is refused.",
+      "description": "Stub a network response on a Chromium session: add a rule, list or clear the rules, or read which requests hit one or missed. Rules last until extension_stop. Firefox is refused.",
       "gate": "a live dev or start session on a Chromium browser",
       "samplePrompt": "Make the API answer 500 and show me what the popup renders",
       "readOnly": false,
@@ -1314,7 +1314,7 @@
           "name": "action",
           "type": "\"add\" | \"list\" | \"clear\" | \"requests\"",
           "required": true,
-          "description": "add a rule, list or clear the rules, or read the requests seen."
+          "description": "requests: the requests seen."
         },
         {
           "name": "method",
@@ -1396,7 +1396,7 @@
           "name": "menuItemId",
           "type": "string",
           "required": false,
-          "description": "action: replay contextMenus.onClicked for this menu item id instead of the toolbar click (Chromium, over the debug port; no gesture)."
+          "description": "action: replay contextMenus.onClicked for this menu item id instead of the toolbar click (Chromium, over the debug port)."
         },
         {
           "name": "panel",
@@ -1455,7 +1455,7 @@
           "type": "boolean | string",
           "required": false,
           "default": false,
-          "description": "true also answers value.observation: the surface's elements once it loaded and settled; a surface name (popup, options, sidebar...) reads that one."
+          "description": "true adds value.observation, the surface's elements once settled; a surface name (popup, options...) reads that one."
         },
         {
           "name": "browser",
@@ -1671,7 +1671,7 @@
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default EXTENSION_DEV_API_URL."
+          "description": "Platform URL; default from env."
         }
       ]
     },
@@ -1693,7 +1693,7 @@
           "type": "\"publish\" | \"sync-captures\"",
           "required": false,
           "default": "publish",
-          "description": "publish (default): the link; sync-captures: captures/<browser>/*.png to build pages (approval)."
+          "description": "publish: the link; sync-captures: captures/<browser>/*.png to build pages (approval)."
         },
         {
           "name": "browsers",
@@ -1747,13 +1747,13 @@
           "name": "waitSeconds",
           "type": "number",
           "required": false,
-          "description": "Seconds to wait for the result, 0 to 600 (default 180), and with approvalId for the approval."
+          "description": "Seconds to wait for the result (with approvalId, the approval), 0 to 600 (default 180)."
         },
         {
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default EXTENSION_DEV_API_URL."
+          "description": "Platform URL; default from env."
         }
       ]
     },
@@ -1775,7 +1775,7 @@
           "type": "\"promote\" | \"cut\" | \"rollback\"",
           "required": false,
           "default": "promote",
-          "description": "promote (default): channel to buildId; cut: version-bump pull request; rollback: previous build."
+          "description": "promote: channel to buildId; cut: version-bump pull request; rollback: previous build."
         },
         {
           "name": "project",
@@ -1835,13 +1835,13 @@
           "name": "waitSeconds",
           "type": "number",
           "required": false,
-          "description": "Seconds to wait for the result, 0 to 600 (default 180), and with approvalId for the approval."
+          "description": "Seconds to wait for the result (with approvalId, the approval), 0 to 600 (default 180)."
         },
         {
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default EXTENSION_DEV_API_URL."
+          "description": "Platform URL; default from env."
         }
       ]
     },
@@ -1926,7 +1926,7 @@
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default EXTENSION_DEV_API_URL."
+          "description": "Platform URL; default from env."
         }
       ]
     },
@@ -1967,7 +1967,7 @@
           "type": "boolean | string",
           "required": false,
           "default": false,
-          "description": "true also answers value.observation: the surface's elements once it loaded and settled; a surface name (popup, options, sidebar...) reads that one."
+          "description": "true adds value.observation, the surface's elements once settled; a surface name (popup, options...) reads that one."
         },
         {
           "name": "browser",
@@ -2025,7 +2025,7 @@
           "name": "targetId",
           "type": "string",
           "required": false,
-          "description": "A page's targetId (extension_open, or dom_snapshot listTargets); overrides url."
+          "description": "targetId from extension_open or dom_snapshot listTargets; overrides url."
         },
         {
           "name": "width",
@@ -2095,7 +2095,7 @@
           "type": "\"build-link\" | \"preview\" | \"both\"",
           "required": false,
           "default": "both",
-          "description": "preview, build-link or both (default)."
+          "description": "Which kind of share."
         },
         {
           "name": "tokenId",
@@ -2108,7 +2108,7 @@
           "type": "\"list\" | \"create\" | \"revoke\"",
           "required": false,
           "default": "list",
-          "description": "list (default); create: share a build; revoke: one share, for good."
+          "description": "create: share a build; revoke: one share, for good."
         },
         {
           "name": "buildId",
@@ -2163,7 +2163,7 @@
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default EXTENSION_DEV_API_URL."
+          "description": "Platform URL; default from env."
         }
       ]
     },
@@ -2420,7 +2420,7 @@
           "type": "boolean | string",
           "required": false,
           "default": false,
-          "description": "true also answers value.observation: the surface's elements once it loaded and settled; a surface name (popup, options, sidebar...) reads that one."
+          "description": "true adds value.observation, the surface's elements once settled; a surface name (popup, options...) reads that one."
         },
         {
           "name": "browser",
@@ -2454,7 +2454,7 @@
           "type": "\"submit\" | \"status\" | \"preflight\" | \"sync-listing\" | \"cancel\" | \"rollout\" | \"release\" | \"publish\" | \"review\" | \"configure-store\" | \"connect\" | \"first-submission\" | \"mint-signing\"",
           "required": false,
           "default": "submit",
-          "description": "Per action: 'preflight', 'status' and submit with dryRun true (the default) are read-only; submit with dryRun:false and no approvalId executes nothing either, it only asks for the owner's approval, as does the first call of any store act; the approved approvalId runs it. submit: buildSha to the stores. preflight: readiness checks. status: each store's word. sync-listing: listing from STORE.md. publish (alias review): draft to review. release (Safari): approved version on sale. cancel: withdraw from review. rollout: raise Chrome's staged rollout. configure-store: storeSettings. connect: page where the person gives the platform the key. first-submission: page for a first Chrome or Edge upload. mint-signing (Safari): register the bundle id, mint certificates and profiles."
+          "description": "'preflight', 'status' and submit with dryRun true are read-only; submit with dryRun:false and no approvalId executes nothing either, it only asks the owner's approval, as does the first call of any store act. submit: buildSha to the stores. preflight: readiness checks. status: each store's word. sync-listing: listing from STORE.md. publish (alias review): draft to review. release (Safari): approved version on sale. cancel: withdraw from review. rollout: raise Chrome's staged rollout. configure-store: storeSettings. connect: page where the person gives the platform the key. first-submission: page for a first Chrome or Edge upload. mint-signing (Safari): register the bundle id, mint certificates and profiles."
         },
         {
           "name": "project",
@@ -2478,68 +2478,68 @@
           "name": "version",
           "type": "string",
           "required": false,
-          "description": "Optional label; default the built manifest's version."
+          "description": "Label; default the built manifest's version."
         },
         {
           "name": "dryRun",
           "type": "boolean",
           "required": false,
           "default": true,
-          "description": "true (the default) sends nothing and spends no approval or quota; false submits once approved and stops at the draft under the default modes."
+          "description": "true sends nothing and spends no approval or quota; false submits once approved and stops at the draft under the default modes."
         },
         {
           "name": "projectPath",
           "type": "string",
           "required": false,
-          "description": "Project root; sync-listing needs it; nothing local is uploaded."
+          "description": "Project root, for sync-listing; nothing local is uploaded."
         },
         {
           "name": "approvalId",
           "type": "string",
           "required": false,
-          "description": "From an approval-required answer, once approved; same arguments again. A real submission needs a workspace owner's approval every time."
+          "description": "Once approved, with the same arguments; a real submission needs a workspace owner's approval every time."
         },
         {
           "name": "screenshots",
           "type": "array of string",
           "required": false,
-          "description": "With sync-listing, PNG screenshots in projectPath; a wrong size or weight is answered with what the store accepts."
+          "description": "sync-listing: PNG screenshots in projectPath."
         },
         {
           "name": "useBuild",
           "type": "string",
           "required": false,
-          "description": "With sync-listing, a completed build's sha to take icons from."
+          "description": "sync-listing: a completed build's sha for icons."
         },
         {
           "name": "detail",
           "type": "boolean | array",
           "required": false,
-          "description": "With preflight, true or a list like [\"chrome\", \"safari.subtitle\"] answers those rows in full."
+          "description": "preflight: true, or [\"chrome\", \"safari.subtitle\"], answers those rows in full."
         },
         {
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default EXTENSION_DEV_API_URL."
+          "description": "Platform URL; default from env."
         },
         {
           "name": "store",
           "type": "\"chrome\" | \"firefox\" | \"edge\" | \"safari\"",
           "required": false,
-          "description": "With cancel or rollout (default chrome), release (safari) or configure-store (required)."
+          "description": "cancel, rollout (default chrome), release (safari), configure-store (required)."
         },
         {
           "name": "storeSettings",
           "type": "object",
           "required": false,
-          "description": "With configure-store, only what changes; a publishing mode asks approval; no credentials; Safari release mode is STORE.md's `- Release:` line."
+          "description": "configure-store: only what changes; a publishing mode asks approval; no credentials; Safari release mode is STORE.md's `- Release:` line."
         },
         {
           "name": "submissionId",
           "type": "string",
           "required": false,
-          "description": "With cancel, publish or release, which submission; default the newest."
+          "description": "cancel, publish, release: the submission; default newest."
         },
         {
           "name": "buildNumber",
@@ -2551,25 +2551,25 @@
           "name": "deployPercentage",
           "type": "number",
           "required": false,
-          "description": "With rollout, the new share of users, 1 to 100, above the current one."
+          "description": "rollout: new share of users, 1 to 100, above the current one."
         },
         {
           "name": "connectSession",
           "type": "string",
           "required": false,
-          "description": "With connect, value.connectSession to wait on with waitSeconds."
+          "description": "connect: value.connectSession to wait on with waitSeconds."
         },
         {
           "name": "replace",
           "type": "boolean",
           "required": false,
-          "description": "With connect, true replaces a working key; only when asked."
+          "description": "connect: true replaces a working key; only when asked."
         },
         {
           "name": "waitSeconds",
           "type": "number",
           "required": false,
-          "description": "Seconds to wait for the result, 0 to 600 (default 180), and with approvalId for the approval."
+          "description": "Seconds to wait for the result (with approvalId, the approval), 0 to 600 (default 180)."
         }
       ]
     },
@@ -2591,116 +2591,116 @@
           "type": "\"preflight\" | \"status\" | \"submit\" | \"publish\" | \"review\" | \"cancel\" | \"rollout\" | \"release\" | \"sync-listing\" | \"mint-signing\" | \"configure-store\" | \"connect\" | \"first-submission\"",
           "required": false,
           "default": "submit",
-          "description": "preflight, status, submit (a dry run unless dryRun:false, which only asks approval), or a store act to ask approval for."
+          "description": "The read, or the act to ask approval for."
         },
         {
           "name": "dryRun",
           "type": "boolean",
           "required": false,
           "default": true,
-          "description": "true (the default) reads only; false only asks the owner's approval of the real submit."
+          "description": "true reads only; false only asks the owner's approval of the real submit."
         },
         {
           "name": "project",
           "type": "string",
           "required": false,
-          "description": "Same as in extension_submit."
+          "description": "As in extension_submit."
         },
         {
           "name": "browsers",
           "type": "array of \"chrome\" | \"firefox\" | \"edge\" | \"safari\"",
           "required": false,
-          "description": "Same as in extension_submit."
+          "description": "As in extension_submit."
         },
         {
           "name": "buildSha",
           "type": "string",
           "required": false,
-          "description": "Same as in extension_submit."
+          "description": "As in extension_submit."
         },
         {
           "name": "version",
           "type": "string",
           "required": false,
-          "description": "Same as in extension_submit."
+          "description": "As in extension_submit."
         },
         {
           "name": "projectPath",
           "type": "string",
           "required": false,
-          "description": "Same as in extension_submit."
+          "description": "As in extension_submit."
         },
         {
           "name": "screenshots",
           "type": "array of string",
           "required": false,
-          "description": "Same as in extension_submit."
+          "description": "As in extension_submit."
         },
         {
           "name": "useBuild",
           "type": "string",
           "required": false,
-          "description": "Same as in extension_submit."
+          "description": "As in extension_submit."
         },
         {
           "name": "detail",
           "type": "boolean | array",
           "required": false,
-          "description": "Same as in extension_submit."
+          "description": "As in extension_submit."
         },
         {
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Same as in extension_submit."
+          "description": "As in extension_submit."
         },
         {
           "name": "store",
           "type": "\"chrome\" | \"firefox\" | \"edge\" | \"safari\"",
           "required": false,
-          "description": "Same as in extension_submit."
+          "description": "As in extension_submit."
         },
         {
           "name": "storeSettings",
           "type": "object",
           "required": false,
-          "description": "Same as in extension_submit."
+          "description": "As in extension_submit."
         },
         {
           "name": "submissionId",
           "type": "string",
           "required": false,
-          "description": "Same as in extension_submit."
+          "description": "As in extension_submit."
         },
         {
           "name": "buildNumber",
           "type": "integer",
           "required": false,
-          "description": "Same as in extension_submit."
+          "description": "As in extension_submit."
         },
         {
           "name": "deployPercentage",
           "type": "number",
           "required": false,
-          "description": "Same as in extension_submit."
+          "description": "As in extension_submit."
         },
         {
           "name": "connectSession",
           "type": "string",
           "required": false,
-          "description": "Same as in extension_submit."
+          "description": "As in extension_submit."
         },
         {
           "name": "replace",
           "type": "boolean",
           "required": false,
-          "description": "Same as in extension_submit."
+          "description": "As in extension_submit."
         },
         {
           "name": "waitSeconds",
           "type": "number",
           "required": false,
-          "description": "Same as in extension_submit."
+          "description": "As in extension_submit."
         }
       ]
     },
@@ -2891,7 +2891,7 @@
           "type": "number",
           "required": false,
           "default": 45000,
-          "description": "Wait budget in ms, default 45000, clamped 1000-50000."
+          "description": "Wait budget in ms, clamped 1000-50000."
         },
         {
           "name": "timeout",
@@ -2986,7 +2986,7 @@
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default EXTENSION_DEV_API_URL."
+          "description": "Platform URL; default from env."
         }
       ]
     },
@@ -3037,7 +3037,7 @@
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default EXTENSION_DEV_API_URL."
+          "description": "Platform URL; default from env."
         }
       ]
     }

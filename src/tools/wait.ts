@@ -50,7 +50,7 @@ export const schema = {
         type: "number",
         default: DEFAULT_TIMEOUT_MS,
         description:
-          `Wait budget in ms, default ${DEFAULT_TIMEOUT_MS}, clamped ${MIN_TIMEOUT_MS}-${SAFE_CEILING_MS}.`,
+          `Wait budget in ms, clamped ${MIN_TIMEOUT_MS}-${SAFE_CEILING_MS}.`,
       },
       timeout: {
         type: "number",

@@ -18,7 +18,7 @@ const SHARED = Object.keys(submitProperties).filter((key) => key !== "action" &&
 
 const SHAPE_KEYS = ["type", "enum", "items", "default", "minimum"];
 
-export const SHARED_INPUT_NOTE = "Same as in extension_submit.";
+export const SHARED_INPUT_NOTE = "As in extension_submit.";
 
 const sharedProperty = (key: string): Record<string, unknown> => ({
   ...Object.fromEntries(Object.entries(submitProperties[key]!).filter(([field]) => SHAPE_KEYS.includes(field))),
@@ -36,12 +36,12 @@ export const schema = {
         type: "string",
         enum: [...SUBMIT_CHECK_ACTIONS],
         default: "submit",
-        description: "preflight, status, submit (a dry run unless dryRun:false, which only asks approval), or a store act to ask approval for.",
+        description: "The read, or the act to ask approval for.",
       },
       dryRun: {
         type: "boolean",
         default: true,
-        description: "true (the default) reads only; false only asks the owner's approval of the real submit.",
+        description: "true reads only; false only asks the owner's approval of the real submit.",
       },
       ...Object.fromEntries(SHARED.map((key) => [key, sharedProperty(key)])),
     },

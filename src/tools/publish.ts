@@ -85,7 +85,7 @@ export const schema = {
         enum: ["publish", SYNC_CAPTURES],
         default: "publish",
         description:
-          "publish (default): the link; sync-captures: captures/<browser>/*.png to build pages (approval).",
+          "publish: the link; sync-captures: captures/<browser>/*.png to build pages (approval).",
       },
       browsers: {
         type: "array",

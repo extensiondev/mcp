@@ -47,7 +47,8 @@ describe("extension_submit says per action which calls only read (ledger 360)", 
     const described = schema.inputSchema.properties.action.description;
 
     expect(described.startsWith(SUBMIT_ACTION_SAFETY)).toBe(true);
-    expect(described).toContain("'preflight', 'status' and submit with dryRun true (the default) are read-only");
+    expect(described).toContain("'preflight', 'status' and submit with dryRun true are read-only");
+    expect(schema.inputSchema.properties.dryRun.default).toBe(true);
     expect(described).toContain("submit with dryRun:false and no approvalId executes nothing either");
     expect(TOOL_POLICY.extension_submit.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, openWorldHint: true });
   });

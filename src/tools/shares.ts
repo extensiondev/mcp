@@ -54,7 +54,7 @@ export const schema = {
         enum: ["build-link", "preview", "both"],
         default: "both",
         description:
-          "preview, build-link or both (default).",
+          "Which kind of share.",
       },
       tokenId: {
         type: "string",
@@ -65,7 +65,7 @@ export const schema = {
         enum: ["list", "create", "revoke"],
         default: "list",
         description:
-          "list (default); create: share a build; revoke: one share, for good.",
+          "create: share a build; revoke: one share, for good.",
       },
       buildId: {
         type: "string",

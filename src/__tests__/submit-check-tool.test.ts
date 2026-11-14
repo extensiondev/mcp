@@ -51,8 +51,8 @@ describe("extension_submit_check takes the calls that only read or ask, under a 
     expect(listedHere).toEqual(own);
     expect(described).toEqual(["action", "dryRun"]);
     expect((checkSchema.inputSchema.properties as Record<string, { enum?: string[] }>).store.enum).toEqual(["chrome", "firefox", "edge", "safari"]);
-    expect(JSON.stringify(checkSchema).length).toBeLessThan(2_500);
-    expect(JSON.stringify(submitSchema).length).toBeLessThan(5_700);
+    expect(JSON.stringify(checkSchema).length).toBeLessThan(2_300);
+    expect(JSON.stringify(submitSchema).length).toBeLessThan(5_400);
   });
 
   it("answers a preflight from extension_submit's own handler, reading the same routes", async () => {

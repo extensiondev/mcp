@@ -90,7 +90,7 @@ export const schema = {
       include: {
         type: "array",
         items: { type: "string", enum: ["similarTemplates"] },
-        description: "Optional sections; similarTemplates adds up to five catalog templates with the same surfaces.",
+        description: "similarTemplates adds up to five catalog templates with the same surfaces.",
       },
     },
     required: [],

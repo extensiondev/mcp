@@ -68,7 +68,7 @@ export const CALL_TIMEOUT = {
 export const API_BASE = {
   type: "string",
   description:
-    "Platform URL; default EXTENSION_DEV_API_URL.",
+    "Platform URL; default from env.",
 } as const;
 
 export const LAUNCH_BROWSER = {

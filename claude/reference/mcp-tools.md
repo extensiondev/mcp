@@ -30,10 +30,10 @@ Read or revoke one approval on extension.dev; revoke a pending or unused one app
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "status" \| "revoke" | no | `"status"` | status (default) or revoke. |
+| `action` | "status" \| "revoke" | no | `"status"` | Read or revoke. |
 | `approvalId` | string | yes |  | The apr_ id. |
 | `project` | string | no |  | Stored login '<workspace>/<project>' when several exist. |
-| `api` | string | no |  | Platform URL; default EXTENSION_DEV_API_URL. |
+| `api` | string | no |  | Platform URL; default from env. |
 
 ## extension_assert
 
@@ -52,18 +52,18 @@ Sign in to an existing extension.dev project (a code for extension.dev/device, t
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "status" \| "login" \| "logout" | no | `"status"` | status lists logins; login signs in; logout deletes the local login. |
+| `action` | "status" \| "login" \| "logout" | no | `"status"` | logout deletes only the local login. |
 | `project` | string | no |  | '<workspace>/<project>' from console.extension.dev (new: extension.dev/new). |
 | `projectPath` | string | no |  | login: the directory whose GitHub origin names the project. |
 | `projects` | array \| string | no |  | login: 1 to 20 existing projects of one workspace, at most 48 characters each, or "*" with workspace. |
 | `workspace` | string | no |  | login with projects: "*": the workspace. |
 | `deviceCode` | string | no |  | login: resume token. |
 | `waitSeconds` | number | no |  | With deviceCode, seconds the call blocks for approval (0 to 900). |
-| `api` | string | no |  | Platform URL; default EXTENSION_DEV_API_URL. |
+| `api` | string | no |  | Platform URL; default from env. |
 
 ## extension_browsers
 
-Find, install and remove browsers Extension.js launches. detect (default) scans system and managed ones; install downloads hundreds of MB in one blocking call; uninstall never touches a system install.
+Find, install and remove browsers Extension.js launches. detect scans system and managed ones; install downloads hundreds of MB in one blocking call; uninstall never touches a system install.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -114,8 +114,8 @@ Read, download, rebuild and configure platform builds. list/get rows: env is the
 | `to` | string | no |  | download: directory (default the cache). |
 | `limit` | number | no |  | list: 1 to 50 (default 10). |
 | `project` | string | no |  | Stored login '<workspace>/<project>' when several exist. |
-| `waitSeconds` | number | no |  | Seconds to wait for the result, 0 to 600 (default 180), and with approvalId for the approval. get waits for a build's verdict (a rebuild or a push). |
-| `api` | string | no |  | Platform URL; default EXTENSION_DEV_API_URL. |
+| `waitSeconds` | number | no |  | Seconds to wait for the result (with approvalId, the approval), 0 to 600 (default 180). get waits for a build's verdict (a rebuild or a push). |
+| `api` | string | no |  | Platform URL; default from env. |
 
 ## extension_create
 
@@ -167,7 +167,7 @@ Find the docs page to cite before answering about a WebExtension API, a manifest
 | --- | --- | --- | --- | --- |
 | `query` | string | yes |  | What to look up. |
 | `limit` | number | no | `5` | Pages to return. |
-| `api` | string | no |  | Platform URL; default EXTENSION_DEV_API_URL. |
+| `api` | string | no |  | Platform URL; default from env. |
 
 ## extension_doctor
 
@@ -188,7 +188,7 @@ Take a shallow DOM snapshot of one open surface or targetId, or list what is ope
 | `tab` | number | no |  | chrome.tabs id; else url, else the active tab. |
 | `url` | string | no |  | content/page: the tab by url. |
 | `tabUrl` | string | no |  | The tab by url from the target list. |
-| `targetId` | string | no |  | A page's targetId (extension_open, or dom_snapshot listTargets); overrides url. |
+| `targetId` | string | no |  | targetId from extension_open or dom_snapshot listTargets; overrides url. |
 | `listTargets` | boolean | no | `false` | List page targets and return. |
 | `listTabs` | boolean | no | `false` | List tabs with ids and return. |
 | `context` | "content" \| "page" \| "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" | no | `"content"` | A closed surface is opened first (as extension_open does); the answer then says opened: true. |
@@ -200,7 +200,7 @@ Take a shallow DOM snapshot of one open surface or targetId, or list what is ope
 
 ## extension_element
 
-Click, fill, read or wait for one element by CSS selector, or send trusted mouse and key input (move, press, release, type, key, scroll) in an open surface, a page by url or a targetId. Runs no caller code, so no allowEval; Chromium only.
+Click, fill, read or wait for one element by CSS selector, or send trusted mouse and key input in an open surface, a page by url or a targetId. Runs no caller code, so no allowEval; Chromium only.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -219,7 +219,7 @@ Click, fill, read or wait for one element by CSS selector, or send trusted mouse
 | `deltaY` | number | no |  | scroll: wheel delta in CSS pixels (positive scrolls down). |
 | `context` | "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" | no |  | An open surface (extension_open first). |
 | `url` | string | no |  | A web page's tab by url. |
-| `targetId` | string | no |  | A page's targetId (extension_open, or dom_snapshot listTargets); overrides url. |
+| `targetId` | string | no |  | targetId from extension_open or dom_snapshot listTargets; overrides url. |
 | `browser` | string | no |  | Session browser; required when several run. |
 | `timeout` | number | no |  | Timeout ms; wait polls until it (default 10000, max 30000). |
 
@@ -234,8 +234,8 @@ Evaluate JavaScript in a running extension's background, surface, content script
 | `context` | "background" \| "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" \| "content" \| "page" | no |  | Default background; a closed surface is opened first (as extension_open does). |
 | `url` | string | no |  | content/page: the tab by url. |
 | `tab` | number | no |  | chrome.tabs id to break a url tie. |
-| `targetId` | string | no |  | A page's targetId (extension_open, or dom_snapshot listTargets); overrides url. |
-| `observe` | boolean \| string | no | `false` | true also answers value.observation: the surface's elements once it loaded and settled; a surface name (popup, options, sidebar...) reads that one. |
+| `targetId` | string | no |  | targetId from extension_open or dom_snapshot listTargets; overrides url. |
+| `observe` | boolean \| string | no | `false` | true adds value.observation, the surface's elements once settled; a surface name (popup, options...) reads that one. |
 | `browser` | string | no |  | Session browser; required when several run. |
 | `timeout` | number | no |  | Timeout ms (default 30000; Firefox 10000; debug port 15000). |
 | `until` | object | no |  | Repeat until truthy ({} for defaults); never sleep in a shell. |
@@ -248,7 +248,7 @@ Inspect a web page (or targetId) over the debugger protocol: HTML, DOM, console,
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
 | `url` | string | no |  | Navigate here first, or the url substring to pick. |
-| `targetId` | string | no |  | A page's targetId (extension_open, or dom_snapshot listTargets); overrides url. |
+| `targetId` | string | no |  | targetId from extension_open or dom_snapshot listTargets; overrides url. |
 | `probe` | array of string | no |  | CSS selectors to count and sample. |
 | `include` | array of "html" \| "summary" \| "meta" \| "dom_snapshot" \| "console" \| "extension_roots" | no | `["summary","meta","console"]` | What to include |
 | `browser` | string | no |  | Session browser; required when several run. |
@@ -293,16 +293,16 @@ Validate a manifest.json across browsers; buildBlocking lists the errors that ma
 | `projectPath` | string | no |  | Project root (manifest at root or src/). |
 | `browsers` | array of string | no | `["chrome","firefox","edge"]` | Browsers to validate against. |
 | `browser` | string | no |  | One browser; alias for browsers:[browser]. |
-| `include` | array of "similarTemplates" | no |  | Optional sections; similarTemplates adds up to five catalog templates with the same surfaces. |
+| `include` | array of "similarTemplates" | no |  | similarTemplates adds up to five catalog templates with the same surfaces. |
 
 ## extension_network
 
-Stub a network response on a Chromium session: add a rule (method, URL or glob, status, body or json), list or clear the rules, or read which requests hit one or missed. Rules last until extension_stop. Firefox is refused.
+Stub a network response on a Chromium session: add a rule, list or clear the rules, or read which requests hit one or missed. Rules last until extension_stop. Firefox is refused.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
-| `action` | "add" \| "list" \| "clear" \| "requests" | yes |  | add a rule, list or clear the rules, or read the requests seen. |
+| `action` | "add" \| "list" \| "clear" \| "requests" | yes |  | requests: the requests seen. |
 | `method` | string | no |  | add: HTTP method; default ANY. |
 | `url` | string | no |  | add: exact URL, or a glob with * and ?. |
 | `status` | number | no | `200` | add: HTTP status to answer. |
@@ -320,7 +320,7 @@ Open an extension surface or a url, or replay the toolbar action, a context menu
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
 | `surface` | "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" \| "action" \| "command" | no |  | Surface to open; action and command replay; devtools is Chromium only. |
 | `name` | string | no |  | command: the chrome.commands name. |
-| `menuItemId` | string | no |  | action: replay contextMenus.onClicked for this menu item id instead of the toolbar click (Chromium, over the debug port; no gesture). |
+| `menuItemId` | string | no |  | action: replay contextMenus.onClicked for this menu item id instead of the toolbar click (Chromium, over the debug port). |
 | `panel` | string | no |  | devtools: panel title. |
 | `waitMs` | number | no |  | devtools: ms to wait (default 15000). |
 | `reload` | boolean | no | `false` | devtools: reload the inspected tab. |
@@ -329,7 +329,7 @@ Open an extension surface or a url, or replay the toolbar action, a context menu
 | `newTab` | boolean | no | `false` | New tab even if one shows the url. |
 | `tab` | number | no |  | With url: navigate this chrome.tabs id (not a tab position; from dom_snapshot listTabs: true); with menuItemId: the tab the click is for (default the active tab). |
 | `asTab` | boolean | no | `false` | Render the surface in a tab. |
-| `observe` | boolean \| string | no | `false` | true also answers value.observation: the surface's elements once it loaded and settled; a surface name (popup, options, sidebar...) reads that one. |
+| `observe` | boolean \| string | no | `false` | true adds value.observation, the surface's elements once settled; a surface name (popup, options...) reads that one. |
 | `browser` | string | no |  | Session browser; required when several run. |
 | `timeout` | number | no |  | Timeout ms (default 30000; Firefox 10000; debug port 15000). |
 
@@ -372,7 +372,7 @@ Create an extension.dev project from a folder (projectPath, uploaded, no push; a
 | `waitSeconds` | number | no |  | With deviceCode, seconds the call blocks for approval (0 to 900). |
 | `login` | boolean | no | `true` | Store the minted login. |
 | `approvalId` | string | no |  | Re-seed approval. |
-| `api` | string | no |  | Platform URL; default EXTENSION_DEV_API_URL. |
+| `api` | string | no |  | Platform URL; default from env. |
 
 ## extension_publish
 
@@ -380,7 +380,7 @@ Publish a build on extension.dev: the link for testers, with a download and a ru
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "publish" \| "sync-captures" | no | `"publish"` | publish (default): the link; sync-captures: captures/<browser>/*.png to build pages (approval). |
+| `action` | "publish" \| "sync-captures" | no | `"publish"` | publish: the link; sync-captures: captures/<browser>/*.png to build pages (approval). |
 | `browsers` | array of "chrome" \| "firefox" \| "edge" \| "safari" | no |  | sync-captures: browsers, one approval each. |
 | `projectPath` | string | no |  | sync-captures: project root. |
 | `approvalId` | string | no |  | sync-captures: approved approval id. |
@@ -389,8 +389,8 @@ Publish a build on extension.dev: the link for testers, with a download and a ru
 | `buildSha` | string | no |  | Build sha, 7 to 40 hex (an unreadable index echoes the sha back unverified); not with channel. |
 | `channel` | string | no |  | Link a channel's newest build instead. |
 | `force` | boolean | no |  | Publish despite failed checks. |
-| `waitSeconds` | number | no |  | Seconds to wait for the result, 0 to 600 (default 180), and with approvalId for the approval. |
-| `api` | string | no |  | Platform URL; default EXTENSION_DEV_API_URL. |
+| `waitSeconds` | number | no |  | Seconds to wait for the result (with approvalId, the approval), 0 to 600 (default 180). |
+| `api` | string | no |  | Platform URL; default from env. |
 
 ## extension_release_promote
 
@@ -398,7 +398,7 @@ Release a build to a channel on extension.dev. A release needs a workspace owner
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "promote" \| "cut" \| "rollback" | no | `"promote"` | promote (default): channel to buildId; cut: version-bump pull request; rollback: previous build. |
+| `action` | "promote" \| "cut" \| "rollback" | no | `"promote"` | promote: channel to buildId; cut: version-bump pull request; rollback: previous build. |
 | `project` | string | no |  | Stored login '<workspace>/<project>' when several exist. |
 | `buildId` | string | no |  | Build commit sha (7+ characters). |
 | `channel` | string | no |  | Target channel, e.g. stable, preview. |
@@ -408,8 +408,8 @@ Release a build to a channel on extension.dev. A release needs a workspace owner
 | `version` | string | no |  | Version label; cut: the exact version. |
 | `releaseNotes` | string | no |  | Release notes, markdown. |
 | `approvalId` | string | no |  | Approved approval id; every release needs a workspace owner's approval. |
-| `waitSeconds` | number | no |  | Seconds to wait for the result, 0 to 600 (default 180), and with approvalId for the approval. |
-| `api` | string | no |  | Platform URL; default EXTENSION_DEV_API_URL. |
+| `waitSeconds` | number | no |  | Seconds to wait for the result (with approvalId, the approval), 0 to 600 (default 180). |
+| `api` | string | no |  | Platform URL; default from env. |
 
 ## extension_release_status
 
@@ -427,7 +427,7 @@ Read where a project stands on extension.dev: channels, builds, store submission
 | `workspace` | string | no |  | Workspace slug. |
 | `project` | string | no |  | Project slug. |
 | `projectPath` | string | no |  | Project root; picks its project. |
-| `api` | string | no |  | Platform URL; default EXTENSION_DEV_API_URL. |
+| `api` | string | no |  | Platform URL; default from env. |
 
 ## extension_reload
 
@@ -438,7 +438,7 @@ Reload the extension's background, or a tab, over the control channel (allowCont
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
 | `context` | "background" \| "content" \| "page" | no | `"background"` | Background, or a content or page tab. |
 | `tab` | number | no |  | content/page: the tab id. |
-| `observe` | boolean \| string | no | `false` | true also answers value.observation: the surface's elements once it loaded and settled; a surface name (popup, options, sidebar...) reads that one. |
+| `observe` | boolean \| string | no | `false` | true adds value.observation, the surface's elements once settled; a surface name (popup, options...) reads that one. |
 | `browser` | string | no |  | Session browser; required when several run. |
 | `timeout` | number | no |  | Timeout ms (default 30000; Firefox 10000; debug port 15000). |
 
@@ -452,7 +452,7 @@ Take a .png of one surface, page or targetId in a live session (Safari: pages on
 | `browser` | string | no |  | Session browser; required when several run. |
 | `context` | "page" \| "popup" \| "options" \| "sidebar" \| "newtab" \| "history" \| "bookmarks" | no | `"page"` | page: the tab url picks; else that open surface. |
 | `url` | string | no |  | page: tab url substring. |
-| `targetId` | string | no |  | A page's targetId (extension_open, or dom_snapshot listTargets); overrides url. |
+| `targetId` | string | no |  | targetId from extension_open or dom_snapshot listTargets; overrides url. |
 | `width` | number | no |  | Viewport width (CSS px). |
 | `height` | number | no |  | Viewport height (CSS px). |
 | `deviceScaleFactor` | number | no |  | Pixel ratio, 0.5 to 4. |
@@ -468,9 +468,9 @@ List, create and revoke emulator preview links for a tester, and list and revoke
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `project` | string | no |  | Stored login '<workspace>/<project>' when several exist. |
-| `kind` | "build-link" \| "preview" \| "both" | no | `"both"` | preview, build-link or both (default). |
+| `kind` | "build-link" \| "preview" \| "both" | no | `"both"` | Which kind of share. |
 | `tokenId` | string | no |  | revoke: a build link's tokenId. |
-| `action` | "list" \| "create" \| "revoke" | no | `"list"` | list (default); create: share a build; revoke: one share, for good. |
+| `action` | "list" \| "create" \| "revoke" | no | `"list"` | create: share a build; revoke: one share, for good. |
 | `buildId` | string | no |  | create: build commit sha. |
 | `browser` | string | no |  | create: browser (default chrome). |
 | `artifactId` | string | no |  | revoke: the gen_... id. |
@@ -479,7 +479,7 @@ List, create and revoke emulator preview links for a tester, and list and revoke
 | `projectPath` | string | no |  | Project root. |
 | `status` | "all" \| "live" | no | `"all"` | all or live. |
 | `limit` | number | no |  | 1 to 200 (default 100). |
-| `api` | string | no |  | Platform URL; default EXTENSION_DEV_API_URL. |
+| `api` | string | no |  | Platform URL; default from env. |
 
 ## extension_start
 
@@ -533,7 +533,7 @@ Read or write one chrome.storage key from the background, over the control chann
 | `key` | string | no |  | Key to get or set. |
 | `value` | any | no |  | Value to set; for null or "" use valueJson. |
 | `valueJson` | string | no |  | Value as JSON text; not with value. |
-| `observe` | boolean \| string | no | `false` | true also answers value.observation: the surface's elements once it loaded and settled; a surface name (popup, options, sidebar...) reads that one. |
+| `observe` | boolean \| string | no | `false` | true adds value.observation, the surface's elements once settled; a surface name (popup, options...) reads that one. |
 | `browser` | string | no |  | Session browser; required when several run. |
 | `timeout` | number | no |  | Timeout ms (default 30000; Firefox 10000; debug port 15000). |
 
@@ -543,26 +543,26 @@ Submit a platform build to the Chrome, Firefox, Edge and Safari stores through e
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "submit" \| "status" \| "preflight" \| "sync-listing" \| "cancel" \| "rollout" \| "release" \| "publish" \| "review" \| "configure-store" \| "connect" \| "first-submission" \| "mint-signing" | no | `"submit"` | Per action: 'preflight', 'status' and submit with dryRun true (the default) are read-only; submit with dryRun:false and no approvalId executes nothing either, it only asks for the owner's approval, as does the first call of any store act; the approved approvalId runs it. submit: buildSha to the stores. preflight: readiness checks. status: each store's word. sync-listing: listing from STORE.md. publish (alias review): draft to review. release (Safari): approved version on sale. cancel: withdraw from review. rollout: raise Chrome's staged rollout. configure-store: storeSettings. connect: page where the person gives the platform the key. first-submission: page for a first Chrome or Edge upload. mint-signing (Safari): register the bundle id, mint certificates and profiles. |
+| `action` | "submit" \| "status" \| "preflight" \| "sync-listing" \| "cancel" \| "rollout" \| "release" \| "publish" \| "review" \| "configure-store" \| "connect" \| "first-submission" \| "mint-signing" | no | `"submit"` | 'preflight', 'status' and submit with dryRun true are read-only; submit with dryRun:false and no approvalId executes nothing either, it only asks the owner's approval, as does the first call of any store act. submit: buildSha to the stores. preflight: readiness checks. status: each store's word. sync-listing: listing from STORE.md. publish (alias review): draft to review. release (Safari): approved version on sale. cancel: withdraw from review. rollout: raise Chrome's staged rollout. configure-store: storeSettings. connect: page where the person gives the platform the key. first-submission: page for a first Chrome or Edge upload. mint-signing (Safari): register the bundle id, mint certificates and profiles. |
 | `project` | string | no |  | Stored login '<workspace>/<project>' when several exist. |
 | `browsers` | array of "chrome" \| "firefox" \| "edge" \| "safari" | no |  | Stores; submit, publish and sync-listing take several under one approval. |
 | `buildSha` | string | no |  | Commit sha of a completed platform build (extension_builds). |
-| `version` | string | no |  | Optional label; default the built manifest's version. |
-| `dryRun` | boolean | no | `true` | true (the default) sends nothing and spends no approval or quota; false submits once approved and stops at the draft under the default modes. |
-| `projectPath` | string | no |  | Project root; sync-listing needs it; nothing local is uploaded. |
-| `approvalId` | string | no |  | From an approval-required answer, once approved; same arguments again. A real submission needs a workspace owner's approval every time. |
-| `screenshots` | array of string | no |  | With sync-listing, PNG screenshots in projectPath; a wrong size or weight is answered with what the store accepts. |
-| `useBuild` | string | no |  | With sync-listing, a completed build's sha to take icons from. |
-| `detail` | boolean \| array | no |  | With preflight, true or a list like ["chrome", "safari.subtitle"] answers those rows in full. |
-| `api` | string | no |  | Platform URL; default EXTENSION_DEV_API_URL. |
-| `store` | "chrome" \| "firefox" \| "edge" \| "safari" | no |  | With cancel or rollout (default chrome), release (safari) or configure-store (required). |
-| `storeSettings` | object | no |  | With configure-store, only what changes; a publishing mode asks approval; no credentials; Safari release mode is STORE.md's `- Release:` line. |
-| `submissionId` | string | no |  | With cancel, publish or release, which submission; default the newest. |
+| `version` | string | no |  | Label; default the built manifest's version. |
+| `dryRun` | boolean | no | `true` | true sends nothing and spends no approval or quota; false submits once approved and stops at the draft under the default modes. |
+| `projectPath` | string | no |  | Project root, for sync-listing; nothing local is uploaded. |
+| `approvalId` | string | no |  | Once approved, with the same arguments; a real submission needs a workspace owner's approval every time. |
+| `screenshots` | array of string | no |  | sync-listing: PNG screenshots in projectPath. |
+| `useBuild` | string | no |  | sync-listing: a completed build's sha for icons. |
+| `detail` | boolean \| array | no |  | preflight: true, or ["chrome", "safari.subtitle"], answers those rows in full. |
+| `api` | string | no |  | Platform URL; default from env. |
+| `store` | "chrome" \| "firefox" \| "edge" \| "safari" | no |  | cancel, rollout (default chrome), release (safari), configure-store (required). |
+| `storeSettings` | object | no |  | configure-store: only what changes; a publishing mode asks approval; no credentials; Safari release mode is STORE.md's `- Release:` line. |
+| `submissionId` | string | no |  | cancel, publish, release: the submission; default newest. |
 | `buildNumber` | integer | no |  | Safari publish or release: TestFlight build number (default newest). |
-| `deployPercentage` | number | no |  | With rollout, the new share of users, 1 to 100, above the current one. |
-| `connectSession` | string | no |  | With connect, value.connectSession to wait on with waitSeconds. |
-| `replace` | boolean | no |  | With connect, true replaces a working key; only when asked. |
-| `waitSeconds` | number | no |  | Seconds to wait for the result, 0 to 600 (default 180), and with approvalId for the approval. |
+| `deployPercentage` | number | no |  | rollout: new share of users, 1 to 100, above the current one. |
+| `connectSession` | string | no |  | connect: value.connectSession to wait on with waitSeconds. |
+| `replace` | boolean | no |  | connect: true replaces a working key; only when asked. |
+| `waitSeconds` | number | no |  | Seconds to wait for the result (with approvalId, the approval), 0 to 600 (default 180). |
 
 ## extension_submit_check
 
@@ -570,25 +570,25 @@ Read a store's state or ask for an approval, with extension_submit's inputs: pre
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "preflight" \| "status" \| "submit" \| "publish" \| "review" \| "cancel" \| "rollout" \| "release" \| "sync-listing" \| "mint-signing" \| "configure-store" \| "connect" \| "first-submission" | no | `"submit"` | preflight, status, submit (a dry run unless dryRun:false, which only asks approval), or a store act to ask approval for. |
-| `dryRun` | boolean | no | `true` | true (the default) reads only; false only asks the owner's approval of the real submit. |
-| `project` | string | no |  | Same as in extension_submit. |
-| `browsers` | array of "chrome" \| "firefox" \| "edge" \| "safari" | no |  | Same as in extension_submit. |
-| `buildSha` | string | no |  | Same as in extension_submit. |
-| `version` | string | no |  | Same as in extension_submit. |
-| `projectPath` | string | no |  | Same as in extension_submit. |
-| `screenshots` | array of string | no |  | Same as in extension_submit. |
-| `useBuild` | string | no |  | Same as in extension_submit. |
-| `detail` | boolean \| array | no |  | Same as in extension_submit. |
-| `api` | string | no |  | Same as in extension_submit. |
-| `store` | "chrome" \| "firefox" \| "edge" \| "safari" | no |  | Same as in extension_submit. |
-| `storeSettings` | object | no |  | Same as in extension_submit. |
-| `submissionId` | string | no |  | Same as in extension_submit. |
-| `buildNumber` | integer | no |  | Same as in extension_submit. |
-| `deployPercentage` | number | no |  | Same as in extension_submit. |
-| `connectSession` | string | no |  | Same as in extension_submit. |
-| `replace` | boolean | no |  | Same as in extension_submit. |
-| `waitSeconds` | number | no |  | Same as in extension_submit. |
+| `action` | "preflight" \| "status" \| "submit" \| "publish" \| "review" \| "cancel" \| "rollout" \| "release" \| "sync-listing" \| "mint-signing" \| "configure-store" \| "connect" \| "first-submission" | no | `"submit"` | The read, or the act to ask approval for. |
+| `dryRun` | boolean | no | `true` | true reads only; false only asks the owner's approval of the real submit. |
+| `project` | string | no |  | As in extension_submit. |
+| `browsers` | array of "chrome" \| "firefox" \| "edge" \| "safari" | no |  | As in extension_submit. |
+| `buildSha` | string | no |  | As in extension_submit. |
+| `version` | string | no |  | As in extension_submit. |
+| `projectPath` | string | no |  | As in extension_submit. |
+| `screenshots` | array of string | no |  | As in extension_submit. |
+| `useBuild` | string | no |  | As in extension_submit. |
+| `detail` | boolean \| array | no |  | As in extension_submit. |
+| `api` | string | no |  | As in extension_submit. |
+| `store` | "chrome" \| "firefox" \| "edge" \| "safari" | no |  | As in extension_submit. |
+| `storeSettings` | object | no |  | As in extension_submit. |
+| `submissionId` | string | no |  | As in extension_submit. |
+| `buildNumber` | integer | no |  | As in extension_submit. |
+| `deployPercentage` | number | no |  | As in extension_submit. |
+| `connectSession` | string | no |  | As in extension_submit. |
+| `replace` | boolean | no |  | As in extension_submit. |
+| `waitSeconds` | number | no |  | As in extension_submit. |
 
 ## extension_templates
 
@@ -637,7 +637,7 @@ Wait for a session to be ready, or for: "rebuild" after an edit; only after wait
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Extension project root |
 | `browser` | string | no |  | Session browser; required when several run. |
-| `timeoutMs` | number | no | `45000` | Wait budget in ms, default 45000, clamped 1000-50000. |
+| `timeoutMs` | number | no | `45000` | Wait budget in ms, clamped 1000-50000. |
 | `timeout` | number | no |  | Deprecated alias of timeoutMs. |
 | `for` | "ready" \| "rebuild" | no | `"ready"` | rebuild: the next compile and reload after an edit. |
 | `since` | string | no |  | rebuild: ISO time a compile must follow. |
@@ -657,7 +657,7 @@ Read the workspace; change a project's settings. configure-project renames a pro
 | `include` | array of "team" \| "members" \| "tokens" \| "apps" \| "activity" \| "environment" \| "storeAccounts" | no |  | Read-only sections to add. |
 | `workspace` | string | no |  | Slug. |
 | `project` | string | no |  | Stored login; for settings, the project. |
-| `api` | string | no |  | Platform URL; default EXTENSION_DEV_API_URL. |
+| `api` | string | no |  | Platform URL; default from env. |
 
 ## extension_workspace_create
 
@@ -670,5 +670,5 @@ Create a missing extension.dev workspace, before extension_project_create. The f
 | `description` | string | no |  | Short description. |
 | `developerUrl` | string | no |  | Public URL. |
 | `deviceCode` | string | no |  | Resume token. |
-| `api` | string | no |  | Platform URL; default EXTENSION_DEV_API_URL. |
+| `api` | string | no |  | Platform URL; default from env. |
 

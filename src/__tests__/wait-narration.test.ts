@@ -30,7 +30,6 @@ describe("extension_wait budget disclosure", () => {
   it("documents timeoutMs with its default and clamp bounds in the schema", () => {
     const timeoutMs = schema.inputSchema.properties.timeoutMs;
     expect(timeoutMs.default).toBe(45000);
-    expect(timeoutMs.description).toContain("45000");
     expect(timeoutMs.description).toContain("1000-50000");
     expect(schema.inputSchema.properties.timeout.description).toContain(
       "timeoutMs",

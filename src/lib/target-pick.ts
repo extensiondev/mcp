@@ -24,7 +24,7 @@ export type TargetFamily = "chromium" | "gecko";
 export const TARGET_ID_PROPERTY = {
   type: "string",
   description:
-    "A page's targetId (extension_open, or dom_snapshot listTargets); overrides url.",
+    "targetId from extension_open or dom_snapshot listTargets; overrides url.",
 };
 
 export const AMBIGUOUS_TARGET_HINT =

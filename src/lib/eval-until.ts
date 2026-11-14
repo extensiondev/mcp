@@ -32,12 +32,12 @@ export const EVAL_UNTIL_PROPERTY = {
     timeoutMs: {
       type: "number",
       default: DEFAULT_TIMEOUT_MS,
-      description: `Whole wait in ms, default ${DEFAULT_TIMEOUT_MS}, max ${MAX_TIMEOUT_MS}.`,
+      description: `Whole wait in ms, max ${MAX_TIMEOUT_MS}.`,
     },
     intervalMs: {
       type: "number",
       default: DEFAULT_INTERVAL_MS,
-      description: `Pause in ms, default ${DEFAULT_INTERVAL_MS}.`,
+      description: "Pause in ms.",
     },
   },
 };

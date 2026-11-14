@@ -34,7 +34,7 @@ export const schema = {
         type: "string",
         enum: ["status", "revoke"],
         default: "status",
-        description: "status (default) or revoke.",
+        description: "Read or revoke.",
       },
       approvalId: {
         type: "string",

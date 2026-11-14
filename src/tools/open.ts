@@ -1162,7 +1162,7 @@ export const schema = {
       },
       menuItemId: {
         type: "string",
-        description: "action: replay contextMenus.onClicked for this menu item id instead of the toolbar click (Chromium, over the debug port; no gesture).",
+        description: "action: replay contextMenus.onClicked for this menu item id instead of the toolbar click (Chromium, over the debug port).",
       },
       panel: {
         type: "string",
