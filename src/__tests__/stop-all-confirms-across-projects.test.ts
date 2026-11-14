@@ -64,7 +64,7 @@ async function gone(pid: number, budgetMs = 5_000): Promise<boolean> {
   const deadline = Date.now() + budgetMs;
 
   while (isAlive(pid) && Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
 
   return !isAlive(pid);

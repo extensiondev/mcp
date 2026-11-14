@@ -44,7 +44,7 @@ export interface ToolsDocsJson {
 export interface ClientsDocsJson {
   generatedFrom: string;
   version: string;
-  clients: { id: string; label: string; recipes: { everything: Recipe; local: Recipe } }[];
+  clients: Array<{ id: string; label: string; recipes: { everything: Recipe; local: Recipe } }>;
 }
 
 export function renderToolsJson(tools: ToolSchemaLike[], version: string): ToolsDocsJson {

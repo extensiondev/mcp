@@ -37,7 +37,7 @@ async function waitFor(check: () => boolean, budgetMs: number): Promise<boolean>
   while (Date.now() < deadline) {
     if (check()) return true;
 
-    await new Promise((r) => setTimeout(r, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
   return check();

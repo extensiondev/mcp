@@ -10,8 +10,6 @@ import { SESSION_PROJECT_PATH } from "../lib/common-schema";
 import {
   DEFAULT_LIMIT,
   DEFAULT_FOLLOW_MS,
-  MIN_FOLLOW_MS,
-  MAX_FOLLOW_MS,
 } from "./logs-constants";
 
 export const schema = {

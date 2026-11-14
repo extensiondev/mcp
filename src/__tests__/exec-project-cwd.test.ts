@@ -53,7 +53,7 @@ describe("the engine runs in the project, not where the MCP client started the s
   posixOnly("spawns the dev CLI with the project as its working directory", async () => {
     const project = fakeProject('pwd; sleep 30');
     live = spawnExtensionCli(["dev", project], { projectDir: project });
-    await new Promise((r) => setTimeout(r, 400));
+    await new Promise((resolve) => setTimeout(resolve, 400));
 
     const printed = live.readOutput().trim().split("\n")[0];
 

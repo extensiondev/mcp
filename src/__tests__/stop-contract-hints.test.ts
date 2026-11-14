@@ -46,7 +46,7 @@ async function waitGone(pid: number): Promise<boolean> {
   for (let i = 0; i < 40; i++) {
     if (!isAlive(pid)) return true;
 
-    await new Promise((r) => setTimeout(r, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
   return !isAlive(pid);
@@ -94,7 +94,7 @@ describe("extension_stop reaps the browser the launcher recorded, not only the o
       const profilePath = path.join(os.tmpdir(), `custom-fx-profile-${process.pid}`);
       const pid = spawnHolder(["profile", profilePath, "no-remote"]);
       writeContractOfDeadServer(projectPath, "firefox", { profilePath });
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
 
       const result = JSON.parse(
         await stop.handler({ projectPath, browser: "firefox" }),
@@ -113,7 +113,7 @@ describe("extension_stop reaps the browser the launcher recorded, not only the o
       const browserPid = spawnHolder(["quiet-browser"]);
       const launcherPid = spawnHolder(["quiet-launcher"]);
       writeContractOfDeadServer(projectPath, "firefox", { browserPid, launcherPid });
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
 
       const result = JSON.parse(
         await stop.handler({ projectPath, browser: "firefox" }),

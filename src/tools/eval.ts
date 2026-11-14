@@ -118,7 +118,7 @@ import {
   noScriptingReason,
   overProtocolNote,
 } from "../lib/gecko-no-scripting";
-import { SAFARI_EVAL_LIMIT, safariContextRefusal } from "../lib/safari-eval";
+import { safariContextRefusal } from "../lib/safari-eval";
 import { readOpeningIfClosed, surfaceOpening } from "../lib/open-if-closed";
 
 const pageRef = (t: { targetId: string; url: string }): TargetRef => ({ targetId: t.targetId, url: t.url });

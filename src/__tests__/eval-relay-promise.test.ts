@@ -365,7 +365,7 @@ describe("the relay wrapper itself", () => {
         relay.relaySafeExpression("Promise.resolve({ n: 2 })", token),
       );
       expect(pending).toEqual({ [relay.RELAY_MARK]: 1, done: false, token });
-      await new Promise((r) => setTimeout(r, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
       const settled = (0, eval)(relay.relayPollExpression(token));
       expect(settled).toMatchObject({ done: true, ok: true, value: { n: 2 } });
       expect(store[token]).toBeUndefined();

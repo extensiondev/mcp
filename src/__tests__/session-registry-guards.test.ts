@@ -82,7 +82,7 @@ describe("sessionSinceMs", () => {
     const project = tmpProject();
     registerSession({ pid: 444, browser: "chrome", projectPath: project, command: "dev" });
     const first = sessionSinceMs(project, "chrome");
-    await new Promise((r) => setTimeout(r, 20));
+    await new Promise((resolve) => setTimeout(resolve, 20));
     registerSession({
       pid: 444,
       browser: "chrome",
@@ -98,7 +98,7 @@ describe("sessionSinceMs", () => {
     const project = tmpProject();
     registerSession({ pid: 444, browser: "chrome", projectPath: project, command: "dev" });
     const first = sessionSinceMs(project, "chrome")!;
-    await new Promise((r) => setTimeout(r, 20));
+    await new Promise((resolve) => setTimeout(resolve, 20));
     registerSession({ pid: 555, browser: "chrome", projectPath: project, command: "dev" });
 
     expect(sessionSinceMs(project, "chrome")!).toBeGreaterThan(first);

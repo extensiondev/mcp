@@ -115,7 +115,7 @@ async function waitGone(pid: number, budgetMs = 5_000): Promise<boolean> {
   const deadline = Date.now() + budgetMs;
 
   while (isAlive(pid) && Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
 
   return !isAlive(pid);
@@ -188,7 +188,7 @@ describe("extension_dev fork guard", () => {
     const stranger = spawn("sleep", ["300"], { detached: true, stdio: "ignore" });
     stranger.unref();
     spawned.push(stranger);
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
     registerSession({ pid: stranger.pid!, browser: "chrome", projectPath: project, command: "dev" });
 
     const result = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
@@ -379,7 +379,7 @@ describe("extension_dev exit cleanup", () => {
     const result = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
 
     expect(result.status).toBe("exited");
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
     const markers = listSessionMarkers().map((m) =>
       path.resolve(m.projectPath),
     );

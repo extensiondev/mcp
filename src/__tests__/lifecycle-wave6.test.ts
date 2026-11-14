@@ -77,7 +77,7 @@ async function waitGone(pid: number, budgetMs = 5_000): Promise<boolean> {
   const deadline = Date.now() + budgetMs;
 
   while (isAlive(pid) && Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
 
   return !isAlive(pid);
@@ -118,7 +118,7 @@ describe("reaped means confirmed gone", () => {
       const pid = spawnHolder([
         path.join(projectPath, "dist", "extension-js", "profiles", "chrome-profile", "calm-red-fox"),
       ]);
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
       vi.spyOn(process, "kill").mockImplementation(((target: number, sig?: string | number) => {
         if (sig === "SIGKILL") return true;
 
@@ -177,7 +177,7 @@ describe("a Windows stop verifies what it ended from its own process table", () 
       const projectPath = tmpProject();
       const profileArg = path.join(projectPath, "dist", "extension-js", "profiles", "chrome-profile", "calm-red-fox");
       const pid = spawnHolder([profileArg]);
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
       windowsHost.table = `4\tSystem\t\r\n${pid}\tnode.exe\t"node" -e "x" ${profileArg}\r\n`;
 
       try {

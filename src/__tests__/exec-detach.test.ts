@@ -49,7 +49,7 @@ describe("spawnExtensionCli detach contract", () => {
     expect(live.child.stdout).toBeNull();
     expect(live.child.stderr).toBeNull();
 
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((resolve) => setTimeout(resolve, 500));
     expect(live.readOutput()).toContain("session log line");
     expect(fs.readFileSync(live.logPath, "utf8")).toContain("session log line");
   });
@@ -81,7 +81,7 @@ describe("spawnExtensionCli detach contract", () => {
 
       try {
         const spawned = spawnExtensionCli(["--version"]);
-        await new Promise((r) => setTimeout(r, 300));
+        await new Promise((resolve) => setTimeout(resolve, 300));
         expect(spawned.child.pid).toBeUndefined();
         expect(spawned.spawnError?.()).toBeInstanceOf(Error);
       } finally {

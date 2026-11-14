@@ -69,7 +69,7 @@ describe("resolveCdpPort dials only the project's own live session", () => {
 
   it("answers null for a contract whose dev server is dead, so a reused port is never dialled", async () => {
     const dead = spawn(process.execPath, ["-e", "process.exit(0)"]);
-    await new Promise((r) => dead.on("exit", r));
+    await new Promise((resolve) => dead.on("exit", resolve));
     writeModernContract(dir, "chrome", { cdpPort: 9555, pid: dead.pid });
 
     expect(await resolveCdpPort(dir, "chrome", { waitMs: 50 })).toBeNull();
@@ -81,7 +81,7 @@ describe("resolveCdpPort dials only the project's own live session", () => {
     const stranger = spawn("sleep", ["300"], { detached: true, stdio: "ignore" });
     stranger.unref();
     children.push(stranger);
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
     writeModernContract(dir, "chrome", { cdpPort: 9555, pid: stranger.pid });
 
     expect(await resolveCdpPort(dir, "chrome", { waitMs: 50 })).toBeNull();

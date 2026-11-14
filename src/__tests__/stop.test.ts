@@ -64,7 +64,7 @@ async function waitGone(pid: number, budgetMs = 2_000): Promise<boolean> {
   while (Date.now() < deadline) {
     if (!isAlive(pid)) return true;
 
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
 
   return !isAlive(pid);
@@ -274,7 +274,7 @@ describe("extension_stop orphan reaping", () => {
         "setInterval(() => {}, 1000)",
         holderArg,
       ]);
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
 
       const result = JSON.parse(
         await stop.handler({ projectPath, browser: "chrome" }),
@@ -297,7 +297,7 @@ describe("extension_stop orphan reaping", () => {
       fs.mkdirSync(path.dirname(watched), { recursive: true });
       fs.writeFileSync(watched, "log line\n");
       const pid = spawnHolder("tail", ["-f", watched]);
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
 
       try {
         const result = JSON.parse(
@@ -328,7 +328,7 @@ describe("extension_stop orphan reaping", () => {
         "dev",
         relative,
       ]);
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
 
       const result = JSON.parse(
         await stop.handler({ projectPath: relative, browser: "chrome" }),
@@ -369,7 +369,7 @@ describe("extension_stop never signals a pid that is no longer the session", () 
     async () => {
       const projectPath = tmpProject();
       const stranger = spawnHolder("sleep", ["300"]);
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
       registerSession({ pid: stranger, browser: "chrome", projectPath, command: "dev" });
 
       const result = JSON.parse(await stop.handler({ projectPath, browser: "chrome" }));

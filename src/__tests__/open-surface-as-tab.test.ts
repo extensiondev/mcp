@@ -495,7 +495,7 @@ describe("open never destroys the page you were watching", () => {
     const asked = "https://example.com/start";
 
     const pending = open.handler({ projectPath: p.dir, url: asked });
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
     cdpTargets = [
       {
         id: "created",

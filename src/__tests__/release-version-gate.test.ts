@@ -145,7 +145,7 @@ describe("the release rails fail closed", () => {
     expect(step).toMatch(/run: pnpm lint\s*$/);
     expect(start).toBeLessThan(verify.indexOf("- name: Test\n"));
     expect(scripts.lint).toMatch(/^eslint \. .*--max-warnings \d+\b/);
-    expect(Number(/--max-warnings (\d+)/.exec(scripts.lint)?.[1])).toBeLessThanOrEqual(216);
+    expect(Number(/--max-warnings (\d+)/.exec(scripts.lint)?.[1])).toBeLessThanOrEqual(184);
   });
 
   it("gives the registry publish job longer than the wait it runs", () => {
