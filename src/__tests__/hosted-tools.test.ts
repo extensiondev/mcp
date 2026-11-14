@@ -16,10 +16,13 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HOSTED_TOOL_NAMES, createHostedServer, registerHostedTools } from "../hosted";
+import { setApprovalOpener } from "../lib/approval-open";
+import { loginIdOf } from "../lib/credential-source";
 import { credentialsPath, writeCredentials } from "../lib/credentials";
 import { envelope as envelopeOf } from "../lib/envelope";
 import { forgetForwardCredentials } from "../lib/forward-credential";
 import { forwardCall } from "../lib/hosted-forwarder";
+import { createToolDispatcher } from "../lib/tool-dispatch";
 import { tools } from "../index";
 import { APPROVAL, PROJECT, WWW, stubPlatformFetch } from "./hosted-platform-fetch";
 
@@ -394,5 +397,122 @@ describe("the forwarder", () => {
     expect(keys[0]).toBe(keys[1]);
     expect(keys[2]).toBe(keys[3]);
     expect(lane().map((hit) => hit.headers.authorization)).toEqual(["Bearer forward-1", "Bearer forward-1", "Bearer forward-1", "Bearer forward-2"]);
+  });
+
+  const WEB_LOGIN = "web.device.login";
+  const DOCS_LOGIN = "docs.device.login";
+  const DOCS_EXPIRES = Math.floor(Date.now() / 1000) + 2 * 24 * 3600;
+
+  function twoLoginsDefaultWeb() {
+    const entry = (projectSlug: string, token: string, expiresAt: number) => ({ version: 1 as const, token, workspaceSlug: "acme", projectSlug, expiresAt, api: WWW, provider: "extensiondev" as const });
+
+    writeCredentials(entry("docs", DOCS_LOGIN, DOCS_EXPIRES));
+    writeCredentials(entry("web", WEB_LOGIN, DOCS_EXPIRES + 24 * 3600));
+  }
+
+  function stubHostedPlatform(laneAnswer: unknown, record?: Record<string, unknown>) {
+    const seen: Array<{ url: string; authorization: string | null; project: string | null; body: any }> = [];
+    vi.stubGlobal("fetch", async (input: unknown, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      const hit = { url: String(input), authorization: headers.get("authorization"), project: headers.get("x-extensiondev-project"), body: JSON.parse(String(init?.body ?? "null")) };
+      seen.push(hit);
+
+      if (hit.url.endsWith("/api/cli/forward/exchange")) return new Response(JSON.stringify({ access_token: `forward-of-${String(hit.authorization).replace("Bearer ", "")}`, expires_in: 600 }), { status: 200 });
+
+      if (hit.url.endsWith("/api/cli/forward/approvals")) {
+        const held = record && hit.authorization === `Bearer forward-of-${DOCS_LOGIN}` && hit.body.approvalId === record.approvalId;
+
+        return new Response(JSON.stringify(held ? { record } : { code: "APPROVAL_UNKNOWN" }), { status: held ? 200 : 404 });
+      }
+
+      if (hit.url.endsWith("/api/cli/whoami")) return new Response(JSON.stringify({ login: "acme/web", live: true, projectId: "prj_hosted1", workspaceSlug: "acme", projectSlug: "web" }), { status: 200 });
+
+      return new Response(JSON.stringify(laneAnswer), { status: 200 });
+    });
+
+    return { seen, lane: () => seen.filter((hit) => hit.url === LANE) };
+  }
+
+  async function dispatched(name: string, args: Record<string, unknown>) {
+    vi.stubEnv("EXTENSION_DEV_HOSTED", "1");
+
+    try {
+      const frame = await createToolDispatcher({ tools, options: { features: ["local", "platform"], noShip: false }, openApprovals: false })({ name, arguments: args });
+
+      return JSON.parse((frame.content as Array<{ text: string }>)[0]?.text ?? "null");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  }
+
+  it("693: makes a call that carries only approvalId as the project and login www holds the approval for", async () => {
+    twoLoginsDefaultWeb();
+    const record = {
+      approvalId: "apr_0123456789abcdefghijklmnopqrstuv",
+      workspace: "acme",
+      project: "docs",
+      loginId: loginIdOf(DOCS_LOGIN),
+      action: "release.promote",
+      fingerprint: "sha256:abc",
+      approvalUrl: `${WWW}/device/approve/apr_0123456789abcdefghijklmnopqrstuv`,
+      mintedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 600_000).toISOString(),
+    };
+    const { seen, lane } = stubHostedPlatform(JSON.parse(envelopeOf({ ok: true, command: "extension_approvals", status: "approved", value: { approvalId: record.approvalId } })), record);
+    const out = await dispatched("extension_approvals", { approvalId: record.approvalId });
+
+    expect(out).toMatchObject({ ok: true, status: "approved" });
+    expect(lane()).toHaveLength(1);
+    expect(lane()[0]).toMatchObject({ authorization: `Bearer forward-of-${DOCS_LOGIN}`, project: "acme/docs" });
+    expect(lane()[0]?.body.args).toMatchObject({ approvalId: record.approvalId, project: "acme/docs" });
+    expect(seen.filter((hit) => hit.url.endsWith("/api/cli/forward/approvals")).map((hit) => hit.project)).toEqual(["acme/web", "acme/docs"]);
+    expect(lane().map((hit) => hit.authorization)).not.toContain(`Bearer ${DOCS_LOGIN}`);
+  });
+
+  it("694: answers auth status here, with the device login's expiry and this machine's logins, and asks the lane nothing", async () => {
+    twoLoginsDefaultWeb();
+    const { seen, lane } = stubHostedPlatform(LISTED);
+    const out = await dispatched("extension_auth", { action: "status", project: "acme/docs" });
+    const all = await dispatched("extension_auth", { action: "status" });
+
+    expect(out.command).toBe("extension_auth");
+    expect(out.value).toMatchObject({ workspaceSlug: "acme", projectSlug: "docs", expiresAt: new Date(DOCS_EXPIRES * 1000).toISOString() });
+    expect(out.value.expiresInSeconds).toBeGreaterThan(600);
+    expect(all.value.logins.map((login: { project: string }) => login.project).sort()).toEqual(["acme/docs", "acme/web"]);
+    expect(lane()).toHaveLength(0);
+    expect(seen.filter((hit) => hit.url.endsWith("/api/cli/whoami")).map((hit) => hit.authorization)).toEqual([`Bearer ${DOCS_LOGIN}`, `Bearer ${WEB_LOGIN}`]);
+  });
+
+  it("697: opens the pages the lane names on this machine, https only, and under the rules an approval page obeys", async () => {
+    const opened: string[] = [];
+    const restore = setApprovalOpener((url) => {
+      opened.push(url);
+
+      return true;
+    });
+    const connectUrl = "https://console.extension.dev/acme/web/submissions/firefox/connect";
+    const keyPage = "https://addons.mozilla.org/developers/addon/api/key/";
+    const pending = () => JSON.parse(envelopeOf({ ok: true, command: "extension_submit", status: "connect-pending", value: { connectUrl, opened: true, openPages: [keyPage, connectUrl, "http://example.com/elsewhere", "file:///etc/hosts"] } }));
+
+    try {
+      const { lane } = stubLane([pending(), pending()]);
+      const local = vi.fn(async () => "local");
+      const out = JSON.parse(await forwardCall("extension_submit", { action: "connect", store: "firefox", projectPath: tmp }, local, { ...FORWARDING, platform: "darwin" }));
+
+      expect(lane()[0]?.body.args.local.pageOpening).toEqual({ block: "" });
+      expect(opened).toEqual([keyPage, connectUrl]);
+      expect(out.value).toEqual({ connectUrl, opened: true });
+
+      const headless = { ...FORWARDING, platform: "darwin" as const, env: { EXTENSION_DEV_HOSTED: "1", EXTENSION_HEADLESS: "1" } };
+      const held = JSON.parse(await forwardCall("extension_submit", { action: "connect", store: "firefox", projectPath: tmp }, local, headless));
+
+      expect(lane()[1]?.body.args.local.pageOpening.block).toContain("EXTENSION_HEADLESS=1");
+      expect(opened).toHaveLength(2);
+      expect(held.value).toMatchObject({ connectUrl, opened: false, openedNote: expect.stringContaining("No page was opened: EXTENSION_HEADLESS=1") });
+      expect(held.value).not.toHaveProperty("openPages");
+      expect(local).not.toHaveBeenCalled();
+    } finally {
+      restore();
+    }
   });
 });

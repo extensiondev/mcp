@@ -51,6 +51,7 @@ import {
   validateToolInput,
 } from "./validate-input";
 
+import type { MintedApproval } from "./approval-state";
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 
 export type { ToolFrame } from "./server-reload";
@@ -64,6 +65,7 @@ export interface ToolModule {
   };
   handler: (args: any) => Promise<string>;
   invalidArgumentsHint?: (issues: InputIssue[]) => string | undefined;
+  approvalRecord?: (args: Record<string, unknown>) => Promise<MintedApproval | null>;
   title?: string;
   annotations?: ToolAnnotations;
 }
@@ -332,7 +334,8 @@ export function createToolSurface(setup: ToolHandlerOptions): {
       held = heldLocal(rebuilt, active, failure);
     }
 
-    const bound = bindApprovalProject(name, pinned.args);
+    const minted = platform ? ((await tool.approvalRecord?.(pinned.args)) ?? null) : null;
+    const bound = bindApprovalProject(name, pinned.args, minted);
 
     if ("refused" in bound) return refusedAct(bound.refused, pinned.args);
 
@@ -363,7 +366,7 @@ export function createToolSurface(setup: ToolHandlerOptions): {
 
     if (held && predated.length) return refusedFrame(predatesCheckEnvelope(name, predated, stamp.stamp(), held));
 
-    const login = bindApprovalLogin(name, normalizedArgs);
+    const login = bindApprovalLogin(name, normalizedArgs, minted);
 
     if ("refused" in login) return refusedAct(login.refused, normalizedArgs);
 

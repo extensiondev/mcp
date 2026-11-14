@@ -8,9 +8,13 @@
 
 import crypto from "node:crypto";
 
+import { autoOpenBlock, openPagesForPerson } from "./approval-open";
+import { mintedApproval } from "./approval-record";
+import { targetServer } from "./credential-server";
 import { resolveCredential, type CredentialRef } from "./credential-source";
+import { MEMBER_PROJECT, listCredentials } from "./credentials";
 import { envelope, isEnvelope } from "./envelope";
-import { forwardSession, withForwardSession, type ForwardSession } from "./forward-approval-state";
+import { forwardSession, withForwardSession, wwwApprovalState, type ForwardSession } from "./forward-approval-state";
 import { HOSTED_SWITCH, forgetForwardCredential, forwardCredential, forwardUrlFor, hostedForwarding, type ExchangedCredential } from "./forward-credential";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { bearerFetch } from "./platform-fetch";
@@ -20,6 +24,7 @@ import { readSubmitFacts, type SubmitFactsArgs } from "./submit-facts-local";
 
 import { version as packageVersion } from "../../package.json";
 
+import type { MintedApproval } from "./approval-state";
 import type { ToolModule } from "./tool-dispatch";
 
 type Args = Record<string, unknown>;
@@ -29,10 +34,27 @@ export const IDEMPOTENCY_HEADER = "idempotency-key";
 export const LOCAL_FACTS_KEY = "local";
 export const FORWARD_TIMEOUT_MS = 60_000;
 export const HOSTED_DROPPED_ARGS = ["api", "projectPath"] as const;
+export const PAGE_OPENING_FACT = "pageOpening";
+export const OPEN_PAGES_KEY = "openPages";
+export const OPEN_PAGES_MAX = 4;
+
+interface StoredLogin {
+  token: string;
+  ref: CredentialRef | null;
+}
+
+export interface ForwarderDeps {
+  env?: Record<string, string | undefined>;
+  platform?: NodeJS.Platform;
+  fetchImpl?: typeof fetch;
+  version?: string;
+  resolveLogin?: (options: { project?: string; api?: string }) => StoredLogin;
+  storedLogins?: (api?: string) => StoredLogin[];
+}
 
 interface ForwardRule {
   local?: (args: Args) => boolean;
-  facts?: (args: Args) => Args | null;
+  facts?: (args: Args, deps: ForwarderDeps) => Args | null;
 }
 
 function text(value: unknown): string {
@@ -43,8 +65,8 @@ function actionOf(args: Args, fallback: string): string {
   return text(args.action) || fallback;
 }
 
-function submitFacts(args: Args): Args {
-  return { facts: readSubmitFacts(args as SubmitFactsArgs) };
+function submitFacts(args: Args, deps: ForwarderDeps): Args {
+  return { facts: readSubmitFacts(args as SubmitFactsArgs), [PAGE_OPENING_FACT]: { block: autoOpenBlock({ noShip: false }, deps.env ?? process.env, deps.platform) } };
 }
 
 export const FORWARDED_TOOLS: Readonly<Record<string, ForwardRule>> = Object.freeze({
@@ -58,20 +80,13 @@ export const FORWARDED_TOOLS: Readonly<Record<string, ForwardRule>> = Object.fre
   },
   extension_workspace_create: { local: (args) => !text(args.deviceCode) },
   extension_project_create: { local: (args) => !text(args.deviceCode) },
-  extension_auth: { local: (args) => actionOf(args, "status") !== "status" },
+  extension_auth: { local: () => true },
   extension_builds: { local: (args) => actionOf(args, "list") === "download" },
   extension_preview_web: { local: () => true },
   extension_publish: { local: (args) => actionOf(args, "publish") === "sync-captures" },
   extension_submit: { facts: submitFacts },
   extension_submit_check: { facts: submitFacts },
 });
-
-export interface ForwarderDeps {
-  env?: Record<string, string | undefined>;
-  fetchImpl?: typeof fetch;
-  version?: string;
-  resolveLogin?: (options: { project?: string; api?: string }) => { token: string; ref: CredentialRef | null };
-}
 
 type LaneAnswer = { kind: "answer"; body: unknown } | { kind: "refused"; text: string } | { kind: "retry"; text: string; fresh: boolean };
 
@@ -188,6 +203,103 @@ function refOf(ref: CredentialRef | null): string | null {
   return ref ? `${ref.workspace}/${ref.project}`.toLowerCase() : null;
 }
 
+function storedLogins(api?: string): StoredLogin[] {
+  const server = targetServer(api);
+  const now = Math.floor(Date.now() / 1000);
+
+  try {
+    return listCredentials()
+      .filter((entry) => entry.server === server && !entry.movedTo && entry.projectSlug !== MEMBER_PROJECT && !(entry.expiresAt && entry.expiresAt <= now))
+      .map((entry) => ({ token: String(entry.token).trim(), ref: { workspace: entry.workspaceSlug, project: entry.projectSlug } }));
+  } catch {
+    return [];
+  }
+}
+
+/* @invariant A FORWARDED CALL THAT CARRIES AN APPROVAL ID IS MADE AS THE
+ * PROJECT AND WITH THE LOGIN THE APPROVAL WAS MINTED FOR, WHEREVER ITS RECORD
+ * LIVES. On the forwarder path the record is in www's hosted state, not in
+ * this machine's approvals.json, and www answers it only to a credential of
+ * the project that minted it. So the login the call would use is asked
+ * first, then every other login stored for that server, each with its own
+ * forward credential, and the record the first one finds is handed to the
+ * dispatcher, which binds the project and the login exactly as it does for
+ * a record on disk (ledger 443 and 472). A record this machine holds on disk
+ * is left to the dispatcher's own read, and an id no stored login can read
+ * is left to the platform.
+ */
+export async function forwardedApproval(command: string, args: Args, deps: ForwarderDeps = {}): Promise<MintedApproval | null> {
+  const approvalId = text(args.approvalId);
+  if (!FORWARDED_TOOLS[command] || !approvalId) return null;
+
+  const named = text(args.api) || undefined;
+  if (mintedApproval(named, approvalId)) return null;
+
+  const checked = safeApiBase(resolveApiBase(named));
+  const resource = checked.ok ? forwardUrlFor(checked.base, deps.env) : null;
+  if (!checked.ok || !resource) return null;
+
+  const own = (deps.resolveLogin ?? resolveCredential)({ project: text(args.project) || undefined, api: named });
+  const known = new Set<string>();
+  const logins = [own, ...(deps.storedLogins ?? storedLogins)(named)].filter((login) => {
+    const key = `${login.token} ${refOf(login.ref) ?? ""}`;
+    if (!login.token || known.has(key)) return false;
+
+    known.add(key);
+
+    return true;
+  });
+  const ask = (login: StoredLogin): Promise<MintedApproval | null> =>
+    wwwApprovalState({ api: checked.base, login: login.token, project: refOf(login.ref), resource, ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}) }).mintedApproval(checked.base, approvalId);
+  const [first, ...rest] = logins;
+  const found = first ? await ask(first) : null;
+  if (found) return found;
+
+  return (await Promise.all(rest.map(ask))).find(Boolean) ?? null;
+}
+
+function personPage(url: unknown): url is string {
+  try {
+    const parsed = new URL(String(url));
+    const host = parsed.hostname.toLowerCase();
+
+    return parsed.protocol === "https:" || (parsed.protocol === "http:" && (host === "localhost" || host === "127.0.0.1" || host === "[::1]"));
+  } catch {
+    return false;
+  }
+}
+
+/* @invariant A PAGE THE HOSTED LANE NAMES FOR THE PERSON OPENS ON THE
+ * PERSON'S MACHINE, UNDER THE SAME RULES AS AN APPROVAL PAGE. The lane has
+ * no browser, so the forwarder tells it up front whether this machine may
+ * open a page (the pageOpening fact: --no-ship aside, the same blocks an
+ * approval page obeys, EXTENSION_DEV_NO_AUTO_OPEN, CI, SSH, a headless
+ * browser, no display), the lane words its answer for that, and names the
+ * pages under value.openPages. They are opened here, https or loopback
+ * only and at most four, and the list never reaches the agent; when the
+ * open command does not start, the answer says so instead of claiming an
+ * open page.
+ */
+function openLanePages(body: unknown, deps: ForwarderDeps): unknown {
+  const lane = (body && typeof body === "object" ? body : {}) as Args;
+  const named = lane.value && typeof lane.value === "object" ? (lane.value as Args)[OPEN_PAGES_KEY] : undefined;
+  if (!Array.isArray(named)) return body;
+
+  const value = Object.fromEntries(Object.entries(lane.value as Args).filter(([key]) => key !== OPEN_PAGES_KEY));
+  const urls = named.filter(personPage).slice(0, OPEN_PAGES_MAX);
+  if (!urls.length) return { ...lane, value };
+
+  const opening = openPagesForPerson(urls, deps.env ?? process.env, deps.platform);
+  if (opening.opened) return { ...lane, value };
+
+  return {
+    ...lane,
+    value: { ...value, opened: false, openedNote: opening.note },
+    hint: [text(lane.hint), opening.note].filter(Boolean).join(" "),
+    warnings: [...(Array.isArray(lane.warnings) ? lane.warnings : []), opening.note],
+  };
+}
+
 /* @invariant THE FORWARDER SENDS THE HOSTED LANE A PROJECT REF, NEVER A PATH,
  * AND ONE ACT ONE KEY. The stored login is resolved here, exchanged at its own
  * www for a forward credential, and only that credential reaches the lane;
@@ -228,7 +340,7 @@ export async function forwardCall(command: string, args: Args, local: (args: Arg
 
   if (rule.local?.(args)) return withForwardSession(session, () => local(args));
 
-  const sent = hostedArgs(args, rule.facts?.(args) ?? null);
+  const sent = hostedArgs(args, rule.facts?.(args, deps) ?? null);
   const key = crypto.randomBytes(24).toString("base64url");
   let answer = await sendOnce(command, session, sent, key, deps, false);
 
@@ -236,7 +348,7 @@ export async function forwardCall(command: string, args: Args, local: (args: Arg
   if (answer.kind !== "answer") return answer.text;
   if (laneStatus(answer.body) === "local-half") return withForwardSession(session, () => local(args));
 
-  return laneEnvelope(command, answer.body);
+  return laneEnvelope(command, openLanePages(answer.body, deps));
 }
 
 export function forwardable<T extends ToolModule>(module: T, deps: ForwarderDeps = {}): T {
@@ -245,5 +357,9 @@ export function forwardable<T extends ToolModule>(module: T, deps: ForwarderDeps
 
   const run = module.handler;
 
-  return { ...module, handler: (args: Args) => (hostedForwarding(deps.env) ? forwardCall(name, args, run, deps) : run(args)) };
+  return {
+    ...module,
+    handler: (args: Args) => (hostedForwarding(deps.env) ? forwardCall(name, args, run, deps) : run(args)),
+    approvalRecord: async (args: Args) => (hostedForwarding(deps.env) ? forwardedApproval(name, args, deps) : null),
+  };
 }

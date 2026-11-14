@@ -280,12 +280,13 @@ function namedRef(named: string, record: MintedApproval): string {
 export function bindApprovalProject(
   name: string,
   args: Record<string, unknown>,
+  record: MintedApproval | null = null,
 ): { args: Record<string, unknown>; note?: string } | { refused: string } {
   const approvalId = trimmed(args.approvalId);
   if (!approvalId) return { args };
 
   const api = trimmed(args.api) || undefined;
-  const minted = mintedApproval(api, approvalId);
+  const minted = record ?? mintedApproval(api, approvalId);
   if (!minted) return { args };
 
   const ref = `${minted.workspace}/${minted.project}`;

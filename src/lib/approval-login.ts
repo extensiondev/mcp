@@ -60,12 +60,13 @@ export function storedLoginFor(
 export function bindApprovalLogin(
   name: string,
   args: Record<string, unknown>,
+  record: MintedApproval | null = null,
 ): { login: StoredCredentials | null } | { refused: string } {
   const approvalId = trimmed(args.approvalId);
   if (!approvalId || requestCredential()) return { login: null };
 
   const api = trimmed(args.api) || undefined;
-  const minted = mintedApproval(api, approvalId);
+  const minted = record ?? mintedApproval(api, approvalId);
   if (!minted) return { login: null };
 
   const login = storedLoginFor(minted, api);
