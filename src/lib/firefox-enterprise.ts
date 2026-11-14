@@ -162,19 +162,13 @@ export function firefoxAgreementCheck(read: AgreementRead | null, now = Date.now
   const why = read?.detail ? `: ${read.detail.replace(/[.\s]+$/, "")}` : " (the submit route's dry run did not answer it)";
   const unread = `whether the connected AMO account accepted the updated Firefox Add-on Distribution Agreement could not be read${why}`;
 
-  return inForce
-    ? {
-        ...base,
-        status: "fail",
-        severity: "blocking",
-        actual: `acceptance could not be read${why}`,
-        message: `${unread[0]!.toUpperCase()}${unread.slice(1)}. ${AGREEMENT_SENTENCE}, and that day has passed. ${accept}.`,
-      }
-    : {
-        ...base,
-        status: "warn",
-        severity: "warning",
-        actual: `acceptance could not be read${why}`,
-        message: `${unread[0]!.toUpperCase()}${unread.slice(1)}. ${AGREEMENT_SENTENCE}. Accept it at ${FIREFOX_AGREEMENT_URL} when AMO prompts.`,
-      };
+  return {
+    ...base,
+    status: "warn",
+    severity: "warning",
+    actual: `acceptance could not be read${why}`,
+    message: inForce
+      ? `${unread[0]!.toUpperCase()}${unread.slice(1)}, so this submission is not held on it. ${AGREEMENT_SENTENCE}, and that day has passed: AMO takes no submission from an account that has not accepted it. Read and accept it at ${FIREFOX_AGREEMENT_URL} with the connected AMO account.`
+      : `${unread[0]!.toUpperCase()}${unread.slice(1)}. ${AGREEMENT_SENTENCE}. Accept it at ${FIREFOX_AGREEMENT_URL} when AMO prompts.`,
+  };
 }

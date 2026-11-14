@@ -282,7 +282,7 @@ describe("511: the Firefox preflight names the updated AMO Distribution Agreemen
     expect((real.warnings as string[]).some((line) => line.includes(FIREFOX_AGREEMENT_URL))).toBe(true);
   });
 
-  it("says the acceptance could not be read, as a warning before the day and a block after it, and says nothing once AMO dates it after the updated agreement", async () => {
+  it("699: says the acceptance could not be read as a warning that names the AMO agreement page, before the day and after it, and says nothing once AMO dates it after the updated agreement", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-11T12:00:00.000Z"));
     firefoxReady({ ...DRY, firefox: { agreementAccepted: "unknown", agreementAcceptedAt: null, agreementChangeDate: "2026-12-01", agreementDetail: "Firefox Add-ons refused the API key (HTTP 401)" } });
@@ -298,9 +298,31 @@ describe("511: the Firefox preflight names the updated AMO Distribution Agreemen
 
     const after = await preflightRow();
 
-    expect(after.view.canSubmit).toBe(false);
-    expect(after.row).toMatchObject({ severity: "blocking", owner: "you", docsUrl: FIREFOX_AGREEMENT_URL });
-    expect(after.row!.message).toContain("could not be read");
+    expect(after.view.canSubmit).toBe(true);
+    expect(after.row).toMatchObject({ severity: "warning", owner: "you", docsUrl: FIREFOX_AGREEMENT_URL });
+    expect(after.row!.message).toContain("could not be read: Firefox Add-ons refused the API key (HTTP 401), so this submission is not held on it");
+    expect(after.row!.message).toContain(`Read and accept it at ${FIREFOX_AGREEMENT_URL}`);
+
+    const real = JSON.parse(await submit({ action: "submit", browsers: ["firefox"], buildSha: SHA, dryRun: false, api: API }));
+
+    expect(real.status).toBe("approval-required");
+    expect((real.warnings as string[]).some((line) => line.includes(FIREFOX_AGREEMENT_URL))).toBe(true);
+
+    vi.setSystemTime(new Date("2027-01-15T00:00:00.000Z"));
+    firefoxReady({ ...DRY, firefox: {} });
+
+    const unanswered = await preflightRow();
+
+    expect(unanswered.view.canSubmit).toBe(true);
+    expect(unanswered.row).toMatchObject({ severity: "warning", docsUrl: FIREFOX_AGREEMENT_URL });
+    expect(unanswered.row!.message).toContain("the submit route's dry run did not answer it");
+
+    firefoxReady({ ...DRY, firefox: { agreementAccepted: false, agreementAcceptedAt: null, agreementChangeDate: "2026-12-01" } });
+
+    const refused = await preflightRow();
+
+    expect(refused.view.canSubmit).toBe(false);
+    expect(refused.row).toMatchObject({ severity: "blocking" });
 
     firefoxReady({ ...DRY, firefox: { agreementAccepted: true, agreementAcceptedAt: "2026-12-01T09:00:00.000Z", agreementChangeDate: "2026-12-01" } });
 
