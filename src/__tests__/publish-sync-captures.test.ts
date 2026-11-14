@@ -1,12 +1,16 @@
+import childProcess from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { actionFingerprint } from "../lib/approval-gate";
+import { readCaptures } from "../lib/browser-captures";
+import { withRequestCredential } from "../lib/credential-scope";
 import { handler as publish } from "../tools/publish";
+import { syncCaptures } from "../tools/publish-captures";
 import { solidPng } from "./fixtures/png";
 import { rgbaPng } from "./fixtures/png-alpha";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
@@ -155,6 +159,29 @@ describe("extension_publish sync-captures sends captures/<browser>/ once, after 
     });
 
     expect(minted[0]!.body.description).toBe("Show 2 Chrome captures of acme/widget on its public build pages, captured in Chrome 142.");
+  });
+
+  it("runs its platform half on the facts the local half hands it, reading no path itself", async () => {
+    if (process.platform === "win32") return;
+
+    const read = readCaptures(root, "chrome");
+    const local = { projectExists: vi.fn(() => true), readCaptures: vi.fn(() => read) };
+    const touched: string[] = [];
+    const fsNames = ["readFileSync", "existsSync", "statSync", "writeFileSync", "mkdirSync", "readdirSync", "openSync", "lstatSync", "realpathSync", "renameSync", "unlinkSync", "rmSync", "appendFileSync", "mkdtempSync"] as const;
+    const childNames = ["spawn", "spawnSync", "execFile", "execFileSync"] as const;
+
+    for (const name of fsNames) vi.spyOn(fs, name).mockImplementation(((...a: unknown[]) => { touched.push(`${name} ${String(a[0])}`); throw new Error("no disk"); }) as never);
+    for (const name of childNames) vi.spyOn(childProcess, name).mockImplementation(((...a: unknown[]) => { touched.push(`${name} ${String(a[0])}`); throw new Error("no process"); }) as never);
+
+    const out = await withRequestCredential(
+      { token: "claims.sig", api: API, projects: [{ workspace: "acme", project: "widget" }], expiresAt: null },
+      () => syncCaptures({ browsers: ["chrome"], projectPath: "/elsewhere/widget", api: API }, local),
+    ).finally(() => vi.restoreAllMocks());
+
+    expect(touched).toEqual([]);
+    expect(local.projectExists).toHaveBeenCalledWith("/elsewhere/widget");
+    expect(local.readCaptures).toHaveBeenCalledWith("/elsewhere/widget", "chrome");
+    expect(JSON.parse(out)).toMatchObject({ status: "approval-required", value: { approvalId: "apr_c" } });
   });
 
   it("then writes once with the approvalId and answers captures-synced with trackUrl and publicUrl from the platform", async () => {

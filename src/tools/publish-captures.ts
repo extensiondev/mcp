@@ -6,8 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import fs from "node:fs";
-
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
 import { linksOf, madeSentence, recordedOutcome } from "../lib/act-outcome";
@@ -20,7 +18,6 @@ import {
   capturesFolder,
   isCaptureBrowser,
   majorVersion,
-  readCaptures,
   readCapturedIn,
   syncBody,
   type CaptureBrowser,
@@ -44,6 +41,11 @@ export interface SyncCapturesArgs {
   approvalId?: string;
   project?: string;
   api?: string;
+}
+
+export interface PublishLocal {
+  projectExists(projectPath: string): boolean;
+  readCaptures(projectPath: string, browser: CaptureBrowser): CapturesRead;
 }
 
 interface ReadSet extends Extract<CapturesRead, { captures: unknown[] }> {
@@ -149,7 +151,7 @@ function capturesTrackUrl(api: ProjectApi, args: SyncCapturesArgs): string {
  * change as the platform computed it, the second with that approvalId writes
  * once and answers what the platform recorded, with the console page that
  * tracks the set and the public listing page that shows it. */
-export async function syncCaptures(args: SyncCapturesArgs): Promise<string> {
+export async function syncCaptures(args: SyncCapturesArgs, local: PublishLocal): Promise<string> {
   const browsers = (Array.isArray(args.browsers) ? args.browsers : []).map((b) => text(b).toLowerCase()).filter(Boolean);
   const unknown = browsers.filter((b) => !isCaptureBrowser(b));
 
@@ -167,14 +169,14 @@ export async function syncCaptures(args: SyncCapturesArgs): Promise<string> {
 
   const projectPath = text(args.projectPath);
 
-  if (!projectPath || !fs.existsSync(projectPath)) {
+  if (!projectPath || !local.projectExists(projectPath)) {
     return badShipRequest(COMMAND, SYNC_CAPTURES, "CapturesInputError", "sync-captures needs projectPath, the extension project root that holds captures/<browser>/. Nothing was sent.");
   }
 
   const sets: ReadSet[] = [];
 
   for (const browser of [...new Set(browsers)] as CaptureBrowser[]) {
-    const read = readCaptures(projectPath, browser);
+    const read = local.readCaptures(projectPath, browser);
     if ("problem" in read) return refuseLocal(browser, read);
 
     sets.push({ browser, ...read });

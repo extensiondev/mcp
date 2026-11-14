@@ -71,6 +71,7 @@ import { withPackageAddresses } from "../lib/publish-package-commands";
 import { consoleProjectUrl } from "../lib/registry";
 import { CAPTURE_BROWSERS } from "../lib/browser-captures";
 import { SYNC_CAPTURES, syncCaptures } from "./publish-captures";
+import { PUBLISH_LOCAL } from "./publish-local";
 
 export const schema = {
   name: "extension_publish",
@@ -195,7 +196,7 @@ export async function handler(args: {
 }): Promise<string> {
   const action = String(args.action ?? "publish").trim().toLowerCase() || "publish";
 
-  if (action === SYNC_CAPTURES) return syncCaptures(args);
+  if (action === SYNC_CAPTURES) return syncCaptures(args, PUBLISH_LOCAL);
 
   if (action !== "publish") {
     return fail("PublishBadRequest", `action must be publish or ${SYNC_CAPTURES}; got "${String(args.action)}".`, "bad-request", "E_BAD_REQUEST");
