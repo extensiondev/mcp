@@ -271,6 +271,29 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
     expect(mirror).toContain("Open the project in the console to confirm it still exists");
   });
 
+  it("681: a NO_LANE_KEY refusal before any approval names the act of the call and no approval, and only the queue replay keeps the queued wording", () => {
+    const before = { refusedBeforeApproval: true };
+    const publish = shipRefusalHint("NO_LANE_KEY", undefined, "chrome", before, "publish") ?? "";
+
+    expect(publish).toBe("This project has no lane key, so the platform had nowhere to run the publish: nothing was sent to the store and no approval was asked for. Open the project in the console to confirm it still exists, then call publish again.");
+
+    for (const act of ["release", "rollout", "cancel"]) {
+      const hint = shipRefusalHint("NO_LANE_KEY", undefined, "chrome", before, act) ?? "";
+
+      expect(hint).toContain(`nowhere to run the ${act}`);
+      expect(hint).toContain(`then call ${act} again.`);
+      expect(hint).not.toMatch(/queued upload|approval went back|submit the build again/);
+    }
+
+    expect(shipRefusalHint("NO_LANE_KEY", undefined, "chrome", { ...before, act: "cancel" })).toContain("then call cancel again.");
+    expect(shipRefusalHint("NO_LANE_KEY", undefined, "chrome", before)).toContain("then make the same call again.");
+
+    const queued = shipRefusalHint("NO_LANE_KEY", undefined, "chrome", {}, "publish") ?? "";
+
+    expect(queued).toContain("the queued upload had nowhere to run");
+    expect(queued).toContain("the approval went back");
+  });
+
   it("cancel of a submission the store is not reviewing says how to find one that is", async () => {
     if (process.platform === "win32") return;
 

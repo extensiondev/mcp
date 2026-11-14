@@ -94,7 +94,6 @@ const HINTS: Record<string, string> = {
   ROLLBACK_TARGET_MOVED: "The channel's history moved since this was asked. Call again with no approvalId for an approval of the build it would return to now.",
   RELEASE_WORKFLOW_NOT_FOUND: "The platform has no release setup for this project yet. Saving the project settings in the console sets it up again.",
   NO_MIRROR: "The platform could not resolve this project's build lane, so nothing ran. Open the project in the console to confirm it still exists, then call again.",
-  NO_LANE_KEY: "This project has no lane key, so the queued upload had nowhere to run: nothing was sent to the store and the approval went back. Open the project in the console to confirm it still exists, then submit the build again.",
   SUBMISSION_NOT_IN_REVIEW: `Only a submission the store is still reviewing can be withdrawn. Read each store's latest submission and its review state with ${STORES_READ}.`,
   SUBMISSION_NOT_FOUND: `Read the submission ids with ${STORES_READ} and pass one as submissionId.`,
   SUBMISSION_NOT_JOINABLE: `The platform cannot tie this submission to its store record, so it did not act on it. Read it with ${STORES_READ}.`,
@@ -127,6 +126,29 @@ const HINTS: Record<string, string> = {
  * Chrome was the only store with a draft act. The draft hints are written for
  * the store the act named, and a call that names none keeps Chrome.
  */
+const LANE_KEY_ACTS: Record<string, string> = {
+  publish: "call publish again",
+  release: "call release again",
+  rollout: "call rollout again",
+  cancel: "call cancel again",
+  submit: "submit the build again",
+  upload: "submit the build again",
+};
+
+function laneKeyHint(body: unknown, act: string): string {
+  const row = isRow(body) ? body : {};
+  const open = "Open the project in the console to confirm it still exists";
+
+  if (row.refusedBeforeApproval !== true) {
+    return `This project has no lane key, so the queued upload had nowhere to run: nothing was sent to the store and the approval went back. ${open}, then submit the build again.`;
+  }
+
+  const named = act || text(row.act);
+  const again = LANE_KEY_ACTS[named] ?? "make the same call again";
+
+  return `This project has no lane key, so the platform had nowhere to run ${named ? `the ${named}` : "this"}: nothing was sent to the store and no approval was asked for. ${open}, then ${again}.`;
+}
+
 function storeDraftHint(code: string, store: string): string | undefined {
   const label = STORE_DRAFT_LABELS[store] ?? STORE_DRAFT_LABELS.chrome!;
   const browser = STORE_DRAFT_LABELS[store] ? store : "chrome";
@@ -143,7 +165,7 @@ function storeDraftHint(code: string, store: string): string | undefined {
   return undefined;
 }
 
-export function shipRefusalHint(code: string, retryAfterSeconds?: number, store = "", body?: unknown): string | undefined {
+export function shipRefusalHint(code: string, retryAfterSeconds?: number, store = "", body?: unknown, act = ""): string | undefined {
   const priced = pricedRefusal(code, body);
   if (priced) return priced.hint;
 
@@ -155,6 +177,7 @@ export function shipRefusalHint(code: string, retryAfterSeconds?: number, store 
   const truth = offLaneTruthOf(code, body);
 
   if (truth) return truth;
+  if (code === "NO_LANE_KEY") return laneKeyHint(body, act);
 
   if (code === "burst_cap") return `The workspace dispatched too many runs in the last hour.${wait} Nothing ran.`;
   if (code === "monthly_cap") return `The workspace's build allowance for this month is spent, so nothing ran.${wait} The console's workspace settings show the allowance.`;
@@ -207,7 +230,7 @@ function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string
   const before = body.refusedBeforeApproval === true;
   const hand = offLaneHandOf(read.code, body);
   const handSay = hand ? byHandSentence(text(body.message) || read.message, hand) : "";
-  const hint = handSay || (act.hints?.(read.code, read.retryAfterSeconds) ?? shipRefusalHint(read.code, read.retryAfterSeconds, text(act.value?.store), read.body));
+  const hint = handSay || (act.hints?.(read.code, read.retryAfterSeconds) ?? shipRefusalHint(read.code, read.retryAfterSeconds, text(act.value?.store), read.body, act.act));
   const upgradeUrl = pricedRefusal(read.code, read.body)?.upgradeUrl;
   const ownerOnly = read.code === OWNER_REQUIRED_CODE;
   const status = ownerOnly
@@ -340,7 +363,7 @@ async function askForApproval(act: ShipAct, read: ProjectApiRefusal, api: Projec
     token: api.token,
     api: act.apiHint,
     refusedStatus: refusedStatus(act.act),
-    refusalHint: (code, body) => shipRefusalHint(code, undefined, text(act.value?.store), body),
+    refusalHint: (code, body) => shipRefusalHint(code, undefined, text(act.value?.store), body, act.act),
     ...(act.approvalBody ? { body: act.approvalBody } : {}),
     reason: act.reason,
     stateRead: act.stateRead,
