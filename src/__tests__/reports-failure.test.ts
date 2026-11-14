@@ -342,6 +342,73 @@ describe("build reports failure when the artifact is unusable", () => {
     ]);
   }, 30_000);
 
+  it("740: the special-folder entries leave out what the engine leaves out, read from a config that takes exclude from .env", async () => {
+    const dir = projectWithManifest(
+      { manifest_version: 3, name: "F", version: "1.0.0", options_page: "options.html" },
+      { manifest: { options_page: "options.html" }, files: ["options.html"] },
+    );
+    const sources: Record<string, string> = {
+      "src/options.html": "x",
+      "src/background.js": 'import("../scripts/shared.js");',
+      "pages/demo.html": "x",
+      "pages/preview.dev.html": "x",
+      "pages/skipped.html": "x",
+      "public/pages/static.html": "x",
+      "scripts/standalone.ts": "export const standalone = 1;",
+      "scripts/shared.ts": "export const shared = 1;",
+      "scripts/release.ts": "export const release = 1;",
+      "scripts/legacy.ts": "export const legacy = 1;",
+      "scripts/zip.mjs": 'import fs from "node:fs";\nfs.existsSync(".");',
+      "package.json": JSON.stringify({ name: "f", scripts: { release: "tsx scripts/release.ts", shared: "tsx scripts/shared.ts" } }),
+      ".env": "SKIPPED=pages/skipped.html\nLEGACY=scripts/nothing.ts\n",
+      ".env.local": "LEGACY=scripts/legacy.ts\n",
+      "extension.config.mjs":
+        'export default { exclude: [import.meta.env.SKIPPED], commands: { build: { exclude: [process.env.LEGACY] } }, browser: { firefox: { folders: { pages: "public/pages" } } } };\n',
+    };
+    const emitted = ["pages/demo.html", "scripts/standalone.js", "scripts/shared.js"];
+
+    for (const [file, text] of Object.entries(sources)) {
+      fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+      fs.writeFileSync(path.join(dir, file), text);
+    }
+
+    for (const file of emitted) {
+      fs.mkdirSync(path.dirname(path.join(dir, "dist", "chrome", file)), { recursive: true });
+      fs.writeFileSync(path.join(dir, "dist", "chrome", file), "x");
+    }
+
+    cliResult = buildCliAnswer(dir, "chrome");
+
+    const listedOf = (answer: string) =>
+      (JSON.parse(answer).value.entrypoints as Array<{ role: string; path: string; present: boolean }>).map((e) => `${e.role} -> ${e.path}:${e.present}`);
+    const kept = [
+      "options_page -> options.html:true",
+      "pages/demo.html -> pages/demo.html:true",
+      "scripts/shared.ts -> scripts/shared.js:true",
+      "scripts/standalone.ts -> scripts/standalone.js:true",
+    ];
+    const built = await build.handler({ projectPath: dir });
+
+    expect(listedOf(built)).toEqual(kept);
+    expect(JSON.parse(built).warnings.join("\n")).not.toContain("not emitted");
+
+    const { handler: analyze } = await import("../tools/analyze");
+
+    expect(listedOf(await analyze({ projectPath: dir }))).toEqual(kept);
+
+    fs.mkdirSync(path.join(dir, "dist", "firefox"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "dist", "firefox", "manifest.json"), JSON.stringify({ manifest_version: 3, name: "F", version: "1.0.0" }));
+
+    expect(listedOf(await analyze({ projectPath: dir, browser: "firefox" }))).toEqual([
+      "scripts/shared.ts -> scripts/shared.js:false",
+      "scripts/standalone.ts -> scripts/standalone.js:false",
+    ]);
+
+    fs.writeFileSync(path.join(dir, "dist", "chrome", "pages", "preview.dev.html"), "x");
+
+    expect(listedOf(await analyze({ projectPath: dir }))).toContain("pages/preview.dev.html -> pages/preview.dev.html:true");
+  }, 60_000);
+
   it("propagates a non-zero build exit as a failure", async () => {
     const dir = projectWithManifest({
       manifest_version: 3,
