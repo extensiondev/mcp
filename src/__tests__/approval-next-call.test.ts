@@ -46,7 +46,7 @@ function input(over: Partial<ApprovalGateInput>): ApprovalGateInput {
     api: API,
     enabled: true,
     platformAsked: true,
-    fetchImpl: answering(201, { approvalId: APPROVAL_ID, approvalUrl: `${API}/device/approve/${APPROVAL_ID}`, description: DESCRIPTION }),
+    fetchImpl: answering(201, { approvalId: APPROVAL_ID, approvalUrl: `${API}/device/approve/${APPROVAL_ID}`, description: DESCRIPTION, approverRole: "owner" }),
     ...over,
   };
 }
@@ -85,6 +85,31 @@ describe("410: an approval names the call that spends it with its tool and the r
     expect(out.error.message).not.toContain("waitSeconds");
   });
 
+  it("names a workspace member for an act the platform says a member approves, and no role when the platform names none", async () => {
+    const answered = async (body: Record<string, unknown>) => {
+      const gate = await evaluateApproval(
+        input({
+          command: "extension_shares",
+          action: "extension_shares.revoke",
+          scope: { artifactId: "art_1" },
+          fetchImpl: answering(201, { approvalId: APPROVAL_ID, approvalUrl: `${API}/device/approve/${APPROVAL_ID}`, description: DESCRIPTION, ...body }),
+        }),
+      );
+
+      return JSON.parse((gate as { envelope: string }).envelope) as { error: { message: string }; hint: string };
+    };
+
+    const read = `extension_approvals {action: "status", approvalId: "${APPROVAL_ID}"} reads whether`;
+    const member = await answered({ approverRole: "member" });
+    const unnamed = await answered({});
+
+    expect(member.error.message).toContain(`${read} a workspace member has approved it.`);
+    expect(member.hint).toContain(`${read} a workspace member has approved it.`);
+    expect(`${member.error.message} ${member.hint}`).not.toContain("workspace owner");
+    expect(unnamed.error.message).toContain(`${read} it has been approved.`);
+    expect(`${unnamed.error.message} ${unnamed.hint}`).not.toMatch(/workspace (owner|member)/);
+  });
+
   it("rewrites the command of an answer the acted-as tool made, and leaves any other answer alone", () => {
     const made = envelope({ ok: false, command: "extension_submit", status: "approval-required" });
 
@@ -99,7 +124,7 @@ describe("410: an approval names the call that spends it with its tool and the r
     function serve(): void {
       platform.login();
       platform.routes[`POST ${PREFLIGHT}`] = () => ({ body: report() });
-      platform.routes[`POST ${APPROVALS}`] = () => ({ status: 201, body: { approvalId: APPROVAL_ID, approvalUrl: `${API}/device/approve/${APPROVAL_ID}`, description: DESCRIPTION } });
+      platform.routes[`POST ${APPROVALS}`] = () => ({ status: 201, body: { approvalId: APPROVAL_ID, approvalUrl: `${API}/device/approve/${APPROVAL_ID}`, description: DESCRIPTION, approverRole: "owner" } });
     }
 
     it("answers with the check tool as its command and names extension_submit as the call that spends the approval", async () => {

@@ -56,10 +56,20 @@ export function nextCallSentence(input: Pick<ApprovalGateInput, "command" | "nex
     : `${input.command} with the same arguments and approvalId ${approvalId}`;
 }
 
-export function approvalLandedSentence(input: Pick<ApprovalGateInput, "nextCall">, approvalId: string): string {
-  const waits = input.nextCall?.waits ? `, and that ${input.nextCall.tool} call with waitSeconds waits for the approval before it runs` : "";
+const APPROVERS: Record<string, string> = { owner: "a workspace owner", member: "a workspace member" };
 
-  return `extension_approvals {action: "status", approvalId: "${approvalId}"} reads whether a workspace owner has approved it${waits}.`;
+/* @invariant THE SENTENCE NAMES THE ROLE THE PLATFORM SAYS THE ACT NEEDS. A
+ * share revoke, a share create and a source replace are approved by any
+ * member, and the sentence said "a workspace owner" for all of them. The
+ * platform's approval answer carries approverRole; an answer without it names
+ * no role at all, since a role guessed here is a second copy of the
+ * platform's table.
+ */
+export function approvalLandedSentence(input: Pick<ApprovalGateInput, "nextCall">, approvalId: string, approverRole?: unknown): string {
+  const waits = input.nextCall?.waits ? `, and that ${input.nextCall.tool} call with waitSeconds waits for the approval before it runs` : "";
+  const approver = typeof approverRole === "string" ? APPROVERS[approverRole] : undefined;
+
+  return `extension_approvals {action: "status", approvalId: "${approvalId}"} reads whether ${approver ? `${approver} has approved it` : "it has been approved"}${waits}.`;
 }
 
 function statusOf(out: string): string {
@@ -304,7 +314,7 @@ async function requestApproval(params: {
       APPROVAL_REQUIRED_STATUS,
       "E_APPROVAL_REQUIRED",
       "ApprovalRenewed",
-      `Approval ${renewing.approvalId} expired at ${expiredAt}, so nothing was executed. A fresh approval for the same act was requested: ${described} Open ${approvalUrl} to review and approve, then call ${nextCallSentence(input, approvalId)}. ${approvalLandedSentence(input, approvalId)}`,
+      `Approval ${renewing.approvalId} expired at ${expiredAt}, so nothing was executed. A fresh approval for the same act was requested: ${described} Open ${approvalUrl} to review and approve, then call ${nextCallSentence(input, approvalId)}. ${approvalLandedSentence(input, approvalId, data.approverRole)}`,
       {
         action: input.action,
         fingerprint,
@@ -330,7 +340,7 @@ async function requestApproval(params: {
     "ApprovalRequired",
     `${described} ${unsaid(described, input.reason ?? (input.irreversible ? "This is irreversible, so a human must approve it first." : "A human must approve it first."))} Open ${
       approvalUrl || "the approval URL"
-    } to review and approve, then call ${nextCallSentence(input, approvalId || "<from the response>")}. ${approvalLandedSentence(input, approvalId || "<from the response>")} Nothing was executed.`,
+    } to review and approve, then call ${nextCallSentence(input, approvalId || "<from the response>")}. ${approvalLandedSentence(input, approvalId || "<from the response>", data.approverRole)} Nothing was executed.`,
     {
       action: input.action,
       fingerprint,
@@ -344,7 +354,7 @@ async function requestApproval(params: {
       ...replaces,
     },
     approvalUrl
-      ? `Approve at ${approvalUrl}; then ${nextCallSentence(input, approvalId)} runs it. ${approvalLandedSentence(input, approvalId)}${lines.length > 1 ? " The page lists one line per store; a store unchecked there is left out." : ""}`
+      ? `Approve at ${approvalUrl}; then ${nextCallSentence(input, approvalId)} runs it. ${approvalLandedSentence(input, approvalId, data.approverRole)}${lines.length > 1 ? " The page lists one line per store; a store unchecked there is left out." : ""}`
       : undefined,
   );
 }
