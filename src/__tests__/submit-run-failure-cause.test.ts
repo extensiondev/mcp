@@ -35,7 +35,7 @@ vi.mock("../tools/store-status", async (importOriginal) => {
   };
 });
 
-const { handler: submit } = await import("../tools/submit");
+const { handler: submit } = await import("../tools/submit-local");
 
 const APPLE_90849 =
   "App Store Connect rejected the build: 90849: Invalid manifest file. The description field must be present, of string type, and 112 or fewer characters long.";

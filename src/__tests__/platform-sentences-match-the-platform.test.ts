@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
-import { schema as submitSchema, handler as submit } from "../tools/submit";
+import { schema as submitSchema, handler as submit } from "../tools/submit-local";
 import { schema as publishSchema } from "../tools/publish";
 import { schema as promoteSchema } from "../tools/release-promote";
 import { isPartialBuild, isSuccessfulBuild, parseBuildIndex } from "../lib/registry";

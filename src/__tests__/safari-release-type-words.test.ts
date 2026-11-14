@@ -12,7 +12,7 @@ import { releaseReadView } from "../lib/store-preflight-checks";
 import { RELEASE_MODE_WORDS, releaseTypeMeaning } from "../lib/store-row-sources";
 import { storePreflightView } from "../tools/store-acts";
 import { safariReleaseSentence } from "../tools/store-status";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 
 const AT_ONCE = "approval publishes it on the App Store at once, and an approval cannot be taken back from here";
 const HOLD = "the review act sets it to manual release before sending it to App Review unless STORE.md states `- Release: after approval` under `## Safari`, and the record names the change in publish.releaseTypeChanged";

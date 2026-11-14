@@ -9,8 +9,9 @@ import { CHROMEWEBSTORE_MD_PREFILL_CALL } from "../lib/chromewebstore-md";
 import { listingDigest } from "../lib/store-listing-media";
 import { STORE_FIELDS, derivedListingFields, listingForStore, parseStoreMdListing } from "../lib/store-md-listing";
 import { TOOL_POLICY } from "../lib/tool-policy";
-import { derivedMarks, derivedSentence, readLocalListing } from "../tools/store-listing";
-import { handler as submit, schema } from "../tools/submit";
+import { readLocalListing } from "../lib/submit-facts-local";
+import { derivedMarks, derivedSentence } from "../tools/store-listing";
+import { handler as submit, schema } from "../tools/submit-local";
 import { chromeDashboardPaste } from "../lib/chrome-dashboard-paste";
 import { digestOf } from "./fixtures/listing-digest";
 import {

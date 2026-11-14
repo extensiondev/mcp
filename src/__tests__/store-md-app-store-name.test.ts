@@ -8,7 +8,7 @@ import { listingDigest } from "../lib/store-listing-media";
 import { storeMdFieldRows } from "../lib/store-md-fields";
 import { LISTING_TEXT_FIELDS, listingForStore, parseStoreMdListing } from "../lib/store-md-listing";
 import { PLAIN_LISTING_SENTENCE } from "../tools/store-listing";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { storeMdNamedForPerson } from "../lib/store-md-words";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 

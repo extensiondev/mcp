@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { STORE_MD_FILENAME, parseStoreMd, type StoreMdData } from "../lib/store-md";
+import { storeMdAt } from "../lib/store-facts-local";
 import { storeMdWarnings } from "../tools/submit";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -73,7 +74,7 @@ describe("STORE.md contract corpus, where an upstream declared in .gitmodules an
 
       try {
         fs.writeFileSync(path.join(dir, STORE_MD_FILENAME), read(name));
-        const warnings = storeMdWarnings(["firefox", "edge"], dir);
+        const warnings = storeMdWarnings(["firefox", "edge"], storeMdAt(dir));
         const expected = pin.expected[name]!;
         expect(
           warnings.some((w) => w.includes("no Firefox reviewer notes")),

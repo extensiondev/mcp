@@ -8,7 +8,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { handler } from "../tools/submit";
+import { handler } from "../tools/submit-local";
 
 function claimsToken(u: string, p: string): string {
   return `${Buffer.from(JSON.stringify({ u, p, exp: Math.floor(Date.now() / 1000) + 600 })).toString("base64url")}.sig`;

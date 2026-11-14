@@ -18,7 +18,7 @@ import { handler as auth } from "../tools/auth";
 import { handler as builds } from "../tools/builds";
 import { handler as publish } from "../tools/publish";
 import { handler as promote } from "../tools/release-promote";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 
 const API = "https://www.extension.dev";
 const NOW = Math.floor(Date.now() / 1000);

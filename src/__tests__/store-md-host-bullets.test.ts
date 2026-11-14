@@ -8,7 +8,9 @@ import { bulletLine, storeOwnLinesBody } from "../lib/store-md-bullets";
 import { CHROME_SYNC_CALL, reconcileChromeCheck, reconcileChromeRow } from "../lib/store-md-chrome-reconcile";
 import { bulletNamesHost, namesNotInBullets, patternCovers, uncoveredNamesIn } from "../lib/store-md-host-justifications";
 import { listingForStore, parseStoreMdListing } from "../lib/store-md-listing";
-import { readLocalListing, type LocalListing } from "../tools/store-listing";
+import { readLocalListing } from "../lib/submit-facts-local";
+
+import type { LocalListing } from "../tools/store-listing";
 
 const HOST_REASON = "Asked for one site at a time when the user allows it; nothing at install.";
 

@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 const PREFLIGHT = `${PROJECT_ROUTE}/stores/firefox/submissions/preflight`;

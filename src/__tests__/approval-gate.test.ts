@@ -5,7 +5,7 @@ import fs from "node:fs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { actionFingerprint, evaluateApproval, requestApprovalAfterRefusal } from "../lib/approval-gate";
-import { handler as submitHandler } from "../tools/submit";
+import { handler as submitHandler } from "../tools/submit-local";
 import { handler as promoteHandler, schema as promoteSchema } from "../tools/release-promote";
 import { handler as sharesHandler } from "../tools/shares";
 import { approvalRecord, promoteAnswer, submitAnswer } from "./fixtures/platform-answers";

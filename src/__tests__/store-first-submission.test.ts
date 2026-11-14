@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NO_AUTO_OPEN_ENV, setApprovalOpener } from "../lib/approval-open";
-import * as submitCheckTool from "../tools/submit-check";
-import * as submitTool from "../tools/submit";
+import * as submitCheckTool from "../tools/submit-check-local";
+import * as submitTool from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 const submit = submitTool.handler;

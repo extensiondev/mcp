@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { actionFingerprint } from "../lib/approval-gate";
 import { readStores } from "../tools/store-status";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes, type Reply } from "./fixtures/project-routes";
 
 const SUB = "sub-20261101025425";

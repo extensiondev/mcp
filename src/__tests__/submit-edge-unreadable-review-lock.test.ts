@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { handler as submit, schema } from "../tools/submit";
+import { handler as submit, schema } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 const PRODUCT = "903d21e4-0e5b-4507-95f2-4620fcf06f1c";

@@ -5,7 +5,7 @@ import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { RECORD_UNREAD } from "../lib/listing-on-record";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 const LISTING = `${PROJECT_ROUTE}/stores/chrome/listing`;

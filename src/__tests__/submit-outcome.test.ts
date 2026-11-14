@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { handler, schema } from "../tools/submit";
+import { handler, schema } from "../tools/submit-local";
 import { readSubmitOutcome } from "../lib/submit-outcome";
 import { submitAnswer } from "./fixtures/platform-answers";
 

@@ -9,7 +9,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { actionFingerprint } from "../lib/approval-gate";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 const ID = `apr_${"K".repeat(32)}`;

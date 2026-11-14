@@ -9,7 +9,7 @@
 import { describe, expect, it } from "vitest";
 
 import { failureLineOf } from "../lib/store-upload-words";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { API, useProjectRoutes } from "./fixtures/project-routes";
 
 const CAUSE =

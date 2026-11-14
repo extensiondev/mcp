@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { SAFARI_RELEASE_LINE_SENTENCE } from "../lib/store-settings";
 import { SAFARI_DRAFT_FROM_HERE, SAFARI_REVIEW_FROM_HERE, submissionModeView } from "../lib/submission-mode-view";
-import { handler as submit, schema } from "../tools/submit";
+import { handler as submit, schema } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 const PREFLIGHT = (store: string) => `${PROJECT_ROUTE}/stores/${store}/submissions/preflight`;

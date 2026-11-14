@@ -13,7 +13,7 @@ import {
 import { fetchRegistryJson } from "../lib/registry";
 import { handler as publishHandler } from "../tools/publish";
 import { handler as promoteHandler } from "../tools/release-promote";
-import { handler as submitHandler } from "../tools/submit";
+import { handler as submitHandler } from "../tools/submit-local";
 
 const srcDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 

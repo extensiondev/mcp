@@ -44,7 +44,7 @@ vi.mock("../lib/platform-fetch", async (importOriginal) => {
   };
 });
 
-const { handler } = await import("../tools/submit");
+const { handler } = await import("../tools/submit-local");
 
 const API = "https://api.test";
 const saved: Record<string, string | undefined> = {};

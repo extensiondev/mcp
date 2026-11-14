@@ -14,12 +14,13 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { writeCredentials } from "../lib/credentials";
-import { UPDATE_URL_NETWORK_NOTE, channelBrowsers, firefoxChannelFields, firefoxChannelSentence, manifestUpdateUrlOf, servedOfAnswer, updateManifestSentence, updateUrlNotSuggestedSentence } from "../lib/firefox-update-url";
+import { UPDATE_URL_NETWORK_NOTE, channelBrowsers, firefoxChannelFields, firefoxChannelSentence, servedOfAnswer, updateManifestSentence, updateUrlNotSuggestedSentence } from "../lib/firefox-update-url";
 import { channelXpiAddress, namesRegistryOrToken, updateManifestAddress } from "../lib/package-address";
+import { manifestUpdateUrlOf } from "../lib/store-facts-local";
 import { noNetworkPromiseOf } from "../lib/store-md-network";
 import { handler as publish } from "../tools/publish";
 import { handler as promote } from "../tools/release-promote";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { storeMdNamedForPerson } from "../lib/store-md-words";
 import { promoteAnswer, publishAnswer } from "./fixtures/platform-answers";
 

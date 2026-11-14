@@ -23,7 +23,7 @@ import { INSTALL_FILES_HINT, STORE_REFUSED_INSTALL_CODE, storeRefusedInstall } f
 import { PLATFORM_UNAVAILABLE_SENTENCE, PLATFORM_UNAVAILABLE_STATUS, STORE_RUN_CHECK, storeRunUnavailable } from "../lib/store-run-unavailable";
 import { runCauseOf } from "../lib/submit-run-cause";
 import { LOCAL_CHECK_FAILED_STATE, SAFARI_DESCRIPTION_UNCHECKED } from "../lib/submit-local-precheck";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 type Row = Record<string, any>;

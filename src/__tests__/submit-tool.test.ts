@@ -2,15 +2,18 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, beforeEach, describe, it, expect } from "vitest";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 
-import { schema, handler, storeMdWarnings } from "../tools/submit";
+import { readSubmitFacts } from "../lib/submit-facts-local";
+import { handler as judgeSubmit, storeMdWarnings } from "../tools/submit";
+import { schema, handler } from "../tools/submit-local";
 import { writeCredentials } from "../lib/credentials";
 import { WRITE_FAILURE_REPORT_URL } from "../lib/settings-write";
 import { actionFingerprint } from "../lib/approval-gate";
 import { INSTALL_FILES_HINT, STORE_REFUSED_INSTALL_STATUS } from "../lib/store-refused-install";
 import { PLATFORM_UNAVAILABLE_SENTENCE, PLATFORM_UNAVAILABLE_STATUS } from "../lib/store-run-unavailable";
 import { submitAnswer } from "./fixtures/platform-answers";
+import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 function claimsToken(u: string, p: string): string {
   return `${Buffer.from(JSON.stringify({ u, p, exp: Math.floor(Date.now() / 1000) + 600 })).toString("base64url")}.sig`;
@@ -466,22 +469,15 @@ describe("extension_submit answers an upload the store's installation test refus
 });
 
 describe("storeMdWarnings", () => {
-  let tmp: string;
-
-  beforeEach(() => {
-    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-storemd-"));
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmp, { recursive: true, force: true });
-  });
+  const file = path.join("/work/extension", "STORE.md");
+  const read = (content: string | null) => ({ file, content });
 
   it("stays silent for chrome-only submissions", () => {
-    expect(storeMdWarnings(["chrome"], tmp)).toEqual([]);
+    expect(storeMdWarnings(["chrome"], read(null))).toEqual([]);
   });
 
   it("warns once when STORE.md is missing entirely", () => {
-    const warnings = storeMdWarnings(["firefox", "edge"], tmp);
+    const warnings = storeMdWarnings(["firefox", "edge"], read(null));
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("No STORE.md");
     expect(warnings[0]).toContain("the source the platform holds at the built commit (an uploaded project's stored tree, or the repository at that commit)");
@@ -489,8 +485,7 @@ describe("storeMdWarnings", () => {
   });
 
   it("warns per store for empty or absent note fields", () => {
-    fs.writeFileSync(
-      path.join(tmp, "STORE.md"),
+    const warnings = storeMdWarnings(["firefox", "edge"], read(
       [
         "## Firefox Add-ons",
         "### Reviewer notes",
@@ -499,16 +494,13 @@ describe("storeMdWarnings", () => {
         "### Certification notes",
         "Real guidance here.",
       ].join("\n"),
-    );
-
-    const warnings = storeMdWarnings(["firefox", "edge"], tmp);
+    ));
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("Firefox reviewer notes");
   });
 
   it("names the file it read when the fields are filled in", () => {
-    fs.writeFileSync(
-      path.join(tmp, "STORE.md"),
+    const warnings = storeMdWarnings(["firefox", "edge"], read(
       [
         "## firefox-amo",
         "### Reviewer notes",
@@ -517,19 +509,16 @@ describe("storeMdWarnings", () => {
         "### Certification notes",
         "Guidance.",
       ].join("\n"),
-    );
-
-    const warnings = storeMdWarnings(["firefox", "edge"], tmp);
+    ));
     expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain(path.join(tmp, "STORE.md"));
+    expect(warnings[0]).toContain(file);
     expect(warnings[0]).toContain("the source the platform holds at the built commit (an uploaded project's stored tree, or the repository at that commit)");
     expect(warnings[0]).toContain("a re-seed with extension_project_create (a new upload) for an uploaded project");
     expect(warnings[0]).not.toContain("unpushed");
   });
 
   it("warns on prefixed note headings, which the platform does not read", () => {
-    fs.writeFileSync(
-      path.join(tmp, "STORE.md"),
+    const warnings = storeMdWarnings(["firefox", "edge"], read(
       [
         "## Firefox",
         "### AMO reviewer notes",
@@ -538,11 +527,58 @@ describe("storeMdWarnings", () => {
         "### Edge certification notes",
         "Guidance.",
       ].join("\n"),
-    );
-
-    const warnings = storeMdWarnings(["firefox", "edge"], tmp);
+    ));
     expect(warnings).toHaveLength(2);
     expect(warnings[0]).toContain("no Firefox reviewer notes");
     expect(warnings[1]).toContain("no Edge certification notes");
+  });
+});
+
+describe("extension_submit: the platform half judges the facts it is handed", () => {
+  const platform = useProjectRoutes("extdev-submit-facts-");
+  const preflight = (store: string) => ({ store, summary: { pass: 1, warn: 0, fail: 0, blockingFailures: 0, canSubmit: true }, checks: [] });
+  let project: string;
+
+  beforeEach(() => {
+    project = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-submit-facts-project-"));
+    fs.mkdirSync(path.join(project, "src"));
+    fs.writeFileSync(path.join(project, "src", "manifest.json"), JSON.stringify({ manifest_version: 3, name: "Widget", version: "1.0.0", description: "Counts the tabs you keep open." }));
+    fs.writeFileSync(path.join(project, "package.json"), JSON.stringify({ name: "widget", version: "1.0.0", license: "MIT" }));
+    fs.writeFileSync(path.join(project, "STORE.md"), "# Widget\n\n## Listing\n\n- Name: Widget\n- Summary: Counts tabs.\n\n## Firefox Add-ons\n\n### Reviewer notes\n\nBuild from source with Node 22.12.0, pnpm 10.19.0 and Extension.js 4.1.39: run pnpm install, then pnpm build.\n");
+    fs.writeFileSync(path.join(project, "CHROMEWEBSTORE.md"), "# Widget\n\n## Description\n\nCounts tabs.\n");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    fs.rmSync(project, { recursive: true, force: true });
+  });
+
+  it("answers a preflight byte for byte from the facts, with no file read under projectPath", async () => {
+    platform.login();
+    for (const store of ["chrome", "firefox", "safari"]) platform.routes[`POST ${PROJECT_ROUTE}/stores/${store}/submissions/preflight`] = () => ({ body: preflight(store) });
+
+    const args = { action: "preflight", browsers: ["chrome", "firefox", "safari"], projectPath: project, api: API };
+    const whole = await handler(args);
+    const facts = readSubmitFacts(args);
+    const roots = [project, fs.realpathSync(project)];
+    const touched: string[] = [];
+
+    const watch = <K extends "readFileSync" | "existsSync" | "statSync" | "realpathSync" | "readdirSync" | "openSync">(name: K) => {
+      const original = fs[name] as (...rest: unknown[]) => unknown;
+      vi.spyOn(fs, name).mockImplementation(((target: fs.PathLike, ...rest: unknown[]) => {
+        touched.push(String(target));
+
+        return original.call(fs, target, ...rest);
+      }) as never);
+    };
+
+    for (const name of ["readFileSync", "existsSync", "statSync", "realpathSync", "readdirSync", "openSync"] as const) watch(name);
+
+    const judged = await judgeSubmit(args, facts);
+    vi.restoreAllMocks();
+
+    expect(judged).toBe(whole);
+    expect(JSON.parse(judged).value.stores.firefox).toBeTruthy();
+    expect(touched.filter((file) => roots.some((root) => file.startsWith(root)))).toEqual([]);
   });
 });

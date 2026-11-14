@@ -16,7 +16,7 @@ import { forgetConnectSessions } from "../lib/connect-session-projects";
 import { credentialKey, credentialsPath } from "../lib/credentials";
 import { installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
 import { createToolDispatcher, type ToolModule } from "../lib/tool-dispatch";
-import * as submitTool from "../tools/submit";
+import * as submitTool from "../tools/submit-local";
 import { API, useProjectRoutes } from "./fixtures/project-routes";
 
 installPlatformKernelHooks();

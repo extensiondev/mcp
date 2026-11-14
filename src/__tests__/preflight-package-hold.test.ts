@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import { isBuildInput } from "../lib/build-inputs";
 import { capResetsAt } from "../lib/head-push";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 const PREFLIGHT = `${PROJECT_ROUTE}/stores/chrome/submissions/preflight`;

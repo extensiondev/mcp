@@ -18,7 +18,7 @@ import { readStoreSettingsChange } from "../lib/store-settings";
 import { logsPath } from "../lib/session-paths";
 import { normalizeArgAliases, validateToolInput } from "../lib/validate-input";
 import { handler as logs, schema as logsSchema } from "../tools/logs";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 import { logEvent, logFile } from "./fixtures/engine-answers";
 import { writeModernContract } from "./fixtures/ready-contract";

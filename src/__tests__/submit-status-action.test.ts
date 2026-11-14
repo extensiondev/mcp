@@ -8,7 +8,7 @@ import { tools } from "../index";
 import { writeCredentials } from "../lib/credentials";
 import { createToolDispatcher } from "../lib/tool-dispatch";
 import { SAFARI_RELEASE_CALL } from "../tools/store-status";
-import { SUBMIT_ACTIONS, handler as submit, schema } from "../tools/submit";
+import { SUBMIT_ACTIONS, handler as submit, schema } from "../tools/submit-local";
 
 import type { ServerOptions } from "../lib/tool-policy";
 

@@ -13,7 +13,7 @@ import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { PLATFORM_REQUEST_BODY_LIMIT_BYTES } from "../lib/listing-body-limit";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { solidPng } from "./fixtures/png";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 

@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { actionFingerprint } from "../lib/approval-gate";
 import { writeCredentials } from "../lib/credentials";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { digestOf } from "./fixtures/listing-digest";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 

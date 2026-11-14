@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 export const STORE_MD_FILENAME = "STORE.md";
+export const CHROMEWEBSTORE_MD_FILENAME = "CHROMEWEBSTORE.md";
 
 export interface StoreMdData {
   firefox?: {

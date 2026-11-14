@@ -6,9 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import fs from "node:fs";
-import path from "node:path";
-
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
 import { API_BASE } from "../lib/common-schema";
@@ -138,18 +135,17 @@ import { withSafariPublishStep } from "../lib/safari-testflight-step";
 import { LISTING_INCOMPLETE_CODE, listingIncompleteOf, listingIncompleteSentence } from "../lib/store-listing-incomplete";
 
 import type { InputIssue } from "../lib/validate-input";
+import type { ProjectFacts, StoreMdRead, SubmitFacts } from "../lib/submit-facts";
 
-export function storeMdWarnings(browsers: string[], cwd: string): string[] {
+export function storeMdWarnings(browsers: string[], read: StoreMdRead): string[] {
   const wantsFirefox = browsers.includes("firefox");
   const wantsEdge = browsers.includes("edge");
   if (!wantsFirefox && !wantsEdge) return [];
 
-  const filePath = path.join(cwd, STORE_MD_FILENAME);
-  let content: string;
+  const filePath = read.file;
+  const content = read.content;
 
-  try {
-    content = fs.readFileSync(filePath, "utf8");
-  } catch {
+  if (content === null) {
     return [
       `No ${STORE_MD_FILENAME} found in the current working directory. Platform submissions read ${STORE_MD_FILENAME} from the source the platform holds at the built commit (an uploaded project's stored tree, or the repository at that commit), so this may not apply here; make sure ${STORE_MD_FILENAME} exists there for Firefox reviewer notes and Edge certification notes. See the extension-dev skill's store-md reference.`,
     ];
@@ -353,8 +349,8 @@ function fail(
   });
 }
 
-export async function handler(args: SubmitToolArgs): Promise<string> {
-  return withoutSecretNames(await answer(args));
+export async function handler(args: SubmitToolArgs, facts: SubmitFacts): Promise<string> {
+  return withoutSecretNames(await answer(args, facts));
 }
 
 const DRAFT_STORES = new Set(["chrome", "edge"]);
@@ -576,6 +572,7 @@ function chromeItemOf(data: any): string {
 
 async function connectionPrecheck(
   args: SubmitToolArgs,
+  project: ProjectFacts,
   browsers: string[],
   ref: ProjectRef | null,
   scope: { buildSha: string },
@@ -607,7 +604,7 @@ async function connectionPrecheck(
 
     if (verdict) return { refused: browserBuildRefusal(verdict, browsers, scope.buildSha), modes, reports: read.reports, warnings: [] };
 
-    const local = await localSubmitPrecheck({ api: read.api, browsers, buildSha: scope.buildSha, projectPath: args.projectPath, ref, apiBase: args.api });
+    const local = await localSubmitPrecheck({ api: read.api, browsers, buildSha: scope.buildSha, project, ref, apiBase: args.api });
     if (local.refused) return { refused: local.refused, modes, reports: read.reports, warnings: local.warnings };
 
     const dryRun = read.api && !String(args.approvalId ?? "").trim() ? await dryRunStoreRead(read.api, browsers, scope.buildSha) : null;
@@ -616,7 +613,7 @@ async function connectionPrecheck(
     const refused = unavailable
       ? platformUnavailableAnswer({ command: "extension_submit", found: unavailable, dryRun: false, ref, stores: browsers, buildSha: scope.buildSha })
       : agreement && agreement.status === "fail"
-        ? localCheckRefusal([{ store: "firefox", row: agreement }], { api: read.api, browsers, buildSha: scope.buildSha, projectPath: args.projectPath, ref, apiBase: args.api })
+        ? localCheckRefusal([{ store: "firefox", row: agreement }], { api: read.api, browsers, buildSha: scope.buildSha, project, ref, apiBase: args.api })
         : null;
     const warnings = agreement && agreement.status === "warn" ? [...local.warnings, String(agreement.message)] : local.warnings;
 
@@ -659,9 +656,9 @@ async function connectionPrecheck(
   return { refused, modes, reports: read.reports, warnings: [] };
 }
 
-async function answer(args: SubmitToolArgs): Promise<string> {
+async function answer(args: SubmitToolArgs, facts: SubmitFacts): Promise<string> {
   if (args.action === "status") return storeVersionStatus(args);
-  if (args.action === "preflight") return readPreflight(args);
+  if (args.action === "preflight") return readPreflight(args, facts.project);
   if (args.action === "cancel") return cancelSubmission(args);
   if (args.action === "rollout") return raiseRollout(args);
   if (args.action === "release") return releaseVersion(args);
@@ -675,7 +672,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
   }
 
   if (args.action === "sync-listing") {
-    return withReviewPromise(await syncListing(args));
+    return withReviewPromise(await syncListing(args, facts.project));
   }
 
   if (args.action !== undefined && args.action !== "submit") {
@@ -816,7 +813,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
   };
 
   if (!dryRun) {
-    const precheck = await connectionPrecheck(args, browsers, credential.ref, {
+    const precheck = await connectionPrecheck(args, facts.project, browsers, credential.ref, {
       buildSha,
     });
     if (precheck.refused) return precheck.refused;
@@ -1224,10 +1221,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       })
     : [];
   warnings.push(
-    ...storeMdWarnings(
-      browsers,
-      String(args.projectPath || "").trim() || process.cwd(),
-    ),
+    ...storeMdWarnings(browsers, facts.warningsStoreMd),
     ...localWarnings,
   );
 

@@ -14,7 +14,7 @@ import { FEATURE_GROUPS } from "../lib/tool-policy";
 import { handler as publish } from "../tools/publish";
 import { handler as promote } from "../tools/release-promote";
 import { handler as releaseStatus } from "../tools/release-status";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { promoteAnswer } from "./fixtures/platform-answers";
 
 const KEYS = ["XDG_CONFIG_HOME", "EXTENSION_DEV_PROJECT", "EXTENSION_DEV_TOKEN", "EXTENSION_DEV_API_URL", "EXTENSION_DEV_APPROVAL_GATE"];

@@ -13,7 +13,7 @@ import { pathIdentity } from "./path-project";
 import { pendingCreate } from "./pending-creates";
 import { LISTING_STORES, type ListingStore } from "./store-md-declarations";
 import { linesNotFound } from "./store-md-fields";
-import { readLocalListing } from "../tools/store-listing";
+import { readLocalListing } from "./submit-facts-local";
 
 import type { UnloggedProjectStep } from "./kernel-hooks";
 

@@ -8,7 +8,7 @@ import { writeCredentials } from "../lib/credentials";
 import { releaseChangeOfRow, releaseChangeSentence } from "../lib/release-type-change";
 import { safariReleaseSentence } from "../tools/store-status";
 import { storeVersionSentence } from "../tools/store-version-status";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 
 const HOLDS = "approval holds it until you release it";
 const AT_ONCE = "approval publishes it on the App Store at once, and an approval cannot be taken back from here";

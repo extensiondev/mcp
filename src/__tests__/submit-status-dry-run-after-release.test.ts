@@ -13,7 +13,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { writeCredentials } from "../lib/credentials";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 
 const READ_AT = "2026-11-06T12:40:00.000Z";
 const DRY_AT = "2026-11-06T13:05:00.000Z";

@@ -11,7 +11,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { NO_AUTO_OPEN_ENV, setApprovalOpener } from "../lib/approval-open";
 import { setConnectCheckPause } from "../lib/connect-existing";
 import { storeReadinessOf } from "../lib/store-onboarding";
-import { handler as submit } from "../tools/submit";
+import { emptyProjectFacts } from "../lib/submit-facts";
+import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 type Row = Record<string, any>;
@@ -168,8 +169,8 @@ describe("extension_submit connect recognizes a store that already has a working
       requirements: { items: [{ id: "firefox.api_credentials", status: "missing", required: true, satisfiedBy: "console-only" }] },
     });
 
-    const passing = storeReadinessOf({ stores: { firefox: view({ kind: "jwt", source: "workspace", healthy: true }) }, asked: ["firefox"], projectPath: "" });
-    const failing = storeReadinessOf({ stores: { firefox: view({ kind: "jwt", healthy: false }) }, asked: ["firefox"], projectPath: "" });
+    const passing = storeReadinessOf({ stores: { firefox: view({ kind: "jwt", source: "workspace", healthy: true }) }, asked: ["firefox"], project: emptyProjectFacts() });
+    const failing = storeReadinessOf({ stores: { firefox: view({ kind: "jwt", healthy: false }) }, asked: ["firefox"], project: emptyProjectFacts() });
 
     expect(passing.connected).toEqual(["firefox"]);
     expect(passing.personDecides.required).not.toContain("firefox.api_credentials");

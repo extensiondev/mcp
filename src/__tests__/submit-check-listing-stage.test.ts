@@ -18,8 +18,8 @@ import { runAskingOnly } from "../lib/ask-only";
 import { projectApiSend, type ProjectApi } from "../lib/project-api";
 import { listingDigest } from "../lib/store-listing-media";
 import { behindSentence, digestMismatchOf } from "../lib/store-listing-digest";
-import { handler as check } from "../tools/submit-check";
-import { handler as submit } from "../tools/submit";
+import { handler as check } from "../tools/submit-check-local";
+import { handler as submit } from "../tools/submit-local";
 import { solidPng } from "./fixtures/png";
 import { API, PROJECT_ID, PROJECT_ROUTE, useProjectRoutes, type Call } from "./fixtures/project-routes";
 

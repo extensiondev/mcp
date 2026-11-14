@@ -17,8 +17,8 @@ import { credentialKey, credentialsPath } from "../lib/credentials";
 import { installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
 import { createToolDispatcher, type ToolModule } from "../lib/tool-dispatch";
 import * as releaseStatus from "../tools/release-status";
-import * as submit from "../tools/submit";
-import * as submitCheck from "../tools/submit-check";
+import * as submit from "../tools/submit-local";
+import * as submitCheck from "../tools/submit-check-local";
 
 installPlatformKernelHooks();
 

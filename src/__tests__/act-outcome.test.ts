@@ -20,7 +20,7 @@ import {
   waitBound,
 } from "../lib/act-outcome";
 import { handler as builds } from "../tools/builds";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 const FULL_SHA = "603fc8a".padEnd(40, "0");

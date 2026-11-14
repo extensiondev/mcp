@@ -11,7 +11,9 @@ import { HELD_MISSES, localPackageHold, packageHoldSentence, type PackageHold } 
 import { dispatchedPushSentence, docsOnlySentence, REFUSED_OUTCOMES, refusedPushSentence, skippedPushSentence, type BuildCap, type HeadPush } from "./head-push";
 import { platformApiGet, type ProjectApi } from "./project-api";
 import { isRow, text } from "./row";
-import { gitHead, platformBuildIcons, type BuildIcons } from "./store-listing-icon";
+import { platformBuildIcons, type BuildIcons } from "./store-listing-icon";
+
+import type { ProjectFacts } from "./submit-facts";
 
 type Row = Record<string, unknown>;
 
@@ -81,11 +83,12 @@ async function headSay(projectPath: string, read: string[], head: string, builds
   return { say, hold };
 }
 
-export async function packageBuildView(projectPath: string, report: Row, store: string, shared: () => Promise<BuildIcons>, cap: CapRead): Promise<PackageBuildView | null> {
+export async function packageBuildView(project: ProjectFacts, report: Row, store: string, shared: () => Promise<BuildIcons>, cap: CapRead): Promise<PackageBuildView | null> {
   const read = buildsReadByPackageChecks(report, store);
+  const projectPath = project.projectPath;
   if (!read.length || !projectPath) return null;
 
-  const head = gitHead(projectPath);
+  const head = project.gitHead;
   if (!head || read.some((id) => sameBuild(id, head))) return null;
 
   const short = head.slice(0, SHORT);
@@ -108,13 +111,13 @@ export async function readBuildCap(api: ProjectApi): Promise<BuildCap | null> {
   return { used: allowance?.used ?? null, limit: allowance?.limit ?? null, month: text(read.json.month) };
 }
 
-export function packageBuildViews(api: ProjectApi, projectPath: string, reports: Record<string, Row>, stores: string[]): Promise<Array<PackageBuildView | null>> {
+export function packageBuildViews(api: ProjectApi, project: ProjectFacts, reports: Record<string, Row>, stores: string[]): Promise<Array<PackageBuildView | null>> {
   let builds: Promise<BuildIcons> | undefined;
   let cap: Promise<BuildCap | null> | undefined;
-  const shared = () => (builds ??= platformBuildIcons(api, projectPath, ""));
+  const shared = () => (builds ??= platformBuildIcons(api, project, ""));
   const capOnce = () => (cap ??= readBuildCap(api));
 
-  return Promise.all(stores.map((store) => (reports[store] ? packageBuildView(projectPath, reports[store], store, shared, capOnce) : Promise.resolve(null))));
+  return Promise.all(stores.map((store) => (reports[store] ? packageBuildView(project, reports[store], store, shared, capOnce) : Promise.resolve(null))));
 }
 
 const STORE_PREFIX = /^([a-z]+): (.*)$/s;

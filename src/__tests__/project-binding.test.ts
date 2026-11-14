@@ -21,7 +21,7 @@ import { PLATFORM_KERNEL_HOOKS, installPlatformKernelHooks } from "../lib/platfo
 import { createToolDispatcher, type ToolModule } from "../lib/tool-dispatch";
 import * as builds from "../tools/builds";
 import * as releaseStatus from "../tools/release-status";
-import * as submit from "../tools/submit";
+import * as submit from "../tools/submit-local";
 import * as kernel from "../kernel";
 
 installPlatformKernelHooks();

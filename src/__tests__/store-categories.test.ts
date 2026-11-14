@@ -14,8 +14,8 @@ import {
 } from "../lib/store-categories";
 import { storeMdSectionOf } from "../lib/store-md-fields";
 import { listingForStore, parseStoreMdListing } from "../lib/store-md-listing";
-import { readLocalListing } from "../tools/store-listing";
-import { handler as submit } from "../tools/submit";
+import { readLocalListing } from "../lib/submit-facts-local";
+import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 const LISTING = (store: string) => `${PROJECT_ROUTE}/stores/${store}/listing`;

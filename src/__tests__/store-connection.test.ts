@@ -4,7 +4,7 @@ import { serverInstructions } from "../index";
 import { ITEM_ON_FILE_POINTER } from "../lib/chrome-item-left";
 import { LINK_ITEM_POINTER } from "../lib/link-item-answer";
 import { trackFields } from "../lib/track-url";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 const PREFLIGHT = `${PROJECT_ROUTE}/stores/chrome/submissions/preflight`;

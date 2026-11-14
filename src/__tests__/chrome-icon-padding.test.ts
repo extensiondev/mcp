@@ -13,7 +13,7 @@ import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { handler as validate } from "../tools/manifest-validate";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { iconPng } from "./fixtures/icon-art";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 

@@ -9,7 +9,7 @@ import { uploadPreview } from "../lib/preview-upload";
 import { publish } from "../lib/publish";
 import { RegistryAccessTokens } from "../lib/registry-access";
 import { fetchRegistryJson } from "../lib/registry";
-import { handler as submitHandler } from "../tools/submit";
+import { handler as submitHandler } from "../tools/submit-local";
 import {
   INSTALL_HEADER,
   SESSION_HEADER,

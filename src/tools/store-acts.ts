@@ -111,8 +111,8 @@ import {
   publishRefusedMessage,
 } from "../lib/edge-first-submission";
 import {
+  localListingOf,
   overLimitSentences,
-  readLocalListing,
   reconciledWithStoreMd,
   screenshotsLineOnce,
   storeMdAdvisory,
@@ -120,7 +120,7 @@ import {
 import { publishVersion } from "./store-publish-version";
 import { reviewerNoteToolchainCheck } from "../lib/store-md-toolchain";
 import { builtToolchainFor } from "../lib/store-md-toolchain-platform";
-import { chromeWebStoreMdCheck } from "../lib/chromewebstore-md";
+import { chromeWebStoreMdCheck, chromeWebStoreMdOf } from "../lib/chromewebstore-md";
 import { firefoxListingCheck, safariDescriptionCheck, withLocalChecks } from "../lib/store-preflight-local";
 import { chromePublisherSlotsCheck } from "../lib/chrome-publisher-slots";
 import { dryRunStoreRead, platformUnavailableStep, storeRunCheck } from "../lib/store-run-unavailable";
@@ -129,6 +129,7 @@ import { FIREFOX_AGREEMENT_CHECK, FIREFOX_AGREEMENT_URL, firefoxAgreementCheck, 
 import type { PackageScope } from "../lib/package-address";
 import type { ListingStore } from "../lib/store-md-listing";
 import type { LocalListingRead } from "../lib/store-requirements";
+import type { ProjectFacts } from "../lib/submit-facts";
 
 export const COMMAND = "extension_submit";
 export const STORES = ["chrome", "firefox", "edge", "safari"] as const;
@@ -906,7 +907,7 @@ function summaryWithout(summary: Row, deferred: Row[], checks: Row[]): Row {
 function readinessView(
   json: Row,
   store: string,
-  projectPath: string,
+  project: ProjectFacts,
   buildNamed: boolean,
   scope: PackageScope,
   record: ListingRecordRead = { read: false },
@@ -928,8 +929,8 @@ function readinessView(
     (c) => text(c.status) === "fail" || text(c.status) === "warn",
   );
   const settled = checks.filter((c) => text(c.status) === "pass");
-  const local = projectPath
-    ? readLocalListing(projectPath, store as ListingStore)
+  const local = project.projectPath
+    ? localListingOf(project, store as ListingStore)
     : null;
   const connection = connectionOf(json, apiHint);
   const connectionSource = reportConnectionSource(json);
@@ -980,11 +981,11 @@ function readinessView(
  * no approval and counts as no shipping call. Prefilled listing text is left
  * out of the answer: it is the project's own words, not a readiness fact.
  */
-export async function preflight(args: StoreActArgs): Promise<string> {
-  return withStoreMdNamedForPerson(await preflightRead(args));
+export async function preflight(args: StoreActArgs, project: ProjectFacts): Promise<string> {
+  return withStoreMdNamedForPerson(await preflightRead(args, project));
 }
 
-async function preflightRead(args: StoreActArgs): Promise<string> {
+async function preflightRead(args: StoreActArgs, project: ProjectFacts): Promise<string> {
   const asked = (
     Array.isArray(args.browsers) && args.browsers.length
       ? args.browsers
@@ -1028,11 +1029,11 @@ async function preflightRead(args: StoreActArgs): Promise<string> {
   );
   const listings = await Promise.all(
     asked.map((store) =>
-      text(args.projectPath) || store === "firefox" ? projectApiGet<Row>(api, `stores/${store}/listing`).catch(() => null) : Promise.resolve(null),
+      project.projectPath || store === "firefox" ? projectApiGet<Row>(api, `stores/${store}/listing`).catch(() => null) : Promise.resolve(null),
     ),
   );
-  const records = text(args.projectPath) ? listings : [];
-  const builtToolchain = asked.includes("firefox") && text(args.projectPath) ? await builtToolchainFor(api, text(args.projectPath), text(args.buildSha)) : null;
+  const records = project.projectPath ? listings : [];
+  const builtToolchain = asked.includes("firefox") && project.projectPath ? await builtToolchainFor(api, project, text(args.buildSha)) : null;
   const firstRefusal = reads.find((read) => !read.ok);
 
   if (firstRefusal && !firstRefusal.ok && reads.every((read) => !read.ok)) {
@@ -1051,8 +1052,8 @@ async function preflightRead(args: StoreActArgs): Promise<string> {
   const shown = (): Row => {
     const lifted = screenshotsLineOnce(stores);
     const compact = compactPreflightStores(lifted.stores, detail);
-    const readiness = readinessAnswer(storeReadinessOf({ stores, asked, projectPath: text(args.projectPath) }));
-    const releaseLoop = releaseLoopOf({ stores, asked: asked.filter((store) => isRow(stores[store])), projectPath: text(args.projectPath) });
+    const readiness = readinessAnswer(storeReadinessOf({ stores, asked, project }));
+    const releaseLoop = releaseLoopOf({ stores, asked: asked.filter((store) => isRow(stores[store])), project });
 
     return {
       ...(readiness ? { readiness } : {}),
@@ -1063,20 +1064,20 @@ async function preflightRead(args: StoreActArgs): Promise<string> {
     };
   };
 
-  const updateManifests = asked.map((store, i) => (reads[i].ok && store === "firefox" ? firefoxUpdateManifestOf(reads[i].json, api.ref, text(args.projectPath), args.api) : null));
+  const updateManifests = asked.map((store, i) => (reads[i].ok && store === "firefox" ? firefoxUpdateManifestOf(reads[i].json, api.ref, project, args.api) : null));
   const checked = asked.map((store, i) => {
     const read = reads[i];
     if (!read.ok) return null;
 
     const local =
       store === "safari"
-        ? [safariDescriptionCheck(text(args.projectPath))]
+        ? [safariDescriptionCheck(project.projectPath ? project.safariDescription : null)]
         : store === "firefox"
-          ? [firefoxListingCheck(listings[i]), reviewerNoteToolchainCheck(text(args.projectPath), builtToolchain)]
+          ? [firefoxListingCheck(listings[i]), reviewerNoteToolchainCheck(project, builtToolchain)]
           : store === "chrome"
             ? [chromePublisherSlotsCheck(read.json)]
             : [];
-    const held = text(args.projectPath) ? chromeWebStoreMdCheck(text(args.projectPath), store as ListingStore, readLocalListing(text(args.projectPath), store as ListingStore)) : null;
+    const held = project.projectPath ? chromeWebStoreMdCheck(chromeWebStoreMdOf(project.chromeWebStoreMd), store as ListingStore, localListingOf(project, store as ListingStore)) : null;
 
     return withLocalChecks(relayFirefoxUpdateUrl(read.json, updateManifests[i]), [...local, held]);
   });
@@ -1093,7 +1094,7 @@ async function preflightRead(args: StoreActArgs): Promise<string> {
   const platformBlocked = asked.filter((store, i) => platformFaults[i] !== null);
   const ownSentence = platformFaults.find((fault) => fault?.ownSentence)?.ownSentence;
   const platformScope = { ref: api.ref, stores: platformBlocked, buildSha: platformBlocked.length ? shaFor(checked[asked.indexOf(platformBlocked[0]!)]!, platformBlocked[0]!) : "", ...(ownSentence ? { ownSentence } : {}) };
-  const enterpriseChannel = asked.includes("firefox") ? firefoxEnterpriseChannelOf(text(args.projectPath)) : null;
+  const enterpriseChannel = asked.includes("firefox") ? firefoxEnterpriseChannelOf(project.projectPath ? project.firefoxManifest : null) : null;
 
   asked.forEach((store, i) => {
     const read = reads[i];
@@ -1104,13 +1105,13 @@ async function preflightRead(args: StoreActArgs): Promise<string> {
       const json = withLocalChecks(checked[i]!, [fault ? storeRunCheck(fault, { ref: api.ref, stores: [store], buildSha: shaFor(checked[i]!, store) }) : null, agreement]);
       reports[store] = json;
 
-      const block = storePreflightView(json, store, text(args.projectPath) ? readLocalListing(text(args.projectPath), store as ListingStore) : null);
+      const block = storePreflightView(json, store, project.projectPath ? localListingOf(project, store as ListingStore) : null);
       if (block) storePreflight[store] = block;
 
       const view = readinessView(
         json,
         store,
-        text(args.projectPath),
+        project,
         Boolean(text(args.buildSha)),
         { ref: api.ref, sha: text(args.buildSha), api: args.api },
         listingRecordOf(records[i] ?? null),
@@ -1133,7 +1134,7 @@ async function preflightRead(args: StoreActArgs): Promise<string> {
   });
 
   const [packageBuilds, buildReadiness] = await Promise.all([
-    packageBuildViews(api, text(args.projectPath), reports, asked),
+    packageBuildViews(api, project, reports, asked),
     readBuildReadiness(api, asked.filter((store) => isRow(stores[store])), text(args.buildSha), { ref: api.ref, api: args.api }),
   ]);
   const buildVerdicts = buildReadiness.verdicts;
@@ -1220,7 +1221,7 @@ async function preflightRead(args: StoreActArgs): Promise<string> {
     const say = connected
       ? `${failedCheckSentence(text(connection.reason), "chrome", connectionSourceOf(connection.source))} ${connectSentences(connectUrl)}`
       : connectSentences(connectUrl);
-    const told = readinessLead(storeReadinessOf({ stores, asked, projectPath: text(args.projectPath) }), say);
+    const told = readinessLead(storeReadinessOf({ stores, asked, project }), say);
     const others = blocked.filter((store) => store !== "chrome");
 
     return envelope({
@@ -1420,7 +1421,7 @@ async function preflightRead(args: StoreActArgs): Promise<string> {
         storesPageUrl,
         connectUrl,
         trackUrl: settingsUrl,
-        sayToPerson: readinessLead(storeReadinessOf({ stores, asked, projectPath: text(args.projectPath) }), full),
+        sayToPerson: readinessLead(storeReadinessOf({ stores, asked, project }), full),
         nextStep: nextStep(step, full, step === "configure" ? settingsUrl : connectUrl),
       },
       hint: full,
@@ -1554,7 +1555,7 @@ async function preflightRead(args: StoreActArgs): Promise<string> {
         ? notReadyStep ?? submitStep(asked, modeIds)
         : partialSubmitStep(goes, blocked, modeIds) ?? agreementStep ?? (buildVerdict ? browserBuildStep(buildVerdict) : null);
 
-  const readinessRead = storeReadinessOf({ stores, asked, projectPath: text(args.projectPath) });
+  const readinessRead = storeReadinessOf({ stores, asked, project });
   const askLine = decisionsSentence(readinessRead, stores);
   const saidLines = [buildsLine, landingLine, inputsSay, edgeFirstLine, reviewLine, notReadyLine(notReady, green), readinessHint, captureLine];
 

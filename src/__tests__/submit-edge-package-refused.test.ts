@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { API, useProjectRoutes } from "./fixtures/project-routes";
 
 const SUBMIT = "/api/cli/stores/submit";

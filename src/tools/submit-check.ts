@@ -10,6 +10,8 @@ import { runAskingOnly } from "../lib/ask-only";
 import { SUBMIT_CHECK_ACTIONS, SUBMIT_CHECK_TOOL, answeredAs, submitCheckRefused } from "../lib/submit-action-safety";
 import { handler as submitHandler, schema as submitSchema, type SubmitToolArgs } from "./submit";
 
+import type { SubmitFacts } from "../lib/submit-facts";
+
 const submitProperties = submitSchema.inputSchema.properties as Record<string, Record<string, unknown>>;
 
 const SHARED = Object.keys(submitProperties).filter((key) => key !== "action" && key !== "approvalId" && key !== "dryRun");
@@ -47,6 +49,6 @@ export const schema = {
   },
 };
 
-export async function handler(args: SubmitToolArgs): Promise<string> {
-  return submitCheckRefused(args as Record<string, unknown>) ?? answeredAs(await runAskingOnly(() => submitHandler(args)), SUBMIT_CHECK_TOOL, submitSchema.name);
+export async function handler(args: SubmitToolArgs, facts: SubmitFacts): Promise<string> {
+  return submitCheckRefused(args as Record<string, unknown>) ?? answeredAs(await runAskingOnly(() => submitHandler(args, facts)), SUBMIT_CHECK_TOOL, submitSchema.name);
 }

@@ -15,7 +15,7 @@ import { describe, expect, it } from "vitest";
 
 import { NEVER_PREFILLED } from "../lib/store-bring-list";
 import { listingForStore, parseStoreMdListing } from "../lib/store-md-listing";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 import { solidPng } from "./fixtures/png";
 import { rgbaPng } from "./fixtures/png-alpha";

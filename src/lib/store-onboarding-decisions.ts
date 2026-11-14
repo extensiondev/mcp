@@ -6,12 +6,10 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import fs from "node:fs";
-import path from "node:path";
-
 import { isRow, text } from "./row";
-import { STORE_MD_FILENAME } from "./store-md";
 import { parseStoreMdListing, type ListingField, type StoreMdListing } from "./store-md-listing";
+
+import type { ProjectFacts } from "./submit-facts";
 
 type Row = Record<string, unknown>;
 
@@ -112,38 +110,17 @@ const LISTED_ONLY = new Set(["firefox.license"]);
 
 export const DECISION_IDS: readonly DecisionId[] = SPECS.map((spec) => spec.id);
 
-interface ProjectFacts {
+interface ProjectReadFacts {
   storeMd: StoreMdListing | null;
   pkg: Row;
   privacyFile: string | null;
   licenseFile: boolean;
 }
 
-function readText(file: string): string | null {
-  try {
-    return fs.readFileSync(file, "utf8");
-  } catch {
-    return null;
-  }
-}
+function projectFactsOf(project: Pick<ProjectFacts, "projectPath" | "storeMd" | "onboarding">): ProjectReadFacts {
+  if (!project.projectPath) return { storeMd: null, pkg: {}, privacyFile: null, licenseFile: false };
 
-function projectFactsOf(projectPath: string): ProjectFacts {
-  if (!projectPath) return { storeMd: null, pkg: {}, privacyFile: null, licenseFile: false };
-
-  const storeMd = readText(path.join(projectPath, STORE_MD_FILENAME));
-  let pkg: Row = {};
-
-  try {
-    const parsed: unknown = JSON.parse(readText(path.join(projectPath, "package.json")) ?? "{}");
-    if (isRow(parsed)) pkg = parsed;
-  } catch {
-    pkg = {};
-  }
-
-  const privacyFile = ["PRIVACY.md", "privacy.md", "PRIVACY"].find((name) => fs.existsSync(path.join(projectPath, name))) ?? null;
-  const licenseFile = ["LICENSE", "LICENSE.md", "LICENSE.txt"].some((name) => fs.existsSync(path.join(projectPath, name)));
-
-  return { storeMd: storeMd === null ? null : parseStoreMdListing(storeMd), pkg, privacyFile, licenseFile };
+  return { storeMd: project.storeMd === null ? null : parseStoreMdListing(project.storeMd), ...project.onboarding };
 }
 
 function storeMdHas(listing: StoreMdListing | null, field: ListingField): boolean {
@@ -176,7 +153,7 @@ function amoLicenseOf(raw: string): string {
   return named ?? "";
 }
 
-function defaultOf(id: DecisionId, facts: ProjectFacts, asked: readonly string[]): { value: string | null; from: string } {
+function defaultOf(id: DecisionId, facts: ProjectReadFacts, asked: readonly string[]): { value: string | null; from: string } {
   const pkg = facts.pkg;
 
   if (id === "support-email") {
@@ -223,8 +200,8 @@ function defaultOf(id: DecisionId, facts: ProjectFacts, asked: readonly string[]
   return { value: null, from: facts.licenseFile ? "a LICENSE file AMO has no preset for: the agent asks which license to name" : "none on file: the agent asks for one" };
 }
 
-export function decisionsOf(args: { asked: readonly string[]; statusById: Record<string, string>; projectPath: string }): Decision[] {
-  const facts = projectFactsOf(args.projectPath);
+export function decisionsOf(args: { asked: readonly string[]; statusById: Record<string, string>; project: Pick<ProjectFacts, "projectPath" | "storeMd" | "onboarding"> }): Decision[] {
+  const facts = projectFactsOf(args.project);
   const storeOf = (id: string): string => id.split(".")[0] ?? "";
 
   return SPECS.flatMap((spec): Decision[] => {

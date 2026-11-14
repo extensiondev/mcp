@@ -16,7 +16,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { actionFingerprint } from "../lib/approval-gate";
 import { stagedPatch, type StagedImage } from "../lib/listing-image-stage";
 import { listingDigest, type ListingPatch } from "../lib/store-listing-media";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { solidPng } from "./fixtures/png";
 import { API, PROJECT_ROUTE, useProjectRoutes, type Call } from "./fixtures/project-routes";
 

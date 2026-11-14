@@ -12,7 +12,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { handler, schema } from "../tools/submit";
+import { handler, schema } from "../tools/submit-local";
 
 const ENV_KEYS = ["XDG_CONFIG_HOME", "EXTENSION_DEV_TOKEN", "EXTENSION_DEV_APPROVAL_GATE"];
 const saved: Record<string, string | undefined> = {};

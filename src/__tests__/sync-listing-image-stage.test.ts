@@ -13,7 +13,7 @@ import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { STAGED_IMAGE_MAX_BYTES, STAGED_IMAGES_PER_STORE, stageListingImages, stagedImageGuard } from "../lib/listing-image-stage";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { solidPng } from "./fixtures/png";
 import { API, PROJECT_ID, PROJECT_ROUTE, useProjectRoutes, type Call } from "./fixtures/project-routes";
 

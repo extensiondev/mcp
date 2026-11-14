@@ -13,7 +13,7 @@ import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { MAX_SCREENSHOT_BYTES, MAX_SCREENSHOT_MASTER_BYTES } from "../lib/store-listing-media";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { solidPng } from "./fixtures/png";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 

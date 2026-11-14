@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 import { firefoxUpdateManifestOutcome, updateManifestOf, updateManifestServedSentence, updateUrlOfCheck } from "../lib/firefox-update-url";
 import { updateManifestAddress } from "../lib/package-address";
 import { toSubmission } from "../lib/platform-submissions";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 type Row = Record<string, unknown>;

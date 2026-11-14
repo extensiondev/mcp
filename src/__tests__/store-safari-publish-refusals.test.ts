@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { shipRefusalHint } from "../lib/ship-act";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 const SAFARI_PUBLISH = `${PROJECT_ROUTE}/stores/safari/publish`;

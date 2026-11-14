@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { CHROMEWEBSTORE_MD_CHECK, CHROMEWEBSTORE_MD_PREFILL_CALL } from "../lib/chromewebstore-md";
 import { CHROME_SYNC_CALL } from "../lib/store-md-chrome-reconcile";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 const PREFLIGHT = `${PROJECT_ROUTE}/stores/chrome/submissions/preflight`;

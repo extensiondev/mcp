@@ -27,7 +27,7 @@ import { connectionOf } from "../lib/store-connection";
 import { handler as builds } from "../tools/builds";
 import { handler as publish } from "../tools/publish";
 import { handler as shares } from "../tools/shares";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 
 type Row = Record<string, unknown>;
 

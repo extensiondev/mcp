@@ -13,7 +13,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createServer } from "../index";
 import { CHROME_PUBLISHER_SLOTS_CHECK, CHROME_SLOTS_SENTENCE } from "../lib/chrome-publisher-slots";
 import { PLATFORM_UNAVAILABLE_SENTENCE, PLATFORM_UNAVAILABLE_STATUS } from "../lib/store-run-unavailable";
-import { SHARED_INPUT_NOTE, handler as checkHandler, schema as checkSchema } from "../tools/submit-check";
+import { SHARED_INPUT_NOTE, handler as checkHandler, schema as checkSchema } from "../tools/submit-check-local";
 import { schema as submitSchema } from "../tools/submit";
 import { usePlatformWorld, WORLD_API } from "./fixtures/platform-world";
 

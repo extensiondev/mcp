@@ -8,7 +8,7 @@ import { ALLOWANCE_PHRASE } from "../lib/allowance";
 import { handler as previewWeb } from "../tools/preview-web";
 import { handler as publish } from "../tools/publish";
 import { handler as promote } from "../tools/release-promote";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { handler as projectCreate } from "../tools/project-create";
 import { promoteAnswer, submitAnswer } from "./fixtures/platform-answers";
 

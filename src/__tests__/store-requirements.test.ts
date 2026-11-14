@@ -5,7 +5,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { configuredRequirementsNote, missingRequiredSentence, missingRequirementsSentences, requirementsView, safariOfferSentences } from "../lib/store-requirements";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { solidPng } from "./fixtures/png";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 

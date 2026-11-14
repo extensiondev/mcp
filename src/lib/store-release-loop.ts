@@ -6,14 +6,12 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import fs from "node:fs";
-import path from "node:path";
-
 import { safariReleaseIntentOf, type SafariReleaseIntentRead } from "./safari-release-intent";
 import { isRow, text } from "./row";
 import { uploadStopsAtDraft } from "./store-connection";
-import { STORE_MD_FILENAME } from "./store-md";
 import { listingForStore, parseStoreMdListing } from "./store-md-listing";
+
+import type { ProjectFacts } from "./submit-facts";
 
 type Row = Record<string, unknown>;
 
@@ -61,9 +59,11 @@ function modeOf(view: unknown, store: string): { mode: string; saved: boolean } 
   return saved ? { mode: saved, saved: true } : { mode: DEFAULT_MODES[store] ?? "", saved: false };
 }
 
-function safariReleaseOf(projectPath: string): SafariReleaseIntentRead {
+function safariReleaseOf(storeMd: string | null): SafariReleaseIntentRead {
+  if (storeMd === null) return safariReleaseIntentOf(undefined);
+
   try {
-    const parsed = parseStoreMdListing(fs.readFileSync(path.join(projectPath, STORE_MD_FILENAME), "utf8"));
+    const parsed = parseStoreMdListing(storeMd);
 
     return safariReleaseIntentOf(listingForStore(parsed, "safari").listing.releaseMode);
   } catch {
@@ -157,7 +157,7 @@ function sayOf(loop: Omit<ReleaseLoop, "say">): string {
  * still get their cost; only when no store asked can submit is there no
  * loop, since what blocks every store leads.
  */
-export function releaseLoopOf(args: { stores: Row; asked: readonly string[]; projectPath: string }): ReleaseLoop | null {
+export function releaseLoopOf(args: { stores: Row; asked: readonly string[]; project: Pick<ProjectFacts, "projectPath" | "storeMd"> }): ReleaseLoop | null {
   const asked = ORDER.filter((store) => args.asked.includes(store));
   if (!asked.length) return null;
 
@@ -166,7 +166,7 @@ export function releaseLoopOf(args: { stores: Row; asked: readonly string[]; pro
   if (!ready.length) return null;
 
   const excluded = asked.filter(blocked).map((store) => ({ store, reason: reasonOf(args.stores[store] as Row) }));
-  const release = args.projectPath.trim() ? safariReleaseOf(args.projectPath.trim()) : safariReleaseIntentOf(undefined);
+  const release = args.project.projectPath.trim() ? safariReleaseOf(args.project.storeMd) : safariReleaseIntentOf(undefined);
   const stores = ready.map((store) => storeOf(store, args.stores[store], release));
   const approvals = countApprovals(stores);
   const watch = `extension_release_status {include: ["stores"]} after the approval: report each store live on its own read word, never an inferred one.`;

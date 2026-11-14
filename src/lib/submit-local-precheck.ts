@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { chromeWebStoreMdCheck } from "./chromewebstore-md";
+import { chromeWebStoreMdCheck, chromeWebStoreMdOf } from "./chromewebstore-md";
 import { envelope } from "./envelope";
 import { FIREFOX_AGREEMENT_CHECK, FIREFOX_AGREEMENT_URL } from "./firefox-enterprise";
 import { projectApiGet, type ProjectApi } from "./project-api";
@@ -17,9 +17,10 @@ import { reviewerNoteToolchainCheck } from "./store-md-toolchain";
 import { builtToolchainFor } from "./store-md-toolchain-platform";
 import { FIREFOX_LISTING_CHECK, SAFARI_DESCRIPTION_CHECK, SAFARI_DESCRIPTION_MAX, firefoxListingCheck, safariDescriptionCheck } from "./store-preflight-local";
 import { trackUrl as consoleTrackUrl } from "./track-url";
-import { readLocalListing } from "../tools/store-listing";
+import { localListingOf } from "../tools/store-listing";
 
 import type { ListingStore } from "./store-md-declarations";
+import type { ProjectFacts } from "./submit-facts";
 
 type Row = Record<string, unknown>;
 
@@ -31,7 +32,7 @@ export interface LocalPrecheckArgs {
   api: ProjectApi | null;
   browsers: string[];
   buildSha: string;
-  projectPath?: string;
+  project: ProjectFacts;
   ref: ProjectRef | null;
   apiBase?: string;
 }
@@ -93,17 +94,18 @@ export function localCheckRefusal(rows: Array<{ store: string; row: Row }>, args
 const refusal = localCheckRefusal;
 
 export async function localSubmitPrecheck(args: LocalPrecheckArgs): Promise<{ refused: string | null; warnings: string[] }> {
-  const projectPath = text(args.projectPath);
+  const project = args.project;
+  const projectPath = project.projectPath;
   const safari = args.browsers.includes("safari");
   const wantsFirefox = args.browsers.includes("firefox");
   const warnings = safari && !projectPath ? [SAFARI_DESCRIPTION_UNCHECKED] : [];
-  const safariRow = safari && projectPath ? safariDescriptionCheck(projectPath) : null;
+  const safariRow = safari && projectPath ? safariDescriptionCheck(project.safariDescription) : null;
   const firefox = wantsFirefox ? await firefoxRow(args.api) : null;
-  const toolchain = wantsFirefox && projectPath ? reviewerNoteToolchainCheck(projectPath, await builtToolchainFor(args.api, projectPath, args.buildSha)) : null;
+  const toolchain = wantsFirefox && projectPath ? reviewerNoteToolchainCheck(project, await builtToolchainFor(args.api, project, args.buildSha)) : null;
   if (toolchain) warnings.push(text(toolchain.message));
 
   for (const store of projectPath ? args.browsers : []) {
-    const held = chromeWebStoreMdCheck(projectPath, store as ListingStore, readLocalListing(projectPath, store as ListingStore));
+    const held = chromeWebStoreMdCheck(chromeWebStoreMdOf(project.chromeWebStoreMd), store as ListingStore, localListingOf(project, store as ListingStore));
     if (held) warnings.push(`${store}: ${text(held.message)}`);
   }
 

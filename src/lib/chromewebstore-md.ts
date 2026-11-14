@@ -6,10 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import fs from "node:fs";
-import path from "node:path";
-
 import { chromeVisibilityOf } from "./chrome-visibility";
+import { CHROMEWEBSTORE_MD_FILENAME } from "./store-md";
 import { stripQuotes } from "./store-md-bullets";
 import { STORE_FIELDS, type ListingField, type ListingStore, type ListingText, type PermissionJustification } from "./store-md-declarations";
 import { linesNotFound, storeMdLineOf, storeMdSectionOf } from "./store-md-fields";
@@ -18,7 +16,7 @@ import type { LocalListingRead } from "./store-requirements";
 
 type Row = Record<string, unknown>;
 
-export const CHROMEWEBSTORE_MD_FILENAME = "CHROMEWEBSTORE.md";
+export { CHROMEWEBSTORE_MD_FILENAME };
 
 export const CHROMEWEBSTORE_MD_CHECK = "listing.chromewebstore_md";
 
@@ -261,17 +259,8 @@ export function parseChromeWebStoreMd(content: string): Omit<ChromeWebStoreMd, "
   return read;
 }
 
-export function readChromeWebStoreMd(projectPath: string): ChromeWebStoreMd | null {
-  const root = projectPath.trim();
-  if (!root) return null;
-
-  let content: string;
-
-  try {
-    content = fs.readFileSync(path.join(root, CHROMEWEBSTORE_MD_FILENAME), "utf8");
-  } catch {
-    return null;
-  }
+export function chromeWebStoreMdOf(content: string | null): ChromeWebStoreMd | null {
+  if (content === null) return null;
 
   const parsed = parseChromeWebStoreMd(content);
 
@@ -311,8 +300,7 @@ export function chromeWebStoreHeldSentence(held: ChromeWebStoreHeld[], storeMdEx
   return `${lead}; run ${CHROMEWEBSTORE_MD_PREFILL_CALL} and ${answer}, so nothing is retyped.`;
 }
 
-export function chromeWebStoreMdCheck(projectPath: string, store: ListingStore, local: LocalListingRead): Row | null {
-  const read = readChromeWebStoreMd(projectPath);
+export function chromeWebStoreMdCheck(read: ChromeWebStoreMd | null, store: ListingStore, local: LocalListingRead): Row | null {
   if (!read) return null;
 
   const onFile = local !== null && !("problem" in local) ? local : null;

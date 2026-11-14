@@ -5,7 +5,7 @@ import { VERSION_ACTION, versionScopeFor } from "../lib/approval-lines";
 import { shipRefusalHint } from "../lib/ship-act";
 import { TOOL_POLICY } from "../lib/tool-policy";
 import { handler as status } from "../tools/release-status";
-import { handler as submit, schema } from "../tools/submit";
+import { handler as submit, schema } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 const SUBMISSION = "sub_7f3a";

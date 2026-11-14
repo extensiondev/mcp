@@ -81,8 +81,7 @@ export interface EnterpriseChannelView {
   say: string;
 }
 
-export function firefoxEnterpriseChannelOf(projectPath: string): EnterpriseChannelView | null {
-  const read = projectPath ? firefoxManifestOf(projectPath) : null;
+export function firefoxEnterpriseChannelOf(read: FirefoxManifestRead | null): EnterpriseChannelView | null {
   if (!read || adminInstallOnlyOf(read.manifest) !== true) return null;
 
   return {

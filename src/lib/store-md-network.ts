@@ -6,11 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import fs from "node:fs";
-import path from "node:path";
-
-import { STORE_MD_FILENAME } from "./store-md";
-
 const NO_NETWORK_PROMISE = [
   /\bno network (requests?|calls?|access|activity|connections?|traffic)\b/i,
   /\bnetwork (requests?|access|calls?|activity)\s*:\s*(none|no|never)\b/i,
@@ -41,14 +36,4 @@ export function noNetworkPromiseOf(content: string): NoNetworkPromise | null {
   }
 
   return null;
-}
-
-export function storeMdNoNetworkPromise(projectPath: string): NoNetworkPromise | null {
-  if (!projectPath.trim()) return null;
-
-  try {
-    return noNetworkPromiseOf(fs.readFileSync(path.join(projectPath, STORE_MD_FILENAME), "utf8"));
-  } catch {
-    return null;
-  }
 }

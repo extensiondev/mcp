@@ -6,8 +6,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { STORE_FIELDS, listingForStore, parseStoreMdListing } from "../lib/store-md-listing";
 import { storeMdSectionOf } from "../lib/store-md-fields";
-import { EDGE_STORE_LOGO_SENTENCE, PLAIN_LISTING_SENTENCE, readLocalListing } from "../tools/store-listing";
-import { handler as submit } from "../tools/submit";
+import { readLocalListing } from "../lib/submit-facts-local";
+import { EDGE_STORE_LOGO_SENTENCE, PLAIN_LISTING_SENTENCE } from "../tools/store-listing";
+import { handler as submit } from "../tools/submit-local";
 import { storeMdNamedForPerson } from "../lib/store-md-words";
 import { solidPng } from "./fixtures/png";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";

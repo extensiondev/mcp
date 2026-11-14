@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { writeCredentials } from "../lib/credentials";
 import { attachTrack } from "../lib/track-url";
 import { readStores } from "../tools/store-status";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 
 const API = "http://localhost:3100";
 const PROJECT_ID = "prj_rebeccat";

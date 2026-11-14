@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { actionFingerprint } from "../lib/approval-gate";
 import { attachTrack } from "../lib/track-url";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 const PUBLISH = `${PROJECT_ROUTE}/stores/chrome/publish`;

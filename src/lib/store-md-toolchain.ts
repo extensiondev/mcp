@@ -16,7 +16,11 @@ import { buildSummaryPath } from "./session-paths";
 import { isRow, text } from "./row";
 import { STORE_MD_FILENAME, parseStoreMd } from "./store-md";
 
+import type { ProjectFacts } from "./submit-facts";
+
 type Row = Record<string, unknown>;
+
+export type ToolchainProject = Pick<ProjectFacts, "projectPath" | "storeMd" | "toolchain">;
 
 export const REVIEWER_NOTE_TOOLCHAIN_CHECK = "firefox.reviewer_note_toolchain";
 
@@ -136,14 +140,21 @@ export function toolchainSentence(chain: Toolchain, commands: { install: string;
   return `Build from source with ${toolchainWords(chain)}: run ${commands.install}, then ${commands.build}.`;
 }
 
-export function firefoxBuildCommand(projectPath: string, packageManager: string): string {
-  const script = scaffoldScripts(projectPath, packageManager).find((row) => row.browser === "firefox" && /\bbuild\b/.test(row.command));
-  if (script) return script.run;
+export function firefoxBuildScript(projectPath: string): string | null {
+  return scaffoldScripts(projectPath, "npm").find((row) => row.browser === "firefox" && /\bbuild\b/.test(row.command))?.name ?? null;
+}
+
+export function firefoxBuildCommandOf(script: string | null, packageManager: string): string {
+  if (script !== null) return `${packageManager} run ${script}`;
 
   if (packageManager === "npm") return "npx extension build --browser firefox";
   if (packageManager === "bun") return "bunx extension build --browser firefox";
 
   return `${packageManager} exec extension build --browser firefox`;
+}
+
+export function firefoxBuildCommand(projectPath: string, packageManager: string): string {
+  return firefoxBuildCommandOf(firefoxBuildScript(projectPath), packageManager);
 }
 
 export function toolchainDifferences(note: Partial<Toolchain>, built: Toolchain): string[] {
@@ -251,9 +262,11 @@ export function localBuildToolchain(projectPath: string): BuiltToolchain | null 
   return null;
 }
 
-function firefoxReviewerNotes(projectPath: string): string | null {
+export function firefoxReviewerNotesOf(content: string | null): string | null {
+  if (content === null) return null;
+
   try {
-    return parseStoreMd(fs.readFileSync(path.join(projectPath, STORE_MD_FILENAME), "utf8")).firefox?.approvalNotes ?? null;
+    return parseStoreMd(content).firefox?.approvalNotes ?? null;
   } catch {
     return null;
   }
@@ -261,18 +274,18 @@ function firefoxReviewerNotes(projectPath: string): string | null {
 
 const NO_BUILD_READ = 'No build toolchain was read to fill it: pass buildSha for a platform build that records one, or run extension_build with browser "firefox" once, and this check names the line to write.';
 
-export function reviewerNoteToolchainCheck(projectPath: string, built: BuiltToolchain | null): Row | null {
-  if (!projectPath) return null;
+export function reviewerNoteToolchainCheck(project: ToolchainProject, built: BuiltToolchain | null): Row | null {
+  if (!project.projectPath) return null;
 
-  const notes = firefoxReviewerNotes(projectPath);
+  const notes = firefoxReviewerNotesOf(project.storeMd);
   const line = notes ? reviewerNoteBuildLine(notes) : null;
   if (!line) return null;
 
   const differences = built ? toolchainDifferences(line, built.chain) : [];
   if (!line.sample && !differences.length) return null;
 
-  const packageManager = built?.chain.packageManager?.name || line.packageManager?.name || detectPackageManager(projectPath);
-  const replacement = built ? toolchainSentence(built.chain, { install: `${packageManager} install`, build: firefoxBuildCommand(projectPath, packageManager) }) : null;
+  const packageManager = built?.chain.packageManager?.name || line.packageManager?.name || (project.toolchain?.packageManager ?? "npm");
+  const replacement = built ? toolchainSentence(built.chain, { install: `${packageManager} install`, build: firefoxBuildCommandOf(project.toolchain?.firefoxBuildScript ?? null, packageManager) }) : null;
   const said = toolchainWords(line) || "no versions";
   const ran = built ? `${built.from} ran ${toolchainWords(built.chain)}` : "";
   const where = `the sentence under \`${REVIEWER_NOTE_HEADING}\` in \`${REVIEWER_NOTE_SECTION}\` of ${STORE_MD_FILENAME}`;

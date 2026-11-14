@@ -4,7 +4,7 @@ import { actionFingerprint } from "../lib/approval-gate";
 import { approvalVerdict } from "../lib/approval-policy";
 import { STORE_SETTINGS_ACTION, modeToPatch, readStoreSettingsChange, storeSettingsDigest } from "../lib/store-settings";
 import { TOOL_POLICY } from "../lib/tool-policy";
-import { handler as submit, schema } from "../tools/submit";
+import { handler as submit, schema } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 const CONFIG = `${PROJECT_ROUTE}/stores/config`;

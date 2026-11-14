@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { actionFingerprint } from "../lib/approval-gate";
 import { handler as approvals } from "../tools/approvals";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { API, useProjectRoutes } from "./fixtures/project-routes";
 
 const ID = `apr_${"V".repeat(32)}`;

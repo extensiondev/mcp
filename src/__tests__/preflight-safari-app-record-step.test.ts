@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { LANGUAGE_FROM, MINT_CALL, SKU_FROM } from "../lib/safari-app-record-step";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { storeMdNamedForPerson } from "../lib/store-md-words";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 

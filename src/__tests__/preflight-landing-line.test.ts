@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 import { serverInstructions } from "../index";
 import { reviewPromiseOf } from "../lib/review-promise";
 import { submissionLandingClause, submissionLandingLine } from "../lib/submission-landing";
-import { handler as submit, schema } from "../tools/submit";
+import { handler as submit, schema } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 type Row = Record<string, any>;

@@ -15,7 +15,7 @@ import { clearCredentials, credentialKey, credentialsPath, listCredentials, writ
 import { handler as builds } from "../tools/builds";
 import { handler as publish } from "../tools/publish";
 import { handler as promote } from "../tools/release-promote";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { readIdentity } from "../tools/whoami";
 import { API, useProjectRoutes, type Call } from "./fixtures/project-routes";
 

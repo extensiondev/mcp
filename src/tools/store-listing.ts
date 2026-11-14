@@ -6,7 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import fs from "node:fs";
 import path from "node:path";
 
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
@@ -54,7 +53,7 @@ import { onListingLine, type ListingRecordRead } from "../lib/listing-record-com
 import { chromePasteLines, type PasteLines } from "../lib/chrome-paste-lines";
 import { SCREENSHOTS_DOOR, screenshotsAdvice, screenshotsLineSentence } from "../lib/store-md-screenshots";
 import { storeSizeSentence } from "../lib/store-screenshot-sizes";
-import { listStoreScreenshots, storeScreenshotsFolder } from "../lib/store-capture";
+import { storeScreenshotsFolder } from "../lib/store-capture";
 import { approvalVerdict } from "../lib/approval-policy";
 import { badShipRequest, isRow, openShipApi, text } from "../lib/ship-act";
 import {
@@ -85,7 +84,7 @@ import {
   type StagedImage,
 } from "../lib/listing-image-stage";
 import { firefoxCategoryCover } from "../lib/firefox-category-cover";
-import { CHROMEWEBSTORE_MD_FILENAME, CHROMEWEBSTORE_MD_PREFILL_CALL, chromeWebStoreHeld, chromeWebStoreHeldSentence, readChromeWebStoreMd, type ChromeWebStoreHeld } from "../lib/chromewebstore-md";
+import { CHROMEWEBSTORE_MD_FILENAME, CHROMEWEBSTORE_MD_PREFILL_CALL, chromeWebStoreHeld, chromeWebStoreHeldSentence, chromeWebStoreMdOf, type ChromeWebStoreHeld } from "../lib/chromewebstore-md";
 import { STORE_MD_FILENAME } from "../lib/store-md";
 import { blockingWords, withStoreMdNamedForPerson } from "../lib/store-md-words";
 import { EDGE_STORE_LOGO_RECIPE } from "../lib/store-bring-list";
@@ -119,17 +118,16 @@ import {
 } from "../lib/store-md-listing";
 import { categoriesSentences, type CategoryRead, type StoreCategoryRow } from "../lib/store-categories";
 import {
-  localIcon,
   platformBuildIcons,
   staleSentence,
   type IconOrigin,
   type IconStale,
 } from "../lib/store-listing-icon";
+import { factOf, type LocalIcon, type ProjectFacts } from "../lib/submit-facts";
 import {
   STORE_LISTING_ACTION,
   approvalBody,
   listingDigest,
-  readScreenshots,
   screenshotRefusal,
   screenshotRule,
   writeBody,
@@ -242,18 +240,20 @@ async function adoptAppRecordName(api: ProjectApi, local: LocalListing): Promise
   local.skipped = local.skipped.filter((line) => !line.startsWith("title in STORE.md"));
 }
 
-export function readLocalListing(
-  projectPath: string,
+export type ListingFacts = Pick<ProjectFacts, "projectPath" | "storeMd" | "chromeWebStoreMd" | "icons">;
+
+const NO_ICON_READ: LocalIcon = { missing: "no manifest.json in the project" };
+
+export function localListingOf(
+  project: ListingFacts,
   store: ListingStore,
   screenshots?: ListingImage[],
 ): LocalListing | { problem: string } {
-  const file = path.join(projectPath, STORE_MD_FILENAME);
-  let content: string;
+  const file = path.join(project.projectPath, STORE_MD_FILENAME);
+  const content = project.storeMd;
 
-  try {
-    content = fs.readFileSync(file, "utf8");
-  } catch {
-    const held = chromeWebStoreHeld(readChromeWebStoreMd(projectPath), store, STORE_FIELDS[store]);
+  if (content === null) {
+    const held = chromeWebStoreHeld(chromeWebStoreMdOf(project.chromeWebStoreMd), store, STORE_FIELDS[store]);
 
     return {
       problem: `No ${STORE_MD_FILENAME} at ${file}. ${held.length ? chromeWebStoreHeldSentence(held, false) : "Create it with the listing copy first (the browser-extension skill's store-md reference has the shape)."}`,
@@ -263,7 +263,7 @@ export function readLocalListing(
   const parsed = parseStoreMdListing(content);
   const read = listingForStore(parsed, store);
   const { listing, skipped, unread } = withChromeVisibility(read, parsed.lines.visibility);
-  const icon = localIcon(projectPath, store);
+  const icon = factOf(project.icons, store) ?? NO_ICON_READ;
   const patch: ListingPatch = { listing };
   const screenshotsLine = parsed.screenshotsLine && !screenshots?.length ? screenshotsLineSentence(parsed.screenshotsLine, parsed.screenshotFiles ?? 0) : "";
 
@@ -1100,11 +1100,11 @@ async function mintListingVersion(
       };
 }
 
-export async function syncListing(args: ListingArgs): Promise<string> {
-  return withStoreMdNamedForPerson(await syncListingRun(args));
+export async function syncListing(args: ListingArgs, facts: ProjectFacts): Promise<string> {
+  return withStoreMdNamedForPerson(await syncListingRun(args, facts));
 }
 
-async function syncListingRun(args: ListingArgs): Promise<string> {
+async function syncListingRun(args: ListingArgs, facts: ProjectFacts): Promise<string> {
   const asked = (
     Array.isArray(args.browsers) && args.browsers.length
       ? args.browsers
@@ -1135,9 +1135,10 @@ async function syncListingRun(args: ListingArgs): Promise<string> {
     );
   }
 
-  const projectPath = text(args.projectPath);
+  const projectPath = facts.projectPath;
+  const shotFacts = facts.shots;
 
-  if (!projectPath || !fs.existsSync(projectPath)) {
+  if (!projectPath || !facts.exists || !shotFacts) {
     return badShipRequest(
       COMMAND,
       ACT,
@@ -1146,7 +1147,7 @@ async function syncListingRun(args: ListingArgs): Promise<string> {
     );
   }
 
-  const given = args.screenshots !== undefined ? readScreenshots(projectPath, args.screenshots, asked as ListingStore[]) : null;
+  const given = args.screenshots !== undefined ? shotFacts.given : null;
 
   if (given && "problem" in given) {
     return badShipRequest(
@@ -1165,10 +1166,11 @@ async function syncListingRun(args: ListingArgs): Promise<string> {
       continue;
     }
 
-    const paths = listStoreScreenshots(projectPath, store);
+    const folder = factOf(shotFacts.folders, store);
+    const paths = folder?.paths ?? [];
     if (!paths.length) continue;
 
-    const read = readScreenshots(projectPath, paths, [store]);
+    const read = folder?.read ?? { problem: `screenshots in ${storeScreenshotsFolder(store)} were not read` };
 
     if ("problem" in read) {
       return badShipRequest(
@@ -1210,7 +1212,7 @@ async function syncListingRun(args: ListingArgs): Promise<string> {
   const locals = new Map<ListingStore, LocalListing>();
 
   for (const store of asked as ListingStore[]) {
-    const local = readLocalListing(projectPath, store, shotsFor.get(store)?.screenshots);
+    const local = localListingOf(facts, store, shotsFor.get(store)?.screenshots);
 
     if ("problem" in local) {
       return badShipRequest(
@@ -1231,8 +1233,8 @@ async function syncListingRun(args: ListingArgs): Promise<string> {
   if ("refused" in opened) return opened.refused;
 
   const api = opened.api;
-  const builds = await platformBuildIcons(api, projectPath, text(args.useBuild));
-  const chromeWebStoreMd = readChromeWebStoreMd(projectPath);
+  const builds = await platformBuildIcons(api, facts, text(args.useBuild));
+  const chromeWebStoreMd = chromeWebStoreMdOf(facts.chromeWebStoreMd);
 
   if (text(args.useBuild) && !builds.build) {
     return badShipRequest(

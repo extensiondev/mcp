@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PLATFORM_READ_TIMEOUT_MS } from "../lib/platform-fetch";
 import { attachTrack } from "../lib/track-url";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { API, useProjectRoutes } from "./fixtures/project-routes";
 
 const SUBMISSIONS = "/api/cli/stores/submissions";

@@ -8,11 +8,11 @@
 
 import { splitChannelKey } from "./channel-link";
 import { channelXpiAddress, updateManifestAddress } from "./package-address";
-import { readBuiltManifest } from "./project-manifest";
 import { isRow, text } from "./row";
-import { storeMdNoNetworkPromise } from "./store-md-network";
+import { noNetworkPromiseOf } from "./store-md-network";
 
 import type { ChannelEntry, ProjectRef } from "./registry";
+import type { ProjectFacts } from "./submit-facts";
 
 type Row = Record<string, unknown>;
 
@@ -21,7 +21,6 @@ export const DEFAULT_FIREFOX_CHANNEL = "stable";
 
 const HOSTED_MANIFEST = /\/channels\/[^/\s"']+\/updates\.json/;
 const UPDATES_READ_AT = /look for updates\b[^.]*?\bat (https?:\/\/[^\s"']+?)[.,;:]?(?=\s|$)/i;
-const PREFIXES = ["", "firefox:", "gecko:"];
 const RELEASE_CHANNEL_KEYS = ["releaseChannel", "targetChannel"];
 
 export interface UpdateManifestServed {
@@ -159,22 +158,6 @@ export function firefoxReleaseChannelOf(json: Row): string {
   return DEFAULT_FIREFOX_CHANNEL;
 }
 
-export function manifestUpdateUrlOf(projectPath: string): string | null {
-  if (!text(projectPath)) return null;
-
-  const manifest = readBuiltManifest(projectPath, "firefox")?.manifest;
-  const settings = prefixed(manifest, "browser_specific_settings") ?? prefixed(manifest, "applications");
-  const url = prefixed(prefixed(settings, "gecko"), "update_url");
-
-  return typeof url === "string" && url.trim() ? url.trim() : null;
-}
-
-function prefixed(row: unknown, key: string): unknown {
-  if (!isRow(row)) return undefined;
-
-  return PREFIXES.map((prefix) => row[`${prefix}${key}`]).find((value) => value !== undefined);
-}
-
 export function updateUrlOfCheck(check: Row | null): string | null {
   const actual = text(check?.actual);
   if (/^https?:\/\//i.test(actual)) return actual;
@@ -191,21 +174,23 @@ function updateUrlCheckOf(json: Row): Row | null {
   return rows.find((row) => text(row.id) === UPDATE_URL_CHECK) ?? null;
 }
 
-function foundUpdateUrl(json: Row, projectPath: string): string | null {
-  return manifestUpdateUrlOf(projectPath) ?? updateUrlOfCheck(updateUrlCheckOf(json));
+export type UpdateUrlFacts = Pick<ProjectFacts, "firefoxUpdateUrl" | "storeMd">;
+
+function foundUpdateUrl(json: Row, project: UpdateUrlFacts): string | null {
+  return project.firefoxUpdateUrl ?? updateUrlOfCheck(updateUrlCheckOf(json));
 }
 
-export function firefoxUpdateManifestOf(json: Row, ref: ProjectRef | null, projectPath: string, api?: string): FirefoxUpdateManifest | null {
+export function firefoxUpdateManifestOf(json: Row, ref: ProjectRef | null, project: UpdateUrlFacts, api?: string): FirefoxUpdateManifest | null {
   const channel = firefoxReleaseChannelOf(json);
   const updateManifestUrl = updateManifestAddress(ref, channel, api);
   if (!updateManifestUrl) return null;
 
-  const found = foundUpdateUrl(json, projectPath);
+  const found = foundUpdateUrl(json, project);
   const mismatch = found !== null && found !== updateManifestUrl;
   const check = updateUrlCheckOf(json);
   const platform = text(check?.message);
   const platformPassed = text(check?.status) === "pass";
-  const promise = found === null && !platformPassed ? storeMdNoNetworkPromise(projectPath) : null;
+  const promise = found === null && !platformPassed && project.storeMd !== null ? noNetworkPromiseOf(project.storeMd) : null;
   const say = mismatch
     ? updateUrlMismatchSentence(found, updateManifestUrl)
     : platformPassed && platform

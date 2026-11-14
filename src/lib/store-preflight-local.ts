@@ -6,11 +6,9 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import fs from "node:fs";
-import path from "node:path";
-
 import { isRow, text } from "./row";
-import { engineProjectRoot } from "./session-paths";
+
+import type { SafariDescriptionRead } from "./submit-facts";
 
 type Row = Record<string, unknown>;
 
@@ -19,67 +17,7 @@ export const SAFARI_DESCRIPTION_CHECK = "safari.manifest_description";
 export const FIREFOX_LISTING_CHECK = "firefox.listing_document";
 export const FIREFOX_SYNC_LISTING_CALL = 'extension_submit {action: "sync-listing", store: "firefox", projectPath: "<project root>"}';
 
-const MESSAGE_KEY = /^__MSG_(\w+)__$/;
-
-interface ManifestRead {
-  manifest: Row;
-  dir: string;
-  from: string;
-}
-
-function readJson(file: string): Row | null {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
-
-    return isRow(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function manifestRead(projectPath: string): ManifestRead | null {
-  const root = engineProjectRoot(projectPath);
-  const candidates: Array<[string, string]> = [
-    [path.join(root, "dist", "safari", "manifest.json"), "the built dist/safari/manifest.json"],
-    [path.join(root, "src", "manifest.json"), "the source src/manifest.json"],
-    [path.join(root, "manifest.json"), "the source manifest.json"],
-  ];
-
-  for (const [file, from] of candidates) {
-    const manifest = readJson(file);
-    if (manifest) return { manifest, dir: path.dirname(file), from };
-  }
-
-  return null;
-}
-
-function localized(value: string, read: ManifestRead): string | null {
-  const key = MESSAGE_KEY.exec(value)?.[1];
-  if (!key) return value;
-
-  const locale = text(read.manifest.default_locale);
-  if (!locale) return null;
-
-  const messages = readJson(path.join(read.dir, "_locales", locale, "messages.json"));
-  const entry = messages ? Object.entries(messages).find(([name]) => name.toLowerCase() === key.toLowerCase())?.[1] : null;
-
-  return isRow(entry) && typeof entry.message === "string" ? entry.message : null;
-}
-
-export function safariDescriptionOf(projectPath: string): { description: string; from: string } | null {
-  const read = manifestRead(projectPath);
-  if (!read) return null;
-
-  const raw = read.manifest["safari:description"] ?? read.manifest.description;
-  if (typeof raw !== "string") return null;
-
-  const description = localized(raw.trim(), read);
-
-  return description === null ? null : { description, from: read.from };
-}
-
-export function safariDescriptionCheck(projectPath: string): Row | null {
-  const read = projectPath ? safariDescriptionOf(projectPath) : null;
+export function safariDescriptionCheck(read: SafariDescriptionRead | null): Row | null {
   if (!read || read.description.length <= SAFARI_DESCRIPTION_MAX) return null;
 
   const length = read.description.length;

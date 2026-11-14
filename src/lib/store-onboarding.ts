@@ -12,6 +12,8 @@ import { decisionsOf, type Decision, type DecisionId } from "./store-onboarding-
 import { listingDraftOf, type ListingDraft } from "./store-listing-draft";
 import { connectedStoresOf, readinessRowsOf, type ReadinessGroups } from "./store-onboarding-suppliers";
 
+import type { ProjectFacts } from "./submit-facts";
+
 type Row = Record<string, unknown>;
 
 export type OpenDecision = Decision & { blocksNow: boolean };
@@ -122,11 +124,11 @@ function withBlocksNow(decisions: Decision[], stores: Row, rows: ReturnType<type
   }));
 }
 
-export function storeReadinessOf(args: { stores: Row; asked: readonly string[]; projectPath: string }): StoreReadiness {
+export function storeReadinessOf(args: { stores: Row; asked: readonly string[]; project: ProjectFacts }): StoreReadiness {
   const asked = args.asked.filter((store) => STORE_NAMES[store]);
   const rows = readinessRowsOf(args.stores, asked);
   const links = connectedStoresOf(rows, asked);
-  const decisions = withBlocksNow(decisionsOf({ asked, statusById: rows.statusById, projectPath: args.projectPath }), args.stores, rows);
+  const decisions = withBlocksNow(decisionsOf({ asked, statusById: rows.statusById, project: args.project }), args.stores, rows);
   const view: Omit<StoreReadiness, "summary"> = {
     stores: asked,
     build: rows.groups.build,
@@ -139,7 +141,7 @@ export function storeReadinessOf(args: { stores: Row; asked: readonly string[]; 
     connected: links.connected,
     notConnected: links.notConnected,
     noStoreConnected: links.connected.length === 0 && links.notConnected.length > 0,
-    listingDraft: listingDraftOf({ projectPath: args.projectPath, asked, statusById: rows.statusById }),
+    listingDraft: listingDraftOf({ project: args.project, asked, statusById: rows.statusById }),
   };
 
   return { ...view, summary: summaryLines(view) };

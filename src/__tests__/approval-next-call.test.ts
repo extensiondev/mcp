@@ -15,8 +15,8 @@ import { withApproveStep } from "../lib/store-connection";
 import { answeredAs } from "../lib/submit-action-safety";
 import { installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
 import { createToolDispatcher } from "../lib/tool-dispatch";
-import * as submitModule from "../tools/submit";
-import * as submitCheckModule from "../tools/submit-check";
+import * as submitModule from "../tools/submit-local";
+import * as submitCheckModule from "../tools/submit-check-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 installPlatformKernelHooks();

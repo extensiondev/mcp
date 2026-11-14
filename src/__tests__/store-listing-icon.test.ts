@@ -13,10 +13,10 @@ import path from "node:path";
 
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { localIcon } from "../lib/store-listing-icon";
+import { localIcon } from "../lib/store-facts-local";
 import { readZipEntry } from "../lib/zip-entries";
-import { readLocalListing } from "../tools/store-listing";
-import { handler as submit } from "../tools/submit";
+import { readLocalListing } from "../lib/submit-facts-local";
+import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 const LISTING = (store: string) => `${PROJECT_ROUTE}/stores/${store}/listing`;

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { actionFingerprint } from "../lib/approval-gate";
 import { safariApprovalReleaseSentence, safariReleaseIntentOf } from "../lib/safari-release-intent";
 import { STORE_SETTINGS_ACTION, storeSettingsDigest } from "../lib/store-settings";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 const CONFIG = `${PROJECT_ROUTE}/stores/config`;

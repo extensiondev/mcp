@@ -19,7 +19,7 @@ import { forgetPendingCreate, pendingCreate, pendingCreatesPath, rememberPending
 import { installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
 import { createToolDispatcher, type ToolModule } from "../lib/tool-dispatch";
 import * as shares from "../tools/shares";
-import * as submit from "../tools/submit";
+import * as submit from "../tools/submit-local";
 
 installPlatformKernelHooks();
 

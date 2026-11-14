@@ -6,23 +6,15 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { execFileSync } from "node:child_process";
-import path from "node:path";
-
 import { HELD_MISSES, iconHoldSentence, localPackageHold, type PackageHold } from "./build-inputs";
 import { dispatchedPushSentence, docsOnlySentence, headPushOf, isDocsOnly, skippedPushSentence, type HeadPush } from "./head-push";
 import { projectApiBytes } from "./project-api-bytes";
 import { projectApiGet, type ProjectApi } from "./project-api";
 import { isRow, text } from "./row";
-import {
-  declaredIcon128,
-  icon128FromBytes,
-  iconFromDist,
-  iconFromSource,
-  type ListingImage,
-} from "./store-listing-media";
+import { declaredIcon128, icon128FromBytes } from "./store-listing-media";
 import { readZipEntry } from "./zip-entries";
 
+import type { IconPick, ProjectFacts } from "./submit-facts";
 import type { ListingStore } from "./store-md-listing";
 
 const MAX_PACKAGE_BYTES = 512 * 1024 * 1024;
@@ -32,73 +24,7 @@ const MAX_ICON_BYTES = 512 * 1024;
 const BUILD_LIST_LIMIT = 50;
 const SHA_PREFIX = 7;
 
-export type IconOrigin =
-  | { from: "build"; build: string; file: string }
-  | { from: "dist"; file: string }
-  | { from: "source"; file: string };
-
-export interface IconPick {
-  icon: ListingImage;
-  origin: IconOrigin;
-}
-
-export interface IconStale {
-  dist: string;
-  source: string;
-}
-
-export type LocalIcon = IconPick | { missing: string; stale?: IconStale };
-
-export function staleSentence(stale: IconStale, newestBuild: string | null): string {
-  const take = newestBuild
-    ? `run a build or pass useBuild: "${newestBuild}" to take the icon from build ${newestBuild}`
-    : "run a build first (extension_build), or push the commit so the platform builds it";
-
-  return `${stale.dist} is older than ${stale.source}; ${take}`;
-}
-
-/* @invariant A LOCAL ICON IS SENT ONLY WHEN IT IS THE SOURCE ICON. The
- * dist folder is whatever the last local build left, so its icon is compared
- * with the icon the source manifest names: equal bytes mean the dist is
- * current and is sent as dist; different bytes mean the dist is older than
- * the source and the icon is withheld with that sentence, never sent as if it
- * were current (ledger 255, three stores kept the old icon). With no dist the
- * source icon itself is sent, since a build copies it as it is; with no
- * source icon to compare against the dist is taken as found.
- */
-export function localIcon(projectPath: string, store: ListingStore): LocalIcon {
-  const source = iconFromSource(projectPath);
-  const dist = iconFromDist(projectPath, store);
-
-  if ("icon" in dist) {
-    if ("icon" in source && source.icon.sha256 !== dist.icon.sha256) {
-      const stale = { dist: dist.icon.source.split(path.sep).slice(0, 2).join("/"), source: source.icon.source };
-
-      return { missing: staleSentence(stale, null), stale };
-    }
-
-    return { icon: dist.icon, origin: { from: "dist", file: dist.icon.source } };
-  }
-
-  if ("icon" in source) return { icon: source.icon, origin: { from: "source", file: source.icon.source } };
-
-  return dist;
-}
-
-export function gitHead(projectPath: string): string {
-  try {
-    return execFileSync("git", ["rev-parse", "HEAD"], {
-      cwd: projectPath,
-      stdio: ["ignore", "pipe", "ignore"],
-      timeout: 5_000,
-      encoding: "utf8",
-    })
-      .trim()
-      .toLowerCase();
-  } catch {
-    return "";
-  }
-}
+export { staleSentence, type IconOrigin, type IconPick, type IconStale, type LocalIcon } from "./submit-facts";
 
 type Row = Record<string, unknown>;
 
@@ -203,18 +129,18 @@ function packageFiles(store: ListingStore): string[] {
  * for the preflight and the icon); then the newest build's icon stands for
  * HEAD, the reason says so, and no push is asked for (ledger 319).
  */
-export async function platformBuildIcons(api: ProjectApi, projectPath: string, useBuild: string): Promise<BuildIcons> {
+export async function platformBuildIcons(api: ProjectApi, project: Pick<ProjectFacts, "projectPath" | "gitHead">, useBuild: string): Promise<BuildIcons> {
   const read = await projectApiGet<{ items?: unknown[]; lastPush?: unknown }>(api, "builds", { limit: BUILD_LIST_LIMIT });
   const rows = read.ok ? buildRows(Array.isArray(read.json?.items) ? read.json.items : []) : [];
   const newest = rows.find((row) => row.done)?.id ?? null;
   const asked = useBuild.toLowerCase();
-  const target = asked || gitHead(projectPath);
+  const target = asked || project.gitHead;
   const headPush = asked || !target || !read.ok ? null : headPushOf(read.json?.lastPush, target);
   const wanted = target ? await wantedBuild(api, rows, target, headPush) : { row: null, seen: null };
   const fallback = !wanted.row && isDocsOnly(headPush) ? newest : null;
   const subject = `the checked out commit ${target.slice(0, SHA_PREFIX)}`;
   const miss = wanted.row || fallback ? null : missedSentence(target, Boolean(asked), wanted.seen, read.ok ? null : read.message, headPush);
-  const hold = miss && !asked && HELD_MISSES.has(miss.why) ? localPackageHold(projectPath, newest ? [newest] : [], target) : null;
+  const hold = miss && !asked && HELD_MISSES.has(miss.why) ? localPackageHold(project.projectPath, newest ? [newest] : [], target) : null;
   const build = wanted.row?.id ?? fallback ?? hold?.build ?? null;
   const missed = miss?.missed ?? null;
   const why = miss?.why ?? (fallback ? "docs-only" : null);

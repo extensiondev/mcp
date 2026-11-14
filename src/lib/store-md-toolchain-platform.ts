@@ -8,7 +8,7 @@
 
 import { projectApiGet, type ProjectApi } from "./project-api";
 import { isRow, text } from "./row";
-import { localBuildToolchain, toolchainOf, type BuiltToolchain } from "./store-md-toolchain";
+import { toolchainOf, type BuiltToolchain, type ToolchainProject } from "./store-md-toolchain";
 
 type Row = Record<string, unknown>;
 
@@ -25,8 +25,8 @@ export async function platformBuildToolchain(api: ProjectApi, buildSha: string):
   return chain ? { chain, from: `build ${sha} on extension.dev` } : null;
 }
 
-export async function builtToolchainFor(api: ProjectApi | null, projectPath: string, buildSha: string): Promise<BuiltToolchain | null> {
+export async function builtToolchainFor(api: ProjectApi | null, project: ToolchainProject, buildSha: string): Promise<BuiltToolchain | null> {
   const platform = api ? await platformBuildToolchain(api, buildSha) : null;
 
-  return platform ?? (projectPath ? localBuildToolchain(projectPath) : null);
+  return platform ?? (project.projectPath ? (project.toolchain?.localBuild ?? null) : null);
 }

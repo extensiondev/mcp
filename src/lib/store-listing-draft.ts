@@ -6,13 +6,9 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import fs from "node:fs";
-import path from "node:path";
-
-import { listOf, readChromeWebStoreMd, type ChromeWebStoreMd } from "./chromewebstore-md";
-import { localizedMessage, messageKeyOf } from "./publish-localized-name";
+import { chromeWebStoreMdOf, listOf, type ChromeWebStoreMd } from "./chromewebstore-md";
 import { NEVER_PREFILLED } from "./store-bring-list";
-import { accessFacts, codeFactsOf, dataCollectionFacts, networkFacts, remoteCodeFacts, type CodeFacts } from "./store-code-facts";
+import { accessFacts, dataCollectionFacts, networkFacts, remoteCodeFacts, type CodeFacts } from "./store-code-facts";
 import { STORE_MD_FILENAME } from "./store-md";
 import { storeMdFieldRows, storeMdLineOf, storeMdSectionOf } from "./store-md-fields";
 import {
@@ -32,7 +28,7 @@ import {
 } from "./store-md-listing";
 import { storeGalleryOf, type GalleryStore } from "./store-gallery";
 
-type Row = Record<string, unknown>;
+import type { DraftFacts, ProjectFacts } from "./submit-facts";
 
 export interface DraftLine {
   field: ListingField;
@@ -105,51 +101,6 @@ const OWNER_ASKS: Record<string, string> = {
 
 const NOT_IN_CODE = "Nothing in the code answers this; it is about the content and the rights you hold.";
 
-function readText(file: string): string | null {
-  try {
-    return fs.readFileSync(file, "utf8");
-  } catch {
-    return null;
-  }
-}
-
-function readJson(file: string): Row | null {
-  const raw = readText(file);
-  if (raw === null) return null;
-
-  try {
-    const parsed: unknown = JSON.parse(raw.replace(/^\uFEFF/, ""));
-
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Row) : null;
-  } catch {
-    return null;
-  }
-}
-
-const text = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
-
-function manifestText(projectPath: string, key: "name" | "description"): { value: string; from: string } | null {
-  for (const dir of [path.join(projectPath, "src"), projectPath]) {
-    const manifest = readJson(path.join(dir, "manifest.json"));
-    if (!manifest) continue;
-
-    const where = path.relative(projectPath, path.join(dir, "manifest.json")).split(path.sep).join("/");
-    const raw = text(manifest[key]);
-    const message = messageKeyOf(raw);
-
-    if (raw && !message) return { value: raw, from: `${where} ${key}` };
-    if (!message) return null;
-
-    const locale = text(manifest.default_locale);
-    const file = `_locales/${locale}/messages.json`;
-    const localized = locale ? localizedMessage(readJson(path.join(dir, file)), message) : null;
-
-    return localized ? { value: localized, from: `${path.relative(projectPath, path.join(dir, file)).split(path.sep).join("/")} ${message}` } : null;
-  }
-
-  return null;
-}
-
 function onFile(parsed: StoreMdListing | null, store: ListingStore, field: ListingField): boolean {
   if (!parsed) return false;
 
@@ -162,9 +113,9 @@ function limitOf(field: ListingField, store: ListingStore): string {
   return storeMdFieldRows(store).find((row) => row.field === field)?.limit ?? "";
 }
 
-function factsFor(field: ListingField, facts: CodeFacts, projectPath: string): string[] {
+function factsFor(field: ListingField, facts: CodeFacts, draft: DraftFacts): string[] {
   const surfaces = facts.surfaces.length ? [`The manifest declares ${facts.surfaces.join(", ")}.`] : [];
-  const summary = manifestText(projectPath, "description");
+  const summary = draft.description;
   const said = summary ? [`The manifest description reads "${/[.!?]$/.test(summary.value) ? summary.value : `${summary.value}.`}"`] : [];
   const matches = facts.contentScriptMatches.length ? [`Content scripts run on: ${facts.contentScriptMatches.join(", ")}.`] : [];
 
@@ -177,11 +128,10 @@ function factsFor(field: ListingField, facts: CodeFacts, projectPath: string): s
   }
 
   if (field === "releaseNotes") {
-    const pkg = readJson(path.join(projectPath, "package.json"));
-    const changelog = ["CHANGELOG.md", "changelog.md"].find((name) => fs.existsSync(path.join(projectPath, name)));
+    const changelog = draft.changelog;
 
     return [
-      ...(text(pkg?.version) ? [`package.json reads version ${text(pkg?.version)}.`] : []),
+      ...(draft.packageVersion ? [`package.json reads version ${draft.packageVersion}.`] : []),
       changelog ? `${changelog} is in the repository.` : "The repository has no CHANGELOG.md.",
     ];
   }
@@ -296,18 +246,19 @@ function addsSentence(lines: DraftLine[]): string {
  * STORE.md lines and named in prefilledFrom, while its Privacy & Data Use
  * answers stay the owner's to give on the dashboard (ledger 512).
  */
-export function listingDraftOf(args: { projectPath: string; asked: readonly string[]; statusById: Record<string, string> }): ListingDraft | null {
-  const projectPath = args.projectPath.trim();
-  if (!projectPath || !fs.existsSync(projectPath)) return null;
+export function listingDraftOf(args: { project: Pick<ProjectFacts, "projectPath" | "exists" | "storeMd" | "chromeWebStoreMd" | "draft">; asked: readonly string[]; statusById: Record<string, string> }): ListingDraft | null {
+  const projectPath = args.project.projectPath.trim();
+  const draft = args.project.draft;
+  if (!projectPath || !args.project.exists || !draft) return null;
 
   const stores = LISTING_STORES.filter((store) => args.asked.includes(store));
   if (!stores.length) return null;
 
-  const raw = readText(path.join(projectPath, STORE_MD_FILENAME));
+  const raw = args.project.storeMd;
   const parsed = raw === null ? null : parseStoreMdListing(raw);
-  const facts = codeFactsOf(projectPath);
-  const name = manifestText(projectPath, "name");
-  const summary = manifestText(projectPath, "description");
+  const facts = draft.codeFacts;
+  const name = draft.name;
+  const summary = draft.description;
   const missing = (field: ListingField): ListingStore[] => stores.filter((store) => STORE_FIELDS[store].includes(field) && !onFile(parsed, store, field));
 
   const fromCode: DraftLine[] = [];
@@ -320,7 +271,7 @@ export function listingDraftOf(args: { projectPath: string; asked: readonly stri
     fromCode.push({ field: "shortDescription", line: storeMdLineOf("shortDescription"), section: LISTING_SECTION, stores: missing("shortDescription"), value: summary.value, from: summary.from });
   }
 
-  const chromeMd = readChromeWebStoreMd(projectPath);
+  const chromeMd = chromeWebStoreMdOf(args.project.chromeWebStoreMd);
   const prefilled = chromeMd ? prefilledLines(chromeMd, missing, fromCode) : [];
   const open = (field: ListingField): ListingStore[] => (prefilled.some((line) => line.field === field) ? [] : missing(field));
   const stillEmpty = STORE_FIELDS.chrome.filter((field) => missing(field).includes("chrome") && ![...fromCode, ...prefilled].some((line) => line.field === field));
@@ -334,7 +285,7 @@ export function listingDraftOf(args: { projectPath: string; asked: readonly stri
       section: group.section,
       stores: group.stores,
       limit: limitOf(field, group.stores[0]!),
-      facts: factsFor(field, facts, projectPath),
+      facts: factsFor(field, facts, draft),
     }));
   });
 
@@ -342,7 +293,7 @@ export function listingDraftOf(args: { projectPath: string; asked: readonly stri
     .filter((id) => stores.includes(id.split(".")[0] as ListingStore) && id in args.statusById && args.statusById[id] !== "have")
     .map((id) => ownerAnswerOf(id, facts));
 
-  const gallery = storeGalleryOf(projectPath, stores, parsed?.screenshotPaths);
+  const gallery = storeGalleryOf(draft.gallery, stores, parsed?.screenshotPaths);
   const adds = [...fromCode, ...prefilled];
   const sources = listOf([...(fromCode.length ? ["the manifest"] : []), ...(prefilled.length ? [chromeMd!.file] : [])]);
   const written = adds.length ? `${raw === null ? "storeMd is a STORE.md to save as it is" : `add ${addsSentence(adds)}`}, read from ${sources}; ` : "";

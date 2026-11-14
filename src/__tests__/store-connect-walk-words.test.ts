@@ -15,7 +15,7 @@ import { NO_AUTO_OPEN_ENV, setApprovalOpener } from "../lib/approval-open";
 import { setConnectCheckPause } from "../lib/connect-existing";
 import { installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
 import { createToolDispatcher, type ToolModule } from "../lib/tool-dispatch";
-import * as submitTool from "../tools/submit";
+import * as submitTool from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 installPlatformKernelHooks();

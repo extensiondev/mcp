@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { writeCredentials } from "../lib/credentials";
 import { handUploadHow, handUploadOf, handUploadSentence } from "../lib/hand-upload";
 import { namesRegistryOrToken } from "../lib/package-address";
-import { handler as submit } from "../tools/submit";
+import { handler as submit } from "../tools/submit-local";
 
 type Row = Record<string, unknown>;
 
