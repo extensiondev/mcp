@@ -125,7 +125,7 @@ describe("a store whose credentials are saved and whose Store publishing switch 
 
     expect(out.status).toBe("store-not-connected");
     expect(out.value.stores.firefox.sourceArchive).toMatchObject({ attached: true, setting: "repository" });
-    expect(out.hint).toContain("Firefox source archive: the platform will attach the source repository at the built commit to the upload for Mozilla's reviewers.");
+    expect(out.hint).toContain("Firefox source archive: the platform will attach the source of the build being submitted (the repository at the built commit, or the stored upload of a project created from a folder) to the upload for Mozilla's reviewers.");
     expect(out.hint).not.toContain(SOURCE_ARCHIVE_SWITCH);
   });
 
@@ -201,8 +201,9 @@ const CONNECTED = [
   check("store.credentials_present", "pass", "Store credentials are saved."),
 ];
 
-function sourceArchive(status: "pass" | "warn") {
+function sourceArchive(status: "pass" | "warn", source?: "upload" | "repository") {
   return {
+    ...(source ? { source } : {}),
     id: "store.firefox_source_archive",
     label: "Firefox source archive",
     status,
@@ -235,16 +236,28 @@ describe("the Firefox answers say whether the platform attaches the AMO source a
     expect(out.value.stores.firefox.warnings.map((c: { id: string }) => c.id)).toEqual(["store.firefox_source_archive"]);
   });
 
-  it("preflight says the platform will attach the source repository at the built commit when the check passes", async () => {
+  it("preflight names what the platform attaches by where the project's source lives, and never a repository an uploaded project lacks", async () => {
     if (process.platform === "win32") return;
 
     platform.login();
-    platform.routes[`POST ${PREFLIGHT}`] = () => ({ body: firefoxReport([...CONNECTED, sourceArchive("pass")]) });
 
-    const out = JSON.parse(await submit({ action: "preflight", browsers: ["firefox"], buildSha: "603fc8a", api: API }));
+    const say = async (source?: "upload" | "repository") => {
+      platform.routes[`POST ${PREFLIGHT}`] = () => ({ body: firefoxReport([...CONNECTED, sourceArchive("pass", source)]) });
 
-    expect(out.value.stores.firefox.sourceArchive).toMatchObject({ attached: true, setting: "repository" });
-    expect(out.value.sayToPerson).toContain("Firefox source archive: the platform will attach the source repository at the built commit to the upload for Mozilla's reviewers.");
+      const out = JSON.parse(await submit({ action: "preflight", browsers: ["firefox"], buildSha: "603fc8a", api: API }));
+
+      expect(out.value.stores.firefox.sourceArchive).toMatchObject({ attached: true, setting: "repository", ...(source ? { origin: source } : {}) });
+      expect(out.value.sayToPerson).toContain(out.value.stores.firefox.sourceArchive.say);
+
+      return String(out.value.stores.firefox.sourceArchive.say);
+    };
+
+    expect(await say("upload")).toBe(
+      "Firefox source archive: this project was created from an uploaded folder and has no repository, so the platform will attach the stored source of the build being submitted to the upload for Mozilla's reviewers.",
+    );
+
+    expect(await say("repository")).toBe("Firefox source archive: the platform will attach the source repository at the built commit to the upload for Mozilla's reviewers.");
+    expect(await say()).toContain("the repository at the built commit, or the stored upload of a project created from a folder");
   });
 
   it("submit says sources attached when the platform's submission record carries the archive", async () => {
@@ -268,7 +281,7 @@ describe("the Firefox answers say whether the platform attaches the AMO source a
 
     expect(out.status).toBe("submitted");
     expect(out.value.firefoxSourceArchive).toMatchObject({ attached: true, source: "platform-record" });
-    expect(out.hint).toContain("Firefox: sources attached; the platform's record says the source repository at the built commit went with the upload.");
+    expect(out.hint).toContain("Firefox: sources attached; the platform's record says the source of the built commit went with the upload.");
   });
 
   it("submit reads the store setting at submit time when the record is silent, and says so", async () => {

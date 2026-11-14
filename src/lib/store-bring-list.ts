@@ -93,7 +93,7 @@ function clearedBy(row: RequirementRow, store: string): string {
   if (DERIVED_SUFFIXES.includes(suffix)) {
     if (suffix === "store_icon") return "the 128 px icon the manifest names, taken from the build; sync-listing records it and the dashboard's Store listing tab takes the upload";
     if (suffix === "app_icon") return "the macOS build stamps the wrapper's 1024x1024 icon from the largest icon the manifest names";
-    if (suffix === "source_archive") return "the Firefox store setting Source archive; the platform cuts it from the repository at the built commit";
+    if (suffix === "source_archive") return "the Firefox store setting Source archive; the platform attaches the source of the built commit, the repository or the stored upload of a project created from a folder";
     if (suffix === "package_contents") return "the build; the preflight scans the Edge package for compressed files";
 
     return "the 128 px icon the manifest names, read from the build by sync-listing";

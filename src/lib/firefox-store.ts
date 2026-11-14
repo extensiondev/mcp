@@ -97,9 +97,18 @@ const SOURCE_ARCHIVE_CHECK = "store.firefox_source_archive";
 
 export const SOURCE_ARCHIVE_FIX = 'turn on Source archive with extension_submit action:"configure-store" store:"firefox" storeSettings:{sourceArchive:"repository"} (a plain call under your own token)';
 
+export type SourceArchiveOrigin = "upload" | "repository";
+
 export interface SourceArchiveRead {
   attached: boolean;
   setting: string;
+  origin?: SourceArchiveOrigin;
+}
+
+function originOf(value: unknown): SourceArchiveOrigin | undefined {
+  const origin = text(value);
+
+  return origin === "upload" || origin === "repository" ? origin : undefined;
 }
 
 export function sourceArchiveOf(json: Row): SourceArchiveRead | null {
@@ -108,12 +117,20 @@ export function sourceArchiveOf(json: Row): SourceArchiveRead | null {
 
   const attached = text(check.status) === "pass";
 
-  return { attached, setting: text(check.actual) || (attached ? "repository" : "none") };
+  const origin = originOf(check.source);
+
+  return { attached, setting: text(check.actual) || (attached ? "repository" : "none"), ...(origin ? { origin } : {}) };
 }
+
+const ATTACHED_FROM: Record<SourceArchiveOrigin | "unstated", string> = {
+  upload: "this project was created from an uploaded folder and has no repository, so the platform will attach the stored source of the build being submitted",
+  repository: "the platform will attach the source repository at the built commit",
+  unstated: "the platform will attach the source of the build being submitted (the repository at the built commit, or the stored upload of a project created from a folder)",
+};
 
 export function sourceArchiveSentence(read: SourceArchiveRead, connectUrl: string): string {
   return read.attached
-    ? "Firefox source archive: the platform will attach the source repository at the built commit to the upload for Mozilla's reviewers."
+    ? `Firefox source archive: ${ATTACHED_FROM[read.origin ?? "unstated"]} to the upload for Mozilla's reviewers.`
     : `Firefox source archive: no source archive is configured; Mozilla requires matching sources for a bundled build, and every platform build is bundled; ${SOURCE_ARCHIVE_FIX} or in the console's Firefox store settings at ${connectUrl}.`;
 }
 
@@ -146,7 +163,8 @@ export interface SourcesOutcome {
 }
 
 /* @invariant THE SOURCES SENTENCE IS READ, NEVER GUESSED. The store run
- * packages the source repository only when the project's Firefox store
+ * packages the source, the repository at the built commit or the stored
+ * upload of a project created from a folder (ledger 701), only when the project's Firefox store
  * setting reads "repository" at run time and stops before the upload when
  * that fetch fails, so the setting the platform answered at submit time is a
  * fact about the upload; a `sourceArchive` field on the platform's own
@@ -176,8 +194,8 @@ export function firefoxSourcesOutcome(
       attached: true,
       source,
       say: recorded
-        ? "Firefox: sources attached; the platform's record says the source repository at the built commit went with the upload."
-        : "Firefox: sources attached; the Firefox store setting read at submit time attaches the source repository at the built commit to the upload.",
+        ? "Firefox: sources attached; the platform's record says the source of the built commit went with the upload."
+        : "Firefox: sources attached; the Firefox store setting read at submit time attaches the source of the built commit to the upload.",
     };
   }
 
