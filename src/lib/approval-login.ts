@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { mintedApproval, type MintedApproval } from "./approval-record";
+import { mintedApproval, mintedWords, type MintedApproval } from "./approval-record";
 import { requestCredential } from "./credential-scope";
 import { loginKey, serverOf, targetServer } from "./credential-server";
 import { loginIdOf, readTokenClaims } from "./credential-source";
@@ -82,14 +82,14 @@ export function bindApprovalLogin(
       value: {
         approvalId,
         mintedFor: ref,
-        action: minted.action,
-        mintedAt: minted.mintedAt,
+        ...(minted.action ? { action: minted.action } : {}),
+        ...(minted.mintedAt ? { mintedAt: minted.mintedAt } : {}),
         trackUrl: trackUrl("project", { workspace: minted.workspace, project: minted.project }, api),
       },
       error: {
         code: "E_AUTH_REQUIRED",
         name: "ApprovalLoginGone",
-        message: `Approval ${approvalId} was requested for ${ref} (${minted.action}, ${minted.mintedAt}), and the login that requested this approval is no longer stored; sign in to ${ref} again and request a new approval. The platform was not asked and nothing was executed.`,
+        message: `Approval ${approvalId} was requested for ${ref}${mintedWords(minted)}, and the login that requested this approval is no longer stored; sign in to ${ref} again and request a new approval. The platform was not asked and nothing was executed.`,
       },
       hint: `Run extension_auth (action: login, project: "${ref}"), then call this tool again with the same arguments and no approvalId.`,
     }),

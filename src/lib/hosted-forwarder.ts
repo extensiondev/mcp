@@ -8,15 +8,12 @@
 
 import crypto from "node:crypto";
 
-import { storedLoginFor } from "./approval-login";
 import { autoOpenBlock, notOpenedNote, openCommandBlock, openPagesForPerson } from "./approval-open";
-import { mintedApproval } from "./approval-record";
-import { targetServer } from "./credential-server";
 import { askingOnly } from "./ask-only";
 import { resolveCredential, type CredentialRef } from "./credential-source";
-import { MEMBER_PROJECT, listCredentials } from "./credentials";
 import { envelope, isEnvelope } from "./envelope";
-import { forwardSession, withForwardSession, wwwApprovalState, type ForwardSession } from "./forward-approval-state";
+import { forwardSession, withForwardSession, type ForwardSession } from "./forward-approval-state";
+import { approvalHeldByPerson, forgetApprovalHolders } from "./forwarded-approval";
 import { HOSTED_SWITCH, forgetForwardCredential, forwardCredential, forwardUrlFor, hostedForwarding, type ExchangedCredential } from "./forward-credential";
 import { ACT_SETTLE_WINDOW_MS, FORWARD_TIMEOUT_MS, IN_FLIGHT_RECHECK_MS, MEMORY_KEY, carriedMemory, hostedWaitOf, lostAnswer, readLane, takeMemory, unreadableAnswer, withWholeWait, withoutHostedWait } from "./forward-lane-answer";
 import { CLOSED_STATUSES, readAnswer, readLanePreflight, withLanePreflight } from "./forward-lane-preflight";
@@ -45,7 +42,7 @@ export const PAGE_OPENING_FACT = "pageOpening";
 export const OPEN_PAGES_KEY = "openPages";
 export const OPEN_PAGES_MAX = 4;
 
-interface StoredLogin {
+export interface StoredLogin {
   token: string;
   ref: CredentialRef | null;
 }
@@ -324,79 +321,10 @@ function refOf(ref: CredentialRef | null): string | null {
   return ref ? `${ref.workspace}/${ref.project}`.toLowerCase() : null;
 }
 
-function storedLogins(api?: string): StoredLogin[] {
-  const server = targetServer(api);
-  const now = Math.floor(Date.now() / 1000);
+export { forgetApprovalHolders };
 
-  try {
-    return listCredentials()
-      .filter((entry) => entry.server === server && !entry.movedTo && entry.projectSlug !== MEMBER_PROJECT && !(entry.expiresAt && entry.expiresAt <= now))
-      .map((entry) => ({ token: String(entry.token).trim(), ref: { workspace: entry.workspaceSlug, project: entry.projectSlug } }));
-  } catch {
-    return [];
-  }
-}
-
-const approvalHolders = new Map<string, string>();
-
-export function forgetApprovalHolders(): void {
-  approvalHolders.clear();
-}
-
-/* @invariant A FORWARDED CALL THAT CARRIES AN APPROVAL ID IS MADE AS THE
- * PROJECT AND WITH THE LOGIN THE APPROVAL WAS MINTED FOR, WHEREVER ITS RECORD
- * LIVES. On the forwarder path the record is in www's hosted state, not in
- * this machine's approvals.json, and www answers it only to a credential of
- * the project that minted it. So the login the call would use is asked
- * first, then the other logins stored for that server, one at a time, the
- * same workspace before the rest, each with the forward credential this
- * process already holds for it, and the asking stops at the first that
- * reads the record. A member login is asked once per project it lists, on
- * one exchange. Which login read an id is remembered for as long as this
- * server runs, so the status poll and the act that follow cost one read
- * each. The record is handed to the dispatcher, which binds the project and
- * the login exactly as it does for a record on disk (ledger 443 and 472). A
- * record this machine holds on disk is left to the dispatcher's own read; an
- * id no stored login can read is left to the platform, and so is a record
- * read by a login that is not in the store (EXTENSION_DEV_TOKEN), because
- * that call already goes out with the login www answered.
- */
 export async function forwardedApproval(command: string, args: Args, deps: ForwarderDeps = {}): Promise<MintedApproval | null> {
-  const approvalId = text(args.approvalId);
-  if (!FORWARDED_TOOLS[command] || !approvalId) return null;
-
-  const named = text(args.api) || undefined;
-  if (mintedApproval(named, approvalId)) return null;
-
-  const checked = safeApiBase(resolveApiBase(named));
-  const resource = checked.ok ? forwardUrlFor(checked.base, deps.env) : null;
-  if (!checked.ok || !resource) return null;
-
-  const own = (deps.resolveLogin ?? resolveCredential)({ project: text(args.project) || undefined, api: named });
-  const keyOf = (login: StoredLogin): string => `${login.token} ${refOf(login.ref) ?? ""}`;
-  const held = `${checked.base} ${approvalId}`;
-  const rank = (login: StoredLogin): number => (keyOf(login) === approvalHolders.get(held) ? 0 : login === own ? 1 : login.ref?.workspace.toLowerCase() === own.ref?.workspace.toLowerCase() ? 2 : 3);
-  const known = new Set<string>();
-  const logins = [own, ...(deps.storedLogins ?? storedLogins)(named)]
-    .filter((login) => {
-      if (!login.token || known.has(keyOf(login))) return false;
-
-      known.add(keyOf(login));
-
-      return true;
-    })
-    .sort((a, b) => rank(a) - rank(b));
-
-  for (const login of logins) {
-    const found = await wwwApprovalState({ api: checked.base, login: login.token, project: refOf(login.ref), resource, ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}) }).mintedApproval(checked.base, approvalId);
-    if (!found) continue;
-
-    approvalHolders.set(held, keyOf(login));
-
-    return login === own && !storedLoginFor(found, named) ? null : found;
-  }
-
-  return null;
+  return FORWARDED_TOOLS[command] ? approvalHeldByPerson(args, deps) : null;
 }
 
 function personPage(url: unknown): url is string {

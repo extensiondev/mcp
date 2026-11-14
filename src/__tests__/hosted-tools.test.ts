@@ -550,6 +550,52 @@ describe("the forwarder", () => {
     expect(lane().map((hit) => hit.project)).toEqual(["acme/blog", "acme/blog"]);
   });
 
+  it("733: asks www once which project holds the approval, exchanges no login for the read but the call's own, and asks nobody else when www says it is not this person's", async () => {
+    const BLOG_LOGIN = "blog.device.login";
+    writeCredentials({ version: 1, token: BLOG_LOGIN, workspaceSlug: "acme", projectSlug: "blog", expiresAt: DOCS_EXPIRES, api: WWW, provider: "extensiondev" });
+    twoLoginsDefaultWeb();
+    const mine = `apr_${"blog".padEnd(32, "0")}`;
+    const theirs = `apr_${"theirs".padEnd(32, "0")}`;
+    const { seen, lane } = stubHostedPlatform(APPROVED(mine));
+    const older = globalThis.fetch;
+
+    vi.stubGlobal("fetch", async (input: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "null"));
+
+      if (!String(input).endsWith("/api/cli/forward/approvals") || body?.anyProject !== true) return older(input as string, init);
+
+      seen.push({ url: String(input), authorization: new Headers(init?.headers).get("authorization"), project: new Headers(init?.headers).get("x-extensiondev-project"), body });
+
+      return body.approvalId === mine
+        ? new Response(JSON.stringify({ project: "acme/blog", loginId: loginIdOf(BLOG_LOGIN) }), { status: 200 })
+        : new Response(JSON.stringify({ code: "APPROVAL_UNKNOWN", message: "Unknown approval", anyProject: true }), { status: 404 });
+    });
+
+    const reads = () => seen.filter((hit) => hit.url.endsWith("/api/cli/forward/approvals")).map((hit) => [hit.project, hit.body.anyProject]);
+    const exchanges = () => seen.filter((hit) => hit.url.endsWith("/api/cli/forward/exchange")).map((hit) => hit.authorization);
+
+    await dispatched("extension_approvals", { approvalId: mine });
+    await dispatched("extension_approvals", { approvalId: mine });
+
+    expect(reads()).toEqual([["acme/web", true]]);
+    expect(exchanges()).toEqual([`Bearer ${WEB_LOGIN}`, `Bearer ${BLOG_LOGIN}`]);
+    expect(lane().map((hit) => [hit.authorization, hit.project, hit.body.args.project])).toEqual([
+      [`Bearer forward-of-${BLOG_LOGIN}`, "acme/blog", "acme/blog"],
+      [`Bearer forward-of-${BLOG_LOGIN}`, "acme/blog", "acme/blog"],
+    ]);
+
+    const other = await dispatched("extension_approvals", { approvalId: mine, project: "acme/docs" });
+
+    expect(other).toMatchObject({ ok: false, status: "approval-rejected" });
+    expect(other.error.message).toContain(`Approval ${mine} was minted for acme/blog, not acme/docs`);
+
+    await dispatched("extension_approvals", { approvalId: theirs });
+
+    expect(reads()).toEqual([["acme/web", true], ["acme/web", true]]);
+    expect(exchanges()).toHaveLength(2);
+    expect(lane()[2]).toMatchObject({ authorization: `Bearer forward-of-${WEB_LOGIN}`, project: "acme/web" });
+  });
+
   it("733: reads an approval through a member login, one project at a time on one exchange", async () => {
     const MEMBER_LOGIN = "member.device.login";
     writeCredentials({ version: 1, token: MEMBER_LOGIN, workspaceSlug: "acme", projectSlug: "*", kind: "member", projectSlugs: ["docs", "blog"], expiresAt: DOCS_EXPIRES, api: WWW, provider: "extensiondev" });

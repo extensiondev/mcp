@@ -149,6 +149,34 @@ async function write(session: ForwardSession, method: "PUT" | "DELETE", path: st
   return openDoor(path, await call(session, method, path, body)).status === 200;
 }
 
+export type ApprovalHolder =
+  | { kind: "holder"; workspace: string; project: string; loginId: string }
+  | { kind: "record"; record: MintedApproval }
+  | { kind: "unknown" }
+  | { kind: "unanswered" };
+
+/* @invariant ONE READ SAYS WHICH OF THE PERSON'S PROJECTS HOLDS AN APPROVAL.
+ * www names the project and the login an approval was filed under to any
+ * forward credential of the same person, and nothing about anyone else's.
+ * The answer is told apart from an older www by its shape: a project and a
+ * login id is the holder; a record is an older www answering for the asking
+ * login's own project; a 404 that repeats the flag is this person holding
+ * no such approval anywhere, so no other login is asked; any other answer
+ * says nothing, and the caller falls back to asking its logins in turn.
+ */
+export async function forwardApprovalHolder(session: ForwardSession, approvalId: string): Promise<ApprovalHolder> {
+  const answer = openDoor(APPROVALS_PATH, await call(session, "POST", APPROVALS_PATH, { approvalId, anyProject: true }));
+  const [workspace = "", project = ""] = String(field(answer.body, "project") ?? "").toLowerCase().split("/");
+  const loginId = field(answer.body, "loginId");
+
+  if (answer.status === 200 && workspace && project && typeof loginId === "string" && loginId) return { kind: "holder", workspace, project, loginId };
+
+  const record = answer.status === 200 ? approvalOf(field(answer.body, "record")) : null;
+  if (record) return { kind: "record", record };
+
+  return answer.status === 404 && field(answer.body, "anyProject") === true ? { kind: "unknown" } : { kind: "unanswered" };
+}
+
 /* @invariant ON THE FORWARDER PATH THE APPROVALS, HELD GRANTS AND PENDING
  * CREATES ARE THE HOSTED LANE'S, NOT THIS MACHINE'S FILES. A forwarded act
  * mints and spends its approval in www's hosted state, so a local step the

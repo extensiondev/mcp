@@ -277,6 +277,12 @@ function namedRef(named: string, record: MintedApproval): string {
  * machine resolves to another project, or to none, is another project. An id
  * this machine did not mint is left to the platform.
  */
+export function mintedWords(minted: Pick<MintedApproval, "action" | "mintedAt">): string {
+  const words = [minted.action, minted.mintedAt].filter(Boolean).join(", ");
+
+  return words ? ` (${words})` : "";
+}
+
 export function bindApprovalProject(
   name: string,
   args: Record<string, unknown>,
@@ -310,11 +316,11 @@ export function bindApprovalProject(
       ok: false,
       command: name,
       status: APPROVAL_REJECTED_STATUS,
-      value: { approvalId, mintedFor: ref, named, action: minted.action, mintedAt: minted.mintedAt },
+      value: { approvalId, mintedFor: ref, named, ...(minted.action ? { action: minted.action } : {}), ...(minted.mintedAt ? { mintedAt: minted.mintedAt } : {}) },
       error: {
         code: "E_APPROVAL_REJECTED",
         name: "ApprovalOtherProject",
-        message: `Approval ${approvalId} was minted for ${ref} (${minted.action}, ${minted.mintedAt}), not ${named}, so the platform was not asked and nothing was executed.`,
+        message: `Approval ${approvalId} was minted for ${ref}${mintedWords(minted)}, not ${named}, so the platform was not asked and nothing was executed.`,
       },
       hint: `Call again with project: "${ref}" and the same approvalId to continue that approval, or with project: "${named}" and no approvalId to request one for ${named}.`,
     }),
