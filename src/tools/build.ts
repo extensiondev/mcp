@@ -27,7 +27,7 @@ import { type Envelope, envelope, isEnvelope } from "../lib/envelope";
 import { platformListed } from "../lib/tool-policy";
 import { manifestDivergence } from "../lib/manifest-by-browser";
 import { droppedRuntimePages, isDroppedRuntimePageWarning } from "../lib/dropped-runtime-pages";
-import { specialFolderEntrypoints, specialFolderMissingNote } from "../lib/special-folder-entries";
+import { specialFolderEntrypoints, specialFolderMissingNote, specialFolderSettings } from "../lib/special-folder-entries";
 import { engineBrowserName } from "../lib/browser-family";
 import { BUNDLE_ID_PATTERN, isSafariTarget } from "../lib/safari-dev-options";
 import {
@@ -946,10 +946,8 @@ export async function handler(args: {
     }
 
     const manifestEntrypoints = builtEntrypoints(distDir);
-    const specialEntrypoints = specialFolderEntrypoints(
-      [engineProjectRoot(args.projectPath), args.projectPath],
-      distDir,
-    );
+    const specialRoots = [engineProjectRoot(args.projectPath), args.projectPath];
+    const specialEntrypoints = specialFolderEntrypoints(specialRoots, distDir, specialFolderSettings(specialRoots, engineBrowserName(browser)));
     const entrypoints = [...manifestEntrypoints, ...specialEntrypoints];
     const specialFolderNote = specialFolderMissingNote(specialEntrypoints, distDir);
     const review = reviewDistReport(distDir, browser);

@@ -15,6 +15,7 @@ import { engineBrowserName } from "../lib/browser-family";
 import { readBuildType } from "../lib/build-type";
 import { reviewCoverageNotes, reviewRiskWarnings, reviewRisksReport } from "../lib/store-review";
 import { engineProjectRoot } from "../lib/session-paths";
+import { specialFolderEntrypoints, specialFolderSettings } from "../lib/special-folder-entries";
 import { manifestByBrowser } from "../lib/manifest-by-browser";
 import { duplicateAssetSentence, duplicateOf, findDuplicateAssets } from "../lib/duplicate-assets";
 
@@ -231,6 +232,10 @@ export async function handler(args: {
         {c.css.forEach((s) => addEntry(`content_scripts[${i}].css`, s));}
     });
   }
+
+  const specialRoots = [engineProjectRoot(args.projectPath), args.projectPath];
+
+  for (const entry of specialFolderEntrypoints(specialRoots, distPath, specialFolderSettings(specialRoots, engineBrowserName(browser)))) addEntry(entry.role, entry.path);
 
   const PROMO_RE =
     /(screenshot|promo|marquee|tile|banner|preview)[-_.]?\d*\.(png|jpe?g|webp|gif)$/i;

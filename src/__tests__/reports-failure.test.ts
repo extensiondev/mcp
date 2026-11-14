@@ -296,6 +296,52 @@ describe("build reports failure when the artifact is unusable", () => {
     expect(result.warnings.join("\n")).toContain("pages/draft.html (expected pages/draft.html)");
   });
 
+  it("705: the special-folder entries follow extension.config.js folders, in the build and in extension_analyze", async () => {
+    const dir = projectWithManifest(
+      { manifest_version: 3, name: "F", version: "1.0.0", options_page: "options.html" },
+      { manifest: { options_page: "options.html" }, files: ["options.html"] },
+    );
+    const sources = ["src/options.html", "pages/stale.html", "app/pages/welcome.html", "app/pages/guide/index.html", "scripts/off.ts", "tools/scripts/firefox-only.ts"];
+    const emitted = ["pages/welcome.html", "pages/guide.html"];
+
+    for (const file of sources) {
+      fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+      fs.writeFileSync(path.join(dir, file), "x");
+    }
+
+    for (const file of emitted) {
+      fs.mkdirSync(path.dirname(path.join(dir, "dist", "chrome", file)), { recursive: true });
+      fs.writeFileSync(path.join(dir, "dist", "chrome", file), "x");
+    }
+
+    fs.writeFileSync(
+      path.join(dir, "extension.config.mjs"),
+      'console.log("noise from the config");\nexport default { folders: { pages: "app/pages", scripts: false }, browser: { firefox: { folders: { scripts: "tools/scripts" } } } };\n',
+    );
+
+    cliResult = buildCliAnswer(dir, "chrome");
+
+    const listedOf = (answer: string) =>
+      (JSON.parse(answer).value.entrypoints as Array<{ role: string; path: string; present: boolean }>).map((e) => `${e.role} -> ${e.path}:${e.present}`);
+    const moved = ["options_page -> options.html:true", "app/pages/guide/index.html -> pages/guide.html:true", "app/pages/welcome.html -> pages/welcome.html:true"];
+    const built = await build.handler({ projectPath: dir });
+
+    expect(listedOf(built)).toEqual(moved);
+    expect(JSON.parse(built).warnings.join("\n")).not.toContain("not emitted");
+
+    const { handler: analyze } = await import("../tools/analyze");
+
+    expect(listedOf(await analyze({ projectPath: dir }))).toEqual(moved);
+
+    fs.mkdirSync(path.join(dir, "dist", "firefox"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "dist", "firefox", "manifest.json"), JSON.stringify({ manifest_version: 3, name: "F", version: "1.0.0" }));
+
+    expect(listedOf(await analyze({ projectPath: dir, browser: "firefox" }))).toEqual([
+      "pages/stale.html -> pages/stale.html:false",
+      "tools/scripts/firefox-only.ts -> scripts/firefox-only.js:false",
+    ]);
+  }, 30_000);
+
   it("propagates a non-zero build exit as a failure", async () => {
     const dir = projectWithManifest({
       manifest_version: 3,
