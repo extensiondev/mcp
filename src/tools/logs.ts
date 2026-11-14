@@ -27,6 +27,7 @@ import {
 import { makeFilter, type LogsArgs } from "./logs-filter";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { WEBKIT_FAMILY } from "../lib/browser-family";
+import { contractPidState } from "../lib/contract-pids";
 import { safariSilentLogReason } from "../lib/safari-session-notes";
 import {
   ambiguousSessionRefusal,
@@ -86,12 +87,14 @@ export function emptyReason(
     return `The dev session recorded status:"error"${typeof code === "string" ? ` (${code})` : ""}, so the extension is not running. Nothing is logging until the session is relaunched.`;
   }
 
-  if (typeof contract.pid === "number") {
-    try {
-      process.kill(contract.pid, 0);
-    } catch {
-      return `ready.json reports ready but its dev-server pid ${contract.pid} is dead: the session exited. Logs stop at the moment it died. Restart with extension_dev; extension_doctor will confirm.`;
-    }
+  const engine = contractPidState(projectPath, browser, contract, "engine");
+
+  if (engine === "dead") {
+    return `ready.json reports ready but its dev-server pid ${contract.pid} is dead: the session exited. Logs stop at the moment it died. Restart with extension_dev; extension_doctor will confirm.`;
+  }
+
+  if (engine === "foreign") {
+    return `ready.json reports ready but its dev-server pid ${contract.pid} is not this session's process anymore: the session exited. Logs stop at the moment it ended. Restart with extension_dev; extension_doctor will confirm.`;
   }
 
   return undefined;
@@ -168,12 +171,10 @@ export function staleFileNote(
     return "These events survive from a previous session: no ready.json exists for this project/browser now, so nothing current is producing logs.";
   }
 
-  if (typeof contract.pid === "number") {
-    try {
-      process.kill(contract.pid, 0);
-    } catch {
-      return `These events are from a PAST run: the session that wrote them (pid ${contract.pid}) is dead. Nothing current is producing logs; do not read these as live output.`;
-    }
+  const engine = contractPidState(projectPath, browser, contract, "engine");
+
+  if (engine !== null && engine !== "alive") {
+    return `These events are from a PAST run: the session that wrote them (pid ${contract.pid}) is ${engine === "dead" ? "dead" : "gone and its pid belongs to another process now"}. Nothing current is producing logs; do not read these as live output.`;
   }
 
   const liveIds = [contract.runId, contract.instanceId]

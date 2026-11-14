@@ -4,7 +4,8 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { handler } from "../tools/logs";
+import { emptyReason, handler } from "../tools/logs";
+import { registerSession, removeSession } from "../lib/process-manager";
 import { logsPath } from "../lib/session-paths";
 import { writeModernContract } from "./fixtures/ready-contract";
 import { logEvent, logFile, logGap, logHeader } from "./fixtures/engine-answers";
@@ -79,5 +80,32 @@ describe("extension_logs says when the file it read is not the whole run", () =>
     expect(out.status).toBe("empty");
     expect(out.value.total).toBe(0);
     expect(out.warnings.join(" ")).toContain("nothing in the extension has logged");
+  });
+});
+
+describe("679: extension_logs judges the contract's engine pid by its start time too", () => {
+  afterEach(() => {
+    removeSession(dir, "chrome");
+  });
+
+  it("reads a live pid that started at another time than the recorded session as a past run", async () => {
+    registerSession({ pid: process.pid, processStartedAt: "2001-01-01T00:00:00.000Z", browser: "chrome", projectPath: dir, command: "dev" });
+    writeLog(logFile("run-1", [logEvent("background", "info", ["old"], { seq: 1 })]));
+
+    const out = await read();
+
+    expect(out.status).toBe("stale");
+    expect(out.warnings.join(" ")).toContain("PAST run");
+    expect(emptyReason(dir, "chrome")).toContain("the session exited");
+  });
+
+  it("keeps a pid whose start time matches the recorded session live", async () => {
+    registerSession({ pid: process.pid, browser: "chrome", projectPath: dir, command: "dev" });
+    writeLog(logFile("run-1", [logEvent("background", "info", ["now"], { seq: 1 })]));
+
+    const out = await read();
+
+    expect(out.status).toBe("read");
+    expect(emptyReason(dir, "chrome")).toBeUndefined();
   });
 });
