@@ -1,6 +1,8 @@
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { describe, it, expect, afterEach, vi } from "vitest";
 
@@ -11,6 +13,7 @@ import {
   errorContract,
   writeEngineDist,
 } from "./fixtures/engine-answers";
+import { specialFolderEntrypoints, specialFolderSettings } from "../lib/special-folder-entries";
 
 import type * as ExecModule from "../lib/exec";
 
@@ -260,6 +263,27 @@ describe("build reports failure when the artifact is unusable", () => {
     expect(result.value.buildExitCode).toBe(0);
   });
 
+  function specialFolderSources(): Record<string, string> {
+    return {
+        "src/options.html": "x",
+        "src/background.js": 'import("../scripts/shared.js");',
+        "pages/demo.html": "x",
+        "pages/preview.dev.html": "x",
+        "pages/skipped.html": "x",
+        "public/pages/static.html": "x",
+        "scripts/standalone.ts": "export const standalone = 1;",
+        "scripts/shared.ts": "export const shared = 1;",
+        "scripts/release.ts": "export const release = 1;",
+        "scripts/legacy.ts": "export const legacy = 1;",
+        "scripts/zip.mjs": 'import fs from "node:fs";\nfs.existsSync(".");',
+        "package.json": JSON.stringify({ name: "f", scripts: { release: "tsx scripts/release.ts", shared: "tsx scripts/shared.ts" } }),
+        ".env": "SKIPPED=pages/skipped.html\nLEGACY=scripts/nothing.ts\n",
+        ".env.local": "LEGACY=scripts/legacy.ts\n",
+        "extension.config.mjs":
+          'export default { exclude: [import.meta.env.SKIPPED], commands: { build: { exclude: [process.env.LEGACY] } }, browser: { firefox: { folders: { pages: "public/pages" } } } };\n',
+    };
+  }
+
   it("lists the pages and scripts special folders beside the manifest entry points", async () => {
     const dir = projectWithManifest(
       { manifest_version: 3, name: "F", version: "1.0.0", options_page: "options.html" },
@@ -347,24 +371,7 @@ describe("build reports failure when the artifact is unusable", () => {
       { manifest_version: 3, name: "F", version: "1.0.0", options_page: "options.html" },
       { manifest: { options_page: "options.html" }, files: ["options.html"] },
     );
-    const sources: Record<string, string> = {
-      "src/options.html": "x",
-      "src/background.js": 'import("../scripts/shared.js");',
-      "pages/demo.html": "x",
-      "pages/preview.dev.html": "x",
-      "pages/skipped.html": "x",
-      "public/pages/static.html": "x",
-      "scripts/standalone.ts": "export const standalone = 1;",
-      "scripts/shared.ts": "export const shared = 1;",
-      "scripts/release.ts": "export const release = 1;",
-      "scripts/legacy.ts": "export const legacy = 1;",
-      "scripts/zip.mjs": 'import fs from "node:fs";\nfs.existsSync(".");',
-      "package.json": JSON.stringify({ name: "f", scripts: { release: "tsx scripts/release.ts", shared: "tsx scripts/shared.ts" } }),
-      ".env": "SKIPPED=pages/skipped.html\nLEGACY=scripts/nothing.ts\n",
-      ".env.local": "LEGACY=scripts/legacy.ts\n",
-      "extension.config.mjs":
-        'export default { exclude: [import.meta.env.SKIPPED], commands: { build: { exclude: [process.env.LEGACY] } }, browser: { firefox: { folders: { pages: "public/pages" } } } };\n',
-    };
+    const sources = specialFolderSources();
     const emitted = ["pages/demo.html", "scripts/standalone.js", "scripts/shared.js"];
 
     for (const [file, text] of Object.entries(sources)) {
@@ -407,6 +414,109 @@ describe("build reports failure when the artifact is unusable", () => {
     fs.writeFileSync(path.join(dir, "dist", "chrome", "pages", "preview.dev.html"), "x");
 
     expect(listedOf(await analyze({ projectPath: dir }))).toContain("pages/preview.dev.html -> pages/preview.dev.html:true");
+  }, 60_000);
+
+  it("keeps exactly the special-folder files the installed engine's own rule keeps, for every name either side lists", async () => {
+    const enginePackage = createRequire(import.meta.url).resolve("extension-develop/package.json");
+    const engineVersion = JSON.parse(fs.readFileSync(enginePackage, "utf8")).version as string;
+    const engineDist = path.join(path.dirname(enginePackage), "dist");
+    const chunks = fs.readdirSync(engineDist).filter((file) => file.endsWith(".mjs")).map((file) => ({ file, text: fs.readFileSync(path.join(engineDist, file), "utf8") }));
+
+    const engineChunk = (name: string) => {
+      const chunk = chunks.find(({ text }) => new RegExp(`^export \\{[^}]*\\b${name}\\b`, "m").test(text));
+
+      if (!chunk) {
+        throw new Error(
+          `extension-develop ${engineVersion} exports no ${name} from any dist chunk, so the hand copy in src/lib/special-folder-entries.ts has nothing to be compared with. Find where the engine now keeps its special-folder rule and point this cell at it.`,
+        );
+      }
+
+      return chunk;
+    };
+
+    const ruleChunk = engineChunk("getSpecialFoldersDataForProjectRoot");
+    const settingsChunk = engineChunk("rememberExcludedFiles");
+    const rule = (await import(pathToFileURL(path.join(engineDist, ruleChunk.file)).href)) as {
+      getSpecialFoldersDataForProjectRoot: (root: string, folders: undefined, mode: string) => Record<"pages" | "scripts", Record<string, string | string[]>>;
+    };
+    const remembered = (await import(pathToFileURL(path.join(engineDist, settingsChunk.file)).href)) as {
+      rememberSpecialFoldersConfig: (root: string, folders: Record<string, string | false>) => void;
+      rememberExcludedFiles: (root: string, exclude: string[]) => void;
+    };
+    const handCopy = fs.readFileSync(path.join(import.meta.dirname, "..", "lib", "special-folder-entries.ts"), "utf8");
+
+    const listed = (sentinel: string) => {
+      const names = new Set<string>();
+
+      for (const [side, text] of [["extension-develop", ruleChunk.text], ["the hand copy", handCopy]] as const) {
+        const list = [...text.matchAll(/new Set\(\[([^\]]*)\]\)/g)].map((match) => [...match[1]!.matchAll(/['"]([^'"]+)['"]/g)].map((name) => name[1]!)).find((entries) => entries.includes(sentinel));
+
+        if (!list) throw new Error(`${side} holds no list naming ${sentinel}, so this cell cannot tell which names to probe.`);
+
+        for (const name of list) names.add(name);
+      }
+
+      return [...names];
+    };
+
+    const nodeOnly = [...listed("child_process"), ...listed("fs-extra")];
+    const referenceExtensions = listed(".svelte");
+    const skippedDirs = listed(".turbo").filter((name) => name !== "scripts");
+    const sources = specialFolderSources();
+    const packageScripts: Record<string, string> = JSON.parse(sources["package.json"]!).scripts;
+
+    nodeOnly.forEach((name, index) => {
+      sources[`scripts/node-only-${index}.js`] = `import "${name}";`;
+    });
+
+    referenceExtensions.forEach((extension, index) => {
+      sources[`scripts/named-${index}.ts`] = "export const named = 1;";
+      sources[`src/names-${index}${extension}`] = `scripts/named-${index}.js`;
+      packageScripts[`named-${index}`] = `tsx scripts/named-${index}.ts`;
+    });
+
+    skippedDirs.forEach((name, index) => {
+      sources[`scripts/hidden-${index}.ts`] = "export const hidden = 1;";
+      sources[`${name}/names-${index}.js`] = `scripts/hidden-${index}.js`;
+      packageScripts[`hidden-${index}`] = `tsx scripts/hidden-${index}.ts`;
+    });
+
+    sources["package.json"] = JSON.stringify({ name: "f", scripts: packageScripts });
+
+    const dir = tmpProject();
+
+    for (const [file, text] of Object.entries(sources)) {
+      fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+      fs.writeFileSync(path.join(dir, file), text);
+    }
+
+    expect(nodeOnly.length).toBeGreaterThan(70);
+    expect(referenceExtensions.length).toBeGreaterThan(10);
+    expect(skippedDirs.length).toBeGreaterThan(8);
+
+    for (const browser of ["chrome", "firefox"]) {
+      const settings = specialFolderSettings([dir], browser);
+      const folders: Record<string, string | false> = {};
+
+      for (const name of ["pages", "scripts", "public"] as const) {
+        const value = settings[name];
+        if (value !== undefined) folders[name] = value;
+      }
+
+      remembered.rememberSpecialFoldersConfig(dir, folders);
+      remembered.rememberExcludedFiles(dir, settings.exclude ?? []);
+
+      const data = rule.getSpecialFoldersDataForProjectRoot(dir, undefined, "production");
+      const engineKeeps = (["pages", "scripts"] as const)
+        .flatMap((folder) => Object.entries(data[folder]).flatMap(([key, value]) => [value].flat().map((file) => `${path.relative(dir, file).split(path.sep).join("/")} -> ${key}`)))
+        .sort();
+      const handCopyKeeps = specialFolderEntrypoints([dir], path.join(dir, "dist", "never-built"), settings)
+        .map((entry) => `${entry.role} -> ${entry.path.slice(0, -path.extname(entry.path).length)}`)
+        .sort();
+
+      expect(handCopyKeeps, `${browser}, extension-develop ${engineVersion}`).toEqual(engineKeeps);
+      expect(engineKeeps.length, browser).toBeGreaterThan(referenceExtensions.length);
+    }
   }, 60_000);
 
   it("propagates a non-zero build exit as a failure", async () => {
