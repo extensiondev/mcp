@@ -186,6 +186,22 @@ describe("extension_release_status include releases answers the platform's proje
     expect(out.hint).not.toMatch(/push a commit/i);
   });
 
+  it("702: a registry none of whose three reads answered names extension_builds list as the one next call", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+
+    for (const file of ["channels.json", "meta.json", "builds/index.json"]) registry[file] = { body: { message: "not found" }, status: 404 };
+
+    const out = JSON.parse(await readReleases({ api: API }));
+
+    expect(out.ok).toBe(false);
+    expect(out.error.name).toBe("ReleaseListNotFound");
+    expect(out.error.message).toContain('Call extension_builds (action: "list", project: "acme/alpha") next');
+    expect(out.error.message).not.toMatch(/may have no builds yet|slugs may be wrong/);
+    expect(out.value.nextCall).toEqual({ tool: "extension_builds", args: { action: "list", project: "acme/alpha" } });
+  });
+
   it("treats any value but public or private as no answer", () => {
     expect(asProjectVisibility(" Public ")).toBe("public");
     expect(asProjectVisibility("private")).toBe("private");

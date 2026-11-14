@@ -120,10 +120,10 @@ export async function readReleases(args: {
   if (!channelsRes.ok && !metaRes.ok && !buildsRes.ok) {
     return fail(
       "ReleaseListNotFound",
-      `No registry data for ${ref.workspace}/${ref.project} (${channelsRes.message}). The project may have no builds yet, or the workspace/project slugs may be wrong. If it is private, make sure extension_auth covers this exact project (a token scoped elsewhere cannot read it). The console Builds page is the authoritative record: ${buildsPageUrl}`,
+      `No registry data for ${ref.workspace}/${ref.project} (${channelsRes.message}). Call extension_builds (action: "list", project: "${ref.workspace}/${ref.project}") next: it reads the platform's own build record, so it tells a project with no builds yet from a workspace or project slug the platform does not know and from a private project this login does not cover. The console Builds page is the authoritative record: ${buildsPageUrl}`,
       "unavailable",
       "E_PLATFORM",
-      { workspace: ref.workspace, project: ref.project, registryUrl: channelsUrl, buildsPageUrl },
+      { workspace: ref.workspace, project: ref.project, registryUrl: channelsUrl, buildsPageUrl, nextCall: { tool: "extension_builds", args: { action: "list", project: `${ref.workspace}/${ref.project}` } } },
     );
   }
 
