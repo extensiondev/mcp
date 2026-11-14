@@ -160,10 +160,10 @@ describe("the listing approval fingerprint hashes the exact media the listing wr
 
     const local: ListingPatch = {
       listing: FIXTURE.listing,
-      icons: [{ sha256: "local-icon", width: 1, height: 1, bytes: Buffer.alloc(1), source: "icon.png" }],
+      icons: [{ sha256: "local-icon", width: 1, height: 1, bytes: Buffer.alloc(1), size: 1, source: "icon.png" }],
       screenshots: [
-        { sha256: "local-a", width: 1, height: 1, bytes: Buffer.alloc(1), source: "a.png" },
-        { sha256: "local-b", width: 1, height: 1, bytes: Buffer.alloc(1), source: "b.png" },
+        { sha256: "local-a", width: 1, height: 1, bytes: Buffer.alloc(1), size: 1, source: "a.png" },
+        { sha256: "local-b", width: 1, height: 1, bytes: Buffer.alloc(1), size: 1, source: "b.png" },
       ],
     };
     const answered: StagedImage[] = [

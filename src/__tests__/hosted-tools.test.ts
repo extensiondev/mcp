@@ -21,9 +21,11 @@ import { loginIdOf } from "../lib/credential-source";
 import { credentialsPath, writeCredentials } from "../lib/credentials";
 import { envelope as envelopeOf } from "../lib/envelope";
 import { forgetForwardCredentials } from "../lib/forward-credential";
+import { runAskingOnly } from "../lib/ask-only";
 import { forwardCall } from "../lib/hosted-forwarder";
 import { createToolDispatcher } from "../lib/tool-dispatch";
 import { tools } from "../index";
+import { solidPng } from "./fixtures/png";
 import { APPROVAL, PROJECT, WWW, stubPlatformFetch } from "./hosted-platform-fetch";
 
 const REQUEST_TOKEN = "request-bearer-token";
@@ -63,7 +65,7 @@ const saved: Record<string, string | undefined> = {};
 
 beforeEach(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-hosted-"));
-  for (const key of ["XDG_CONFIG_HOME", "EXTENSION_DEV_TOKEN", "EXTENSION_DEV_PROJECT", "EXTENSION_DEV_API_URL"]) saved[key] = process.env[key];
+  for (const key of ["XDG_CONFIG_HOME", "EXTENSION_DEV_TOKEN", "EXTENSION_DEV_PROJECT", "EXTENSION_DEV_API_URL", "EXTENSION_DEV_HOSTED"]) saved[key] = process.env[key];
   process.env.XDG_CONFIG_HOME = tmp;
   delete process.env.EXTENSION_DEV_TOKEN;
   delete process.env.EXTENSION_DEV_PROJECT;
@@ -515,5 +517,80 @@ describe("the forwarder", () => {
     } finally {
       restore();
     }
+  });
+
+  it("sends an ask-only call under the check tool's name, so the lane's dispatcher marks it asking only", async () => {
+    const { lane } = stubLane([LISTED, LISTED]);
+    writeCredentials({ version: 1, token: "disk-token", workspaceSlug: "acme", projectSlug: "web", expiresAt: 4102444800, api: WWW });
+    process.env.EXTENSION_DEV_HOSTED = "1";
+    const dispatch = createToolDispatcher({ tools, options: { features: ["local", "platform"], noShip: false }, openApprovals: false });
+    const asked = { action: "submit", browsers: ["chrome"], project: "acme/web", buildSha: "abc1234", dryRun: false };
+
+    await dispatch({ name: "extension_submit_check", arguments: asked });
+    await dispatch({ name: "extension_submit", arguments: asked });
+
+    expect(lane().map((hit) => hit.body.tool)).toEqual(["extension_submit_check", "extension_submit"]);
+    expect(await runAskingOnly(() => forwardCall("extension_release_promote", { project: "acme/web" }, async () => "local", FORWARDING))).toBe("local");
+    expect(lane()).toHaveLength(2);
+  });
+
+  it("uploads listing images to www itself and sends the lane digests, sizes and a path label, never bytes or the machine path", async () => {
+    const root = path.join(tmp, "proj");
+    const icon = solidPng(128, 128);
+    const shot = Buffer.concat([solidPng(1280, 800), Buffer.alloc(900_000, 7)]);
+    const uploads: Array<{ url: string; authorization: string | null; body: any }> = [];
+    const laneBodies: string[] = [];
+    fs.mkdirSync(path.join(root, "dist", "chrome", "icons"), { recursive: true });
+    fs.mkdirSync(path.join(root, "store", "screenshots", "chrome"), { recursive: true });
+    fs.writeFileSync(path.join(root, "dist", "chrome", "manifest.json"), JSON.stringify({ manifest_version: 3, name: "x", version: "1.0.0", icons: { "128": "icons/128.png" } }));
+    fs.writeFileSync(path.join(root, "dist", "chrome", "icons", "128.png"), icon);
+    fs.writeFileSync(path.join(root, "store", "screenshots", "chrome", "1.png"), shot);
+    fs.writeFileSync(path.join(root, "STORE.md"), "# Store\n\n## Listing\n\n- Summary: hello\n");
+    writeCredentials({ version: 1, token: "disk-token", workspaceSlug: "acme", projectSlug: "web", expiresAt: 4102444800, api: WWW });
+
+    vi.stubGlobal("fetch", async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      const authorization = new Headers(init?.headers).get("authorization");
+
+      if (url.endsWith("/api/cli/forward/exchange")) return new Response(JSON.stringify({ access_token: "forward-1", expires_in: 600 }), { status: 200 });
+      if (url.endsWith("/api/cli/whoami")) return new Response(JSON.stringify({ projectId: "prj_hosted1", workspaceSlug: "acme", projectSlug: "web" }), { status: 200 });
+
+      if (url.endsWith("/stores/chrome/listing/images")) {
+        uploads.push({ url, authorization, body: JSON.parse(String(init?.body)) });
+
+        return new Response(JSON.stringify({ image: { sha256: `answered-${uploads.length}`, width: 128, height: 128, bytes: 10 } }), { status: 200 });
+      }
+
+      laneBodies.push(String(init?.body));
+
+      return new Response(JSON.stringify(JSON.parse(envelopeOf({ ok: true, command: "extension_submit", status: "listing-synced", value: { file: "{projectPath}/STORE.md" }, hint: "Read {projectPath}/STORE.md. Then go on." }))), { status: 200 });
+    });
+
+    const login = { env: { EXTENSION_DEV_HOSTED: "1" }, version: "11.0.0" };
+    const out = JSON.parse(await forwardCall("extension_submit", { action: "sync-listing", browsers: ["chrome"], project: "acme/web", projectPath: root, screenshots: [path.join(root, "store", "screenshots", "chrome", "1.png")] }, async () => "local", login));
+    await forwardCall("extension_submit", { action: "submit", browsers: ["firefox"], project: "acme/web", projectPath: root }, async () => "local", login);
+    await forwardCall("extension_submit", { action: "preflight", browsers: ["chrome"], project: "acme/web", projectPath: root }, async () => "local", login);
+    const sent = JSON.parse(laneBodies[0]!).args;
+    const facts = sent.local.facts.project;
+
+    expect(uploads.map((hit) => [hit.url, hit.authorization, hit.body.kind, hit.body.dataBase64.length])).toEqual([
+      [`${WWW}/api/projects/prj_hosted1/stores/chrome/listing/images`, "Bearer disk-token", "icons", icon.toString("base64").length],
+      [`${WWW}/api/projects/prj_hosted1/stores/chrome/listing/images`, "Bearer disk-token", "screenshots", shot.toString("base64").length],
+    ]);
+
+    expect(facts.icons.chrome.icon).toMatchObject({ bytes: null, size: icon.length, staged: { chrome: { ok: true, json: { image: { sha256: "answered-1" } } } } });
+    expect(facts.shots.given.screenshots[0]).toMatchObject({ bytes: null, size: shot.length, source: "store/screenshots/chrome/1.png", staged: { chrome: { ok: true, json: { image: { sha256: "answered-2" } } } } });
+    expect(sent.screenshots).toEqual(["store/screenshots/chrome/1.png"]);
+    expect(facts.projectPath).toBe("{projectPath}");
+    expect(laneBodies).toHaveLength(3);
+    expect(Math.max(...laneBodies.map((body) => body.length))).toBeLessThan(50_000);
+
+    for (const body of laneBodies) {
+      expect(body).not.toContain('"type":"Buffer"');
+      expect(body).not.toContain(tmp);
+      expect(body).not.toContain(fs.realpathSync(tmp));
+    }
+
+    expect(out).toMatchObject({ value: { file: path.join(root, "STORE.md") }, hint: `Read ${path.join(root, "STORE.md")}. Then go on.` });
   });
 });

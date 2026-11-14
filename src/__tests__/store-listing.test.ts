@@ -500,7 +500,7 @@ describe("STORE.md fills the store listing", () => {
 
     expect(local.lines.title).toBe("Name");
 
-    const passed = readLocalListing(root, "chrome", [{ sha256: "b".repeat(64), width: 640, height: 400, bytes: png(640, 400), source: "given.png" }]);
+    const passed = readLocalListing(root, "chrome", [{ sha256: "b".repeat(64), width: 640, height: 400, bytes: png(640, 400), size: 1, source: "given.png" }]);
     if ("problem" in passed) throw new Error(passed.problem);
 
     expect(passed.patch.screenshots?.map((shot) => shot.source)).toEqual(["given.png"]);

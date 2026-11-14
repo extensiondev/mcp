@@ -8,7 +8,7 @@
 
 import { envelope } from "./envelope";
 import { LISTING_TOO_LARGE_STATUS } from "./listing-body-limit";
-import { projectApiSend, type ProjectApi, type ProjectApiRefusal } from "./project-api";
+import { projectApiSend, type ProjectApi, type ProjectApiRead, type ProjectApiRefusal } from "./project-api";
 import { isRow, text } from "./row";
 import { MAX_SCREENSHOT_MASTER_BYTES, type ListingDigestPatch, type ListingImage, type ListingPatch } from "./store-listing-media";
 
@@ -26,6 +26,8 @@ export const IMAGE_NOT_ON_LISTING = "IMAGE_NOT_ON_LISTING";
 export const IMAGE_NOT_ON_LISTING_NEXT =
   "The listing named an image the platform no longer holds as staged; call sync-listing again with the same arguments, which stages every image afresh before the listing write.";
 
+export const IMAGE_BYTES_NOT_SENT = "IMAGE_BYTES_NOT_SENT";
+
 const COMMAND = "extension_submit";
 const ACT = "sync-listing";
 const OLD_PLATFORM = new Set([404, 405]);
@@ -34,6 +36,7 @@ const STAGE_NEXT: Record<string, string> = {
   INVALID_LISTING: "fix the file the platform named (a PNG or JPEG at a size the store takes), then call sync-listing again",
   OWNER_REQUIRED: "staging a listing image takes a workspace owner's token; log in as an owner with extension_auth (action: \"login\") and call sync-listing again",
   IMAGE_STAGE_FAILED: "the platform could not store the image; call sync-listing again with the same arguments",
+  [IMAGE_BYTES_NOT_SENT]: "call sync-listing again with the same arguments, so the local server uploads the image before the hosted lane names it",
 };
 
 export interface StagedImage {
@@ -62,13 +65,13 @@ function queue(patch: ListingPatch): Array<{ kind: ImageKind; image: ListingImag
 
 export function stagedImageGuard(store: ListingStore, patch: ListingPatch): string | null {
   const images = queue(patch);
-  const heavy = images.find(({ image }) => image.bytes.length > STAGED_IMAGE_MAX_BYTES);
+  const heavy = images.find(({ image }) => image.size > STAGED_IMAGE_MAX_BYTES);
 
   if (images.length <= STAGED_IMAGES_PER_STORE && !heavy) return null;
 
   const named = heavy?.image ?? images[STAGED_IMAGES_PER_STORE]!.image;
   const message = heavy
-    ? `${store}: ${named.source} is ${named.bytes.length} bytes, over the ${STAGED_IMAGE_MAX_BYTES}-byte cap the platform takes for one listing image. Nothing was sent.`
+    ? `${store}: ${named.source} is ${named.size} bytes, over the ${STAGED_IMAGE_MAX_BYTES}-byte cap the platform takes for one listing image. Nothing was sent.`
     : `${store}: ${images.length} listing images were given, over the ${STAGED_IMAGES_PER_STORE} the platform stages for one store; ${named.source} is the first past the cap. Nothing was sent.`;
 
   return envelope({
@@ -79,7 +82,7 @@ export function stagedImageGuard(store: ListingStore, patch: ListingPatch): stri
       action: ACT,
       store,
       listing: {
-        image: { name: named.source, bytes: named.bytes.length, width: named.width, height: named.height },
+        image: { name: named.source, bytes: named.size, width: named.width, height: named.height },
         limitBytes: STAGED_IMAGE_MAX_BYTES,
         maxImages: STAGED_IMAGES_PER_STORE,
         count: images.length,
@@ -99,7 +102,7 @@ function stagedOf(raw: unknown, kind: ImageKind, image: ListingImage): StagedIma
 
   const width = Number(answered.width) || image.width;
   const height = Number(answered.height) || image.height;
-  const bytes = Number(answered.bytes) || image.bytes.length;
+  const bytes = Number(answered.bytes) || image.size;
 
   return { name: image.source, kind, sha256, width, height, bytes };
 }
@@ -123,8 +126,21 @@ function stageRefusal(store: ListingStore, kind: ImageKind, image: ListingImage,
   });
 }
 
+function forwardedRead(image: ListingImage, store: ListingStore): ProjectApiRead<Row> {
+  const read = image.staged && Object.prototype.hasOwnProperty.call(image.staged, store) ? image.staged[store] : null;
+
+  if (!isRow(read)) {
+    return { ok: false, status: 409, code: IMAGE_BYTES_NOT_SENT, message: "the local server did not upload it to the platform before this call", held: false, body: null };
+  }
+
+  if (read.ok === true) return { ok: true, json: (isRow(read.json) ? read.json : {}) as Row };
+
+  return { ok: false, status: Number(read.status) || 0, code: text(read.code), message: text(read.message), held: read.held === true, body: read.body ?? null };
+}
+
 export async function stageListingImages(api: ProjectApi, store: ListingStore, patch: ListingPatch): Promise<StageResult> {
   const images: StagedImage[] = [];
+  const held = queue(patch).every(({ image }) => image.bytes);
 
   for (const { kind, image } of queue(patch)) {
     const known = cache.get(image)?.get(store);
@@ -134,12 +150,9 @@ export async function stageListingImages(api: ProjectApi, store: ListingStore, p
       continue;
     }
 
-    const sent = await projectApiSend<Row>(api, "PUT", `stores/${store}/listing/images`, {
-      kind,
-      dataBase64: image.bytes.toString("base64"),
-    });
+    const sent = image.bytes ? await projectApiSend<Row>(api, "PUT", `stores/${store}/listing/images`, { kind, dataBase64: image.bytes.toString("base64") }) : forwardedRead(image, store);
 
-    if (!sent.ok && !images.length && OLD_PLATFORM.has(sent.status)) return { mode: "single-body" };
+    if (!sent.ok && !images.length && OLD_PLATFORM.has(sent.status) && held) return { mode: "single-body" };
     if (!sent.ok && (sent.held || sent.status === 0)) return { refused: sent };
     if (!sent.ok) return { out: stageRefusal(store, kind, image, sent) };
 

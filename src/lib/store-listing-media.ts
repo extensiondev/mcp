@@ -48,12 +48,23 @@ const RESIZING_STORES: ReadonlySet<ListingStore> = new Set(["chrome", "edge", "f
 const MASTER_STORES: ReadonlySet<ListingStore> = new Set(["safari"]);
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
+export type StageRead = { ok: true; json: unknown } | { ok: false; status: number; code: string; message: string; held: boolean; body: unknown };
+
+/* @invariant AN IMAGE'S BYTES STAY WHERE THEY WERE READ. A listing image read
+ * on this side holds its bytes; one the forwarder read on the person's machine
+ * crosses the hosted lane with bytes null, its size, and per store the answer
+ * the platform's listing images door gave when the forwarder uploaded it there.
+ * Whatever weighs or stages an image reads size and staged, never a byte count
+ * off a missing buffer.
+ */
 export interface ListingImage {
   sha256: string;
   width: number;
   height: number;
-  bytes: Buffer;
+  bytes: Buffer | null;
+  size: number;
   source: string;
+  staged?: Record<string, StageRead>;
 }
 
 export interface ListingPatch {
@@ -118,7 +129,7 @@ function imageFromBytes(bytes: Buffer, maxBytes: number, source: string): Listin
   if (!size) return `${source} is not a PNG image`;
   if (bytes.length > maxBytes) return `${source} is ${bytes.length} bytes, over the ${maxBytes} a listing image takes`;
 
-  return { sha256: crypto.createHash("sha256").update(bytes).digest("hex"), ...size, bytes, source };
+  return { sha256: crypto.createHash("sha256").update(bytes).digest("hex"), ...size, bytes, size: bytes.length, source };
 }
 
 function readImage(file: string, maxBytes: number, source: string): ListingImage | string {
@@ -260,13 +271,13 @@ export function screenshotRefusal(store: ListingStore, screenshots: ListingImage
     const resized = resizedForStore(store, image);
     const cap = storeScreenshotBytes(store);
 
-    if (!resized && image.bytes.length > cap) {
+    if (!resized && image.size > cap) {
       return {
         store,
         file: image.source,
         measured,
         ...(rule.sizes ? { accepted: rule.sizes } : {}),
-        message: `${image.source} is ${image.bytes.length} bytes at ${measured}; the platform sends it to ${STORE_SCREENSHOT_SPECS[store].name} as it is, and a listing image it sends there is at most ${cap} bytes${RESIZING_STORES.has(store) ? ` (only a 16:10 PNG wider than ${RESIZED_WIDTH} is resized to ${RESIZED_WIDTH}x${RESIZED_HEIGHT} and may be up to ${MAX_SCREENSHOT_MASTER_BYTES})` : ""}`,
+        message: `${image.source} is ${image.size} bytes at ${measured}; the platform sends it to ${STORE_SCREENSHOT_SPECS[store].name} as it is, and a listing image it sends there is at most ${cap} bytes${RESIZING_STORES.has(store) ? ` (only a 16:10 PNG wider than ${RESIZED_WIDTH} is resized to ${RESIZED_WIDTH}x${RESIZED_HEIGHT} and may be up to ${MAX_SCREENSHOT_MASTER_BYTES})` : ""}`,
       };
     }
 
@@ -303,8 +314,8 @@ export function listingDigest(patch: ListingDigestPatch): string {
 
 export function writeBody(patch: ListingPatch): Record<string, unknown> {
   const media: Record<string, unknown> = {};
-  if (patch.icons) media.icons = patch.icons.map((image) => ({ dataBase64: image.bytes.toString("base64") }));
-  if (patch.screenshots) media.screenshots = patch.screenshots.map((image) => ({ dataBase64: image.bytes.toString("base64") }));
+  if (patch.icons) media.icons = patch.icons.map((image) => ({ dataBase64: (image.bytes ?? Buffer.alloc(0)).toString("base64") }));
+  if (patch.screenshots) media.screenshots = patch.screenshots.map((image) => ({ dataBase64: (image.bytes ?? Buffer.alloc(0)).toString("base64") }));
 
   return { listing: patch.listing, ...(Object.keys(media).length ? { media } : {}) };
 }

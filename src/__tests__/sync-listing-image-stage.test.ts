@@ -55,7 +55,7 @@ async function sync(root: string, screenshots: string[]): Promise<any> {
 }
 
 function image(source: string, bytes: number): ListingImage {
-  return { sha256: `local-${source}`, width: 2560, height: 1600, bytes: Buffer.alloc(bytes), source };
+  return { sha256: `local-${source}`, width: 2560, height: 1600, bytes: Buffer.alloc(bytes), size: bytes, source };
 }
 
 describe("sync-listing stages each image through the listing images door, then writes the listing by the answered shas", () => {
@@ -187,5 +187,26 @@ describe("sync-listing stages each image through the listing images door, then w
 
     expect(first).toEqual(again);
     expect(platform.sent("PUT", IMAGES)).toHaveLength(1);
+  });
+
+  it("names an image the forwarder uploaded by the door's answer, with no bytes and no request of its own", async () => {
+    const api = { base: API, token: "t", projectId: PROJECT_ID, ref: { workspace: "acme", project: "widget" }, command: "x" } as unknown as ProjectApi;
+    const door = { ok: true as const, json: { image: { sha256: "answered-there", width: 1280, height: 800, bytes: 700 } } };
+    const sent = { ...image("shots/sent.png", 0), bytes: null, size: 900_000, staged: { safari: door } };
+    const refused = { ...sent, source: "shots/refused.png", staged: { safari: { ok: false as const, status: 403, code: "OWNER_REQUIRED", message: "Owners only.", held: false, body: null } } };
+    const unsent = { ...sent, source: "shots/unsent.png", staged: { chrome: door } };
+    platform.login();
+
+    expect(await stageListingImages(api, "safari", { listing: {}, screenshots: [sent] })).toEqual({
+      mode: "staged",
+      images: [{ name: "shots/sent.png", kind: "screenshots", sha256: "answered-there", width: 1280, height: 800, bytes: 700 }],
+    });
+
+    const [owner, missing] = await Promise.all([refused, unsent].map(async (shot) => JSON.parse(((await stageListingImages(api, "safari", { listing: {}, screenshots: [shot] })) as { out: string }).out)));
+
+    expect(owner).toMatchObject({ ok: false, status: "sync-listing-refused", value: { platformCode: "OWNER_REQUIRED", image: { name: "shots/refused.png" } } });
+    expect(missing).toMatchObject({ ok: false, status: "sync-listing-refused", value: { platformCode: "IMAGE_BYTES_NOT_SENT", image: { name: "shots/unsent.png" } } });
+    expect(stagedImageGuard("safari", { listing: {}, screenshots: [{ ...sent, size: STAGED_IMAGE_MAX_BYTES + 1 }] })).toContain("listing-too-large");
+    expect(platform.calls).toHaveLength(0);
   });
 });

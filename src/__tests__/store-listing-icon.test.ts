@@ -161,7 +161,7 @@ describe("the local icon read", () => {
 
     expect("icon" in current && current.origin).toEqual({ from: "dist", file: "dist/edge/images/icon-128.png" });
     expect("icon" in sourceOnly && sourceOnly.origin).toEqual({ from: "source", file: "src/images/icon-128.png" });
-    expect("icon" in sourceOnly && sourceOnly.icon.bytes.equals(NEW_ICON)).toBe(true);
+    expect("icon" in sourceOnly && sourceOnly.icon.bytes?.equals(NEW_ICON)).toBe(true);
     expect(stale).toEqual({
       missing: "dist/edge is older than src/images/icon-128.png; run a build first (extension_build), or push the commit so the platform builds it",
       stale: { dist: "dist/edge", source: "src/images/icon-128.png" },

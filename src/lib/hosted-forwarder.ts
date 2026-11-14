@@ -11,6 +11,7 @@ import crypto from "node:crypto";
 import { autoOpenBlock, openPagesForPerson } from "./approval-open";
 import { mintedApproval } from "./approval-record";
 import { targetServer } from "./credential-server";
+import { askingOnly } from "./ask-only";
 import { resolveCredential, type CredentialRef } from "./credential-source";
 import { MEMBER_PROJECT, listCredentials } from "./credentials";
 import { envelope, isEnvelope } from "./envelope";
@@ -20,7 +21,8 @@ import { resolveApiBase, safeApiBase } from "./login-flow";
 import { bearerFetch } from "./platform-fetch";
 import { PROJECT_HEADER } from "./request-fetch";
 import { readSharedPreviews } from "./share-record";
-import { readSubmitFacts, type SubmitFactsArgs } from "./submit-facts-local";
+import { forwardSubmitFacts, labeledScreenshots, withProjectRoot, type ForwardFactsArgs } from "./submit-facts-forward";
+import { TOOL_POLICY } from "./tool-policy";
 
 import { version as packageVersion } from "../../package.json";
 
@@ -54,7 +56,9 @@ export interface ForwarderDeps {
 
 interface ForwardRule {
   local?: (args: Args) => boolean;
-  facts?: (args: Args, deps: ForwarderDeps) => Args | null;
+  facts?: (args: Args, deps: ForwarderDeps) => Args | null | Promise<Args | null>;
+  sent?: (args: Args) => Args;
+  answered?: (args: Args, body: unknown) => unknown;
 }
 
 function text(value: unknown): string {
@@ -65,8 +69,22 @@ function actionOf(args: Args, fallback: string): string {
   return text(args.action) || fallback;
 }
 
-function submitFacts(args: Args, deps: ForwarderDeps): Args {
-  return { facts: readSubmitFacts(args as SubmitFactsArgs), [PAGE_OPENING_FACT]: { block: autoOpenBlock({ noShip: false }, deps.env ?? process.env, deps.platform) } };
+const SUBMIT_RULE: ForwardRule = {
+  facts: async (args, deps) => ({ facts: await forwardSubmitFacts(args as ForwardFactsArgs), [PAGE_OPENING_FACT]: { block: autoOpenBlock({ noShip: false }, deps.env ?? process.env, deps.platform) } }),
+  sent: (args) => (args.screenshots === undefined ? args : { ...args, screenshots: labeledScreenshots(args as ForwardFactsArgs) }),
+  answered: (args, body) => withProjectRoot(body, args.projectPath),
+};
+
+/* @invariant AN ASK-ONLY CALL REACHES THE LANE UNDER THE ASK-ONLY TOOL'S NAME,
+ * OR NOT AT ALL. The asking-only mark lives in this process and does not cross
+ * the wire, so a call the dispatcher runs as another tool while asking only is
+ * sent as the tool the person called, and the lane's own dispatcher puts the
+ * mark back before anything runs. A tool with no ask-only name runs here.
+ */
+function laneToolOf(command: string): string | null {
+  if (!askingOnly() || TOOL_POLICY[command]?.actsAs) return command;
+
+  return Object.keys(TOOL_POLICY).find((name) => TOOL_POLICY[name]?.actsAs?.tool === command) ?? null;
 }
 
 export const FORWARDED_TOOLS: Readonly<Record<string, ForwardRule>> = Object.freeze({
@@ -84,8 +102,8 @@ export const FORWARDED_TOOLS: Readonly<Record<string, ForwardRule>> = Object.fre
   extension_builds: { local: (args) => actionOf(args, "list") === "download" },
   extension_preview_web: { local: () => true },
   extension_publish: { local: (args) => actionOf(args, "publish") === "sync-captures" },
-  extension_submit: { facts: submitFacts },
-  extension_submit_check: { facts: submitFacts },
+  extension_submit: SUBMIT_RULE,
+  extension_submit_check: SUBMIT_RULE,
 });
 
 type LaneAnswer = { kind: "answer"; body: unknown } | { kind: "refused"; text: string } | { kind: "retry"; text: string; fresh: boolean };
@@ -143,6 +161,7 @@ function laneCode(body: unknown): string {
 
 async function sendOnce(
   command: string,
+  tool: string,
   session: ForwardSession,
   sent: Args,
   key: string,
@@ -167,7 +186,7 @@ async function sendOnce(
           [IDEMPOTENCY_HEADER]: key,
           ...(session.project ? { [PROJECT_HEADER]: session.project } : {}),
         },
-        body: JSON.stringify({ tool: command, args: sent }),
+        body: JSON.stringify({ tool, args: sent }),
         signal: AbortSignal.timeout(FORWARD_TIMEOUT_MS),
       },
       deps.fetchImpl,
@@ -305,16 +324,18 @@ function openLanePages(body: unknown, deps: ForwarderDeps): unknown {
  * www for a forward credential, and only that credential reaches the lane;
  * api and projectPath stay on this machine, and what the hosted half needs
  * from the project (the STORE.md, icon, screenshot and git facts of a submit,
- * the share record of a list or revoke) is read here and sent as facts. Each
- * call carries one idempotency key, and the forwarder's own retry (a refused
- * cached credential, a lane that did not answer) sends the same key, so the
- * lane answers the first outcome instead of acting twice. A step that writes
+ * the share record of a list or revoke) is read here and sent as facts, with
+ * image bytes uploaded from here to www and the project root sent as a label.
+ * Each call carries one idempotency key, and the forwarder's own retry (a
+ * refused cached credential, a lane that did not answer) sends the same key, so
+ * the lane answers the first outcome instead of acting twice. A step that writes
  * to this machine or starts a device login runs here, never on the lane, and
  * with no stored login the whole call runs here, as the default path does.
  */
 export async function forwardCall(command: string, args: Args, local: (args: Args) => Promise<string>, deps: ForwarderDeps = {}): Promise<string> {
   const rule = FORWARDED_TOOLS[command];
-  if (!rule || forwardSession()) return local(args);
+  const tool = laneToolOf(command);
+  if (!rule || !tool || forwardSession()) return local(args);
 
   const named = text(args.api) || undefined;
   const checked = safeApiBase(resolveApiBase(named));
@@ -340,15 +361,15 @@ export async function forwardCall(command: string, args: Args, local: (args: Arg
 
   if (rule.local?.(args)) return withForwardSession(session, () => local(args));
 
-  const sent = hostedArgs(args, rule.facts?.(args, deps) ?? null);
+  const sent = hostedArgs(rule.sent?.(args) ?? args, (await rule.facts?.(args, deps)) ?? null);
   const key = crypto.randomBytes(24).toString("base64url");
-  let answer = await sendOnce(command, session, sent, key, deps, false);
+  let answer = await sendOnce(command, tool, session, sent, key, deps, false);
 
-  if (answer.kind === "retry") answer = await sendOnce(command, session, sent, key, deps, answer.fresh);
+  if (answer.kind === "retry") answer = await sendOnce(command, tool, session, sent, key, deps, answer.fresh);
   if (answer.kind !== "answer") return answer.text;
   if (laneStatus(answer.body) === "local-half") return withForwardSession(session, () => local(args));
 
-  return laneEnvelope(command, openLanePages(answer.body, deps));
+  return laneEnvelope(command, openLanePages(rule.answered ? rule.answered(args, answer.body) : answer.body, deps));
 }
 
 export function forwardable<T extends ToolModule>(module: T, deps: ForwarderDeps = {}): T {

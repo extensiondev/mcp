@@ -37,7 +37,7 @@ export function measureListingBody(body: unknown): number {
 
 export function listingBodyView(patch: ListingPatch, bytes: number): ListingBodyView {
   const files = (patch.screenshots ?? [])
-    .map((image) => ({ name: image.source, bytes: image.bytes.length, width: image.width, height: image.height }))
+    .map((image) => ({ name: image.source, bytes: image.size, width: image.width, height: image.height }))
     .sort((a, b) => b.bytes - a.bytes);
 
   return { bytes, limitBytes: PLATFORM_REQUEST_BODY_LIMIT_BYTES, files };
@@ -49,11 +49,11 @@ function encodedRowBytes(raw: number): number {
 
 export function screenshotsThatFit(patch: ListingPatch, bytes: number): number {
   const shots = patch.screenshots ?? [];
-  let used = bytes - shots.reduce((sum, image) => sum + encodedRowBytes(image.bytes.length), 0);
+  let used = bytes - shots.reduce((sum, image) => sum + encodedRowBytes(image.size), 0);
   let count = 0;
 
   for (const image of shots) {
-    const next = used + encodedRowBytes(image.bytes.length);
+    const next = used + encodedRowBytes(image.size);
     if (next > PLATFORM_REQUEST_BODY_LIMIT_BYTES) break;
 
     used = next;
