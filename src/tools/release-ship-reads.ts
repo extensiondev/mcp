@@ -15,6 +15,13 @@ const COMMAND = "extension_release_status";
 
 type Row = Record<string, unknown>;
 
+export function failedLaneLines(recent: unknown): string[] {
+  return (Array.isArray(recent) ? recent : [])
+    .filter(isRow)
+    .filter((row) => text(row.laneError) && text(row.conclusion) !== "success")
+    .map((row) => `${text(row.name) || "A run"}${text(row.createdAt) ? ` of ${text(row.createdAt)}` : ""} failed, and the build lane said: ${text(row.laneError)}`);
+}
+
 export async function readPromotionRuns(scope: Scope & { since?: string }): Promise<string> {
   const opened = await openFor(scope, "PromotionRuns");
   if (!opened.ok) return opened.out;
@@ -29,6 +36,8 @@ export async function readPromotionRuns(scope: Scope & { since?: string }): Prom
   const degraded = read.json.degraded === true;
   const lane = read.json.source === "lane";
   const since = text(read.json.since);
+  const failures = failedLaneLines(recent);
+  const failed = failures.length ? ` ${failures.length} of them failed with the lane's own line (laneError on the row); the newest: ${failures[0]}` : "";
 
   return envelope({
     ok: true,
@@ -37,12 +46,12 @@ export async function readPromotionRuns(scope: Scope & { since?: string }): Prom
     value: { ...where, since: since || null, ...(lane ? { source: "lane" } : {}), recent, ...(degraded ? { degraded: true } : {}) },
     hint: lane
       ? recent.length
-        ? `The ${recent.length} newest store submission runs the build lane ran for this project since ${since}, newest first; a store submit starts one per browser.`
+        ? `The ${recent.length} newest store submission runs the build lane ran for this project since ${since}, newest first; a store submit starts one per browser.${failed}`
         : `This project has no release runs yet: the build lane ran no store submission for it since ${since || "the start of the window"}. Pass since (up to 30 days back) to look further.`
       : recent.length
-        ? `The ${recent.length} newest release workflow runs since ${since}, newest first; a promote or a rollback starts one per browser.`
+        ? `The ${recent.length} newest release workflow runs since ${since}, newest first; a promote or a rollback starts one per browser.${failed}`
         : `No release workflow ran since ${since || "the start of the window"}. Pass since (up to 30 days back) to look further.`,
-    warnings: [degraded ? "The platform could not list the runs just now, so an empty list here is unknown, not empty." : null],
+    warnings: [degraded ? "The platform could not list the runs just now, so an empty list here is unknown, not empty." : null, ...failures],
   });
 }
 

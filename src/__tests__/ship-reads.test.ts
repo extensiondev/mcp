@@ -49,6 +49,40 @@ describe("extension_release_status reads the latest release runs, the Chrome rol
     expect(JSON.stringify(listed.value.runs)).not.toMatch(/workflow/i);
   });
 
+  it("704: a failed run carrying laneError is called out in the hint and the warnings, in the lane's own line", async () => {
+    if (process.platform === "win32") return;
+
+    const laneError = "The Chrome Web Store refused the upload: the item is in review.";
+
+    platform.login();
+    platform.routes[`GET ${PROJECT_ROUTE}/releases/promotion-runs`] = () => ({
+      body: {
+        since: "2026-11-04T00:00:00.000Z",
+        source: "lane",
+        recent: [
+          { name: "Submit to Browser Stores", status: "completed", conclusion: "failure", htmlUrl: "", createdAt: "2026-11-12T20:31:00Z", laneError },
+          { name: "Submit to Browser Stores", status: "completed", conclusion: "success", htmlUrl: "", createdAt: "2026-11-11T20:31:00Z" },
+        ],
+      },
+    });
+
+    const out = JSON.parse(await status({ include: ["runs"], api: API }));
+    const line = `Submit to Browser Stores of 2026-11-12T20:31:00Z failed, and the build lane said: ${laneError}`;
+
+    expect(out.value.runs.value.recent[0].laneError).toBe(laneError);
+    expect(out.value.runs.warnings).toEqual([line]);
+    expect(out.value.runs.hint).toContain(`1 of them failed with the lane's own line (laneError on the row); the newest: ${line}`);
+    expect(out.warnings).toContain(line);
+
+    platform.routes[`GET ${PROJECT_ROUTE}/releases/promotion-runs`] = () => ({
+      body: { since: "2026-11-04T00:00:00.000Z", source: "lane", recent: [{ name: "Submit to Browser Stores", status: "completed", conclusion: "success", htmlUrl: "", createdAt: "2026-11-11T20:31:00Z" }] },
+    });
+
+    const clean = JSON.parse(await status({ include: ["runs"], api: API }));
+
+    expect(JSON.stringify(clean)).not.toMatch(/failed/);
+  });
+
   it("runs read by a login whose minter is not an owner says it needs an owner", async () => {
     if (process.platform === "win32") return;
 

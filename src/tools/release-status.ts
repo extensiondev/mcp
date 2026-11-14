@@ -12,7 +12,7 @@ import { envelope, envelopeObject } from "../lib/envelope";
 import { readReleases } from "./release-list";
 import { readStores } from "./store-status";
 import { readOneRelease, readReleaseHistory } from "./release-history";
-import { readCutReadiness, readPromotionRuns, readRollout } from "./release-ship-reads";
+import { failedLaneLines, readCutReadiness, readPromotionRuns, readRollout } from "./release-ship-reads";
 import { readListing } from "./store-listing-read";
 
 export const schema = {
@@ -151,6 +151,7 @@ export async function handler(args: {
     status: ok ? (partial ? "partial" : "read") : "unavailable",
     warnings: [
       ...openListingPushWarnings(stores),
+      ...failedLaneLines((runs?.value as { recent?: unknown } | undefined)?.recent),
       ...(partial
         ? [
             `Only part of the status could be read: ${failed
