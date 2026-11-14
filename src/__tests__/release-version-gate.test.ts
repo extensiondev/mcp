@@ -30,6 +30,8 @@ describe("the release version gate reads the bundle's own manifest", () => {
   });
 });
 
+const GIT_CELL_BUDGET_MS = 30_000;
+
 describe("the release rails fail closed", () => {
   const read = (rel: string) => fs.readFileSync(fileURLToPath(new URL(`../../${rel}`, import.meta.url)), "utf8");
 
@@ -233,7 +235,7 @@ describe("the release rails fail closed", () => {
     } finally {
       remove();
     }
-  });
+  }, GIT_CELL_BUDGET_MS);
 
   it.skipIf(process.platform === "win32")("writes the summary to a standard output that is a socket when no step summary file is set (the cell needs /bin/sh and a python3 socketpair a child can inherit, which Windows has not)", () => {
     expect(read("scripts/release-commit.sh")).not.toMatch(/\/dev\/std(out|err)/);
@@ -249,7 +251,7 @@ describe("the release rails fail closed", () => {
     } finally {
       remove();
     }
-  });
+  }, GIT_CELL_BUDGET_MS);
 
   it("fails the README width step when nothing was replaced", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-readme-width-"));
