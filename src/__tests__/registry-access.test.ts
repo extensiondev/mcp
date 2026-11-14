@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { withRequestCredential, type RequestCredential } from "../lib/credential-scope";
 import { writeCredentials, type StoredCredentials } from "../lib/credentials";
 import { fetchRegistryJson } from "../lib/registry";
 import {
@@ -91,7 +92,7 @@ function claimsToken(u: string, p: string): string {
 
 class Probe extends RegistryAccessTokens {
   mintFor(ref: { workspace: string; project: string }) {
-    return (this as unknown as { mint: (r: typeof ref) => Promise<unknown> }).mint(ref);
+    return this.get(ref);
   }
 }
 
@@ -290,6 +291,42 @@ describe("private projects", () => {
 
     expect(results.every((r) => r.ok)).toBe(true);
     expect(mints).toBe(1);
+  });
+
+  it.each([
+    { label: "a caller whose token covers another project", second: { token: "stranger-token", projects: [{ workspace: "evil", project: "x" }] }, grants: 1 },
+    { label: "a second caller covering the same project", second: { token: "colleague-token", projects: [REF] }, grants: 2 },
+  ])("a cached registry token is served only to the credential that minted it, never to $label", async ({ second, grants }) => {
+    const owner: RequestCredential = { token: "owner-token", api: "https://www.extension.dev", projects: [REF], expiresAt: null };
+    const other: RequestCredential = { ...owner, ...second };
+    const asked: string[] = [];
+    const reads: string[] = [];
+    const fetchImpl = vi.fn(async (url: any, init?: any) => {
+      const href = String(url);
+
+      if (href.includes("/api/access-grant")) {
+        const bearer = String(init?.headers?.authorization ?? "").replace("Bearer ", "");
+        asked.push(bearer);
+
+        return jsonResponse({ token: `short-for-${bearer}`, expiresAt: Math.floor(Date.now() / 1000) + 600 });
+      }
+
+      reads.push(href);
+
+      return href.includes("t=short-for-") ? jsonResponse({ "chrome-stable": { sha: "abc1234" } }) : jsonResponse({}, 401);
+    });
+    const tokens = new RegistryAccessTokens({ fetchImpl: fetchImpl as any });
+    const read = () => fetchRegistryJson(URL_UNDER_TEST, fetchImpl as any, { ref: REF, tokens });
+
+    expect((await withRequestCredential(owner, read)).ok).toBe(true);
+    reads.length = 0;
+
+    const res = await withRequestCredential(other, read);
+
+    expect(reads.some((href) => href.includes("short-for-owner-token"))).toBe(false);
+    expect(asked).toHaveLength(grants);
+    expect(res.ok).toBe(grants === 2);
+    if (grants === 2) expect(reads[reads.length - 1]).toContain(`t=short-for-${second.token}`);
   });
 
   it("never posts an expired stored token; it asks for a fresh login instead", async () => {

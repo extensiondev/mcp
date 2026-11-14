@@ -205,7 +205,7 @@ async function fetchRegistry(
   const tokens = options?.tokens ?? defaultRegistryAccessTokens;
   const ref = options?.ref ?? null;
 
-  const cached = ref ? tokens.peek(ref) : "";
+  const cached = ref ? tokens.peek(ref, options?.api) : "";
   const firstUrl = cached ? withAccessToken(url, cached) : url;
 
   let res: Response;

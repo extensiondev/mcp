@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { createHash } from "node:crypto";
+
 import { envToken } from "./credential-scope";
 import { claimsCover, readTokenClaims } from "./credential-source";
 import { readValidCredentials } from "./credentials";
@@ -28,8 +30,49 @@ type CacheEntry =
   | { kind: "fresh"; token: string; expiresAt: number }
   | { kind: "pending"; promise: Promise<AccessGrant> };
 
-function cacheKey(ref: ProjectRef): string {
-  return `${ref.workspace.toLowerCase()}/${ref.project.toLowerCase()}`;
+interface GrantCredential {
+  token: string;
+  api?: string;
+}
+
+const CACHE_LIMIT = 512;
+
+function credentialFor(ref: ProjectRef, apiHint?: string): GrantCredential | null {
+  const creds = readValidCredentials(undefined, {
+    project: `${ref.workspace}/${ref.project}`,
+    api: apiHint,
+  });
+  const sameAs = (workspace: string, project: string): boolean =>
+    workspace.toLowerCase() === ref.workspace.toLowerCase() &&
+    project.toLowerCase() === ref.project.toLowerCase();
+  let token = String(creds?.token || "").trim();
+
+  if (token && creds?.workspaceSlug && creds?.projectSlug && !sameAs(creds.workspaceSlug, creds.projectSlug)) {
+    token = "";
+  }
+
+  if (!token) {
+    const env = envToken();
+
+    if (env) {
+      const claims = readTokenClaims(env);
+      if (!claims || claimsCover(claims, ref)) token = env;
+    }
+  }
+
+  return token ? { token, ...(creds?.api ? { api: creds.api } : {}) } : null;
+}
+
+/* @invariant A REGISTRY ACCESS TOKEN IS SERVED BACK ONLY TO THE CREDENTIAL
+ * THAT MINTED IT. One process serves many callers on the hosted server, so
+ * the cache key carries a hash of the bearer and the platform it was sent
+ * to beside the project; a caller with no credential for the project never
+ * reads the cache at all (ledger 664).
+ */
+function cacheKey(ref: ProjectRef, credential: GrantCredential, apiHint?: string): string {
+  const holder = createHash("sha256").update(credential.token).digest("hex");
+
+  return `${holder}\n${resolveApiBase(apiHint || credential.api)}\n${ref.workspace.toLowerCase()}/${ref.project.toLowerCase()}`;
 }
 
 export interface AccessTokenCacheOptions {
@@ -48,40 +91,36 @@ export class RegistryAccessTokens {
       options?.nowSeconds ?? (() => Math.floor(Date.now() / 1000));
   }
 
-  peek(ref: ProjectRef): string {
-    const entry = this.cache.get(cacheKey(ref));
-    if (!entry || entry.kind !== "fresh") return "";
+  peek(ref: ProjectRef, apiHint?: string): string {
+    const credential = credentialFor(ref, apiHint);
 
-    return entry.expiresAt - REFRESH_LEAD_SECONDS > this.nowSeconds()
-      ? entry.token
-      : "";
+    return credential ? this.fresh(cacheKey(ref, credential, apiHint))?.token ?? "" : "";
   }
 
   async get(ref: ProjectRef, apiHint?: string): Promise<AccessGrant> {
-    const key = cacheKey(ref);
+    const credential = credentialFor(ref, apiHint);
+    if (!credential) return { status: "no-credential" };
+
+    const key = cacheKey(ref, credential, apiHint);
     const entry = this.cache.get(key);
     if (entry?.kind === "pending") return entry.promise;
 
-    const cached = this.peek(ref);
+    const cached = this.fresh(key);
+    if (cached) return { status: "ok", token: cached.token, expiresAt: cached.expiresAt };
 
-    if (cached) {
-      return {
-        status: "ok",
-        token: cached,
-        expiresAt: (this.cache.get(key) as { expiresAt: number }).expiresAt,
-      };
-    }
-
-    const promise = this.mint(ref, apiHint);
+    const promise = this.mint(ref, credential, apiHint);
     this.cache.set(key, { kind: "pending", promise });
     const result = await promise;
 
     if (result.status === "ok") {
+      this.cache.delete(key);
       this.cache.set(key, {
         kind: "fresh",
         token: result.token,
         expiresAt: result.expiresAt,
       });
+
+      this.prune();
     } else {
       this.cache.delete(key);
     }
@@ -89,32 +128,29 @@ export class RegistryAccessTokens {
     return result;
   }
 
-  private async mint(ref: ProjectRef, apiHint?: string): Promise<AccessGrant> {
-    const creds = readValidCredentials(undefined, {
-      project: `${ref.workspace}/${ref.project}`,
-      api: apiHint,
-    });
-    const sameAs = (workspace: string, project: string): boolean =>
-      workspace.toLowerCase() === ref.workspace.toLowerCase() &&
-      project.toLowerCase() === ref.project.toLowerCase();
-    let token = String(creds?.token || "").trim();
+  private fresh(key: string): { token: string; expiresAt: number } | null {
+    const entry = this.cache.get(key);
+    if (!entry || entry.kind !== "fresh") return null;
 
-    if (token && creds?.workspaceSlug && creds?.projectSlug && !sameAs(creds.workspaceSlug, creds.projectSlug)) {
-      token = "";
+    return entry.expiresAt - REFRESH_LEAD_SECONDS > this.nowSeconds() ? entry : null;
+  }
+
+  private prune(): void {
+    for (const [key, entry] of this.cache) {
+      if (entry.kind === "fresh" && entry.expiresAt - REFRESH_LEAD_SECONDS <= this.nowSeconds()) this.cache.delete(key);
     }
 
-    if (!token) {
-      const env = envToken();
+    for (const oldest of this.cache.keys()) {
+      if (this.cache.size <= CACHE_LIMIT) break;
 
-      if (env) {
-        const claims = readTokenClaims(env);
-        if (!claims || claimsCover(claims, ref)) token = env;
-      }
+      this.cache.delete(oldest);
     }
+  }
 
-    if (!token) return { status: "no-credential" };
+  private async mint(ref: ProjectRef, credential: GrantCredential, apiHint?: string): Promise<AccessGrant> {
+    const token = credential.token;
 
-    const check = safeApiBase(resolveApiBase(apiHint || creds?.api), apiHint);
+    const check = safeApiBase(resolveApiBase(apiHint || credential.api), apiHint);
     if (!check.ok) return { status: "denied", message: check.message };
 
     let res: Response;

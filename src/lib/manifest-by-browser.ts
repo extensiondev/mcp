@@ -162,7 +162,7 @@ export function manifestByBrowser(projectPath: string): ManifestByBrowser {
   const browsers = Object.keys(emitted);
   const keys = Object.keys(resolvedManifestKeys({})) as Array<keyof ResolvedManifestKeys>;
   const differences = keys.filter(
-    (key) => new Set(browsers.map((browser) => JSON.stringify(resolved[browser][key]))).size > 1,
+    (key) => new Set(browsers.map((browser) => JSON.stringify(resolved[browser]?.[key]))).size > 1,
   );
 
   return {

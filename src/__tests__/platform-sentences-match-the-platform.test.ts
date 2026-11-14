@@ -181,7 +181,7 @@ describe("publish, promote, builds, the share probe and the grant refusal", () =
   it("carries the platform's refusal reason on a denied grant", async () => {
     class Probe extends RegistryAccessTokens {
       mintFor(ref: { workspace: string; project: string }) {
-        return (this as unknown as { mint: (r: typeof ref) => Promise<unknown> }).mint(ref);
+        return this.get(ref);
       }
     }
     const prev = process.env.EXTENSION_DEV_TOKEN;
