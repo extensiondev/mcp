@@ -5,7 +5,8 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { writeCredentials } from "../lib/credentials";
-import { handler } from "../tools/publish";
+import { actionFingerprint } from "../lib/approval-gate";
+import { SHARE_CREATE_ACTION, handler } from "../tools/publish";
 import {
   PUBLISH_EXPIRES_AT_EPOCH,
   publishAnswer,
@@ -149,6 +150,74 @@ describe("extension_publish envelope compatibility", () => {
 
     expect(bearers[0]).toBe(`Bearer ${envToken}`);
     expect(bearers[1]).toBe("Bearer tok_stored");
+  });
+
+  describe("a private link the platform wants a person to approve", () => {
+    const API = "https://www.extension.dev";
+    const BUILD = "a8a86d7c0ffee000000000000000000000000001";
+    const SCOPE = { target: `build:${BUILD}`, ttlHours: "168" };
+    const APPROVAL_ID = "apr_0123456789abcdef0123456789abcdef";
+    const asks = (approvalRequest: unknown) => ({ status: 403, body: { code: "APPROVAL_REQUIRED", message: "Create a share link to a private project with a token needs a human approval of this exact act.", approvalRequest } });
+
+    async function publishThrough(answers: Array<{ status: number; body: unknown }>, args: Record<string, unknown> = {}) {
+      process.env.EXTENSION_DEV_TOKEN = `${Buffer.from(JSON.stringify({ u: "acme", p: "widget", exp: Math.floor(Date.now() / 1000) + 600 })).toString("base64url")}.sig`;
+
+      const prevFetch = global.fetch;
+      const sent: Array<{ path: string; body: Record<string, unknown> }> = [];
+
+      global.fetch = (async (url: string, init?: RequestInit) => {
+        const door = new URL(String(url)).pathname;
+
+        sent.push({ path: door, body: init?.body ? JSON.parse(String(init.body)) : {} });
+
+        if (door === "/api/cli/approvals") {
+          return new Response(JSON.stringify({ approvalId: APPROVAL_ID, approvalUrl: `${API}/device/approve/${APPROVAL_ID}`, expiresAt: "2026-11-14T14:00:00.000Z", description: "Create a share link to build a8a86d7 of widget that anyone holding it can open for 168 hours (7 days). The project stays private." }), { status: 201 });
+        }
+
+        if (door !== "/api/cli/publish") return new Response(JSON.stringify({ code: "NOT_FOUND" }), { status: 404 });
+
+        const next = answers.shift() ?? { status: 500, body: {} };
+
+        return new Response(JSON.stringify(next.body), { status: next.status, headers: { "content-type": "application/json" } });
+      }) as unknown as typeof fetch;
+
+      try {
+        return { out: JSON.parse(await handler({ api: API, ...args })), sent };
+      } finally {
+        global.fetch = prevFetch;
+      }
+    }
+
+    it("requests an approval of the exact link the platform named and names the retry with the build and lifetime it resolved", async () => {
+      const { out, sent } = await publishThrough([asks({ action: SHARE_CREATE_ACTION, scope: SCOPE, fingerprint: actionFingerprint(SHARE_CREATE_ACTION, SCOPE) })]);
+      const minted = sent.find((call) => call.path === "/api/cli/approvals");
+
+      expect(out).toMatchObject({ ok: false, status: "approval-required", value: { approvalId: APPROVAL_ID, approvalUrl: `${API}/device/approve/${APPROVAL_ID}` } });
+      expect(minted?.body).toMatchObject({ action: SHARE_CREATE_ACTION, scope: SCOPE, fingerprint: actionFingerprint(SHARE_CREATE_ACTION, SCOPE) });
+      expect(out.error.message).toContain(`extension_publish {buildSha: "${BUILD}", ttlHours: 168, approvalId: "${APPROVAL_ID}"}`);
+      expect(JSON.stringify(out)).not.toContain("tok_share");
+    });
+
+    it.each([
+      ["another act", { action: "extension_project.visibility", scope: SCOPE, fingerprint: actionFingerprint("extension_project.visibility", SCOPE) }],
+      ["a scope wider than one link", { action: SHARE_CREATE_ACTION, scope: { ...SCOPE, target: "project" }, fingerprint: actionFingerprint(SHARE_CREATE_ACTION, { ...SCOPE, target: "project" }) }],
+      ["a fingerprint that is not the scope's", { action: SHARE_CREATE_ACTION, scope: SCOPE, fingerprint: "f".repeat(64) }],
+    ])("asks nobody to approve %s", async (_name, approvalRequest) => {
+      const { out, sent } = await publishThrough([asks(approvalRequest)]);
+
+      expect(out).toMatchObject({ ok: false, status: "publish-refused", error: { name: "PublishApprovalMismatch" } });
+      expect(sent.map((call) => call.path)).toEqual(["/api/cli/publish"]);
+    });
+
+    it("sends the approval with the publish, and says a spent one is spent without asking for another", async () => {
+      const args = { buildSha: BUILD, ttlHours: 168, approvalId: APPROVAL_ID };
+      const spent = await publishThrough([{ status: 409, body: { code: "APPROVAL_CONSUMED", message: "This approval was already used. Approvals are single-use." } }], args);
+
+      expect(spent.sent.filter((call) => call.path === "/api/cli/publish")).toEqual([{ path: "/api/cli/publish", body: { ttlHours: 168, buildSha: BUILD, approvalId: APPROVAL_ID } }]);
+      expect(spent.out).toMatchObject({ ok: false, error: { code: "E_APPROVAL_REJECTED", platformCode: "APPROVAL_CONSUMED" }, value: { approvalId: APPROVAL_ID } });
+      expect(spent.out.error.message).toContain("No link was created by this call.");
+      expect(spent.sent.some((call) => call.path === "/api/cli/approvals")).toBe(false);
+    });
   });
 
   describe("build link lifetime", () => {

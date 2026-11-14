@@ -1711,7 +1711,7 @@
           "name": "approvalId",
           "type": "string",
           "required": false,
-          "description": "sync-captures: approved approval id."
+          "description": "Approved approval id."
         },
         {
           "name": "project",

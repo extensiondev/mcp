@@ -383,7 +383,7 @@ Publish a build on extension.dev: the link for testers, with a download and a ru
 | `action` | "publish" \| "sync-captures" | no | `"publish"` | publish: the link; sync-captures: captures/<browser>/*.png to build pages (approval). |
 | `browsers` | array of "chrome" \| "firefox" \| "edge" \| "safari" | no |  | sync-captures: browsers, one approval each. |
 | `projectPath` | string | no |  | sync-captures: project root. |
-| `approvalId` | string | no |  | sync-captures: approved approval id. |
+| `approvalId` | string | no |  | Approved approval id. |
 | `project` | string | no |  | Stored login '<workspace>/<project>' when several exist. |
 | `ttlHours` | number | no |  | Private link lifetime, hours (default 168). |
 | `buildSha` | string | no |  | Build sha, 7 to 40 hex (an unreadable index echoes the sha back unverified); not with channel. |

@@ -23,6 +23,7 @@ export interface PublishOptions {
   ttlHours?: number;
   buildSha?: string;
   channel?: string;
+  approvalId?: string;
   api?: string;
   token?: string;
   ref?: CredentialRef | null;
@@ -70,6 +71,7 @@ export async function publish(
   if (options.ttlHours != null) body.ttlHours = Number(options.ttlHours);
   if (options.buildSha) body.buildSha = options.buildSha;
   if (options.channel) body.channel = options.channel;
+  if (options.approvalId) body.approvalId = options.approvalId;
 
   let res: Response;
 
@@ -117,6 +119,7 @@ export async function publish(
 
     return {
       ok: false,
+      body: data,
       error: {
         name: "PublishError",
         ...(typeof data?.code === "string" ? { code: data.code } : {}),

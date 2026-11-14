@@ -70,6 +70,8 @@ import { localizeExtensionName } from "../lib/publish-localized-name";
 import { withPackageAddresses } from "../lib/publish-package-commands";
 import { consoleProjectUrl } from "../lib/registry";
 import { CAPTURE_BROWSERS } from "../lib/browser-captures";
+import { actionFingerprint, requestApprovalAfterRefusal, type ApprovalGateInput } from "../lib/approval-gate";
+import { approvalRoundTrip } from "../lib/approval-outcome";
 import { SYNC_CAPTURES, syncCaptures } from "./publish-captures";
 import { PUBLISH_LOCAL } from "./publish-local";
 
@@ -98,7 +100,7 @@ export const schema = {
       },
       approvalId: {
         type: "string",
-        description: "sync-captures: approved approval id.",
+        description: "Approved approval id.",
       },
       project: PROJECT_TOKEN_INPUT,
       ttlHours: {
@@ -165,6 +167,64 @@ function sharePageField(args: {
   if (outcome.recorded) return { ...base, opensNow: true };
 
   return { ...base, opensNow: null, reason: outcome.readProblem ?? "the share record was not read back, so the grant behind the page is unproven" };
+}
+
+export const SHARE_CREATE_ACTION = "extension_shares.create";
+
+const SHARE_TARGET = /^(build:[0-9a-f]{7,40}|channel:[a-z0-9](?:[a-z0-9-]{0,39}[a-z0-9])?)$/;
+
+const SHARE_LIFETIME = /^[1-9][0-9]{0,4}$/;
+
+type ShareScope = { target: string; ttlHours: string };
+
+/* @invariant A PRIVATE LINK ASKED FOR WITH A CREDENTIAL THE PLATFORM WILL NOT
+ * LET MINT ONE GOES THROUGH A PERSON'S APPROVAL OF THAT EXACT LINK. The
+ * platform answers such a publish with the approval it wants: the build or
+ * channel the link would open and the hours it would live, already resolved
+ * and cut to the plan's window. That request is checked against its own
+ * fingerprint and against the two shapes a link can take before an approval
+ * is requested for it, and the call the answer names carries the build and
+ * the lifetime the platform resolved, so the retry rebuilds the same scope
+ * even if a newer build lands meanwhile. A request this server cannot
+ * reproduce is refused; it is never relayed to the approval page.
+ */
+function shareScopeAsked(body: unknown): ShareScope | null {
+  const asked = (body as { approvalRequest?: { action?: unknown; scope?: unknown; fingerprint?: unknown } } | null)?.approvalRequest;
+  const scope = (asked?.scope ?? {}) as Record<string, unknown>;
+  const wanted = { target: String(scope.target ?? ""), ttlHours: String(scope.ttlHours ?? "") };
+
+  return asked?.action === SHARE_CREATE_ACTION &&
+    Object.keys(scope).sort().join(",") === "target,ttlHours" &&
+    SHARE_TARGET.test(wanted.target) &&
+    SHARE_LIFETIME.test(wanted.ttlHours) &&
+    asked.fingerprint === actionFingerprint(SHARE_CREATE_ACTION, wanted)
+    ? wanted
+    : null;
+}
+
+function shareGate(args: { project?: string; api?: string }, credential: { token: string; ref: { workspace: string; project: string } | null }, scope: ShareScope): ApprovalGateInput {
+  const [kind = "", name = ""] = scope.target.split(":");
+  const where = credential.ref ? `${credential.ref.workspace}/${credential.ref.project}` : "this project";
+
+  return {
+    command: "extension_publish",
+    action: SHARE_CREATE_ACTION,
+    scope,
+    description: `Create a share link to ${kind === "channel" ? `channel ${name}` : `build ${name.slice(0, 7)}`} of ${where}, open to anyone holding it for ${scope.ttlHours} hours.`,
+    token: credential.token,
+    ref: credential.ref,
+    api: args.api,
+    refusedStatus: "publish-refused",
+    reason: "A share link to a private project carries a read token, so a workspace member approves this exact link before it is created.",
+    nextCall: {
+      tool: "extension_publish",
+      args: {
+        ...(args.project ? { project: args.project } : {}),
+        ...(kind === "channel" ? { channel: name } : { buildSha: name }),
+        ttlHours: Number(scope.ttlHours),
+      },
+    },
+  };
 }
 
 function fail(
@@ -290,10 +350,12 @@ export async function handler(args: {
     }
   }
 
+  const approvalId = String(args.approvalId ?? "").trim();
   const result = await publish({
     ttlHours: args.ttlHours,
     buildSha: args.buildSha,
     ...(channelArg ? { channel: channelArg } : {}),
+    ...(approvalId ? { approvalId } : {}),
     api: args.api,
     token,
     ref: credential.ref,
@@ -310,6 +372,29 @@ export async function handler(args: {
     }
 
     const code = (result.error as { code?: string }).code;
+
+    if (code === "APPROVAL_REQUIRED" && !approvalId) {
+      const scope = shareScopeAsked(result.body);
+
+      if (scope) return requestApprovalAfterRefusal(shareGate(args, credential, scope));
+
+      return fail("PublishApprovalMismatch", "The platform asked for an approval of this link that this server cannot reproduce, so no approval was requested and no link was created.", "publish-refused", "E_PLATFORM");
+    }
+
+    const answered = approvalId
+      ? approvalRoundTrip({
+          command: "extension_publish",
+          platformCode: code ?? "",
+          message: String((result.body as { message?: unknown } | null)?.message ?? result.error.message),
+          approvalId,
+          undone: "No link was created by this call.",
+          api: args.api,
+          value: { action: "publish" },
+          stateRead: "extension_shares (action: 'list') for the links that exist",
+        })
+      : undefined;
+
+    if (answered) return answered;
 
     if (code === "NO_BUILD_TO_SHARE") {
       return envelope({
