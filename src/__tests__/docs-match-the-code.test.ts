@@ -22,6 +22,7 @@ const require = createRequire(import.meta.url);
 const read = (rel: string) => fs.readFileSync(fileURLToPath(new URL(`../../${rel}`, import.meta.url)), "utf8");
 const DOCS = [
   "README.md",
+  "llms-install.md",
   "claude/README.md",
   "claude/CLAUDE.md",
   "claude/ARCHITECTURE.md",
@@ -299,6 +300,37 @@ describe("the docs say what the code does", () => {
     expect(server.icons).toEqual([
       { src: "https://media.extension.land/brand/extension-dev/favicon/icon-512.png", mimeType: "image/png", sizes: ["512x512"] },
     ]);
+  });
+
+  it("carries the Cline listing kit: an install file an agent can follow alone and the brand icon at 400 and 512 pixels", () => {
+    const pkg = require("../../package.json") as { name: string; engines: { node: string }; files: string[] };
+    const server = require("../../server.json") as { packages: Array<{ environmentVariables: Array<{ name: string }> }> };
+    const install = read("llms-install.md");
+    const png = (rel: string) => fs.readFileSync(fileURLToPath(new URL(`../../${rel}`, import.meta.url)));
+
+    const size = (bytes: Buffer) => {
+      expect(bytes.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
+      expect(bytes.subarray(12, 16).toString("latin1")).toBe("IHDR");
+
+      return [bytes.readUInt32BE(16), bytes.readUInt32BE(20)];
+    };
+
+    expect(size(png("docs/icon-400.png"))).toEqual([400, 400]);
+    expect(size(png("docs/icon-512.png"))).toEqual([512, 512]);
+    expect(pkg.files.some((entry) => entry === "docs" || entry.startsWith("docs/") || entry === "llms-install.md")).toBe(false);
+
+    expect(install).toContain(`Node.js ${pkg.engines.node.replace(/^>=/, "")}`);
+    expect(install).toContain(`npx -y ${pkg.name}@latest`);
+    expect(JSON.parse(install.match(/```json\n([\s\S]*?)```/)![1])).toEqual({
+      mcpServers: { "extension-dev": { command: "npx", args: ["-y", `${pkg.name}@latest`] } },
+    });
+
+    expect(install).toMatch(/extension_doctor\(\{\}\)/);
+    expect(install).toContain('"status": "healthy"');
+    expect(install).toMatch(/extension_auth\(\{ action: "login", project: "<workspace>\/<project>" \}\)/);
+    expect(install).not.toMatch(/extension_login/);
+
+    for (const { name } of server.packages[0].environmentVariables) expect(install, name).toContain(`\`${name}\``);
   });
 
   it("claims the Glama listing with the same name and sentence the registry carries, under three categories", () => {
