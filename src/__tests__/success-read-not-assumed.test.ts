@@ -3,7 +3,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+
+import templatesSnapshot from "../lib/templates-meta.snapshot.json";
 
 let uninstallAnswer: unknown = [];
 vi.mock("extension-install", () => ({
@@ -202,6 +204,14 @@ describe("extension_browsers uninstall reads the per-browser result", () => {
 });
 
 describe("extension_add_feature reads the manifest before saying safe", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", async () => Response.json(templatesSnapshot));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   function project(manifest: string): string {
     const root = tmpDir("mcp-addfeat-");
     fs.mkdirSync(path.join(root, "src"), { recursive: true });

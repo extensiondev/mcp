@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 
 import { tools as ALL_TOOLS } from "../index";
 import * as browsers from "../tools/browsers";
@@ -240,6 +240,14 @@ describe("analyze handler", () => {
 });
 
 describe("add-feature handler", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", async () => Response.json(templatesSnapshot));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("returns error when manifest does not exist", async () => {
     const result = await addFeature.handler({
       projectPath: "/tmp/nonexistent-project",
