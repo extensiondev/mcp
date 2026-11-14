@@ -5,6 +5,8 @@ import { spawn } from "node:child_process";
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 
+import { CDPClient } from "../lib/cdp";
+
 import type { ChildProcess } from "node:child_process";
 import type * as ExecModule from "../lib/exec";
 import type { SpawnedCli } from "../lib/exec";
@@ -357,6 +359,7 @@ describe("extension_dev health tick", () => {
 
 describe("extension_dev port truth", () => {
   it("reports the bound port from ready.json and never disagrees with wait", async () => {
+    const targets = vi.spyOn(CDPClient, "discoverTargets").mockRejectedValue(new TypeError("fetch failed"));
     const project = tmpProject();
 
     nextChild = () => {
@@ -389,6 +392,8 @@ describe("extension_dev port truth", () => {
       await wait.handler({ projectPath: project, browser: "chrome" }),
     );
     expect(waited.value.port).toBe(result.value.port);
+
+    targets.mockRestore();
   }, 20_000);
 
   it("labels the requested port honestly when the contract has not landed", async () => {

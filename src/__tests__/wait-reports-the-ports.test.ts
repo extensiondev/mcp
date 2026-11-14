@@ -2,9 +2,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 
 import { handler as wait, schema } from "../tools/wait";
+import { CDPClient } from "../lib/cdp";
 import { readyContractPath } from "../lib/session-paths";
 import { attachedDevContract, readyContract } from "./fixtures/engine-answers";
 
@@ -29,6 +30,7 @@ afterEach(() => {
 
 describe("extension_wait names every port the session bound, so 'tell me the ports' is answered by the tool", () => {
   it("carries the dev server port, the control port and the browser's CDP port out of the contract", async () => {
+    const targets = vi.spyOn(CDPClient, "discoverTargets").mockRejectedValue(new TypeError("fetch failed"));
     const dir = project();
     contract(dir, "chrome", attachedDevContract("chrome", { port: 8080, controlPort: 52246, cdpPort: 9333 }));
 
@@ -37,6 +39,8 @@ describe("extension_wait names every port the session bound, so 'tell me the por
     expect(out.status).toBe("ready");
     expect(out.value).toMatchObject({ port: 8080, controlPort: 52246, cdpPort: 9333 });
     expect(out.value.debugPortNote).toBeUndefined();
+
+    targets.mockRestore();
   }, 10_000);
 
   it("says in one field that the session opened no debug port instead of leaving the key out", async () => {

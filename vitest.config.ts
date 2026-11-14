@@ -52,7 +52,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
-    setupFiles: ["src/__tests__/setup-session-dir.ts"],
+    setupFiles: ["src/__tests__/setup-session-dir.ts", "src/__tests__/setup-network-guard.ts"],
     testTimeout: process.platform === "win32" ? 30_000 : 5_000,
   },
   resolve: {
