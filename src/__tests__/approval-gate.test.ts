@@ -230,7 +230,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       expect(hit("DELETE /api/artifacts")).toBe(false);
     });
 
-    it("prints the platform's own environment refusal, price included, when it says one", async () => {
+    it("prints the platform's own environment refusal and relays no upgrade link", async () => {
       global.fetch = router(calls, {
         "POST /api/cli/release/promote": () =>
           jsonResponse({ code: "UNSTAMPED_BUILD_BLOCKED", message: WRONG_ENV, upgradeUrl: "https://www.extension.dev/pricing" }, 409),
@@ -241,7 +241,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       );
       expect(out.status).toBe("promote-failed");
       expect(out.hint).toBe(WRONG_ENV);
-      expect(out.value.upgradeUrl).toBe("https://www.extension.dev/pricing");
+      expect(out.value.upgradeUrl).toBeUndefined();
     });
 
     it("tells the agent how to get a production build when the platform refuses the environment with no sentence", async () => {

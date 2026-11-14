@@ -17,7 +17,8 @@ import { readApprovalSubject } from "./approval-subject";
 import { envelope } from "./envelope";
 import { kernelHook } from "./kernel-hooks";
 import { resolveApiBase, safeApiBase } from "./login-flow";
-import { platformHoldEnvelope, readUpgradeUrl, sawPlatformHold } from "./platform-hold";
+import { allowanceRefusal, allowanceValue, platformHoldEnvelope, sawPlatformHold } from "./platform-hold";
+import { billingUrl } from "./console-urls";
 import { bearerHeaders } from "./request-fetch";
 import {
   APPROVAL_EXPIRED_STATUS,
@@ -227,8 +228,8 @@ async function requestApproval(params: {
   if (!res.ok && data.refusedBeforeApproval === true) {
     const platformCode = typeof data.code === "string" ? data.code : "";
     const hint = platformCode ? input.refusalHint?.(platformCode, data) : undefined;
-    const upgradeUrl = readUpgradeUrl(data);
-    const reason = typeof data.message === "string" && data.message ? data.message : "no reason given";
+    const allowance = allowanceRefusal(data, billingUrl(input.ref?.workspace, input.api));
+    const reason = allowance ? allowance.message : typeof data.message === "string" && data.message ? data.message : "no reason given";
     const message = `The platform refused this action before asking anyone to approve it (${res.status}): ${reason} Nothing was executed and no approval was requested, so fix the cause and call again.`;
 
     return {
@@ -241,7 +242,7 @@ async function requestApproval(params: {
           action: input.action,
           description: input.description,
           ...(Array.isArray(data.stores) ? { stores: data.stores } : {}),
-          ...(upgradeUrl ? { upgradeUrl } : {}),
+          ...allowanceValue(allowance),
         },
         error: { code: "E_PLATFORM", name: "ActionRefused", message, ...(platformCode ? { platformCode } : {}) },
         ...(hint ? { hint } : {}),

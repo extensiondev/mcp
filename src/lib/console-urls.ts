@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { consoleProjectPath } from "@extension.dev/urls/paths";
+import { consoleProjectPath, consoleWorkspacePath } from "@extension.dev/urls/paths";
 
 import { mcpOrigins } from "./origins";
 
@@ -14,6 +14,12 @@ import type { ProjectRef } from "./registry";
 
 export function consoleBase(apiHint?: string): string {
   return mcpOrigins(apiHint).console;
+}
+
+export function billingUrl(workspace: string | null | undefined, apiHint?: string): string {
+  const slug = String(workspace ?? "").trim();
+
+  return slug ? `${consoleBase(apiHint)}${consoleWorkspacePath(slug, "settings/plan")}` : "";
 }
 
 export function consoleProjectUrl(

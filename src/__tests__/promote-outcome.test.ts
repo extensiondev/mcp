@@ -234,7 +234,7 @@ describe("extension_release_promote says what notarization will not do", () => {
     expect(out.status).toBe("promoted");
     expect(out.warnings.join(" ")).toContain("will NOT happen for safari");
     expect(out.warnings.join(" ")).toContain("macos_notarization_not_included");
-    expect(out.warnings.join(" ")).toContain("https://extension.dev/pricing");
+    expect(out.warnings.join(" ")).not.toContain("/pricing");
   });
 
   it("says a pending notarization is not part of the answer", async () => {

@@ -28,7 +28,8 @@ import { bearerHeaders } from "../lib/request-fetch";
 import { kernelHook } from "../lib/kernel-hooks";
 import { REFUNDED_SAY, REFUNDED_STEP } from "../lib/ship-act";
 import { STORE_MD_FILENAME, parseStoreMd } from "../lib/store-md";
-import { platformHoldEnvelope, pricedRefusal, sawPlatformHold } from "../lib/platform-hold";
+import { allowanceRefusal, allowanceValue, platformHoldEnvelope, readPlatformMessage, sawPlatformHold } from "../lib/platform-hold";
+import { billingUrl } from "../lib/console-urls";
 import {
   approvalGateEnabled,
   evaluateApproval,
@@ -1093,7 +1094,7 @@ async function answer(args: SubmitToolArgs, facts: SubmitFacts): Promise<string>
         ? approvalRoundTrip({
             command: "extension_submit",
             platformCode: typeof data?.code === "string" ? data.code : "",
-            message: typeof data?.message === "string" ? data.message : "",
+            message: readPlatformMessage(data),
             approvalId: String(body.approvalId),
             undone: refusedLines.length
               ? `Nothing was submitted by this call (${linesSentence(refusedLines)}).`
@@ -1138,8 +1139,8 @@ async function answer(args: SubmitToolArgs, facts: SubmitFacts): Promise<string>
       !BEFORE_APPROVAL.has(platformCode) &&
       !approvalRefunded;
     const retry = retryStores(refusedLines);
-    const priced = pricedRefusal(platformCode, data);
-    const upgradeValue = priced?.upgradeUrl ? { upgradeUrl: priced.upgradeUrl } : {};
+    const allowance = allowanceRefusal(data, billingUrl(credential.ref?.workspace, args.api));
+    const allowanceFields = allowanceValue(allowance);
 
     return envelope({
       ok: false,
@@ -1153,20 +1154,20 @@ async function answer(args: SubmitToolArgs, facts: SubmitFacts): Promise<string>
               approvalId: String(body.approvalId),
               approvalRefunded: true,
               ...lineValue,
-              ...upgradeValue,
+              ...allowanceFields,
               sayToPerson: REFUNDED_SAY,
               nextStep: REFUNDED_STEP,
             },
           }
         : refusedLines.length
-          ? { value: { browsers, buildSha, approvalId: String(body.approvalId), ...lineValue, ...upgradeValue } }
-          : priced?.upgradeUrl
-            ? { value: { browsers, buildSha, ...upgradeValue } }
+          ? { value: { browsers, buildSha, approvalId: String(body.approvalId), ...lineValue, ...allowanceFields } }
+          : allowance
+            ? { value: { browsers, buildSha, ...allowanceFields } }
             : {}),
       error: {
         code: "E_PLATFORM",
         name: "SubmitError",
-        message: priced ? priced.hint : `${dryRun ? "preflight" : "submit"} failed (${res.status}): ${data?.message || text || "unknown error"}`,
+        message: allowance ? allowance.message : `${dryRun ? "preflight" : "submit"} failed (${res.status}): ${data?.message || text || "unknown error"}`,
         ...(typeof data?.code === "string" ? { platformCode: data.code } : {}),
       },
       ...(approvalRefunded && refusedLines.length

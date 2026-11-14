@@ -10,6 +10,7 @@ import { UserlandProjectPage } from "@extension.dev/urls/userland";
 
 import { WAIT_SECONDS_INPUT, dispatchedHint, madeSentence, stampNow, text as plain } from "../lib/act-outcome";
 import { API_BASE } from "../lib/common-schema";
+import { billingUrl } from "../lib/console-urls";
 import { awaitPromoteRecord, promoteLinks, releasesPage, unknownBuildEnrichment } from "../lib/promote-record";
 import { resolveCredential } from "../lib/credential-source";
 import { bearerHeaders } from "../lib/request-fetch";
@@ -18,7 +19,7 @@ import { envelope, type ErrorCode } from "../lib/envelope";
 import { PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
 import { platformFetch } from "../lib/platform-fetch";
-import { platformHoldEnvelope, pricedRefusal, sawPlatformHold } from "../lib/platform-hold";
+import { allowanceRefusal, allowanceValue, platformHoldEnvelope, pricedRefusal, readPlatformMessage, sawPlatformHold } from "../lib/platform-hold";
 import {
   approvalGateEnabled,
   evaluateApproval,
@@ -289,7 +290,7 @@ export async function handler(args: ReleaseActArgs & {
       ? approvalRoundTrip({
           command: "extension_release_promote",
           platformCode: code ?? "",
-          message: typeof data?.message === "string" ? data.message : "",
+          message: readPlatformMessage(data),
           approvalId,
           undone: "Nothing was promoted by this call.",
           api: args.api,
@@ -305,7 +306,7 @@ export async function handler(args: ReleaseActArgs & {
     const hint = unknownBuild
       ? "Run extension_release_status to see this project's channels, their promoted shas, and recent builds."
       : (code && promoteRefusalHint(code, data)) || "";
-    const upgradeUrl = code ? pricedRefusal(code, data)?.upgradeUrl : "";
+    const allowance = allowanceRefusal(data, billingUrl(credential.ref?.workspace, args.api));
 
     return envelope({
       ok: false,
@@ -314,10 +315,10 @@ export async function handler(args: ReleaseActArgs & {
       error: {
         code: "E_PLATFORM",
         name: "ReleaseError",
-        message: `promote failed (${res.status}): ${data?.message || text || "unknown error"}`,
+        message: allowance ? allowance.message : `promote failed (${res.status}): ${data?.message || text || "unknown error"}`,
         ...(code ? { platformCode: code } : {}),
       },
-      value: { ...enrich, ...(upgradeUrl ? { upgradeUrl } : {}) },
+      value: { ...enrich, ...allowanceValue(allowance) },
       hint,
     });
   }

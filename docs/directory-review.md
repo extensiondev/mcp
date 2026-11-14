@@ -13,10 +13,10 @@ hints of every hosted tool.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `extension_auth` | 14 | Read the signed-in identity | true | false | true | true | No: hosted serves `status` alone | None |
 | `extension_workspace` | 19 | Read the workspace | true | false | true | true | No: hosted serves `info`, `projects`, `settings`, all reads | None of its own since this audit; `value.plan` relays the platform's allowance record as the console shows it |
-| `extension_project_create` | 24 | Create a project | false | false | false | true | No: one operation | None of its own; a refused create relays the platform's sentence |
-| `extension_builds` | 16 | Read and rebuild builds | false | true | false | true | Yes: `list`, `get`, `logs` read; `rebuild`, `recheck`, `configure`, `create-channel`, `configure-channel`, `delete-channel` write | None of its own; a refused rebuild relays the platform's sentence and its `upgradeUrl` |
+| `extension_project_create` | 24 | Create a project | false | false | false | true | No: one operation | None; a refused create relays the platform's sentence, and a spent monthly allowance answers the limit reached, when it resets and the billing page (`value.limitReached`, `value.resetsAt`, `value.billingUrl`), never a price or an upgrade link |
+| `extension_builds` | 16 | Read and rebuild builds | false | true | false | true | Yes: `list`, `get`, `logs` read; `rebuild`, `recheck`, `configure`, `create-channel`, `configure-channel`, `delete-channel` write | None; a spent monthly allowance answers the limit reached, when it resets and the billing page (`value.limitReached`, `value.resetsAt`, `value.billingUrl`), never a price or an upgrade link |
 | `extension_release_status` | 24 | Read the release status | true | false | true | true | No: one read with `include` | None |
-| `extension_release_promote` | 25 | Promote a release | false | true | false | true | No: `promote`, `cut`, `rollback` all write | None of its own; a refused release relays the platform's sentence and its `upgradeUrl` |
+| `extension_release_promote` | 25 | Promote a release | false | true | false | true | No: `promote`, `cut`, `rollback` all write | None; a spent monthly allowance answers the limit reached, when it resets and the billing page (`value.limitReached`, `value.resetsAt`, `value.billingUrl`), never a price or an upgrade link |
 
 Every hosted answer names only steps the hosted server serves: an `approval-required` answer
 says to open the approval page in the browser and call the same tool again with `approvalId`,
@@ -62,12 +62,15 @@ a hosted server does not have.
    and what the OpenAI review's "expose each operation as a separate tool" rule reads the same
    way. The fix is a split at the policy table: a read-only `extension_builds` (`list`, `get`,
    `logs`) and a write tool for `rebuild`, `recheck`, `configure` and the channel actions.
-2. A refused rebuild, release or create relays the platform's own sentence and, when the platform
-   sends one, `value.upgradeUrl`. The platform's sentence for a spent monthly allowance names the
-   paid tier and its price, by the www invariant "the price rides on the refusal, in the server's
-   words" (2026-11-06). The OpenAI review refuses pricing, subscription and upgrade text inside a
-   plugin. Whether the platform keeps that sentence off answers to connected-app tokens is the
-   owner's decision, not this package's.
+2. The platform's refusals for a plan that does not include a macOS runner
+   (`MACOS_RUNNER_NOT_INCLUDED`, `MACOS_NOTARIZATION_NOT_INCLUDED`) still end with "Upgrade this
+   workspace ..." and the pricing page address in the sentence a tool relays. No hosted tool
+   starts a Safari build or a notarization on its own, but a rebuild of a project that targets
+   Safari alone can meet the first. The spent monthly allowance no longer carries a price: by the
+   owner's ruling of 2026-11-14 a tool answer states the limit reached, when it resets and the
+   billing page (`allowanceRefusal` in `src/lib/platform-hold.ts`), drops `upgradeUrl` everywhere
+   and drops any platform sentence that names a price, an upgrade or the pricing page for that
+   refusal.
 3. The OpenAI domain proof (`/.well-known/openai-apps-challenge`) is served only once the
    submission form hands out its token.
 4. Reviewer accounts for both directories are hand steps for the owner; see the checklist below.
@@ -206,13 +209,17 @@ promote lands. The tests in `src/__tests__/docs-match-the-code.test.ts` pin the 
 - Expected tools: `extension_builds` (`action: "rebuild"`).
 - Expected refusal: `ok: false`, `status: "rate-limited"`, `error.code: "E_PLATFORM"`,
   `error.name: "BuildsRefused"`, `error.platformCode: "monthly_cap"`, `value.retryAfterSeconds`,
-  and the hint is the platform's own sentence, which begins "This build was refused and nothing
-  was dispatched: ..." (`actRefusal` in `src/tools/builds-acts.ts` relays the message of a
-  `monthly_cap` refusal as it is). Why: the allowance is the workspace's, and the server never
-  dispatches past it. Today the platform's sentence continues with the paid tier and its price
-  and the answer carries `value.upgradeUrl` (open item 2 above); the review refuses that text, so
-  this case is written for the answer without the offer and is to replay after the www promote
-  and the owner's ruling on open item 2.
+  `value.limitReached` (for example "monthly build limit (100 builds)"), `value.resetsAt` (the
+  first instant of next month, UTC) and `value.billingUrl` (the workspace's plan page in the
+  console, `/<workspace>/settings/plan`). The hint and `error.message` are one neutral sentence:
+  "This workspace reached its monthly build limit (100 builds), so this build was refused and
+  nothing was dispatched. The limit resets at 2026-12-01T00:00:00.000Z. Manage the plan at
+  <billingUrl>." (`allowanceRefusal` in `src/lib/platform-hold.ts`, relayed by `actRefusal` in
+  `src/tools/builds-acts.ts`). Why: the allowance is the workspace's, and the server never
+  dispatches past it. The answer names no price, no paid tier and no `upgradeUrl` (owner ruling
+  2026-11-14); the console keeps its own sentence. To replay after the www promote: that the
+  platform sends `limitReached`, `resetsAt`, `billingUrl` and `neutralMessage`; before it, the
+  server composes the same three facts with "resets at the start of next month (UTC)".
 
 ### Negative 3: Create a project in a workspace the reviewer cannot write
 

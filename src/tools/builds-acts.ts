@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { billingUrl } from "../lib/console-urls";
 import { envelope } from "../lib/envelope";
 import {
   OWNER_REQUIRED_CODE,
@@ -16,7 +17,7 @@ import {
   type ProjectApi,
   type ProjectApiRefusal,
 } from "../lib/project-api";
-import { pricedRefusal } from "../lib/platform-hold";
+import { allowanceRefusal, allowanceValue, pricedRefusal } from "../lib/platform-hold";
 
 export const COMMAND = "extension_builds";
 export const BUILD_ENVS = ["staging", "production"] as const;
@@ -80,14 +81,16 @@ export function badRequest(action: string, name: string, message: string, extra:
 const RATE_LIMITED = new Set(["burst_cap", "monthly_cap", "RATE_LIMITED"]);
 const UNAVAILABLE = new Set(["counter_unavailable", "entitlement_unavailable", "kill_switch", "unattributed"]);
 
-function refusalHint(code: string, retryAfterSeconds?: number, body?: unknown): string | undefined {
+function refusalHint(code: string, retryAfterSeconds?: number, body?: unknown, billing = ""): string | undefined {
+  const allowance = allowanceRefusal(body, billing);
+  if (allowance) return allowance.message;
+
   const priced = pricedRefusal(code, body);
   if (priced) return priced.hint;
 
   const wait = retryAfterSeconds ? ` The platform asks for ${retryAfterSeconds} seconds before the next try.` : "";
 
   if (code === "burst_cap") return `The workspace started too many builds in the last hour.${wait} Nothing was dispatched.`;
-  if (code === "monthly_cap") return `The workspace's build allowance for this month is spent, so nothing was dispatched.${wait} The console's workspace settings show the allowance.`;
   if (code === "RATE_LIMITED") return `This login made too many of these requests.${wait}`;
   if (code === "BUILD_DISPATCH_DISABLED") return "Build dispatch is paused for every project right now, so nothing was dispatched. Try again later.";
   if (UNAVAILABLE.has(code)) return `The platform could not confirm this build is within the workspace's allowance, so it refused instead of guessing.${wait || " Try again shortly."}`;
@@ -109,8 +112,9 @@ export function actRefusal(read: ProjectApiRefusal, action: string, api: Project
     return projectApiReadFailure(COMMAND, read, { api: args.api, name: "Builds", value: { action, ...value }, context });
   }
 
-  const hint = refusalHint(read.code, read.retryAfterSeconds, read.body);
-  const upgradeUrl = pricedRefusal(read.code, read.body)?.upgradeUrl;
+  const billing = billingUrl(api.ref.workspace, args.api);
+  const hint = refusalHint(read.code, read.retryAfterSeconds, read.body, billing);
+  const allowance = allowanceRefusal(read.body, billing);
   const status =
     read.status === 400
       ? "bad-request"
@@ -132,13 +136,13 @@ export function actRefusal(read: ProjectApiRefusal, action: string, api: Project
       action,
       ...value,
       ...(read.retryAfterSeconds ? { retryAfterSeconds: read.retryAfterSeconds } : {}),
-      ...(upgradeUrl ? { upgradeUrl } : {}),
+      ...allowanceValue(allowance),
     },
     error: {
       code: status === "bad-request" ? "E_BAD_REQUEST" : read.status === 403 ? "E_AUTH_DENIED" : "E_PLATFORM",
       name: `Builds${status === "bad-request" ? "InputError" : "Refused"}`,
       ...(read.code ? { platformCode: read.code } : {}),
-      message: read.message,
+      message: allowance ? allowance.message : read.message,
     },
     ...(hint ? { hint } : {}),
   });

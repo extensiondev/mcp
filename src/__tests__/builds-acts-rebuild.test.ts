@@ -159,13 +159,13 @@ describe(SUITE, () => {
     expect(world.calls.filter((call) => call.method === "POST")).toHaveLength(1);
   });
 
-  it("rebuild refused for a spent month prints the platform's priced sentence and its upgrade link as they came", async () => {
+  it("rebuild refused for a spent month names the limit, its reset and the billing page, never a price", async () => {
     if (process.platform === "win32") return;
 
     const said = "This build was refused and nothing was dispatched: monthly build limit of 25 reached. Retry in 3600 seconds. Pro is $29 per workspace per month and includes 350 builds a month.";
     login();
     world.routes[`POST ${DISPATCH_ROUTE}`] = () => ({
-      body: { code: "monthly_cap", message: said, upgradeUrl: "https://www.extension.dev/pricing" },
+      body: { code: "monthly_cap", message: said, upgradeUrl: "https://www.extension.dev/pricing", limitReached: "monthly build limit (25 builds)", resetsAt: "2026-12-01T00:00:00.000Z", billingUrl: "https://console.extension.dev/acme/settings/plan", neutralMessage: "This workspace reached its monthly build limit (25 builds), so nothing was dispatched. The limit resets at 2026-12-01T00:00:00.000Z." },
       status: 429,
     });
 
@@ -173,20 +173,23 @@ describe(SUITE, () => {
 
     expect(out.status).toBe("rate-limited");
     expect(out.error.platformCode).toBe("monthly_cap");
-    expect(out.hint).toBe(said);
-    expect(out.value.upgradeUrl).toBe("https://www.extension.dev/pricing");
+    expect(out.hint).toBe("This workspace reached its monthly build limit (25 builds), so nothing was dispatched. The limit resets at 2026-12-01T00:00:00.000Z. Manage the plan at https://console.extension.dev/acme/settings/plan.");
+    expect(out.error.message).toBe(out.hint);
+    expect(out.value).toMatchObject({ limitReached: "monthly build limit (25 builds)", resetsAt: "2026-12-01T00:00:00.000Z", billingUrl: "https://console.extension.dev/acme/settings/plan" });
+    expect(JSON.stringify(out)).not.toMatch(/\$29|upgradeUrl|\/pricing|Pro is/);
   });
 
-  it("rebuild refused for a spent month with no sentence keeps the fallback and names no upgrade link", async () => {
+  it("rebuild refused for a spent month by a platform that sends no neutral fields composes them and names no price", async () => {
     if (process.platform === "win32") return;
 
     login();
-    world.routes[`POST ${DISPATCH_ROUTE}`] = () => ({ body: { code: "monthly_cap" }, status: 429 });
+    world.routes[`POST ${DISPATCH_ROUTE}`] = () => ({ body: { code: "monthly_cap", message: "Spent. Pro is $29 per workspace per month.", upgradeUrl: "https://www.extension.dev/pricing" }, status: 429 });
 
     const out = JSON.parse(await builds({ action: "rebuild", api: API }));
 
-    expect(out.hint).toContain("The workspace's build allowance for this month is spent, so nothing was dispatched.");
-    expect(out.value.upgradeUrl).toBeUndefined();
+    expect(out.hint).toMatch(/^This workspace reached its monthly build limit, so this was refused and nothing ran\. The limit resets at the start of next month \(UTC\)\. Manage the plan at https?:\/\/\S+\/settings\/plan\.$/);
+    expect(out.value.billingUrl).toMatch(/\/settings\/plan$/);
+    expect(JSON.stringify(out)).not.toMatch(/\$29|upgradeUrl|\/pricing|Pro is/);
   });
 
   it("rebuild refused for the wrong environment prints the platform's sentence, price included", async () => {

@@ -56,28 +56,89 @@ export function readPlatformCode(body: unknown): string {
   return typeof code === "string" ? code.trim() : "";
 }
 
-export function readPlatformMessage(body: unknown): string {
+function messageOf(body: unknown): string {
   const record = asRecord(body);
   const message = record?.message;
 
   return typeof message === "string" ? message.trim() : "";
 }
 
-export const PRICED_REFUSAL_CODES = new Set(["monthly_cap", "BUILD_ENV_MISMATCH", "UNSTAMPED_BUILD_BLOCKED"]);
+export const ALLOWANCE_REFUSAL_CODE = "monthly_cap";
 
-export function readUpgradeUrl(body: unknown): string {
-  const value = asRecord(body)?.upgradeUrl;
-  const url = typeof value === "string" ? value.trim() : "";
+export const PRICED_REFUSAL_CODES = new Set(["BUILD_ENV_MISMATCH", "UNSTAMPED_BUILD_BLOCKED"]);
 
-  return /^https?:\/\//i.test(url) ? url : "";
+export interface AllowanceRefusal {
+  message: string;
+  limitReached: string;
+  resetsAt: string;
+  billingUrl: string;
 }
 
-export function pricedRefusal(code: string, body: unknown): { hint: string; upgradeUrl: string } | null {
+const PRICE_OR_PITCH = /[$€£]\s?\d|\bupgrade\b|\/pricing\b/i;
+
+function httpUrl(value: unknown): string {
+  const url = typeof value === "string" ? value.trim() : "";
+
+  return /^https?:\/\//i.test(url) && !PRICE_OR_PITCH.test(url) ? url : "";
+}
+
+function instantOf(value: unknown): string {
+  const stamp = typeof value === "string" ? value.trim() : "";
+
+  return stamp && Number.isFinite(Date.parse(stamp)) ? stamp : "";
+}
+
+function plainText(value: unknown): string {
+  const said = typeof value === "string" ? value.trim() : "";
+
+  return said && !PRICE_OR_PITCH.test(said) ? said : "";
+}
+
+/* @invariant A SPENT MONTHLY ALLOWANCE IS ANSWERED WITH THE LIMIT, ITS RESET
+ * AND THE BILLING PAGE, AND NEVER A PRICE (owner ruling 2026-11-14, ledger
+ * 525). The console keeps the platform's full sentence and its upgrade link;
+ * a tool answer relays the neutral fields the platform sends beside them
+ * (limitReached, resetsAt, billingUrl, neutralMessage) and composes the same
+ * three facts itself when an older platform sends none. Anything that names
+ * a price, an upgrade or the pricing page is dropped rather than relayed, so
+ * no tool answer can carry a pitch whatever the platform says.
+ */
+export function allowanceRefusal(body: unknown, billingUrl = ""): AllowanceRefusal | null {
+  const record = asRecord(body);
+
+  if (!record || readPlatformCode(record) !== ALLOWANCE_REFUSAL_CODE) return null;
+
+  const limitReached = plainText(record.limitReached) || "monthly build limit";
+  const resetsAt = instantOf(record.resetsAt);
+  const billing = httpUrl(record.billingUrl) || httpUrl(billingUrl);
+  const said =
+    plainText(record.neutralMessage) ||
+    `This workspace reached its ${limitReached}, so this was refused and nothing ran. ${resetsAt ? `The limit resets at ${resetsAt}.` : "The limit resets at the start of next month (UTC)."}`;
+  const message = billing && !said.includes(billing) ? `${said} Manage the plan at ${billing}.` : said;
+
+  return { message, limitReached, resetsAt, billingUrl: billing };
+}
+
+export function allowanceValue(refusal: AllowanceRefusal | null): Record<string, string> {
+  if (!refusal) return {};
+
+  return {
+    limitReached: refusal.limitReached,
+    ...(refusal.resetsAt ? { resetsAt: refusal.resetsAt } : {}),
+    ...(refusal.billingUrl ? { billingUrl: refusal.billingUrl } : {}),
+  };
+}
+
+export function readPlatformMessage(body: unknown): string {
+  return allowanceRefusal(body)?.message ?? messageOf(body);
+}
+
+export function pricedRefusal(code: string, body: unknown): { hint: string } | null {
   if (!PRICED_REFUSAL_CODES.has(code)) return null;
 
-  const hint = readPlatformMessage(body);
+  const hint = messageOf(body);
 
-  return hint ? { hint, upgradeUrl: readUpgradeUrl(body) } : null;
+  return hint ? { hint } : null;
 }
 
 export function sawPlatformHold(

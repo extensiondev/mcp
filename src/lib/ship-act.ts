@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { approvalRoundTrip } from "./approval-outcome";
+import { billingUrl } from "./console-urls";
 import { envelope, type ErrorCode } from "./envelope";
 import {
   actionFingerprint,
@@ -24,7 +25,7 @@ import {
   type ProjectApi,
   type ProjectApiRefusal,
 } from "./project-api";
-import { pricedRefusal } from "./platform-hold";
+import { allowanceRefusal, allowanceValue, pricedRefusal } from "./platform-hold";
 import { isRow, text } from "./row";
 import { byHandFields, byHandSentence, offLaneHandOf, offLaneTruthOf } from "./store-act-by-hand";
 
@@ -164,7 +165,10 @@ function storeDraftHint(code: string, store: string): string | undefined {
   return undefined;
 }
 
-export function shipRefusalHint(code: string, retryAfterSeconds?: number, store = "", body?: unknown, act = ""): string | undefined {
+export function shipRefusalHint(code: string, retryAfterSeconds?: number, store = "", body?: unknown, act = "", billing = ""): string | undefined {
+  const allowance = allowanceRefusal(body, billing);
+  if (allowance) return allowance.message;
+
   const priced = pricedRefusal(code, body);
   if (priced) return priced.hint;
 
@@ -179,7 +183,6 @@ export function shipRefusalHint(code: string, retryAfterSeconds?: number, store 
   if (code === "NO_LANE_KEY") return laneKeyHint(body, act);
 
   if (code === "burst_cap") return `The workspace dispatched too many runs in the last hour.${wait} Nothing ran.`;
-  if (code === "monthly_cap") return `The workspace's build allowance for this month is spent, so nothing ran.${wait} The console's workspace settings show the allowance.`;
   if (code === "RATE_LIMITED") return `This login made too many of these requests.${wait}`;
   if (UNSURE.has(code)) return `The platform could not confirm this is within the workspace's allowance, so it refused instead of guessing.${wait || " Try again shortly."}`;
 
@@ -229,8 +232,9 @@ function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string
   const before = body.refusedBeforeApproval === true;
   const hand = offLaneHandOf(read.code, body);
   const handSay = hand ? byHandSentence(text(body.message) || read.message, hand) : "";
-  const hint = handSay || (act.hints?.(read.code, read.retryAfterSeconds) ?? shipRefusalHint(read.code, read.retryAfterSeconds, text(act.value?.store), read.body, act.act));
-  const upgradeUrl = pricedRefusal(read.code, read.body)?.upgradeUrl;
+  const billing = billingUrl(api.ref.workspace, act.apiHint);
+  const allowance = allowanceRefusal(read.body, billing);
+  const hint = handSay || allowance?.message || (act.hints?.(read.code, read.retryAfterSeconds) ?? shipRefusalHint(read.code, read.retryAfterSeconds, text(act.value?.store), read.body, act.act, billing));
   const ownerOnly = read.code === OWNER_REQUIRED_CODE;
   const status = ownerOnly
     ? "needs-owner"
@@ -289,7 +293,7 @@ function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string
           }
         : {}),
       ...(read.retryAfterSeconds ? { retryAfterSeconds: read.retryAfterSeconds } : {}),
-      ...(upgradeUrl ? { upgradeUrl } : {}),
+      ...allowanceValue(allowance),
       ...(hand ? byHandFields(handSay, hand) : {}),
       ...(refunded ? { approvalId: act.approvalId, approvalRefunded: true, sayToPerson: REFUNDED_SAY, nextStep: REFUNDED_STEP } : {}),
     },
@@ -297,7 +301,7 @@ function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string
       code,
       name: ownerOnly ? "OwnerRequired" : "ActRefused",
       ...(read.code ? { platformCode: read.code } : {}),
-      message: hand ? handSay : before ? `${closed(read.message)} Nothing ran and no approval was requested.` : read.message,
+      message: hand ? handSay : allowance ? allowance.message : before ? `${closed(read.message)} Nothing ran and no approval was requested.` : read.message,
     },
     ...(ownerOnly
       ? { hint: "Only a login approved by a workspace owner may do this. Ask an owner to sign in with extension_auth and run it, or to do it in the console." }
@@ -362,7 +366,7 @@ async function askForApproval(act: ShipAct, read: ProjectApiRefusal, api: Projec
     token: api.token,
     api: act.apiHint,
     refusedStatus: refusedStatus(act.act),
-    refusalHint: (code, body) => shipRefusalHint(code, undefined, text(act.value?.store), body, act.act),
+    refusalHint: (code, body) => shipRefusalHint(code, undefined, text(act.value?.store), body, act.act, billingUrl(api.ref.workspace, act.apiHint)),
     ...(act.approvalBody ? { body: act.approvalBody } : {}),
     reason: act.reason,
     stateRead: act.stateRead,

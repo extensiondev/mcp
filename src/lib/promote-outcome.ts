@@ -8,7 +8,7 @@
 
 export interface PromoteNotarization {
   pending: string[];
-  refused: { browsers: string[]; reason: string; upgradeUrl: string } | null;
+  refused: { browsers: string[]; reason: string } | null;
 }
 
 export type PromoteOutcome =
@@ -80,7 +80,6 @@ export function readPromoteOutcome(body: unknown): PromoteOutcome {
         ? {
             browsers: refusedBrowsers,
             reason: String(refusal.reason ?? "").trim() || "unstated",
-            upgradeUrl: String(refusal.upgradeUrl ?? "").trim(),
           }
         : null,
   };
@@ -111,11 +110,7 @@ export function notarizationNotes(notarization: PromoteNotarization): string[] {
 
   if (notarization.refused) {
     notes.push(
-      `macOS notarization will NOT happen for ${notarization.refused.browsers.join(", ")}: the platform refused it (${notarization.refused.reason})${
-        notarization.refused.upgradeUrl
-          ? `; see ${notarization.refused.upgradeUrl}`
-          : ""
-      }. The release itself is unaffected.`,
+      `macOS notarization will NOT happen for ${notarization.refused.browsers.join(", ")}: the platform refused it (${notarization.refused.reason}). The release itself is unaffected.`,
     );
   }
 

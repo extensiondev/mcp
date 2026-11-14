@@ -214,25 +214,26 @@ describe("extension_release_promote cuts a release pull request and rolls a chan
     expect(out.warnings.join(" ")).toContain("firefox");
   });
 
-  it("cut refused for a spent month prints the platform's priced sentence and its upgrade link", async () => {
+  it("cut refused for a spent month names the limit, its reset and the billing page, never a price", async () => {
     if (process.platform === "win32") return;
 
     const said = "You have reached your monthly build limit (25), so a release PR opened now could not build after merging. It resets next month. Pro is $29 per workspace per month and includes 350 builds a month.";
     platform.login();
     platform.routes[`POST ${CUT}`] = () => ({
       status: 429,
-      body: { code: "monthly_cap", message: said, upgradeUrl: "https://www.extension.dev/pricing", refusedBeforeApproval: true },
+      body: { code: "monthly_cap", message: said, upgradeUrl: "https://www.extension.dev/pricing", refusedBeforeApproval: true, limitReached: "monthly build limit (25 builds)", resetsAt: "2026-12-01T00:00:00.000Z", billingUrl: "https://console.extension.dev/acme/settings/plan", neutralMessage: "This workspace reached its monthly build limit (25 builds), so nothing was dispatched. The limit resets at 2026-12-01T00:00:00.000Z." },
     });
 
     const out = JSON.parse(await promote({ action: "cut", level: "minor", channel: "beta", api: API }));
 
     expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
     expect(out.status).toBe("rate-limited");
-    expect(out.hint).toBe(said);
-    expect(out.value.upgradeUrl).toBe("https://www.extension.dev/pricing");
+    expect(out.hint).toBe("This workspace reached its monthly build limit (25 builds), so nothing was dispatched. The limit resets at 2026-12-01T00:00:00.000Z. Manage the plan at https://console.extension.dev/acme/settings/plan.");
+    expect(out.value).toMatchObject({ resetsAt: "2026-12-01T00:00:00.000Z", billingUrl: "https://console.extension.dev/acme/settings/plan" });
+    expect(JSON.stringify(out)).not.toMatch(/\$29|upgradeUrl|\/pricing|Pro is/);
   });
 
-  it("cut refused for a spent month with no sentence keeps the fallback", async () => {
+  it("cut refused for a spent month with no neutral fields composes them", async () => {
     if (process.platform === "win32") return;
 
     platform.login();
@@ -240,7 +241,8 @@ describe("extension_release_promote cuts a release pull request and rolls a chan
 
     const out = JSON.parse(await promote({ action: "cut", level: "minor", channel: "beta", api: API }));
 
-    expect(out.hint).toContain("The workspace's build allowance for this month is spent, so nothing ran.");
+    expect(out.hint).toContain("This workspace reached its monthly build limit, so this was refused and nothing ran.");
+    expect(out.value.billingUrl).toMatch(/\/settings\/plan$/);
     expect(out.value.upgradeUrl).toBeUndefined();
   });
 
