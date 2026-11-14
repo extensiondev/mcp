@@ -8,11 +8,11 @@
 
 import { loginMissing, openProjectApi, projectApiGet } from "./project-api";
 import { spokenDate } from "./publish-link";
-import { lockedSentence, notOnLaneSentence, readPushState, type OwedField, type PushState } from "./store-listing-push";
+import { lockedSentence, notOnLaneSentence, readPushState, type OwedField, type PushState, type RunState } from "./store-listing-push";
 
 type Row = Record<string, unknown>;
 
-export type ListingPushState = "queued" | "running" | "failed" | "landed" | "locked" | "unanswered" | "unknown";
+export type ListingPushState = RunState;
 
 export interface ListingPushView {
   state: ListingPushState;

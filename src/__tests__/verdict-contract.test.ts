@@ -16,6 +16,8 @@ import {
   type CheckOutcome,
   type CheckResult,
 } from "../lib/verdict";
+import { listingPushView } from "../lib/safari-listing-push-read";
+import { readPushState } from "../lib/store-listing-push";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pinFile = path.join(here, "fixtures", "preview-verdict.pin.json");
@@ -60,6 +62,15 @@ const monorepoRoot = findDeclaringRoot();
 const upstreamFile = monorepoRoot
   ? path.join(monorepoRoot, pin.upstreamPath)
   : null;
+
+const PUSH_STATE_SOURCE = "apps/web/www.extension.dev/src/features/stores/safari-listing-push.ts";
+const PUSH_STATE_UNION = /export type SafariListingRunState =([^;]+);/;
+
+const platformPushStates = (): string[] => {
+  const source = fs.readFileSync(path.join(monorepoRoot!, PUSH_STATE_SOURCE), "utf8");
+
+  return [...(PUSH_STATE_UNION.exec(source)?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+};
 
 interface UpstreamCheck {
   id: string;
@@ -351,5 +362,22 @@ describe("the ported grammar against @extension.dev/lab/preview-verdict", () => 
     expect(verified.rejections.map((rejection) => rejection.code)).toContain(
       "contract-mismatch",
     );
+  });
+});
+
+describe("the listing push run states against the platform's own union", () => {
+  it("keeps every run state the platform can answer, through the reader and the view", (ctx) => {
+    if (!monorepoRoot) return ctx.skip(NO_SUPERPROJECT);
+
+    const states = platformPushStates();
+
+    expect(states, `${PUSH_STATE_SOURCE} no longer declares SafariListingRunState as a union of string literals`).toContain("queued");
+
+    for (const state of states) {
+      const push = readPushState({ status: "dispatched", runState: state });
+
+      expect(push?.runState, `the platform answers the listing push run state "${state}" and the reader drops it`).toBe(state);
+      expect(listingPushView(push!).state).toBe(state);
+    }
   });
 });
