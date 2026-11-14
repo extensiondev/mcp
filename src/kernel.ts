@@ -71,14 +71,14 @@ export type { StoreHistoryEntry, SubmissionLookup } from "./lib/platform-store-r
 export type { uploadPreview } from "./lib/preview-upload";
 export { projectApiBytes } from "./lib/project-api-bytes";
 export { OWNER_REQUIRED_CODE, loginMissing, openProjectApi, platformApiGet, projectApiGet, projectApiOpenFailure, projectApiReadFailure, projectApiSend, tokenRefusal } from "./lib/project-api";
-export type { ProjectApi, ProjectApiRead, ProjectApiRefusal } from "./lib/project-api";
+export type { ProjectApi, ProjectApiOpen, ProjectApiRead, ProjectApiRefusal } from "./lib/project-api";
 export { BATCH_UNSUPPORTED_MESSAGE, DEFAULT_CREATE_PROJECTS_PER_APPROVAL, MAX_BATCH_PROJECTS, PLATFORM_CREATES_PER_HOUR, WORKSPACE_WILDCARD, createCapNote, createRateLimitNote, parseProjectBatch, sameProjectSet } from "./lib/project-batch";
 export { carriesRegistryToken, carriesShareToken, heldRunLine, longHeldLines, nameMismatchNote, publishLinkFields, publishNotes, runCommandsOf, shellUrl, shortenPageShas, spokenDate, unshellUrl } from "./lib/publish-link";
 export type { RunCommand } from "./lib/publish-link";
 export { localizeExtensionName } from "./lib/publish-localized-name";
 export { buildIndexShapeProblem, channelsShapeProblem, fetchRegistryBytes, fetchRegistryJson, isSuccessfulBuild, parseBuildIndex, parseChannels, registryBase, registryFileUrl, requireShape, resolveProjectRef, userlandProjectUrl } from "./lib/registry";
 export type { ChannelEntry, ProjectRef, RegistryFetchRefusal } from "./lib/registry";
-export { bearerHeaders } from "./lib/request-fetch";
+export { bearerHeaders, projectHeader } from "./lib/request-fetch";
 export { AMO_SIGNED_STATUS, amoUnlistedSigning, reviewSentence, storeReviewLine, storeReviewOfRow } from "./lib/review-beside-submission";
 export type { ReviewView } from "./lib/review-beside-submission";
 export { isRow, text } from "./lib/row";
