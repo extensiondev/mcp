@@ -188,8 +188,8 @@ describe("extension_builds download saves the platform's package through www", (
 
     expect(touched).toEqual([]);
     expect(out.status).toBe("downloaded");
-    expect(out.value).toMatchObject({ path: `/held/acme/leon/${SHA}/edge.zip`, verified: true, sha256: sha256(EDGE_ZIP) });
-    expect(local.save).toHaveBeenCalledWith(`/held/acme/leon/${SHA}`, `/held/acme/leon/${SHA}/edge.zip`, expect.any(Buffer));
+    expect(out.value).toMatchObject({ path: path.join(`/held/acme/leon/${SHA}`, "edge.zip"), verified: true, sha256: sha256(EDGE_ZIP) });
+    expect(local.save).toHaveBeenCalledWith(`/held/acme/leon/${SHA}`, path.join(`/held/acme/leon/${SHA}`, "edge.zip"), expect.any(Buffer));
     expect(local.readBack).toHaveBeenCalledTimes(1);
   });
 
