@@ -8,17 +8,16 @@
 
 import {
   MEMBER_PROJECT,
-  credentialStoreProblem,
-  defaultLoginDrift,
   isMemberLogin,
-  listCredentials,
   loginDriftSentence,
   memberLabel,
   memberProjects,
-  readCredentials,
+  type CredentialSelector,
+  type StoredCredentials,
 } from "../lib/credentials";
 import { envelope } from "../lib/envelope";
-import { readTokenClaims, resolveCredential } from "../lib/credential-source";
+import { AUTH_LOCAL } from "./auth-local";
+import { readTokenClaims, type ResolvedCredential } from "../lib/credential-source";
 import { envToken, requestCredential } from "../lib/credential-scope";
 import { targetServer } from "../lib/credential-server";
 import { resolveApiBase, safeApiBase, tokenTtlNote } from "../lib/login-flow";
@@ -26,6 +25,16 @@ import {
   askServerIdentity,
   type ServerIdentityAnswer,
 } from "../lib/server-identity";
+
+export type StoredLoginEntry = StoredCredentials & { key: string; active: boolean; server: string };
+
+export interface AuthLocal {
+  readCredentials(selector?: CredentialSelector): StoredCredentials | null;
+  credentialStoreProblem(): { path: string; reason: string } | null;
+  listCredentials(): StoredLoginEntry[];
+  defaultLoginDrift(api?: string): { kept: string; newest: string } | null;
+  resolveCredential(options?: { project?: string; api?: string }): ResolvedCredential;
+}
 
 type ServerCheck =
   | ServerIdentityAnswer
@@ -87,10 +96,10 @@ interface LoginRow {
  * project it names, but the person signed in once, so the report shows one
  * login for the workspace and the projects it reads, never a row per project.
  */
-function loginRows(now: number): LoginRow[] {
+function loginRows(local: AuthLocal, now: number): LoginRow[] {
   const rows = new Map<string, LoginRow>();
 
-  for (const entry of listCredentials()) {
+  for (const entry of local.listCredentials()) {
     const ref = `${entry.workspaceSlug}/${entry.projectSlug}`;
     const member = isMemberLogin(entry);
     const key = `${entry.server} ${entry.key}`;
@@ -114,8 +123,8 @@ function loginRows(now: number): LoginRow[] {
   return [...rows.values()];
 }
 
-function elsewhereNote(server: string): { note: string; logins: Array<{ project: string; server: string }> } | null {
-  const logins = loginRows(Math.floor(Date.now() / 1000))
+function elsewhereNote(local: AuthLocal, server: string): { note: string; logins: Array<{ project: string; server: string }> } | null {
+  const logins = loginRows(local, Math.floor(Date.now() / 1000))
     .filter((entry) => entry.server !== server)
     .map((entry) => ({ project: entry.project, server: entry.server }));
   if (logins.length === 0) return null;
@@ -126,12 +135,12 @@ function elsewhereNote(server: string): { note: string; logins: Array<{ project:
   };
 }
 
-function storedLogins(target: string, now: number): LoginRow[] {
-  return loginRows(now).map((row) => ({ ...row, active: row.active && row.server === target }));
+function storedLogins(local: AuthLocal, target: string, now: number): LoginRow[] {
+  return loginRows(local, now).map((row) => ({ ...row, active: row.active && row.server === target }));
 }
 
-function notSignedIn(project: string, target: string, now: number): string {
-  const logins = storedLogins(target, now);
+function notSignedIn(local: AuthLocal, project: string, target: string, now: number): string {
+  const logins = storedLogins(local, target, now);
   const onServer = logins.filter((login) => login.server === target);
 
   return envelope({
@@ -143,13 +152,13 @@ function notSignedIn(project: string, target: string, now: number): string {
   });
 }
 
-export async function readIdentity(deps?: {
+export async function readIdentityWith(local: AuthLocal, deps?: {
   fetchImpl?: typeof fetch;
 }, api?: string, project?: string): Promise<string> {
   const target = targetServer(api);
   const wanted = String(project ?? "").trim();
-  const creds = readCredentials({ ...(wanted ? { project: wanted } : {}), api });
-  const problem = creds ? null : credentialStoreProblem();
+  const creds = local.readCredentials({ ...(wanted ? { project: wanted } : {}), api });
+  const problem = creds ? null : local.credentialStoreProblem();
 
   if (problem) {
     return envelope({
@@ -166,9 +175,9 @@ export async function readIdentity(deps?: {
     });
   }
 
-  if (wanted && !creds) return notSignedIn(wanted, target, Math.floor(Date.now() / 1000));
+  if (wanted && !creds) return notSignedIn(local, wanted, target, Math.floor(Date.now() / 1000));
 
-  const elsewhere = creds ? null : elsewhereNote(target);
+  const elsewhere = creds ? null : elsewhereNote(local, target);
 
   if (!creds && elsewhere && !envToken()) {
     return envelope({
@@ -261,7 +270,7 @@ export async function readIdentity(deps?: {
         : expired
           ? "The stored token has expired. Run extension_auth (action: login) to refresh it."
           : `Logged in as ${slugs}, per the token extension_auth stored on this machine. That token is what scopes the identity: it does not follow the current working directory or project folder.`;
-  const resolved = resolveCredential({ api });
+  const resolved = local.resolveCredential({ api });
   const envTokenNote = envTokenSet
     ? `EXTENSION_DEV_TOKEN is set: an unnamed call sends it${resolved.ref ? ` (per its claims it belongs to ${resolved.ref.workspace}/${resolved.ref.project})` : " (its claims could not be read)"}, while a call naming a project, or a server pinned to one, sends that project's stored login first; this report describes only the stored login.`
     : null;
@@ -270,12 +279,12 @@ export async function readIdentity(deps?: {
     check.kind === "confirmed" && check.login.toLowerCase() !== expectedLogin
       ? `The server resolves this token to ${check.login}, not to the ${expectedLogin} the stored file claims; the file's slugs are stale or were edited. Log in again to refresh them.`
       : null;
-  const logins = wanted ? [] : storedLogins(target, now);
+  const logins = wanted ? [] : storedLogins(local, target, now);
   const loginsNote =
     logins.length > 1
       ? `${logins.length} logins are stored on this machine (${logins.map((l) => (l.server === target ? l.project : `${l.project} on ${l.server}`)).join(", ")}); the one above is the default for token-scoped tools on ${target}, each of them takes \`project\` to use another, and a login minted on another server is used only when a call targets that server.`
       : null;
-  const drift = hosted || wanted ? null : defaultLoginDrift(api);
+  const drift = hosted || wanted ? null : local.defaultLoginDrift(api);
   const driftNote = drift ? loginDriftSentence(drift) : null;
 
   const message = [
@@ -318,4 +327,10 @@ export async function readIdentity(deps?: {
       driftNote,
     ],
   });
+}
+
+export async function readIdentity(deps?: {
+  fetchImpl?: typeof fetch;
+}, api?: string, project?: string): Promise<string> {
+  return readIdentityWith(AUTH_LOCAL, deps, api, project);
 }

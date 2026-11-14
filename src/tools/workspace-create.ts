@@ -8,15 +8,12 @@
 
 import { answerDeadline, FIRST_CALL_POLL_MS, RESUME_POLL_MS } from "../lib/call-budget";
 import { API_BASE } from "../lib/common-schema";
-import { pollDeviceGrant, requestDeviceCode } from "../lib/device-flow";
+import { pollDeviceGrant, type DeviceCodeStart, type DeviceIntent } from "../lib/device-flow";
 import { laneClosedByServer } from "../lib/credential-source";
 import {
   CREATE_IN_PROGRESS_CODE,
   grantExpiresAt,
-  heldCreateGrant,
   heldUntilSentence,
-  holdCreateGrant,
-  releaseCreateGrant,
   type HeldCreateGrant,
 } from "../lib/held-create-grant";
 import { envelope, type ErrorCode } from "../lib/envelope";
@@ -26,14 +23,23 @@ import {
   safeApiBase,
 } from "../lib/login-flow";
 import { consoleBase } from "../lib/registry";
-import { CREATE_CEILING_SENTENCE, CREATE_STUCK_AFTER_SECONDS, creatingAge, creatingForWords } from "../lib/create-ceiling";
+import { CREATE_CEILING_SENTENCE, CREATE_STUCK_AFTER_SECONDS, creatingForWords, type CreatingAge } from "../lib/create-ceiling";
 import { laneClosedFacts, laneClosedHint, platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
-import { identityHeaders } from "../lib/session-identity";
+import { WORKSPACE_CREATE_LOCAL } from "./workspace-create-local";
 import { answerIsUnknownOutcome, readCreatedWorkspace } from "../lib/create-answer";
 
 const COMMAND = "extension_workspace_create";
 
 const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/i;
+
+export interface WorkspaceCreateLocal {
+  requestDeviceCode(args: { apiBase: string; path: string; workspace: string; intent: DeviceIntent }): Promise<DeviceCodeStart>;
+  heldCreateGrant(apiBase: string, deviceCode: string, ref: string): HeldCreateGrant | null;
+  holdCreateGrant(apiBase: string, deviceCode: string, target: { workspace: string; ref: string }, held: HeldCreateGrant): boolean;
+  releaseCreateGrant(apiBase: string, deviceCode: string): void;
+  creatingAge(args: { apiBase: string; deviceCode: string; kept: boolean; data: Record<string, unknown> }): CreatingAge;
+  identityHeaders(tool: string): Record<string, string>;
+}
 
 export const schema = {
   name: COMMAND,
@@ -117,14 +123,20 @@ function pendingEnvelope(start: {
   });
 }
 
-export async function handler(args: {
+type HandlerArgs = {
   workspace: string;
   displayName?: string;
   description?: string;
   developerUrl?: string;
   deviceCode?: string;
   api?: string;
-}): Promise<string> {
+};
+
+export async function handler(args: HandlerArgs): Promise<string> {
+  return handleWorkspaceCreate(args, WORKSPACE_CREATE_LOCAL);
+}
+
+export async function handleWorkspaceCreate(args: HandlerArgs, local: WorkspaceCreateLocal): Promise<string> {
   const callStartedAt = Date.now();
   const workspace = String(args.workspace || "").trim().toLowerCase();
 
@@ -145,10 +157,11 @@ export async function handler(args: {
 
   const apiBase = apiCheck.base;
   const resumeDeviceCode = String(args.deviceCode || "").trim();
-  const held = heldCreateGrant(apiBase, resumeDeviceCode, workspace);
+  const held = local.heldCreateGrant(apiBase, resumeDeviceCode, workspace);
 
   if (held) {
     return createWithGrant({
+      local,
       apiBase,
       workspace,
       args,
@@ -181,7 +194,7 @@ export async function handler(args: {
     let start;
 
     try {
-      start = await requestDeviceCode({
+      start = await local.requestDeviceCode({
         apiBase,
         path: config.deviceCodeUrl,
         workspace,
@@ -222,6 +235,7 @@ export async function handler(args: {
     }
 
     return finishFromPoll(early, {
+      local,
       apiBase,
       workspace,
       args,
@@ -241,6 +255,7 @@ export async function handler(args: {
   });
 
   return finishFromPoll(poll, {
+    local,
     apiBase,
     workspace,
     args,
@@ -253,6 +268,7 @@ export async function handler(args: {
 async function finishFromPoll(
   poll: Awaited<ReturnType<typeof pollDeviceGrant>>,
   ctx: {
+    local: WorkspaceCreateLocal;
     apiBase: string;
     workspace: string;
     args: { displayName?: string; description?: string; developerUrl?: string };
@@ -349,6 +365,7 @@ async function finishFromPoll(
   }
 
   return createWithGrant({
+    local: ctx.local,
     apiBase: ctx.apiBase,
     workspace: ctx.workspace,
     args: ctx.args,
@@ -361,6 +378,7 @@ async function finishFromPoll(
 }
 
 type CreateContext = {
+  local: WorkspaceCreateLocal;
   apiBase: string;
   workspace: string;
   args: { displayName?: string; description?: string; developerUrl?: string };
@@ -374,13 +392,13 @@ type CreateContext = {
 async function createWithGrant(ctx: CreateContext): Promise<string> {
   const kept =
     ctx.resumed ||
-    holdCreateGrant(ctx.apiBase, ctx.deviceCode, { workspace: ctx.workspace, ref: ctx.workspace }, ctx.held);
+    ctx.local.holdCreateGrant(ctx.apiBase, ctx.deviceCode, { workspace: ctx.workspace, ref: ctx.workspace }, ctx.held);
   let keepGrant = false;
   const answer = await sendCreate(ctx, kept, () => {
     keepGrant = kept;
   });
 
-  if (!keepGrant) releaseCreateGrant(ctx.apiBase, ctx.deviceCode);
+  if (!keepGrant) ctx.local.releaseCreateGrant(ctx.apiBase, ctx.deviceCode);
 
   return answer;
 }
@@ -421,7 +439,7 @@ async function sendCreate(ctx: CreateContext, kept: boolean, keepGrant: () => vo
       headers: {
         authorization: `Bearer ${token}`,
         "content-type": "application/json",
-        ...identityHeaders(COMMAND),
+        ...ctx.local.identityHeaders(COMMAND),
       },
       body: JSON.stringify({
         displayName: String(ctx.args.displayName || ctx.workspace).trim(),
@@ -463,7 +481,7 @@ async function sendCreate(ctx: CreateContext, kept: boolean, keepGrant: () => vo
   if (String(data.code || "") === CREATE_IN_PROGRESS_CODE) {
     keepGrant();
     const waitSeconds = Number(data.retryAfterSeconds) > 0 ? Number(data.retryAfterSeconds) : 10;
-    const age = creatingAge({ apiBase: ctx.apiBase, deviceCode: ctx.deviceCode, kept, data });
+    const age = ctx.local.creatingAge({ apiBase: ctx.apiBase, deviceCode: ctx.deviceCode, kept, data });
 
     if (age.stuck) {
       const workspaceUrl = `${consoleBase(ctx.apiBase)}/${encodeURIComponent(ctx.workspace)}`;

@@ -1,3 +1,4 @@
+import childProcess from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -8,7 +9,7 @@ import {
   writeCredentials,
   type StoredCredentials,
 } from "../lib/credentials";
-import { readIdentity } from "../tools/whoami";
+import { readIdentity, readIdentityWith, type AuthLocal } from "../tools/whoami";
 import { askServerIdentity } from "../lib/server-identity";
 
 const FUTURE = Math.floor(Date.now() / 1000) + 3600;
@@ -31,6 +32,30 @@ function fetchAnswering(status: number, body?: unknown): typeof fetch {
       status,
       headers: { "content-type": "application/json" },
     })) as unknown as typeof fetch;
+}
+
+function machineCalls(): string[] {
+  const seen: string[] = [];
+  const fsNames = ["readFileSync", "existsSync", "statSync", "writeFileSync", "mkdirSync", "readdirSync", "openSync", "lstatSync", "realpathSync", "renameSync", "unlinkSync", "rmSync", "appendFileSync"] as const;
+  const childNames = ["spawn", "spawnSync", "execFile", "execFileSync"] as const;
+
+  for (const name of fsNames) {
+    vi.spyOn(fs, name).mockImplementation(((...args: unknown[]) => {
+      seen.push(`fs.${name} ${String(args[0])}`);
+
+      throw new Error(`the platform half touched fs.${name}`);
+    }) as never);
+  }
+
+  for (const name of childNames) {
+    vi.spyOn(childProcess, name).mockImplementation(((...args: unknown[]) => {
+      seen.push(`child_process.${name} ${String(args[0])}`);
+
+      throw new Error(`the platform half ran child_process.${name}`);
+    }) as never);
+  }
+
+  return seen;
 }
 
 const fetchFailing: typeof fetch = (async () => {
@@ -258,5 +283,33 @@ describe("askServerIdentity sends the bearer and reads only real verdicts", () =
         new Response("oops", { status: 503 })) as unknown as typeof fetch,
     });
     expect(answer.kind).toBe("unavailable");
+  });
+
+  it("answers status from the facts the local half hands it and reads no file itself", async () => {
+    const local: AuthLocal = {
+      readCredentials: vi.fn(() => sample()),
+      credentialStoreProblem: vi.fn(() => null),
+      listCredentials: vi.fn(() => [{ ...sample(), key: "acme/widget", active: true, server: "https://www.extension.dev" }]),
+      defaultLoginDrift: vi.fn(() => null),
+      resolveCredential: vi.fn(() => ({ token: "claims.sig", source: "stored" as const, ref: null, refSource: "none" as const, mismatch: null, note: null, expired: null })),
+    };
+    const seen = machineCalls();
+
+    try {
+      const result = JSON.parse(
+        await readIdentityWith(local, { fetchImpl: fetchAnswering(200, { login: "acme/widget", live: true }) }, "https://www.extension.dev"),
+      );
+
+      expect(result.status).toBe("logged-in");
+      expect(result.value.server.verdict).toBe("confirmed");
+      expect(result.value.logins).toEqual([expect.objectContaining({ project: "acme/widget", active: true })]);
+    } finally {
+      vi.restoreAllMocks();
+    }
+
+    expect(seen).toEqual([]);
+    expect(local.readCredentials).toHaveBeenCalledWith({ api: "https://www.extension.dev" });
+    expect(local.listCredentials).toHaveBeenCalled();
+    expect(local.defaultLoginDrift).toHaveBeenCalledWith("https://www.extension.dev");
   });
 });

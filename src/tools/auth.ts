@@ -7,15 +7,14 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { API_BASE, PROJECT_PATH } from "../lib/common-schema";
-import { isProjectRef } from "../lib/credentials";
 import { appendWarnings } from "../lib/envelope-warnings";
-import { loginForPath, pathIdentity } from "../lib/path-project";
 import { DEVICE_WAIT_MAX_SECONDS, deviceWaitDescription } from "../lib/device-wait";
 import { envelope } from "../lib/envelope";
 import { loginToProject, loginToProjects, loginToWorkspace } from "./login";
 import { WORKSPACE_WILDCARD } from "../lib/project-batch";
 import { readIdentity } from "./whoami";
 import { clearLocalCredentials } from "./logout";
+import { projectAtPath } from "./auth-local";
 
 export const schema = {
   name: "extension_auth",
@@ -70,16 +69,6 @@ function listMisuse(message: string): string {
     status: "bad-request",
     error: { code: "E_BAD_REQUEST", name: "BadRequest", message },
   });
-}
-
-function projectAtPath(projectPath: string, api?: string): { project: string; via: string } | null {
-  const found = loginForPath(projectPath, api);
-  if (found.state === "match") return { project: found.project, via: `its ${found.via}, a stored login` };
-
-  const { owner, repo } = pathIdentity(projectPath);
-  const project = `${owner}/${repo}`;
-
-  return owner && repo && isProjectRef(project) ? { project, via: "its GitHub origin" } : null;
 }
 
 export async function handler(args: {

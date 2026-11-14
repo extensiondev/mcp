@@ -45,7 +45,9 @@ import {
 import { consoleBase } from "../lib/registry";
 import { isMemberLogin, isProjectRef, memberLabel, memberProjects } from "../lib/credentials";
 import { followProjectMove, followSentence, readProjectMove } from "../lib/project-move";
-import { projectPresence, sameSlugElsewhere, type ProjectPresence } from "../lib/project-on-server";
+import { projectPresence, sameSlugElsewhere } from "./auth-local";
+
+import type { ProjectPresence } from "../lib/project-on-server";
 
 const FIRST_CALL_BUDGET_MS = 8_000;
 const RESUME_BUDGET_MS = 22_000;

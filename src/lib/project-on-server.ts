@@ -7,36 +7,38 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { serverOf } from "./credential-server";
-import { createdOnServer } from "./created-projects";
-import { listCredentials } from "./credentials";
 
 export type ProjectPresence = "public" | "not-public" | "unknown";
 
-function storedLogins(): ReturnType<typeof listCredentials> {
-  try {
-    return listCredentials();
-  } catch {
-    return [];
-  }
+export interface PresenceLogin {
+  server: string;
+  workspaceSlug: string;
+  projectSlug: string;
 }
 
-function storedHere(apiBase: string, project: string): boolean {
+export interface PresenceLocal {
+  storedLogins(): PresenceLogin[];
+  createdOnServer(apiBase: string, project: string): boolean;
+}
+
+function storedHere(local: PresenceLocal, apiBase: string, project: string): boolean {
   const here = serverOf(apiBase);
   const wanted = project.toLowerCase();
 
-  return storedLogins().some(
+  return local.storedLogins().some(
     (entry) => entry.server === here && `${entry.workspaceSlug}/${entry.projectSlug}`.toLowerCase() === wanted,
   );
 }
 
 const PRESENCE_TIMEOUT_MS = 4_000;
 
-export async function projectPresence(
+export async function projectPresenceWith(
+  local: PresenceLocal,
   apiBase: string,
   project: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<ProjectPresence> {
-  if (storedHere(apiBase, project) || createdOnServer(apiBase, project)) return "public";
+  if (storedHere(local, apiBase, project) || local.createdOnServer(apiBase, project)) return "public";
 
   const [workspace = "", projectSlug = ""] = project.split("/");
   const url = `${apiBase}/api/projects/resolve?workspace=${encodeURIComponent(workspace)}&projectSlug=${encodeURIComponent(projectSlug)}`;
@@ -56,13 +58,13 @@ export async function projectPresence(
   }
 }
 
-export function sameSlugElsewhere(apiBase: string, project: string): string[] {
+export function sameSlugElsewhereWith(local: PresenceLocal, apiBase: string, project: string): string[] {
   const here = serverOf(apiBase);
   const wanted = project.toLowerCase();
 
   return [
     ...new Set(
-      storedLogins()
+      local.storedLogins()
         .filter((entry) => entry.server !== here)
         .filter((entry) => `${entry.workspaceSlug}/${entry.projectSlug}`.toLowerCase() === wanted)
         .map((entry) => entry.server),

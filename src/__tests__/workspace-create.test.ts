@@ -1,10 +1,11 @@
+import childProcess from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { handler, schema } from "../tools/workspace-create";
+import { handleWorkspaceCreate, handler, schema, type WorkspaceCreateLocal } from "../tools/workspace-create";
 import { readCredentials } from "../lib/credentials";
 
 const API = "https://api.test";
@@ -93,6 +94,30 @@ const created = {
     createdAt: "2026-10-01T00:00:00.000Z",
   },
 };
+
+function machineCalls(): string[] {
+  const seen: string[] = [];
+  const fsNames = ["readFileSync", "existsSync", "statSync", "writeFileSync", "mkdirSync", "readdirSync", "openSync", "lstatSync", "realpathSync", "renameSync", "unlinkSync", "rmSync", "appendFileSync"] as const;
+  const childNames = ["spawn", "spawnSync", "execFile", "execFileSync"] as const;
+
+  for (const name of fsNames) {
+    vi.spyOn(fs, name).mockImplementation(((...args: unknown[]) => {
+      seen.push(`fs.${name} ${String(args[0])}`);
+
+      throw new Error(`the platform half touched fs.${name}`);
+    }) as never);
+  }
+
+  for (const name of childNames) {
+    vi.spyOn(childProcess, name).mockImplementation(((...args: unknown[]) => {
+      seen.push(`child_process.${name} ${String(args[0])}`);
+
+      throw new Error(`the platform half ran child_process.${name}`);
+    }) as never);
+  }
+
+  return seen;
+}
 
 let tmp: string;
 let prevXdg: string | undefined;
@@ -309,5 +334,35 @@ describe("extension_workspace_create", () => {
     expect(out.status).toBe("created");
     expect(out.value.workspaceSlug).toBe("new-org-2");
     expect(out.value.workspaceId).toBe("ws_new");
+  });
+
+  it("creates through the local half's held grant and reads no file itself", async () => {
+    const { fn, calls } = createFetch({ token: [], create: created });
+    vi.stubGlobal("fetch", fn);
+    const local: WorkspaceCreateLocal = {
+      requestDeviceCode: vi.fn(),
+      heldCreateGrant: vi.fn(() => ({ grant: "held-grant", grantExpiresAt: FUTURE })),
+      holdCreateGrant: vi.fn(() => true),
+      releaseCreateGrant: vi.fn(),
+      creatingAge: vi.fn(),
+      identityHeaders: vi.fn(() => ({})),
+    };
+    const seen = machineCalls();
+    let out: any;
+
+    try {
+      out = JSON.parse(await handleWorkspaceCreate({ workspace: "new-org", deviceCode: "dev-code" }, local));
+    } finally {
+      vi.restoreAllMocks();
+    }
+
+    expect(seen).toEqual([]);
+    expect(out.status).toBe("created");
+    expect(local.heldCreateGrant).toHaveBeenCalledWith(API, "dev-code", "new-org");
+    expect(local.releaseCreateGrant).toHaveBeenCalledWith(API, "dev-code");
+    expect(local.requestDeviceCode).not.toHaveBeenCalled();
+    expect(local.identityHeaders).toHaveBeenCalledWith("extension_workspace_create");
+    const create = calls.find((c) => c.url.endsWith("/api/cli/workspaces/create"));
+    expect((create?.init?.headers as Record<string, string>).authorization).toBe("Bearer held-grant");
   });
 });
