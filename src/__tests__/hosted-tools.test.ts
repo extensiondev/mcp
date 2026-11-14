@@ -579,7 +579,7 @@ describe("the forwarder", () => {
     ]);
 
     expect(facts.icons.chrome.icon).toMatchObject({ bytes: null, size: icon.length, staged: { chrome: { ok: true, json: { image: { sha256: "answered-1" } } } } });
-    expect(facts.shots.given.screenshots[0]).toMatchObject({ bytes: null, size: shot.length, source: "store/screenshots/chrome/1.png", staged: { chrome: { ok: true, json: { image: { sha256: "answered-2" } } } } });
+    expect(facts.shots.given.screenshots[0]).toMatchObject({ bytes: null, size: shot.length, source: path.join("store", "screenshots", "chrome", "1.png"), staged: { chrome: { ok: true, json: { image: { sha256: "answered-2" } } } } });
     expect(sent.screenshots).toEqual(["store/screenshots/chrome/1.png"]);
     expect(facts.projectPath).toBe("{projectPath}");
     expect(laneBodies).toHaveLength(3);
