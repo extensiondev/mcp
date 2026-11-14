@@ -6,27 +6,35 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import fs from "node:fs";
 import path from "node:path";
 
 import { PROJECT_PATH, REAL_BROWSERS } from "../lib/common-schema";
-import * as build from "./build";
-import { navigateToUrl } from "./open";
 import { ZIP_URL_REDIRECT_NOTE } from "../lib/artifacts-api";
 import { resolveCredential } from "../lib/credential-source";
 import { LOGIN_STEPS, PROJECT_TOKEN_INPUT } from "../lib/credentials";
-import { uploadPreview } from "../lib/preview-upload";
 import { spendNarration, ALLOWANCE_PHRASE  } from "../lib/allowance";
-import { recordSharedPreview } from "../lib/share-record";
 import { probeShareCors } from "../lib/share-cors-probe";
 import { envelope } from "../lib/envelope";
-import { engineBrowserName } from "../lib/browser-family";
-import { engineProjectRoot } from "../lib/session-paths";
 import {
   PLATFORM_HOLD_CODE,
   PLATFORM_HOLD_STILL_WORKS,
   templatesOrigin,
 } from "../lib/platform-hold";
+import { PREVIEW_WEB_LOCAL } from "./preview-web-local";
+
+import type { uploadPreview } from "../lib/preview-upload";
+import type { recordSharedPreview } from "../lib/share-record";
+
+export interface PreviewWebLocal {
+  build(projectPath: string, browser: string): Promise<string>;
+  distDirOf(args: { projectPath: string; distPath?: string }, browser: string): string;
+  manifestExists(manifestPath: string): boolean;
+  readManifest(manifestPath: string): Record<string, any>;
+  devCheckout(projectPath: string, label: string): string | null;
+  navigate(projectPath: string, browser: string, url: string): Promise<string>;
+  uploadPreview: typeof uploadPreview;
+  recordSharedPreview: typeof recordSharedPreview;
+}
 
 const COMMAND = "extension_preview_web";
 
@@ -93,51 +101,6 @@ const SURFACE = {
   label: "preview.extension.dev",
 } as const;
 
-const PREVIEW_APP_LOCATIONS = [
-  ["apps", "web", "preview.extension.dev"],
-  ["apps", "preview.extension.dev"],
-  ["preview.extension.dev"],
-];
-
-function previewDevCheckout(startPaths: string[]): string | null {
-  const seen = new Set<string>();
-
-  for (const start of startPaths) {
-    let dir: string;
-
-    try {
-      dir = path.resolve(start);
-    } catch {
-      continue;
-    }
-
-    for (let depth = 0; depth < 8; depth++) {
-      if (seen.has(dir)) break;
-
-      seen.add(dir);
-
-      for (const location of PREVIEW_APP_LOCATIONS) {
-        const manifest = path.join(dir, ...location, "package.json");
-
-        try {
-          const parsed = JSON.parse(fs.readFileSync(manifest, "utf8")) as {
-            name?: string;
-          };
-          if (parsed.name === SURFACE.label) return dir;
-        } catch {
-        }
-      }
-
-      const parent = path.dirname(dir);
-      if (parent === dir) break;
-
-      dir = parent;
-    }
-  }
-
-  return null;
-}
-
 function localLaneRemedy(checkout: string | null): string {
   const shareOut =
     "Pass share:true for a link that needs no local server and opens for anyone.";
@@ -178,6 +141,7 @@ function previewOriginOf(previewUrl: string): string | null {
 }
 
 async function buildShare(
+  local: PreviewWebLocal,
   projectPath: string,
   distDir: string,
   manifest: Record<string, any>,
@@ -186,7 +150,7 @@ async function buildShare(
   project?: string,
 ): Promise<Record<string, unknown>> {
   const credential = resolveCredential({ ...(project ? { project } : {}) });
-  const result = await uploadPreview({
+  const result = await local.uploadPreview({
     distDir,
     manifest,
     browser,
@@ -227,7 +191,7 @@ async function buildShare(
 
   const sharedAt = new Date().toISOString();
   const sharedAtFrom = "this machine's clock at the moment the platform answered, not the platform's record";
-  const record = recordSharedPreview(projectPath, {
+  const record = local.recordSharedPreview(projectPath, {
     sharedAt,
     previewUrl: result.data.previewUrl,
     artifactId: result.data.artifactId,
@@ -359,7 +323,7 @@ export const schema = {
   },
 };
 
-export async function handler(args: {
+interface PreviewWebArgs {
   projectPath: string;
   browser?: string;
   build?: boolean;
@@ -370,7 +334,13 @@ export async function handler(args: {
   openIn?: string;
   share?: boolean;
   project?: string;
-}): Promise<string> {
+}
+
+export async function handler(args: PreviewWebArgs): Promise<string> {
+  return previewWebWith(args, PREVIEW_WEB_LOCAL);
+}
+
+export async function previewWebWith(args: PreviewWebArgs, local: PreviewWebLocal): Promise<string> {
   const browser = args.browser ?? "chrome";
   const host = safeHostBase(args.hostUrl ?? SURFACE.defaultOrigin);
 
@@ -390,7 +360,7 @@ export async function handler(args: {
   let buildResult: Record<string, unknown> | null = null;
 
   if (shouldBuild) {
-    const raw = await build.handler({ projectPath: args.projectPath, browser });
+    const raw = await local.build(args.projectPath, browser);
 
     try {
       buildResult = JSON.parse(raw);
@@ -413,12 +383,10 @@ export async function handler(args: {
     }
   }
 
-  const distDir = args.distPath
-    ? path.resolve(args.distPath)
-    : path.join(engineProjectRoot(args.projectPath), "dist", engineBrowserName(browser));
+  const distDir = local.distDirOf(args, browser);
   const manifestPath = path.join(distDir, "manifest.json");
 
-  if (!fs.existsSync(manifestPath)) {
+  if (!local.manifestExists(manifestPath)) {
     return envelope({
       ok: false,
       command: COMMAND,
@@ -434,7 +402,7 @@ export async function handler(args: {
   let manifest: Record<string, any>;
 
   try {
-    manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    manifest = local.readManifest(manifestPath);
   } catch (err) {
     return envelope({
       ok: false,
@@ -470,14 +438,14 @@ export async function handler(args: {
     result.share = unrequestedShare(args);
   }
 
-  const checkout = previewDevCheckout([args.projectPath, process.cwd()]);
+  const checkout = local.devCheckout(args.projectPath, SURFACE.label);
   const remedy = localLaneRemedy(checkout);
   const hint = `Open deepLink in a browser to see the extension render in ${SURFACE.label}'s emulator, where the Trace tab shows every chrome.* call it makes and the lane toggle switches between the emulated backend and a real carrier-equipped browser. It needs that surface's dev server running on this machine. ${remedy}`;
   const previewWarnings: string[] = [];
 
   if (args.open) {
     const sessionBrowser = args.openIn ?? browser;
-    const navRaw = await navigateToUrl(args.projectPath, sessionBrowser, deepLink);
+    const navRaw = await local.navigate(args.projectPath, sessionBrowser, deepLink);
     let opened: Record<string, unknown>;
 
     try {
@@ -498,6 +466,7 @@ export async function handler(args: {
 
   if (args.share) {
     const share = await buildShare(
+      local,
       args.projectPath,
       distDir,
       manifest,

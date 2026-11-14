@@ -1,10 +1,12 @@
+import childProcess from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { handler, schema } from "../tools/preview-web";
+import { withRequestCredential } from "../lib/credential-scope";
+import { handler, previewWebWith, schema } from "../tools/preview-web";
 
 import type * as CdpPortModule from "../lib/cdp-port";
 
@@ -53,6 +55,37 @@ describe("extension_preview_web", () => {
 
   it("requires projectPath", () => {
     expect(schema.inputSchema.required).toContain("projectPath");
+  });
+
+  it("runs its platform half on the facts the local half hands it, reading no path itself", async () => {
+    const local = {
+      build: vi.fn(async () => JSON.stringify({ ok: true })),
+      distDirOf: vi.fn(() => "/elsewhere/widget/dist/chrome"),
+      manifestExists: vi.fn(() => true),
+      readManifest: vi.fn(() => ({ ...MANIFEST })),
+      devCheckout: vi.fn(() => null),
+      navigate: vi.fn(async () => JSON.stringify({ ok: true })),
+      uploadPreview: vi.fn(async () => ({ ok: true as const, data: { artifactId: "gen_probe", previewUrl: "http://preview.extension.localhost/?preview=gen_probe" }, body: {} })),
+      recordSharedPreview: vi.fn(() => ({ recorded: true, path: "/elsewhere/widget/.extension.dev/shared-previews.json", entries: 1, note: "recorded" })),
+    };
+    const touched: string[] = [];
+    const fsNames = ["readFileSync", "existsSync", "statSync", "writeFileSync", "mkdirSync", "readdirSync", "openSync", "lstatSync", "realpathSync", "renameSync", "unlinkSync", "rmSync", "appendFileSync", "mkdtempSync"] as const;
+    const childNames = ["spawn", "spawnSync", "execFile", "execFileSync"] as const;
+
+    for (const name of fsNames) vi.spyOn(fs, name).mockImplementation(((...a: unknown[]) => { touched.push(`${name} ${String(a[0])}`); throw new Error("no disk"); }) as never);
+    for (const name of childNames) vi.spyOn(childProcess, name).mockImplementation(((...a: unknown[]) => { touched.push(`${name} ${String(a[0])}`); throw new Error("no process"); }) as never);
+
+    const out = await withRequestCredential(
+      { token: "claims.sig", api: "http://localhost:3100", projects: [{ workspace: "acme", project: "widget" }], expiresAt: null },
+      () => previewWebWith({ projectPath: "/elsewhere/widget", open: true, share: true, probe: false }, local),
+    );
+
+    expect(touched).toEqual([]);
+    expect(local.build).toHaveBeenCalledWith("/elsewhere/widget", "chrome");
+    expect(local.navigate).toHaveBeenCalledWith("/elsewhere/widget", "chrome", expect.stringContaining("preview%3A%2F%2Fbuild%2F"));
+    expect(local.devCheckout).toHaveBeenCalledWith("/elsewhere/widget", "preview.extension.dev");
+    expect(local.recordSharedPreview).toHaveBeenCalledWith("/elsewhere/widget", expect.objectContaining({ artifactId: "gen_probe", browser: "chrome" }));
+    expect(JSON.parse(out)).toMatchObject({ ok: true, status: "previewed", value: { built: true, share: { ok: true, artifactId: "gen_probe" } } });
   });
 
   it("defaults to preview and emits a base64url-round-tripping preview://build deep link (probe off)", async () => {
