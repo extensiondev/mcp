@@ -130,6 +130,50 @@ describe("status reads a failed store run's own cause into failureReason with a 
     expect(entry.nextStep.say).toContain("The key on file is at fault");
   });
 
+  it.each([
+    {
+      store: "chrome",
+      reason: 'HTTP 400 Bad Request, POST https://oauth2.googleapis.com/token {"error":"invalid_grant","error_description":"Token has been expired or revoked."}',
+      url: /\/stores\?connect=chrome$/,
+      names: "Google refused the Chrome Web Store connection",
+    },
+    {
+      store: "edge",
+      reason: "HTTP 401 Unauthorized, POST https://api.addons.microsoftedge.microsoft.com/v1/products/0RDCKF9C2Q4L/submissions/draft/package",
+      url: /\/settings\/store-accounts$/,
+      names: "Partner Center answered 401",
+    },
+    {
+      store: "safari",
+      reason: 'HTTP 401 Unauthorized, GET https://api.appstoreconnect.apple.com/v1/apps?limit=1 {"errors":[{"status":"401","code":"NOT_AUTHORIZED"}]}',
+      url: /\/settings\/store-accounts$/,
+      names: "App Store Connect answered 401",
+    },
+  ])("answers the connect step that names the credential for a $store run the store's API refused to authenticate", async ({ store, reason, url, names }) => {
+    const out = await status(
+      [{ store, configured: true, lastSubmission: { id: "sub_k", version: "0.1.0", status: "failed", failureReason: reason }, submissionRun: { status: "completed", conclusion: "failure" } }],
+      [store],
+    );
+    const entry = out.value.stores[0];
+
+    expect(entry.failureReason).toBe(reason);
+    expect(entry.nextStep).toMatchObject({ kind: "connect", replace: true });
+    expect(entry.nextStep.url).toMatch(url);
+    expect(entry.nextStep.say).toContain(names);
+    expect(entry.nextStep.say).toContain("nothing is in review");
+  });
+
+  it("grounds no connect step for a 403, which a store answers for an item the account does not own", async () => {
+    const reason = "HTTP 403 Forbidden, POST https://api.addons.microsoftedge.microsoft.com/v1/products/0RDCKF9C2Q4L/submissions/draft/package";
+    const out = await status(
+      [{ store: "edge", configured: true, lastSubmission: { id: "sub_e", status: "failed", failureReason: reason }, submissionRun: { status: "completed", conclusion: "failure" } }],
+      ["edge"],
+    );
+
+    expect(out.value.stores[0].failureReason).toBe(reason);
+    expect(out.value.stores[0].nextStep).toBeNull();
+  });
+
   it("names the failing step beside the generic reason and grounds no next step when the cause is not known", async () => {
     const out = await status(
       [

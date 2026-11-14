@@ -1573,7 +1573,7 @@ async function answer(args: SubmitToolArgs, facts: SubmitFacts): Promise<string>
         ? credentialFailure
           ? credentialFailureStep({
               failure: credentialFailure,
-              connectUrl: firefoxConnectUrl(credential.ref, args.api),
+              connectUrl: fallbackConnectUrl(credential.ref, credentialFailure.store, args.api),
               accountsUrl: workspaceStoreAccountsUrl(credential.ref, args.api),
               trackUrl: firstPage,
             })

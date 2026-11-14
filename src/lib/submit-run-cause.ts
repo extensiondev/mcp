@@ -92,7 +92,7 @@ export function runCauseOf(store: string, submission: Row, run: Row, url: string
   if (credential) {
     return {
       failed: true,
-      failureReason: trimmed(said || `${lead}: AMO refused the run's credentials (401)`),
+      failureReason: trimmed(said || `${lead}: ${credential.store === "firefox" ? "AMO refused the run's credentials (401)" : "the store's API refused the run's credentials"}`),
       nextStep: urls ? credentialFailureStep({ failure: credential, connectUrl: urls.connectUrl, accountsUrl: urls.accountsUrl, trackUrl: url ?? "" }) : null,
     };
   }

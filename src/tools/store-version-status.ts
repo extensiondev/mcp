@@ -21,8 +21,7 @@ import { type ListingPushView } from "../lib/safari-listing-push-read";
 import { releaseChangeOfRow, releaseChangeSentence, releaseTypeMeaning, type ReleaseTypeChange, type ReleaseTypeChangeRefused } from "../lib/store-row-sources";
 import { packageRefusedSentence, uploadRefused } from "../lib/store-upload-words";
 import { readStores } from "./store-status";
-import { workspaceStoreAccountsUrl, type NextStep } from "../lib/store-connection";
-import { firefoxConnectUrl } from "../lib/firefox-store";
+import { fallbackConnectUrl, workspaceStoreAccountsUrl, type NextStep } from "../lib/store-connection";
 
 const COMMAND = "extension_submit";
 
@@ -265,8 +264,14 @@ export async function storeVersionStatus(args: {
     ? wanted.map((store) => rows.find((row) => row.store === store) ?? { store })
     : rows.filter((row) => row.configured === true || isRow(row.lastSubmission));
   const ref = text(value.workspace) && text(value.project) ? { workspace: text(value.workspace), project: text(value.project) } : null;
-  const urls = ref ? { connectUrl: firefoxConnectUrl(ref, args.api), accountsUrl: workspaceStoreAccountsUrl(ref, args.api) } : undefined;
-  const stores = picked.map((row) => statusOfRow(row, ref ? consoleProjectUrl(ref, ConsoleProjectPage.submissionsStore(text(row.store)), args.api) : "", urls));
+  const accountsUrl = ref ? workspaceStoreAccountsUrl(ref, args.api) : "";
+  const stores = picked.map((row) =>
+    statusOfRow(
+      row,
+      ref ? consoleProjectUrl(ref, ConsoleProjectPage.submissionsStore(text(row.store)), args.api) : "",
+      ref ? { connectUrl: fallbackConnectUrl(ref, text(row.store), args.api), accountsUrl } : undefined,
+    ),
+  );
   const step = overallStep(stores);
   const wait = isRow(value.refreshWait) ? value.refreshWait : null;
   const refresh = isRow(value.refresh) ? value.refresh : null;
