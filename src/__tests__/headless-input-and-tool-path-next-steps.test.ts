@@ -5,7 +5,10 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import snapshot from "../lib/templates-meta.snapshot.json";
+
 import type * as Exec from "../lib/exec";
+import type * as TemplatesCache from "../lib/templates-cache";
 
 const spawnCalls: Array<{ args: string[]; env?: Record<string, string> }> = [];
 
@@ -20,6 +23,19 @@ vi.mock("../lib/exec", async (importOriginal) => {
 
       return { child, logPath: "/dev/null", readOutput: () => "" };
     }),
+  };
+});
+
+const catalogRows = (snapshot as { templates: Array<{ slug: string; surfaces?: string[] }> }).templates;
+
+vi.mock("../lib/templates-cache", async (importOriginal) => {
+  const actual = await importOriginal<typeof TemplatesCache>();
+
+  return {
+    ...actual,
+    listTemplates: async (filters?: { surface?: string }) =>
+      catalogRows.filter((t) => !filters?.surface || (t.surfaces ?? []).includes(filters.surface)),
+    getTemplateBySlug: async (slug: string) => catalogRows.find((t) => t.slug === slug),
   };
 });
 
