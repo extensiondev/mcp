@@ -176,6 +176,10 @@ export function resolveCredential(options: { project?: string; api?: string } = 
     const wantedRef = splitRef(wanted);
     const expired = expiredStoredLogin({ project: wanted, api });
 
+    if (named && env && wantedRef && envClaims && claimsCover(envClaims, wantedRef)) {
+      return { token: env, source: "env", ref: wantedRef, refSource: "env-claims", mismatch: null, note: null, expired: null };
+    }
+
     if (named) {
       return {
         token: "",

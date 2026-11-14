@@ -89,6 +89,24 @@ describe("resolveCredential", () => {
     expect(out.note).toMatch(/No stored login for acme\/missing/);
   });
 
+  it("761: sends the env token for a named project its claims cover when no login is stored, and never for one they do not cover", () => {
+    process.env.EXTENSION_DEV_TOKEN = claimsToken("acme", "web");
+    const covered = resolveCredential({ project: "Acme/Web" });
+
+    expect(covered).toMatchObject({ source: "env", token: process.env.EXTENSION_DEV_TOKEN, ref: { workspace: "acme", project: "web" }, refSource: "env-claims", mismatch: null, note: null });
+    expect(resolveCredential({ project: "acme/other" })).toMatchObject({ source: "none", token: "" });
+    expect(resolveCredential({ project: "other/web" })).toMatchObject({ source: "none", token: "" });
+
+    process.env.EXTENSION_DEV_TOKEN = `${Buffer.from(JSON.stringify({ u: "acme", p: "*", l: "member", ps: ["web", "docs"], exp: FUTURE, n: "m", a: "cli" })).toString("base64url")}.sig`;
+
+    expect(resolveCredential({ project: "acme/docs" })).toMatchObject({ source: "env", token: process.env.EXTENSION_DEV_TOKEN, ref: { workspace: "acme", project: "docs" } });
+    expect(resolveCredential({ project: "acme/billing" })).toMatchObject({ source: "none", token: "" });
+
+    login("acme", "docs");
+
+    expect(resolveCredential({ project: "acme/docs" })).toMatchObject({ source: "stored", token: "stored-docs" });
+  });
+
   it("uses the stored active login when no env token is set", () => {
     login("acme", "widget");
     const out = resolveCredential();
