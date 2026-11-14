@@ -163,6 +163,50 @@ describe("status reads a failed store run's own cause into failureReason with a 
     expect(entry.nextStep.say).toContain("nothing is in review");
   });
 
+  it("reads a Chrome upload's own 401 wording, which names no host, as the same credential refusal", async () => {
+    const reason = 'Chrome upload failed: 401 Unauthorized {"error":{"code":401,"status":"UNAUTHENTICATED"}}';
+    const out = await status(
+      [{ store: "chrome", configured: true, lastSubmission: { id: "sub_k", status: "failed", failureReason: reason }, submissionRun: { status: "completed", conclusion: "failure" } }],
+      ["chrome"],
+    );
+
+    expect(out.value.stores[0].nextStep).toMatchObject({ kind: "connect", replace: true });
+  });
+
+  it.each(["chrome", "edge", "safari"])("lets the platform's structured cause decide the failure of a %s run before any sentence is matched, by its verdict on the key on file", async (store) => {
+    const step = async (failureCause: Row | undefined, failureReason = "the store run failed") =>
+      (
+        await status(
+          [{ store, configured: true, lastSubmission: { id: "sub_k", version: "0.1.0", status: "failed", failureReason, ...(failureCause ? { failureCause } : {}) }, submissionRun: { status: "completed", conclusion: "failure" } }],
+          [store],
+        )
+      ).value.stores[0].nextStep;
+    const cause = (keyOnFile: string) => ({ kind: "store-connection-failed", store, credential: "credential-refused", keyOnFile });
+
+    expect(await step(undefined)).toBeNull();
+
+    const refused = await step(cause("refused"));
+
+    expect(refused).toMatchObject({ kind: "connect", replace: true });
+    expect(refused.say).toContain("The credential on file is at fault");
+    expect(refused.say).toContain("refused it on the platform's own status read too");
+    expect(refused.say).not.toContain("the handoff");
+
+    const accepted = await step(cause("accepted"));
+
+    expect(accepted.kind).toBe("preflight");
+    expect(accepted.replace).toBeUndefined();
+    expect(accepted.say).toContain("The credential on file is not at fault");
+    expect(accepted.say).toContain("connecting again fixes nothing");
+    expect(accepted.say).not.toMatch(/revoked|expired|regenerated/);
+
+    const unread = await step(cause("unread"));
+
+    expect(unread).toMatchObject({ kind: "connect", replace: true });
+    expect(unread.say).toContain("If the store refuses the next run the same way, the handoff");
+    expect(unread.say).not.toContain("The credential on file is at fault");
+  });
+
   it("grounds no connect step for a 403, which a store answers for an item the account does not own", async () => {
     const reason = "HTTP 403 Forbidden, POST https://api.addons.microsoftedge.microsoft.com/v1/products/0RDCKF9C2Q4L/submissions/draft/package";
     const out = await status(

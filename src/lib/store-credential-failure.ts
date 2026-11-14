@@ -37,19 +37,33 @@ type KeyedStore = Exclude<CredentialStore, "firefox">;
  * store's body, so a 401 from the Chrome Web Store, Partner Center or App
  * Store Connect host, Google's refusal of the token exchange (invalid_grant,
  * invalid_client) and Apple's NOT_AUTHORIZED each name the credential the
- * run was handed. A 403 is left alone: it is what a store answers for an
- * item the account does not own, and connecting again fixes nothing there.
+ * run was handed. Chrome's upload, publish and cancel calls word theirs
+ * "Chrome upload failed: 401 Unauthorized", with no host. A 403 is left
+ * alone: it is what a store answers for an item the account does not own,
+ * and connecting again fixes nothing there.
  */
 const AUTH_REFUSAL: Record<KeyedStore, RegExp> = {
-  chrome: /\bHTTP 401\b[\s\S]*googleapis\.com|\binvalid_grant\b|\binvalid_client\b/i,
+  chrome: /\bHTTP 401\b[\s\S]*googleapis\.com|\bChrome [a-z ]+ failed: 401\b|\binvalid_grant\b|\binvalid_client\b/i,
   edge: /\bHTTP 401\b[\s\S]*microsoftedge\.microsoft\.com/i,
   safari: /\bHTTP 401\b[\s\S]*appstoreconnect\.apple\.com|\bNOT_AUTHORIZED\b/i,
 };
 
+const REFUSED: Record<KeyedStore, string> = {
+  chrome: "Google refused the Chrome Web Store connection the run was handed",
+  edge: "Partner Center answered 401 on the Publish API Client ID and key the run was handed",
+  safari: "App Store Connect answered 401 on the API key the run was handed",
+};
+
+const SO_ON_FILE: Record<KeyedStore, string> = {
+  chrome: "so the connection on file was revoked or has expired",
+  edge: "so the key on file has expired or was regenerated",
+  safari: "so the key on file was revoked or its issuer ID, key ID and private key no longer match",
+};
+
 const REFUSED_BY: Record<KeyedStore, string> = {
-  chrome: "Google refused the Chrome Web Store connection the run was handed, so the connection on file was revoked or has expired",
-  edge: "Partner Center answered 401 on the Publish API Client ID and key the run was handed, so the key on file has expired or was regenerated",
-  safari: "App Store Connect answered 401 on the API key the run was handed, so the key on file was revoked or its issuer ID, key ID and private key no longer match",
+  chrome: `${REFUSED.chrome}, ${SO_ON_FILE.chrome}`,
+  edge: `${REFUSED.edge}, ${SO_ON_FILE.edge}`,
+  safari: `${REFUSED.safari}, ${SO_ON_FILE.safari}`,
 };
 
 const CONNECT_AGAIN: Record<KeyedStore, string> = {
@@ -69,18 +83,23 @@ function keyedStore(store: string): KeyedStore | null {
  * failureCause with the half that failed (the issuer AMO does not know, or
  * the secret that does not match it), whether the key on file was refused
  * or accepted by the platform's own signed read, and whose account the run
- * used. A record from an older platform carries only the lane's sentence,
- * which is read by shape with the key on file left unread.
+ * used. The platform answers the same cause for a Chrome, Edge and App
+ * Store run, with the verdict its status poll holds on the key on file, so
+ * the structured cause is read first for every store and decides alone. A
+ * record from an older platform carries only the lane's sentence, which is
+ * read by shape with the key on file left unread.
  */
 export function credentialFailureOf(submission: Row): CredentialFailure | null {
   const cause = isRow(submission.failureCause) ? submission.failureCause : null;
+  const named = cause && text(cause.kind) === "store-connection-failed" ? text(cause.store) : "";
 
-  if (cause && text(cause.kind) === "store-connection-failed" && text(cause.store) === "firefox") {
+  if (cause && (named === "firefox" || keyedStore(named))) {
     const keyOnFile = text(cause.keyOnFile) as KeyOnFile;
+    const firefoxFault = text(cause.credential) === "issuer-unknown" ? "issuer-unknown" : "secret-rejected";
 
     return {
-      store: "firefox",
-      credential: text(cause.credential) === "issuer-unknown" ? "issuer-unknown" : "secret-rejected",
+      store: named as CredentialStore,
+      credential: named === "firefox" ? firefoxFault : "credential-refused",
       keyOnFile: KEY_ON_FILE.has(keyOnFile) ? keyOnFile : "unread",
       source: connectionSourceOf(cause.source),
     };
@@ -119,6 +138,8 @@ function connectWhere(failure: CredentialFailure, connectUrl: string, accountsUr
  * sends the person to preflight and the report, never to paste a key that
  * works; an unread key names the key on file as the likely cause and both
  * places to connect it, with the handoff as the fault if AMO refuses again.
+ * A Chrome, Edge or App Store failure follows the same three verdicts, read
+ * from the platform's status poll of that store with the key on file.
  */
 export function credentialFailureStep(args: {
   failure: CredentialFailure;
@@ -130,8 +151,28 @@ export function credentialFailureStep(args: {
   const keyed = keyedStore(failure.store);
 
   if (keyed) {
-    const where = keyed === "chrome" ? `the Chrome store settings at ${args.connectUrl}` : `the workspace's Store accounts page at ${args.accountsUrl}, or the ${storeLabel(keyed)} store settings at ${args.connectUrl} when the project holds its own key`;
-    const say = `The submission did not reach ${storeLabel(keyed)}; nothing is in review. ${REFUSED_BY[keyed]}. ${CONNECT_AGAIN[keyed]} at ${where}; the console checks it against the store before it saves it. Then submit the same build again. If the store refuses the next run the same way, the handoff of the credential to the store run is at fault: report it at ${WRITE_FAILURE_REPORT_URL} with the submission id. ${trackUrl} holds the run's own words.`;
+    const label = storeLabel(keyed);
+    const reached = `The submission did not reach ${label}; nothing is in review.`;
+    const held = `${trackUrl} holds the run's own words.`;
+
+    if (failure.keyOnFile === "accepted") {
+      return nextStep(
+        "preflight",
+        `${reached} ${REFUSED[keyed]}. The credential on file is not at fault: ${label} accepted it on the platform's own status read after this run failed, so the handoff of that credential to the store run is, and connecting again fixes nothing. Report it at ${WRITE_FAILURE_REPORT_URL} with the submission id; say preflight again before the next submit. ${held}`,
+        trackUrl,
+      );
+    }
+
+    const where = keyed === "chrome" ? `the Chrome store settings at ${args.connectUrl}` : `the workspace's Store accounts page at ${args.accountsUrl}, or the ${label} store settings at ${args.connectUrl} when the project holds its own key`;
+    const fault =
+      failure.keyOnFile === "refused"
+        ? `${REFUSED_BY[keyed]}. The credential on file is at fault: ${label} refused it on the platform's own status read too.`
+        : `${REFUSED_BY[keyed]}.`;
+    const again =
+      failure.keyOnFile === "refused"
+        ? ""
+        : ` If the store refuses the next run the same way, the handoff of the credential to the store run is at fault: report it at ${WRITE_FAILURE_REPORT_URL} with the submission id.`;
+    const say = `${reached} ${fault} ${CONNECT_AGAIN[keyed]} at ${where}; the console checks it against the store before it saves it. Then submit the same build again.${again} ${held}`;
 
     return { ...nextStep("connect", say, keyed === "chrome" ? args.connectUrl : args.accountsUrl), replace: true };
   }
