@@ -13,6 +13,8 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { writeCredentials } from "../lib/credentials";
+import { PLATFORM_KERNEL_HOOKS, installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
+import { registerKernelHooks } from "../lib/kernel-hooks";
 import {
   UPDATE_URL_UNKNOWN_CHANNEL,
   channelAwareBuildWarnings,
@@ -24,6 +26,8 @@ import {
 import { browserFromCliArgs, buildFrame, buildNarration, buildSummary, writeEngineDist } from "./fixtures/engine-answers";
 
 import type * as ExecModule from "../lib/exec";
+
+installPlatformKernelHooks();
 
 const AMO_LINE = 'AMO error MANIFEST_UPDATE_URL: "update_url" is not allowed. (manifest.json)';
 const INNER_HTML = "AMO warning UNSAFE_VAR_ASSIGNMENT: Unsafe assignment to innerHTML (chunks/react-dom.js)";
@@ -189,6 +193,25 @@ describe("channelAwareBuildWarnings reads STORE.md first, then the platform, els
     expect(line).toMatch(/^Remove browser_specific_settings\.gecko\.update_url before the listed submission/);
     expect(line).toContain("the project's Firefox store setting on extension.dev says listed");
     expect(new Set(paths())).toEqual(new Set(["/api/cli/whoami", `/api/projects/${PROJECT_ID}/stores/config`]));
+  });
+
+  it("asks the platform through the hook its host registers, so the build tool's own graph never loads the project client", async () => {
+    fs.writeFileSync(path.join(project, "STORE.md"), storeMd(["- Category: Other"]));
+    const hook = vi.fn(async () => "unlisted" as const);
+    registerKernelHooks({ platformFirefoxChannel: hook });
+
+    try {
+      expect(await readAmoChannel(project)).toEqual({ channel: "unlisted", source: "platform" });
+      expect(hook).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      registerKernelHooks({ platformFirefoxChannel: PLATFORM_KERNEL_HOOKS.platformFirefoxChannel });
+    }
+
+    const source = (file: string) => fs.readFileSync(path.join(__dirname, "..", "lib", file), "utf8");
+
+    expect(source("amo-update-url.ts")).not.toMatch(/from "\.\/(project-api|registry)"/);
+    expect(source("store-md-toolchain.ts")).not.toMatch(/import \{[^}]*\} from "\.\/project-api"/);
   });
 
   it("the build tool answers the note in place of the AMO error line for an unlisted project", async () => {

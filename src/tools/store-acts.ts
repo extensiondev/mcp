@@ -118,7 +118,8 @@ import {
   storeMdAdvisory,
 } from "./store-listing";
 import { publishVersion } from "./store-publish-version";
-import { builtToolchainFor, reviewerNoteToolchainCheck } from "../lib/store-md-toolchain";
+import { reviewerNoteToolchainCheck } from "../lib/store-md-toolchain";
+import { builtToolchainFor } from "../lib/store-md-toolchain-platform";
 import { chromeWebStoreMdCheck } from "../lib/chromewebstore-md";
 import { firefoxListingCheck, safariDescriptionCheck, withLocalChecks } from "../lib/store-preflight-local";
 import { chromePublisherSlotsCheck } from "../lib/chrome-publisher-slots";

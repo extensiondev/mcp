@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { platformFirefoxChannel } from "./amo-platform-channel";
 import { openApprovalOnce } from "./approval-open";
 import { connectSessionProject } from "./connect-session-projects";
 import { registerKernelHooks, type KernelHooks } from "./kernel-hooks";
@@ -22,6 +23,7 @@ export const PLATFORM_KERNEL_HOOKS: KernelHooks = {
   loginForOrigin,
   unloggedProjectStep: nextStepForUnloggedProject,
   localPreflightHalf,
+  platformFirefoxChannel,
 };
 
 export function installPlatformKernelHooks(): void {

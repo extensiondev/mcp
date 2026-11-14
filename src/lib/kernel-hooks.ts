@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import type { AmoChannel } from "./amo-update-url";
+
 type Args = Record<string, unknown>;
 
 export type PathLoginRead =
@@ -27,6 +29,7 @@ export interface KernelHooks {
   loginForOrigin(dir: string, api?: string): { project: string; owner: string; repo: string } | null;
   unloggedProjectStep(ref: string, projectPath: string, api?: string): UnloggedProjectStep;
   localPreflightHalf(name: string, args: Args, projectPath: string): Args;
+  platformFirefoxChannel(): Promise<AmoChannel | null>;
 }
 
 let registered: Partial<KernelHooks> = {};

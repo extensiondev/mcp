@@ -341,13 +341,13 @@ describe("ledger 467: every tool that takes projectPath binds the project the fo
 });
 
 describe("the kernel export binds a call through the hooks its host registers", () => {
-  it("answers a folder's binding from the registered hooks, and the platform set fills all eight", async () => {
+  it("answers a folder's binding from the registered hooks, and the platform set fills all nine", async () => {
     const dir = path.join(tmp, "anywhere");
     fs.mkdirSync(dir, { recursive: true });
 
     expect(kernel.createToolDispatcher).toBe(createToolDispatcher);
     expect([...kernel.registeredKernelHooks()].sort()).toEqual(Object.keys(PLATFORM_KERNEL_HOOKS).sort());
-    expect(Object.keys(PLATFORM_KERNEL_HOOKS)).toHaveLength(8);
+    expect(Object.keys(PLATFORM_KERNEL_HOOKS)).toHaveLength(9);
 
     kernel.registerKernelHooks({
       serverLogins: () => ({ live: [], kept: null }),

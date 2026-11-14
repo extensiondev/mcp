@@ -9,9 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { storeConfigView } from "./platform-store-records";
-import { openProjectApi, projectApiGet } from "./project-api";
-import { resolveProjectRef } from "./registry";
+import { kernelHook } from "./kernel-hooks";
 import { STORE_MD_FILENAME } from "./store-md";
 import { bulletLine, storeOwnLinesBody } from "./store-md-bullets";
 import { classifyStore } from "./store-md-listing";
@@ -87,30 +85,11 @@ function storeMdChannelOf(projectPath: string): AmoChannel | null {
   }
 }
 
-async function platformFirefoxChannel(): Promise<AmoChannel | null> {
-  try {
-    const ref = resolveProjectRef();
-    if (!ref) return null;
-
-    const opened = await openProjectApi({ command: "extension_build", expect: ref });
-    if (!opened.ok) return null;
-
-    const config = await projectApiGet<Record<string, unknown>>(opened.api, "stores/config");
-    if (!config.ok) return null;
-
-    const view = storeConfigView(config.json.firefox, "firefox");
-
-    return amoChannelOf(view?.releaseChannel ?? view?.submissionMode ?? "");
-  } catch {
-    return null;
-  }
-}
-
 export async function readAmoChannel(projectPath: string): Promise<AmoChannelRead> {
   const fromFile = storeMdChannelOf(projectPath);
   if (fromFile) return { channel: fromFile, source: "store-md" };
 
-  const fromPlatform = await platformFirefoxChannel();
+  const fromPlatform = await kernelHook("platformFirefoxChannel")();
 
   return fromPlatform ? { channel: fromPlatform, source: "platform" } : { channel: null, source: null };
 }

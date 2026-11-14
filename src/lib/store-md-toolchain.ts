@@ -11,7 +11,6 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { exactVersion } from "./exec";
-import { projectApiGet, type ProjectApi } from "./project-api";
 import { scaffoldScripts } from "./scaffold-scripts";
 import { buildSummaryPath } from "./session-paths";
 import { isRow, text } from "./row";
@@ -250,25 +249,6 @@ export function localBuildToolchain(projectPath: string): BuiltToolchain | null 
   }
 
   return null;
-}
-
-export async function platformBuildToolchain(api: ProjectApi, buildSha: string): Promise<BuiltToolchain | null> {
-  const sha = text(buildSha).toLowerCase();
-  if (!sha) return null;
-
-  const read = await projectApiGet<Row>(api, `builds/${encodeURIComponent(sha)}`).catch(() => null);
-  if (!read || !read.ok || !isRow(read.json)) return null;
-
-  const build = isRow(read.json.build) ? read.json.build : read.json;
-  const chain = toolchainOf(build.toolchain) ?? toolchainOf(read.json.toolchain);
-
-  return chain ? { chain, from: `build ${sha} on extension.dev` } : null;
-}
-
-export async function builtToolchainFor(api: ProjectApi | null, projectPath: string, buildSha: string): Promise<BuiltToolchain | null> {
-  const platform = api ? await platformBuildToolchain(api, buildSha) : null;
-
-  return platform ?? (projectPath ? localBuildToolchain(projectPath) : null);
 }
 
 function firefoxReviewerNotes(projectPath: string): string | null {
