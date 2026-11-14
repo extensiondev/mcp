@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { spawnSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import fs from "node:fs";
 import os from "node:os";
@@ -162,4 +163,22 @@ describe("the server records why it failed and keeps serving", () => {
     expect(out.value.serverLog.lastExit).toMatchObject({ pid: 77, reason: "received SIGTERM", code: 143, recorded: true });
     expect(out.hint).toContain("received SIGTERM");
   }, 20_000);
+});
+
+describe("a script that measures the server runs it under a scratch config directory", () => {
+  it("leaves the person's config directory without a server log after measuring the tool list", () => {
+    const repo = path.resolve(import.meta.dirname, "..", "..");
+
+    expect(fs.existsSync(path.join(repo, "dist", "module.js")), "the script starts the built server; run pnpm compile first").toBe(true);
+
+    const person = tmp("mcp-person-config-");
+    const run = spawnSync(process.execPath, [path.join(repo, "scripts", "tool-surface-size.mjs"), "--json"], {
+      encoding: "utf8",
+      env: { ...process.env, XDG_CONFIG_HOME: person, APPDATA: person, LOCALAPPDATA: person },
+    });
+
+    expect(run.status, run.stderr).toBe(0);
+    expect(JSON.parse(run.stdout).rows.length).toBeGreaterThan(10);
+    expect(fs.readdirSync(person)).toEqual([]);
+  }, 60_000);
 });

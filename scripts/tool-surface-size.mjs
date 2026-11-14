@@ -7,14 +7,31 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { spawn } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const binPath = fileURLToPath(new URL("../bin/extension-mcp.js", import.meta.url));
+
+/* @invariant THE MEASURED SERVER NEVER TOUCHES THE PERSON'S CONFIG DIRECTORY.
+ * The server writes its start and exit records beside the credentials, and
+ * this script started it under the caller's own environment, so every
+ * measurement left a SIGTERM record in the person's mcp-server.log for the
+ * next extension_doctor to report. It now runs under a scratch config
+ * directory that is removed when the script exits.
+ */
+const scratchConfig = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-tool-surface-"));
+
+process.once("exit", () => {
+  fs.rmSync(scratchConfig, { recursive: true, force: true });
+});
 
 function listTools() {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [binPath], {
       stdio: ["pipe", "pipe", "inherit"],
+      env: { ...process.env, XDG_CONFIG_HOME: scratchConfig, APPDATA: scratchConfig, LOCALAPPDATA: scratchConfig },
     });
 
     let buffer = "";
