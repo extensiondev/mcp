@@ -13,7 +13,6 @@ import path from "node:path";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 import { handler } from "../tools/wait";
-import { CDPClient } from "../lib/cdp";
 import {
   registerSession,
   removeSession,
@@ -123,7 +122,6 @@ describe("extension_wait answers the engine's own attach diagnosis as soon as re
   }, 10_000);
 
   it("answers ready once the first attach clears the three fields on the same contract", async () => {
-    const targets = vi.spyOn(CDPClient, "discoverTargets").mockRejectedValue(new TypeError("fetch failed"));
     registerSession({ pid: process.pid, browser: "chrome", projectPath: dir, command: "dev" });
     stamp(dir);
 
@@ -140,8 +138,6 @@ describe("extension_wait answers the engine's own attach diagnosis as soon as re
     expect(later.value.browserAttached).toBe(true);
     expect(later.value.browserUpNotAttachedHint).toBeUndefined();
     expect(later.value.nextStep).toBeUndefined();
-
-    targets.mockRestore();
   }, 10_000);
 });
 

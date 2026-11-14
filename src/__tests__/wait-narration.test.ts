@@ -2,10 +2,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 
 import { handler, schema } from "../tools/wait";
-import { CDPClient } from "../lib/cdp";
 import {
   registerSession,
   removeSession,
@@ -188,7 +187,6 @@ describe("extension_wait ignores contracts from a previous run", () => {
 
 describe("extension_wait splits compiled from browserAttached", () => {
   it("reports both facts true, renaming the contract's own command to sessionCommand since the envelope owns the command key", async () => {
-    const targets = vi.spyOn(CDPClient, "discoverTargets").mockRejectedValue(new TypeError("fetch failed"));
     writeModernContract(dir, "chrome", {
       command: "dev",
       port: 8083,
@@ -210,8 +208,6 @@ describe("extension_wait splits compiled from browserAttached", () => {
     expect(typeof result.value.elapsedMs).toBe("number");
     expect(result.command).toBe("extension_wait");
     expect(result.value.sessionCommand).toBe("dev");
-
-    targets.mockRestore();
   });
 
   it("keeps the half-ready state separate when the budget runs out unattached", async () => {
