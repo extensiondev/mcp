@@ -65,6 +65,8 @@ function messageOf(body: unknown): string {
 
 export const ALLOWANCE_REFUSAL_CODE = "monthly_cap";
 
+const SPENT_MONTH_CODES = new Set([ALLOWANCE_REFUSAL_CODE, "BUILD_QUOTA_EXHAUSTED"]);
+
 const PLAN_BOUNDARY_CODES: Record<string, string> = {
   MACOS_RUNNER_NOT_INCLUDED: "Safari builds and App Store submissions are not included on this workspace's plan",
   MACOS_NOTARIZATION_NOT_INCLUDED: "notarizing macOS executables is not included on this workspace's plan",
@@ -112,13 +114,19 @@ function plainText(value: unknown): string {
  * and notarization refusals end in an upgrade sentence for the console; here
  * they are said as what the plan does not include plus the billing page, and
  * they carry no reset because a plan boundary does not clear with the month.
+ *
+ * THE SPENT MONTH HAS TWO NAMES ON THE WIRE. The build dispatch lane sends
+ * `monthly_cap`; every lane behind the platform's guard (submit, release,
+ * rollback, publish, rollout, cancel, the release PR) sends
+ * `BUILD_QUOTA_EXHAUSTED` with the same neutral fields. Reading one name
+ * alone relayed the priced sentence for all the others.
  */
 export function allowanceRefusal(body: unknown, billingUrl = ""): AllowanceRefusal | null {
   const record = asRecord(body);
   const code = record ? readPlatformCode(record) : "";
   const boundary = PLAN_BOUNDARY_CODES[code] ?? "";
 
-  if (!record || (code !== ALLOWANCE_REFUSAL_CODE && !boundary)) return null;
+  if (!record || (!SPENT_MONTH_CODES.has(code) && !boundary)) return null;
 
   const limitReached = plainText(record.limitReached) || boundary || "monthly build limit";
   const resetsAt = boundary ? "" : instantOf(record.resetsAt);

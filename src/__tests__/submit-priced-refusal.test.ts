@@ -53,6 +53,15 @@ describe("a submission refused for a spent month names the limit, its reset and 
   });
 });
 
+describe("the spent month is read under the code the guard lanes send", () => {
+  it("answers BUILD_QUOTA_EXHAUSTED with the neutral fields and never the priced sentence", () => {
+    const refusal = allowanceRefusal({ code: "BUILD_QUOTA_EXHAUSTED", message: SAID, upgradeUrl: PRICING, limitReached: "monthly build limit (25 builds)", resetsAt: RESETS, neutralMessage: NEUTRAL }, BILLING);
+
+    expect(refusal).toEqual({ message: `${NEUTRAL} Manage the plan at ${BILLING}.`, limitReached: "monthly build limit (25 builds)", resetsAt: RESETS, billingUrl: BILLING });
+    expect(allowanceRefusal({ code: "BUILD_COUNTER_UNAVAILABLE", message: "The counter could not be read." }, BILLING)).toBeNull();
+  });
+});
+
 describe("a plan boundary is said without the upgrade sentence the console reads", () => {
   const platform = useProjectRoutes("extdev-submit-plan-boundary-");
   const PITCHED = `Safari submissions run on a macOS runner. It is not included on this plan. Upgrade this workspace to submit to the App Store: ${PRICING}`;
