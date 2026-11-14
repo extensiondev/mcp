@@ -105,14 +105,48 @@ async function call(session: ForwardSession, method: "POST" | "PUT" | "DELETE", 
   }
 }
 
+const LANE_SWITCHES: Readonly<Record<string, string>> = Object.freeze({
+  FORWARD_LANE_CLOSED: "WWW_FORWARD_LANE is off on extension.dev",
+  HOSTED_STATE_OFF: "the store behind this door is off on extension.dev",
+});
+
+/* @invariant A CLOSED DOOR IS CALLED CLOSED, NEVER AN EMPTY RECORD. A 503
+ * from a hosted state door says nothing about the record that was asked
+ * for: a held grant that could not be read may well exist, and one that
+ * could not be saved was not saved. Reading that answer as no record made a
+ * closed lane look like a grant that never existed, so it is thrown by name
+ * instead, with the door and the switch behind it, and the login is not
+ * blamed.
+ */
+export class ForwardLaneClosedError extends Error {
+  readonly door: string;
+  readonly code: string;
+
+  constructor(door: string, code: string) {
+    super(
+      `The hosted lane's ${door} door is closed: ${LANE_SWITCHES[code] ?? "the platform answered 503 without naming a switch"}. This login is fine; the record was neither read nor written, so nothing here says it does not exist. Run this from the local server without EXTENSION_DEV_HOSTED, or try again once the lane is open.`,
+    );
+
+    this.name = "ForwardLaneClosedError";
+    this.door = door;
+    this.code = code;
+  }
+}
+
+function openDoor(path: string, answer: { status: number; body: unknown }): { status: number; body: unknown } {
+  if (answer.status !== 503) return answer;
+
+  throw new ForwardLaneClosedError(path.slice(path.lastIndexOf("/") + 1), String(field(answer.body, "code") ?? "").slice(0, 64));
+}
+
 async function read(session: ForwardSession, path: string, body: Row): Promise<unknown> {
-  const answer = await call(session, "POST", path, body);
+  const answer = openDoor(path, await call(session, "POST", path, body));
 
   return answer.status === 200 ? answer.body : null;
 }
 
 async function write(session: ForwardSession, method: "PUT" | "DELETE", path: string, body: Row): Promise<boolean> {
-  return (await call(session, method, path, body)).status === 200;
+  return openDoor(path, await call(session, method, path, body)).status === 200;
 }
 
 /* @invariant ON THE FORWARDER PATH THE APPROVALS, HELD GRANTS AND PENDING
@@ -121,7 +155,8 @@ async function write(session: ForwardSession, method: "PUT" | "DELETE", path: st
  * forwarder runs itself (a device poll that holds a create grant, a capture
  * sync that asks for approval) reads and writes the same records through
  * www's forward state doors with a forward credential, and a later hosted
- * call finds them. An answer www does not give is read as no record. Outside
+ * call finds them. An answer www does not give is read as no record, and a
+ * door that answers 503 is thrown as closed, never read as one. Outside
  * a forwarded call, and on the default in-process path, the file store
  * answers exactly as before.
  */
@@ -134,7 +169,7 @@ export function wwwApprovalState(session: ForwardSession): ApprovalState {
       return approvalOf(field(await read(session, APPROVALS_PATH, { action: args.action, fingerprint: args.fingerprint }), "record"));
     },
     async rememberMintedApproval(args) {
-      const answer = await call(session, "PUT", APPROVALS_PATH, { approvalId: args.approvalId });
+      const answer = openDoor(APPROVALS_PATH, await call(session, "PUT", APPROVALS_PATH, { approvalId: args.approvalId }));
 
       return answer.status === 200 ? approvalOf(field(answer.body, "record")) : null;
     },

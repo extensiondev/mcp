@@ -199,4 +199,35 @@ describe("on the forwarder path the approvals and held grants are the hosted lan
     expect(seen[seen.length - 1]).toEqual({ url: "https://www.extension.dev/api/cli/forward/held-grants", method: "PUT", authorization: "Bearer forward-1", body: { deviceCode: "dev-code", grant: "grant", workspace: "acme", refs: ["acme/new"], rows: [] } });
     expect(forwarderApprovalState()).toBe(FILE_APPROVAL_STATE);
   });
+
+  it("names a state door that answers 503 as closed, never as a grant that does not exist", async () => {
+    vi.stubGlobal("fetch", async (input: unknown) => {
+      if (String(input).endsWith("/exchange")) return new Response(JSON.stringify({ access_token: "forward-1", expires_in: 600 }), { status: 200 });
+      if (String(input).endsWith("/mcp/forward")) return new Response(JSON.stringify({ ok: false, status: "local-half", error: { code: "E_TOOL_DISABLED", message: "Polling runs locally." } }), { status: 200 });
+      if (String(input).endsWith("/pending-creates")) return new Response(JSON.stringify({ pending: null }), { status: 200 });
+
+      return new Response(JSON.stringify({ code: "HOSTED_STATE_OFF", message: "Hosted state is not enabled on this platform." }), { status: 503 });
+    });
+
+    const deps = { env: { EXTENSION_DEV_HOSTED: "1" }, version: "11.0.0", resolveLogin: () => ({ token: "device-login", ref: { workspace: "acme", project: "web" } }) };
+
+    const state = async () => {
+      const closed = await Promise.allSettled([
+        forwarderApprovalState().loadHeldBatch("https://www.extension.dev", "dev-code"),
+        forwarderApprovalState().saveHeldBatch("https://www.extension.dev", "dev-code", { workspace: "acme", refs: ["acme/new"], grant: "grant", grantExpiresAt: 1, rows: [] }),
+        forwarderApprovalState().mintedApproval("https://www.extension.dev", "apr_1"),
+      ]);
+
+      for (const outcome of closed) {
+        expect(outcome).toMatchObject({ status: "rejected", reason: { name: "ForwardLaneClosedError", code: "HOSTED_STATE_OFF" } });
+        expect(String((outcome as PromiseRejectedResult).reason.message)).toMatch(/door is closed.*This login is fine/);
+      }
+
+      expect(await forwarderApprovalState().pendingCreate("https://www.extension.dev", "acme/new")).toBeNull();
+
+      return "read here";
+    };
+
+    expect(await forwardCall("extension_project_create", { deviceCode: "dev-code" }, state, deps)).toBe("read here");
+  });
 });
