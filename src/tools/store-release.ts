@@ -8,8 +8,9 @@
 
 import { awaitRecordedOutcome, dispatchedHint, linksOf, madeSentence, stampNow } from "../lib/act-outcome";
 import { envelope } from "../lib/envelope";
-import { readSubmissionRecord, type PlatformSubmission } from "../lib/platform-submissions";
+import { readStoreActByHand, readSubmissionRecord, type PlatformSubmission } from "../lib/platform-submissions";
 import { badShipRequest, openShipApi, runShipAct, text } from "../lib/ship-act";
+import { storeActByHandAnswer } from "../lib/store-act-by-hand";
 import { actLinks, judgeRelease, releaseFailureReason, trackOf } from "../lib/store-act-outcome";
 import { COMMAND, safariBuildNumberOf, storesRead, type Row, type StoreActArgs } from "./store-acts";
 
@@ -55,6 +56,9 @@ export async function releaseVersion(args: StoreActArgs): Promise<string> {
   };
   const opened = await openShipApi(COMMAND, args, { action: "release", store });
   if ("refused" in opened) return opened.refused;
+
+  const byHand = text(args.approvalId) ? null : await readStoreActByHand(opened.api, store, "release");
+  if (byHand) return storeActByHandAnswer({ command: COMMAND, action: "release", store, subject: "Releasing an approved App Store version", hand: byHand, value: named });
 
   const ran = await runShipAct(
     {

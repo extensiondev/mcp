@@ -8,9 +8,11 @@
 
 import { awaitRecordedOutcome, dispatchedHint, linksOf, madeSentence, missedRead, stampNow, type Verdict } from "../lib/act-outcome";
 import { envelope } from "../lib/envelope";
+import { readStoreActByHand } from "../lib/platform-submissions";
 import { projectApiGet } from "../lib/project-api";
 import { MINT_CALL } from "../lib/safari-app-record-step";
 import { badShipRequest, isRow, openShipApi, runShipAct, text } from "../lib/ship-act";
+import { storeActByHandAnswer } from "../lib/store-act-by-hand";
 import { storeSettingsUrl, nextStep } from "../lib/store-connection";
 import { COMMAND, type Row, type StoreActArgs } from "./store-acts";
 
@@ -74,6 +76,9 @@ export async function mintSigning(args: StoreActArgs): Promise<string> {
 
   const opened = await openShipApi(COMMAND, args, { action: MINT_SIGNING_ACTION, store });
   if ("refused" in opened) return opened.refused;
+
+  const byHand = text(args.approvalId) ? null : await readStoreActByHand(opened.api, store, "mint");
+  if (byHand) return storeActByHandAnswer({ command: COMMAND, action: MINT_SIGNING_ACTION, store, subject: "Minting the App Store signing certificate and profiles", hand: byHand });
 
   const ran = await runShipAct(
     {

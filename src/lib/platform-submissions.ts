@@ -626,7 +626,9 @@ export type { StoreActByHand } from "./store-act-by-hand";
  * and a read that carries no verdict leaves the act to the route, which
  * stays the backstop.
  */
-export function storeActByHandOf(json: unknown, store: string, act: "submit" | "cancel"): StoreActByHand | null {
+export type ReadStoreAct = "submit" | "cancel" | "rollout" | "release" | "mint";
+
+export function storeActByHandOf(json: unknown, store: string, act: ReadStoreAct): StoreActByHand | null {
   const acts = json && typeof json === "object" ? (json as { storeActs?: unknown }).storeActs : null;
   const perStore = acts && typeof acts === "object" ? (acts as Record<string, unknown>)[store] : null;
   const verdict = perStore && typeof perStore === "object" ? (perStore as Record<string, unknown>)[act] : null;
@@ -642,7 +644,7 @@ export function storeActByHandOf(json: unknown, store: string, act: "submit" | "
 export async function readStoreActByHand(
   api: Pick<ProjectApi, "base" | "token" | "command">,
   store: string,
-  act: "submit" | "cancel",
+  act: ReadStoreAct,
 ): Promise<StoreActByHand | null> {
   const read = await platformApiGet<Record<string, unknown>>(api, "/api/cli/stores/submissions").catch(() => null);
 

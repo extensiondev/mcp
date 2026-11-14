@@ -9,7 +9,7 @@
 import { awaitRecordedOutcome, dispatchedHint, madeSentence, missedRead, stampNow } from "../lib/act-outcome";
 import { envelope } from "../lib/envelope";
 import { readStoreActByHand, readSubmissionRecord, readSubmissionsInReview, type PlatformSubmission, type StoreActByHand, type SubmissionDispatch } from "../lib/platform-submissions";
-import { byHandFields } from "../lib/store-act-by-hand";
+import { byHandFields, storeActByHandAnswer } from "../lib/store-act-by-hand";
 import { projectApiGet, type ProjectApi } from "../lib/project-api";
 import { badShipRequest, isRow, openShipApi, runShipAct, text } from "../lib/ship-act";
 import { actLinks, judgeCancel, judgeRollout, trackOf } from "../lib/store-act-outcome";
@@ -287,6 +287,9 @@ export async function raiseRollout(args: StoreActArgs): Promise<string> {
   const { store } = picked;
   const opened = await openShipApi(COMMAND, args, { action: "rollout", store, deployPercentage: percentage });
   if ("refused" in opened) return opened.refused;
+
+  const byHand = text(args.approvalId) ? null : await readStoreActByHand(opened.api, store, "rollout");
+  if (byHand) return storeActByHandAnswer({ command: COMMAND, action: "rollout", store, subject: `Raising the ${STORE_TITLES[store] ?? store} staged rollout`, hand: byHand, value: { deployPercentage: percentage } });
 
   const ran = await runShipAct(
     {

@@ -132,6 +132,40 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
     expect(platform.calls.filter((call) => call.method === "POST")).toHaveLength(0);
   });
 
+  it("734: a rollout raise, a release and a signing mint the platform cannot run name the store's hand path before any approval or 409", async () => {
+    if (process.platform === "win32") return;
+
+    const hand = (handPath: string, handUrl: string) => ({ onPlatform: false, handPath, handUrl });
+    const storeActs = {
+      chrome: { submit: { onPlatform: true }, rollout: hand('open the item in the Chrome Web Store Developer Dashboard and raise the percentage under "Distribution"', "https://chrome.google.com/webstore/devconsole") },
+      safari: { release: hand('open the version in App Store Connect and choose "Release This Version"', "https://appstoreconnect.apple.com/apps"), mint: hand("open Certificates, Identifiers and Profiles in the Apple Developer account and create the signing certificate and provisioning profile", "https://developer.apple.com/account/resources/certificates/list") },
+    };
+    platform.login();
+    platform.routes["GET /api/cli/stores/submissions"] = () => ({ body: { submissions: [], storeActs } });
+
+    const asked = [
+      ["rollout", "chrome", storeActs.chrome.rollout, { action: "rollout", store: "chrome", deployPercentage: 50, api: API }],
+      ["release", "safari", storeActs.safari.release, { action: "release", store: "safari", api: API }],
+      ["mint-signing", "safari", storeActs.safari.mint, { action: "mint-signing", store: "safari", api: API }],
+    ] as const;
+
+    for (const [action, store, verdict, args] of asked) {
+      const out = JSON.parse(await submit(args));
+
+      expect(out).toMatchObject({ ok: false, status: `${action}-by-hand`, value: { action, store, refusedBeforeApproval: true, owner: "store", handPath: verdict.handPath, handUrl: verdict.handUrl } });
+      expect(out.value.nextStep).toEqual({ kind: "dashboard", say: out.hint, url: verdict.handUrl });
+      expect(out.hint).toContain(`no approval was asked for. To do it now, ${verdict.handPath}.`);
+    }
+
+    expect(platform.calls.filter((call) => call.method === "POST")).toHaveLength(0);
+
+    platform.routes["GET /api/cli/stores/submissions"] = () => ({ body: { submissions: [], storeActs: { chrome: { submit: { onPlatform: true } } } } });
+    platform.routes[`POST ${ROLLOUT}`] = () => approvalRequired("extension_store.rollout", { store: "chrome", deployPercentage: "50" });
+    platform.routes[`POST ${APPROVALS}`] = () => ({ status: 201, body: { approvalId: "apr_r", approvalUrl: `${API}/approve/apr_r` } });
+
+    expect(JSON.parse(await submit({ action: "rollout", store: "chrome", deployPercentage: 50, api: API })).status).toBe("approval-required");
+  });
+
   it("677: an Edge cancel records a review canceled by hand in Partner Center through the platform under an approval, and sends no withdrawal", async () => {
     if (process.platform === "win32") return;
 

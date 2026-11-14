@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Ledger 734. A Chrome rollout raise, an App Store release and a Safari signing mint the platform marks as not run there (`storeActs.<store>.rollout`, `release`, `mint` with `onPlatform: false`) answer `rollout-by-hand`, `release-by-hand` or `mint-signing-by-hand` with the store's hand path as `value.nextStep`, before an approval is asked and before the route that would answer 409. A read with no verdict leaves the act to the route.
 - Ledger 740. The special-folder entries in `extension_build` and `extension_analyze` leave out what the engine leaves out (`finalizeSpecialFoldersData`): a file under the public folder, a file `exclude` names in `extension.config.js` (the top level, the browser's block and `commands.build` joined), a script that imports Node-only modules, a script a `package.json` script runs that nothing in the extension names, and a `.dev.` file the dist does not hold. The config read preloads the project's `.env` files and answers `import.meta.env` the way the engine does, so `folders` or `exclude` taken from them is read.
 - Ledger 739. A pid the process table refuses as out of range no longer prints `ps: process id too large` on this server's stderr.
 
