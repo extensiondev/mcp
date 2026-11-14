@@ -17,12 +17,9 @@ import {
   type ArtifactPublisher,
   type ListedArtifact,
 } from "../lib/artifacts-api";
-import {
-  readSharedPreviews,
-  type SharedPreviewEntry,
-} from "../lib/share-record";
 import { envelope } from "../lib/envelope";
-import { createShareFromBuild } from "./shares-create";
+import { createShareFromBuild, type SharesLocal } from "./shares-create";
+import { SHARES_LOCAL } from "./shares-local";
 import { listBuildLinkShares, namesBuildLink, revokeBuildLinkShare, withBuildLinks } from "./shares-build-links";
 import { resolveCredential } from "../lib/credential-source";
 import { expiredLoginRefusal } from "../lib/login-expired";
@@ -39,6 +36,8 @@ import {
   platformHoldEnvelope,
   templatesOrigin,
 } from "../lib/platform-hold";
+
+import type { SharedPreviewEntry } from "../lib/share-record";
 
 const LOGIN_HINT = LOGIN_STEPS;
 
@@ -236,10 +235,10 @@ async function listShares(args: {
   limit?: number;
   api?: string;
   project?: string;
-}): Promise<string> {
+}, localHalf: SharesLocal): Promise<string> {
   const liveFiltered = args.status === "live";
   const local = args.projectPath
-    ? readSharedPreviews(args.projectPath)
+    ? localHalf.readSharedPreviews(args.projectPath)
     : undefined;
   const localRecord = local
     ? {
@@ -426,7 +425,7 @@ async function revokeShare(args: {
   approvalId?: string;
   api?: string;
   project?: string;
-}): Promise<string> {
+}, localHalf: SharesLocal): Promise<string> {
   const supplied = String(args.artifactId || args.url || "").trim();
   const ref = parseArtifactRef(supplied);
 
@@ -501,7 +500,7 @@ async function revokeShare(args: {
   });
 
   const local = args.projectPath
-    ? readSharedPreviews(args.projectPath)
+    ? localHalf.readSharedPreviews(args.projectPath)
     : undefined;
   const entry = local ? localIndex(local.entries).get(ref) : undefined;
   const recordNote = local
@@ -584,7 +583,7 @@ async function revokeShare(args: {
   });
 }
 
-export async function handler(args: {
+interface SharesArgs {
   action?: string;
   kind?: string;
   tokenId?: string;
@@ -598,9 +597,15 @@ export async function handler(args: {
   limit?: number;
   api?: string;
   project?: string;
-}): Promise<string> {
+}
+
+export async function handler(args: SharesArgs): Promise<string> {
+  return sharesWith(args, SHARES_LOCAL);
+}
+
+export async function sharesWith(args: SharesArgs, local: SharesLocal): Promise<string> {
   if (args.action === "create") {
-    return createShareFromBuild({ buildId: args.buildId, browser: args.browser, project: args.project, api: args.api });
+    return createShareFromBuild({ buildId: args.buildId, browser: args.browser, project: args.project, api: args.api }, local);
   }
 
   if (args.action === "revoke" && namesBuildLink(args)) {
@@ -621,7 +626,7 @@ export async function handler(args: {
       ...(args.approvalId ? { approvalId: args.approvalId } : {}),
       ...(args.api ? { api: args.api } : {}),
       ...(args.project ? { project: args.project } : {}),
-    });
+    }, local);
   }
 
   const kind = String(args.kind ?? "both").trim() || "both";
@@ -637,7 +642,7 @@ export async function handler(args: {
     ...(args.projectPath ? { projectPath: args.projectPath } : {}),
     ...linkArgs,
     ...(args.limit != null ? { limit: args.limit } : {}),
-  });
+  }, local);
 
   return kind === "preview" ? previews : withBuildLinks(previews, await listBuildLinkShares(linkArgs));
 }

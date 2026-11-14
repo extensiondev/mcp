@@ -1,11 +1,13 @@
+import childProcess from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { handler as shares, schema } from "../tools/shares";
+import { handler as shares, schema, sharesWith } from "../tools/shares";
+import { withRequestCredential } from "../lib/credential-scope";
 import { TOOL_POLICY, disabledToolEnvelope } from "../lib/tool-policy";
 import { writeCredentials } from "../lib/credentials";
 
@@ -223,6 +225,39 @@ describe("extension_shares create shares a platform build as a public link", () 
     expect(out.error.message).toContain("../escape.js");
     expect(calls.some((call) => call.url.endsWith("/api/artifacts"))).toBe(false);
     expect(fs.existsSync(path.join(os.tmpdir(), "escape.js"))).toBe(false);
+  });
+
+  it("runs its platform half on the facts the local half hands it, reading no path itself", async () => {
+    const upload = { ok: true as const, data: { artifactId: ARTIFACT_ID, previewUrl: `http://preview.extension.localhost/?preview=${ARTIFACT_ID}` }, body: {} };
+    const local = {
+      readSharedPreviews: vi.fn(() => ({ path: "/elsewhere/widget/.extension.dev/shared-previews.json", exists: false, unreadable: false, entries: [] })),
+      makeStagingDir: vi.fn(() => "/staged/build"),
+      unpackPackage: vi.fn(() => ({ ok: true as const, files: 3, bytes: 120 })),
+      readStagedManifest: vi.fn(() => JSON.parse(MANIFEST)),
+      uploadPreview: vi.fn(async () => upload),
+      removeStagingDir: vi.fn(),
+    };
+    const touched: string[] = [];
+    const fsNames = ["readFileSync", "existsSync", "statSync", "writeFileSync", "mkdirSync", "readdirSync", "openSync", "lstatSync", "realpathSync", "renameSync", "unlinkSync", "rmSync", "appendFileSync", "mkdtempSync"] as const;
+    const childNames = ["spawn", "spawnSync", "execFile", "execFileSync"] as const;
+
+    for (const name of fsNames) vi.spyOn(fs, name).mockImplementation(((...a: unknown[]) => { touched.push(`${name} ${String(a[0])}`); throw new Error("no disk"); }) as never);
+    for (const name of childNames) vi.spyOn(childProcess, name).mockImplementation(((...a: unknown[]) => { touched.push(`${name} ${String(a[0])}`); throw new Error("no process"); }) as never);
+
+    const credential = { token: "claims.sig", api: API, projects: [{ workspace: "acme", project: "widget" }], expiresAt: null };
+    const [created, listed] = await withRequestCredential(credential, () =>
+      Promise.all([
+        sharesWith({ action: "create", buildId: "603fc8a", api: API }, local),
+        sharesWith({ action: "list", kind: "preview", projectPath: "/elsewhere/widget", api: API }, local),
+      ]),
+    ).finally(() => vi.restoreAllMocks());
+
+    expect(touched).toEqual([]);
+    expect(local.unpackPackage).toHaveBeenCalledWith(expect.any(Buffer), "/staged/build", expect.any(Object));
+    expect(local.removeStagingDir).toHaveBeenCalledWith("/staged/build");
+    expect(local.readSharedPreviews).toHaveBeenCalledWith("/elsewhere/widget");
+    expect(JSON.parse(created)).toMatchObject({ ok: true, status: "shared", value: { artifactId: ARTIFACT_ID } });
+    expect(JSON.parse(listed).command).toBe("extension_shares");
   });
 
   it("refuses create without a buildId before any request", async () => {

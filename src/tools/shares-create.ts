@@ -6,15 +6,10 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-
 import { spendNarration } from "../lib/allowance";
 import { ZIP_URL_REDIRECT_NOTE } from "../lib/artifacts-api";
 import { envelope } from "../lib/envelope";
 import { platformHoldEnvelope } from "../lib/platform-hold";
-import { uploadPreview } from "../lib/preview-upload";
 import {
   openProjectApi,
   projectApiGet,
@@ -23,7 +18,10 @@ import {
   type ProjectApi,
 } from "../lib/project-api";
 import { fetchRegistryBytes, registryBase } from "../lib/registry";
-import { unpackZip } from "../lib/zip-entries";
+
+import type { uploadPreview } from "../lib/preview-upload";
+import type { SharedPreviewsFile } from "../lib/share-record";
+import type { unpackZip } from "../lib/zip-entries";
 
 const COMMAND = "extension_shares";
 const MAX_DOWNLOAD_BYTES = 64 * 1024 * 1024;
@@ -31,6 +29,15 @@ const MAX_UNPACKED_BYTES = 128 * 1024 * 1024;
 const MAX_ENTRIES = 2_000;
 
 type Row = Record<string, unknown>;
+
+export interface SharesLocal {
+  readSharedPreviews(projectPath: string): SharedPreviewsFile;
+  makeStagingDir(): string;
+  unpackPackage: typeof unpackZip;
+  readStagedManifest(distDir: string): unknown;
+  uploadPreview: typeof uploadPreview;
+  removeStagingDir(distDir: string): void;
+}
 
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -75,7 +82,7 @@ export async function createShareFromBuild(args: {
   browser?: string;
   project?: string;
   api?: string;
-}): Promise<string> {
+}, local: SharesLocal): Promise<string> {
   const buildId = text(args.buildId);
   const browser = text(args.browser).toLowerCase() || "chrome";
   const value: Row = { action: "create", buildId, browser };
@@ -131,10 +138,10 @@ export async function createShareFromBuild(args: {
     return failure("unavailable", "SharesBuildDownloadFailed", `Build ${buildId}'s ${browser} package could not be downloaded: ${download.message}. Nothing was uploaded.`, value);
   }
 
-  const distDir = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-share-build-"));
+  const distDir = local.makeStagingDir();
 
   try {
-    const unpacked = unpackZip(download.bytes, distDir, { maxEntries: MAX_ENTRIES, maxBytes: MAX_UNPACKED_BYTES });
+    const unpacked = local.unpackPackage(download.bytes, distDir, { maxEntries: MAX_ENTRIES, maxBytes: MAX_UNPACKED_BYTES });
 
     if (!unpacked.ok) {
       return failure("share-failed", "SharesBuildPackageRefused", `Build ${buildId}'s ${browser} package was refused: ${unpacked.message}. Nothing was uploaded.`, value);
@@ -143,13 +150,13 @@ export async function createShareFromBuild(args: {
     let manifest: Row;
 
     try {
-      const parsed = JSON.parse(fs.readFileSync(path.join(distDir, "manifest.json"), "utf8"));
+      const parsed = local.readStagedManifest(distDir);
       manifest = isRow(parsed) ? parsed : {};
     } catch {
       return failure("share-failed", "SharesBuildManifestMissing", `Build ${buildId}'s ${browser} package has no readable manifest.json at its root. Nothing was uploaded.`, value);
     }
 
-    const uploaded = await uploadPreview({ distDir, manifest, browser, api: args.api, token: api.token, ref: api.ref, command: COMMAND });
+    const uploaded = await local.uploadPreview({ distDir, manifest, browser, api: args.api, token: api.token, ref: api.ref, command: COMMAND });
 
     if (!uploaded.ok) {
       if (uploaded.held) {
@@ -180,6 +187,6 @@ export async function createShareFromBuild(args: {
       hint: `Anyone with previewUrl can open build ${buildId} for ${browser} in the emulator, with no install or sign-in, and download it as a zip from zipUrl, so the link hands over the built code. It stays live until expiresAt. Run extension_shares (action: "list") to find it again, or action:"revoke" with its artifactId to pull it back.${share.zipUrl ? ` ${ZIP_URL_REDIRECT_NOTE}` : ""}`,
     });
   } finally {
-    fs.rmSync(distDir, { recursive: true, force: true });
+    local.removeStagingDir(distDir);
   }
 }
