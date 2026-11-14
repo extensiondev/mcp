@@ -6,7 +6,9 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { requestCredential } from "./credential-scope";
 import { persistTokenResponse } from "./login-flow";
+import { bearerFetch } from "./platform-fetch";
 
 import type { StoredCredentials } from "./credentials";
 
@@ -23,6 +25,35 @@ export interface DeviceCodeStart {
 
 export type DeviceIntent = "login" | "create" | "create-workspace";
 
+function originOf(url: string): string | null {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
+
+/* @invariant A DEVICE START MADE FOR A CALLER NAMES THAT CALLER. The hosted
+ * server starts and polls approvals for every connected app from one
+ * address, and the platform counts device starts per address when nobody is
+ * named, so one caller could spend the start for all of them. Inside a
+ * request credential's scope the start and its polls carry that caller's
+ * own bearer, to the credential's own platform only and never through a
+ * redirect, and the platform counts them under that caller. The local
+ * server has no request credential, sends none, and is counted by the
+ * person's own address as before.
+ */
+export function deviceCallerHeaders(apiBase: string): Record<string, string> {
+  const caller = requestCredential();
+  const origin = originOf(apiBase);
+
+  return caller?.token && origin && origin === originOf(caller.api) ? { authorization: `Bearer ${caller.token}` } : {};
+}
+
+function deviceFetch(impl: FetchImpl): FetchImpl {
+  return ((input: Parameters<FetchImpl>[0], init?: RequestInit) => bearerFetch(input, init, impl)) as FetchImpl;
+}
+
 export async function requestDeviceCode(args: {
   apiBase: string;
   path: string;
@@ -33,12 +64,12 @@ export async function requestDeviceCode(args: {
   intent?: DeviceIntent;
   fetchImpl?: FetchImpl;
 }): Promise<DeviceCodeStart> {
-  const doFetch = args.fetchImpl ?? fetch;
+  const doFetch = deviceFetch(args.fetchImpl ?? fetch);
   const batch =
     args.projects === "*" || (Array.isArray(args.projects) && args.projects.length > 0);
   const res = await doFetch(`${args.apiBase}${args.path}`, {
     method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json" },
+    headers: { "content-type": "application/json", accept: "application/json", ...deviceCallerHeaders(args.apiBase) },
     body: JSON.stringify({
       ...(batch ? { projects: args.projects } : {}),
       ...(!batch && args.project ? { project: args.project } : {}),
@@ -130,7 +161,7 @@ export async function pollDeviceGrant(args: {
   budgetMs: number;
   fetchImpl?: FetchImpl;
 }): Promise<DeviceGrantPollResult> {
-  const doFetch = args.fetchImpl ?? fetch;
+  const doFetch = deviceFetch(args.fetchImpl ?? fetch);
   const deadline = Date.now() + args.budgetMs;
   let interval = Math.max(1, args.interval);
   const batch =
@@ -139,7 +170,7 @@ export async function pollDeviceGrant(args: {
   for (;;) {
     const res = await doFetch(`${args.apiBase}${args.path}`, {
       method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json" },
+      headers: { "content-type": "application/json", accept: "application/json", ...deviceCallerHeaders(args.apiBase) },
       body: JSON.stringify({
         device_code: args.deviceCode,
         ...(batch ? { projects: args.projects } : {}),

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { withRequestCredential } from "../lib/credential-scope";
 import { pollDeviceGrant, requestDeviceCode } from "../lib/device-flow";
 
 function answer(body: unknown, status = 200): Response {
@@ -96,5 +97,47 @@ describe("pollDeviceGrant never calls an answer it cannot read pending", () => {
     });
     expect(result.ok).toBe(false);
     expect((result as { reason: string }).reason).toBe("pending");
+  });
+});
+
+describe("a device start made for a hosted caller names that caller", () => {
+  const sent: Array<{ url: string; authorization: string | null; redirect: unknown }> = [];
+
+  const platform = async (input: unknown, init?: RequestInit) => {
+    sent.push({ url: String(input), authorization: new Headers(init?.headers).get("authorization"), redirect: init?.redirect });
+
+    return String(input).endsWith("/token") ? answer({ token: "t" }) : answer({ device_code: "d", user_code: "U" });
+  };
+
+  const caller = (api: string) => ({ token: "caller-grant", api, projects: [{ workspace: "acme", project: "web" }], expiresAt: null });
+  const start = (apiBase: string) => requestDeviceCode({ apiBase, path: "/api/cli/device/code", project: "acme/new", intent: "create", fetchImpl: platform as typeof fetch });
+
+  it("carries the caller's own bearer on the start and the poll, to its own platform only and never through a redirect", async () => {
+    sent.length = 0;
+    await withRequestCredential(caller("https://www.extension.dev"), async () => {
+      await start("https://www.extension.dev");
+      await pollDeviceGrant({ apiBase: "https://www.extension.dev", path: "/api/cli/device/token", deviceCode: "d", interval: 1, budgetMs: 10, fetchImpl: platform as typeof fetch });
+      await start("https://www.example.com");
+    });
+
+    expect(sent.map((call) => call.authorization)).toEqual(["Bearer caller-grant", "Bearer caller-grant", null]);
+    expect(sent.slice(0, 2).map((call) => call.redirect)).toEqual(["manual", "manual"]);
+  });
+
+  it("sends no bearer from the local server, which has no request credential", async () => {
+    sent.length = 0;
+    await start("https://www.extension.dev");
+
+    expect(sent).toEqual([{ url: "https://www.extension.dev/api/cli/device/code", authorization: null, redirect: undefined }]);
+  });
+
+  it("refuses a redirect on a start that carries the caller's bearer", async () => {
+    const redirecting = (async () => new Response(null, { status: 302, headers: { location: "https://evil.example/steal" } })) as typeof fetch;
+
+    await expect(
+      withRequestCredential(caller("https://www.extension.dev"), () =>
+        requestDeviceCode({ apiBase: "https://www.extension.dev", path: "/api/cli/device/code", project: "acme/new", fetchImpl: redirecting }),
+      ),
+    ).rejects.toThrow(/never sent to a redirect/);
   });
 });
