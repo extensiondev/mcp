@@ -13,6 +13,8 @@ import { envIsHeadless } from "./launch-flags";
 import { APPROVAL_REQUIRED_STATUS } from "./approval-outcome";
 import { isRow, text } from "./row";
 
+import type { PageOpening } from "./kernel-hooks";
+
 type Env = NodeJS.ProcessEnv | Record<string, string | undefined>;
 
 export const NO_AUTO_OPEN_ENV = "EXTENSION_DEV_NO_AUTO_OPEN";
@@ -118,10 +120,7 @@ export function canAutoOpen(options: { noShip: boolean }, env: Env = process.env
   return autoOpenBlock(options, env, platform) === "";
 }
 
-export interface PageOpening {
-  opened: boolean;
-  note: string;
-}
+export type { PageOpening } from "./kernel-hooks";
 
 export const notOpenedNote = (why: string): string => `No page was opened: ${why}. Hand the person the urls in this answer instead of calling again for a window.`;
 

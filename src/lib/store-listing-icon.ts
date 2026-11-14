@@ -6,8 +6,9 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { HELD_MISSES, iconHoldSentence, localPackageHold, type PackageHold } from "./build-inputs";
+import { HELD_MISSES, iconHoldSentence, type PackageHold } from "./build-inputs";
 import { dispatchedPushSentence, docsOnlySentence, headPushOf, isDocsOnly, skippedPushSentence, type HeadPush } from "./head-push";
+import { kernelHook } from "./kernel-hooks";
 import { projectApiBytes } from "./project-api-bytes";
 import { projectApiGet, type ProjectApi } from "./project-api";
 import { isRow, text } from "./row";
@@ -140,7 +141,7 @@ export async function platformBuildIcons(api: ProjectApi, project: Pick<ProjectF
   const fallback = !wanted.row && isDocsOnly(headPush) ? newest : null;
   const subject = `the checked out commit ${target.slice(0, SHA_PREFIX)}`;
   const miss = wanted.row || fallback ? null : missedSentence(target, Boolean(asked), wanted.seen, read.ok ? null : read.message, headPush);
-  const hold = miss && !asked && HELD_MISSES.has(miss.why) ? localPackageHold(project.projectPath, newest ? [newest] : [], target) : null;
+  const hold = miss && !asked && HELD_MISSES.has(miss.why) ? kernelHook("localPackageHold")(project.projectPath, newest ? [newest] : [], target) : null;
   const build = wanted.row?.id ?? fallback ?? hold?.build ?? null;
   const missed = miss?.missed ?? null;
   const why = miss?.why ?? (fallback ? "docs-only" : null);

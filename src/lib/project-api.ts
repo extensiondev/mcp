@@ -24,7 +24,7 @@ import {
 import { PROJECT_MOVED_STATUS, readProjectMove, type ProjectMove } from "./project-move";
 import { platformFetch } from "./platform-fetch";
 import { bearerHeaders } from "./request-fetch";
-import { identityHeaders } from "./session-identity";
+import { kernelHook } from "./kernel-hooks";
 import { tokenRefusal } from "./token-refusal";
 
 export { tokenRefusal } from "./token-refusal";
@@ -108,7 +108,7 @@ async function getJson(
         ...bearerHeaders(token, ref),
         accept: "application/json",
         ...(send ? { "content-type": "application/json" } : {}),
-        ...identityHeaders(command),
+        ...kernelHook("identityHeaders")(command),
       },
     },
     { kind: send ? "dispatch" : "read" },

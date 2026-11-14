@@ -7,6 +7,8 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import type { AmoChannel } from "./amo-update-url";
+import type { ApprovalState } from "./approval-state";
+import type { PackageHold } from "./build-inputs";
 
 type Args = Record<string, unknown>;
 
@@ -20,6 +22,11 @@ export interface UnloggedProjectStep {
   value: Args;
 }
 
+export interface PageOpening {
+  opened: boolean;
+  note: string;
+}
+
 export interface KernelHooks {
   shapeStoreAnswer(command: string, args: Args, result: string): string;
   openApprovalOnce(result: string, options: { noShip: boolean }): string;
@@ -30,6 +37,11 @@ export interface KernelHooks {
   unloggedProjectStep(ref: string, projectPath: string, api?: string): UnloggedProjectStep;
   localPreflightHalf(name: string, args: Args, projectPath: string): Args;
   platformFirefoxChannel(): Promise<AmoChannel | null>;
+  identityHeaders(tool: string): Record<string, string>;
+  moveCreatedProject(apiBase: string, from: string, to: string): boolean;
+  localPackageHold(projectPath: string, builds: string[], head: string): PackageHold | null;
+  openPagesForPerson(urls: string[]): PageOpening;
+  approvalState(): ApprovalState;
 }
 
 let registered: Partial<KernelHooks> = {};

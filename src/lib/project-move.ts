@@ -6,9 +6,9 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { moveCreatedProject } from "./created-projects";
 import { PROJECT_PIN_ENV, pinnedProject, sameProject } from "./credentials";
 import { isEnvelope } from "./envelope";
+import { kernelHook } from "./kernel-hooks";
 
 export const PROJECT_MOVED_STATUS = "moved";
 
@@ -77,7 +77,7 @@ export function followSentence(move: Pick<ProjectMove, "from" | "to">): string {
 export function followProjectMove(args: { apiBase: string; move: ProjectMove }): string[] {
   const followed: string[] = [];
 
-  if (moveCreatedProject(args.apiBase, args.move.from, args.move.to)) followed.push("created-projects");
+  if (kernelHook("moveCreatedProject")(args.apiBase, args.move.from, args.move.to)) followed.push("created-projects");
 
   const pinned = pinnedProject();
 

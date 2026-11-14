@@ -175,6 +175,7 @@ describe("a PROJECT_MOVED answer is followed once by the records this server kee
     await created("acme/other");
     process.env.EXTENSION_DEV_PROJECT = "acme/other";
 
+    (await import("../lib/local-kernel-hooks")).installLocalKernelHooks();
     const { followProjectMove } = await import("../lib/project-move");
     const followed = followProjectMove({ apiBase: API, move: { from: "acme/leon", to: "acme/lion", projectId: PROJECT_ID } });
 

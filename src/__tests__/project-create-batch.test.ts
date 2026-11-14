@@ -187,6 +187,7 @@ const saved: Record<string, string | undefined> = {};
 
 beforeEach(async () => {
   vi.resetModules();
+  (await import("../lib/local-kernel-hooks")).installLocalKernelHooks();
   projectCreate = await import("../tools/project-create");
   vi.stubGlobal(
     "fetch",
@@ -952,6 +953,7 @@ describe("extension_project_create with projects: the grant and the list", () =>
     await run({ projects: THREE, deviceCode: "dev-code" });
     fs.rmSync(heldBatchesPath(), { force: true });
     vi.resetModules();
+    (await import("../lib/local-kernel-hooks")).installLocalKernelHooks();
     projectCreate = await import("../tools/project-create");
     const out = await run({ projects: THREE, deviceCode: "dev-code" });
 
@@ -1259,6 +1261,7 @@ describe("extension_project_create with projects: every call answers before the 
 describe("extension_project_create with projects: the grant survives a server restart", () => {
   async function restart() {
     vi.resetModules();
+    (await import("../lib/local-kernel-hooks")).installLocalKernelHooks();
     projectCreate = await import("../tools/project-create");
   }
 

@@ -10,6 +10,7 @@ import { platformFirefoxChannel } from "./amo-platform-channel";
 import { openApprovalOnce } from "./approval-open";
 import { connectSessionProject } from "./connect-session-projects";
 import { registerKernelHooks, type KernelHooks } from "./kernel-hooks";
+import { LOCAL_KERNEL_HOOKS } from "./local-kernel-hooks";
 import { loginForOrigin, loginForPath, serverLogins } from "./path-project";
 import { shapeStoreAnswer } from "./store-answer";
 import { localPreflightHalf, nextStepForUnloggedProject } from "./unlogged-project";
@@ -24,6 +25,7 @@ export const PLATFORM_KERNEL_HOOKS: KernelHooks = {
   unloggedProjectStep: nextStepForUnloggedProject,
   localPreflightHalf,
   platformFirefoxChannel,
+  ...LOCAL_KERNEL_HOOKS,
 };
 
 export function installPlatformKernelHooks(): void {

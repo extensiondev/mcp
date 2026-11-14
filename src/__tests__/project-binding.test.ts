@@ -9,8 +9,9 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
+import ts from "typescript";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { clientDirs, setClientRoots } from "../lib/client-roots";
@@ -341,13 +342,13 @@ describe("ledger 467: every tool that takes projectPath binds the project the fo
 });
 
 describe("the kernel export binds a call through the hooks its host registers", () => {
-  it("answers a folder's binding from the registered hooks, and the platform set fills all nine", async () => {
+  it("answers a folder's binding from the registered hooks, and the platform set fills all fourteen", async () => {
     const dir = path.join(tmp, "anywhere");
     fs.mkdirSync(dir, { recursive: true });
 
     expect(kernel.createToolDispatcher).toBe(createToolDispatcher);
     expect([...kernel.registeredKernelHooks()].sort()).toEqual(Object.keys(PLATFORM_KERNEL_HOOKS).sort());
-    expect(Object.keys(PLATFORM_KERNEL_HOOKS)).toHaveLength(9);
+    expect(Object.keys(PLATFORM_KERNEL_HOOKS)).toHaveLength(14);
 
     kernel.registerKernelHooks({
       serverLogins: () => ({ live: [], kept: null }),
@@ -367,4 +368,90 @@ describe("the kernel export binds a call through the hooks its host registers", 
       installPlatformKernelHooks();
     }
   });
+});
+
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const MACHINE_BUILTINS = new Set(["fs", "fs/promises", "node:fs", "node:fs/promises", "child_process", "node:child_process"]);
+const MACHINE_MODULES = new Set(
+  ["credentials", "credential-source", "session-identity", "session-login", "private-file", "user-cache-dir", "created-projects", "approval-record", "held-batches", "pending-creates", "path-project", "approval-open"].map(
+    (name) => `src/lib/${name}.ts`,
+  ),
+);
+const ALLOWED_MACHINE_MODULES = new Set(["src/lib/credentials.ts", "src/lib/credential-source.ts"]);
+
+function planFiles(section: string): string[] {
+  return [...section.matchAll(/`((?:lib|tools)\/[^`]+\.ts)`/g)].map((match) => `src/${match[1]}`);
+}
+
+function planSection(plan: string, from: string, to: string): string {
+  return plan.split(from)[1]?.split(to)[0] ?? "";
+}
+
+function typeOnly(elements: ts.NodeArray<ts.ImportSpecifier | ts.ExportSpecifier>): boolean {
+  return elements.length > 0 && elements.every((element) => element.isTypeOnly);
+}
+
+function runtimeImports(file: string): string[] {
+  const source = ts.createSourceFile(file, fs.readFileSync(path.join(REPO, ...file.split("/")), "utf8"), ts.ScriptTarget.Latest, true);
+  const found: string[] = [];
+
+  const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+      const clause = node.importClause;
+      const bindings = clause?.namedBindings;
+      const elided = clause?.isTypeOnly || (clause && !clause.name && bindings && ts.isNamedImports(bindings) && typeOnly(bindings.elements));
+      if (!elided) found.push(node.moduleSpecifier.text);
+    } else if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+      const clause = node.exportClause;
+      if (!node.isTypeOnly && !(clause && ts.isNamedExports(clause) && typeOnly(clause.elements))) found.push(node.moduleSpecifier.text);
+    } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && node.arguments[0] && ts.isStringLiteral(node.arguments[0])) {
+      found.push(node.arguments[0].text);
+    }
+
+    ts.forEachChild(node, visit);
+  };
+
+  visit(source);
+
+  return found;
+}
+
+function resolveImport(from: string, specifier: string): string {
+  if (!specifier.startsWith(".")) return specifier;
+
+  const base = path.posix.normalize(path.posix.join(path.posix.dirname(from), specifier));
+  const hit = [base, `${base}.ts`, `${base}/index.ts`].find((candidate) => fs.statSync(path.join(REPO, ...candidate.split("/")), { throwIfNoEntry: false })?.isFile());
+
+  return hit ?? base;
+}
+
+describe("ledger 644: the platform files reach nothing on the machine", () => {
+  it("walks every A.1 file and A.2 platform half and finds no fs, spawn or XDG module beyond the credential layer", () => {
+    const plan = fs.readFileSync(path.join(REPO, "docs", "plans", "hosted-move.md"), "utf8");
+    const splitSection = planSection(plan, "### A.2", "### A.3");
+    const starts = [...planFiles(planSection(plan, "### A.1", "### A.2")), ...planFiles(planSection(splitSection, "- Platform halves", "\n- "))];
+    const stops = new Set([
+      ...planFiles(planSection(splitSection, "- Local halves", "\n\n")),
+      ...planFiles(planSection(plan, "### A.3", "## Appendix B")),
+    ]);
+    const reached = new Set<string>();
+    const offending: string[] = [];
+    const queue = [...starts];
+
+    for (let file = queue.shift(); file !== undefined; file = queue.shift()) {
+      if (reached.has(file)) continue;
+
+      reached.add(file);
+
+      for (const target of runtimeImports(file).map((specifier) => resolveImport(file, specifier))) {
+        if (MACHINE_BUILTINS.has(target) || (MACHINE_MODULES.has(target) && !ALLOWED_MACHINE_MODULES.has(target))) offending.push(`${file} -> ${target}`);
+        if (target.startsWith("src/") && !MACHINE_MODULES.has(target) && !stops.has(target) && !target.endsWith("-local.ts")) queue.push(target);
+      }
+    }
+
+    expect(starts.length).toBe(162);
+    expect(starts.every((file) => fs.existsSync(path.join(REPO, ...file.split("/"))))).toBe(true);
+    expect(stops.has("src/lib/held-batches.ts")).toBe(true);
+    expect(offending).toEqual([]);
+  }, 30_000);
 });

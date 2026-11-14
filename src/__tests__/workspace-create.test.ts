@@ -341,8 +341,8 @@ describe("extension_workspace_create", () => {
     vi.stubGlobal("fetch", fn);
     const local: WorkspaceCreateLocal = {
       requestDeviceCode: vi.fn(),
-      heldCreateGrant: vi.fn(() => ({ grant: "held-grant", grantExpiresAt: FUTURE })),
-      holdCreateGrant: vi.fn(() => true),
+      heldCreateGrant: vi.fn(async () => ({ grant: "held-grant", grantExpiresAt: FUTURE })),
+      holdCreateGrant: vi.fn(async () => true),
       releaseCreateGrant: vi.fn(),
       creatingAge: vi.fn(),
       identityHeaders: vi.fn(() => ({})),

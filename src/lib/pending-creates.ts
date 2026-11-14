@@ -13,12 +13,9 @@ import { serverOf } from "./credential-server";
 import { credentialsPath } from "./credentials";
 import { withFileLock, writePrivateJson } from "./private-file";
 
-export interface PendingCreate {
-  userCode: string;
-  verificationUri: string;
-  verificationUriComplete?: string;
-  expiresAt: string;
-}
+import type { PendingCreate } from "./approval-state";
+
+export type { PendingCreate } from "./approval-state";
 
 type PendingFile = Record<string, Record<string, PendingCreate>>;
 

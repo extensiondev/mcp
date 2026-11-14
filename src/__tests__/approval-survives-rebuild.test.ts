@@ -384,6 +384,7 @@ describe("an approval this machine minted is presented as the project that minte
   it("names the minting project when the platform still answers unknown, and leaves an id it did not mint to the platform", async () => {
     if (process.platform === "win32") return;
 
+    (await import("../lib/local-kernel-hooks")).installLocalKernelHooks();
     const { evaluateApproval } = await import("../lib/approval-gate");
     const { rememberMintedApproval } = await import("../lib/approval-record");
     const unknown = async () =>

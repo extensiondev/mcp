@@ -8,6 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createProject, handler, schema, type ProjectCreateLocal } from "../tools/project-create";
 import { readCredentials } from "../lib/credentials";
+import { registerKernelHooks } from "../lib/kernel-hooks";
+import { installLocalKernelHooks } from "../lib/local-kernel-hooks";
 import { pendingCreate } from "../lib/pending-creates";
 import { readZipEntry, readZipEntryNames } from "../lib/zip-entries";
 
@@ -1222,16 +1224,10 @@ describe("extension_project_create", () => {
       readUploadSource: vi.fn(() => ({ kind: "archive" as const, archive: { ok: true as const, zip: Buffer.from("zip"), bytes: 3, files: 2, entries: [], leftOut: { secrets: [] } } })),
       requestDeviceCode: vi.fn(async () => ({ deviceCode: "dev-code", userCode: "ABCD-1234", verificationUri: "https://extension.dev/device", interval: 0, expiresIn: 900 })),
       identityHeaders: vi.fn(() => ({})),
-      pendingCreate: vi.fn(() => null),
-      rememberPendingCreate: vi.fn(() => true),
-      forgetPendingCreate: vi.fn(),
       heldCreateGrant: vi.fn(() => null),
       holdCreateGrant: vi.fn(() => true),
       releaseCreateGrant: vi.fn(),
       firstSeenCreating: vi.fn((_api: string, _code: string, now: number) => now),
-      saveHeldBatch: vi.fn(() => true),
-      loadHeldBatch: vi.fn(() => null),
-      dropHeldBatch: vi.fn(),
       rememberCreatedProject: vi.fn(() => true),
       persistTokenResponse: vi.fn(),
       writeCredentialBatch: vi.fn(() => null),
@@ -1239,8 +1235,21 @@ describe("extension_project_create", () => {
       readWorkspaceBuildAllowance: vi.fn(async () => null),
       readCreateLogin: vi.fn(() => ({ login: { stored: true, project: "acme/ghost-app" }, sentence: "The login is stored." })),
     } as unknown as ProjectCreateLocal;
+    const state = {
+      mintedApproval: vi.fn(async () => null),
+      standingApprovalForAct: vi.fn(async () => null),
+      rememberMintedApproval: vi.fn(async () => null),
+      loadHeldBatch: vi.fn(async () => null),
+      heldBatchForRef: vi.fn(async () => null),
+      saveHeldBatch: vi.fn(async () => true),
+      dropHeldBatch: vi.fn(async () => {}),
+      pendingCreate: vi.fn(async () => null),
+      rememberPendingCreate: vi.fn(async () => true),
+      forgetPendingCreate: vi.fn(async () => {}),
+    };
+    registerKernelHooks({ approvalState: () => state });
 
-    const out = JSON.parse(await createProject({ project: "acme/ghost-app", projectPath: "ghost" }, local));
+    const out = JSON.parse(await createProject({ project: "acme/ghost-app", projectPath: "ghost" }, local).finally(installLocalKernelHooks));
 
     expect(machine).toEqual([]);
     expect(out.status).toBe("created");
@@ -1252,6 +1261,7 @@ describe("extension_project_create", () => {
     expect(local.releaseCreateGrant).toHaveBeenCalledTimes(1);
     expect(local.rememberCreatedProject).toHaveBeenCalledWith(API, "acme/ghost-app");
     expect(local.readCreateLogin).toHaveBeenCalledTimes(1);
+    expect(state.forgetPendingCreate).toHaveBeenCalledWith(API, "acme/ghost-app");
     expect(calls.some((call) => call.url.endsWith("/api/cli/projects/source"))).toBe(true);
   });
 });

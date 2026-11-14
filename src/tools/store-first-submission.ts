@@ -8,9 +8,9 @@
 
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
-import { openPagesForPerson, type PageOpening } from "../lib/approval-open";
 import { consoleProjectUrl } from "../lib/console-urls";
 import { envelope } from "../lib/envelope";
+import { kernelHook, type PageOpening } from "../lib/kernel-hooks";
 import { projectApiGet, projectApiReadFailure, type ProjectApi } from "../lib/project-api";
 import { badShipRequest, openShipApi, text } from "../lib/ship-act";
 import { nextStep } from "../lib/store-connection";
@@ -129,7 +129,7 @@ function route(store: FirstSubmissionStore): string {
 }
 
 function openPages(pageUrl: string, dashboardUrl: string): PageOpening {
-  return openPagesForPerson(dashboardUrl ? [dashboardUrl, pageUrl] : [pageUrl]);
+  return kernelHook("openPagesForPerson")(dashboardUrl ? [dashboardUrl, pageUrl] : [pageUrl]);
 }
 
 const WAITED_OPENING: PageOpening = { opened: false, note: "No page was opened: this call waited on the platform's read; a call with waitSeconds: 0 opens the console page and the store dashboard." };

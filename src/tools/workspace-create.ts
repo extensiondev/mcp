@@ -34,10 +34,10 @@ const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/i;
 
 export interface WorkspaceCreateLocal {
   requestDeviceCode(args: { apiBase: string; path: string; workspace: string; intent: DeviceIntent }): Promise<DeviceCodeStart>;
-  heldCreateGrant(apiBase: string, deviceCode: string, ref: string): HeldCreateGrant | null;
-  holdCreateGrant(apiBase: string, deviceCode: string, target: { workspace: string; ref: string }, held: HeldCreateGrant): boolean;
-  releaseCreateGrant(apiBase: string, deviceCode: string): void;
-  creatingAge(args: { apiBase: string; deviceCode: string; kept: boolean; data: Record<string, unknown> }): CreatingAge;
+  heldCreateGrant(apiBase: string, deviceCode: string, ref: string): Promise<HeldCreateGrant | null>;
+  holdCreateGrant(apiBase: string, deviceCode: string, target: { workspace: string; ref: string }, held: HeldCreateGrant): Promise<boolean>;
+  releaseCreateGrant(apiBase: string, deviceCode: string): Promise<void>;
+  creatingAge(args: { apiBase: string; deviceCode: string; kept: boolean; data: Record<string, unknown> }): Promise<CreatingAge>;
   identityHeaders(tool: string): Record<string, string>;
 }
 
@@ -157,7 +157,7 @@ export async function handleWorkspaceCreate(args: HandlerArgs, local: WorkspaceC
 
   const apiBase = apiCheck.base;
   const resumeDeviceCode = String(args.deviceCode || "").trim();
-  const held = local.heldCreateGrant(apiBase, resumeDeviceCode, workspace);
+  const held = await local.heldCreateGrant(apiBase, resumeDeviceCode, workspace);
 
   if (held) {
     return createWithGrant({
@@ -392,13 +392,13 @@ type CreateContext = {
 async function createWithGrant(ctx: CreateContext): Promise<string> {
   const kept =
     ctx.resumed ||
-    ctx.local.holdCreateGrant(ctx.apiBase, ctx.deviceCode, { workspace: ctx.workspace, ref: ctx.workspace }, ctx.held);
+    (await ctx.local.holdCreateGrant(ctx.apiBase, ctx.deviceCode, { workspace: ctx.workspace, ref: ctx.workspace }, ctx.held));
   let keepGrant = false;
   const answer = await sendCreate(ctx, kept, () => {
     keepGrant = kept;
   });
 
-  if (!keepGrant) ctx.local.releaseCreateGrant(ctx.apiBase, ctx.deviceCode);
+  if (!keepGrant) await ctx.local.releaseCreateGrant(ctx.apiBase, ctx.deviceCode);
 
   return answer;
 }
@@ -481,7 +481,7 @@ async function sendCreate(ctx: CreateContext, kept: boolean, keepGrant: () => vo
   if (String(data.code || "") === CREATE_IN_PROGRESS_CODE) {
     keepGrant();
     const waitSeconds = Number(data.retryAfterSeconds) > 0 ? Number(data.retryAfterSeconds) : 10;
-    const age = ctx.local.creatingAge({ apiBase: ctx.apiBase, deviceCode: ctx.deviceCode, kept, data });
+    const age = await ctx.local.creatingAge({ apiBase: ctx.apiBase, deviceCode: ctx.deviceCode, kept, data });
 
     if (age.stuck) {
       const workspaceUrl = `${consoleBase(ctx.apiBase)}/${encodeURIComponent(ctx.workspace)}`;

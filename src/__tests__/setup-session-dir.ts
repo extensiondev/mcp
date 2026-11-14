@@ -5,6 +5,7 @@ import path from "node:path";
 import { beforeEach } from "vitest";
 
 import { outcomeClock } from "../lib/act-outcome";
+import { installLocalKernelHooks } from "../lib/local-kernel-hooks";
 import { safariEnableProbes } from "../lib/safari-enable-probes";
 import { xcodeTeamsReader } from "../lib/xcode-teams";
 
@@ -13,6 +14,8 @@ process.env.EXTENSION_MCP_SESSION_DIR = fs.mkdtempSync(
 );
 
 process.env.EXTENSION_DEV_NO_TELEMETRY = "1";
+
+installLocalKernelHooks();
 
 xcodeTeamsReader.read = async () => null;
 

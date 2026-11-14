@@ -25,7 +25,7 @@ import {
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
 import { platformFetch } from "../lib/platform-fetch";
 import { bearerHeaders } from "../lib/request-fetch";
-import { identityHeaders } from "../lib/session-identity";
+import { kernelHook } from "../lib/kernel-hooks";
 import { REFUNDED_SAY, REFUNDED_STEP } from "../lib/ship-act";
 import { STORE_MD_FILENAME, parseStoreMd } from "../lib/store-md";
 import { platformHoldEnvelope, pricedRefusal, sawPlatformHold } from "../lib/platform-hold";
@@ -848,7 +848,7 @@ async function answer(args: SubmitToolArgs, facts: SubmitFacts): Promise<string>
       headers: {
         ...bearerHeaders(token, credential.ref),
         "content-type": "application/json",
-        ...identityHeaders("extension_submit"),
+        ...kernelHook("identityHeaders")("extension_submit"),
       },
       body: JSON.stringify(body),
     },

@@ -15,7 +15,7 @@ import { platformFetch } from "./platform-fetch";
 import { platformApiGet, type ProjectApi } from "./project-api";
 import { releaseChangeOfRow, type ReleaseTypeChange, type ReleaseTypeChangeRefused } from "./release-type-change";
 import { bearerHeaders } from "./request-fetch";
-import { identityHeaders } from "./session-identity";
+import { kernelHook } from "./kernel-hooks";
 import { STORE_LABELS } from "./store-categories";
 import { storeReadsOf, type StoreReadView } from "./store-reads";
 
@@ -549,7 +549,7 @@ export async function readPlatformSubmissions(args: {
   const sent = await platformFetch(url, {
     headers: {
       ...bearerHeaders(credential.token, credential.ref),
-      ...identityHeaders("extension_release_status"),
+      ...kernelHook("identityHeaders")("extension_release_status"),
     },
   });
 

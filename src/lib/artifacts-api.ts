@@ -10,7 +10,7 @@ import { NO_TOKEN_MESSAGE } from "./credentials";
 import { resolveToken } from "./publish";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { bearerHeaders } from "./request-fetch";
-import { identityHeaders } from "./session-identity";
+import { kernelHook } from "./kernel-hooks";
 import { platformHoldMessage, sawPlatformHold } from "./platform-hold";
 
 type FetchImpl = typeof fetch;
@@ -193,7 +193,7 @@ export async function listArtifacts(options: {
       headers: {
         ...bearerHeaders(token, options.ref),
         accept: "application/json",
-        ...identityHeaders("extension_shares"),
+        ...kernelHook("identityHeaders")("extension_shares"),
       },
     });
   } catch (err: any) {
@@ -298,7 +298,7 @@ export async function revokeArtifact(options: {
         ...bearerHeaders(token, options.ref),
         accept: "application/json",
         ...(approvalId ? { "x-extensiondev-approval": approvalId } : {}),
-        ...identityHeaders("extension_shares"),
+        ...kernelHook("identityHeaders")("extension_shares"),
       },
     });
   } catch (err: any) {

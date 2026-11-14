@@ -13,9 +13,9 @@ import { readLines } from "./approval-lines";
 import { loginRefusedBeforeApproval } from "./approval-login";
 import { approvalUrlFor } from "./approval-outcome";
 import { verdictOfAction } from "./approval-policy";
-import { mintedApproval, rememberMintedApproval, standingApprovalForAct } from "./approval-record";
 import { readApprovalSubject } from "./approval-subject";
 import { envelope } from "./envelope";
+import { kernelHook } from "./kernel-hooks";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { platformHoldEnvelope, readUpgradeUrl, sawPlatformHold } from "./platform-hold";
 import { bearerHeaders } from "./request-fetch";
@@ -114,7 +114,7 @@ export async function requestApprovalAfterRefusal(
   if (gate.blocked) return gate.envelope;
 
   if (gate.approvalId) {
-    const approvalUrl = mintedApproval(input.api, gate.approvalId)?.approvalUrl || approvalUrlFor(gate.approvalId, input.api);
+    const approvalUrl = (await kernelHook("approvalState")().mintedApproval(input.api, gate.approvalId))?.approvalUrl || approvalUrlFor(gate.approvalId, input.api);
 
     return envelope({
       ok: false,
@@ -281,7 +281,7 @@ async function requestApproval(params: {
     );
   }
 
-  const remembered = rememberMintedApproval({
+  const remembered = await kernelHook("approvalState")().rememberMintedApproval({
     api: input.api,
     token: input.token,
     approvalId,
@@ -385,7 +385,7 @@ export async function evaluateApproval(
 
     if (verdict === "plain" && !input.platformAsked) return { blocked: false };
 
-    const standing = standingApprovalForAct({ api: input.api, token: input.token, action: input.action, fingerprint, now: input.now });
+    const standing = await kernelHook("approvalState")().standingApprovalForAct({ api: input.api, token: input.token, action: input.action, fingerprint, now: input.now });
 
     if (standing) {
       const held = await verifyApproval({ base: apiCheck.base, fingerprint, input: { ...input, approvalId: standing.approvalId }, doFetch, minted: standing });
@@ -396,10 +396,10 @@ export async function evaluateApproval(
     return requestApproval({ base: apiCheck.base, fingerprint, input, doFetch });
   }
 
-  const minted = mintedApproval(input.api, String(input.approvalId));
+  const minted = await kernelHook("approvalState")().mintedApproval(input.api, String(input.approvalId));
 
   if (minted?.replacedBy) {
-    const current = mintedApproval(input.api, minted.replacedBy);
+    const current = await kernelHook("approvalState")().mintedApproval(input.api, minted.replacedBy);
     const ref = `${minted.workspace}/${minted.project}`;
     const url = current?.approvalUrl || approvalUrlFor(minted.replacedBy, input.api);
 

@@ -14,15 +14,9 @@ import { serverOf } from "./credential-server";
 import { credentialsPath } from "./credentials";
 import { withFileLock, writePrivateJson } from "./private-file";
 
-export interface HeldBatch<Row> {
-  workspace: string;
-  refs: string[];
-  grant: string;
-  grantExpiresAt: number;
-  rows: Row[];
-  creatingSince?: number;
-  server?: string;
-}
+import type { HeldBatch } from "./approval-state";
+
+export type { HeldBatch } from "./approval-state";
 
 type HeldFile = Record<string, HeldBatch<unknown>>;
 

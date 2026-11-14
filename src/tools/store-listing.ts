@@ -35,6 +35,7 @@ import {
   type ApprovalScope,
 } from "../lib/approval-gate";
 import { askingOnly } from "../lib/ask-only";
+import { kernelHook } from "../lib/kernel-hooks";
 import { checkDigestPatch, type StageFailure } from "../lib/listing-check-stage";
 import { checkRefused, plainListingAsk } from "../lib/submit-action-safety";
 import {
@@ -45,7 +46,6 @@ import {
   type ApprovalLineRow,
 } from "../lib/approval-lines";
 import { approvalRoundTrip } from "../lib/approval-outcome";
-import { mintedApproval } from "../lib/approval-record";
 import { chromeDashboardPaste, chromePasteSentence } from "../lib/chrome-dashboard-paste";
 import { withChromeVisibility } from "../lib/chrome-visibility";
 import { onRecordRow, onRecordSentence, screenshotsOnRecord } from "../lib/listing-on-record";
@@ -1124,7 +1124,7 @@ async function syncListingRun(args: ListingArgs, facts: ProjectFacts): Promise<s
   }
 
   const versioned = asked.length > 1;
-  const resumed = text(args.approvalId) ? mintedApproval(args.api, text(args.approvalId)) : null;
+  const resumed = text(args.approvalId) ? await kernelHook("approvalState")().mintedApproval(args.api, text(args.approvalId)) : null;
 
   if (text(args.approvalId) && versioned && resumed?.action !== VERSION_ACTION) {
     return badShipRequest(

@@ -9,7 +9,7 @@
 import { resolveCredential, type CredentialRef } from "./credential-source";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { bearerHeaders } from "./request-fetch";
-import { identityHeaders } from "./session-identity";
+import { kernelHook } from "./kernel-hooks";
 import { platformHoldMessage, sawPlatformHold } from "./platform-hold";
 
 type FetchImpl = typeof fetch;
@@ -78,7 +78,7 @@ export async function publish(
       headers: {
         ...bearerHeaders(token, options.ref),
         "content-type": "application/json",
-        ...identityHeaders("extension_publish"),
+        ...kernelHook("identityHeaders")("extension_publish"),
       },
       body: JSON.stringify(body),
     });

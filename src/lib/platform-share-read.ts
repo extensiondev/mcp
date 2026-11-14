@@ -8,7 +8,7 @@
 
 import { missedRead, type RecordRead } from "./act-outcome";
 import { platformFetch } from "./platform-fetch";
-import { identityHeaders } from "./session-identity";
+import { kernelHook } from "./kernel-hooks";
 
 export interface ShareRecord {
   id: string;
@@ -27,7 +27,7 @@ export async function readShareRecord(args: {
   if (args.buildSha) url.searchParams.set("build", args.buildSha);
 
   const sent = await platformFetch(url.toString(), {
-    headers: { accept: "application/json", ...identityHeaders("extension_publish") },
+    headers: { accept: "application/json", ...kernelHook("identityHeaders")("extension_publish") },
   });
 
   if (!sent.ok) return { ok: false, message: sent.unreached.message, transient: true };

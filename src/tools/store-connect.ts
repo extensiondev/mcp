@@ -6,7 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { openPagesForPerson, type PageOpening } from "../lib/approval-open";
 import { checkSavedConnection, readSavedConnection } from "../lib/connect-existing";
 import {
   alreadyConnectedAnswer,
@@ -36,6 +35,7 @@ import {
 } from "../lib/connect-session";
 import { rememberConnectSession } from "../lib/connect-session-projects";
 import { envelope } from "../lib/envelope";
+import { kernelHook, type PageOpening } from "../lib/kernel-hooks";
 import {
   OWNER_REQUIRED_CODE,
   projectApiGet,
@@ -176,7 +176,7 @@ function answer(api: ProjectApi, args: StoreConnectArgs, store: ConnectStore, se
 function openPages(store: ConnectStore, connectUrl: string): PageOpening {
   const keyPage = STORE_KEY_PAGES[store];
 
-  return openPagesForPerson(keyPage ? [keyPage, connectUrl] : [connectUrl]);
+  return kernelHook("openPagesForPerson")(keyPage ? [keyPage, connectUrl] : [connectUrl]);
 }
 
 const resumedOpening = (sessionId: string): PageOpening => ({ opened: false, note: `No page was opened: this call resumed connect session ${sessionId}, whose page opened when the session began.` });

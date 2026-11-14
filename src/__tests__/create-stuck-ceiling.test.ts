@@ -79,6 +79,7 @@ function stubPlatform(grant: Record<string, unknown>, createPath: string, answer
 
 async function freshTools() {
   vi.resetModules();
+  (await import("../lib/local-kernel-hooks")).installLocalKernelHooks();
 
   return {
     projectCreate: await import("../tools/project-create"),

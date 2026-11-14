@@ -7,8 +7,9 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { readBuildAllowance } from "./build-allowance";
-import { HELD_MISSES, localPackageHold, packageHoldSentence, type PackageHold } from "./build-inputs";
+import { HELD_MISSES, packageHoldSentence, type PackageHold } from "./build-inputs";
 import { dispatchedPushSentence, docsOnlySentence, REFUSED_OUTCOMES, refusedPushSentence, skippedPushSentence, type BuildCap, type HeadPush } from "./head-push";
+import { kernelHook } from "./kernel-hooks";
 import { platformApiGet, type ProjectApi } from "./project-api";
 import { isRow, text } from "./row";
 import { platformBuildIcons, type BuildIcons } from "./store-listing-icon";
@@ -76,7 +77,7 @@ async function headSay(projectPath: string, read: string[], head: string, builds
   const short = head.slice(0, SHORT);
   const subject = `HEAD ${short}`;
   const refused = refusedPush(builds);
-  const hold = builds.why !== null && HELD_MISSES.has(builds.why) ? localPackageHold(projectPath, read, head) : null;
+  const hold = builds.why !== null && HELD_MISSES.has(builds.why) ? kernelHook("localPackageHold")(projectPath, read, head) : null;
   const state = refused ? refusedPushSentence(refused, subject, await cap(), builds.newest ?? read[0] ?? null) : headState(builds, short);
   const say = hold ? `${packageHoldSentence(hold, subject)}${builds.why === "not-dispatched" ? `; ${state}` : ""}` : state;
 

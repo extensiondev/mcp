@@ -370,9 +370,12 @@ Generated from the runtime import graph at 34c922a (type-only imports left out, 
 
 ### A.2 Platform files that touch the machine, split (28 files)
 
-Each one is reached only by platform tools but reads or writes the disk, runs git, or opens the browser. Section 3 names the functions that stay local.
+Each one was reached only by platform tools but read or wrote the disk, ran git, or opened the browser. Section 3 names the functions that stay local. After the splits, each file is either the platform half, which reads nothing from the machine and takes the facts, a local object or a kernel hook from the local side, or the local half itself, which stays public beside the `*-local.ts` files.
 
-`lib/approval-open.ts`, `lib/build-inputs.ts`, `lib/chromewebstore-md.ts`, `lib/held-batches.ts`, `lib/path-project.ts`, `lib/pending-creates.ts`, `lib/preview-upload.ts`, `lib/project-ignore.ts`, `lib/share-record.ts`, `lib/source-archive.ts`, `lib/store-gallery.ts`, `lib/store-listing-draft.ts`, `lib/store-listing-icon.ts`, `lib/store-md-network.ts`, `lib/store-onboarding-decisions.ts`, `lib/store-preflight-local.ts`, `lib/store-release-loop.ts`, `lib/user-cache-dir.ts`, `tools/builds-download.ts`, `tools/login.ts`, `tools/logout.ts`, `tools/preview-web.ts`, `tools/project-create.ts`, `tools/publish-captures.ts`, `tools/shares-create.ts`, `tools/store-listing.ts`, `tools/submit.ts`, `tools/whoami.ts`
+- Platform halves (17): `lib/build-inputs.ts`, `lib/chromewebstore-md.ts`, `lib/store-gallery.ts`, `lib/store-listing-draft.ts`, `lib/store-listing-icon.ts`, `lib/store-md-network.ts`, `lib/store-onboarding-decisions.ts`, `lib/store-preflight-local.ts`, `lib/store-release-loop.ts`, `tools/builds-download.ts`, `tools/preview-web.ts`, `tools/project-create.ts`, `tools/publish-captures.ts`, `tools/shares-create.ts`, `tools/store-listing.ts`, `tools/submit.ts`, `tools/whoami.ts`
+- Local halves, stay public (11): `lib/approval-open.ts`, `lib/held-batches.ts`, `lib/path-project.ts`, `lib/pending-creates.ts`, `lib/preview-upload.ts`, `lib/project-ignore.ts`, `lib/share-record.ts`, `lib/source-archive.ts`, `lib/user-cache-dir.ts`, `tools/login.ts`, `tools/logout.ts`
+
+`src/__tests__/project-binding.test.ts` walks the runtime imports from every A.1 file and every A.2 platform half and fails on `node:fs`, `node:child_process` or a module that reads the login, install or approval files under the XDG config folder. The credential layer (`lib/credentials.ts`, `lib/credential-source.ts`) is the one allowed edge: when a hosted call carries a request credential its reads answer from that credential and its writes refuse, and the forwarder keeps it public. The walk stops at the public files of A.3, A.4 and the local halves above, and at the `*-local.ts` halves a tool entry hands to its platform half.
 
 ### A.3 Local-only, stays (106 files)
 

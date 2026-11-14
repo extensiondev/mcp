@@ -18,21 +18,9 @@ import { envelope } from "./envelope";
 import { withFileLock, writePrivateJson } from "./private-file";
 import { currentProjectName, movedNameNote, resolveProjectIdentity, sameStoredProject, tokenProjectIdentity } from "./project-identity";
 
-export interface MintedApproval {
-  approvalId: string;
-  workspace: string;
-  project: string;
-  projectId?: string;
-  loginId?: string;
-  action: string;
-  fingerprint: string;
-  approvalUrl: string;
-  mintedAt: string;
-  expiresAt: string;
-  description?: string;
-  replaces?: string[];
-  replacedBy?: string;
-}
+import type { MintedApproval, RememberApprovalArgs, StandingApprovalArgs } from "./approval-state";
+
+export type { MintedApproval } from "./approval-state";
 
 type ApprovalFile = Record<string, Record<string, MintedApproval>>;
 
@@ -158,19 +146,7 @@ function prune(file: ApprovalFile, now: number): ApprovalFile {
  * carry none, never the token), so the retry is made with the login that
  * asked.
  */
-export function rememberMintedApproval(args: {
-  api?: string;
-  token: string;
-  projectId?: string;
-  approvalId: string;
-  action: string;
-  fingerprint: string;
-  approvalUrl: string;
-  expiresAt?: string;
-  description?: string;
-  answeredFor?: string;
-  now?: number;
-}): MintedApproval | null {
+export function rememberMintedApproval(args: RememberApprovalArgs): MintedApproval | null {
   const claims = readTokenClaims(args.token);
   const approvalId = trimmed(args.approvalId);
   if (!claims || !approvalId) return null;
@@ -256,7 +232,7 @@ function ownIdentity(api: string | undefined, token: string): Pick<MintedApprova
  * here so the gate can ask the platform about it first and mint only when it
  * is no longer pending or approved.
  */
-export function standingApprovalForAct(args: { api?: string; token: string; action: string; fingerprint: string; now?: number }): MintedApproval | null {
+export function standingApprovalForAct(args: StandingApprovalArgs): MintedApproval | null {
   const own = ownIdentity(args.api, args.token);
   if (!own) return null;
 

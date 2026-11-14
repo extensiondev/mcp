@@ -16,6 +16,7 @@ import { API_BASE } from "../lib/common-schema";
 import { pollDeviceGrant, type DeviceCodeStart } from "../lib/device-flow";
 import { laneClosedByServer } from "../lib/credential-source";
 import { envelope, type ErrorCode } from "../lib/envelope";
+import { kernelHook } from "../lib/kernel-hooks";
 import { fetchLoginConfig, resolveApiBase, safeApiBase } from "../lib/login-flow";
 import {
   DEFAULT_CREATE_PROJECTS_PER_APPROVAL,
@@ -71,7 +72,6 @@ import { PROJECT_CREATE_LOCAL } from "./project-create-local";
 
 import type { SourceArchive } from "../lib/source-archive";
 import type { ProjectFoundByRead } from "../lib/created-project-read";
-import type { PendingCreate } from "../lib/pending-creates";
 
 export type UploadSourceRead =
   | { kind: "not-folder" }
@@ -82,13 +82,10 @@ export interface ProjectCreateLocal extends BatchCreateLocal {
   cwd(): string;
   uploadRoot(projectPath: string): string;
   readUploadSource(root: string): UploadSourceRead;
-  pendingCreate(apiBase: string, project: string): PendingCreate | null;
-  rememberPendingCreate(apiBase: string, project: string, record: PendingCreate): boolean;
-  forgetPendingCreate(apiBase: string, project: string): void;
-  heldCreateGrant(apiBase: string, deviceCode: string, ref: string): HeldCreateGrant | null;
-  holdCreateGrant(apiBase: string, deviceCode: string, target: { workspace: string; ref: string }, held: HeldCreateGrant): boolean;
-  releaseCreateGrant(apiBase: string, deviceCode: string): void;
-  firstSeenCreating(apiBase: string, deviceCode: string, now: number, kept: boolean): number;
+  heldCreateGrant(apiBase: string, deviceCode: string, ref: string): Promise<HeldCreateGrant | null>;
+  holdCreateGrant(apiBase: string, deviceCode: string, target: { workspace: string; ref: string }, held: HeldCreateGrant): Promise<boolean>;
+  releaseCreateGrant(apiBase: string, deviceCode: string): Promise<void>;
+  firstSeenCreating(apiBase: string, deviceCode: string, now: number, kept: boolean): Promise<number>;
   rememberCreatedProject(apiBase: string, project: string): boolean;
   persistTokenResponse(args: { apiBase: string; project: string; data: Record<string, unknown> }): StoredCredentials;
   findProjectByStoredLogin(args: { apiBase: string; project: string; command: string }): Promise<ProjectFoundByRead | null>;
@@ -306,19 +303,19 @@ function deadlineSentence(expiresAt: string): string {
   return `The code expires at ${expiresAt.slice(11, 16)} UTC and the approval dies with it. ${resumeWaitSentence("extension_project_create", expiresAt, " and the same arguments")}`;
 }
 
-function pendingEnvelope(start: {
+async function pendingEnvelope(start: {
   deviceCode: string;
   userCode: string;
   verificationUri: string;
   verificationUriComplete?: string;
   expiresIn: number;
-}, pendingFor: { apiBase: string; project: string }, waitSeconds: unknown, local: ProjectCreateLocal): string {
+}, pendingFor: { apiBase: string; project: string }, waitSeconds: unknown): Promise<string> {
   const complete = String(start.verificationUriComplete || "").trim();
   const hasCompleteLink =
     complete.length > 0 && complete !== start.verificationUri;
   const expiresAt = codeExpiryFromStart(start.expiresIn);
   rememberCodeExpiry(start.deviceCode, expiresAt);
-  local.rememberPendingCreate(pendingFor.apiBase, pendingFor.project, {
+  await kernelHook("approvalState")().rememberPendingCreate(pendingFor.apiBase, pendingFor.project, {
     userCode: start.userCode,
     verificationUri: start.verificationUri,
     ...(hasCompleteLink ? { verificationUriComplete: complete } : {}),
@@ -441,7 +438,7 @@ export async function createProject(args: ProjectCreateArgs, local: ProjectCreat
 
   const refusal = source ? null : sourceRequired(apiBase, local);
   const resumeDeviceCode = String(args.deviceCode || "").trim();
-  const held = local.heldCreateGrant(apiBase, resumeDeviceCode, project);
+  const held = await local.heldCreateGrant(apiBase, resumeDeviceCode, project);
 
   if (held) {
     if (refusal || !source) return refusal ?? sourceRequired(apiBase, local);
@@ -476,7 +473,7 @@ export async function createProject(args: ProjectCreateArgs, local: ProjectCreat
   let interval = 5;
   let budgetMs = RESUME_POLL_MS;
   const expiresAt = deviceCode
-    ? (local.pendingCreate(apiBase, project)?.expiresAt ?? codeExpiresAt(deviceCode))
+    ? ((await kernelHook("approvalState")().pendingCreate(apiBase, project))?.expiresAt ?? codeExpiresAt(deviceCode))
     : null;
   const wait = deviceWait({ waitSeconds: args.waitSeconds, expiresAt, fallbackMs: RESUME_POLL_MS });
   budgetMs = wait.budgetMs;
@@ -524,7 +521,7 @@ export async function createProject(args: ProjectCreateArgs, local: ProjectCreat
     });
 
     if (!early.ok && early.reason === "pending") {
-      return pendingEnvelope(start, { apiBase, project }, args.waitSeconds, local);
+      return pendingEnvelope(start, { apiBase, project }, args.waitSeconds);
     }
 
     return finishFromPoll(early, {
@@ -591,7 +588,7 @@ async function finishFromPoll(
   local: ProjectCreateLocal,
 ): Promise<string> {
   if (poll.ok || poll.reason !== "pending") {
-    local.forgetPendingCreate(ctx.apiBase, ctx.project);
+    await kernelHook("approvalState")().forgetPendingCreate(ctx.apiBase, ctx.project);
     forgetCodeExpiry(ctx.deviceCode);
   }
 
@@ -743,13 +740,13 @@ async function createWithGrant(ctx: {
   const [wantWorkspace = ""] = ctx.project.split("/");
   const kept =
     ctx.resumed ||
-    local.holdCreateGrant(ctx.apiBase, ctx.deviceCode, { workspace: wantWorkspace, ref: ctx.project }, ctx.held);
+    (await local.holdCreateGrant(ctx.apiBase, ctx.deviceCode, { workspace: wantWorkspace, ref: ctx.project }, ctx.held));
   let keepGrant = false;
   const answer = await sendCreate(ctx, kept, () => {
     keepGrant = kept;
   }, local);
 
-  if (!keepGrant) local.releaseCreateGrant(ctx.apiBase, ctx.deviceCode);
+  if (!keepGrant) await local.releaseCreateGrant(ctx.apiBase, ctx.deviceCode);
 
   return answer;
 }
@@ -893,7 +890,7 @@ async function sendCreate(
     keepGrant();
     const waitSeconds = Number(data.retryAfterSeconds) > 0 ? Number(data.retryAfterSeconds) : 10;
     const now = Date.now();
-    const age = creatingAgeAt(data, now, local.firstSeenCreating(ctx.apiBase, ctx.deviceCode, now, kept));
+    const age = creatingAgeAt(data, now, await local.firstSeenCreating(ctx.apiBase, ctx.deviceCode, now, kept));
 
     if (age.stuck) {
       const projectUrl = consoleProjectUrl({ workspace: wantWorkspace, project: wantProject }, "", ctx.apiBase);

@@ -13,6 +13,7 @@ import { firstBuildValue, readFirstBuild, withheldBecause } from "./first-build"
 import { answerDeadline, RESUME_POLL_MS, START_WORK_WITHIN_MS } from "./call-budget";
 import { pollDeviceGrant, type DeviceCodeStart, type DeviceIntent } from "./device-flow";
 import { envelope, type ErrorCode } from "./envelope";
+import { kernelHook } from "./kernel-hooks";
 import { fetchLoginConfig, resolveApiBase, safeApiBase } from "./login-flow";
 import { laneClosedFacts, laneClosedHint, platformHoldEnvelope, sawPlatformHold } from "./platform-hold";
 import {
@@ -26,7 +27,6 @@ import { buildCreateBody } from "./project-create-body";
 import { projectCreateUrl } from "./project-source-upload";
 import { consoleBase, consoleProjectUrl } from "./registry";
 
-import type { HeldBatch } from "./held-batches";
 
 const COMMAND = "extension_project_create";
 
@@ -60,9 +60,6 @@ const SINGLE_ONLY_KEYS = ["project", "repo", "displayName", "description"];
 export interface BatchCreateLocal {
   requestDeviceCode(args: { apiBase: string; path: string; project?: string; projects?: string[]; intent?: DeviceIntent }): Promise<DeviceCodeStart>;
   identityHeaders(tool: string): Record<string, string>;
-  saveHeldBatch<T>(apiBase: string, deviceCode: string, batch: HeldBatch<T>): boolean;
-  loadHeldBatch<T>(apiBase: string, deviceCode: string): HeldBatch<T> | null;
-  dropHeldBatch(apiBase: string, deviceCode: string): void;
   writeCredentialBatch(batch: StoredCredentials[]): string | null;
 }
 
@@ -390,7 +387,7 @@ function refusalHint(code: string, ref: string, retryAfterSeconds?: number, gran
 
 type CreateOutcome = { row: Row; stop?: Stop; halt?: boolean };
 
-function persist(local: BatchCreateLocal, session: Session, deviceCode: string, inFlight?: BatchEntry): void {
+async function persist(session: Session, deviceCode: string, inFlight?: BatchEntry): Promise<void> {
   const rows = rowsInOrder(session).filter((row) => row.status !== "pending");
 
   if (inFlight) {
@@ -402,7 +399,7 @@ function persist(local: BatchCreateLocal, session: Session, deviceCode: string, 
     });
   }
 
-  session.persisted = local.saveHeldBatch(session.apiBase, deviceCode, {
+  session.persisted = await kernelHook("approvalState")().saveHeldBatch(session.apiBase, deviceCode, {
     workspace: session.workspace,
     refs: session.refs,
     grant: session.grant,
@@ -826,12 +823,12 @@ async function runSlice(local: BatchCreateLocal, session: Session, deviceCode: s
 
       if (Date.now() - callStartedAt >= START_WORK_WITHIN_MS) break;
 
-      persist(local, session, deviceCode, entry);
+      await persist(session, deviceCode, entry);
       const outcome = await createOne(local, session, entry, installationId, callStartedAt);
       session.rows.set(entry.ref, outcome.row);
       if (outcome.stop) session.stop = outcome.stop;
 
-      persist(local, session, deviceCode);
+      await persist(session, deviceCode);
 
       if (outcome.halt) {
         halted = true;
@@ -864,18 +861,17 @@ async function runSlice(local: BatchCreateLocal, session: Session, deviceCode: s
   }
 
   sessions.delete(deviceCode);
-  local.dropHeldBatch(session.apiBase, deviceCode);
+  await kernelHook("approvalState")().dropHeldBatch(session.apiBase, deviceCode);
 
   return finalEnvelope(session);
 }
 
-function restoreSession(
-  local: BatchCreateLocal,
+async function restoreSession(
   apiBase: string,
   deviceCode: string,
   parsed: { entries: BatchEntry[] },
-): Session | undefined {
-  const held = local.loadHeldBatch<Row>(apiBase, deviceCode);
+): Promise<Session | undefined> {
+  const held = await kernelHook("approvalState")().loadHeldBatch<Row>(apiBase, deviceCode);
   if (!held) return undefined;
 
   const session: Session = {
@@ -931,7 +927,7 @@ export async function createProjectBatch(args: BatchCreateArgs, local: BatchCrea
 
   sweepSessions(Math.floor(Date.now() / 1000));
   let deviceCode = String(args.deviceCode || "").trim();
-  const held = deviceCode ? (sessions.get(deviceCode) ?? restoreSession(local, apiBase, deviceCode, parsed)) : undefined;
+  const held = deviceCode ? (sessions.get(deviceCode) ?? (await restoreSession(apiBase, deviceCode, parsed))) : undefined;
 
   if (held) {
     if (held.apiBase !== apiBase || !sameProjectSet(held.refs, refs)) {
@@ -1135,7 +1131,7 @@ export async function createProjectBatch(args: BatchCreateArgs, local: BatchCrea
     persisted: false,
   };
   sessions.set(deviceCode, session);
-  persist(local, session, deviceCode);
+  await persist(session, deviceCode);
 
   return runSlice(local, session, deviceCode, installationId || undefined, callStartedAt);
 }

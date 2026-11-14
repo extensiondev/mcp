@@ -6,9 +6,9 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { openPagesForPerson } from "./approval-open";
 import { CONNECT_ACTION, CONNECT_STORE_NAMES, accountPhrase, type ConnectStore } from "./connect-session";
 import { envelope } from "./envelope";
+import { kernelHook } from "./kernel-hooks";
 import { failedCheckSentence, nextStep, storeSettingsUrl, workspaceReconnectSentences, workspaceStoreAccountsUrl } from "./store-connection";
 import { withStoreKeyPageNote } from "./store-key-page-notes";
 
@@ -148,7 +148,7 @@ export function uncheckedAnswer(api: ProjectApi, store: ConnectStore, check: Con
 
 export function workspaceFailingAnswer(api: ProjectApi, store: ConnectStore, check: ConnectionCheck, apiHint?: string): string {
   const accountsUrl = workspaceStoreAccountsUrl(api.ref, apiHint);
-  const opening = openPagesForPerson([accountsUrl]);
+  const opening = kernelHook("openPagesForPerson")([accountsUrl]);
   const reason = check.connection.reason;
   const told = check.connection.reconnect
     ? workspaceReconnectSentences(reason, accountsUrl)
