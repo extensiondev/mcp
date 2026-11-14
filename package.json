@@ -59,6 +59,8 @@
     "readme:clients": "UPDATE_README=1 vitest run src/__tests__/readme-clients.test.ts",
     "compile": "rslib build",
     "lint": "eslint . --report-unused-disable-directives",
+    "lint:fast": "eslint . --report-unused-disable-directives --cache --cache-strategy content --cache-location node_modules/.cache/eslint/",
+    "lint:files": "eslint --quiet",
     "test": "vitest run",
     "typecheck": "tsc --noEmit && tsc --noEmit -p src/__tests__/tsconfig.json"
   },
