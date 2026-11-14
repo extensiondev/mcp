@@ -409,6 +409,50 @@ describe("extension_builds reads the platform's builds with the project's own to
     }
   });
 
+  it("ledger 684: a 404 on a build says the list that would name it came back incomplete instead of a bare not-found", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+    routes[`/api/projects/${PROJECT_ID}/builds/603fc8a`] = { body: { message: "Build not found" }, status: 404 };
+    routes[`/api/projects/${PROJECT_ID}/builds`] = { body: { items: [], unavailable: ["channel_pins", "lane_runs"] } };
+
+    const out = JSON.parse(await builds({ action: "get", buildId: "603fc8a", waitSeconds: 240, api: API }));
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("not-found");
+    expect(out.error.code).toBe("E_BUILD_NOT_FOUND");
+    expect(out.value.unavailable).toEqual(["lane_runs"]);
+    expect(out.hint).toContain("The build lane did not answer");
+    expect(out.hint).toContain("whether this build exists is not known");
+
+    routes[`/api/projects/${PROJECT_ID}/builds`] = { body: { items: [], unavailable: ["channel_pins"] } };
+
+    const whole = JSON.parse(await builds({ action: "get", buildId: "603fc8a", api: API }));
+
+    expect(whole.status).toBe("not-found");
+    expect(whole.hint ?? "").not.toContain("incomplete");
+  });
+
+  it("ledger 684: a build read never says held by no pin from a list whose channel pins did not answer", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+    routes[`/api/projects/${PROJECT_ID}/builds`] = { body: { items: [{ ...BUILD_ROW, channels: [] }], unavailable: ["channel_pins"] } };
+
+    const unread = JSON.parse(await builds({ action: "get", buildId: "603fc8a", api: API }));
+
+    expect(unread.value.build).not.toHaveProperty("channels");
+    expect(unread.hint).not.toContain("held by");
+    expect(unread.warnings.join(" ")).toContain("Channel pins did not answer");
+
+    routes[`/api/projects/${PROJECT_ID}/builds`] = { body: { items: [{ ...BUILD_ROW, channels: [] }], unavailable: ["head"] } };
+
+    const read = JSON.parse(await builds({ action: "get", buildId: "603fc8a", api: API }));
+
+    expect(read.value.build.channels).toEqual([]);
+    expect(read.hint).toContain("held by no pin");
+  });
+
   it("reads the logs of one browser, keeping the tail of a long log and saying it cut it", async () => {
     if (process.platform === "win32") return;
 

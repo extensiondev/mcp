@@ -375,6 +375,23 @@ describe("extension_submit sync-listing reads each store's icon from the build t
     const unpushed = JSON.parse(await submit({ action: "sync-listing", browsers: ["edge"], projectPath: root, api: API }));
 
     expect(unpushed.value.iconSource).toEqual({ from: "local", reason: `the checked out commit ${short} has no platform build; build it with extension_builds action:"rebuild" (no push needed when the platform already holds this source; an uploaded project takes it by a re-seed first, extension_project_create with this projectPath, and a project built from a repository also builds on a push), or pass useBuild with a completed build` });
+
+    platform.routes[`GET ${BUILDS}`] = () => ({ body: { items, unavailable: ["head", "lane_runs"] } });
+
+    const incomplete = JSON.parse(await submit({ action: "sync-listing", browsers: ["edge"], projectPath: root, api: API }));
+
+    expect(incomplete.value.iconSource).toEqual({
+      from: "local",
+      reason: `whether the checked out commit ${short} has a platform build is not known, because the platform's build list came back incomplete: The build lane did not answer, so runs without a registry record, such as a build still running, are missing from this list`,
+    });
+
+    expect(JSON.stringify(incomplete)).not.toContain("has no platform build");
+
+    platform.routes[`GET ${BUILDS}`] = () => ({ body: { items, unavailable: ["head", "channel_pins"] } });
+
+    const whole = JSON.parse(await submit({ action: "sync-listing", browsers: ["edge"], projectPath: root, api: API }));
+
+    expect(whole.value.iconSource.reason).toContain("has no platform build; build it with extension_builds");
   });
 
   it("takes the newest build's icon when the local repository proves the checked out commit changed nothing the build reads, and asks for a push once it did", async () => {

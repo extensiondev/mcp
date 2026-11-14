@@ -8,9 +8,9 @@
 
 import { OUTCOME_POLL_MS, outcomeClock, stampNow } from "../lib/act-outcome";
 import { buildDispatchOf, forgetBuildDispatch, sameSha, unrecordedBackoffSeconds, unrecordedGetCall, type BuildDispatch } from "../lib/build-dispatches";
-import { buildState, isActiveState, isRow, lastPushView, text, type Row } from "../lib/builds-list-row";
+import { buildState, incompleteListWords, isActiveState, isRow, lastPushView, readsThatMayHideRows, text, unavailableReads, type Row } from "../lib/builds-list-row";
 import { envelope } from "../lib/envelope";
-import { projectApiGet, type ProjectApi, type ProjectApiRead } from "../lib/project-api";
+import { projectApiGet, type ProjectApi, type ProjectApiRead, type ProjectApiRefusal } from "../lib/project-api";
 
 export interface PushNaming {
   lastPush: Row | null;
@@ -21,18 +21,24 @@ export interface PushNaming {
 export interface WaitedRead {
   detail: ProjectApiRead<Row>;
   naming: PushNaming | null;
+  incomplete: string[];
   started: number;
 }
 
-async function pushNaming(api: ProjectApi, buildId: string): Promise<Omit<PushNaming, "dispatch"> | null> {
-  const read = await projectApiGet<{ items?: unknown[]; lastPush?: unknown }>(api, "builds", { limit: 10 });
+interface ListNaming extends Omit<PushNaming, "dispatch"> {
+  incomplete: string[];
+}
+
+async function pushNaming(api: ProjectApi, buildId: string): Promise<ListNaming | null> {
+  const read = await projectApiGet<{ items?: unknown[]; lastPush?: unknown; unavailable?: unknown }>(api, "builds", { limit: 10 });
   if (!read.ok || !isRow(read.json)) return null;
 
   const lastPush = isRow(read.json.lastPush) && sameSha(text(read.json.lastPush.commit), buildId) ? lastPushView(read.json.lastPush, []).lastPush : null;
   const items = Array.isArray(read.json.items) ? read.json.items.filter(isRow) : [];
   const listed = items.find((item) => [item.buildId, item.commit, item.id].some((sha) => sameSha(text(sha), buildId))) ?? null;
+  const incomplete = listed ? [] : readsThatMayHideRows(unavailableReads(read.json.unavailable));
 
-  return lastPush || listed ? { lastPush, listed } : null;
+  return lastPush || listed || incomplete.length ? { lastPush, listed, incomplete } : null;
 }
 
 export async function readBuildWaiting(api: ProjectApi, buildId: string, boundMs: number): Promise<WaitedRead> {
@@ -40,7 +46,7 @@ export async function readBuildWaiting(api: ProjectApi, buildId: string, boundMs
   const started = outcomeClock.now();
   const left = () => boundMs - (outcomeClock.now() - started);
   let detail = await projectApiGet<Row>(api, route);
-  let named: Omit<PushNaming, "dispatch"> | null = null;
+  let named: ListNaming | null = null;
   let dispatch: BuildDispatch | null = null;
   let misses = 0;
 
@@ -53,7 +59,7 @@ export async function readBuildWaiting(api: ProjectApi, buildId: string, boundMs
       named = named ?? (await pushNaming(api, buildId));
     }
 
-    if ((!detail.ok && !named && !dispatch) || left() <= 0) break;
+    if ((!detail.ok && !named?.lastPush && !named?.listed && !dispatch) || left() <= 0) break;
 
     const pollMs = !detail.ok && dispatch ? unrecordedBackoffSeconds(misses++) * 1000 : OUTCOME_POLL_MS;
     await outcomeClock.sleep(Math.min(pollMs, Math.max(0, left())));
@@ -62,9 +68,26 @@ export async function readBuildWaiting(api: ProjectApi, buildId: string, boundMs
 
   if (detail.ok) forgetBuildDispatch(api, buildId);
 
-  const naming = detail.ok || (!named && !dispatch) ? null : { lastPush: named?.lastPush ?? null, listed: named?.listed ?? null, dispatch };
+  const known = Boolean(named?.lastPush || named?.listed || dispatch);
+  const naming = detail.ok || !known ? null : { lastPush: named?.lastPush ?? null, listed: named?.listed ?? null, dispatch };
 
-  return { detail, naming, started };
+  return { detail, naming, incomplete: detail.ok || known ? [] : (named?.incomplete ?? []), started };
+}
+
+export function notFoundOnIncompleteList(command: string, buildId: string, detail: ProjectApiRefusal, incomplete: string[]): string {
+  return envelope({
+    ok: false,
+    command,
+    status: "not-found",
+    value: { action: "get", buildId, unavailable: incomplete },
+    error: {
+      code: "E_BUILD_NOT_FOUND",
+      name: "BuildsNotFound",
+      ...(detail.code ? { platformCode: detail.code } : {}),
+      message: detail.message,
+    },
+    hint: `The platform holds no record of build ${buildId}, and the builds list that would name a build still on its way came back incomplete: ${incompleteListWords(incomplete)}. So whether this build exists is not known; call extension_builds action:"get" with this buildId again shortly before concluding it does not.`,
+  });
 }
 
 export function notRecordedYet(command: string, buildId: string, read: WaitedRead, boundMs: number, buildsPageUrl: string): string {

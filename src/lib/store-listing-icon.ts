@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { HELD_MISSES, iconHoldSentence, type PackageHold } from "./build-inputs";
+import { incompleteListWords, readsThatMayHideRows, unavailableReads } from "./builds-list-row";
 import { dispatchedPushSentence, docsOnlySentence, headPushOf, isDocsOnly, skippedPushSentence, type HeadPush } from "./head-push";
 import { kernelHook } from "./kernel-hooks";
 import { projectApiBytes } from "./project-api-bytes";
@@ -85,7 +86,7 @@ export const NO_BUILD_ROUTE =
 
 export type BuildMiss = "no-commit" | "not-completed" | "unreadable" | "not-dispatched" | "dispatched-unlisted" | "no-record";
 
-function missedSentence(target: string, asked: boolean, seen: BuildRow | null, unreadable: string | null, push: HeadPush | null): { why: BuildMiss; missed: string } {
+function missedSentence(target: string, asked: boolean, seen: BuildRow | null, unreadable: string | null, incomplete: string | null, push: HeadPush | null): { why: BuildMiss; missed: string } {
   const subject = `the checked out commit ${target.slice(0, SHA_PREFIX)}`;
 
   if (!target) return { why: "no-commit", missed: "the project directory has no git commit checked out, so no platform build could be matched" };
@@ -93,6 +94,7 @@ function missedSentence(target: string, asked: boolean, seen: BuildRow | null, u
   if (unreadable) return { why: "unreadable", missed: `the platform's build list could not be read (${unreadable})` };
   if (push && !push.dispatched) return { why: "not-dispatched", missed: `${skippedPushSentence(push, subject)}; or pass useBuild with a completed build` };
   if (push) return { why: "dispatched-unlisted", missed: `${dispatchedPushSentence(push, subject)}; or pass useBuild with a completed build` };
+  if (incomplete) return { why: "unreadable", missed: `whether ${subject} has a platform build is not known, because the platform's build list came back incomplete: ${incomplete}` };
 
   return { why: "no-record", missed: `${subject} has no platform build; ${NO_BUILD_ROUTE}, or pass useBuild with a completed build` };
 }
@@ -134,7 +136,9 @@ function packageFiles(store: ListingStore): string[] {
  * HEAD, the reason says so, and no push is asked for (ledger 319).
  */
 export async function platformBuildIcons(api: ProjectApi, project: Pick<ProjectFacts, "projectPath" | "gitHead">, useBuild: string): Promise<BuildIcons> {
-  const read = await projectApiGet<{ items?: unknown[]; lastPush?: unknown }>(api, "builds", { limit: BUILD_LIST_LIMIT });
+  const read = await projectApiGet<{ items?: unknown[]; lastPush?: unknown; unavailable?: unknown }>(api, "builds", { limit: BUILD_LIST_LIMIT });
+  const hidden = read.ok ? readsThatMayHideRows(unavailableReads(read.json?.unavailable)) : [];
+  const incomplete = hidden.length ? incompleteListWords(hidden) : null;
   const rows = read.ok ? buildRows(Array.isArray(read.json?.items) ? read.json.items : []) : [];
   const newest = rows.find((row) => row.done)?.id ?? null;
   const asked = useBuild.toLowerCase();
@@ -143,7 +147,7 @@ export async function platformBuildIcons(api: ProjectApi, project: Pick<ProjectF
   const wanted = target ? await wantedBuild(api, rows, target, headPush) : { row: null, seen: null };
   const fallback = !wanted.row && isDocsOnly(headPush) ? newest : null;
   const subject = `the checked out commit ${target.slice(0, SHA_PREFIX)}`;
-  const miss = wanted.row || fallback ? null : missedSentence(target, Boolean(asked), wanted.seen, read.ok ? null : read.message, headPush);
+  const miss = wanted.row || fallback ? null : missedSentence(target, Boolean(asked), wanted.seen, read.ok ? null : read.message, incomplete, headPush);
   const hold = miss && !asked && HELD_MISSES.has(miss.why) ? kernelHook("localPackageHold")(project.projectPath, newest ? [newest] : [], target) : null;
   const build = wanted.row?.id ?? fallback ?? hold?.build ?? null;
   const missed = miss?.missed ?? null;
@@ -173,7 +177,7 @@ export async function platformBuildIcons(api: ProjectApi, project: Pick<ProjectF
     commit: target,
     missed,
     newest,
-    unreadable: read.ok ? null : read.message,
+    unreadable: read.ok ? incomplete : read.message,
     headPush,
     hold,
     why,

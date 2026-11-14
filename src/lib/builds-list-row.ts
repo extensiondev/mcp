@@ -305,25 +305,48 @@ export function headLagView(headLag: Row | null): Row | null {
   return out;
 }
 
-const UNAVAILABLE_READ_SENTENCES = {
+const UNAVAILABLE_READ_SENTENCES: Record<string, string> = {
   lane_runs: "The build lane did not answer, so runs without a registry record, such as a build still running, are missing from this list.",
   channel_pins: "Channel pins did not answer, so no row shows its channel right now.",
   history: "The former names' history did not answer, so builds published before a rename may be missing.",
   head: "The head could not be read, so whether the latest push is owed a build is not known.",
-} as const;
+  build_numbers: "The build numbers did not answer, so no row shows its build number right now.",
+  project_record: "The project record did not answer, so builds made under this name before the project was created are not filtered out.",
+  push_refusal: "The push refusal record did not answer, so whether the latest push was refused is not known.",
+};
 
-export type UnavailableRead = keyof typeof UNAVAILABLE_READ_SENTENCES;
+const READS_THAT_HOLD_NO_ROW = new Set(["channel_pins", "head", "build_numbers", "project_record", "push_refusal"]);
+const READS_THAT_HOLD_NO_PIN = new Set(["lane_runs", "history", "head", "build_numbers", "project_record", "push_refusal"]);
+const READ_CODE = /^[a-z][a-z0-9_]{0,39}$/;
+const UNNAMED_READ = "unnamed";
 
-export function unavailableReads(value: unknown): UnavailableRead[] {
+export function unavailableReads(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
 
-  const given = new Set(value.map(text));
+  const given = new Set(value.map((code) => (typeof code === "string" && READ_CODE.test(code.trim()) ? code.trim() : UNNAMED_READ)));
+  const known = Object.keys(UNAVAILABLE_READ_SENTENCES).filter((code) => given.has(code));
 
-  return (Object.keys(UNAVAILABLE_READ_SENTENCES) as UnavailableRead[]).filter((code) => given.has(code));
+  return [...known, ...[...given].filter((code) => !(code in UNAVAILABLE_READ_SENTENCES))];
 }
 
-export function unavailableSentences(codes: UnavailableRead[]): string[] {
-  return codes.map((code) => UNAVAILABLE_READ_SENTENCES[code]);
+export function unavailableSentences(codes: string[]): string[] {
+  return codes.map(
+    (code) =>
+      UNAVAILABLE_READ_SENTENCES[code] ??
+      `A read the platform ${code === UNNAMED_READ ? "did not name" : `names ${code}`} did not answer and this server does not know what it holds, so this list may be incomplete.`,
+  );
+}
+
+export function readsThatMayHideRows(codes: string[]): string[] {
+  return codes.filter((code) => !READS_THAT_HOLD_NO_ROW.has(code));
+}
+
+export function readsThatMayHidePins(codes: string[]): string[] {
+  return codes.filter((code) => !READS_THAT_HOLD_NO_PIN.has(code));
+}
+
+export function incompleteListWords(codes: string[]): string {
+  return unavailableSentences(codes).join(" ").replace(/\.$/, "");
 }
 
 export const READ_AGAIN_SENTENCE = 'Call extension_builds action:"list" again shortly to read the list once they answer.';

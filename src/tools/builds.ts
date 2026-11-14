@@ -11,7 +11,20 @@ import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 import { WAIT_SECONDS_INPUT, WAIT_SECONDS_MAX, outcomeClock, stampNow } from "../lib/act-outcome";
 import { API_BASE } from "../lib/common-schema";
 import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
-import { buildName, buildNumberOf, buildState, channelsOf, isActiveState, isRow, pinsWords, text, type Row } from "../lib/builds-list-row";
+import {
+  buildName,
+  buildNumberOf,
+  buildState,
+  channelsOf,
+  incompleteListWords,
+  isActiveState,
+  isRow,
+  pinsWords,
+  readsThatMayHidePins,
+  text,
+  unavailableReads,
+  type Row,
+} from "../lib/builds-list-row";
 import { browserFigures } from "../lib/build-browser-figures";
 import { forgetBuildDispatch } from "../lib/build-dispatches";
 import { unrecordedBrowsers, unrecordedRowReason } from "../lib/build-health";
@@ -33,7 +46,7 @@ import { createChannel } from "./builds-create-channel";
 import { CONFIGURE_CHANNEL, DELETE_CHANNEL, configureChannel, deleteChannelConsoleOnly } from "./builds-channel";
 import { DOWNLOAD_ACTION, download, type DownloadArgs } from "./builds-download";
 import { BUILDS_DOWNLOAD_LOCAL } from "./builds-download-local";
-import { notRecordedYet, readBuildWaiting } from "./builds-get-wait";
+import { notFoundOnIncompleteList, notRecordedYet, readBuildWaiting } from "./builds-get-wait";
 import { DEFAULT_LIMIT, MAX_LIMIT, listBuilds } from "./builds-list";
 import { buildFailures, platformFault, readLogs } from "./builds-logs";
 import { rebuild } from "./builds-rebuild";
@@ -256,6 +269,10 @@ async function getBuild(args: HandlerArgs): Promise<string> {
     return notRecordedYet(COMMAND, buildId, waitedRead, boundMs, consoleProjectUrl(opened.api.ref, ConsoleProjectPage.builds, args.api));
   }
 
+  if (!detail.ok && detail.status === 404 && waitedRead.incomplete.length) {
+    return notFoundOnIncompleteList(COMMAND, buildId, detail, waitedRead.incomplete);
+  }
+
   if (!detail.ok) {
     return projectApiReadFailure(COMMAND, detail, {
       api: args.api,
@@ -343,7 +360,10 @@ async function getBuild(args: HandlerArgs): Promise<string> {
     unchecked.length ? `integrity was not checked for ${unchecked.map((row) => row.browser).join(", ")} (see unchecked)` : null,
     ...stateClauses,
   ].filter(Boolean);
-  const envChannel = envChannelOf(detail.json, listed?.ok ? listItemFor(listed.json, canonical) : null);
+  const listItem = listed?.ok ? listItemFor(listed.json, canonical) : null;
+  const listMisses = listed?.ok && isRow(listed.json) ? unavailableReads(listed.json.unavailable) : [];
+  const pinsUnread = Array.isArray(detail.json.channels) ? [] : listItem ? readsThatMayHidePins(listMisses) : [];
+  const envChannel = envChannelOf(detail.json, pinsUnread.length && listItem ? { ...listItem, channels: undefined } : listItem);
   const pinned = pinsWords(channelsOf(envChannel));
   const waited = boundMs > 0 ? { seconds: Math.round((outcomeClock.now() - started) / 1000), settled: !unfinished } : null;
   const readAt = stampNow();
@@ -384,6 +404,7 @@ async function getBuild(args: HandlerArgs): Promise<string> {
       !artifacts || artifacts.ok ? null : `The artifact list for ${named} is ${readProblem(artifacts)}.`,
       usage.ok ? null : `The usage report for ${named} is ${readProblem(usage)}.`,
       integrityUnread.length ? `Integrity for ${named} could not be read: ${integrityUnread.join("; ")}.` : null,
+      pinsUnread.length ? `Which channel holds ${named} is not known right now, because the builds list that carries the pins came back incomplete: ${incompleteListWords(pinsUnread)}. Read it again shortly.` : null,
       unrecorded.length
         ? `The platform's record of ${named} has no row for ${unrecorded.join(", ")} while its artifact list carries ${unrecorded.length === 1 ? "a package for it" : "packages for them"}, so ${
             unrecorded.length === 1 ? "that browser row is" : "those browser rows are"
