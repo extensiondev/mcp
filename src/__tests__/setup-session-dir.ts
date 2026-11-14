@@ -21,14 +21,16 @@ xcodeTeamsReader.read = async () => null;
 
 safariEnableProbes.platform = () => "test";
 
+let started = Date.now();
 let slept = 0;
-outcomeClock.now = () => Date.now() + slept;
+outcomeClock.now = () => started + slept;
 
 outcomeClock.sleep = async (ms: number) => {
   slept += ms;
 };
 
 beforeEach(() => {
+  started = Date.now();
   slept = 0;
 });
 

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { writeCredentials } from "../lib/credentials";
 import { readStores } from "../tools/store-status";
@@ -149,7 +149,29 @@ describe("extension_release_status refresh with several stores: one project-leve
     else process.env.EXTENSION_DEV_API_URL = prevApi;
 
     global.fetch = prevFetch;
+    vi.restoreAllMocks();
     fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it("730: reports no seconds waited when the wall clock runs five seconds on every request and nothing slept", async () => {
+    if (process.platform === "win32") return;
+
+    const served = serve({});
+    const wallClock = Date.now;
+    let late = 0;
+
+    vi.spyOn(Date, "now").mockImplementation(() => wallClock() + late);
+    global.fetch = ((...request: Parameters<typeof fetch>) => {
+      late += 5_000;
+
+      return served.fetch(...request);
+    }) as typeof fetch;
+
+    const out = JSON.parse(await readStores(CALL));
+
+    expect(late).toBeGreaterThanOrEqual(5_000);
+    expect(out.value.refreshWait).toEqual({ landed: true, waitedSeconds: 0, stores: ALL });
+    expect(out.hint).toContain("it landed within 0 s of waiting");
   });
 
   it("answers the first store dispatched with sharedWith, the 429s and Edge's read-now as covered by it, and waits on all four", async () => {
