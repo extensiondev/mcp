@@ -652,11 +652,12 @@ export async function readStoreActByHand(
 export async function readSubmissionsInReview(
   api: Pick<ProjectApi, "base" | "token" | "command">,
   store: string,
+  options: { recordedByHand?: boolean } = {},
 ): Promise<RecordRead<PlatformSubmission[]> & { byHand?: StoreActByHand | null }> {
   const read = await platformApiGet<{ submissions?: unknown }>(api, "/api/cli/stores/submissions");
   if (!read.ok) return missedRead(read);
 
-  const byHand = storeActByHandOf(read.json, store, "cancel");
+  const byHand = options.recordedByHand ? null : storeActByHandOf(read.json, store, "cancel");
   if (byHand) return { ok: true, record: [], byHand };
 
   const rows = Array.isArray(read.json.submissions) ? read.json.submissions : null;

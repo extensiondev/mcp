@@ -132,6 +132,42 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
     expect(platform.calls.filter((call) => call.method === "POST")).toHaveLength(0);
   });
 
+  it("677: an Edge cancel records a review canceled by hand in Partner Center through the platform under an approval, and sends no withdrawal", async () => {
+    if (process.platform === "win32") return;
+
+    const handPath = 'open the extension in Partner Center and choose "Cancel submission"';
+    const route = `${PROJECT_ROUTE}/stores/edge/submissions/sub_e1/cancel/by-hand`;
+    const scope = { store: "edge", submissionId: "sub_e1", byHand: "partner-center" };
+    platform.login();
+    platform.routes["GET /api/cli/stores/submissions"] = () => ({
+      body: {
+        submissions: [{ id: "sub_e1", store: "edge", status: "submitted", version: "0.3.1.13" }],
+        storeActs: { edge: { cancel: { onPlatform: false, handPath } } },
+      },
+    });
+
+    platform.routes[`POST ${route}`] = () => approvalRequired("extension_store.cancel", scope);
+    platform.routes[`POST ${APPROVALS}`] = () => ({ status: 201, body: { approvalId: "apr_h", approvalUrl: `${API}/approve/apr_h` } });
+
+    const asked = JSON.parse(await submit({ action: "cancel", store: "edge", api: API }));
+
+    expect(asked.status).toBe("approval-required");
+    expect(platform.sent("POST", APPROVALS)[0].body.scope).toEqual(scope);
+    expect(JSON.stringify(platform.sent("POST", APPROVALS)[0].body)).toContain("canceled by hand in Partner Center");
+    expect(platform.sent("POST", `${PROJECT_ROUTE}/stores/edge/submissions/sub_e1/cancel`)).toHaveLength(0);
+
+    platform.routes[`POST ${route}`] = () => ({
+      body: { ok: true, recorded: true, store: "edge", submissionId: "sub_e1", handCancel: { recordedBy: "cezar", recordedAt: "2026-11-14T15:00:00.000Z" }, lockCleared: true },
+    });
+
+    const recorded = JSON.parse(await submit({ action: "cancel", store: "edge", approvalId: "apr_h", api: API }));
+
+    expect(recorded.status).toBe("cancel-recorded");
+    expect(recorded.value).toMatchObject({ store: "edge", submissionId: "sub_e1", canceledByHand: true, recordedBy: "cezar", recordedAt: "2026-11-14T15:00:00.000Z", lockCleared: true });
+    expect(recorded.value.sayToPerson).toContain("nothing was sent to Partner Center");
+    expect(platform.sent("POST", route).map((call) => call.body)).toEqual([{}, { approvalId: "apr_h" }]);
+  });
+
   const offLane = (store: string, act: string, subject: string, handPath?: string, handUrl?: string) => ({
     status: 409,
     body: {

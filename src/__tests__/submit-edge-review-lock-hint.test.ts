@@ -27,7 +27,7 @@ describe("extension_submit tells the agent what Edge does while a submission is 
     expect(said).toMatch(/never cancels that review/);
   });
 
-  it("dates a read older than an hour with the call that reads it again, and names the way past a cancel made in Partner Center (ledger 570)", () => {
+  it("dates a read older than an hour with the call that reads it again, and names the act that records a cancel made in Partner Center on the submission in flight (ledgers 570 and 677)", () => {
     const READ_AT = "2026-11-10T18:00:00.000Z";
     const now = Date.parse("2026-11-12T22:46:00.000Z");
     const stale = lockSentences({ edge: { ...LOCKED.edge, lock: { ...LOCKED.edge.lock, readAt: READ_AT } } }, now);
@@ -35,7 +35,13 @@ describe("extension_submit tells the agent what Edge does while a submission is 
 
     expect(stale).toContain(`Partner Center answered this 52 hours ago (${READ_AT}); extension_submit_check {action: "submit", browsers: ["edge"]} reads it fresh.`);
     expect(fresh).not.toContain("answered this");
-    expect(fresh).toContain("If Partner Center reads In draft because the review was canceled there, send the build as an Edge upload, which is never locked, and press Publish in Partner Center.");
+    expect(fresh).toContain(
+      'If that review was canceled in Partner Center, extension_submit {action: "cancel", store: "edge"} records it under a workspace owner\'s approval and clears this lock at once; it records the person\'s word and sends nothing to Partner Center.',
+    );
+
+    expect(lockSentences({ edge: { ...LOCKED.edge, inFlight: { submissionId: "sub_e1", version: "0.3.1.13" } } }, now)).toContain(
+      'extension_submit {action: "cancel", store: "edge", submissionId: "sub_e1"}',
+    );
   });
 
   it("says an Edge upload during a review replaces the draft package only, and names Edge in the description", () => {

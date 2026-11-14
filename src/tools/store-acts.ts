@@ -757,16 +757,20 @@ export function nextVersionSentences(storePreflight: Record<string, Row>): strin
     .join(" ");
 }
 
+export function edgeHandCancelCall(submissionId: string): string {
+  return `extension_submit {action: "cancel", store: "edge"${submissionId ? `, submissionId: "${submissionId}"` : ""}}`;
+}
+
 /* @invariant AN EDGE LOCK SAYS HOW OLD ITS READ IS AND THE WAY PAST A HAND
  * CANCEL. The platform re-reads the publish operation before it locks, but
- * when that read could not be made the lock is the record's word, which
- * still said Partner Center was reviewing a version the owner had put back
- * to draft with "Cancel submission" (ledger 570). A read older than an hour
- * is dated with the call that reads it again, and every Edge lock names
- * what to do when Partner Center reads In draft, since the Publish API never
- * sees that state.
+ * the Publish API keeps reading SUCCEEDED after the owner pressed "Cancel
+ * submission" in Partner Center, so no read ever sees that cancel (ledger
+ * 570). A read older than an hour is dated with the call that reads it
+ * again, and every Edge lock names the act that records the hand cancel on
+ * the submission in flight, which clears the lock at once (Cezar,
+ * 2026-11-14, ledger 677).
  */
-function edgeLockAge(lock: Row, now: number): string {
+function edgeLockAge(lock: Row, now: number, submissionId: string): string {
   const readAt = text(lock.readAt);
   const hours = readAt ? Math.floor((now - Date.parse(readAt)) / HOUR_MS) : 0;
   const age =
@@ -774,7 +778,7 @@ function edgeLockAge(lock: Row, now: number): string {
       ? ` Partner Center answered this ${hours} ${hours === 1 ? "hour" : "hours"} ago (${readAt}); extension_submit_check {action: "submit", browsers: ["edge"]} reads it fresh.`
       : "";
 
-  return `${age} If Partner Center reads In draft because the review was canceled there, send the build as an Edge upload, which is never locked, and press Publish in Partner Center.`;
+  return `${age} If that review was canceled in Partner Center, ${edgeHandCancelCall(submissionId)} records it under a workspace owner's approval and clears this lock at once; it records the person's word and sends nothing to Partner Center.`;
 }
 
 export function lockSentences(storePreflight: Record<string, Row>, now = Date.now()): string {
@@ -789,7 +793,7 @@ export function lockSentences(storePreflight: Record<string, Row>, now = Date.no
         return `${store}: a submission is in certification review and its state ${text(lock.reason) || "could not be read from here"}; the ${text(block.act) || "act"} is queued until ${text(lock.clearsWhen)} (${text(lock.storeWord) || text(lock.kind)}), never failed, and nothing here can call the product idle.`;
       }
 
-      const edge = store === "edge" ? ` An Edge upload meanwhile replaces the draft package only and never cancels that review.${edgeLockAge(lock, now)}` : "";
+      const edge = store === "edge" ? ` An Edge upload meanwhile replaces the draft package only and never cancels that review.${edgeLockAge(lock, now, isRow(block.inFlight) ? text(block.inFlight.submissionId) : "")}` : "";
 
       return `${store}: the ${text(block.act) || "act"} is locked until ${text(lock.clearsWhen)} (${text(lock.storeWord) || text(lock.kind)}); a submit or publish is queued behind it, never failed.${edge}`;
     })

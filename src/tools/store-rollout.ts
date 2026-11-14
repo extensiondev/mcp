@@ -43,8 +43,8 @@ function cancelByHand(store: string, submissionId: string, byHand: StoreActByHan
   });
 }
 
-async function submissionInReview(api: ProjectApi, store: string, args: StoreActArgs): Promise<{ submissionId: string } | { refused: string }> {
-  const read = await readSubmissionsInReview(api, store);
+async function submissionInReview(api: ProjectApi, store: string, args: StoreActArgs, recordedByHand = false): Promise<{ submissionId: string } | { refused: string }> {
+  const read = await readSubmissionsInReview(api, store, { recordedByHand });
   const refuse = (why: string) => ({
     refused: badShipRequest(COMMAND, "cancel", "CancelInputError", `${why} Nothing was sent.`),
   });
@@ -63,11 +63,78 @@ async function submissionInReview(api: ProjectApi, store: string, args: StoreAct
   return refuse(`${ids.length} ${store} submissions are in review, so cancel needs the one to withdraw: ${calls}.`);
 }
 
+/* @invariant AN EDGE CANCEL IS RECORDED, NEVER SENT. The platform cannot
+ * withdraw an Edge review, and Partner Center's Publish API keeps reading
+ * SUCCEEDED after "Cancel submission" was pressed there, so the platform's
+ * Edge lock stood on a review that ended (ledger 570 and 677). Cezar's
+ * ruling of 2026-11-14: the person records it. So a cancel for Edge names
+ * the one submission the platform reads as in review and asks a workspace
+ * owner to approve the record of a cancel made by hand, in words that say
+ * where to cancel first and that nothing is sent; the platform writes who
+ * and when, clears the lock, and corrects the record if the store later
+ * serves that version. Nothing here calls Partner Center.
+ */
+async function recordHandCancel(args: StoreActArgs, store: string): Promise<string> {
+  const named = text(args.submissionId);
+  const opened = await openShipApi(COMMAND, args, { action: "cancel", store, canceledByHand: true, ...(named ? { submissionId: named } : {}) });
+  if ("refused" in opened) return opened.refused;
+
+  const resolved = named ? { submissionId: named } : await submissionInReview(opened.api, store, args, true);
+  if ("refused" in resolved) return resolved.refused;
+
+  const { submissionId } = resolved;
+  const ran = await runShipAct(
+    {
+      command: COMMAND,
+      act: "cancel",
+      action: "extension_store.cancel",
+      route: `stores/${store}/submissions/${encodeURIComponent(submissionId)}/cancel/by-hand`,
+      body: {},
+      approvalId: args.approvalId,
+      description: `Record that the Edge review of submission ${submissionId} was canceled by hand in Partner Center.`,
+      reason: 'The platform cannot cancel an Edge review and Partner Center does not say when one is canceled there, so a workspace owner approves recording this exact cancel. Approve only once it is canceled: open the extension in Partner Center and choose "Cancel submission". Nothing is sent to Partner Center.',
+      stateRead: storesRead(args),
+      scopeFits: (asked) => text(asked.store) === store && text(asked.submissionId) === submissionId && text(asked.byHand) === "partner-center",
+      project: args.project,
+      apiHint: args.api,
+      value: { store, submissionId, canceledByHand: true },
+    },
+    opened.api,
+  );
+
+  if (!ran.ok) return ran.out;
+
+  const recorded = isRow(ran.json.handCancel) ? ran.json.handCancel : {};
+  const by = text(recorded.recordedBy);
+  const at = text(recorded.recordedAt) || stampNow();
+  const say = `Recorded${by ? ` by ${by}` : ""} at ${at}: the Edge review of submission ${submissionId} was canceled by hand in Partner Center. The Edge lock is clear, so a new version can be sent now; nothing was sent to Partner Center, and the record is corrected to published if Edge Add-ons later serves that version.`;
+
+  return envelope({
+    ok: true,
+    command: COMMAND,
+    status: "cancel-recorded",
+    value: {
+      action: "cancel",
+      store,
+      submissionId,
+      canceledByHand: true,
+      ...(by ? { recordedBy: by } : {}),
+      recordedAt: at,
+      lockCleared: ran.json.lockCleared === true,
+      sayToPerson: say,
+    },
+    hint: `${say} extension_submit_check {action: "submit", browsers: ["edge"]} reads the Edge line again.`,
+  });
+}
+
 export async function cancelSubmission(args: StoreActArgs): Promise<string> {
   const picked = storeOf(args, "cancel");
   if ("refused" in picked) return picked.refused;
 
   const { store } = picked;
+
+  if (store === "edge") return recordHandCancel(args, store);
+
   const safari = store === "safari";
   const named = text(args.submissionId);
   const opened = await openShipApi(COMMAND, args, { action: "cancel", store, ...(named ? { submissionId: named } : {}) });
