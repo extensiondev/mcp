@@ -6,8 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { identityHeaders } from "./session-identity";
-
 export const SOURCE_TOO_LARGE_CODE = "SOURCE_TOO_LARGE";
 
 export const SOURCE_UPLOAD_CONSUMED_CODE = "SOURCE_UPLOAD_CONSUMED";
@@ -67,7 +65,7 @@ export async function uploadProjectSource(options: {
   apiBase: string;
   token: string;
   zip: Buffer;
-  command: string;
+  identity: Record<string, string>;
   signal?: AbortSignal;
   fetchImpl?: typeof fetch;
 }): Promise<SourceUploadOutcome> {
@@ -80,7 +78,7 @@ export async function uploadProjectSource(options: {
       headers: {
         authorization: `Bearer ${options.token}`,
         "content-type": "application/zip",
-        ...identityHeaders(options.command),
+        ...options.identity,
       },
       body: new Uint8Array(options.zip),
       ...(options.signal ? { signal: options.signal } : {}),

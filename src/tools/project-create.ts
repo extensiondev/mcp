@@ -6,7 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import fs from "node:fs";
 import path from "node:path";
 
 import { wwwImportPath } from "@extension.dev/urls/paths";
@@ -14,15 +13,10 @@ import { wwwImportPath } from "@extension.dev/urls/paths";
 import { linksOf, madeSentence, recordedOutcome } from "../lib/act-outcome";
 import { createRequestDeadline, readBackOnce, RESUME_POLL_MS } from "../lib/call-budget";
 import { API_BASE } from "../lib/common-schema";
-import { pollDeviceGrant, requestDeviceCode } from "../lib/device-flow";
+import { pollDeviceGrant, type DeviceCodeStart } from "../lib/device-flow";
 import { laneClosedByServer } from "../lib/credential-source";
 import { envelope, type ErrorCode } from "../lib/envelope";
-import {
-  fetchLoginConfig,
-  persistTokenResponse,
-  resolveApiBase,
-  safeApiBase,
-} from "../lib/login-flow";
+import { fetchLoginConfig, resolveApiBase, safeApiBase } from "../lib/login-flow";
 import {
   DEFAULT_CREATE_PROJECTS_PER_APPROVAL,
   MAX_BATCH_PROJECTS,
@@ -31,13 +25,10 @@ import {
 import {
   CREATE_IN_PROGRESS_CODE,
   grantExpiresAt,
-  heldCreateGrant,
   heldUntilSentence,
-  holdCreateGrant,
-  releaseCreateGrant,
   type HeldCreateGrant,
-} from "../lib/held-create-grant";
-import { createProjectBatch } from "../lib/project-create-batch";
+} from "../lib/held-create-grant-words";
+import { createProjectBatch, type BatchCreateLocal } from "../lib/project-create-batch";
 import { buildCreateBody, DEFAULT_BUILD_COMMAND, type CreateBodySource } from "../lib/project-create-body";
 import {
   projectCreateUrl,
@@ -45,26 +36,15 @@ import {
   uploadProjectSource,
   type SourceUploadOutcome,
 } from "../lib/project-source-upload";
-import {
-  buildSourceArchive,
-  looksLikeExtensionFolder,
-  megabytes,
-  SOURCE_SKIPPED_EXTENSIONS,
-  SOURCE_SKIPPED_FOLDERS,
-  sourceManifestPath,
-} from "../lib/source-archive";
+import { megabytes, SOURCE_SKIPPED_EXTENSIONS, SOURCE_SKIPPED_FOLDERS } from "../lib/source-archive-words";
 import { consoleBase, consoleProjectUrl } from "../lib/registry";
 import { mcpOrigins } from "../lib/origins";
 import { laneClosedFacts, laneClosedHint, platformHoldEnvelope, sawPlatformHold, type CreatePrefill } from "../lib/platform-hold";
-import { identityHeaders } from "../lib/session-identity";
-import { firstBuildSpendNarration, readWorkspaceBuildAllowance } from "../lib/build-allowance";
+import { firstBuildSpendNarration, type BuildAllowance } from "../lib/build-allowance";
 import { answerIsUnknownOutcome, readCreatedProject } from "../lib/create-answer";
-import { CREATE_CEILING_SENTENCE, CREATE_STUCK_AFTER_SECONDS, creatingAge, creatingForWords } from "../lib/create-ceiling";
-import { findProjectByStoredLogin, type ProjectFoundByRead } from "../lib/created-project-read";
-import { rememberCreatedProject } from "../lib/created-projects";
-import { forgetPendingCreate, pendingCreate, rememberPendingCreate } from "../lib/pending-creates";
-import { isProjectRef } from "../lib/credentials";
-import { readCreateLogin, wantsCreateLogin, type CreateLogin } from "../lib/create-login";
+import { CREATE_CEILING_SENTENCE, CREATE_STUCK_AFTER_SECONDS, creatingAgeAt, creatingForWords } from "../lib/create-ceiling-words";
+import { isProjectRef, type StoredCredentials } from "../lib/credentials";
+import { wantsCreateLogin, type CreateLogin, type CreateLoginRead } from "../lib/create-login";
 import {
   codeExpiresAt,
   codeExpiryFromStart,
@@ -87,6 +67,34 @@ import {
   reseedBuildSentence,
   withheldBecause,
 } from "../lib/first-build";
+import { PROJECT_CREATE_LOCAL } from "./project-create-local";
+
+import type { SourceArchive } from "../lib/source-archive";
+import type { ProjectFoundByRead } from "../lib/created-project-read";
+import type { PendingCreate } from "../lib/pending-creates";
+
+export type UploadSourceRead =
+  | { kind: "not-folder" }
+  | { kind: "no-manifest" }
+  | { kind: "archive"; archive: SourceArchive };
+
+export interface ProjectCreateLocal extends BatchCreateLocal {
+  cwd(): string;
+  uploadRoot(projectPath: string): string;
+  readUploadSource(root: string): UploadSourceRead;
+  pendingCreate(apiBase: string, project: string): PendingCreate | null;
+  rememberPendingCreate(apiBase: string, project: string, record: PendingCreate): boolean;
+  forgetPendingCreate(apiBase: string, project: string): void;
+  heldCreateGrant(apiBase: string, deviceCode: string, ref: string): HeldCreateGrant | null;
+  holdCreateGrant(apiBase: string, deviceCode: string, target: { workspace: string; ref: string }, held: HeldCreateGrant): boolean;
+  releaseCreateGrant(apiBase: string, deviceCode: string): void;
+  firstSeenCreating(apiBase: string, deviceCode: string, now: number, kept: boolean): number;
+  rememberCreatedProject(apiBase: string, project: string): boolean;
+  persistTokenResponse(args: { apiBase: string; project: string; data: Record<string, unknown> }): StoredCredentials;
+  findProjectByStoredLogin(args: { apiBase: string; project: string; command: string }): Promise<ProjectFoundByRead | null>;
+  readWorkspaceBuildAllowance(args: { apiBase: string; workspace: string; command: string }): Promise<BuildAllowance | null>;
+  readCreateLogin(args: { data: Record<string, unknown>; apiBase: string; project: string; login: boolean }): CreateLoginRead;
+}
 
 const COMMAND = "extension_project_create";
 
@@ -210,8 +218,8 @@ type CreateSource =
   | { kind: "github"; repo: string }
   | { kind: "upload"; root: string; defaulted: boolean; zip: Buffer; bytes: number; files: number; leftOut: { secrets: string[] } };
 
-function sourceRequired(apiBase: string): string {
-  const cwd = process.cwd();
+function sourceRequired(apiBase: string, local: ProjectCreateLocal): string {
+  const cwd = local.cwd();
 
   return envelope({
     ok: false,
@@ -227,27 +235,22 @@ function sourceRequired(apiBase: string): string {
   });
 }
 
-function prepareUpload(root: string, defaulted: boolean): { ok: true; source: CreateSource } | { ok: false; answer: string } {
-  let folder = false;
+function prepareUpload(root: string, defaulted: boolean, local: ProjectCreateLocal): { ok: true; source: CreateSource } | { ok: false; answer: string } {
+  const read = local.readUploadSource(root);
 
-  try {
-    folder = fs.statSync(root).isDirectory();
-  } catch {
-  }
-
-  if (!folder) {
+  if (read.kind === "not-folder") {
     return {
       ok: false,
       answer: fail(
         "BadRequest",
-        `projectPath ${root} is not a folder on this machine, so there is nothing to upload. Pass the folder extension_create made (absolute, or relative to the server's cwd ${process.cwd()}), or repo '<owner>/<repo>'.`,
+        `projectPath ${root} is not a folder on this machine, so there is nothing to upload. Pass the folder extension_create made (absolute, or relative to the server's cwd ${local.cwd()}), or repo '<owner>/<repo>'.`,
         "bad-request",
         "E_BAD_REQUEST",
       ),
     };
   }
 
-  if (!sourceManifestPath(root)) {
+  if (read.kind === "no-manifest") {
     return {
       ok: false,
       answer: fail(
@@ -259,7 +262,7 @@ function prepareUpload(root: string, defaulted: boolean): { ok: true; source: Cr
     };
   }
 
-  const archive = buildSourceArchive(root);
+  const archive = read.archive;
 
   if (!archive.ok) {
     if (archive.reason === "unreadable") {
@@ -309,13 +312,13 @@ function pendingEnvelope(start: {
   verificationUri: string;
   verificationUriComplete?: string;
   expiresIn: number;
-}, pendingFor: { apiBase: string; project: string }, waitSeconds: unknown): string {
+}, pendingFor: { apiBase: string; project: string }, waitSeconds: unknown, local: ProjectCreateLocal): string {
   const complete = String(start.verificationUriComplete || "").trim();
   const hasCompleteLink =
     complete.length > 0 && complete !== start.verificationUri;
   const expiresAt = codeExpiryFromStart(start.expiresIn);
   rememberCodeExpiry(start.deviceCode, expiresAt);
-  rememberPendingCreate(pendingFor.apiBase, pendingFor.project, {
+  local.rememberPendingCreate(pendingFor.apiBase, pendingFor.project, {
     userCode: start.userCode,
     verificationUri: start.verificationUri,
     ...(hasCompleteLink ? { verificationUriComplete: complete } : {}),
@@ -344,7 +347,7 @@ function pendingEnvelope(start: {
   });
 }
 
-export async function handler(args: {
+export type ProjectCreateArgs = {
   project?: string;
   repo?: string;
   projectPath?: string;
@@ -361,9 +364,15 @@ export async function handler(args: {
   waitSeconds?: unknown;
   login?: unknown;
   api?: string;
-}): Promise<string> {
+};
+
+export async function handler(args: ProjectCreateArgs): Promise<string> {
+  return createProject(args, PROJECT_CREATE_LOCAL);
+}
+
+export async function createProject(args: ProjectCreateArgs, local: ProjectCreateLocal): Promise<string> {
   if (args.projects !== undefined && args.projects !== null) {
-    return createProjectBatch(args);
+    return createProjectBatch(args, local);
   }
 
   const callStartedAt = Date.now();
@@ -420,26 +429,22 @@ export async function handler(args: {
   let source: CreateSource | null = repo ? { kind: "github", repo } : null;
 
   if (!source) {
-    const root = projectPathArg
-      ? path.resolve(projectPathArg)
-      : looksLikeExtensionFolder(process.cwd())
-        ? process.cwd()
-        : "";
+    const root = local.uploadRoot(projectPathArg);
 
     if (root) {
-      const upload = prepareUpload(root, !projectPathArg);
+      const upload = prepareUpload(root, !projectPathArg, local);
       if (!upload.ok) return upload.answer;
 
       source = upload.source;
     }
   }
 
-  const refusal = source ? null : sourceRequired(apiBase);
+  const refusal = source ? null : sourceRequired(apiBase, local);
   const resumeDeviceCode = String(args.deviceCode || "").trim();
-  const held = heldCreateGrant(apiBase, resumeDeviceCode, project);
+  const held = local.heldCreateGrant(apiBase, resumeDeviceCode, project);
 
   if (held) {
-    if (refusal || !source) return refusal ?? sourceRequired(apiBase);
+    if (refusal || !source) return refusal ?? sourceRequired(apiBase, local);
 
     return createWithGrant({
       apiBase,
@@ -451,7 +456,7 @@ export async function handler(args: {
       held,
       resumed: true,
       callBlocks: deviceWait({ waitSeconds: args.waitSeconds, fallbackMs: RESUME_POLL_MS }).waiting,
-    });
+    }, local);
   }
 
   let config;
@@ -471,16 +476,16 @@ export async function handler(args: {
   let interval = 5;
   let budgetMs = RESUME_POLL_MS;
   const expiresAt = deviceCode
-    ? (pendingCreate(apiBase, project)?.expiresAt ?? codeExpiresAt(deviceCode))
+    ? (local.pendingCreate(apiBase, project)?.expiresAt ?? codeExpiresAt(deviceCode))
     : null;
   const wait = deviceWait({ waitSeconds: args.waitSeconds, expiresAt, fallbackMs: RESUME_POLL_MS });
   budgetMs = wait.budgetMs;
 
   if (!deviceCode) {
-    let start;
+    let start: DeviceCodeStart;
 
     try {
-      start = await requestDeviceCode({
+      start = await local.requestDeviceCode({
         apiBase,
         path: config.deviceCodeUrl,
         project,
@@ -504,7 +509,7 @@ export async function handler(args: {
       return fail("CreateStartError", String(message), "create-failed", "E_PLATFORM");
     }
 
-    if (refusal || !source) return refusal ?? sourceRequired(apiBase);
+    if (refusal || !source) return refusal ?? sourceRequired(apiBase, local);
 
     deviceCode = start.deviceCode;
     interval = start.interval;
@@ -519,7 +524,7 @@ export async function handler(args: {
     });
 
     if (!early.ok && early.reason === "pending") {
-      return pendingEnvelope(start, { apiBase, project }, args.waitSeconds);
+      return pendingEnvelope(start, { apiBase, project }, args.waitSeconds, local);
     }
 
     return finishFromPoll(early, {
@@ -532,10 +537,10 @@ export async function handler(args: {
       callStartedAt,
       wait: deviceWait({ waitSeconds: undefined, fallbackMs: FIRST_CALL_BUDGET_MS }),
       expiresAt: codeExpiryFromStart(start.expiresIn),
-    });
+    }, local);
   }
 
-  if (refusal || !source) return refusal ?? sourceRequired(apiBase);
+  if (refusal || !source) return refusal ?? sourceRequired(apiBase, local);
 
   const poll = await pollDeviceGrant({
     apiBase,
@@ -556,7 +561,7 @@ export async function handler(args: {
     callStartedAt,
     wait,
     expiresAt,
-  });
+  }, local);
 }
 
 async function finishFromPoll(
@@ -583,9 +588,10 @@ async function finishFromPoll(
     wait: DeviceWait;
     expiresAt: string | null;
   },
+  local: ProjectCreateLocal,
 ): Promise<string> {
   if (poll.ok || poll.reason !== "pending") {
-    forgetPendingCreate(ctx.apiBase, ctx.project);
+    local.forgetPendingCreate(ctx.apiBase, ctx.project);
     forgetCodeExpiry(ctx.deviceCode);
   }
 
@@ -666,7 +672,7 @@ async function finishFromPoll(
 
     if (token) {
       try {
-        const creds = persistTokenResponse({ apiBase: ctx.apiBase, project: ctx.project, data: grant as Record<string, unknown> });
+        const creds = local.persistTokenResponse({ apiBase: ctx.apiBase, project: ctx.project, data: grant as Record<string, unknown> });
         stored = { workspaceSlug: creds.workspaceSlug, projectSlug: creds.projectSlug, ...(creds.expiresAt ? { expiresAt: creds.expiresAt } : {}) };
       } catch (err) {
         storeFailure = err instanceof Error ? err.message : String(err);
@@ -707,7 +713,7 @@ async function finishFromPoll(
     held: { grant: token, grantExpiresAt: grantExpiresAt(grant as Record<string, unknown>) },
     resumed: false,
     callBlocks: ctx.wait.waiting,
-  });
+  }, local);
 }
 
 type CreateArgs = {
@@ -733,17 +739,17 @@ async function createWithGrant(ctx: {
   held: HeldCreateGrant;
   resumed: boolean;
   callBlocks: boolean;
-}): Promise<string> {
+}, local: ProjectCreateLocal): Promise<string> {
   const [wantWorkspace = ""] = ctx.project.split("/");
   const kept =
     ctx.resumed ||
-    holdCreateGrant(ctx.apiBase, ctx.deviceCode, { workspace: wantWorkspace, ref: ctx.project }, ctx.held);
+    local.holdCreateGrant(ctx.apiBase, ctx.deviceCode, { workspace: wantWorkspace, ref: ctx.project }, ctx.held);
   let keepGrant = false;
   const answer = await sendCreate(ctx, kept, () => {
     keepGrant = kept;
-  });
+  }, local);
 
-  if (!keepGrant) releaseCreateGrant(ctx.apiBase, ctx.deviceCode);
+  if (!keepGrant) local.releaseCreateGrant(ctx.apiBase, ctx.deviceCode);
 
   return answer;
 }
@@ -762,6 +768,7 @@ async function sendCreate(
   },
   kept: boolean,
   keepGrant: () => void,
+  local: ProjectCreateLocal,
 ): Promise<string> {
   const token = ctx.held.grant;
   const [wantWorkspace = "", wantProject = ""] = ctx.project.split("/");
@@ -790,7 +797,7 @@ async function sendCreate(
     });
   };
 
-  const allowanceBefore = await readWorkspaceBuildAllowance({ apiBase: ctx.apiBase, workspace: wantWorkspace, command: COMMAND });
+  const allowanceBefore = await local.readWorkspaceBuildAllowance({ apiBase: ctx.apiBase, workspace: wantWorkspace, command: COMMAND });
   let bodySource: CreateBodySource;
   let uploaded: { bytes: number; files: number } | null = null;
 
@@ -798,7 +805,7 @@ async function sendCreate(
     const [owner = "", repoName = ""] = ctx.source.repo.split("/");
     bodySource = { kind: "github", owner, repoName, installationId: ctx.args.installationId };
   } else {
-    const upload = await uploadProjectSource({ apiBase: ctx.apiBase, token, zip: ctx.source.zip, command: COMMAND });
+    const upload = await uploadProjectSource({ apiBase: ctx.apiBase, token, zip: ctx.source.zip, identity: local.identityHeaders(COMMAND) });
 
     if (!upload.ok) {
       return uploadFailed(upload, { ...ctx, wantWorkspace, wantProject, kept, keepGrant });
@@ -825,7 +832,7 @@ async function sendCreate(
   const send = (signal: AbortSignal) =>
     fetch(url, {
       method: "POST",
-      headers: { authorization: `Bearer ${token}`, "content-type": "application/json", ...identityHeaders(COMMAND) },
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json", ...local.identityHeaders(COMMAND) },
       body: JSON.stringify(body),
       signal,
     });
@@ -868,9 +875,9 @@ async function sendCreate(
   }
 
   if (String(data.code || "") === SOURCE_UPLOAD_CONSUMED_CODE) {
-    const found = await findProjectByStoredLogin({ apiBase: ctx.apiBase, project: ctx.project, command: COMMAND });
+    const found = await local.findProjectByStoredLogin({ apiBase: ctx.apiBase, project: ctx.project, command: COMMAND });
 
-    if (found) return createdByRead(found, ctx.source, ctx.apiBase);
+    if (found) return createdByRead(found, ctx.source, ctx.apiBase, local);
 
     return unconfirmed(
       `The platform answered that the uploaded source was already consumed by an earlier create request with this grant (${String(data.message || SOURCE_UPLOAD_CONSUMED_CODE)}), so that create landed or is still running`,
@@ -879,13 +886,14 @@ async function sendCreate(
   }
 
   if (String(data.code || "") === CREATE_IN_PROGRESS_CODE) {
-    const found = await findProjectByStoredLogin({ apiBase: ctx.apiBase, project: ctx.project, command: COMMAND });
+    const found = await local.findProjectByStoredLogin({ apiBase: ctx.apiBase, project: ctx.project, command: COMMAND });
 
-    if (found) return createdByRead(found, ctx.source, ctx.apiBase);
+    if (found) return createdByRead(found, ctx.source, ctx.apiBase, local);
 
     keepGrant();
     const waitSeconds = Number(data.retryAfterSeconds) > 0 ? Number(data.retryAfterSeconds) : 10;
-    const age = creatingAge({ apiBase: ctx.apiBase, deviceCode: ctx.deviceCode, kept, data });
+    const now = Date.now();
+    const age = creatingAgeAt(data, now, local.firstSeenCreating(ctx.apiBase, ctx.deviceCode, now, kept));
 
     if (age.stuck) {
       const projectUrl = consoleProjectUrl({ workspace: wantWorkspace, project: wantProject }, "", ctx.apiBase);
@@ -981,7 +989,7 @@ async function sendCreate(
     }
 
     if (code === "PROJECT_EXISTS") {
-      rememberCreatedProject(ctx.apiBase, ctx.project);
+      local.rememberCreatedProject(ctx.apiBase, ctx.project);
 
       return envelope({
         ok: false,
@@ -1039,7 +1047,7 @@ async function sendCreate(
   const fileCounts = data.files && typeof data.files === "object" && !Array.isArray(data.files) ? (data.files as Record<string, unknown>) : {};
   const reseedFiles = { written: Number(fileCounts.written) || 0, removed: Number(fileCounts.removed) || 0 };
   const buildWord = reseeded ? "build" : "first build";
-  rememberCreatedProject(ctx.apiBase, `${finalWorkspace}/${finalProject}`);
+  local.rememberCreatedProject(ctx.apiBase, `${finalWorkspace}/${finalProject}`);
   const buildsPageUrl = consoleProjectUrl(
     { workspace: finalWorkspace, project: finalProject },
     "builds",
@@ -1049,7 +1057,7 @@ async function sendCreate(
     { kind: "project", url: consoleUrl, made: !reseeded },
     ...(firstBuild.state === "dispatched" ? [{ kind: "build" as const, url: firstBuild.buildUrl || buildsPageUrl, made: reseeded }] : []),
   ]);
-  const login = readCreateLogin({
+  const login = local.readCreateLogin({
     data,
     apiBase: ctx.apiBase,
     project: `${finalWorkspace}/${finalProject}`,
@@ -1205,9 +1213,9 @@ function uploadFailed(
   });
 }
 
-function createdByRead(found: ProjectFoundByRead, source: CreateSource, apiBase: string): string {
+function createdByRead(found: ProjectFoundByRead, source: CreateSource, apiBase: string, local: ProjectCreateLocal): string {
   const ref = `${found.workspaceSlug}/${found.projectSlug}`;
-  rememberCreatedProject(apiBase, ref);
+  local.rememberCreatedProject(apiBase, ref);
   const consoleUrl = consoleProjectUrl({ workspace: found.workspaceSlug, project: found.projectSlug }, "", apiBase);
   const links = linksOf([{ kind: "project", url: consoleUrl, made: true }]);
   const login: CreateLogin = { stored: false, project: ref, reason: "confirmed-by-read" };

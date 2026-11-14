@@ -7,12 +7,11 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { spendNarration } from "./allowance";
-import { writeCredentialBatch, tokenExpiry, isProjectRef } from "./credentials";
+import { tokenExpiry, isProjectRef, type StoredCredentials } from "./credentials";
 import { answerIsUnknownOutcome, readCreatedProject } from "./create-answer";
 import { firstBuildValue, readFirstBuild, withheldBecause } from "./first-build";
 import { answerDeadline, RESUME_POLL_MS, START_WORK_WITHIN_MS } from "./call-budget";
-import { pollDeviceGrant, requestDeviceCode } from "./device-flow";
-import { dropHeldBatch, loadHeldBatch, saveHeldBatch } from "./held-batches";
+import { pollDeviceGrant, type DeviceCodeStart, type DeviceIntent } from "./device-flow";
 import { envelope, type ErrorCode } from "./envelope";
 import { fetchLoginConfig, resolveApiBase, safeApiBase } from "./login-flow";
 import { laneClosedFacts, laneClosedHint, platformHoldEnvelope, sawPlatformHold } from "./platform-hold";
@@ -26,7 +25,8 @@ import {
 import { buildCreateBody } from "./project-create-body";
 import { projectCreateUrl } from "./project-source-upload";
 import { consoleBase, consoleProjectUrl } from "./registry";
-import { identityHeaders } from "./session-identity";
+
+import type { HeldBatch } from "./held-batches";
 
 const COMMAND = "extension_project_create";
 
@@ -56,6 +56,15 @@ const ENTRY_STRING_KEYS = [
 const BROWSERS = ["chrome", "edge", "firefox"];
 
 const SINGLE_ONLY_KEYS = ["project", "repo", "displayName", "description"];
+
+export interface BatchCreateLocal {
+  requestDeviceCode(args: { apiBase: string; path: string; project?: string; projects?: string[]; intent?: DeviceIntent }): Promise<DeviceCodeStart>;
+  identityHeaders(tool: string): Record<string, string>;
+  saveHeldBatch<T>(apiBase: string, deviceCode: string, batch: HeldBatch<T>): boolean;
+  loadHeldBatch<T>(apiBase: string, deviceCode: string): HeldBatch<T> | null;
+  dropHeldBatch(apiBase: string, deviceCode: string): void;
+  writeCredentialBatch(batch: StoredCredentials[]): string | null;
+}
 
 export interface BatchCreateArgs {
   projects?: unknown;
@@ -381,7 +390,7 @@ function refusalHint(code: string, ref: string, retryAfterSeconds?: number, gran
 
 type CreateOutcome = { row: Row; stop?: Stop; halt?: boolean };
 
-function persist(session: Session, deviceCode: string, inFlight?: BatchEntry): void {
+function persist(local: BatchCreateLocal, session: Session, deviceCode: string, inFlight?: BatchEntry): void {
   const rows = rowsInOrder(session).filter((row) => row.status !== "pending");
 
   if (inFlight) {
@@ -393,7 +402,7 @@ function persist(session: Session, deviceCode: string, inFlight?: BatchEntry): v
     });
   }
 
-  session.persisted = saveHeldBatch(session.apiBase, deviceCode, {
+  session.persisted = local.saveHeldBatch(session.apiBase, deviceCode, {
     workspace: session.workspace,
     refs: session.refs,
     grant: session.grant,
@@ -402,7 +411,7 @@ function persist(session: Session, deviceCode: string, inFlight?: BatchEntry): v
   });
 }
 
-async function createOne(session: Session, entry: BatchEntry, installationId: string | undefined, callStartedAt: number): Promise<CreateOutcome> {
+async function createOne(local: BatchCreateLocal, session: Session, entry: BatchEntry, installationId: string | undefined, callStartedAt: number): Promise<CreateOutcome> {
   const url = projectCreateUrl(session.apiBase);
   const body = {
     ...buildCreateBody({
@@ -428,7 +437,7 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
       headers: {
         authorization: `Bearer ${session.grant}`,
         "content-type": "application/json",
-        ...identityHeaders(COMMAND),
+        ...local.identityHeaders(COMMAND),
       },
       body: JSON.stringify(body),
       signal: deadline.signal,
@@ -553,7 +562,7 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
     let storeFailure = "";
 
     try {
-      writeCredentialBatch([
+      local.writeCredentialBatch([
         {
           version: 1,
           token,
@@ -782,7 +791,7 @@ function finalEnvelope(session: Session): string {
   });
 }
 
-async function runSlice(session: Session, deviceCode: string, installationId: string | undefined, callStartedAt: number): Promise<string> {
+async function runSlice(local: BatchCreateLocal, session: Session, deviceCode: string, installationId: string | undefined, callStartedAt: number): Promise<string> {
   if (session.busy) {
     return envelope({
       ok: true,
@@ -817,12 +826,12 @@ async function runSlice(session: Session, deviceCode: string, installationId: st
 
       if (Date.now() - callStartedAt >= START_WORK_WITHIN_MS) break;
 
-      persist(session, deviceCode, entry);
-      const outcome = await createOne(session, entry, installationId, callStartedAt);
+      persist(local, session, deviceCode, entry);
+      const outcome = await createOne(local, session, entry, installationId, callStartedAt);
       session.rows.set(entry.ref, outcome.row);
       if (outcome.stop) session.stop = outcome.stop;
 
-      persist(session, deviceCode);
+      persist(local, session, deviceCode);
 
       if (outcome.halt) {
         halted = true;
@@ -855,17 +864,18 @@ async function runSlice(session: Session, deviceCode: string, installationId: st
   }
 
   sessions.delete(deviceCode);
-  dropHeldBatch(session.apiBase, deviceCode);
+  local.dropHeldBatch(session.apiBase, deviceCode);
 
   return finalEnvelope(session);
 }
 
 function restoreSession(
+  local: BatchCreateLocal,
   apiBase: string,
   deviceCode: string,
   parsed: { entries: BatchEntry[] },
 ): Session | undefined {
-  const held = loadHeldBatch<Row>(apiBase, deviceCode);
+  const held = local.loadHeldBatch<Row>(apiBase, deviceCode);
   if (!held) return undefined;
 
   const session: Session = {
@@ -888,7 +898,7 @@ function restoreSession(
   return session;
 }
 
-export async function createProjectBatch(args: BatchCreateArgs): Promise<string> {
+export async function createProjectBatch(args: BatchCreateArgs, local: BatchCreateLocal): Promise<string> {
   const parsed = parseBatchCreateArgs(args);
 
   if (!parsed.ok) {
@@ -921,7 +931,7 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
 
   sweepSessions(Math.floor(Date.now() / 1000));
   let deviceCode = String(args.deviceCode || "").trim();
-  const held = deviceCode ? (sessions.get(deviceCode) ?? restoreSession(apiBase, deviceCode, parsed)) : undefined;
+  const held = deviceCode ? (sessions.get(deviceCode) ?? restoreSession(local, apiBase, deviceCode, parsed)) : undefined;
 
   if (held) {
     if (held.apiBase !== apiBase || !sameProjectSet(held.refs, refs)) {
@@ -933,7 +943,7 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
       );
     }
 
-    return runSlice(held, deviceCode, installationId || undefined, callStartedAt);
+    return runSlice(local, held, deviceCode, installationId || undefined, callStartedAt);
   }
 
   let config;
@@ -979,11 +989,11 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
 
   let interval = 5;
   let budgetMs = RESUME_POLL_MS;
-  let start: Awaited<ReturnType<typeof requestDeviceCode>> | null = null;
+  let start: DeviceCodeStart | null = null;
 
   if (!deviceCode) {
     try {
-      start = await requestDeviceCode({
+      start = await local.requestDeviceCode({
         apiBase,
         path: config.deviceCodeUrl,
         projects: refs,
@@ -1125,7 +1135,7 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
     persisted: false,
   };
   sessions.set(deviceCode, session);
-  persist(session, deviceCode);
+  persist(local, session, deviceCode);
 
-  return runSlice(session, deviceCode, installationId || undefined, callStartedAt);
+  return runSlice(local, session, deviceCode, installationId || undefined, callStartedAt);
 }

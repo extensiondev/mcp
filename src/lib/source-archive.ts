@@ -10,11 +10,11 @@ import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 
+import { SOURCE_SKIPPED_EXTENSIONS, SOURCE_SKIPPED_FOLDERS } from "./source-archive-words";
+
+export { megabytes, SOURCE_SKIPPED_EXTENSIONS, SOURCE_SKIPPED_FOLDERS } from "./source-archive-words";
+
 export const SOURCE_ARCHIVE_MAX_BYTES = 4 * 1024 * 1024;
-
-export const SOURCE_SKIPPED_FOLDERS = ["node_modules", "dist", ".git", ".extension-dev"];
-
-export const SOURCE_SKIPPED_EXTENSIONS = [".zip", ".crx", ".xpi"];
 
 export const SOURCE_SECRET_EXAMPLES = [".env.example", ".env.sample", ".env.template"];
 
@@ -345,10 +345,4 @@ export function buildSourceArchive(root: string, options: { maxBytes?: number } 
   }
 
   return { ok: true, zip: Buffer.concat([...locals, directory, eocd]), bytes, files: entries.length, entries, leftOut };
-}
-
-export function megabytes(bytes: number): string {
-  const mb = bytes / (1024 * 1024);
-
-  return `${mb >= 10 ? mb.toFixed(0) : mb.toFixed(1)} MB`;
 }

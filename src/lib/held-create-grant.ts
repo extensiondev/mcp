@@ -8,16 +8,14 @@
 
 import { dropHeldBatch, loadHeldBatch, saveHeldBatch } from "./held-batches";
 
-export const CREATE_IN_PROGRESS_CODE = "CREATE_IN_PROGRESS";
+import type { HeldCreateGrant } from "./held-create-grant-words";
 
-export interface HeldCreateGrant {
-  grant: string;
-  grantExpiresAt: number;
-}
-
-export function grantExpiresAt(data: Record<string, unknown>): number {
-  return Number(data.expiresAt || 0) || Math.floor(Date.now() / 1000) + 900;
-}
+export {
+  CREATE_IN_PROGRESS_CODE,
+  grantExpiresAt,
+  heldUntilSentence,
+  type HeldCreateGrant,
+} from "./held-create-grant-words";
 
 export function holdCreateGrant(
   apiBase: string,
@@ -48,8 +46,4 @@ export function heldCreateGrant(apiBase: string, deviceCode: string, ref: string
 
 export function releaseCreateGrant(apiBase: string, deviceCode: string): void {
   dropHeldBatch(apiBase, deviceCode);
-}
-
-export function heldUntilSentence(held: HeldCreateGrant): string {
-  return new Date(held.grantExpiresAt * 1000).toISOString();
 }

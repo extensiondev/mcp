@@ -1,3 +1,4 @@
+import childProcess from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -5,7 +6,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { handler, schema } from "../tools/project-create";
+import { createProject, handler, schema, type ProjectCreateLocal } from "../tools/project-create";
 import { readCredentials } from "../lib/credentials";
 import { pendingCreate } from "../lib/pending-creates";
 import { readZipEntry, readZipEntryNames } from "../lib/zip-entries";
@@ -1196,5 +1197,61 @@ describe("extension_project_create", () => {
     expect(out.value.projectSlug).toBe("ghost-app-2");
     expect(out.warnings.join(" ")).toContain("registered this project as acme/ghost-app-2");
     expect(out.value.nextSteps[0]).toContain("acme/ghost-app-2");
+  });
+
+  it("644: the platform half creates from an uploaded folder through its local half and reads no filesystem path itself", async () => {
+    const { fn, calls } = createFetch({ code: undefined, token: [{ status: 200, body: grantBody }], source: UPLOADED, create: CREATED });
+    vi.stubGlobal("fetch", fn);
+    const machine: string[] = [];
+
+    const watch = (target: object, names: string[]) => {
+      for (const name of names) {
+        vi.spyOn(target as Record<string, (...args: unknown[]) => unknown>, name).mockImplementation((...args: unknown[]) => {
+          machine.push(`${name} ${String(args[0])}`);
+
+          throw new Error(`${name} called`);
+        });
+      }
+    };
+
+    watch(fs, ["readFileSync", "existsSync", "statSync", "writeFileSync", "mkdirSync", "readdirSync", "openSync", "lstatSync", "realpathSync", "renameSync", "unlinkSync", "rmSync", "appendFileSync"]);
+    watch(childProcess, ["spawn", "spawnSync", "execFile", "execFileSync"]);
+    const local: ProjectCreateLocal = {
+      cwd: vi.fn(() => "/fake/cwd"),
+      uploadRoot: vi.fn(() => "/fake/ghost"),
+      readUploadSource: vi.fn(() => ({ kind: "archive" as const, archive: { ok: true as const, zip: Buffer.from("zip"), bytes: 3, files: 2, entries: [], leftOut: { secrets: [] } } })),
+      requestDeviceCode: vi.fn(async () => ({ deviceCode: "dev-code", userCode: "ABCD-1234", verificationUri: "https://extension.dev/device", interval: 0, expiresIn: 900 })),
+      identityHeaders: vi.fn(() => ({})),
+      pendingCreate: vi.fn(() => null),
+      rememberPendingCreate: vi.fn(() => true),
+      forgetPendingCreate: vi.fn(),
+      heldCreateGrant: vi.fn(() => null),
+      holdCreateGrant: vi.fn(() => true),
+      releaseCreateGrant: vi.fn(),
+      firstSeenCreating: vi.fn((_api: string, _code: string, now: number) => now),
+      saveHeldBatch: vi.fn(() => true),
+      loadHeldBatch: vi.fn(() => null),
+      dropHeldBatch: vi.fn(),
+      rememberCreatedProject: vi.fn(() => true),
+      persistTokenResponse: vi.fn(),
+      writeCredentialBatch: vi.fn(() => null),
+      findProjectByStoredLogin: vi.fn(async () => null),
+      readWorkspaceBuildAllowance: vi.fn(async () => null),
+      readCreateLogin: vi.fn(() => ({ login: { stored: true, project: "acme/ghost-app" }, sentence: "The login is stored." })),
+    } as unknown as ProjectCreateLocal;
+
+    const out = JSON.parse(await createProject({ project: "acme/ghost-app", projectPath: "ghost" }, local));
+
+    expect(machine).toEqual([]);
+    expect(out.status).toBe("created");
+    expect(out.value.projectPath).toBe("/fake/ghost");
+    expect(local.uploadRoot).toHaveBeenCalledWith("ghost");
+    expect(local.readUploadSource).toHaveBeenCalledWith("/fake/ghost");
+    expect(local.requestDeviceCode).toHaveBeenCalledTimes(1);
+    expect(local.holdCreateGrant).toHaveBeenCalledTimes(1);
+    expect(local.releaseCreateGrant).toHaveBeenCalledTimes(1);
+    expect(local.rememberCreatedProject).toHaveBeenCalledWith(API, "acme/ghost-app");
+    expect(local.readCreateLogin).toHaveBeenCalledTimes(1);
+    expect(calls.some((call) => call.url.endsWith("/api/cli/projects/source"))).toBe(true);
   });
 });
