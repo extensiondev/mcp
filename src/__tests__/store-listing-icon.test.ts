@@ -15,6 +15,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { localIcon } from "../lib/store-facts-local";
 import { readZipEntry } from "../lib/zip-entries";
+import { NO_BUILD_ROUTE } from "../lib/store-listing-icon";
 import { readLocalListing } from "../lib/submit-facts-local";
 import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
@@ -373,7 +374,7 @@ describe("extension_submit sync-listing reads each store's icon from the build t
 
     const unpushed = JSON.parse(await submit({ action: "sync-listing", browsers: ["edge"], projectPath: root, api: API }));
 
-    expect(unpushed.value.iconSource).toEqual({ from: "local", reason: `the checked out commit ${short} has no platform build; push it, or pass useBuild with a completed build` });
+    expect(unpushed.value.iconSource).toEqual({ from: "local", reason: `the checked out commit ${short} has no platform build; build it with extension_builds action:"rebuild" (no push needed when the platform already holds this source; an uploaded project takes it by a re-seed first, extension_project_create with this projectPath, and a project built from a repository also builds on a push), or pass useBuild with a completed build` });
   });
 
   it("takes the newest build's icon when the local repository proves the checked out commit changed nothing the build reads, and asks for a push once it did", async () => {
@@ -400,6 +401,6 @@ describe("extension_submit sync-listing reads each store's icon from the build t
     const pushed = JSON.parse(await submit({ action: "sync-listing", browsers: ["edge"], projectPath: root, api: API }));
 
     expect(pushed.value.stores.edge.icon).toEqual({ from: "dist", file: "dist/edge/images/icon-128.png" });
-    expect(pushed.value.iconSource).toEqual({ from: "local", reason: `the checked out commit ${code} has no platform build; push it, or pass useBuild with a completed build` });
+    expect(pushed.value.iconSource).toEqual({ from: "local", reason: `the checked out commit ${code} has no platform build; ${NO_BUILD_ROUTE}, or pass useBuild with a completed build` });
   });
 });

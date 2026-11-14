@@ -12,7 +12,7 @@ import { dispatchedPushSentence, docsOnlySentence, REFUSED_OUTCOMES, refusedPush
 import { kernelHook } from "./kernel-hooks";
 import { platformApiGet, type ProjectApi } from "./project-api";
 import { isRow, text } from "./row";
-import { platformBuildIcons, type BuildIcons } from "./store-listing-icon";
+import { NO_BUILD_ROUTE, platformBuildIcons, type BuildIcons } from "./store-listing-icon";
 
 import type { ProjectFacts } from "./submit-facts";
 
@@ -59,7 +59,7 @@ function headState(builds: BuildIcons, short: string): string {
   if (builds.build && builds.why === null) return `${subject} has completed build ${builds.build} on the platform, which this read did not cover; call preflight again with buildSha: "${builds.build}"`;
   if (builds.why === "not-dispatched" && builds.headPush) return skippedPushSentence(builds.headPush, subject);
   if (builds.why === "dispatched-unlisted" && builds.headPush) return dispatchedPushSentence(builds.headPush, subject);
-  if (builds.why === "no-record") return `${subject} has no platform build yet; push it so the package checks read it`;
+  if (builds.why === "no-record") return `${subject} has no platform build yet; ${NO_BUILD_ROUTE} so the package checks read it`;
   if (builds.why === "unreadable") return `${subject} is newer, and ${builds.missed}`;
 
   return `${subject} is pending on the platform: ${builds.missed}`;

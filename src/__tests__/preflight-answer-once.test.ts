@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import { LINK_ITEM_POINTER } from "../lib/link-item-answer";
 import { buildsReadByPackageChecks } from "../lib/package-checks-build";
+import { NO_BUILD_ROUTE } from "../lib/store-listing-icon";
 import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
@@ -300,7 +301,7 @@ describe("the package checks consult the push record before asking for a push", 
     expect(dispatched.value.stores.chrome.packageBuild.headPush).toEqual({ outcome: "DISPATCHED", receivedAt: "2026-10-30T21:11:41Z" });
   });
 
-  it("keeps the push-it sentence when the push record is another commit's, and reads the build list once for two stores", async () => {
+  it("names rebuild first, a re-seed and a push only as the repository alternative when the push record is another commit's, and reads the build list once for two stores", async () => {
     if (process.platform === "win32") return;
 
     const { root, head } = gitProject();
@@ -313,8 +314,8 @@ describe("the package checks consult the push record before asking for a push", 
 
     const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome", "edge"], projectPath: root, api: API }));
 
-    expect(out.value.stores.chrome.packageBuild).toEqual({ read: ["154767e"], head: short, say: `chrome: the package checks read build 154767e; HEAD ${short} has no platform build yet; push it so the package checks read it.` });
-    expect(out.value.stores.edge.packageBuild.say).toBe(`edge: the package checks read build 154767e; HEAD ${short} has no platform build yet; push it so the package checks read it.`);
+    expect(out.value.stores.chrome.packageBuild).toEqual({ read: ["154767e"], head: short, say: `chrome: the package checks read build 154767e; HEAD ${short} has no platform build yet; ${NO_BUILD_ROUTE} so the package checks read it.` });
+    expect(out.value.stores.edge.packageBuild.say).toBe(`edge: the package checks read build 154767e; HEAD ${short} has no platform build yet; ${NO_BUILD_ROUTE} so the package checks read it.`);
     expect(platform.sent("GET", BUILDS)).toHaveLength(1);
   });
 });

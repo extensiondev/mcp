@@ -80,6 +80,9 @@ async function wantedBuild(api: ProjectApi, rows: BuildRow[], sha: string, push:
   return { row: fresh?.done ? fresh : null, seen: fresh ?? listed[0] ?? null };
 }
 
+export const NO_BUILD_ROUTE =
+  'build it with extension_builds action:"rebuild" (no push needed when the platform already holds this source; an uploaded project takes it by a re-seed first, extension_project_create with this projectPath, and a project built from a repository also builds on a push)';
+
 export type BuildMiss = "no-commit" | "not-completed" | "unreadable" | "not-dispatched" | "dispatched-unlisted" | "no-record";
 
 function missedSentence(target: string, asked: boolean, seen: BuildRow | null, unreadable: string | null, push: HeadPush | null): { why: BuildMiss; missed: string } {
@@ -91,7 +94,7 @@ function missedSentence(target: string, asked: boolean, seen: BuildRow | null, u
   if (push && !push.dispatched) return { why: "not-dispatched", missed: `${skippedPushSentence(push, subject)}; or pass useBuild with a completed build` };
   if (push) return { why: "dispatched-unlisted", missed: `${dispatchedPushSentence(push, subject)}; or pass useBuild with a completed build` };
 
-  return { why: "no-record", missed: `${subject} has no platform build; push it, or pass useBuild with a completed build` };
+  return { why: "no-record", missed: `${subject} has no platform build; ${NO_BUILD_ROUTE}, or pass useBuild with a completed build` };
 }
 
 export interface BuildIcons {

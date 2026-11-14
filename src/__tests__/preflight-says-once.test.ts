@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { packageBuildLine, type PackageBuildView } from "../lib/package-checks-build";
+import { NO_BUILD_ROUTE } from "../lib/store-listing-icon";
 import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
@@ -44,8 +45,8 @@ describe("407: the four-store preflight says each sentence once and hint carries
 
   it("groups the package sentence by the stores that share it instead of saying it once per store", () => {
     expect(packageBuildLine(STORES.map((store) => view(store)))).toBe(`chrome, firefox, edge and safari: ${TAIL}`);
-    expect(packageBuildLine([view("chrome"), null, view("edge", "edge: the package checks read build 1111111; HEAD 9bf4db4 has no platform build yet; push it so the package checks read it.")])).toBe(
-      `chrome: ${TAIL} edge: the package checks read build 1111111; HEAD 9bf4db4 has no platform build yet; push it so the package checks read it.`,
+    expect(packageBuildLine([view("chrome"), null, view("edge", `edge: the package checks read build 1111111; HEAD 9bf4db4 has no platform build yet; ${NO_BUILD_ROUTE} so the package checks read it.`)])).toBe(
+      `chrome: ${TAIL} edge: the package checks read build 1111111; HEAD 9bf4db4 has no platform build yet; ${NO_BUILD_ROUTE} so the package checks read it.`,
     );
 
     expect(packageBuildLine([null, null])).toBe("");

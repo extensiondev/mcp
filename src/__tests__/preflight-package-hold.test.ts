@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import { isBuildInput } from "../lib/build-inputs";
 import { capResetsAt } from "../lib/head-push";
+import { NO_BUILD_ROUTE } from "../lib/store-listing-icon";
 import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
@@ -108,12 +109,12 @@ describe("the package checks say they still hold when HEAD changes nothing the b
     const code = project.commit({ "README.md": "# Leon\n", "src/index.ts": "export {};\n" }, "code and readme").slice(0, 7);
     const withCode = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], projectPath: project.root, api: API }));
 
-    expect(withCode.value.stores.chrome.packageBuild).toEqual({ read: [builtShort], head: code, say: `chrome: the package checks read build ${builtShort}; HEAD ${code} has no platform build yet; push it so the package checks read it.` });
+    expect(withCode.value.stores.chrome.packageBuild).toEqual({ read: [builtShort], head: code, say: `chrome: the package checks read build ${builtShort}; HEAD ${code} has no platform build yet; build it with extension_builds action:"rebuild" (no push needed when the platform already holds this source; an uploaded project takes it by a re-seed first, extension_project_create with this projectPath, and a project built from a repository also builds on a push) so the package checks read it.` });
 
     const packaged = project.commit({ "public/NOTES.md": "shipped inside the package\n" }, "packaged markdown").slice(0, 7);
     const withPublic = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], projectPath: project.root, api: API }));
 
-    expect(withPublic.value.stores.chrome.packageBuild.say).toBe(`chrome: the package checks read build ${builtShort}; HEAD ${packaged} has no platform build yet; push it so the package checks read it.`);
+    expect(withPublic.value.stores.chrome.packageBuild.say).toBe(`chrome: the package checks read build ${builtShort}; HEAD ${packaged} has no platform build yet; ${NO_BUILD_ROUTE} so the package checks read it.`);
     expect(withPublic.value.stores.chrome.packageBuild.holds).toBeUndefined();
   });
 });
