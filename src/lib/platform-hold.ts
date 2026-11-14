@@ -65,6 +65,11 @@ function messageOf(body: unknown): string {
 
 export const ALLOWANCE_REFUSAL_CODE = "monthly_cap";
 
+const PLAN_BOUNDARY_CODES: Record<string, string> = {
+  MACOS_RUNNER_NOT_INCLUDED: "Safari builds and App Store submissions are not included on this workspace's plan",
+  MACOS_NOTARIZATION_NOT_INCLUDED: "notarizing macOS executables is not included on this workspace's plan",
+};
+
 export const PRICED_REFUSAL_CODES = new Set(["BUILD_ENV_MISMATCH", "UNSTAMPED_BUILD_BLOCKED"]);
 
 export interface AllowanceRefusal {
@@ -102,18 +107,26 @@ function plainText(value: unknown): string {
  * three facts itself when an older platform sends none. Anything that names
  * a price, an upgrade or the pricing page is dropped rather than relayed, so
  * no tool answer can carry a pitch whatever the platform says.
+ *
+ * A PLAN BOUNDARY IS ANSWERED THE SAME WAY (ledger 748). The macOS runner
+ * and notarization refusals end in an upgrade sentence for the console; here
+ * they are said as what the plan does not include plus the billing page, and
+ * they carry no reset because a plan boundary does not clear with the month.
  */
 export function allowanceRefusal(body: unknown, billingUrl = ""): AllowanceRefusal | null {
   const record = asRecord(body);
+  const code = record ? readPlatformCode(record) : "";
+  const boundary = PLAN_BOUNDARY_CODES[code] ?? "";
 
-  if (!record || readPlatformCode(record) !== ALLOWANCE_REFUSAL_CODE) return null;
+  if (!record || (code !== ALLOWANCE_REFUSAL_CODE && !boundary)) return null;
 
-  const limitReached = plainText(record.limitReached) || "monthly build limit";
-  const resetsAt = instantOf(record.resetsAt);
+  const limitReached = plainText(record.limitReached) || boundary || "monthly build limit";
+  const resetsAt = boundary ? "" : instantOf(record.resetsAt);
   const billing = httpUrl(record.billingUrl) || httpUrl(billingUrl);
-  const said =
-    plainText(record.neutralMessage) ||
-    `This workspace reached its ${limitReached}, so this was refused and nothing ran. ${resetsAt ? `The limit resets at ${resetsAt}.` : "The limit resets at the start of next month (UTC)."}`;
+  const composed = boundary
+    ? `${limitReached.charAt(0).toUpperCase()}${limitReached.slice(1)}, so this was refused and nothing ran.`
+    : `This workspace reached its ${limitReached}, so this was refused and nothing ran. ${resetsAt ? `The limit resets at ${resetsAt}.` : "The limit resets at the start of next month (UTC)."}`;
+  const said = plainText(record.neutralMessage) || composed;
   const message = billing && !said.includes(billing) ? `${said} Manage the plan at ${billing}.` : said;
 
   return { message, limitReached, resetsAt, billingUrl: billing };

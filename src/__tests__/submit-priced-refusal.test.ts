@@ -8,6 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 
+import { allowanceRefusal } from "../lib/platform-hold";
 import { handler as submit } from "../tools/submit-local";
 import { API, useProjectRoutes } from "./fixtures/project-routes";
 
@@ -49,5 +50,42 @@ describe("a submission refused for a spent month names the limit, its reset and 
     expect(out.error.message).toMatch(/^This workspace reached its monthly build limit, so this was refused and nothing ran\. The limit resets at the start of next month \(UTC\)\. Manage the plan at https?:\/\/\S+\/settings\/plan\.$/);
     expect(out.value.billingUrl).toMatch(/\/settings\/plan$/);
     expect(JSON.stringify(out)).not.toMatch(/\$29|upgradeUrl|\/pricing|Pro is/);
+  });
+});
+
+describe("a plan boundary is said without the upgrade sentence the console reads", () => {
+  const platform = useProjectRoutes("extdev-submit-plan-boundary-");
+  const PITCHED = `Safari submissions run on a macOS runner. It is not included on this plan. Upgrade this workspace to submit to the App Store: ${PRICING}`;
+  const PLAIN = "Safari submissions build a signed macOS installer package on a macOS runner, which this workspace's plan does not include, so nothing was dispatched.";
+
+  it("relays the platform's neutral sentence for a Safari submit and drops the pitch and the pricing link", async () => {
+    if (process.platform === "win32") return;
+
+    process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
+    platform.login();
+    platform.routes[`POST ${SUBMIT}`] = () => ({
+      status: 403,
+      body: { code: "MACOS_RUNNER_NOT_INCLUDED", message: PITCHED, upgradeUrl: PRICING, store: "safari", limitReached: "Safari builds and App Store submissions are not included on this workspace's plan", billingUrl: BILLING, neutralMessage: `${PLAIN} Manage the plan at ${BILLING}.` },
+    });
+
+    const out = JSON.parse(await submit({ browsers: ["safari"], buildSha: "b418732", dryRun: false, api: API }));
+
+    expect(out.error.platformCode).toBe("MACOS_RUNNER_NOT_INCLUDED");
+    expect(out.error.message).toBe(`${PLAIN} Manage the plan at ${BILLING}.`);
+    expect(out.value).toMatchObject({ limitReached: "Safari builds and App Store submissions are not included on this workspace's plan", billingUrl: BILLING });
+    expect(out.value).not.toHaveProperty("resetsAt");
+    expect(JSON.stringify(out)).not.toMatch(/upgrade|\/pricing/i);
+  });
+
+  it.each([
+    ["MACOS_RUNNER_NOT_INCLUDED", "Safari builds and App Store submissions are not included on this workspace's plan", "Safari builds and App Store submissions are not included on this workspace's plan, so this was refused and nothing ran."],
+    ["MACOS_NOTARIZATION_NOT_INCLUDED", "notarizing macOS executables is not included on this workspace's plan", "Notarizing macOS executables is not included on this workspace's plan, so this was refused and nothing ran."],
+  ])("composes %s from the code alone when an older platform sends only its upgrade sentence", (code, limitReached, said) => {
+    expect(allowanceRefusal({ code, message: PITCHED, upgradeUrl: PRICING, resetsAt: RESETS }, BILLING)).toEqual({
+      message: `${said} Manage the plan at ${BILLING}.`,
+      limitReached,
+      resetsAt: "",
+      billingUrl: BILLING,
+    });
   });
 });
