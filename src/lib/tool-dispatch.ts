@@ -113,22 +113,26 @@ export function listedTools(tools: ToolModule[], options: ServerOptions): Listed
     }));
 }
 
-/* @invariant EVERY LISTED TOOL CARRIES ITS TITLE TWICE AND ITS FOUR HINTS AS
- * BOOLEANS. The connector directories read the title from the tool's own
- * `title` field (MCP 2025-06-18) and older clients from `annotations.title`,
- * so both are sent with the same words; and readOnlyHint, destructiveHint,
- * idempotentHint and openWorldHint are always explicit true or false, never
- * left out for a reviewer to infer. A projection that lists a tool with fewer
- * actions than the module serves (the hosted extension_auth with status alone,
- * the hosted extension_workspace with its reads alone) names its own title and
- * hints, because the shared policy row describes the whole module.
+/* @invariant EVERY LISTED TOOL CARRIES ITS TITLE ONCE AND ITS FOUR HINTS AS
+ * BOOLEANS. The title is the tool's own `title` field (MCP 2025-06-18), the
+ * one the connector directories read, and `annotations` never repeats it:
+ * the second copy cost about 1,200 characters of a tool list that sat at
+ * 65,882 of its 67,000 budget, room the split of extension_builds into a
+ * read tool and an act tool needs (Cezar's ruling of 2026-11-14). A client
+ * that reads only `annotations.title` shows the tool's name instead. And
+ * readOnlyHint, destructiveHint, idempotentHint and openWorldHint are
+ * always explicit true or false, never left out for a reviewer to infer. A
+ * projection that lists a tool with fewer actions than the module serves
+ * (the hosted extension_auth with status alone, the hosted
+ * extension_workspace with its reads alone) names its own title and hints,
+ * because the shared policy row describes the whole module.
  */
 export function listedToolEntry(tool: ListedTool): {
   name: string;
   title: string;
   description: string;
   inputSchema: Record<string, unknown>;
-  annotations: { title: string } & ToolAnnotations;
+  annotations: ToolAnnotations;
 } {
   const title = tool.title ?? toolTitle(tool.name);
   const hints = tool.annotations ?? TOOL_POLICY[tool.name]?.annotations ?? {
@@ -138,7 +142,7 @@ export function listedToolEntry(tool: ListedTool): {
     openWorldHint: false,
   };
 
-  return { name: tool.name, title, description: tool.description, inputSchema: tool.inputSchema, annotations: { title, ...hints } };
+  return { name: tool.name, title, description: tool.description, inputSchema: tool.inputSchema, annotations: hints };
 }
 
 export function createToolDispatcher(setup: ToolHandlerOptions): (call: RebuiltCall) => Promise<ToolFrame> {

@@ -20,9 +20,11 @@ import { createServer } from "../index";
  * per property and per action; the long prose lives in the answers the
  * server already writes (hint, sayToPerson, nextStep). The ceilings below
  * are measured on JSON.stringify of each listed tool, the bytes a client
- * actually receives. Since ledger 525 every tool also lists its title as
- * the tool's own `title` field, the one the connector directories read,
- * which is about 1,000 characters over the whole list. */
+ * actually receives. Since ledger 525 every tool lists its title as the
+ * tool's own `title` field, the one the connector directories read, and
+ * since ledger 757 only there: `annotations` carries the four hints and no
+ * second copy of the title, which won back about 1,200 characters for the
+ * split of extension_builds. */
 const PER_TOOL = 6_000;
 const WHOLE_LIST = 67_000;
 

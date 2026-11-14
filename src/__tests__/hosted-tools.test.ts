@@ -146,7 +146,7 @@ describe("hosted tool surface", () => {
 
     for (const tool of listed) {
       expect(tool.title, tool.name).toMatch(/^[A-Z]/);
-      expect(tool.annotations?.title, tool.name).toBe(tool.title);
+      expect(tool.annotations, tool.name).not.toHaveProperty("title");
 
       for (const hint of ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"]) {
         expect(typeof (tool.annotations as Record<string, unknown> | undefined)?.[hint], `${tool.name}.${hint}`).toBe("boolean");

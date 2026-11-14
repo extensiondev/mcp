@@ -24,9 +24,9 @@ the projects hint names the sign-in from the MCP client, and the settings hint n
 console's project settings page (`hostedAnswer` in `src/hosted.ts`, pinned by a scan of every
 hint, warning, error message, next step and spoken line in `hosted-tools.test.ts`).
 
-Every tool lists its title twice, as the tool's `title` (MCP 2025-06-18) and as
-`annotations.title`, and every hint is an explicit boolean (`listedToolEntry` in
-`src/lib/tool-dispatch.ts`). A hosted projection with fewer actions than its module names its own
+Every tool lists its title once, as the tool's `title` (MCP 2025-06-18); `annotations` carries
+the four hints and no `title`, so a client that reads only `annotations.title` shows the tool's
+name. Every hint is an explicit boolean (`listedToolEntry` in `src/lib/tool-dispatch.ts`). A hosted projection with fewer actions than its module names its own
 title and hints in `src/hosted.ts`; the rest come from the table in `src/lib/tool-annotations.ts` through `src/lib/tool-policy.ts`. The `download`
 action and its `to` input are not served hosted: they save a package to the caller's disk, which
 a hosted server does not have.
