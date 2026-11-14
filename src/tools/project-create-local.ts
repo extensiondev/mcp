@@ -18,6 +18,7 @@ import { writeCredentialBatch } from "../lib/credentials";
 import { requestDeviceCode } from "../lib/device-flow";
 import { heldCreateGrant, holdCreateGrant, releaseCreateGrant } from "../lib/held-create-grant";
 import { persistTokenResponse } from "../lib/login-flow";
+import { openProjectApi } from "../lib/project-api";
 import { identityHeaders } from "../lib/session-identity";
 import { buildSourceArchive, looksLikeExtensionFolder, sourceManifestPath } from "../lib/source-archive";
 
@@ -59,4 +60,5 @@ export const PROJECT_CREATE_LOCAL: ProjectCreateLocal = {
   findProjectByStoredLogin: (args) => findProjectByStoredLogin(args),
   readWorkspaceBuildAllowance: (args) => readWorkspaceBuildAllowance(args),
   readCreateLogin: (args) => readCreateLogin(args),
+  openStoredLogin: (args) => openProjectApi(args),
 };

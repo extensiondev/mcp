@@ -151,11 +151,70 @@ export interface SourceListing {
   leftOut: { secrets: string[] };
 }
 
+const SECRET_FILE_NAME =
+  /^(?:\.env(?:\..+)?|\.envrc|\.netrc|_netrc|\.git-credentials|id_(?:rsa|dsa|ecdsa|ecdsa_sk|ed25519|ed25519_sk|xmss)|.*\.(?:pem|p8|p12|pfx|key|keystore|jks|ppk)|client_secret.*\.json|.+-firebase-adminsdk-.+\.json)$/i;
+
+const REGISTRY_CONFIG_NAMES = [".npmrc", ".yarnrc.yml"];
+
+const REGISTRY_CREDENTIAL = /(?:_authToken|_auth|_password|npmAuthToken|npmAuthIdent)["']?\s*[=:]\s*(.*)$/i;
+
+const ENVIRONMENT_REFERENCE = /^\$\{[^}]+\}$/;
+
+const PRIVATE_KEY_FIELD = /"private_key"\s*:\s*"-----BEGIN [A-Z ]*PRIVATE KEY-----/;
+
+const SECRET_CONTENT_MAX_BYTES = 1024 * 1024;
+
+/* @invariant A KEY FILE STAYS ON THE MACHINE BY ITS NAME, BEFORE .gitignore
+ * IS READ. `.env` and every `.env.*`, `.envrc`, `.netrc`, `.git-credentials`,
+ * the SSH identity files (never their `.pub` halves), every `*.pem`, `*.p8`
+ * (the App Store Connect AuthKey), `*.p12`, `*.pfx`, `*.key`, `*.keystore`,
+ * `*.jks` and `*.ppk`, and the two names Google gives a downloaded credential
+ * are held back and named in `leftOut.secrets`, because a value in them is a
+ * secret the moment it leaves the machine. The three example forms of `.env`
+ * ship. The platform holds the same list in www
+ * src/services/projects/source-archive.ts and refuses an archive that
+ * carries one; a name added on one side is added on both.
+ */
 export function isSecretFile(name: string): boolean {
   const lower = name.toLowerCase();
   if (SOURCE_SECRET_EXAMPLES.includes(lower)) return false;
 
-  return lower === ".env" || lower.startsWith(".env.") || lower.endsWith(".pem");
+  return SECRET_FILE_NAME.test(lower);
+}
+
+/* @invariant THREE FILES ARE KEY FILES BY WHAT THEY HOLD, BECAUSE THEIR NAMES
+ * ARE ALSO THE NAMES OF ORDINARY PROJECT FILES. `.npmrc` and `.yarnrc.yml`
+ * configure the install the platform runs, so they ship unless a line gives
+ * a registry credential a literal value; a line that reads it from the
+ * environment ships. A service-account key has no name of its own, so a
+ * `.json` file is held back when it carries a `private_key` field holding a
+ * PEM private key. A file that cannot be read here is left to the archive
+ * step, which names the read failure.
+ */
+export function holdsSecret(name: string, absolute: string, bytes: number): boolean {
+  const lower = name.toLowerCase();
+  const registry = REGISTRY_CONFIG_NAMES.includes(lower);
+
+  if ((!registry && !lower.endsWith(".json")) || bytes > SECRET_CONTENT_MAX_BYTES) return false;
+
+  let text: string;
+
+  try {
+    text = fs.readFileSync(absolute, "utf8");
+  } catch {
+    return false;
+  }
+
+  if (!registry) return PRIVATE_KEY_FIELD.test(text);
+
+  return text.split("\n").some((raw) => {
+    const line = raw.trim();
+    if (line.startsWith("#") || line.startsWith(";")) return false;
+
+    const value = (REGISTRY_CREDENTIAL.exec(line)?.[1] ?? "").trim().replace(/^["']|["']$/g, "");
+
+    return value !== "" && !ENVIRONMENT_REFERENCE.test(value);
+  });
 }
 
 function readIgnoreFile(dir: string, base: string): IgnoreRule[] {
@@ -200,7 +259,14 @@ export function collectSourceFiles(root: string): SourceListing {
 
       if (gitignored(relativePath, false, rules)) continue;
 
-      files.push({ path: relativePath, absolute, bytes: fs.statSync(absolute).size });
+      const bytes = fs.statSync(absolute).size;
+
+      if (holdsSecret(entry.name, absolute, bytes)) {
+        secrets.push(relativePath);
+        continue;
+      }
+
+      files.push({ path: relativePath, absolute, bytes });
     }
   };
 

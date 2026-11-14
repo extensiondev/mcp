@@ -357,7 +357,7 @@ Create an extension.dev project from a folder (projectPath, uploaded, no push; a
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `project` | string | no |  | New '<workspace>/<project>'. |
-| `projectPath` | string | no |  | Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). node_modules, dist, .git, .extension-dev, .zip, .crx, .xpi, .env*, *.pem and .gitignore entries stay out; 4 MB zipped at most. On a project whose source was uploaded, this re-seeds it from the new archive and rebuilds it (no token comes back); extension_builds rebuild rebuilds its stored tree without a new upload. |
+| `projectPath` | string | no |  | Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). node_modules, dist, .git, .extension-dev, .zip, .crx, .xpi, .env*, key files and .gitignore entries stay out; 4 MB zipped at most. On an uploaded project with a login this re-seeds and rebuilds it after an approval; extension_builds rebuild rebuilds its stored tree without a new upload. |
 | `repo` | string | no |  | GitHub '<owner>/<repo>' the source is pushed to; instead of projectPath. |
 | `installationId` | string | no |  | Omit; the platform finds it or answers a connect link. |
 | `displayName` | string | no |  | Human name; rename later with extension_workspace configure-project. |
@@ -371,6 +371,7 @@ Create an extension.dev project from a folder (projectPath, uploaded, no push; a
 | `deviceCode` | string | no |  | Resume token; reuse re-reads the outcome. |
 | `waitSeconds` | number | no |  | With deviceCode, seconds the call blocks for approval (0 to 900). |
 | `login` | boolean | no | `true` | Store the minted login. |
+| `approvalId` | string | no |  | Re-seed approval. |
 | `api` | string | no |  | Platform URL; default EXTENSION_DEV_API_URL. |
 
 ## extension_publish

@@ -20,12 +20,37 @@ export function projectSourceUploadUrl(apiBase: string): string {
   return `${apiBase}/api/cli/projects/source`;
 }
 
+export interface SourceReplaceRequest {
+  action: string;
+  scope: Record<string, string>;
+}
+
 export interface SourceUploadReceipt {
   uploadId: string;
   bytes: number;
   files: number;
   manifest: { name: string; version: string };
   expiresAt: string;
+  replace?: SourceReplaceRequest;
+}
+
+export const LOGIN_NOT_ADMITTED_CODE = "NOT_A_PROVISIONING_GRANT";
+
+/* @invariant THE APPROVAL A SOURCE REPLACE ASKS FOR IS THE ONE THE PLATFORM
+ * NAMED. An upload sent with a login answers the act and the scope the
+ * create door will rebuild (the tree it computed and the person the login
+ * belongs to), so the approval is requested with those exact values and
+ * nothing here guesses a tree sha from the local folder.
+ */
+function readReplaceRequest(value: unknown): SourceReplaceRequest | null {
+  const record = asRecord(value);
+  const scope = asRecord(record?.scope);
+  const action = text(record?.action);
+  if (!action || !scope) return null;
+
+  const entries = Object.entries(scope).filter((entry): entry is [string, string] => typeof entry[1] === "string");
+
+  return entries.length === Object.keys(scope).length && entries.length > 0 ? { action, scope: Object.fromEntries(entries) } : null;
 }
 
 export type SourceUploadOutcome =
@@ -59,6 +84,7 @@ export function readUploadReceipt(body: unknown): { ok: true; receipt: SourceUpl
       files: Number(record.files) || 0,
       manifest: { name: text(manifest?.name), version: text(manifest?.version) },
       expiresAt: text(record.expiresAt),
+      ...(readReplaceRequest(record.approvalRequest) ? { replace: readReplaceRequest(record.approvalRequest)! } : {}),
     },
   };
 }

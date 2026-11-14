@@ -78,6 +78,7 @@ export const APPROVAL_POLICY = {
   "extension_settings.store-public-mode": "approval",
   "extension_project.visibility-public": "approval",
   "extension_store.listing-derived": "approval",
+  "extension_project.source": "approval",
   "extension_browsers.captures": "approval",
   "extension_store.mint": "approval",
   "extension_store.disconnect": "console",

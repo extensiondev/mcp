@@ -34,6 +34,7 @@ import { buildCreateBody, DEFAULT_BUILD_COMMAND, type CreateBodySource } from ".
 import {
   projectCreateUrl,
   SOURCE_UPLOAD_CONSUMED_CODE,
+  LOGIN_NOT_ADMITTED_CODE,
   uploadProjectSource,
   type SourceUploadOutcome,
 } from "../lib/project-source-upload";
@@ -70,7 +71,10 @@ import {
 } from "../lib/first-build";
 import { PROJECT_CREATE_LOCAL } from "./project-create-local";
 import { bearerFetch } from "../lib/platform-fetch";
+import { evaluateApproval, platformRequiresApproval, requestApprovalAfterRefusal, type ApprovalGateInput } from "../lib/approval-gate";
+import { projectHeader } from "../lib/request-fetch";
 
+import type { ProjectApi, ProjectApiOpen } from "../lib/project-api";
 import type { SourceArchive } from "../lib/source-archive";
 import type { ProjectFoundByRead } from "../lib/created-project-read";
 
@@ -92,6 +96,7 @@ export interface ProjectCreateLocal extends BatchCreateLocal {
   findProjectByStoredLogin(args: { apiBase: string; project: string; command: string }): Promise<ProjectFoundByRead | null>;
   readWorkspaceBuildAllowance(args: { apiBase: string; workspace: string; command: string }): Promise<BuildAllowance | null>;
   readCreateLogin(args: { data: Record<string, unknown>; apiBase: string; project: string; login: boolean }): CreateLoginRead;
+  openStoredLogin(args: { project: string; api?: string; command: string }): Promise<ProjectApiOpen>;
 }
 
 const COMMAND = "extension_project_create";
@@ -113,7 +118,7 @@ export const schema = {
       },
       projectPath: {
         type: "string",
-        description: `Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). ${SOURCE_SKIPPED_FOLDERS.join(", ")}, ${SOURCE_SKIPPED_EXTENSIONS.join(", ")}, .env*, *.pem and .gitignore entries stay out; 4 MB zipped at most. On a project whose source was uploaded, this re-seeds it from the new archive and rebuilds it (no token comes back); extension_builds rebuild rebuilds its stored tree without a new upload.`,
+        description: `Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). ${SOURCE_SKIPPED_FOLDERS.join(", ")}, ${SOURCE_SKIPPED_EXTENSIONS.join(", ")}, .env*, key files and .gitignore entries stay out; 4 MB zipped at most. On an uploaded project with a login this re-seeds and rebuilds it after an approval; extension_builds rebuild rebuilds its stored tree without a new upload.`,
       },
       repo: {
         type: "string",
@@ -175,6 +180,10 @@ export const schema = {
         type: "boolean",
         default: true,
         description: "Store the minted login.",
+      },
+      approvalId: {
+        type: "string",
+        description: "Re-seed approval.",
       },
       api: API_BASE,
     },
@@ -361,6 +370,7 @@ export type ProjectCreateArgs = {
   deviceCode?: string;
   waitSeconds?: unknown;
   login?: unknown;
+  approvalId?: string;
   api?: string;
 };
 
@@ -439,6 +449,12 @@ export async function createProject(args: ProjectCreateArgs, local: ProjectCreat
 
   const refusal = source ? null : sourceRequired(apiBase, local);
   const resumeDeviceCode = String(args.deviceCode || "").trim();
+
+  if (source?.kind === "upload" && !resumeDeviceCode) {
+    const replaced = await replaceWithStoredLogin({ apiBase, project, args, source, callStartedAt }, local);
+    if (replaced !== null) return replaced;
+  }
+
   const held = await local.heldCreateGrant(apiBase, resumeDeviceCode, project);
 
   if (held) {
@@ -677,6 +693,11 @@ async function finishFromPoll(
       }
     }
 
+    if (stored && ctx.source.kind === "upload") {
+      const replaced = await replaceWithStoredLogin({ apiBase: ctx.apiBase, project: ctx.project, args: ctx.args, source: ctx.source, callStartedAt: ctx.callStartedAt }, local);
+      if (replaced !== null) return replaced;
+    }
+
     return envelope({
       ok: stored !== null,
       command: COMMAND,
@@ -714,6 +735,64 @@ async function finishFromPoll(
   }, local);
 }
 
+/* @invariant A SECOND ARCHIVE FOR A PROJECT THIS MACHINE IS SIGNED IN TO
+ * GOES UNDER THAT LOGIN, NEVER A NEW PROVISIONING GRANT. The platform mints
+ * a grant only for a project that does not exist, so a re-seed asked through
+ * the device flow ended in a login and no upload. When a stored login opens
+ * the project, the folder is uploaded with it, the approval the platform
+ * named for that tree is requested (or verified, when the call carries its
+ * id), and the create door replaces the source under it. A platform that
+ * does not admit a login at the upload door, or a project whose source is a
+ * GitHub repository, answers the same refusal a login always got there, and
+ * the call falls back to the device flow as before.
+ */
+const LOGIN_NOT_ADMITTED = new WeakSet<object>();
+
+async function replaceWithStoredLogin(
+  ctx: { apiBase: string; project: string; args: CreateArgs; source: CreateSource; callStartedAt: number },
+  local: ProjectCreateLocal,
+): Promise<string | null> {
+  if (LOGIN_NOT_ADMITTED.has(ctx.args)) return null;
+
+  const opened = await local.openStoredLogin({ command: COMMAND, project: ctx.project, api: ctx.args.api });
+  if (!opened.ok) return null;
+
+  const answer = await sendCreate(
+    {
+      ...ctx,
+      deviceCode: "",
+      held: { grant: opened.api.token, grantExpiresAt: 0 },
+      resumed: false,
+      callBlocks: false,
+      login: opened.api,
+    },
+    false,
+    () => undefined,
+    local,
+  );
+
+  if (answer === null) LOGIN_NOT_ADMITTED.add(ctx.args);
+
+  return answer;
+}
+
+function replaceGate(ctx: { project: string; args: CreateArgs; source: CreateSource }, api: ProjectApi, request: { action: string; scope: Record<string, string> }): ApprovalGateInput {
+  const root = ctx.source.kind === "upload" ? ctx.source.root : "";
+
+  return {
+    command: COMMAND,
+    action: request.action,
+    scope: request.scope,
+    description: `Replace the source of ${ctx.project} with the folder ${root} and build it.`,
+    nextCall: { tool: COMMAND, args: { project: ctx.project, projectPath: root } },
+    token: api.token,
+    ref: api.ref,
+    api: ctx.args.api,
+    reason: "It replaces the files the project builds from, so a workspace member approves it first.",
+    enabled: true,
+  };
+}
+
 type CreateArgs = {
   repo?: string;
   installationId?: string;
@@ -725,6 +804,8 @@ type CreateArgs = {
   browsers?: string[];
   outputDirectories?: Record<string, unknown>;
   login?: unknown;
+  approvalId?: string;
+  api?: string;
 };
 
 async function createWithGrant(ctx: {
@@ -749,7 +830,7 @@ async function createWithGrant(ctx: {
 
   if (!keepGrant) await local.releaseCreateGrant(ctx.apiBase, ctx.deviceCode);
 
-  return answer;
+  return answer ?? fail("CreateError", `The platform did not take the create request for ${ctx.project}.`, "create-failed", "E_PLATFORM");
 }
 
 async function sendCreate(
@@ -763,12 +844,15 @@ async function sendCreate(
     held: HeldCreateGrant;
     resumed: boolean;
     callBlocks: boolean;
+    login?: ProjectApi;
   },
   kept: boolean,
   keepGrant: () => void,
   local: ProjectCreateLocal,
-): Promise<string> {
+): Promise<string | null> {
   const token = ctx.held.grant;
+  const named = ctx.login ? projectHeader({ workspace: ctx.project.split("/")[0], project: ctx.project.split("/")[1] }) : {};
+  let replaceApprovalId = "";
   const [wantWorkspace = "", wantProject = ""] = ctx.project.split("/");
   const url = projectCreateUrl(ctx.apiBase);
 
@@ -789,7 +873,9 @@ async function sendCreate(
         consoleUrl: consoleBase(ctx.apiBase),
         ...(kept ? { deviceCode: ctx.deviceCode } : {}),
       },
-      hint: kept
+      hint: ctx.login
+        ? `The platform may still be replacing the source of ${ctx.project}. Read extension_builds (action: list, project: '${ctx.project}') before sending the folder again: a build of the new tree there means it landed.`
+        : kept
         ? `The platform may still be finishing ${ctx.project}. Call extension_project_create again with this same deviceCode and the same arguments to learn the outcome; that call resumes without a second approval, and a new call would need one. The grant is held on this machine, readable only by this user, until ${heldUntilSentence(ctx.held)}, and with it the platform answers with this create's outcome (created, still creating, or refused) and never creates ${ctx.project} twice. ${CREATE_CEILING_SENTENCE}`
         : `Do not create it again blind: the grant could not be kept on this machine, and a second create racing the first is two builds claiming one name. Look for ${ctx.project} in the console at ${consoleBase(ctx.apiBase)}. If it is there, sign in with extension_auth (action: login, project: '${ctx.project}'); only if it is not, call extension_project_create again.`,
     });
@@ -803,10 +889,21 @@ async function sendCreate(
     const [owner = "", repoName = ""] = ctx.source.repo.split("/");
     bodySource = { kind: "github", owner, repoName, installationId: ctx.args.installationId };
   } else {
-    const upload = await uploadProjectSource({ apiBase: ctx.apiBase, token, zip: ctx.source.zip, identity: local.identityHeaders(COMMAND) });
+    const upload = await uploadProjectSource({ apiBase: ctx.apiBase, token, zip: ctx.source.zip, identity: { ...local.identityHeaders(COMMAND), ...named } });
+
+    if (ctx.login && !upload.ok && upload.kind === "refused" && (upload.status === 401 || upload.code === LOGIN_NOT_ADMITTED_CODE)) return null;
 
     if (!upload.ok) {
-      return uploadFailed(upload, { ...ctx, wantWorkspace, wantProject, kept, keepGrant });
+      return uploadFailed(upload, { ...ctx, wantWorkspace, wantProject, kept, keepGrant, viaLogin: Boolean(ctx.login) });
+    }
+
+    if (ctx.login) {
+      if (!upload.receipt.replace) return null;
+
+      const gate = await evaluateApproval({ ...replaceGate(ctx, ctx.login, upload.receipt.replace), approvalId: String(ctx.args.approvalId || "").trim() || undefined });
+      if (gate.blocked) return gate.envelope;
+
+      replaceApprovalId = gate.approvalId || String(ctx.args.approvalId || "").trim();
     }
 
     uploaded = { bytes: upload.receipt.bytes || ctx.source.bytes, files: upload.receipt.files || ctx.source.files };
@@ -825,13 +922,14 @@ async function sendCreate(
     browsers: ctx.args.browsers,
     outputDirectories: ctx.args.outputDirectories,
   });
+  const sent = ctx.login ? { ...body, project: ctx.project, ...(replaceApprovalId ? { approvalId: replaceApprovalId } : {}) } : body;
   let res: Response;
   const deadline = createRequestDeadline(ctx.callStartedAt, ctx.callBlocks);
   const send = (signal: AbortSignal) =>
     bearerFetch(url, {
       method: "POST",
-      headers: { authorization: `Bearer ${token}`, "content-type": "application/json", ...local.identityHeaders(COMMAND) },
-      body: JSON.stringify(body),
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json", ...local.identityHeaders(COMMAND), ...named },
+      body: JSON.stringify(sent),
       signal,
     });
 
@@ -933,6 +1031,17 @@ async function sendCreate(
         ? `The platform has been creating ${ctx.project} for ${creatingForWords(age.seconds)} (since ${age.startedAtIso}) from the earlier request with this grant, and started nothing new. Call extension_project_create again with this same deviceCode and the same arguments in about ${waitSeconds} s to read the outcome; no new approval is needed while the grant lasts (until ${heldUntilSentence(ctx.held)}).`
         : `The platform is still creating ${ctx.project} from an earlier request with this grant, and started nothing new. The grant could not be kept on this machine, so look for ${ctx.project} in the console at ${consoleBase(ctx.apiBase)} in a minute.`,
     });
+  }
+
+  if (ctx.login && ctx.source.kind === "upload" && platformRequiresApproval(res, data)) {
+    const asked = (data as { approvalRequest?: { action?: unknown; scope?: unknown } }).approvalRequest;
+
+    return requestApprovalAfterRefusal(
+      replaceGate(ctx, ctx.login, {
+        action: String(asked?.action || "extension_project.source"),
+        scope: (asked?.scope && typeof asked.scope === "object" ? asked.scope : {}) as Record<string, string>,
+      }),
+    );
   }
 
   if (!res.ok) {
@@ -1121,7 +1230,7 @@ async function sendCreate(
         buildStep,
       ],
     },
-    hint: `${opening} ${reseeded ? reseedBuildSentence(firstBuild, ref, buildsPageUrl) : firstBuildSentence(firstBuild, buildsPageUrl)} ${login.sentence} The provisioning grant is spent and not kept on this machine; the other files this tool leaves are its install id (install.json) and a note that ${ref} exists on this server (created-projects.json), so extension_auth does not doubt it. Next: ${
+    hint: `${opening} ${reseeded ? reseedBuildSentence(firstBuild, ref, buildsPageUrl) : firstBuildSentence(firstBuild, buildsPageUrl)} ${login.sentence} ${ctx.login ? `It ran under the stored login for ${ref}${replaceApprovalId ? ` and approval ${replaceApprovalId}, which is spent` : ""}; no provisioning grant was asked for, and the files` : "The provisioning grant is spent and not kept on this machine; the other files"} this tool leaves are its install id (install.json) and a note that ${ref} exists on this server (created-projects.json), so extension_auth does not doubt it. Next: ${
       signedIn ? "" : `extension_auth (action: login, project: '${ref}') to mint the project token, then `
     }${buildNext} ${madeSentence(links)}`,
     warnings: [
@@ -1155,6 +1264,7 @@ function uploadFailed(
     wantProject: string;
     kept: boolean;
     keepGrant: () => void;
+    viaLogin?: boolean;
   },
 ): string {
   if (upload.kind === "refused") {
@@ -1174,7 +1284,9 @@ function uploadFailed(
   }
 
   ctx.keepGrant();
-  const resume = ctx.kept
+  const resume = ctx.viaLogin
+    ? "then call extension_project_create again with the same arguments; it runs under the stored login"
+    : ctx.kept
     ? `then call extension_project_create again with this same deviceCode and the same arguments; the grant stays held on this machine until ${heldUntilSentence(ctx.held)}, so no second approval is needed`
     : "then call extension_project_create again; the grant could not be kept on this machine, so that call asks for a new approval";
 

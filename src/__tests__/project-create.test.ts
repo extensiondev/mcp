@@ -11,6 +11,8 @@ import { readCredentials } from "../lib/credentials";
 import { registerKernelHooks } from "../lib/kernel-hooks";
 import { installLocalKernelHooks } from "../lib/local-kernel-hooks";
 import { pendingCreate } from "../lib/pending-creates";
+import { actionFingerprint } from "../lib/approval-gate";
+import { collectSourceFiles } from "../lib/source-archive";
 import { readZipEntry, readZipEntryNames } from "../lib/zip-entries";
 
 const API = "https://api.test";
@@ -350,6 +352,66 @@ describe("extension_project_create", () => {
     expect(out.value.deviceCode).toBe("dev-code");
     expect(out.hint).toContain("same deviceCode");
     expect(calls.some((c) => c.url.endsWith("/api/cli/projects/create"))).toBe(false);
+  });
+
+  it("keeps the key files a project folder holds on the machine and names each, with no .gitignore listing them", () => {
+    const fromEnvironment = ["$", "{NPM_TOKEN}"].join("");
+    const dir = extensionFolder("keys", {
+      ".gitignore": "",
+      ".npmrc": "//registry.npmjs.org/:_authToken=npm_abcdef0123456789\n",
+      "packages/ui/.npmrc": `auto-install-peers=true\n# _authToken=old\n//registry.npmjs.org/:_authToken=${fromEnvironment}\n`,
+      ".yarnrc.yml": 'npmScopes:\n  acme:\n    npmAuthToken: "ffff-0000"\n',
+      ".netrc": "machine github.com login x password y",
+      "safari/AuthKey_TEST.p8": "-----BEGIN PRIVATE KEY-----",
+      "certs/developer.p12": "binary",
+      "certs/server.key": "binary",
+      "android/release.keystore": "binary",
+      "android/upload.jks": "binary",
+      "keys/id_rsa": "-----BEGIN OPENSSH PRIVATE KEY-----",
+      "keys/id_rsa.pub": "ssh-rsa AAAA",
+      "id_ed25519": "-----BEGIN OPENSSH PRIVATE KEY-----",
+      "client_secret_1234-abc.apps.googleusercontent.com.json": "{}",
+      "acme-firebase-adminsdk-x1y2z-0123456789.json": "{}",
+      "config/acme-prod-1a2b3c4d5e6f.json": '{ "type": "service_account", "private_key": "-----BEGIN PRIVATE KEY-----\\nMIIE" }',
+      "src/keyboard.json": '{ "private_key": "see the build env" }',
+      "src/key.ts": "export const key = 1;",
+    });
+
+    const listing = collectSourceFiles(dir);
+
+    expect(listing.leftOut.secrets).toEqual([
+      ".env",
+      ".netrc",
+      ".npmrc",
+      ".yarnrc.yml",
+      "acme-firebase-adminsdk-x1y2z-0123456789.json",
+      "android/release.keystore",
+      "android/upload.jks",
+      "certs/developer.p12",
+      "certs/key.pem",
+      "certs/server.key",
+      "client_secret_1234-abc.apps.googleusercontent.com.json",
+      "config/.env.local",
+      "config/acme-prod-1a2b3c4d5e6f.json",
+      "id_ed25519",
+      "keys/id_rsa",
+      "safari/AuthKey_TEST.p8",
+    ]);
+
+    expect(listing.files.map((file) => file.path)).toEqual([
+      ".env.example",
+      ".gitignore",
+      "keys/id_rsa.pub",
+      "logs/a.log",
+      "manifest.json",
+      "package.json",
+      "packages/ui/.npmrc",
+      "secret.txt",
+      "src/content.js",
+      "src/key.ts",
+      "src/keyboard.json",
+      "src/old.bak",
+    ]);
   });
 
   it("489: calls a 409 SOURCE_UPLOAD_CONSUMED create unconfirmed, never created and never failed", async () => {
@@ -1087,28 +1149,62 @@ describe("extension_project_create", () => {
     },
   };
 
-  async function reseedCall(create: Route, loggedIn: boolean) {
-    if (loggedIn) {
-      const { writeCredentials } = await import("../lib/credentials");
-      writeCredentials({ version: 1, token: "ghost.sig", workspaceSlug: "acme", projectSlug: "ghost-app", expiresAt: FUTURE + 3600, api: API });
-    }
+  const REPLACE = { action: "extension_project.source", scope: { person: "octocat", sourceSha: "c".repeat(40) } };
 
-    const dir = extensionFolder("ext");
-    const { fn } = createFetch({ token: [{ status: 200, body: grantBody }], source: UPLOADED, create });
+  async function storedLogin() {
+    const { writeCredentials } = await import("../lib/credentials");
+    writeCredentials({ version: 1, token: "ghost.sig", workspaceSlug: "acme", projectSlug: "ghost-app", expiresAt: FUTURE + 3600, api: API });
+  }
+
+  function loginFetch(routes: { source?: Route; create?: Route; approval?: Route }) {
+    const { fn, calls } = createFetch({
+      token: [{ status: 200, body: { ...grantBody, token: "ghost.sig", tokenKind: "project" } }],
+      source: routes.source ?? { status: 200, body: { ...UPLOADED.body, approvalRequest: REPLACE } },
+      create: routes.create,
+    });
+    const seen: Array<{ url: string; init?: RequestInit }> = [];
     const routed = vi.fn(async (url: any, init?: RequestInit) => {
-      if (String(url).endsWith("/api/workspaces/acme/plan")) {
+      const href = String(url);
+      seen.push({ url: href, init });
+
+      if (href.endsWith("/api/workspaces/acme/plan")) {
         return jsonResponse({ plan: "pro", limits: { buildsPerMonth: 350, projects: 10 }, used: { buildsThisMonth: 10, projects: 3 } });
+      }
+
+      if (href.endsWith("/api/cli/whoami")) {
+        return jsonResponse({ login: "acme/ghost-app", projectId: "prj_old", workspaceSlug: "acme", projectSlug: "ghost-app" });
+      }
+
+      if (href.endsWith("/api/cli/approvals")) {
+        return jsonResponse({ approvalId: "apr_new", approvalUrl: "https://extension.dev/device/approve/apr_new", expiresAt: "2099-01-01T00:00:00.000Z", description: "Replace the source of ghost-app." }, 201);
+      }
+
+      if (href.includes("/api/cli/approvals/")) {
+        const route = routes.approval ?? {
+          status: 200,
+          body: { status: "approved", fingerprint: actionFingerprint(REPLACE.action, REPLACE.scope), expiresAt: "2099-01-01T00:00:00.000Z", used: false },
+        };
+
+        return jsonResponse(route.body, route.status);
       }
 
       return fn(url, init);
     });
     vi.stubGlobal("fetch", routed);
 
-    return JSON.parse(await handler({ project: "acme/ghost-app", projectPath: dir, deviceCode: "dev-code" }));
+    return { seen, calls };
+  }
+
+  async function reseedCall(create: Route) {
+    await storedLogin();
+    const dir = extensionFolder("ext");
+    loginFetch({ create });
+
+    return JSON.parse(await handler({ project: "acme/ghost-app", projectPath: dir, approvalId: "apr_ok" }));
   }
 
   it("539: a new archive on an existing uploaded project re-seeds it: says the files written and removed, names the dispatched build and asks no login approval", async () => {
-    const out = await reseedCall(RESEEDED, true);
+    const out = await reseedCall(RESEEDED);
 
     expect(out.ok).toBe(true);
     expect(out.status).toBe("reseeded");
@@ -1123,6 +1219,8 @@ describe("extension_project_create", () => {
     expect(out.hint).toContain("Its build was dispatched; https://console.test/acme/ghost-app/builds/b-42 tracks it.");
     expect(out.hint).toContain("login this machine already holds for acme/ghost-app still serves it");
     expect(out.hint).not.toContain("one more approval");
+    expect(out.hint).toContain("ran under the stored login for acme/ghost-app and approval apr_ok");
+    expect(out.hint).not.toContain("provisioning grant is spent");
     expect(out.hint).not.toContain("first build");
     expect(out.value.nextSteps.join(" ")).not.toContain("extension_auth");
     expect(out.warnings ?? []).toEqual([]);
@@ -1139,7 +1237,6 @@ describe("extension_project_create", () => {
           initialBuild: { dispatched: false, reason: "already_dispatched", hint: "This archive is the tree the project already built." },
         },
       },
-      true,
     );
 
     expect(out.ok).toBe(true);
@@ -1155,14 +1252,77 @@ describe("extension_project_create", () => {
     expect(out.warnings ?? []).toEqual([]);
   });
 
-  it("539: a re-seed on a machine with no login for the project names the login call without calling it one more approval", async () => {
-    const out = await reseedCall(RESEEDED, false);
+  it("sends a second archive under the stored login, never a device code: the upload and the create carry the login and the project, and the create carries the approval", async () => {
+    await storedLogin();
+    const dir = extensionFolder("ext");
+    const { seen } = loginFetch({ create: RESEEDED });
+
+    const out = JSON.parse(await handler({ project: "acme/ghost-app", projectPath: dir, approvalId: "apr_ok" }));
 
     expect(out.status).toBe("reseeded");
-    expect(out.value.login).toMatchObject({ stored: false, held: false, reason: "reseeded" });
-    expect(out.hint).toContain("this machine holds no login for acme/ghost-app");
-    expect(out.hint).not.toContain("one more approval");
-    expect(out.value.nextSteps[0]).toContain("extension_auth (action: login, project: 'acme/ghost-app')");
+    expect(seen.some((call) => call.url.endsWith("/api/cli/device/code"))).toBe(false);
+
+    const upload = seen.find((call) => call.url.endsWith("/api/cli/projects/source"))!;
+    const create = seen.find((call) => call.url.endsWith("/api/cli/projects/create"))!;
+
+    for (const call of [upload, create]) {
+      const headers = call.init!.headers as Record<string, string>;
+      expect(headers.authorization).toBe("Bearer ghost.sig");
+      expect(headers["x-extensiondev-project"]).toBe("acme/ghost-app");
+    }
+
+    expect(JSON.parse(String(create.init!.body))).toMatchObject({ project: "acme/ghost-app", source: { uploadId: "upl_1" }, approvalId: "apr_ok" });
+  });
+
+  it("asks for the approval the platform named for that tree and person, and sends no create until it is given", async () => {
+    await storedLogin();
+    const dir = extensionFolder("ext");
+    const { seen } = loginFetch({ create: RESEEDED });
+
+    const out = JSON.parse(await handler({ project: "acme/ghost-app", projectPath: dir }));
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("approval-required");
+    expect(out.value.approvalId).toBe("apr_new");
+    expect(out.value.approvalUrl).toBe("https://extension.dev/device/approve/apr_new");
+
+    const asked = JSON.parse(String(seen.find((call) => call.url.endsWith("/api/cli/approvals"))!.init!.body));
+
+    expect(asked.action).toBe("extension_project.source");
+    expect(asked.scope).toEqual(REPLACE.scope);
+    expect(asked.fingerprint).toBe(actionFingerprint(REPLACE.action, REPLACE.scope));
+    expect(seen.some((call) => call.url.endsWith("/api/cli/projects/create"))).toBe(false);
+    expect(out.hint).toContain("extension_project_create");
+    expect(out.hint).toContain("apr_new");
+  });
+
+  it("refuses an approval of another tree before the create is sent", async () => {
+    await storedLogin();
+    const dir = extensionFolder("ext");
+    const { seen } = loginFetch({
+      create: RESEEDED,
+      approval: { status: 200, body: { status: "approved", fingerprint: "f".repeat(64), expiresAt: "2099-01-01T00:00:00.000Z", used: false } },
+    });
+
+    const out = JSON.parse(await handler({ project: "acme/ghost-app", projectPath: dir, approvalId: "apr_other" }));
+
+    expect(out.ok).toBe(false);
+    expect(out.error.name).toBe("ApprovalScopeMismatch");
+    expect(seen.some((call) => call.url.endsWith("/api/cli/projects/create"))).toBe(false);
+  });
+
+  it("falls back to the device flow, after one upload, when the platform does not admit the login at the upload door", async () => {
+    await storedLogin();
+    const dir = extensionFolder("ext");
+    const { seen } = loginFetch({
+      source: { status: 403, body: { code: "NOT_A_PROVISIONING_GRANT", message: "This endpoint only accepts a provisioning grant." } },
+    });
+
+    const out = JSON.parse(await handler({ project: "acme/ghost-app", projectPath: dir, waitSeconds: 1 }));
+
+    expect(seen.some((call) => call.url.endsWith("/api/cli/device/code"))).toBe(true);
+    expect(seen.filter((call) => call.url.endsWith("/api/cli/projects/source"))).toHaveLength(1);
+    expect(out.status).toBe("project-exists-logged-in");
   });
 
   it("539: PROJECT_EXISTS on an upload says a new archive re-seeds only an uploaded project, and names rebuild rather than a push", async () => {
@@ -1185,7 +1345,7 @@ describe("extension_project_create", () => {
 
   it("539: says in its description that projectPath on an existing uploaded project re-seeds and rebuilds it", () => {
     expect(schema.description).toContain("again: re-seed and rebuild");
-    expect(schema.inputSchema.properties.projectPath.description).toContain("re-seeds it from the new archive and rebuilds it");
+    expect(schema.inputSchema.properties.projectPath.description).toContain("with a login this re-seeds and rebuilds it after an approval");
     expect(schema.inputSchema.properties.projectPath.description).toContain("extension_builds rebuild rebuilds its stored tree without a new upload");
   });
 
@@ -1234,6 +1394,7 @@ describe("extension_project_create", () => {
       findProjectByStoredLogin: vi.fn(async () => null),
       readWorkspaceBuildAllowance: vi.fn(async () => null),
       readCreateLogin: vi.fn(() => ({ login: { stored: true, project: "acme/ghost-app" }, sentence: "The login is stored." })),
+      openStoredLogin: vi.fn(async () => ({ ok: false as const, reason: "no-login" as const, message: "No login." })),
     } as unknown as ProjectCreateLocal;
     const state = {
       mintedApproval: vi.fn(async () => null),

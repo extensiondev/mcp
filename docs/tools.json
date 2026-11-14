@@ -1574,7 +1574,7 @@
           "name": "projectPath",
           "type": "string",
           "required": false,
-          "description": "Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). node_modules, dist, .git, .extension-dev, .zip, .crx, .xpi, .env*, *.pem and .gitignore entries stay out; 4 MB zipped at most. On a project whose source was uploaded, this re-seeds it from the new archive and rebuilds it (no token comes back); extension_builds rebuild rebuilds its stored tree without a new upload."
+          "description": "Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). node_modules, dist, .git, .extension-dev, .zip, .crx, .xpi, .env*, key files and .gitignore entries stay out; 4 MB zipped at most. On an uploaded project with a login this re-seeds and rebuilds it after an approval; extension_builds rebuild rebuilds its stored tree without a new upload."
         },
         {
           "name": "repo",
@@ -1660,6 +1660,12 @@
           "required": false,
           "default": true,
           "description": "Store the minted login."
+        },
+        {
+          "name": "approvalId",
+          "type": "string",
+          "required": false,
+          "description": "Re-seed approval."
         },
         {
           "name": "api",
