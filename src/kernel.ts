@@ -25,6 +25,8 @@ export type { ApprovalState, HeldBatch, MintedApproval, PendingCreate, RememberA
 export { approvalSubjectPhrase, subjectOf } from "./lib/approval-subject";
 export { readJson } from "./lib/approval-verify";
 export { askingOnly, runAskingOnly } from "./lib/ask-only";
+export { memoryShelf, readCarriedMemory, scratchShelf, withCallMemory } from "./lib/call-memory";
+export type { CarriedMemory } from "./lib/call-memory";
 export { BROWSER_CAPTURES_ACTION, CAPTURE_BROWSERS, approvalBody as captureApprovalBody, browserDisplayName, capturesDigest, capturesFolder, isCaptureBrowser, majorVersion, readCapturedIn, syncBody } from "./lib/browser-captures";
 export type { CaptureBrowser, CapturesRead } from "./lib/browser-captures";
 export { API_BASE, PROJECT_PATH, REAL_BROWSERS } from "./lib/common-schema";
@@ -57,7 +59,8 @@ export type { PageOpening } from "./lib/kernel-hooks";
 export { expiredLoginFor, expiredLoginRefusal, loginExpiredRefusal, renewCall, startLoginRenewal } from "./lib/login-expired";
 export { fetchLoginConfig, persistTokenResponse, resolveApiBase, safeApiBase, tokenTtlNote } from "./lib/login-flow";
 export { mcpOrigins } from "./lib/origins";
-export { TRANSIENT_READ_STATUSES, WAIT_SECONDS_DEFAULT, WAIT_SECONDS_MAX, missesSentence, outcomeClock, waitBound } from "./lib/outcome-clock";
+export { TRANSIENT_READ_STATUSES, WAIT_SECONDS_DEFAULT, WAIT_SECONDS_MAX, missesSentence, outcomeClock, underCallDeadline, underWaitDeadline, waitBound, withCallDeadline } from "./lib/outcome-clock";
+export type { CallDeadline, WaitCut } from "./lib/outcome-clock";
 export { GRANT_QUERY, REGISTRY_TOKEN_QUERY, artifactWithAddress, channelXpiAddress, isPackageArtifact, packageAddress, packageAddressMode, packageFileOf, shareGrantOf, updateManifestAddress } from "./lib/package-address";
 export type { PackageScope } from "./lib/package-address";
 export { PLATFORM_DISPATCH_TIMEOUT_MS, bearerFetch, platformFetch, withoutRedirects } from "./lib/platform-fetch";

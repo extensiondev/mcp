@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { isoSeconds } from "./builds-list-row";
+import { memoryShelf } from "./call-memory";
 
 export interface BuildDispatch {
   sha: string;
@@ -24,7 +25,11 @@ export const UNRECORDED_BACKOFF_CAP_SECONDS = 15;
 const DISPATCHES_PER_PROJECT = 32;
 const PROJECTS_LIMIT = 128;
 
-const dispatches = new Map<string, BuildDispatch[]>();
+function isDispatchList(value: unknown): value is BuildDispatch[] {
+  return Array.isArray(value) && value.length <= DISPATCHES_PER_PROJECT && value.every((entry) => Boolean(entry) && typeof entry === "object" && typeof (entry as BuildDispatch).sha === "string" && typeof (entry as BuildDispatch).dispatchedAt === "string");
+}
+
+const dispatched = (): Map<string, BuildDispatch[]> => memoryShelf("build-dispatches", isDispatchList);
 
 function scopeKey(scope: DispatchScope): string {
   return `${scope.base}\n${scope.projectId}`;
@@ -43,6 +48,7 @@ export function rememberBuildDispatch(scope: DispatchScope, sha: string, dispatc
   const clean = sha.trim().toLowerCase();
   if (!clean) return;
 
+  const dispatches = dispatched();
   const kept = (dispatches.get(key) ?? []).filter((entry) => !sameSha(entry.sha, clean));
   kept.unshift({ sha: clean, dispatchedAt: isoSeconds(dispatchedAt) || dispatchedAt });
   dispatches.delete(key);
@@ -59,15 +65,16 @@ export function buildDispatchOf(scope: DispatchScope, sha: string): BuildDispatc
   const clean = sha.trim();
   if (!clean) return null;
 
-  return (dispatches.get(scopeKey(scope)) ?? []).find((entry) => sameSha(entry.sha, clean)) ?? null;
+  return (dispatched().get(scopeKey(scope)) ?? []).find((entry) => sameSha(entry.sha, clean)) ?? null;
 }
 
 export function latestBuildDispatch(scope: DispatchScope): BuildDispatch | null {
-  return dispatches.get(scopeKey(scope))?.[0] ?? null;
+  return dispatched().get(scopeKey(scope))?.[0] ?? null;
 }
 
 export function forgetBuildDispatch(scope: DispatchScope, sha: string): void {
   const key = scopeKey(scope);
+  const dispatches = dispatched();
   const kept = (dispatches.get(key) ?? []).filter((entry) => !sameSha(entry.sha, sha));
 
   if (kept.length) dispatches.set(key, kept);

@@ -354,7 +354,7 @@ describe("the forwarder's login goes only to its own www and its own lane", () =
     expect(fetchImpl).not.toHaveBeenCalled();
 
     const off = JSON.parse(await forwardCall("extension_release_status", {}, local, deps));
-    expect(off).toMatchObject({ ok: false, status: "hosted-off", error: { code: "E_TOOL_DISABLED" }, hint: expect.stringContaining("Unset EXTENSION_DEV_HOSTED") });
+    expect(off).toMatchObject({ ok: false, status: "hosted-off", error: { code: "E_PLATFORM" }, hint: expect.stringContaining("Unset EXTENSION_DEV_HOSTED") });
     expect(JSON.parse(await forwardCall("extension_release_status", { api: "https://staging.extension.dev" }, local, deps))).toMatchObject({ status: "hosted-unpaired" });
   });
 });

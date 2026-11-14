@@ -22,7 +22,9 @@ import { credentialsPath, writeCredentials } from "../lib/credentials";
 import { envelope as envelopeOf } from "../lib/envelope";
 import { forgetForwardCredentials } from "../lib/forward-credential";
 import { runAskingOnly } from "../lib/ask-only";
+import { forgetCarriedMemory } from "../lib/forward-lane-answer";
 import { forwardCall } from "../lib/hosted-forwarder";
+import { outcomeClock } from "../lib/outcome-clock";
 import { createToolDispatcher } from "../lib/tool-dispatch";
 import { tools } from "../index";
 import { solidPng } from "./fixtures/png";
@@ -75,6 +77,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   forgetForwardCredentials();
+  forgetCarriedMemory();
 
   for (const [key, value] of Object.entries(saved)) {
     if (value === undefined) delete process.env[key];
@@ -349,6 +352,7 @@ function stubLane(answers: unknown[], exchange = 200) {
     const next = answers.shift();
 
     if (next instanceof Error) throw next;
+    if (next instanceof Response) return next;
 
     return new Response(JSON.stringify(next), { status: 200 });
   });
@@ -592,5 +596,171 @@ describe("the forwarder", () => {
     }
 
     expect(out).toMatchObject({ value: { file: path.join(root, "STORE.md") }, hint: `Read ${path.join(root, "STORE.md")}. Then go on.` });
+  });
+});
+
+const PROMOTE = { project: "acme/web", buildId: "abc1234", channel: "stable" };
+const IN_FLIGHT = { ok: false, status: "act-in-flight", error: { code: "E_ACT_IN_FLIGHT", message: "This act was already sent and has not reported an outcome yet." }, value: { idempotencyKey: "k" } };
+const PROMOTED = JSON.parse(envelopeOf({ ok: true, command: "extension_release_promote", status: "promoted", value: { channel: "stable" } }));
+const edge = (status: number, body: string, headers: Record<string, string> = {}) => new Response(body, { status, headers });
+const forwarded = async (tool: string, args: Record<string, unknown>) => JSON.parse(await forwardCall(tool, args, async () => "local", FORWARDING));
+
+describe("the forwarder reads a lane answer by its status, and never reports an act that may have run as one that did not", () => {
+  it("answers a 504 or a 502 on an act as may have run, with its key and the record to read first", async () => {
+    for (const status of [504, 502]) {
+      const { lane } = stubLane([edge(status, "An error occurred with this application.\nFUNCTION_INVOCATION_TIMEOUT"), edge(status, "An error occurred with this application.\nFUNCTION_INVOCATION_TIMEOUT")]);
+      const out = await forwarded("extension_release_promote", PROMOTE);
+      const keys = lane().map((hit) => hit.headers["idempotency-key"]);
+
+      expect(out).toMatchObject({ ok: false, status: "act-unconfirmed", error: { code: "E_PLATFORM" }, value: { httpStatus: status, mayHaveRun: true, idempotencyKey: keys[0], readFirst: "extension_release_status (project: 'acme/web')" } });
+      expect(out.error.message).toContain(`answered ${status} (FUNCTION_INVOCATION_TIMEOUT)`);
+      expect(out.hint).toContain("extension_release_status (project: 'acme/web')");
+      expect(keys).toEqual([keys[0], keys[0]]);
+    }
+  });
+
+  it("asks a lost read once more and answers what the second try read", async () => {
+    const { lane } = stubLane([edge(504, "FUNCTION_INVOCATION_TIMEOUT"), LISTED]);
+
+    expect(await forwarded("extension_builds", { action: "list", project: "acme/web" })).toEqual(LISTED);
+    expect(lane()).toHaveLength(2);
+
+    stubLane([edge(502, "BAD_GATEWAY"), edge(502, "BAD_GATEWAY")]);
+    const twice = await forwarded("extension_builds", { action: "list", project: "acme/web" });
+
+    expect(twice).toMatchObject({ ok: false, status: "platform-unavailable", value: { httpStatus: 502 } });
+    expect(twice.hint).toContain("Nothing was changed");
+    expect(twice.value).not.toHaveProperty("mayHaveRun");
+  });
+
+  it("names the payload on a 413 and the lane on a 503, and sends neither again", async () => {
+    const big = stubLane([edge(413, "Request Entity Too Large\nFUNCTION_PAYLOAD_TOO_LARGE")]);
+    const large = await forwarded("extension_submit", { action: "sync-listing", browsers: ["chrome"], project: "acme/web", projectPath: tmp });
+    const sentBytes = Buffer.byteLength(JSON.stringify(big.lane()[0]?.body));
+
+    expect(large).toMatchObject({ ok: false, status: "payload-too-large", error: { code: "E_BAD_REQUEST" }, value: { httpStatus: 413, sentBytes } });
+    expect(large.error.message).toContain(`${Math.ceil(sentBytes / 1024)} KB was sent`);
+    expect(large.value.localFactsBytes).toBeGreaterThan(0);
+    expect(big.lane()).toHaveLength(1);
+
+    const off = stubLane([edge(503, JSON.stringify({ ok: false, status: "hosted-off", error: { code: "E_PLATFORM", message: "Platform tools are switched off for now. The local tools still work." } }), { "retry-after": "300" })]);
+    const closed = await forwarded("extension_release_promote", PROMOTE);
+
+    expect(closed).toMatchObject({ ok: false, status: "hosted-off", error: { code: "E_PLATFORM" }, value: { lane: LANE, httpStatus: 503, retryAfterSeconds: 300 } });
+    expect(closed.error.message).toContain(`${LANE} answered 503: Platform tools are switched off for now.`);
+    expect(off.lane()).toHaveLength(1);
+  });
+
+  it("asks a key the lane still holds in flight again until its act reports, and stops asking once the function cannot still be running", async () => {
+    const settled = stubLane([new Error("socket hang up"), IN_FLIGHT, IN_FLIGHT, PROMOTED]);
+
+    expect(await forwarded("extension_release_promote", PROMOTE)).toEqual(PROMOTED);
+    expect(new Set(settled.lane().map((hit) => hit.headers["idempotency-key"])).size).toBe(1);
+    expect(settled.lane()).toHaveLength(4);
+
+    const stuck = stubLane([new Error("socket hang up"), ...Array.from({ length: 40 }, () => IN_FLIGHT)]);
+    const out = await forwarded("extension_release_promote", PROMOTE);
+
+    expect(out).toMatchObject({ ok: false, status: "act-in-flight", error: { code: "E_ACT_IN_FLIGHT" } });
+    expect(stuck.lane().length).toBe(2 + 65_000 / 5_000);
+  });
+});
+
+describe("the forwarder gives the person the wait they asked for and keeps what the hosted tools remember", () => {
+  const cut = (granted: number, status = "found") => ({
+    ok: true,
+    command: "extension_builds",
+    status,
+    value: { buildId: "abc1234", hostedWait: { askedSeconds: 180, grantedSeconds: granted, notice: "The hosted lane cut this wait." } },
+    warnings: ["The hosted lane cut this wait."],
+  });
+
+  it("asks a read whose wait the lane cut again with the seconds still owed, and answers without the lane's notice", async () => {
+    const settled = { ok: true, command: "extension_builds", status: "found", value: { buildId: "abc1234", conclusion: "success" } };
+    const { lane } = stubLane([cut(40), cut(40), settled]);
+    let calls = 0;
+    const stubbed = globalThis.fetch;
+
+    vi.stubGlobal("fetch", async (input: unknown, init?: RequestInit) => {
+      if (String(input) === LANE && calls++ > 0) await outcomeClock.sleep(40_000);
+
+      return stubbed(input as string, init);
+    });
+
+    const out = await forwarded("extension_builds", { action: "get", buildId: "abc1234", project: "acme/web", waitSeconds: 180 });
+
+    expect(out).toMatchObject({ ok: true, status: "found", value: { conclusion: "success" } });
+    expect(out.value).not.toHaveProperty("hostedWait");
+    expect(lane().map((hit) => hit.body.args.waitSeconds)).toEqual([180, 180, 140]);
+    expect(new Set(lane().map((hit) => hit.headers["idempotency-key"])).size).toBe(1);
+  });
+
+  it("never sends an act again to finish its wait, and hands the agent the lane's notice", async () => {
+    const dispatched = { ok: true, command: "extension_release_promote", status: "promote-dispatched", value: { hostedWait: { askedSeconds: 180, grantedSeconds: 40, notice: "The hosted lane cut this wait." } }, warnings: ["The hosted lane cut this wait."] };
+    const { lane } = stubLane([dispatched]);
+    const out = await forwarded("extension_release_promote", PROMOTE);
+
+    expect(lane()).toHaveLength(1);
+    expect(out).toMatchObject({ status: "promote-dispatched", value: { hostedWait: { askedSeconds: 180, grantedSeconds: 40 } }, warnings: ["The hosted lane cut this wait."] });
+  });
+
+  it("carries what the lane's tools remembered into the next call and never shows it to the agent", async () => {
+    const memory = { "build-dispatches": [["https://www.extension.dev\nprj_1", [{ sha: "abc1234", dispatchedAt: "2026-11-14T12:00:00Z" }]]] };
+    const { lane } = stubLane([{ ...LISTED, memory }, { ...LISTED, memory: {} }, LISTED]);
+    const first = await forwarded("extension_builds", { action: "rebuild", buildId: "abc1234", project: "acme/web" });
+    await forwarded("extension_builds", { action: "list", project: "acme/web" });
+    await forwarded("extension_builds", { action: "list", project: "acme/web" });
+
+    expect(first).toEqual(LISTED);
+    expect(lane()[0]?.body.args).not.toHaveProperty("local");
+    expect(lane()[1]?.body.args.local).toEqual({ memory });
+    expect(lane()[2]?.body.args).not.toHaveProperty("local");
+  });
+});
+
+describe("the forwarder's smaller promises", () => {
+  it("sends the lane the per-install id the README promises, and none when telemetry is off", async () => {
+    const { lane } = stubLane([LISTED, LISTED]);
+    const off = process.env.EXTENSION_DEV_NO_TELEMETRY;
+
+    await forwarded("extension_builds", {});
+    delete process.env.EXTENSION_DEV_NO_TELEMETRY;
+
+    try {
+      await forwarded("extension_builds", {});
+    } finally {
+      process.env.EXTENSION_DEV_NO_TELEMETRY = off;
+    }
+
+    expect(lane()[0]?.headers).not.toHaveProperty("x-extensiondev-install");
+    expect(lane()[1]?.headers["x-extensiondev-install"]).toMatch(/^[0-9a-f]{32}$/);
+    expect(lane()[1]?.headers["x-extensiondev-tool"]).toBe("extension_builds");
+  });
+
+  it("drops the lane function's own server stamp, so the agent never reads a pid that is not on this machine", async () => {
+    stubLane([{ ...LISTED, value: { builds: [], server: { version: "0.0.1", pid: 4, startedAt: "2026-11-14T12:00:00Z" } } }]);
+
+    expect((await forwarded("extension_builds", {})).value).toEqual({ builds: [] });
+  });
+
+  it("tells a forwarder the lane calls too old to update the package before it reconnects", async () => {
+    stubLane([{ ok: false, status: "forwarder-stale", error: { code: "E_FORWARDER_STALE", message: "Update @extension.dev/mcp to 11.0.0 or newer to use the platform tools; this version is too old for the hosted contract." } }]);
+    const out = await forwarded("extension_builds", {});
+
+    expect(out).toMatchObject({ ok: false, status: "forwarder-stale", error: { code: "E_SERVER_STALE", message: expect.stringContaining("11.0.0 or newer") }, value: { forwarderVersion: "11.0.0" } });
+    expect(out.hint.indexOf("@extension.dev/mcp@latest")).toBeGreaterThan(-1);
+    expect(out.hint.indexOf("@extension.dev/mcp@latest")).toBeLessThan(out.hint.indexOf("/mcp, pick extension-dev"));
+  });
+
+  it("answers offline with E_NETWORK when it cannot reach www or the lane for a read", async () => {
+    vi.stubGlobal("fetch", async () => {
+      throw new TypeError("fetch failed");
+    });
+
+    expect(await forwarded("extension_release_status", { project: "acme/web" })).toMatchObject({ ok: false, status: "offline", error: { code: "E_NETWORK" } });
+
+    stubLane([new TypeError("fetch failed"), new TypeError("fetch failed")]);
+
+    expect(await forwarded("extension_release_status", { project: "acme/web" })).toMatchObject({ ok: false, status: "offline", error: { code: "E_NETWORK" }, hint: expect.stringContaining("Nothing was changed") });
   });
 });

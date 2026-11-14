@@ -1,0 +1,209 @@
+// ███╗   ███╗ ██████╗██████╗
+// ████╗ ████║██╔════╝██╔══██╗
+// ██╔████╔██║██║     ██████╔╝
+// ██║╚██╔╝██║██║     ██╔═══╝
+// ██║ ╚═╝ ██║╚██████╗██║
+// ╚═╝     ╚═╝ ╚═════╝╚═╝
+// Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
+
+import { readCarriedMemory, type CarriedMemory } from "./call-memory";
+import { envelope } from "./envelope";
+import { HOSTED_SWITCH } from "./forward-credential";
+
+type Args = Record<string, unknown>;
+
+export const LANE_FUNCTION_SECONDS = 60;
+export const FORWARD_TIMEOUT_MS = 70_000;
+export const ACT_SETTLE_WINDOW_MS = 65_000;
+export const IN_FLIGHT_RECHECK_MS = 5_000;
+export const MEMORY_KEY = "memory";
+export const HOSTED_WAIT_KEY = "hostedWait";
+
+const LOST_STATUSES = new Set([502, 504]);
+
+export type LaneRead =
+  | { kind: "answer"; body: Args }
+  | { kind: "lost"; httpStatus: number; reason: string }
+  | { kind: "unreadable"; httpStatus: number; said: string; retryAfterSeconds: number | null };
+
+export interface HostedWait {
+  askedSeconds: number;
+  grantedSeconds: number;
+  notice: string;
+}
+
+function text(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function isRow(value: unknown): value is Args {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function firstLine(raw: string): string {
+  return (
+    raw
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .pop() ?? ""
+  ).slice(0, 120);
+}
+
+/* @invariant A LANE ANSWER IS READ BY ITS HTTP STATUS BEFORE ITS BODY. The
+ * lane answers every tool outcome and every refusal of its own as a JSON
+ * envelope, so a body that is not one came from the edge in front of it: a
+ * 504 or 502 means the function ran out of time or died, and what it had
+ * already asked the platform to do may have happened; a 413 means the body
+ * never reached the function; a 503 means the lane is off or not deployed.
+ * Each is told apart here, and none is flattened into "could not read".
+ */
+export async function readLane(res: Response): Promise<LaneRead> {
+  const raw = await res.text().catch(() => "");
+  let body: unknown = null;
+
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    body = null;
+  }
+
+  const readable = isRow(body) && typeof body.ok === "boolean" && typeof body.status === "string";
+  const said = readable ? text(((body as Args).error as Args | undefined)?.message) : firstLine(raw);
+
+  if (LOST_STATUSES.has(res.status)) return { kind: "lost", httpStatus: res.status, reason: said };
+
+  if (res.status === 413 || res.status === 503 || !readable) {
+    const retryAfter = Number(res.headers.get("retry-after"));
+
+    return { kind: "unreadable", httpStatus: res.status, said, retryAfterSeconds: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null };
+  }
+
+  return { kind: "answer", body: body as Args };
+}
+
+export function recordToRead(command: string, args: Args): string {
+  const project = text(args.project);
+  const named = project ? `, project: '${project}'` : "";
+
+  if (command === "extension_submit" || command === "extension_submit_check" || command === "extension_publish") return `extension_submit_check (action: 'status'${named})`;
+  if (command === "extension_builds") return `extension_builds (action: 'list'${named})`;
+  if (command === "extension_shares") return `extension_shares (action: 'list'${named})`;
+  if (command === "extension_approvals") return `extension_approvals (action: 'status'${named})`;
+  if (command === "extension_workspace" || command === "extension_workspace_create" || command === "extension_project_create") return "extension_workspace (action: 'projects')";
+
+  return `extension_release_status${project ? ` (project: '${project}')` : ""}`;
+}
+
+function refusal(command: string, status: string, code: "E_PLATFORM" | "E_NETWORK" | "E_BAD_REQUEST", message: string, hint: string, value: Args): string {
+  return envelope({ ok: false, command, status, error: { code, message }, hint, value: { hosted: true, ...value } });
+}
+
+export function lostAnswer(args: { command: string; sent: Args; key: string; reads: boolean; resource: string; httpStatus: number; reason: string }): string {
+  const { command, key, resource, httpStatus, reason } = args;
+  const how = httpStatus ? `answered ${httpStatus}${reason ? ` (${reason})` : ""}` : `did not answer${reason ? ` (${reason})` : ""}`;
+  const local = `Unset ${HOSTED_SWITCH} to run ${command} in this process.`;
+
+  if (args.reads) {
+    if (!httpStatus) {
+      return refusal(command, "offline", "E_NETWORK", `Platform tools need the network to reach ${new URL(resource).host}; it ${how} twice. The local tools still work.`, `Nothing was changed: this call only reads. Try again shortly. ${local}`, { lane: resource });
+    }
+
+    return refusal(command, "platform-unavailable", "E_PLATFORM", `The hosted lane at ${resource} ${how} twice for this read.`, `Nothing was changed: this call only reads. Try again shortly. ${local}`, { lane: resource, httpStatus });
+  }
+
+  const read = recordToRead(command, args.sent);
+
+  return refusal(
+    command,
+    "act-unconfirmed",
+    "E_PLATFORM",
+    `The hosted lane at ${resource} ${how} before ${command} reported an outcome, so the act may have run.`,
+    `Read its record first with ${read}, and send the act again only if the record shows it did not run. The call carried idempotency key ${key}, which the lane holds until the act reports back.`,
+    { lane: resource, ...(httpStatus ? { httpStatus } : {}), idempotencyKey: key, mayHaveRun: true, readFirst: read },
+  );
+}
+
+export function unreadableAnswer(args: { command: string; resource: string; read: Extract<LaneRead, { kind: "unreadable" }>; sentBytes: number; factsBytes: number }): string {
+  const { command, resource, read, sentBytes, factsBytes } = args;
+  const local = `Unset ${HOSTED_SWITCH} to run ${command} in this process.`;
+
+  if (read.httpStatus === 413) {
+    const kb = Math.ceil(sentBytes / 1024);
+    const facts = factsBytes ? ` ${Math.ceil(factsBytes / 1024)} KB of it is what this server read from the project folder (STORE.md, icons, screenshots, the share record).` : "";
+
+    return refusal(
+      command,
+      "payload-too-large",
+      "E_BAD_REQUEST",
+      `The hosted lane refused this call's body as too large (413): ${kb} KB was sent.${facts}`,
+      `Nothing ran. ${factsBytes ? "Send fewer or smaller listing images, or name one browser per call. " : "Send smaller arguments. "}${local}`,
+      { lane: resource, httpStatus: 413, sentBytes, ...(factsBytes ? { localFactsBytes: factsBytes } : {}) },
+    );
+  }
+
+  if (read.httpStatus === 503) {
+    return refusal(
+      command,
+      "hosted-off",
+      "E_PLATFORM",
+      `The hosted lane at ${resource} answered 503${read.said ? `: ${read.said}` : ", so it is switched off or not deployed"}`,
+      `Nothing ran. Try again ${read.retryAfterSeconds ? `in ${read.retryAfterSeconds} s` : "shortly"}. ${local}`,
+      { lane: resource, httpStatus: 503, ...(read.retryAfterSeconds ? { retryAfterSeconds: read.retryAfterSeconds } : {}) },
+    );
+  }
+
+  return refusal(
+    command,
+    "platform-unavailable",
+    "E_PLATFORM",
+    `The hosted lane at ${resource} answered ${read.httpStatus} with a body that is not one of its answers${read.said ? ` (${read.said})` : ""}.`,
+    `Try again shortly. ${local}`,
+    { lane: resource, httpStatus: read.httpStatus },
+  );
+}
+
+export function hostedWaitOf(body: Args): HostedWait | null {
+  const wait = isRow(body.value) ? body.value[HOSTED_WAIT_KEY] : null;
+  if (!isRow(wait) || typeof wait.askedSeconds !== "number" || typeof wait.grantedSeconds !== "number") return null;
+
+  return { askedSeconds: wait.askedSeconds, grantedSeconds: wait.grantedSeconds, notice: text(wait.notice) };
+}
+
+export function withoutHostedWait(body: Args): Args {
+  const wait = hostedWaitOf(body);
+  if (!wait || !isRow(body.value)) return body;
+
+  const { [HOSTED_WAIT_KEY]: _cut, ...value } = body.value;
+  const warnings = Array.isArray(body.warnings) ? body.warnings.filter((line) => line !== wait.notice) : body.warnings;
+
+  return { ...body, value, ...(warnings !== undefined ? { warnings } : {}) };
+}
+
+const carried = new Map<string, CarriedMemory>();
+
+/* @invariant THE FORWARDER IS THE PROCESS THAT SEES BOTH CALLS, SO IT KEEPS
+ * WHAT THE HOSTED TOOLS REMEMBER. The lane keeps no state between calls: what
+ * a tool put on its shelves comes back beside the answer, is kept here per
+ * lane for as long as this server runs, and is carried into the next call.
+ * It never reaches the agent, and it is never written to disk.
+ */
+export function carriedMemory(resource: string): CarriedMemory {
+  return carried.get(resource) ?? {};
+}
+
+export function takeMemory(resource: string, body: Args): Args {
+  if (!(MEMORY_KEY in body)) return body;
+
+  const { [MEMORY_KEY]: memory, ...answer } = body;
+  const kept = Object.fromEntries(Object.entries(readCarriedMemory(memory)).filter(([, rows]) => rows.length > 0));
+
+  if (Object.keys(kept).length) carried.set(resource, kept);
+  else carried.delete(resource);
+
+  return answer;
+}
+
+export function forgetCarriedMemory(): void {
+  carried.clear();
+}

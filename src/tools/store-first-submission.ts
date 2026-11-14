@@ -11,6 +11,7 @@ import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 import { consoleProjectUrl } from "../lib/console-urls";
 import { envelope } from "../lib/envelope";
 import { kernelHook, type PageOpening } from "../lib/kernel-hooks";
+import { underWaitDeadline } from "../lib/outcome-clock";
 import { projectApiGet, projectApiReadFailure, type ProjectApi } from "../lib/project-api";
 import { badShipRequest, openShipApi, text } from "../lib/ship-act";
 import { nextStep } from "../lib/store-connection";
@@ -84,7 +85,7 @@ function waitBound(raw: unknown): number {
   const n = typeof raw === "string" ? Number(raw) : raw;
   if (typeof n !== "number" || !Number.isFinite(n)) return 0;
 
-  return Math.min(FIRST_SUBMISSION_WAIT_MAX_SECONDS, Math.max(0, Math.floor(n)));
+  return underWaitDeadline(Math.min(FIRST_SUBMISSION_WAIT_MAX_SECONDS, Math.max(0, Math.floor(n))));
 }
 
 const rows = (value: unknown): Array<Record<string, unknown>> =>

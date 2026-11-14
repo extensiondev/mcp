@@ -18,6 +18,7 @@ import type { ApprovalState, HeldBatch, MintedApproval, PendingCreate } from "./
 export const APPROVALS_PATH = "/api/cli/forward/approvals";
 export const HELD_GRANTS_PATH = "/api/cli/forward/held-grants";
 export const PENDING_CREATES_PATH = "/api/cli/forward/pending-creates";
+export const STATE_TIMEOUT_MS = 15_000;
 
 export interface ForwardSession {
   api: string;
@@ -93,6 +94,7 @@ async function call(session: ForwardSession, method: "POST" | "PUT" | "DELETE", 
           ...(session.project ? { [PROJECT_HEADER]: session.project } : {}),
         },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(STATE_TIMEOUT_MS),
       },
       session.fetchImpl,
     );

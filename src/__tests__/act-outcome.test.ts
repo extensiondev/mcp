@@ -19,6 +19,9 @@ import {
   outcomeClock,
   waitBound,
 } from "../lib/act-outcome";
+import { latestBuildDispatch, rememberBuildDispatch } from "../lib/build-dispatches";
+import { withCallMemory } from "../lib/call-memory";
+import { underCallDeadline, withCallDeadline, type CallDeadline } from "../lib/outcome-clock";
 import { handler as builds } from "../tools/builds";
 import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
@@ -33,6 +36,47 @@ describe("waitSeconds is a bounded wait", () => {
     expect(waitBound(-5)).toBe(0);
     expect(waitBound("42")).toBe(42);
     expect(waitBound(9000)).toBe(600);
+  });
+});
+
+describe("a host that ends every call at a fixed time cuts every wait to the time it has left", () => {
+  const pending = { read: async () => ({ ok: true as const, record: { status: "pending" } }), judge: (record: { status: string }) => ({ kind: "waiting" as const, status: record.status }) };
+
+  it("cuts an asked wait and the 180 s default alike, records each cut, and leaves a wait that fits alone", async () => {
+    const deadline: CallDeadline = { waitsEndAt: outcomeClock.now() + 40_500, dispatchesEndAt: outcomeClock.now() + 45_000, readsEndAt: outcomeClock.now() + 52_000, cuts: [] };
+    const defaulted = await withCallDeadline(deadline, () => awaitRecordedOutcome({ waitSeconds: undefined, ...pending }));
+
+    expect(defaulted.outcome).toMatchObject({ recorded: false, waitedSeconds: 40 });
+    expect(deadline.cuts).toMatchObject([{ askedSeconds: 180, grantedSeconds: 40 }]);
+    expect(outcomeClock.now()).toBeGreaterThanOrEqual(deadline.cuts[0]!.until);
+    expect(withCallDeadline({ ...deadline, waitsEndAt: outcomeClock.now() + 40_500, cuts: [] }, () => [waitBound(600), waitBound(12), waitBound(0)])).toEqual([40, 12, 0]);
+    expect(waitBound(undefined)).toBe(WAIT_SECONDS_DEFAULT);
+  });
+
+  it("gives a platform request the time left for its kind, a dispatch less than a read, and its whole budget with no host limit", () => {
+    const now = outcomeClock.now();
+    const deadline: CallDeadline = { waitsEndAt: now + 40_000, dispatchesEndAt: now + 45_000, readsEndAt: now + 52_000, cuts: [] };
+
+    expect(withCallDeadline(deadline, () => [underCallDeadline("dispatch", 90_000), underCallDeadline("dispatch", 60_000), underCallDeadline("read", 15_000)]).map((ms) => Math.ceil(ms / 1000))).toEqual([45, 45, 15]);
+    expect(Math.ceil(withCallDeadline({ ...deadline, readsEndAt: now + 9_000 }, () => underCallDeadline("read", 15_000)) / 1000)).toBe(9);
+    expect(underCallDeadline("dispatch", 90_000)).toBe(90_000);
+  });
+});
+
+describe("what a tool remembers between two calls travels with the caller on a host that keeps no state", () => {
+  const scope = { base: API, projectId: "prj_1" };
+
+  it("starts each hosted call from what was carried in and hands back what the tool remembered", async () => {
+    const first = await withCallMemory(undefined, async () => rememberBuildDispatch(scope, "603fc8a", "2026-11-14T12:00:00Z"));
+    const cold = await withCallMemory({}, async () => latestBuildDispatch(scope));
+    const carried = await withCallMemory(JSON.parse(JSON.stringify(first.memory)), async () => latestBuildDispatch(scope));
+    const forged = await withCallMemory({ "build-dispatches": [[`${API}\nprj_1`, "not a dispatch list"]], "unconfirmed-writes": [["k", "2"]] }, async () => latestBuildDispatch(scope));
+
+    expect(cold.result).toBeNull();
+    expect(carried.result).toMatchObject({ sha: "603fc8a" });
+    expect(carried.memory).toEqual(first.memory);
+    expect(forged.result).toBeNull();
+    expect(latestBuildDispatch(scope)).toBeNull();
   });
 });
 

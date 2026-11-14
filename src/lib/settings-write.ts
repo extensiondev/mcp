@@ -6,9 +6,12 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { createHash } from "node:crypto";
+
 import { actionFingerprint, evaluateApproval, requestApprovalAfterRefusal, type ApprovalGateInput } from "./approval-gate";
 import { approvalRoundTrip } from "./approval-outcome";
 import { askingOnly } from "./ask-only";
+import { memoryShelf } from "./call-memory";
 import { verdictOfAction, type ApprovalVerdict } from "./approval-policy";
 import { projectApiSend, type ProjectApi, type ProjectApiRefusal } from "./project-api";
 import { isRow, text } from "./row";
@@ -63,14 +66,17 @@ export type SettingsWriteResult =
 export const UNCONFIRMED_RETRY_SECONDS = 10;
 export const WRITE_FAILURE_REPORT_URL = "https://github.com/extensiondev/mcp/issues";
 
-const unconfirmedWrites = new Map<string, number>();
 const UNCONFIRMED_WRITES_LIMIT = 256;
 
+const isAttempt = (value: unknown): value is number => typeof value === "number" && Number.isInteger(value) && value > 0;
+const countedWrites = (): Map<string, number> => memoryShelf("unconfirmed-writes", isAttempt);
+
 function writeKey(write: SettingsWrite): string {
-  return `${write.api.base}\n${write.api.projectId}\n${write.method ?? "PUT"}\n${write.route}\n${JSON.stringify(write.body)}`;
+  return createHash("sha256").update(`${write.api.base}\n${write.api.projectId}\n${write.method ?? "PUT"}\n${write.route}\n${JSON.stringify(write.body)}`).digest("hex");
 }
 
 function countUnconfirmed(key: string): number {
+  const unconfirmedWrites = countedWrites();
   const attempt = (unconfirmedWrites.get(key) ?? 0) + 1;
   unconfirmedWrites.delete(key);
   unconfirmedWrites.set(key, attempt);
@@ -118,7 +124,7 @@ export async function approvedSettingsWrite(write: SettingsWrite): Promise<Setti
   const sent = await projectApiSend<Row>(write.api, write.method ?? "PUT", write.route, { ...write.body, ...(approvalId ? { approvalId } : {}) });
 
   if (sent.ok) {
-    unconfirmedWrites.delete(key);
+    countedWrites().delete(key);
 
     return { ok: true, json: isRow(sent.json) ? sent.json : {}, verdict: settingsWriteVerdict(write) };
   }
@@ -149,7 +155,7 @@ export async function approvedSettingsWrite(write: SettingsWrite): Promise<Setti
 
   const attempt = countUnconfirmed(key);
   const read = write.readBack ? await write.readBack() : { saved: "unknown" as const };
-  if (read.saved === "yes") unconfirmedWrites.delete(key);
+  if (read.saved === "yes") countedWrites().delete(key);
 
   return { ok: false, sent, unconfirmed: { attempt, saved: read.saved, ...(read.state ? { state: read.state } : {}) } };
 }

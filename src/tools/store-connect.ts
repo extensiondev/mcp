@@ -36,6 +36,7 @@ import {
 import { rememberConnectSession } from "../lib/connect-session-projects";
 import { envelope } from "../lib/envelope";
 import { kernelHook, type PageOpening } from "../lib/kernel-hooks";
+import { underWaitDeadline } from "../lib/outcome-clock";
 import {
   OWNER_REQUIRED_CODE,
   projectApiGet,
@@ -75,7 +76,7 @@ function waitBound(raw: unknown): number {
   const n = typeof raw === "string" ? Number(raw) : raw;
   if (typeof n !== "number" || !Number.isFinite(n)) return 0;
 
-  return Math.min(CONNECT_WAIT_MAX_SECONDS, Math.max(0, Math.floor(n)));
+  return underWaitDeadline(Math.min(CONNECT_WAIT_MAX_SECONDS, Math.max(0, Math.floor(n))));
 }
 
 function refusal(sent: ProjectApiRefusal, api: ProjectApi, args: StoreConnectArgs, store: ConnectStore): string {

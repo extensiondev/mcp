@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { underCallDeadline } from "./outcome-clock";
+
 export const PLATFORM_READ_TIMEOUT_MS = 15_000;
 export const PLATFORM_DISPATCH_TIMEOUT_MS = 60_000;
 
@@ -120,7 +122,7 @@ export function unreachedBy(url: string, err: unknown, boundMs: number): Platfor
  */
 export async function platformFetch(url: string, init: RequestInit, options: PlatformFetchOptions = {}): Promise<PlatformFetchResult> {
   const kind = options.kind ?? "read";
-  const boundMs = Number.isFinite(options.boundMs) && (options.boundMs as number) > 0 ? (options.boundMs as number) : platformBoundMs(kind);
+  const boundMs = underCallDeadline(kind, Number.isFinite(options.boundMs) && (options.boundMs as number) > 0 ? (options.boundMs as number) : platformBoundMs(kind));
   const doFetch = options.fetchImpl ?? globalThis.fetch;
   const controller = new AbortController();
   const bound = new DOMException(`The platform did not answer within ${Math.round(boundMs / 1000)} s`, "TimeoutError");

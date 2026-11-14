@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { underCallDeadline } from "./outcome-clock";
+
 export const FIRST_CALL_POLL_MS = 8_000;
 export const RESUME_POLL_MS = 15_000;
 export const START_WORK_WITHIN_MS = 20_000;
@@ -15,7 +17,7 @@ export const CREATE_READ_BACK_MS = 15_000;
 
 export function answerDeadline(callStartedAt: number): { signal: AbortSignal; release: () => void } {
   const controller = new AbortController();
-  const leftMs = Math.max(1_000, callStartedAt + ANSWER_WITHIN_MS - Date.now());
+  const leftMs = underCallDeadline("dispatch", Math.max(1_000, callStartedAt + ANSWER_WITHIN_MS - Date.now()));
   const timer = setTimeout(() => {
     controller.abort(
       new Error(
@@ -37,13 +39,16 @@ export function createRequestDeadline(
   if (!callBlocks && !windowSpent) return answerDeadline(callStartedAt);
 
   const controller = new AbortController();
+  const givenMs = underCallDeadline("dispatch", CREATE_REQUEST_MS);
   const timer = setTimeout(() => {
     controller.abort(
       new Error(
-        `no answer within ${Math.round(CREATE_REQUEST_MS / 1000)} s of sending the create, the time this call gives a create once it already blocks past the 45 s answer window`,
+        givenMs < CREATE_REQUEST_MS
+          ? `no answer within ${Math.round(givenMs / 1000)} s of sending the create, the time left before the hosted call itself ends`
+          : `no answer within ${Math.round(CREATE_REQUEST_MS / 1000)} s of sending the create, the time this call gives a create once it already blocks past the 45 s answer window`,
       ),
     );
-  }, CREATE_REQUEST_MS);
+  }, givenMs);
   timer.unref?.();
 
   return { signal: controller.signal, release: () => clearTimeout(timer) };
@@ -51,7 +56,7 @@ export function createRequestDeadline(
 
 export async function readBackOnce(send: (signal: AbortSignal) => Promise<Response>): Promise<Response | null> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(new Error("read-back timed out")), CREATE_READ_BACK_MS);
+  const timer = setTimeout(() => controller.abort(new Error("read-back timed out")), underCallDeadline("read", CREATE_READ_BACK_MS));
   timer.unref?.();
 
   try {

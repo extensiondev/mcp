@@ -8,7 +8,7 @@
 
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
-import { WAIT_SECONDS_INPUT, WAIT_SECONDS_MAX, outcomeClock, stampNow } from "../lib/act-outcome";
+import { WAIT_SECONDS_INPUT, WAIT_SECONDS_MAX, outcomeClock, stampNow, underWaitDeadline } from "../lib/act-outcome";
 import { API_BASE } from "../lib/common-schema";
 import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
 import {
@@ -227,7 +227,7 @@ function getWaitBoundMs(raw: unknown): number {
   const n = Number(raw);
   if (!Number.isFinite(n)) return 0;
 
-  return Math.min(WAIT_SECONDS_MAX, Math.max(0, Math.floor(n))) * 1000;
+  return underWaitDeadline(Math.min(WAIT_SECONDS_MAX, Math.max(0, Math.floor(n)))) * 1000;
 }
 
 function requireBuildId(args: HandlerArgs, action: string): string | null {

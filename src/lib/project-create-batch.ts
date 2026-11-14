@@ -11,6 +11,7 @@ import { tokenExpiry, isProjectRef, type StoredCredentials } from "./credentials
 import { answerIsUnknownOutcome, readCreatedProject } from "./create-answer";
 import { firstBuildValue, readFirstBuild, withheldBecause } from "./first-build";
 import { answerDeadline, RESUME_POLL_MS, START_WORK_WITHIN_MS } from "./call-budget";
+import { scratchShelf } from "./call-memory";
 import { pollDeviceGrant, type DeviceCodeStart, type DeviceIntent } from "./device-flow";
 import { envelope, type ErrorCode } from "./envelope";
 import { kernelHook } from "./kernel-hooks";
@@ -145,11 +146,13 @@ interface Session {
   persisted: boolean;
 }
 
-const sessions = new Map<string, Session>();
+const openSessions = (): Map<string, Session> => scratchShelf("create-sessions");
 
 const SESSION_KEEP_SECONDS = 3600;
 
 function sweepSessions(nowSeconds: number): void {
+  const sessions = openSessions();
+
   for (const [key, session] of sessions) {
     if (session.busy) continue;
     if (session.grantExpiresAt <= nowSeconds) session.grant = "";
@@ -861,7 +864,7 @@ async function runSlice(local: BatchCreateLocal, session: Session, deviceCode: s
     });
   }
 
-  sessions.delete(deviceCode);
+  openSessions().delete(deviceCode);
   await kernelHook("approvalState")().dropHeldBatch(session.apiBase, deviceCode);
 
   return finalEnvelope(session);
@@ -890,7 +893,7 @@ async function restoreSession(
     persisted: true,
   };
 
-  if (session.entries.length) sessions.set(deviceCode, session);
+  if (session.entries.length) openSessions().set(deviceCode, session);
 
   return session;
 }
@@ -928,7 +931,7 @@ export async function createProjectBatch(args: BatchCreateArgs, local: BatchCrea
 
   sweepSessions(Math.floor(Date.now() / 1000));
   let deviceCode = String(args.deviceCode || "").trim();
-  const held = deviceCode ? (sessions.get(deviceCode) ?? (await restoreSession(apiBase, deviceCode, parsed))) : undefined;
+  const held = deviceCode ? (openSessions().get(deviceCode) ?? (await restoreSession(apiBase, deviceCode, parsed))) : undefined;
 
   if (held) {
     if (held.apiBase !== apiBase || !sameProjectSet(held.refs, refs)) {
@@ -1131,7 +1134,7 @@ export async function createProjectBatch(args: BatchCreateArgs, local: BatchCrea
     unanswered: 0,
     persisted: false,
   };
-  sessions.set(deviceCode, session);
+  openSessions().set(deviceCode, session);
   await persist(session, deviceCode);
 
   return runSlice(local, session, deviceCode, installationId || undefined, callStartedAt);

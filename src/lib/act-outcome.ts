@@ -12,12 +12,13 @@ import {
   WAIT_SECONDS_MAX,
   missesSentence,
   outcomeClock,
+  underWaitDeadline,
   waitBound,
 } from "./outcome-clock";
 import { spokenDate } from "./publish-link";
 import { trackFields } from "./track-url";
 
-export { TRANSIENT_READ_STATUSES, WAIT_SECONDS_DEFAULT, WAIT_SECONDS_MAX, missesSentence, outcomeClock, waitBound };
+export { TRANSIENT_READ_STATUSES, WAIT_SECONDS_DEFAULT, WAIT_SECONDS_MAX, missesSentence, outcomeClock, underWaitDeadline, waitBound };
 
 type Row = Record<string, unknown>;
 

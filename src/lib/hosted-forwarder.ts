@@ -17,9 +17,12 @@ import { MEMBER_PROJECT, listCredentials } from "./credentials";
 import { envelope, isEnvelope } from "./envelope";
 import { forwardSession, withForwardSession, wwwApprovalState, type ForwardSession } from "./forward-approval-state";
 import { HOSTED_SWITCH, forgetForwardCredential, forwardCredential, forwardUrlFor, hostedForwarding, type ExchangedCredential } from "./forward-credential";
+import { ACT_SETTLE_WINDOW_MS, FORWARD_TIMEOUT_MS, IN_FLIGHT_RECHECK_MS, MEMORY_KEY, carriedMemory, hostedWaitOf, lostAnswer, readLane, takeMemory, unreadableAnswer, withoutHostedWait } from "./forward-lane-answer";
 import { resolveApiBase, safeApiBase } from "./login-flow";
-import { bearerFetch } from "./platform-fetch";
+import { outcomeClock } from "./outcome-clock";
+import { bearerFetch, unreachedBy } from "./platform-fetch";
 import { PROJECT_HEADER } from "./request-fetch";
+import { identityHeaders } from "./session-identity";
 import { readSharedPreviews } from "./share-record";
 import { forwardSubmitFacts, labeledScreenshots, withProjectRoot, type ForwardFactsArgs } from "./submit-facts-forward";
 import { TOOL_POLICY } from "./tool-policy";
@@ -34,7 +37,7 @@ type Args = Record<string, unknown>;
 export const FORWARDER_HEADER = "x-extensiondev-forwarder";
 export const IDEMPOTENCY_HEADER = "idempotency-key";
 export const LOCAL_FACTS_KEY = "local";
-export const FORWARD_TIMEOUT_MS = 60_000;
+export { FORWARD_TIMEOUT_MS };
 export const HOSTED_DROPPED_ARGS = ["api", "projectPath"] as const;
 export const PAGE_OPENING_FACT = "pageOpening";
 export const OPEN_PAGES_KEY = "openPages";
@@ -55,6 +58,7 @@ export interface ForwarderDeps {
 }
 
 interface ForwardRule {
+  reads?: (args: Args) => boolean;
   local?: (args: Args) => boolean;
   facts?: (args: Args, deps: ForwarderDeps) => Args | null | Promise<Args | null>;
   sent?: (args: Args) => Args;
@@ -87,26 +91,52 @@ function laneToolOf(command: string): string | null {
   return Object.keys(TOOL_POLICY).find((name) => TOOL_POLICY[name]?.actsAs?.tool === command) ?? null;
 }
 
+const reading =
+  (fallback: string, ...actions: string[]) =>
+  (args: Args): boolean =>
+    actions.includes(actionOf(args, fallback));
+
+function submitReads(args: Args): boolean {
+  const action = actionOf(args, "submit");
+
+  return action === "preflight" || action === "status" || (action === "submit" && args.dryRun !== false);
+}
+
 export const FORWARDED_TOOLS: Readonly<Record<string, ForwardRule>> = Object.freeze({
-  extension_approvals: {},
-  extension_release_status: {},
+  extension_approvals: { reads: reading("status", "status") },
+  extension_release_status: { reads: () => true },
   extension_release_promote: {},
-  extension_workspace: {},
+  extension_workspace: { reads: reading("info", "info", "projects", "usage", "settings") },
   extension_shares: {
+    reads: reading("list", "list"),
     local: (args) => actionOf(args, "list") === "create",
     facts: (args) => (text(args.projectPath) ? { sharedPreviews: readSharedPreviews(text(args.projectPath)) } : null),
   },
   extension_workspace_create: { local: (args) => !text(args.deviceCode) },
   extension_project_create: { local: (args) => !text(args.deviceCode) },
   extension_auth: { local: () => true },
-  extension_builds: { local: (args) => actionOf(args, "list") === "download" },
+  extension_builds: { reads: reading("list", "list", "get", "logs"), local: (args) => actionOf(args, "list") === "download" },
   extension_preview_web: { local: () => true },
   extension_publish: { local: (args) => actionOf(args, "publish") === "sync-captures" },
-  extension_submit: SUBMIT_RULE,
-  extension_submit_check: SUBMIT_RULE,
+  extension_submit: { reads: submitReads, ...SUBMIT_RULE },
+  extension_submit_check: { reads: submitReads, ...SUBMIT_RULE },
 });
 
-type LaneAnswer = { kind: "answer"; body: unknown } | { kind: "refused"; text: string } | { kind: "retry"; text: string; fresh: boolean };
+export function forwardedCallReads(command: string, args: Args): boolean {
+  return FORWARDED_TOOLS[command]?.reads?.(args) === true;
+}
+
+type LaneAnswer = { kind: "answer"; body: Args } | { kind: "refused"; text: string } | { kind: "stale-credential"; text: string } | { kind: "lost"; httpStatus: number; reason: string; sent: boolean };
+
+interface LaneCall {
+  command: string;
+  tool: string;
+  session: ForwardSession;
+  sent: Args;
+  key: string;
+  reads: boolean;
+  deps: ForwarderDeps;
+}
 
 function refusal(command: string, status: string, code: string, message: string, hint?: string, value?: Args): string {
   return envelope({ ok: false, command, status, error: { code, message }, ...(hint ? { hint } : {}), ...(value ? { value } : {}) });
@@ -117,11 +147,11 @@ function exchangeRefusal(command: string, api: string, project: string | null, r
   const local = `Unset ${HOSTED_SWITCH} to run ${command} in this process, as the default does.`;
 
   if (refused.status === 0) {
-    return refusal(command, "platform-unreachable", "E_PLATFORM", `The local server could not reach ${api} to exchange its device login for a forward credential${said}.`, `Try again shortly. ${local}`, { hosted: true });
+    return refusal(command, "offline", "E_NETWORK", `Platform tools need the network to reach ${api}, and this server could not reach it to exchange its device login for a forward credential${said}. The local tools still work.`, `Try again shortly. ${local}`, { hosted: true });
   }
 
   if (refused.status === 503) {
-    return refusal(command, "hosted-off", "E_TOOL_DISABLED", `extension.dev has not opened the hosted lane yet${said}.`, local, { hosted: true });
+    return refusal(command, "hosted-off", "E_PLATFORM", `extension.dev has not opened the hosted lane yet${said}.`, local, { hosted: true });
   }
 
   if (refused.status === 401 || refused.status === 403) {
@@ -133,19 +163,52 @@ function exchangeRefusal(command: string, api: string, project: string | null, r
   return refusal(command, refused.status === 429 ? "rate-limited" : "platform-unavailable", "E_PLATFORM", `extension.dev could not mint a forward credential just now${said}.`, `Try again shortly. ${local}`, { hosted: true });
 }
 
-function laneEnvelope(command: string, body: unknown): string {
+function withoutLaneStamp(body: Args): Args {
+  const value = body.value;
+  if (!value || typeof value !== "object" || Array.isArray(value) || !("server" in value)) return body;
+
+  const { server: _lane, ...kept } = value as Args;
+
+  return { ...body, value: kept };
+}
+
+/* @invariant WHAT THE AGENT READS ABOUT THE SERVER IS THIS PROCESS, NEVER THE
+ * LANE'S FUNCTION. The hosted function stamps its own version, pid and start
+ * time on an answer; an agent told to end that pid would look for it on this
+ * machine. The lane's stamp is dropped here, so the only value.server an
+ * answer carries is the one this server's dispatcher adds. A forwarder the
+ * lane calls too old is told the two steps that fix it: the package the
+ * client starts is updated first, then the server is reconnected, because a
+ * reload alone starts the same old version again.
+ */
+function laneEnvelope(command: string, answered: Args, deps: ForwarderDeps): string {
+  const body = withoutLaneStamp(answered);
+
+  if (text(body.status) === "forwarder-stale") {
+    const error = (body.error && typeof body.error === "object" ? body.error : {}) as Args;
+
+    return refusal(
+      command,
+      "forwarder-stale",
+      "E_SERVER_STALE",
+      text(error.message) || "This version of @extension.dev/mcp is too old for the hosted contract.",
+      `Update the package first: start @extension.dev/mcp@latest in the client's MCP configuration (npx -y @extension.dev/mcp@latest), then reconnect the server (/mcp, pick extension-dev) so the new version runs. Reconnecting alone starts version ${deps.version ?? packageVersion} again. Unset ${HOSTED_SWITCH} to run ${command} in this process meanwhile.`,
+      { hosted: true, forwarderVersion: deps.version ?? packageVersion },
+    );
+  }
+
   if (isEnvelope(body)) return JSON.stringify(body);
 
-  const lane = (body && typeof body === "object" ? body : {}) as Args;
-  const error = (lane.error && typeof lane.error === "object" ? lane.error : {}) as Args;
+  const error = (body.error && typeof body.error === "object" ? body.error : {}) as Args;
 
   return envelope({
-    ok: lane.ok === true,
+    ok: body.ok === true,
     command,
-    status: text(lane.status) || "platform-unavailable",
-    ...(lane.ok === true ? {} : { error: { code: text(error.code) || "E_PLATFORM", message: text(error.message) || "The hosted lane answered nothing this server could read." } }),
-    ...(text(lane.hint) ? { hint: text(lane.hint) } : {}),
-    ...(lane.value && typeof lane.value === "object" ? { value: lane.value } : {}),
+    status: text(body.status),
+    ...(body.ok === true ? {} : { error: { code: text(error.code) || "E_PLATFORM", message: text(error.message) || `The hosted lane answered ${text(body.status)} without a message.` } }),
+    ...(text(body.hint) ? { hint: text(body.hint) } : {}),
+    ...(body.value && typeof body.value === "object" ? { value: body.value } : {}),
+    ...(Array.isArray(body.warnings) ? { warnings: body.warnings.map(String) } : {}),
   });
 }
 
@@ -159,18 +222,12 @@ function laneCode(body: unknown): string {
   return error && typeof error === "object" ? text((error as Args).code) : "";
 }
 
-async function sendOnce(
-  command: string,
-  tool: string,
-  session: ForwardSession,
-  sent: Args,
-  key: string,
-  deps: ForwarderDeps,
-  fresh: boolean,
-): Promise<LaneAnswer> {
+async function sendOnce(call: LaneCall, fresh: boolean): Promise<LaneAnswer> {
+  const { command, tool, session, key, deps } = call;
   const exchanged = await forwardCredential({ ...session, fresh });
   if (!exchanged.ok) return { kind: "refused", text: exchangeRefusal(command, session.api, session.project, exchanged) };
 
+  const sentBody = JSON.stringify({ tool, args: call.sent });
   let res: Response;
 
   try {
@@ -185,37 +242,78 @@ async function sendOnce(
           [FORWARDER_HEADER]: deps.version ?? packageVersion,
           [IDEMPOTENCY_HEADER]: key,
           ...(session.project ? { [PROJECT_HEADER]: session.project } : {}),
+          ...identityHeaders(command),
         },
-        body: JSON.stringify({ tool, args: sent }),
+        body: sentBody,
         signal: AbortSignal.timeout(FORWARD_TIMEOUT_MS),
       },
       deps.fetchImpl,
     );
   } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
+    const unreached = unreachedBy(session.resource, err, FORWARD_TIMEOUT_MS);
 
-    return {
-      kind: "retry",
-      fresh: false,
-      text: refusal(command, "platform-unreachable", "E_PLATFORM", `The hosted lane at ${session.resource} did not answer (${reason}).`, `The act may have run: read its record (extension_release_status, or extension_submit_check action:'status') before calling again. Unset ${HOSTED_SWITCH} to run ${command} in this process.`, { hosted: true, idempotencyKey: key }),
-    };
+    return { kind: "lost", httpStatus: 0, reason: unreached.message, sent: unreached.kind !== "dns" };
   }
 
-  const body: unknown = await res.json().catch(() => null);
+  const read = await readLane(res);
 
-  if (laneCode(body) === "E_AUTH_DENIED" && exchanged.cached) {
+  if (read.kind === "lost") return { ...read, sent: true };
+
+  if (read.kind === "unreadable") {
+    const facts = call.sent[LOCAL_FACTS_KEY];
+
+    return { kind: "refused", text: unreadableAnswer({ command, resource: session.resource, read, sentBytes: Buffer.byteLength(sentBody), factsBytes: facts ? Buffer.byteLength(JSON.stringify(facts)) : 0 }) };
+  }
+
+  if (laneCode(read.body) === "E_AUTH_DENIED" && exchanged.cached) {
     forgetForwardCredential(session);
 
-    return { kind: "retry", fresh: true, text: laneEnvelope(command, body) };
+    return { kind: "stale-credential", text: laneEnvelope(command, read.body, deps) };
   }
 
-  return { kind: "answer", body };
+  return { kind: "answer", body: read.body };
 }
 
-function hostedArgs(args: Args, facts: Args | null): Args {
-  const kept = Object.fromEntries(Object.entries(args).filter(([key]) => !(HOSTED_DROPPED_ARGS as readonly string[]).includes(key) && key !== LOCAL_FACTS_KEY));
+/* @invariant A LOST ANSWER IS ASKED FOR AGAIN WITH THE SAME KEY, AND AN ACT
+ * THAT MAY HAVE RUN IS NEVER REPORTED AS ONE THAT DID NOT. When the lane
+ * does not answer, or its edge answers 502 or 504, the same call goes out
+ * once more under the same idempotency key: a read simply runs again, and an
+ * act answers its first outcome if the lane settled it. While the lane says
+ * the key is still in flight and its function could still be running (65 s
+ * from the first send, five past the function's limit), the key is asked
+ * again every 5 s. What is still lost after that is answered by kind: a read
+ * says nothing changed, an act says it may have run and names its key and
+ * the record to read first.
+ */
+async function askLane(call: LaneCall): Promise<LaneAnswer> {
+  const firstSentAt = outcomeClock.now();
+  let answer = await sendOnce(call, false);
 
-  return facts ? { ...kept, [LOCAL_FACTS_KEY]: facts } : kept;
+  if (answer.kind === "stale-credential") answer = await sendOnce(call, true);
+  if (answer.kind !== "lost") return answer;
+
+  answer = await sendOnce(call, false);
+
+  while (answer.kind === "answer" && laneStatus(answer.body) === "act-in-flight" && outcomeClock.now() - firstSentAt < ACT_SETTLE_WINDOW_MS) {
+    await outcomeClock.sleep(IN_FLIGHT_RECHECK_MS);
+    answer = await sendOnce(call, false);
+  }
+
+  return answer;
+}
+
+function answerText(call: LaneCall, answer: Exclude<LaneAnswer, { kind: "answer" }>): string {
+  if (answer.kind !== "lost") return answer.text;
+
+  return lostAnswer({ command: call.command, sent: call.sent, key: call.key, reads: call.reads || !answer.sent, resource: call.session.resource, httpStatus: answer.httpStatus, reason: answer.reason });
+}
+
+function hostedArgs(args: Args, facts: Args | null, resource: string): Args {
+  const kept = Object.fromEntries(Object.entries(args).filter(([key]) => !(HOSTED_DROPPED_ARGS as readonly string[]).includes(key) && key !== LOCAL_FACTS_KEY));
+  const memory = carriedMemory(resource);
+  const local = Object.keys(memory).length ? { ...facts, [MEMORY_KEY]: memory } : facts;
+
+  return local ? { ...kept, [LOCAL_FACTS_KEY]: local } : kept;
 }
 
 function refOf(ref: CredentialRef | null): string | null {
@@ -331,6 +429,11 @@ function openLanePages(body: unknown, deps: ForwarderDeps): unknown {
  * the lane answers the first outcome instead of acting twice. A step that writes
  * to this machine or starts a device login runs here, never on the lane, and
  * with no stored login the whole call runs here, as the default path does.
+ * The lane ends every call inside its function's limit and says when it cut
+ * a wait short; this process has no such limit, so a read that was cut is
+ * asked again with the seconds still owed until the bound the caller asked
+ * for has passed. An act is never sent twice to finish a wait: its answer
+ * keeps the lane's notice and the tool's own next step.
  */
 export async function forwardCall(command: string, args: Args, local: (args: Args) => Promise<string>, deps: ForwarderDeps = {}): Promise<string> {
   const rule = FORWARDED_TOOLS[command];
@@ -361,15 +464,36 @@ export async function forwardCall(command: string, args: Args, local: (args: Arg
 
   if (rule.local?.(args)) return withForwardSession(session, () => local(args));
 
-  const sent = hostedArgs(rule.sent?.(args) ?? args, (await rule.facts?.(args, deps)) ?? null);
-  const key = crypto.randomBytes(24).toString("base64url");
-  let answer = await sendOnce(command, tool, session, sent, key, deps, false);
+  const facts = (await rule.facts?.(args, deps)) ?? null;
+  const shaped = rule.sent?.(args) ?? args;
+  const call: LaneCall = { command, tool, session, sent: hostedArgs(shaped, facts, resource), key: crypto.randomBytes(24).toString("base64url"), reads: rule.reads?.(args) === true, deps };
+  const startedAt = outcomeClock.now();
+  const answer = await askLane(call);
 
-  if (answer.kind === "retry") answer = await sendOnce(command, tool, session, sent, key, deps, answer.fresh);
-  if (answer.kind !== "answer") return answer.text;
-  if (laneStatus(answer.body) === "local-half") return withForwardSession(session, () => local(args));
+  if (answer.kind !== "answer") return answerText(call, answer);
 
-  return laneEnvelope(command, openLanePages(rule.answered ? rule.answered(args, answer.body) : answer.body, deps));
+  let body = takeMemory(resource, answer.body);
+  if (laneStatus(body) === "local-half") return withForwardSession(session, () => local(args));
+
+  let cut = call.reads ? hostedWaitOf(body) : null;
+  const askedSeconds = cut?.askedSeconds ?? 0;
+
+  while (cut) {
+    const left = askedSeconds - Math.round((outcomeClock.now() - startedAt) / 1000);
+
+    if (left <= 0) {
+      body = withoutHostedWait(body);
+      break;
+    }
+
+    const next = await askLane({ ...call, sent: { ...hostedArgs(shaped, facts, resource), waitSeconds: left } });
+    if (next.kind !== "answer") break;
+
+    body = takeMemory(resource, next.body);
+    cut = hostedWaitOf(body);
+  }
+
+  return laneEnvelope(command, openLanePages(rule.answered ? rule.answered(args, body) : body, deps) as Args, deps);
 }
 
 export function forwardable<T extends ToolModule>(module: T, deps: ForwarderDeps = {}): T {
