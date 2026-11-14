@@ -14,7 +14,7 @@ import { composedDashboardUrl } from "./dashboard-url-meter";
 import { envelope, isEnvelope } from "./envelope";
 import { handUploadSentence, platformVersionNote } from "./hand-upload";
 import { itemPackageUrl, packageAddressMode, packageFileOf, packagePathOf, type PackageScope } from "./package-address";
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 
 import type { ProjectRef } from "./registry";
 

@@ -13,7 +13,7 @@ import { HELD_MISSES, iconHoldSentence, localPackageHold, type PackageHold } fro
 import { dispatchedPushSentence, docsOnlySentence, headPushOf, isDocsOnly, skippedPushSentence, type HeadPush } from "./head-push";
 import { projectApiBytes } from "./project-api-bytes";
 import { projectApiGet, type ProjectApi } from "./project-api";
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 import {
   declaredIcon128,
   icon128FromBytes,

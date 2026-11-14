@@ -10,7 +10,7 @@ import { browserBuildSettingsUrl, browserBuildVerdict, readBrowserBuilds, type B
 import { projectApiGet, type ProjectApi } from "./project-api";
 import { type ProjectRef } from "./registry";
 import { MINT_CALL } from "./safari-app-record-step";
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 
 import type { RequirementRow } from "./store-requirements";
 

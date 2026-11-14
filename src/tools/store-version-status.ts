@@ -16,7 +16,7 @@ import { runCauseOf, type ConnectUrls } from "../lib/submit-run-cause";
 import { AMO_SIGNED_STATUS } from "../lib/review-beside-submission";
 import { consoleProjectUrl } from "../lib/registry";
 import { readsBeforeDispatch } from "../lib/store-read-landed";
-import { isRow, text } from "../lib/ship-act";
+import { isRow, text } from "../lib/row";
 import { type ListingPushView } from "../lib/safari-listing-push-read";
 import { releaseChangeOfRow, releaseChangeSentence, releaseTypeMeaning, type ReleaseTypeChange, type ReleaseTypeChangeRefused } from "../lib/store-row-sources";
 import { packageRefusedSentence, uploadRefused } from "../lib/store-upload-words";

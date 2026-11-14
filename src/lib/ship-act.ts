@@ -25,17 +25,12 @@ import {
   type ProjectApiRefusal,
 } from "./project-api";
 import { pricedRefusal } from "./platform-hold";
+import { isRow, text } from "./row";
 import { byHandFields, byHandSentence, offLaneHandOf, offLaneTruthOf } from "./store-act-by-hand";
 
+export { isRow, text };
+
 type Row = Record<string, unknown>;
-
-export function isRow(value: unknown): value is Row {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-export function text(value: unknown): string {
-  return typeof value === "string" ? value.trim() : typeof value === "number" ? String(value) : "";
-}
 
 function closed(message: string): string {
   return /[.!?]$/.test(message) ? message : `${message}.`;

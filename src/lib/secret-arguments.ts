@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { CONNECT_STORE_NAMES, type ConnectStore } from "./connect-session";
+import { CONNECT_STORE_NAMES, type ConnectStore } from "./connect-stores";
 import { envelope } from "./envelope";
 
 export type SecretKind = "private-key" | "amo-jwt-issuer" | "amo-jwt-secret" | "google-client-secret" | "google-token" | "named-secret";

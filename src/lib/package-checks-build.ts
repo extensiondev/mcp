@@ -10,7 +10,7 @@ import { readBuildAllowance } from "./build-allowance";
 import { HELD_MISSES, localPackageHold, packageHoldSentence, type PackageHold } from "./build-inputs";
 import { dispatchedPushSentence, docsOnlySentence, REFUSED_OUTCOMES, refusedPushSentence, skippedPushSentence, type BuildCap, type HeadPush } from "./head-push";
 import { platformApiGet, type ProjectApi } from "./project-api";
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 import { gitHead, platformBuildIcons, type BuildIcons } from "./store-listing-icon";
 
 type Row = Record<string, unknown>;

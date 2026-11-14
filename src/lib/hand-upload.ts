@@ -7,7 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { packageFileName, packageFileOf, printedPackageAddress, type PackageScope } from "./package-address";
-import { text } from "./ship-act";
+import { text } from "./row";
 
 import type { RequirementRow } from "./store-requirements";
 

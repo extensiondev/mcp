@@ -18,7 +18,7 @@ import {
   type ProjectApi,
 } from "../lib/project-api";
 import { consoleProjectUrl } from "../lib/registry";
-import { isRow, text } from "../lib/ship-act";
+import { isRow, text } from "../lib/row";
 
 const COMMAND = "extension_shares";
 const REVOKE_ACTION = "extension_shares.revoke";

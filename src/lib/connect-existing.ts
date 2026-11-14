@@ -8,7 +8,7 @@
 
 import { accountOf, type ConnectStore } from "./connect-session";
 import { projectApiGet, projectApiSend, type ProjectApi, type ProjectApiRead } from "./project-api";
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 import { WORKSPACE_RECONNECT_STATE } from "./store-connection";
 
 type Row = Record<string, unknown>;

@@ -14,7 +14,7 @@ import { exactVersion } from "./exec";
 import { projectApiGet, type ProjectApi } from "./project-api";
 import { scaffoldScripts } from "./scaffold-scripts";
 import { buildSummaryPath } from "./session-paths";
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 import { STORE_MD_FILENAME, parseStoreMd } from "./store-md";
 
 type Row = Record<string, unknown>;

@@ -10,7 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { safariReleaseIntentOf, type SafariReleaseIntentRead } from "./safari-release-intent";
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 import { uploadStopsAtDraft } from "./store-connection";
 import { STORE_MD_FILENAME } from "./store-md";
 import { listingForStore, parseStoreMdListing } from "./store-md-listing";

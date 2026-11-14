@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 import { STORE_MD_FILENAME } from "./store-md";
 import { STORE_SECTIONS, SUBSECTION_KEYS, type ListingField, type ListingStore } from "./store-md-declarations";
 import { storeMdLineOf, storeMdSectionOf } from "./store-md-fields";

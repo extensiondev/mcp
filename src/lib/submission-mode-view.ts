@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 import { uploadStopsAtDraft } from "./store-connection";
 import { SAFARI_RELEASE_LINE_SENTENCE, SUBMISSION_MODE_IDS, isStoreSettingsStore } from "./store-settings";
 

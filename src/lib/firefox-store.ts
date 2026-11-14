@@ -7,7 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { composedDashboardUrl } from "./dashboard-url-meter";
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 import { connectionOf, failedCheckSentence, fallbackConnectUrl } from "./store-connection";
 
 import type { ProjectRef } from "./registry";

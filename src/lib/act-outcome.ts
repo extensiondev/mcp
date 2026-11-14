@@ -6,15 +6,21 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { setTimeout as timerSleep } from "node:timers/promises";
-
+import {
+  TRANSIENT_READ_STATUSES,
+  WAIT_SECONDS_DEFAULT,
+  WAIT_SECONDS_MAX,
+  missesSentence,
+  outcomeClock,
+  waitBound,
+} from "./outcome-clock";
 import { spokenDate } from "./publish-link";
 import { trackFields } from "./track-url";
 
+export { TRANSIENT_READ_STATUSES, WAIT_SECONDS_DEFAULT, WAIT_SECONDS_MAX, missesSentence, outcomeClock, waitBound };
+
 type Row = Record<string, unknown>;
 
-export const WAIT_SECONDS_DEFAULT = 180;
-export const WAIT_SECONDS_MAX = 600;
 export const OUTCOME_POLL_MS = 5_000;
 
 export const WAIT_SECONDS_INPUT = {
@@ -22,20 +28,6 @@ export const WAIT_SECONDS_INPUT = {
   description:
     "Seconds to wait for the result, 0 to 600 (default 180), and with approvalId for the approval.",
 };
-
-export const outcomeClock = {
-  now: (): number => Date.now(),
-  sleep: async (ms: number): Promise<void> => {
-    await timerSleep(ms);
-  },
-};
-
-export function waitBound(raw: unknown): number {
-  const n = typeof raw === "string" && raw.trim() !== "" ? Number(raw) : raw;
-  if (typeof n !== "number" || !Number.isFinite(n)) return WAIT_SECONDS_DEFAULT;
-
-  return Math.min(WAIT_SECONDS_MAX, Math.max(0, Math.floor(n)));
-}
 
 export interface ActOutcome {
   recorded: boolean;
@@ -58,8 +50,6 @@ export interface RecordMiss {
 
 export type RecordRead<T> = { ok: true; record: T | null } | RecordMiss;
 
-export const TRANSIENT_READ_STATUSES = new Set([0, 408, 425, 429, 500, 502, 503, 504]);
-
 export function missedRead(read: { status: number; message: string; retryAfterSeconds?: number }): RecordMiss {
   return {
     ok: false,
@@ -67,10 +57,6 @@ export function missedRead(read: { status: number; message: string; retryAfterSe
     transient: TRANSIENT_READ_STATUSES.has(read.status),
     ...(read.retryAfterSeconds ? { retryAfterSeconds: read.retryAfterSeconds } : {}),
   };
-}
-
-export function missesSentence(misses: number, waitedSeconds: number, last: string, what = "the record"): string {
-  return `${last}; ${misses} ${misses === 1 ? "read" : "reads"} of ${what} missed over ${waitedSeconds} s`;
 }
 
 export function retryMs(retryAfterSeconds: unknown): number {

@@ -9,7 +9,7 @@
 import { envelope } from "./envelope";
 import { LISTING_TOO_LARGE_STATUS } from "./listing-body-limit";
 import { projectApiSend, type ProjectApi, type ProjectApiRefusal } from "./project-api";
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 import { MAX_SCREENSHOT_MASTER_BYTES, type ListingDigestPatch, type ListingImage, type ListingPatch } from "./store-listing-media";
 
 import type { ListingStore } from "./store-md-listing";

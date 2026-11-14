@@ -16,7 +16,7 @@ import { resolveEngineOverride } from "../lib/engine-override";
 import { captureTemplateSeed } from "../lib/funnel-telemetry";
 import { pinnedTemplateCommit, templateCatalogUrl } from "../lib/template-artifact-source";
 import { envelope } from "../lib/envelope";
-import { shellPath } from "../lib/publish-link";
+import { shellPath } from "../lib/shell-words";
 import { scaffoldScripts } from "../lib/scaffold-scripts";
 import { STORE_MD_FILENAME } from "../lib/store-md";
 import { STORE_MD_DRAFT_SENTENCE } from "../lib/store-md-words";

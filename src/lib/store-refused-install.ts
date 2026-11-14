@@ -7,7 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { envelope } from "./envelope";
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 import { nextStep } from "./store-connection";
 import { storeRunUnavailable } from "./store-run-unavailable";
 import { storeName } from "./store-upload-words";

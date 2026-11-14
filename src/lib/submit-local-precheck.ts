@@ -11,7 +11,7 @@ import { envelope } from "./envelope";
 import { FIREFOX_AGREEMENT_CHECK, FIREFOX_AGREEMENT_URL } from "./firefox-enterprise";
 import { projectApiGet, type ProjectApi } from "./project-api";
 import { type ProjectRef } from "./registry";
-import { text } from "./ship-act";
+import { text } from "./row";
 import { nextStep } from "./store-connection";
 import { builtToolchainFor, reviewerNoteToolchainCheck } from "./store-md-toolchain";
 import { FIREFOX_LISTING_CHECK, SAFARI_DESCRIPTION_CHECK, SAFARI_DESCRIPTION_MAX, firefoxListingCheck, safariDescriptionCheck } from "./store-preflight-local";

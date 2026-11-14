@@ -8,7 +8,7 @@
 
 import { envelope } from "../lib/envelope";
 import { projectApiGet, projectApiReadFailure } from "../lib/project-api";
-import { isRow, text } from "../lib/ship-act";
+import { isRow, text } from "../lib/row";
 import { openFor, type Scope } from "./release-history";
 
 const COMMAND = "extension_release_status";

@@ -24,7 +24,7 @@ import {
   type ProjectApiRefusal,
 } from "../lib/project-api";
 import { projectRename, renameHint } from "../lib/project-rename";
-import { isRow, text } from "../lib/ship-act";
+import { isRow, text } from "../lib/row";
 import { trackUrl } from "../lib/track-url";
 
 export const COMMAND = "extension_workspace";

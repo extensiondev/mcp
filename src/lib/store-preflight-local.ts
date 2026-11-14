@@ -9,7 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 import { engineProjectRoot } from "./session-paths";
 
 type Row = Record<string, unknown>;

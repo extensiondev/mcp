@@ -9,7 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 import { STORE_MD_FILENAME } from "./store-md";
 import { parseStoreMdListing, type ListingField, type StoreMdListing } from "./store-md-listing";
 

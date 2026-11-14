@@ -11,7 +11,7 @@ import { spawn } from "node:child_process";
 import { envelope, isEnvelope } from "./envelope";
 import { envIsHeadless } from "./launch-flags";
 import { APPROVAL_REQUIRED_STATUS } from "./approval-outcome";
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 
 type Env = NodeJS.ProcessEnv | Record<string, string | undefined>;
 

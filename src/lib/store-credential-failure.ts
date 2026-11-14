@@ -7,7 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { WRITE_FAILURE_REPORT_URL } from "./settings-write";
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 import { connectionSourceOf, nextStep, type ConnectionSource, type NextStep } from "./store-connection";
 
 type Row = Record<string, unknown>;

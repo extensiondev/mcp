@@ -7,7 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { openProjectApi, projectApiGet, type ProjectApi } from "./project-api";
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 
 export type SafariReleaseIntent = "manual" | "after-approval";
 

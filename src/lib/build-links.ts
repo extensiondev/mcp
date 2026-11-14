@@ -11,7 +11,7 @@ import { readPlatformCode, readPlatformMessage, sawPlatformHold } from "./platfo
 import { projectApiGet, type ProjectApi, type ProjectApiRead } from "./project-api";
 import { bearerHeaders } from "./request-fetch";
 import { identityHeaders } from "./session-identity";
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 
 const LINK_ID = /^[A-Za-z0-9_-]{8,128}$/;
 const BUILD_SCOPE = /^build:([0-9a-f]{7,40})$/i;

@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { isRow } from "./ship-act";
+import { isRow } from "./row";
 import { STORE_MD_FILENAME } from "./store-md";
 
 type Row = Record<string, unknown>;

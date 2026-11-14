@@ -11,7 +11,7 @@ import crypto from "node:crypto";
 import { composedDashboardUrl } from "./dashboard-url-meter";
 import { edgeListingUrlOf } from "./edge-listing";
 import { AMO_API_KEY_PAGE } from "./firefox-store";
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 
 type Row = Record<string, unknown>;
 

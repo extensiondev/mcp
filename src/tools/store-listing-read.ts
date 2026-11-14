@@ -17,7 +17,7 @@ import {
 } from "../lib/platform-store-listing";
 import { projectApiGet, projectApiReadFailure, type ProjectApiRefusal } from "../lib/project-api";
 import { consoleProjectUrl } from "../lib/registry";
-import { text } from "../lib/ship-act";
+import { text } from "../lib/row";
 import { LISTING_STORES, type ListingStore } from "../lib/store-md-listing";
 import { openFor, type Scope } from "./release-history";
 

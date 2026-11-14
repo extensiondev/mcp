@@ -9,7 +9,7 @@
 import { envelope } from "./envelope";
 import { platformApiGet, type ProjectApi } from "./project-api";
 import { WRITE_FAILURE_REPORT_URL } from "./settings-write";
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 import { byHandFields, byHandSentence, offLaneHandOf, STORE_ACT_NOT_ON_LANE_CODE, type StoreActByHand } from "./store-act-by-hand";
 import { nextStep } from "./store-connection";
 

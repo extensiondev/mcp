@@ -8,7 +8,7 @@
 
 import { projectApiSend, type ProjectApi, type ProjectApiRead } from "./project-api";
 import { spokenDate } from "./publish-link";
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 import { byHandFields, byHandSentence, STORE_ACT_NOT_ON_LANE_CODE } from "./store-act-by-hand";
 import { STORE_MD_FILENAME } from "./store-md";
 

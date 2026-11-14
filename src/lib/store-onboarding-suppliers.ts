@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 import { NEVER_PREFILLED, supplyOf } from "./store-bring-list";
 import { WORKSPACE_RECONNECT_STATE } from "./store-connection";
 

@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { APPROVAL_GATE_ENV, approvalGateEnabled } from "./approval-gate";
+import { APPROVAL_GATE_ENV, approvalGateEnabled } from "./approval-gate-env";
 import { approvalVerdict } from "./approval-policy";
 import { envelope, isEnvelope } from "./envelope";
 import { STORE_SETTINGS_ACTION } from "./store-settings";

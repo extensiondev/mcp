@@ -8,6 +8,7 @@
 
 import crypto from "node:crypto";
 
+import { APPROVAL_GATE_ENV, approvalGateEnabled } from "./approval-gate-env";
 import { readLines } from "./approval-lines";
 import { loginRefusedBeforeApproval } from "./approval-login";
 import { approvalUrlFor } from "./approval-outcome";
@@ -86,16 +87,7 @@ export {
   type ApprovalScope,
 } from "./approval-verify";
 
-export const APPROVAL_GATE_ENV = "EXTENSION_DEV_APPROVAL_GATE";
-
-export function approvalGateEnabled(defaultOn = false): boolean {
-  const raw = String(process.env[APPROVAL_GATE_ENV] || "")
-    .trim()
-    .toLowerCase();
-  if (raw === "") return defaultOn;
-
-  return raw !== "0" && raw !== "false" && raw !== "off";
-}
+export { APPROVAL_GATE_ENV, approvalGateEnabled };
 
 export function platformRequiresApproval(
   res: { status: number },

@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 import { FIREFOX_SYNC_LISTING_CALL, SAFARI_DESCRIPTION_MAX } from "./store-preflight-local";
 import { nextStep, type NextStep } from "./store-connection";
 import { credentialFailureOf, credentialFailureStep } from "./store-credential-failure";

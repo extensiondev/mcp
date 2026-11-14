@@ -11,7 +11,7 @@ import { approvalRoundTrip } from "./approval-outcome";
 import { askingOnly } from "./ask-only";
 import { verdictOfAction, type ApprovalVerdict } from "./approval-policy";
 import { projectApiSend, type ProjectApi, type ProjectApiRefusal } from "./project-api";
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 
 type Row = Record<string, unknown>;
 

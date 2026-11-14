@@ -12,7 +12,7 @@ import { consoleBase } from "../lib/console-urls";
 import { listCredentials } from "../lib/credentials";
 import { targetServer } from "../lib/credential-server";
 import { envelope } from "../lib/envelope";
-import { text } from "../lib/ship-act";
+import { text } from "../lib/row";
 
 const COMMAND = "extension_workspace";
 

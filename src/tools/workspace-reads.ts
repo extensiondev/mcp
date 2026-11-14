@@ -11,7 +11,7 @@ import { ConsoleProjectPage, consoleWorkspacePath } from "@extension.dev/urls/pa
 import { consoleBase, consoleProjectUrl } from "../lib/console-urls";
 import { envelope, isEnvelope, type Envelope } from "../lib/envelope";
 import { platformApiGet, projectApiGet, type ProjectApi, type ProjectApiRead } from "../lib/project-api";
-import { isRow, text } from "../lib/ship-act";
+import { isRow, text } from "../lib/row";
 import { readEnvironment } from "./workspace-environment";
 
 export const WORKSPACE_INCLUDES = ["team", "members", "tokens", "apps", "activity", "environment", "storeAccounts"] as const;

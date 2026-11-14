@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 import { storeSettingsUrl } from "./store-connection";
 import { STORE_MD_FILENAME } from "./store-md";
 import { LISTING_TEXT_LIMITS } from "./store-md-declarations";

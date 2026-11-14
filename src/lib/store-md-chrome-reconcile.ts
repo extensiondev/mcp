@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { text } from "./ship-act";
+import { text } from "./row";
 import { STORE_MD_FILENAME } from "./store-md";
 import { HOST_BULLET_FORM } from "./store-md-bullets";
 import { listOf, namesNotInBullets, uncoveredNamesIn } from "./store-md-host-justifications";

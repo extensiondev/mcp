@@ -10,7 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { compareVersions, decompose } from "./engine-version";
-import { shellPath } from "./publish-link";
+import { shellPath } from "./shell-words";
 
 export type DeclaredEngine = { kind: "declared"; spec: string } | { kind: "none" } | { kind: "unreadable" };
 

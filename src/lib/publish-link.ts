@@ -8,8 +8,11 @@
 
 import { consoleProjectUrl } from "./console-urls";
 import { GRANT_QUERY, REGISTRY_TOKEN_QUERY } from "./package-address";
+import { shellPath, shellUrl, unshellUrl } from "./shell-words";
 
 import type { ProjectRef } from "./registry";
+
+export { shellPath, shellUrl, unshellUrl };
 
 export const VISIBILITY_SOURCE = "extension.dev project settings";
 
@@ -150,32 +153,6 @@ export function pageLine(
   return link.expiresAt
     ? `${lead} It works until ${spokenDate(link.expiresAt)}.`
     : lead;
-}
-
-const SHELL_SPECIAL = /[\s&;|<>()$`'"\\*?[\]{}!]/;
-
-const EXPANDS_IN_DOUBLE_QUOTES = /[$`"\\!]/;
-
-const SHELL_PLAIN_WORD = /^[A-Za-z0-9_@%+=:,./-]+$/;
-
-function singleQuoted(word: string): string {
-  return `'${word.replace(/'/g, "'\\''")}'`;
-}
-
-export function shellPath(filePath: string): string {
-  return SHELL_PLAIN_WORD.test(filePath) ? filePath : singleQuoted(filePath);
-}
-
-export function shellUrl(url: string): string {
-  if (!SHELL_SPECIAL.test(url)) return url;
-
-  return EXPANDS_IN_DOUBLE_QUOTES.test(url) ? singleQuoted(url) : `"${url}"`;
-}
-
-export function unshellUrl(word: string): string {
-  if (word.length > 1 && word.startsWith("'") && word.endsWith("'")) return word.slice(1, -1).replace(/'\\''/g, "'");
-
-  return word.replace(/^["']|["']$/g, "");
 }
 
 export interface RunCommand {

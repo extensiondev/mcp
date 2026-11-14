@@ -12,7 +12,7 @@ import { consoleProjectUrl } from "./console-urls";
 import { envelope } from "./envelope";
 import { projectApiGet, type ProjectApi } from "./project-api";
 import { type ProjectRef } from "./registry";
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 import { nextStep, type NextStep } from "./store-connection";
 
 type Row = Record<string, unknown>;

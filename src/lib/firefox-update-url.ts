@@ -9,7 +9,7 @@
 import { splitChannelKey } from "./channel-link";
 import { channelXpiAddress, updateManifestAddress } from "./package-address";
 import { readBuiltManifest } from "./project-manifest";
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 import { storeMdNoNetworkPromise } from "./store-md-network";
 
 import type { ChannelEntry, ProjectRef } from "./registry";

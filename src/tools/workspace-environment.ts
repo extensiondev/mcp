@@ -12,7 +12,7 @@ import { consoleProjectUrl } from "../lib/console-urls";
 import { resolveCredential } from "../lib/credential-source";
 import { envelope } from "../lib/envelope";
 import { openProjectApi, projectApiGet, projectApiOpenFailure, projectApiSend, type ProjectApi } from "../lib/project-api";
-import { isRow, text } from "../lib/ship-act";
+import { isRow, text } from "../lib/row";
 import { trackUrl } from "../lib/track-url";
 import { COMMAND, refusal } from "./workspace-configure";
 

@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { TRANSIENT_READ_STATUSES, missesSentence, outcomeClock, waitBound } from "./act-outcome";
+import { TRANSIENT_READ_STATUSES, missesSentence, outcomeClock, waitBound } from "./outcome-clock";
 import { APPROVAL_PENDING_RETRY_SECONDS, APPROVAL_PENDING_STATUS } from "./approval-outcome";
 import { resolveCredential } from "./credential-source";
 import { envelope, isEnvelope, type Envelope } from "./envelope";

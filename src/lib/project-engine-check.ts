@@ -21,7 +21,7 @@ import {
 import { driftRemediation, readDeclaredDrift, readDeclaredEngine, type DeclaredRead } from "./engine-declared";
 import { engineDrift } from "./engine-version";
 import { pinnedCliVersion } from "./exec";
-import { shellPath } from "./publish-link";
+import { shellPath } from "./shell-words";
 
 export interface ProjectEngineCheck {
   check: "project-engine";

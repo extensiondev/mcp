@@ -11,7 +11,7 @@ import path from "node:path";
 
 import { engineManifestView } from "./engine-manifest-view";
 import { engineProjectRoot } from "./session-paths";
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 
 type Row = Record<string, unknown>;
 

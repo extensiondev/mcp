@@ -8,7 +8,7 @@
 
 import { envelope, isEnvelope, type Envelope } from "./envelope";
 import { nextStep } from "./store-connection";
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 
 type Row = Record<string, unknown>;
 

@@ -6,19 +6,18 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { CONNECT_STORE_NAMES, CONNECT_STORES, type ConnectStore } from "./connect-stores";
 import { consoleProjectUrl } from "./console-urls";
 import { composedDashboardUrl } from "./dashboard-url-meter";
 import { AMO_API_KEY_PAGE } from "./firefox-store";
-import { isRow, text } from "./ship-act";
+import { isRow, text } from "./row";
 import { withStoreKeyPageNote } from "./store-key-page-notes";
 
 import type { ProjectRef } from "./registry";
 
+export { CONNECT_STORE_NAMES, CONNECT_STORES, type ConnectStore };
+
 export const CONNECT_ACTION = "connect";
-
-export const CONNECT_STORES = ["chrome", "firefox", "edge", "safari"] as const;
-
-export type ConnectStore = (typeof CONNECT_STORES)[number];
 
 export const CONNECT_WAIT_MAX_SECONDS = 600;
 
@@ -27,13 +26,6 @@ export const STORE_KEY_PAGES: Record<ConnectStore, string | null> = {
   firefox: AMO_API_KEY_PAGE,
   edge: composedDashboardUrl("https://partner.microsoft.com/dashboard/microsoftedge/publishapi"),
   safari: composedDashboardUrl("https://appstoreconnect.apple.com/access/integrations/api"),
-};
-
-export const CONNECT_STORE_NAMES: Record<ConnectStore, string> = {
-  chrome: "the Chrome Web Store",
-  firefox: "Firefox Add-ons",
-  edge: "Edge Add-ons",
-  safari: "the App Store",
 };
 
 const HANDOFF: Record<ConnectStore, string> = {
