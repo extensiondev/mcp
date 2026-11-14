@@ -14,7 +14,6 @@ import { type ProjectRef } from "./registry";
 import { text } from "./row";
 import { nextStep } from "./store-connection";
 import { reviewerNoteToolchainCheck } from "./store-md-toolchain";
-import { builtToolchainFor } from "./store-md-toolchain-platform";
 import { FIREFOX_LISTING_CHECK, SAFARI_DESCRIPTION_CHECK, SAFARI_DESCRIPTION_MAX, firefoxListingCheck, safariDescriptionCheck } from "./store-preflight-local";
 import { trackUrl as consoleTrackUrl } from "./track-url";
 import { localListingOf } from "../tools/store-listing";
@@ -101,7 +100,7 @@ export async function localSubmitPrecheck(args: LocalPrecheckArgs): Promise<{ re
   const warnings = safari && !projectPath ? [SAFARI_DESCRIPTION_UNCHECKED] : [];
   const safariRow = safari && projectPath ? safariDescriptionCheck(project.safariDescription) : null;
   const firefox = wantsFirefox ? await firefoxRow(args.api) : null;
-  const toolchain = wantsFirefox && projectPath ? reviewerNoteToolchainCheck(project, await builtToolchainFor(args.api, project, args.buildSha)) : null;
+  const toolchain = wantsFirefox && projectPath ? reviewerNoteToolchainCheck(project) : null;
   if (toolchain) warnings.push(text(toolchain.message));
 
   for (const store of projectPath ? args.browsers : []) {

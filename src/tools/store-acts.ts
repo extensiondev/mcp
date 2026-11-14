@@ -119,7 +119,6 @@ import {
 } from "./store-listing";
 import { publishVersion } from "./store-publish-version";
 import { reviewerNoteToolchainCheck } from "../lib/store-md-toolchain";
-import { builtToolchainFor } from "../lib/store-md-toolchain-platform";
 import { chromeWebStoreMdCheck, chromeWebStoreMdOf } from "../lib/chromewebstore-md";
 import { firefoxListingCheck, safariDescriptionCheck, withLocalChecks } from "../lib/store-preflight-local";
 import { chromePublisherSlotsCheck } from "../lib/chrome-publisher-slots";
@@ -1033,7 +1032,6 @@ async function preflightRead(args: StoreActArgs, project: ProjectFacts): Promise
     ),
   );
   const records = project.projectPath ? listings : [];
-  const builtToolchain = asked.includes("firefox") && project.projectPath ? await builtToolchainFor(api, project, text(args.buildSha)) : null;
   const firstRefusal = reads.find((read) => !read.ok);
 
   if (firstRefusal && !firstRefusal.ok && reads.every((read) => !read.ok)) {
@@ -1073,7 +1071,7 @@ async function preflightRead(args: StoreActArgs, project: ProjectFacts): Promise
       store === "safari"
         ? [safariDescriptionCheck(project.projectPath ? project.safariDescription : null)]
         : store === "firefox"
-          ? [firefoxListingCheck(listings[i]), reviewerNoteToolchainCheck(project, builtToolchain)]
+          ? [firefoxListingCheck(listings[i]), reviewerNoteToolchainCheck(project)]
           : store === "chrome"
             ? [chromePublisherSlotsCheck(read.json)]
             : [];

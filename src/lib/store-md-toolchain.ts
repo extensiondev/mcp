@@ -272,10 +272,12 @@ export function firefoxReviewerNotesOf(content: string | null): string | null {
   }
 }
 
-const NO_BUILD_READ = 'No build toolchain was read to fill it: pass buildSha for a platform build that records one, or run extension_build with browser "firefox" once, and this check names the line to write.';
+const NO_BUILD_READ = 'No build toolchain was read to fill it: run extension_build with browser "firefox" once, and this check names the line to write.';
 
-export function reviewerNoteToolchainCheck(project: ToolchainProject, built: BuiltToolchain | null): Row | null {
+export function reviewerNoteToolchainCheck(project: ToolchainProject): Row | null {
   if (!project.projectPath) return null;
+
+  const built = project.toolchain?.localBuild ?? null;
 
   const notes = firefoxReviewerNotesOf(project.storeMd);
   const line = notes ? reviewerNoteBuildLine(notes) : null;

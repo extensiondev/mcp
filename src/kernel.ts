@@ -104,7 +104,6 @@ export type { ListingField, ListingStore, ListingText, ListingTextField, Permiss
 export { LISTING_STORES, classifyStore, derivedListingFields, listingForStore, parseStoreMdListing } from "./lib/store-md-listing";
 export type { StoreListingRead, StoreMdListing, StoreMdPrivacy, UnreadLine } from "./lib/store-md-listing";
 export { SCREENSHOTS_DOOR, screenshotsAdvice, screenshotsLineSentence } from "./lib/store-md-screenshots";
-export { builtToolchainFor } from "./lib/store-md-toolchain-platform";
 export { reviewerNoteToolchainCheck } from "./lib/store-md-toolchain";
 export { blockingWords, withStoreMdNamedForPerson } from "./lib/store-md-words";
 export { CHROMEWEBSTORE_MD_FILENAME, STORE_MD_FILENAME, parseStoreMd } from "./lib/store-md";
