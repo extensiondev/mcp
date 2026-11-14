@@ -8,6 +8,7 @@ import {
   writeCredentials,
   type StoredCredentials,
 } from "../lib/credentials";
+import { withRequestCredential } from "../lib/credential-scope";
 import * as auth from "../tools/auth";
 
 const FUTURE = Math.floor(Date.now() / 1000) + 3600;
@@ -216,5 +217,15 @@ describe("7-day token TTL disclosure", () => {
   it("token-gated tools state the TTL wherever they point at Access tokens", async () => {
     const promote = await import("../tools/release-promote");
     expect(promote.schema.description).toContain("7 days");
+  });
+
+  it("names the forward credential, not an OAuth token, when the hosted lane answers a forwarded status", async () => {
+    const credential = { token: "forward-1", api: "https://www.extension.dev", projects: [{ workspace: "acme", project: "widget" }], expiresAt: FUTURE };
+    const forwarded = await withRequestCredential({ ...credential, kind: "forward" }, () => auth.handler({}));
+    const connected = await withRequestCredential(credential, () => auth.handler({}));
+
+    expect(forwarded).toContain("through a short-lived forward credential the local server exchanged from this machine's device login");
+    expect(forwarded).not.toContain("OAuth");
+    expect(connected).toContain("through this connection's OAuth token");
   });
 });

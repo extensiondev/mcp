@@ -19,6 +19,7 @@ export interface RequestCredential {
   projects: ScopedProject[];
   expiresAt: number | null;
   project?: string | null;
+  kind?: "oauth" | "forward";
   onUnauthorized?: () => void;
 }
 
@@ -51,6 +52,7 @@ export function normalizeRequestCredential(credential: RequestCredential): Reque
     projects,
     expiresAt: Number.isFinite(expiresAt) && expiresAt > 0 ? expiresAt : null,
     project: selected ? `${selected.workspace}/${selected.project}` : null,
+    ...(credential.kind === "forward" ? { kind: "forward" as const } : {}),
     ...(credential.onUnauthorized ? { onUnauthorized: credential.onUnauthorized } : {}),
   };
 }

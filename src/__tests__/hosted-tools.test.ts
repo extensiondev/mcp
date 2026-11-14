@@ -17,6 +17,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HOSTED_TOOL_NAMES, createHostedServer, registerHostedTools } from "../hosted";
 import { credentialsPath, writeCredentials } from "../lib/credentials";
+import { envelope as envelopeOf } from "../lib/envelope";
+import { forgetForwardCredentials } from "../lib/forward-credential";
+import { forwardCall } from "../lib/hosted-forwarder";
 import { tools } from "../index";
 import { APPROVAL, PROJECT, WWW, stubPlatformFetch } from "./hosted-platform-fetch";
 
@@ -66,6 +69,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  forgetForwardCredentials();
 
   for (const [key, value] of Object.entries(saved)) {
     if (value === undefined) delete process.env[key];
@@ -321,5 +325,74 @@ describe("hosted tool surface", () => {
 
     expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(["extension_release_status"]);
     expect(() => registerHostedTools(new McpServer({ name: "x", version: "0" }), { credential, tools: ["extension_publish"] })).toThrow(/Not a hosted tool/);
+  });
+});
+
+const LANE = "https://mcp.extension.dev/mcp/forward";
+const LISTED = JSON.parse(envelopeOf({ ok: true, command: "extension_builds", status: "listed", value: { builds: [] } }));
+const FORWARDING = { env: { EXTENSION_DEV_HOSTED: "1" }, version: "11.0.0", resolveLogin: () => ({ token: "device-login", ref: PROJECT }) };
+
+function stubLane(answers: unknown[], exchange = 200) {
+  const seen: Array<{ url: string; headers: Record<string, string>; body: any }> = [];
+  vi.stubGlobal("fetch", async (input: unknown, init?: RequestInit) => {
+    seen.push({ url: String(input), headers: Object.fromEntries(new Headers(init?.headers).entries()), body: JSON.parse(String(init?.body ?? "null")) });
+    const exchanged = seen.filter((hit) => hit.url.endsWith("/api/cli/forward/exchange")).length;
+
+    if (String(input).endsWith("/api/cli/forward/exchange")) return new Response(JSON.stringify(exchange === 200 ? { access_token: `forward-${exchanged}`, expires_in: 600 } : { code: "FORWARD_LANE_CLOSED", message: "The lane is off." }), { status: exchange });
+
+    const next = answers.shift();
+
+    if (next instanceof Error) throw next;
+
+    return new Response(JSON.stringify(next), { status: 200 });
+  });
+
+  return { seen, lane: () => seen.filter((hit) => hit.url === LANE) };
+}
+
+describe("the forwarder", () => {
+  it("sends the lane a project ref, a forward credential and one key, never the login, api or path", async () => {
+    const { seen, lane } = stubLane([LISTED, LISTED]);
+    const local = vi.fn(async () => "local");
+    const out = await forwardCall("extension_builds", { action: "list", project: "acme/web", projectPath: "/work/web", api: WWW }, local, FORWARDING);
+    await forwardCall("extension_builds", { action: "list", project: "acme/web" }, local, FORWARDING);
+    const [first, second] = lane();
+
+    expect(JSON.parse(out)).toEqual(LISTED);
+    expect(local).not.toHaveBeenCalled();
+    expect(seen.filter((hit) => hit.url.endsWith("/exchange"))).toHaveLength(1);
+    expect(first?.headers).toMatchObject({ authorization: "Bearer forward-1", "x-extensiondev-forwarder": "11.0.0", "x-extensiondev-project": "acme/web" });
+    expect(first?.headers["idempotency-key"]).toMatch(/^[A-Za-z0-9_-]{16,128}$/);
+    expect(second?.headers["idempotency-key"]).not.toBe(first?.headers["idempotency-key"]);
+    expect(first?.body).toEqual({ tool: "extension_builds", args: { action: "list", project: "acme/web" } });
+    expect(lane().map((hit) => hit.headers.authorization)).not.toContain("Bearer device-login");
+  });
+
+  it("sends the submit facts it read here, and runs a step that writes to this machine here", async () => {
+    const { lane } = stubLane([LISTED]);
+    const local = vi.fn(async () => "local");
+    await forwardCall("extension_submit_check", { action: "preflight", browsers: ["chrome"], projectPath: tmp }, local, FORWARDING);
+
+    expect(lane()[0]?.body.args.local.facts.project).toMatchObject({ exists: true });
+    expect(lane()[0]?.body.args).not.toHaveProperty("projectPath");
+
+    for (const [tool, args] of [["extension_builds", { action: "download", buildId: "abc1234" }], ["extension_auth", { action: "login" }], ["extension_preview_web", {}]] as const) {
+      expect(await forwardCall(tool, args, local, FORWARDING)).toBe("local");
+    }
+
+    expect(lane()).toHaveLength(1);
+  });
+
+  it("retries a lane that did not answer, and a refused cached credential, with the same key", async () => {
+    const denied = { ok: false, status: "auth-refused", error: { code: "E_AUTH_DENIED", message: "Refused." } };
+    const { lane } = stubLane([new Error("socket hang up"), LISTED, denied, LISTED]);
+    await forwardCall("extension_builds", {}, async () => "local", FORWARDING);
+    const out = await forwardCall("extension_builds", {}, async () => "local", FORWARDING);
+    const keys = lane().map((hit) => hit.headers["idempotency-key"]);
+
+    expect(JSON.parse(out)).toEqual(LISTED);
+    expect(keys[0]).toBe(keys[1]);
+    expect(keys[2]).toBe(keys[3]);
+    expect(lane().map((hit) => hit.headers.authorization)).toEqual(["Bearer forward-1", "Bearer forward-1", "Bearer forward-1", "Bearer forward-2"]);
   });
 });

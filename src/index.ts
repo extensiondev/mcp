@@ -71,10 +71,14 @@ import { createToolDispatcher, installToolHandlers, listedTools, type ToolModule
 import { isProjectRef } from "./lib/credentials";
 import { installCrashGuard } from "./lib/server-crash-guard";
 import { installPlatformKernelHooks } from "./lib/platform-kernel-hooks";
+import { registerKernelHooks } from "./lib/kernel-hooks";
+import { forwarderApprovalState } from "./lib/forward-approval-state";
+import { forwardable } from "./lib/hosted-forwarder";
 
 import { version } from "../package.json";
 
 installPlatformKernelHooks();
+registerKernelHooks({ approvalState: forwarderApprovalState });
 
 export { version };
 export { renderToolsDoc } from "./lib/docs-tools";
@@ -88,8 +92,8 @@ export const tools: ToolModule[] = [
   dev,
   start,
   tryTool,
-  previewWeb,
-  shares,
+  forwardable(previewWeb),
+  forwardable(shares),
   stop,
   manifestValidate,
   themeVerify,
@@ -106,19 +110,19 @@ export const tools: ToolModule[] = [
   domSnapshot,
   element,
   screenshot,
-  publish,
-  releaseStatus,
-  approvals,
-  buildsTool,
-  workspaceTool,
-  releasePromote,
-  submitTool,
-  submitCheck,
+  forwardable(publish),
+  forwardable(releaseStatus),
+  forwardable(approvals),
+  forwardable(buildsTool),
+  forwardable(workspaceTool),
+  forwardable(releasePromote),
+  forwardable(submitTool),
+  forwardable(submitCheck),
   wait,
   addFeature,
-  auth,
-  projectCreate,
-  workspaceCreate,
+  forwardable(auth),
+  forwardable(projectCreate),
+  forwardable(workspaceCreate),
   browsers,
   doctor,
   docsSearch,

@@ -251,12 +251,18 @@ export async function readIdentityWith(local: AuthLocal, deps?: {
   const server = describeServer(check, askApi);
 
   const hosted = Boolean(requestCredential());
+  const forwarded = requestCredential()?.kind === "forward";
   const slugs = member && !namedProject ? memberLabel(creds) : `${creds.workspaceSlug}/${creds.projectSlug}`;
   const memberRenew = `extension_auth (action: login, workspace: "${creds.workspaceSlug}", projects: "*")`;
-  const identityNote = hosted
+  const hostedNote = forwarded
     ? expired
+      ? "The short-lived forward credential for this call has expired. Call again: the local server exchanges its device login for a fresh one, and if extension.dev refuses that login, run extension_auth (action: login) on this machine."
+      : `Signed in as ${slugs} through a short-lived forward credential the local server exchanged from this machine's device login, which scopes every call; the device login itself goes only to extension.dev, never to the hosted lane.`
+    : expired
       ? "This connection's token has expired. Sign in again from your MCP client."
-      : `Signed in as ${slugs} through this connection's OAuth token, which scopes every call.`
+      : `Signed in as ${slugs} through this connection's OAuth token, which scopes every call.`;
+  const identityNote = hosted
+    ? hostedNote
     : member
       ? expired
         ? `The member login for ${creds.workspaceSlug} has expired. Run ${memberRenew} to refresh it.`

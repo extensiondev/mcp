@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { writeCredentials } from "../lib/credentials";
 import { envelope } from "../lib/envelope";
+import { FORWARD_PAIRS, LOCAL_FORWARD_URL, forgetForwardCredentials, forwardCredential, forwardUrlFor } from "../lib/forward-credential";
 import {
   PLATFORM_DISPATCH_TIMEOUT_MS,
   PLATFORM_READ_TIMEOUT_MS,
@@ -14,6 +15,7 @@ import {
   platformFetch,
   type PlatformFetchResult,
 } from "../lib/platform-fetch";
+import { forwardCall, forwardable } from "../lib/hosted-forwarder";
 import { attachTrack } from "../lib/track-url";
 import { handler as builds } from "../tools/builds";
 
@@ -291,5 +293,68 @@ describe("a bearer never follows a platform redirect", () => {
     });
 
     expect(loose).toEqual([]);
+  });
+});
+
+describe("the forwarder's login goes only to its own www and its own lane", () => {
+  afterEach(() => forgetForwardCredentials());
+
+  it.each([
+    ["production www", "https://www.extension.dev", {}, FORWARD_PAIRS["https://www.extension.dev"]],
+    ["the apex", "https://extension.dev", {}, "https://mcp.extension.dev/mcp/forward"],
+    ["production www with an override", "https://www.extension.dev", { EXTENSION_DEV_FORWARD_URL: "https://lane.example/mcp/forward" }, "https://mcp.extension.dev/mcp/forward"],
+    ["a loopback www", "http://localhost:3100", {}, LOCAL_FORWARD_URL],
+    ["a loopback www with a loopback override", "http://127.0.0.1:3100", { EXTENSION_DEV_FORWARD_URL: "http://127.0.0.1:4555/mcp/forward" }, "http://127.0.0.1:4555/mcp/forward"],
+    ["a loopback www with an HTTPS override", "http://localhost:3100", { EXTENSION_DEV_FORWARD_URL: "https://lane.example/mcp/forward" }, null],
+    ["another HTTPS www", "https://staging.extension.dev", {}, null],
+  ])("pairs %s from the closed table", (_name, api, env, expected) => {
+    expect(forwardUrlFor(api, env)).toBe(expected);
+  });
+
+  it("exchanges the login once, keeps the short credential until a minute before it ends, and never follows a redirect", async () => {
+    const seen: Array<{ url: string; authorization: string | null; redirect: string | undefined; body: unknown }> = [];
+    let life = 600;
+    const fetchImpl = (async (input: unknown, init?: RequestInit) => {
+      seen.push({ url: String(input), authorization: new Headers(init?.headers).get("authorization"), redirect: init?.redirect, body: JSON.parse(String(init?.body)) });
+
+      return jsonResponse({ access_token: `forward-${seen.length}`, expires_in: life });
+    }) as unknown as typeof fetch;
+    const input = { api: "https://www.extension.dev", login: "device-login", project: "acme/web", resource: "https://mcp.extension.dev/mcp/forward", fetchImpl };
+
+    const first = await forwardCredential(input);
+    const second = await forwardCredential(input);
+
+    expect(first).toMatchObject({ ok: true, cached: false, credential: { token: "forward-1" } });
+    expect(second).toMatchObject({ ok: true, cached: true, credential: { token: "forward-1" } });
+    expect(seen).toEqual([{ url: "https://www.extension.dev/api/cli/forward/exchange", authorization: "Bearer device-login", redirect: "manual", body: { resource: input.resource } }]);
+
+    forgetForwardCredentials();
+    life = 30;
+    await forwardCredential(input);
+    expect((await forwardCredential(input)) as { cached: boolean }).toMatchObject({ cached: false, credential: { token: "forward-3" } });
+  });
+
+  it("keeps nothing from a refused exchange", async () => {
+    let status = 503;
+    const fetchImpl = (async () => jsonResponse({ code: "FORWARD_LANE_CLOSED", message: "The hosted lane is off." }, status)) as unknown as typeof fetch;
+    const input = { api: "https://www.extension.dev", login: "device-login", project: null, resource: "https://mcp.extension.dev/mcp/forward", fetchImpl };
+
+    expect(await forwardCredential(input)).toEqual({ ok: false, status: 503, code: "FORWARD_LANE_CLOSED", message: "The hosted lane is off." });
+
+    status = 401;
+    expect(await forwardCredential(input)).toMatchObject({ ok: false, status: 401 });
+  });
+
+  it("keeps the in-process path while the switch is off, and refuses with the switch's name when www has no open lane", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ code: "FORWARD_LANE_CLOSED", message: "The lane is off." }, 503)) as unknown as typeof fetch;
+    const deps = { env: { EXTENSION_DEV_HOSTED: "1" }, fetchImpl, resolveLogin: () => ({ token: "device-login", ref: { workspace: "acme", project: "web" } }) };
+    const local: (args: Record<string, unknown>) => Promise<string> = async () => "local";
+
+    expect(await forwardable({ schema: { name: "extension_builds", description: "", inputSchema: {} }, handler: local }, { ...deps, env: {} }).handler({})).toBe("local");
+    expect(fetchImpl).not.toHaveBeenCalled();
+
+    const off = JSON.parse(await forwardCall("extension_release_status", {}, local, deps));
+    expect(off).toMatchObject({ ok: false, status: "hosted-off", error: { code: "E_TOOL_DISABLED" }, hint: expect.stringContaining("Unset EXTENSION_DEV_HOSTED") });
+    expect(JSON.parse(await forwardCall("extension_release_status", { api: "https://staging.extension.dev" }, local, deps))).toMatchObject({ status: "hosted-unpaired" });
   });
 });

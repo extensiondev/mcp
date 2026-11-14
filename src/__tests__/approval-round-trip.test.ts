@@ -2,9 +2,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handler as builds } from "../tools/builds";
+import { FILE_APPROVAL_STATE } from "../lib/approval-state-local";
+import { forwardSession, forwarderApprovalState } from "../lib/forward-approval-state";
+import { forgetForwardCredentials } from "../lib/forward-credential";
+import { forwardCall } from "../lib/hosted-forwarder";
 import { handler as promote } from "../tools/release-promote";
 import { handler as submit } from "../tools/submit-local";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
@@ -161,5 +165,38 @@ describe("an approval that is not granted yet reads as pending everywhere, and o
     expect(out.ok).toBe(true);
     expect(out.status).toBe("approval-pending");
     expect(platform.sent("POST", "/api/cli/release/promote")).toHaveLength(0);
+  });
+});
+
+describe("on the forwarder path the approvals and held grants are the hosted lane's", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    forgetForwardCredentials();
+  });
+
+  it("holds a create grant a local step polled in www's hosted state, and keeps the files outside a forwarded call", async () => {
+    const seen: Array<{ url: string; method: string; authorization: string | null; body: unknown }> = [];
+    vi.stubGlobal("fetch", async (input: unknown, init?: RequestInit) => {
+      seen.push({ url: String(input), method: String(init?.method), authorization: new Headers(init?.headers).get("authorization"), body: JSON.parse(String(init?.body ?? "null")) });
+
+      if (String(input).endsWith("/exchange")) return new Response(JSON.stringify({ access_token: "forward-1", expires_in: 600 }), { status: 200 });
+
+      if (String(input).endsWith("/mcp/forward")) return new Response(JSON.stringify({ ok: false, status: "local-half", error: { code: "E_TOOL_DISABLED", message: "Polling runs locally." } }), { status: 200 });
+
+      return new Response(JSON.stringify({ held: true }), { status: 200 });
+    });
+
+    const deps = { env: { EXTENSION_DEV_HOSTED: "1" }, version: "11.0.0", resolveLogin: () => ({ token: "device-login", ref: { workspace: "acme", project: "web" } }) };
+
+    const polled = async () => {
+      expect(forwardSession()).not.toBeNull();
+      await forwarderApprovalState().saveHeldBatch("https://www.extension.dev", "dev-code", { workspace: "acme", refs: ["acme/new"], grant: "grant", grantExpiresAt: 1, rows: [] });
+
+      return "polled here";
+    };
+
+    expect(await forwardCall("extension_project_create", { deviceCode: "dev-code" }, polled, deps)).toBe("polled here");
+    expect(seen[seen.length - 1]).toEqual({ url: "https://www.extension.dev/api/cli/forward/held-grants", method: "PUT", authorization: "Bearer forward-1", body: { deviceCode: "dev-code", grant: "grant", workspace: "acme", refs: ["acme/new"], rows: [] } });
+    expect(forwarderApprovalState()).toBe(FILE_APPROVAL_STATE);
   });
 });
