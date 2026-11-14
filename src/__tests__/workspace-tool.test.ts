@@ -303,6 +303,27 @@ describe("extension_workspace reads a workspace with any project login it holds"
     expect(calls.some((call) => call.url === `${API}/api/projects?workspace=acme`)).toBe(true);
   });
 
+  it("says a connected app's answers cover the picked projects, never the whole workspace, and raises no warning for the plan it may not read", async () => {
+    if (process.platform === "win32") return;
+
+    login("acme", "alpha", "alpha.sig");
+    routes["/api/workspaces/acme"] = { body: { ...WORKSPACE, projectCount: 1, memberCount: undefined, scope: "picked-projects" } };
+    routes["/api/workspaces/acme/plan"] = { body: { code: "CONNECTED_APP_SCOPE", message: "A connected app reads only the projects you picked." }, status: 403 };
+    routes["/api/projects"] = { body: { ...PROJECTS, projects: [PROJECTS.projects[0]], total: 1, scope: "picked-projects" } };
+
+    const info = JSON.parse(await workspace({ api: API }));
+    const listed = JSON.parse(await workspace({ action: "projects", api: API }));
+
+    expect(info.ok).toBe(true);
+    expect(info.value.workspace).toMatchObject({ projectCount: 1, memberCount: null, scope: "picked-projects" });
+    expect(info.value.plan).toBeNull();
+    expect(info.warnings ?? []).toEqual([]);
+    expect(info.hint).toContain("This connection covers 1 project of acme");
+    expect(listed.value).toMatchObject({ total: 1, scope: "picked-projects" });
+    expect(listed.hint).toContain("This connection covers 1 project of acme");
+    expect(listed.hint).not.toContain("acme has 1 project");
+  });
+
   it("reads the usage period totals and each project's share", async () => {
     if (process.platform === "win32") return;
 

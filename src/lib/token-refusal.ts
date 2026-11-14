@@ -52,6 +52,13 @@ export function tokenRefusal(
         name: "TokenReadOnly",
         hint: "A project login only reads workspace data. Make this change in the console.",
       };
+    case "CONNECTED_APP_SCOPE":
+      return {
+        status: "refused",
+        code: "E_AUTH_DENIED",
+        name: "ConnectedAppScope",
+        hint: "This connection reads only the projects picked for it. Members, invites, access tokens, the team, the activity log, store accounts, usage and the plan are read in the console, or with your own login in the local server (npx @extension.dev/mcp).",
+      };
     case "FORBIDDEN":
       return {
         status: "refused",

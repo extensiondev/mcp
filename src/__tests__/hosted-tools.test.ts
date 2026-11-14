@@ -158,6 +158,7 @@ describe("hosted tool surface", () => {
     const workspace = listed.find((tool) => tool.name === "extension_workspace")!;
     expect(workspace.title).toBe("Read the workspace");
     expect(workspace.description).not.toMatch(/change a project's settings/);
+    expect(workspace.description).not.toMatch(/every project|build allowance and what is used/);
     const builds = listed.find((tool) => tool.name === "extension_builds")!;
     expect((builds.inputSchema.properties as any).action.enum).not.toContain("download");
     expect(Object.keys(builds.inputSchema.properties ?? {})).not.toContain("to");

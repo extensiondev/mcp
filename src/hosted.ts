@@ -46,7 +46,7 @@ const HOSTED_AUTH_DESCRIPTION =
   "Report who this connection is signed in as: the workspace and project its OAuth token covers, when it expires, and whether the platform's whoami endpoint confirms it (value.server.verdict: confirmed, refused or unavailable). The token itself is never returned. Signing in and out happens in the MCP client, through the connection's OAuth flow, so this server has no login or logout action.";
 
 const HOSTED_WORKSPACE_DESCRIPTION =
-  "Read the workspace this connection's token covers. info: the workspace, its build allowance and what is used; projects: every project with its last build; settings: a project's build settings. Builds spend only on build branch pushes that change the root directory; docs-only pushes spend nothing. Changing settings, visibility or environment runs in the local server (npx @extension.dev/mcp).";
+  "Read the workspace this connection's token covers. info: the workspace and how many projects this connection covers; projects: the projects picked for this connection, each with its last build; settings: a project's build settings. The build allowance, usage, members and store accounts are read in the console, not here. Builds spend only on build branch pushes that change the root directory; docs-only pushes spend nothing. Changing settings, visibility or environment runs in the local server (npx @extension.dev/mcp).";
 
 const PROJECTIONS: Record<string, HostedProjection> = {
   extension_auth: {

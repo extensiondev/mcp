@@ -125,6 +125,7 @@ describe("a route closed to logins names the one that is open, or the person who
     ["PROMOTE_THROUGH_CLI_ROUTE", "extension_release_promote"],
     ["SUBMIT_THROUGH_CLI_ROUTE", "extension_submit"],
     ["RELEASE_DELETE_NEEDS_A_PERSON", "console"],
+    ["CONNECTED_APP_SCOPE", "console"],
   ])("%s", (code, next) => {
     const known = tokenRefusal(code);
 

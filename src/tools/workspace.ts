@@ -166,6 +166,14 @@ async function open(args: HandlerArgs, action: Action) {
   return { api: opened.api, workspace };
 }
 
+const PICKED_PROJECTS = "picked-projects";
+
+function coverage(count: unknown, workspace: string): string {
+  const total = typeof count === "number" ? count : null;
+
+  return `This connection covers ${total ?? "some"} project${total === 1 ? "" : "s"} of ${workspace}, the one${total === 1 ? "" : "s"} picked when it was connected; the workspace may hold others`;
+}
+
 function loginOf(api: ProjectApi): string {
   return `${api.ref.workspace}/${api.ref.project}`;
 }
@@ -229,8 +237,10 @@ async function readInfo(args: HandlerArgs): Promise<string> {
   const limits = (summary?.limits ?? {}) as Row;
   const used = (summary?.used ?? {}) as Row;
   const slug = text(ws.slug) || workspace;
-  const usage =
-    summary && summary.used
+  const picked = text(ws.scope) === PICKED_PROJECTS;
+  const usage = picked
+    ? `${coverage(ws.projectCount, slug)}. Its allowance, usage and members are not part of a connection.`
+    : summary && summary.used
       ? `${slug} has used ${used.buildsThisMonth ?? "?"} of ${limits.buildsPerMonth ?? "?"} builds this month and ${used.projects ?? "?"} of ${limits.projects ?? "?"} projects.`
       : `${slug}'s allowance counters were not read.`;
   const allowance = readBuildAllowance(summary);
@@ -252,6 +262,7 @@ async function readInfo(args: HandlerArgs): Promise<string> {
         actingAs: text(ws.currentUserLogin) || null,
         projectCount: ws.projectCount ?? null,
         memberCount: ws.memberCount ?? null,
+        ...(picked ? { scope: PICKED_PROJECTS } : {}),
       },
       plan: summary,
       allowance: allowance ? buildAllowanceValue(allowance) : null,
@@ -260,7 +271,7 @@ async function readInfo(args: HandlerArgs): Promise<string> {
     },
     hint: `${warning ? `${warning} ` : ""}${usage} This login acts as ${text(ws.currentUserLogin) || "its minter"} (${text(ws.currentUserRole) || "role unknown"}). ${consoleOnly(slug, args.api)}`,
     warnings: [
-      plan.ok ? null : `The allowance could not be read (${plan.message}).`,
+      plan.ok || picked ? null : `The allowance could not be read (${plan.message}).`,
       summary && summary.countersReadable === false ? "The allowance counters could not be read right now, so used is not current." : null,
     ],
   });
@@ -313,16 +324,19 @@ async function readProjects(args: HandlerArgs): Promise<string> {
   });
   const failing = rows.filter((row) => (row.lastBuild as Row | null)?.status === "failed").map((row) => row.project);
   const total = typeof read.json.total === "number" ? read.json.total : rows.length;
+  const picked = text(read.json.scope) === PICKED_PROJECTS;
+  const failed = failing.length ? `; the last build failed for ${failing.join(", ")}` : "";
 
   return envelope({
     ok: true,
     command: COMMAND,
     status: "listed",
-    value: { action: "projects", workspace, total, projects: rows, login: loginOf(api) },
-    hint:
-      rows.length === 0
+    value: { action: "projects", workspace, total, projects: rows, login: loginOf(api), ...(picked ? { scope: PICKED_PROJECTS } : {}) },
+    hint: picked
+      ? `${coverage(total, workspace)}${failed}. extension_builds and extension_release_status read each of them.`
+      : rows.length === 0
         ? `${workspace} has no projects yet. Create one with extension_project_create.`
-        : `${workspace} has ${total} project${total === 1 ? "" : "s"}${failing.length ? `; the last build failed for ${failing.join(", ")}` : ""}. loggedIn says which have a login on this machine; extension_builds and extension_release_status read one with its login, and extension_auth (action: "login", workspace: "${workspace}", projects: "*") signs in to all of them.`,
+        : `${workspace} has ${total} project${total === 1 ? "" : "s"}${failed}. loggedIn says which have a login on this machine; extension_builds and extension_release_status read one with its login, and extension_auth (action: "login", workspace: "${workspace}", projects: "*") signs in to all of them.`,
   });
 }
 
