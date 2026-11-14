@@ -131,6 +131,21 @@ describe("the release rails fail closed", () => {
     expect(needs.split(",").map((s) => s.trim())).toContain("engine-pin");
   });
 
+  it("738: lints every push on the stable verify leg, under a warning ceiling the lint script carries", () => {
+    const yml = read(".github/workflows/ci.yml");
+    const verify = yml.slice(yml.indexOf("\n  verify:\n"), yml.indexOf("\n  verify-windows:\n"));
+    const start = verify.indexOf("- name: Lint\n");
+    const next = verify.indexOf("\n      - name: ", start + 1);
+    const step = start === -1 ? "" : verify.slice(start, next === -1 ? undefined : next);
+    const scripts = (JSON.parse(read("package.json")) as { scripts: Record<string, string> }).scripts;
+
+    expect(step).toContain("if: matrix.name == 'stable'");
+    expect(step).toMatch(/run: pnpm lint\s*$/);
+    expect(start).toBeLessThan(verify.indexOf("- name: Test\n"));
+    expect(scripts.lint).toMatch(/^eslint \. .*--max-warnings \d+\b/);
+    expect(Number(/--max-warnings (\d+)/.exec(scripts.lint)?.[1])).toBeLessThanOrEqual(216);
+  });
+
   it("gives the registry publish job longer than the wait it runs", () => {
     const script = read("scripts/publish-mcp-registry.sh");
     const attempts = Number(/NPM_WAIT_ATTEMPTS=(\d+)/.exec(script)?.[1]);

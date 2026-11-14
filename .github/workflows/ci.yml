@@ -90,6 +90,10 @@ jobs:
       - name: Typecheck (src and tests)
         run: pnpm typecheck
 
+      - name: Lint
+        if: matrix.name == 'stable'
+        run: pnpm lint
+
       - name: Test
         env:
           RUN_CLI_SMOKE: ${{ github.event_name == 'schedule' && '1' || '' }}
