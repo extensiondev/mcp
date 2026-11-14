@@ -78,6 +78,7 @@ export function processCommand(pid: number): string {
   try {
     return execFileSync("ps", ["-o", "comm=", "-p", String(pid)], {
       encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
     }).trim();
   } catch {
     return "";
@@ -129,6 +130,7 @@ function posixProcessStartTimes(pids: number[]): Map<number, string> {
     out = execFileSync("ps", ["-o", "pid=,lstart=", "-p", pids.join(",")], {
       encoding: "utf8",
       env: { ...process.env, LC_ALL: "C" },
+      stdio: ["ignore", "pipe", "ignore"],
     });
   } catch (err) {
     const stdout = (err as { stdout?: unknown })?.stdout;

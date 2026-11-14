@@ -1,7 +1,8 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { describe, it, expect, afterEach, afterAll } from "vitest";
 
@@ -562,4 +563,15 @@ describe("extension_stop judges a session by its pid and its start time", () => 
     expect(pidState(process.pid, processStartedAt(process.pid))).toBe("alive");
     expect(pidState(process.pid)).toBe("alive");
   });
+
+  it.skipIf(process.platform === "win32")("739: a pid the process table refuses is read without a word on stderr", () => {
+    const identity = pathToFileURL(path.resolve(__dirname, "../lib/process-identity.ts")).href;
+    const script = `import { processCommand, processStartTimes } from ${JSON.stringify(identity)};
+      const asked = [4100002, 99999999999];
+      process.stdout.write(JSON.stringify({ found: processStartTimes(asked).size, commands: asked.map(processCommand) }));`;
+    const ran = spawnSync(process.execPath, ["--no-warnings", "--experimental-strip-types", "--input-type=module", "-e", script], { encoding: "utf8" });
+
+    expect(ran.stderr).toBe("");
+    expect(JSON.parse(ran.stdout)).toEqual({ found: 0, commands: ["", ""] });
+  }, 20_000);
 });
