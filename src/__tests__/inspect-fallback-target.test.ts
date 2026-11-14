@@ -68,7 +68,7 @@ vi.mock("../lib/cdp-port", () => ({
 describe("extension_inspect navigation fallback", () => {
   it("navigates a web page, not an open extension surface, when url matches nothing", async () => {
     cdp.navigated.length = 0;
-    const startedAt = Date.now();
+    const timers = vi.spyOn(globalThis, "setTimeout");
     const out = JSON.parse(
       await handler({
         projectPath: "/p",
@@ -77,13 +77,16 @@ describe("extension_inspect navigation fallback", () => {
         include: [],
       }),
     );
+    const waits = timers.mock.calls.map(([, ms]) => Number(ms ?? 0));
+    timers.mockRestore();
+
     expect(out.ok).toBe(true);
     expect(out.value.target.id).toBe("web");
     expect(cdp.navigated).toEqual([
       { sessionId: "session-web", url: "https://nomatch.example/" },
     ]);
 
-    expect(Date.now() - startedAt).toBeLessThan(100);
+    expect(waits).toEqual([]);
   }, 10000);
 
   it("falls back to the extension surface only when nothing else is open", async () => {
