@@ -24,7 +24,18 @@ function chunk(type: string, data: Buffer): Buffer {
   return Buffer.concat([length, body, crc]);
 }
 
+const encoded = new Map<string, Buffer>();
+
 export function solidPng(width: number, height: number): Buffer {
+  const size = `${width}x${height}`;
+  const png = encoded.get(size) ?? encodeSolidPng(width, height);
+
+  encoded.set(size, png);
+
+  return Buffer.from(png);
+}
+
+function encodeSolidPng(width: number, height: number): Buffer {
   const header = Buffer.alloc(13);
   header.writeUInt32BE(width, 0);
   header.writeUInt32BE(height, 4);

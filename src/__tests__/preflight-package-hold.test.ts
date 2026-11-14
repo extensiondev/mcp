@@ -67,7 +67,9 @@ describe("the rule for what a platform build reads mirrors the platform's own DO
   });
 });
 
-describe("the package checks say they still hold when HEAD changes nothing the build reads", () => {
+const GIT_CELL_BUDGET_MS = 30_000;
+
+describe("the package checks say they still hold when HEAD changes nothing the build reads", { timeout: GIT_CELL_BUDGET_MS }, () => {
   const platform = useProjectRoutes("extdev-preflight-hold-");
 
   it("names the changed files, the build the checks hold for, and asks for no push after a STORE.md-only commit", async () => {
@@ -119,7 +121,7 @@ describe("the package checks say they still hold when HEAD changes nothing the b
   });
 });
 
-describe("a push the platform refused over the build cap is named as refused, with the reset and the newest submittable build", () => {
+describe("a push the platform refused over the build cap is named as refused, with the reset and the newest submittable build", { timeout: GIT_CELL_BUDGET_MS }, () => {
   const platform = useProjectRoutes("extdev-preflight-cap-");
   const OLDER = { buildId: "154767e", commit: "154767e96aca6864db7db35d00154940807560e1", status: "success" };
   const NEWEST = { buildId: "914c593", commit: "914c593a6aca6864db7db35d00154940807560e1", status: "success" };

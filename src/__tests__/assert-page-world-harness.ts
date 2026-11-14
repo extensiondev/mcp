@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, beforeEach, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, vi } from "vitest";
 
 import { readyContractPath } from "../lib/session-paths";
 
@@ -171,7 +171,13 @@ export async function assertOnce(clause: Record<string, unknown>, browser = BROW
   return { frame, check: frame.value?.checks?.[0] };
 }
 
+const ASSERT_TOOL_LOAD_BUDGET_MS = 60_000;
+
 export function usePageWorldProject(): void {
+  beforeAll(async () => {
+    await import("../tools/assert");
+  }, ASSERT_TOOL_LOAD_BUDGET_MS);
+
   beforeEach(() => {
     live.project = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-assert-page-world-"));
     live.targets = [];

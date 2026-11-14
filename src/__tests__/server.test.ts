@@ -57,12 +57,25 @@ describe("Tool schema validation", () => {
 
 describe("extension_browsers list action", () => {
   it("returns valid JSON with expected fields", async () => {
-    const result = await browsers.handler({ action: "list" });
-    const parsed = JSON.parse(result);
-    expect(typeof parsed.value.cacheRoot).toBe("string");
-    expect(typeof parsed.value.cacheExists).toBe("boolean");
-    expect(Array.isArray(parsed.value.installed)).toBe(true);
-    expect(Array.isArray(parsed.value.availableToInstall)).toBe(true);
+    const cacheRoot = fs.mkdtempSync(path.join(os.tmpdir(), "extjs-browsers-cache-"));
+    const saved = process.env.EXT_BROWSERS_CACHE_DIR;
+
+    process.env.EXT_BROWSERS_CACHE_DIR = cacheRoot;
+
+    try {
+      const result = await browsers.handler({ action: "list" });
+      const parsed = JSON.parse(result);
+
+      expect(parsed.value.cacheRoot).toBe(path.resolve(cacheRoot));
+      expect(parsed.value.cacheExists).toBe(true);
+      expect(parsed.value.installed).toEqual([]);
+      expect(Array.isArray(parsed.value.availableToInstall)).toBe(true);
+    } finally {
+      if (saved === undefined) delete process.env.EXT_BROWSERS_CACHE_DIR;
+      else process.env.EXT_BROWSERS_CACHE_DIR = saved;
+
+      fs.rmSync(cacheRoot, { recursive: true, force: true });
+    }
   });
 });
 
