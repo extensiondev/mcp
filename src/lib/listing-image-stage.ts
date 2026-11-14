@@ -138,6 +138,44 @@ function forwardedRead(image: ListingImage, store: ListingStore): ProjectApiRead
   return { ok: false, status: Number(read.status) || 0, code: text(read.code), message: text(read.message), held: read.held === true, body: read.body ?? null };
 }
 
+export interface UnsentImage {
+  store: ListingStore;
+  kind: ImageKind;
+  name: string;
+}
+
+/* @invariant THE HOSTED HALF JUDGES A SYNC BEFORE IT ASKS FOR AN IMAGE. A
+ * forwarded sync-listing reaches the lane with each image as a digest and a
+ * size, and the bytes are uploaded from the person's machine only once the
+ * lane has read the call: an image whose bytes are not here and that no
+ * upload answered for its store is named back as one the local server
+ * stages first, before any store is written and before an approval is
+ * spent. A store the call would refuse or leave alone names none, so a
+ * refused call stages nothing.
+ */
+export function unsentImages(store: ListingStore, patch: ListingPatch): UnsentImage[] {
+  return queue(patch)
+    .filter(({ image }) => !image.bytes && !cache.get(image)?.get(store) && !(image.staged && Object.prototype.hasOwnProperty.call(image.staged, store)))
+    .map(({ kind, image }) => ({ store, kind, name: image.source }));
+}
+
+export function stageFirstAnswer(images: UnsentImage[]): string {
+  const named = images.map((image) => `${image.name} (${image.store})`).join(", ");
+
+  return envelope({
+    ok: false,
+    command: COMMAND,
+    status: `${ACT}-refused`,
+    value: { action: ACT, platformCode: IMAGE_BYTES_NOT_SENT, platformStatus: 409, stageFirst: images },
+    error: {
+      code: "E_PLATFORM",
+      name: "ListingImagesNotStaged",
+      message: `${named} ${images.length === 1 ? "was" : "were"} not uploaded to the platform before this call, so no listing was written and no approval was spent.`,
+    },
+    hint: `Next: ${STAGE_NEXT[IMAGE_BYTES_NOT_SENT]}.`,
+  });
+}
+
 export async function stageListingImages(api: ProjectApi, store: ListingStore, patch: ListingPatch): Promise<StageResult> {
   const images: StagedImage[] = [];
   const held = queue(patch).every(({ image }) => image.bytes);

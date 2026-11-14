@@ -8,7 +8,8 @@
 
 import crypto from "node:crypto";
 
-import { autoOpenBlock, openPagesForPerson } from "./approval-open";
+import { storedLoginFor } from "./approval-login";
+import { autoOpenBlock, notOpenedNote, openCommandBlock, openPagesForPerson } from "./approval-open";
 import { mintedApproval } from "./approval-record";
 import { targetServer } from "./credential-server";
 import { askingOnly } from "./ask-only";
@@ -17,14 +18,15 @@ import { MEMBER_PROJECT, listCredentials } from "./credentials";
 import { envelope, isEnvelope } from "./envelope";
 import { forwardSession, withForwardSession, wwwApprovalState, type ForwardSession } from "./forward-approval-state";
 import { HOSTED_SWITCH, forgetForwardCredential, forwardCredential, forwardUrlFor, hostedForwarding, type ExchangedCredential } from "./forward-credential";
-import { ACT_SETTLE_WINDOW_MS, FORWARD_TIMEOUT_MS, IN_FLIGHT_RECHECK_MS, MEMORY_KEY, carriedMemory, hostedWaitOf, lostAnswer, readLane, takeMemory, unreadableAnswer, withoutHostedWait } from "./forward-lane-answer";
+import { ACT_SETTLE_WINDOW_MS, FORWARD_TIMEOUT_MS, IN_FLIGHT_RECHECK_MS, MEMORY_KEY, carriedMemory, hostedWaitOf, lostAnswer, readLane, takeMemory, unreadableAnswer, withWholeWait, withoutHostedWait } from "./forward-lane-answer";
+import { CLOSED_STATUSES, readAnswer, readLanePreflight, withLanePreflight } from "./forward-lane-preflight";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { outcomeClock } from "./outcome-clock";
 import { bearerFetch, unreachedBy } from "./platform-fetch";
 import { PROJECT_HEADER } from "./request-fetch";
 import { identityHeaders } from "./session-identity";
 import { readSharedPreviews } from "./share-record";
-import { forwardSubmitFacts, labeledScreenshots, withProjectRoot, type ForwardFactsArgs } from "./submit-facts-forward";
+import { forwardSubmitFacts, imagesTheLaneWants, labeledScreenshots, withProjectRoot, type ForwardFactsArgs, type WantedImage } from "./submit-facts-forward";
 import { TOOL_POLICY } from "./tool-policy";
 
 import { version as packageVersion } from "../../package.json";
@@ -60,7 +62,8 @@ export interface ForwarderDeps {
 interface ForwardRule {
   reads?: (args: Args) => boolean;
   local?: (args: Args) => boolean;
-  facts?: (args: Args, deps: ForwarderDeps) => Args | null | Promise<Args | null>;
+  facts?: (args: Args, deps: ForwarderDeps, wanted: WantedImage[] | null) => Args | null | Promise<Args | null>;
+  wants?: (body: Args) => WantedImage[] | null;
   sent?: (args: Args) => Args;
   answered?: (args: Args, body: unknown) => unknown;
 }
@@ -74,7 +77,8 @@ function actionOf(args: Args, fallback: string): string {
 }
 
 const SUBMIT_RULE: ForwardRule = {
-  facts: async (args, deps) => ({ facts: await forwardSubmitFacts(args as ForwardFactsArgs), [PAGE_OPENING_FACT]: { block: autoOpenBlock({ noShip: false }, deps.env ?? process.env, deps.platform) } }),
+  facts: async (args, deps, wanted) => ({ facts: await forwardSubmitFacts(args as ForwardFactsArgs, wanted ? { wanted } : null), [PAGE_OPENING_FACT]: { block: autoOpenBlock({ noShip: false }, deps.env ?? process.env, deps.platform) } }),
+  wants: imagesTheLaneWants,
   sent: (args) => (args.screenshots === undefined ? args : { ...args, screenshots: labeledScreenshots(args as ForwardFactsArgs) }),
   answered: (args, body) => withProjectRoot(body, args.projectPath),
 };
@@ -333,17 +337,29 @@ function storedLogins(api?: string): StoredLogin[] {
   }
 }
 
+const approvalHolders = new Map<string, string>();
+
+export function forgetApprovalHolders(): void {
+  approvalHolders.clear();
+}
+
 /* @invariant A FORWARDED CALL THAT CARRIES AN APPROVAL ID IS MADE AS THE
  * PROJECT AND WITH THE LOGIN THE APPROVAL WAS MINTED FOR, WHEREVER ITS RECORD
  * LIVES. On the forwarder path the record is in www's hosted state, not in
  * this machine's approvals.json, and www answers it only to a credential of
  * the project that minted it. So the login the call would use is asked
- * first, then every other login stored for that server, each with its own
- * forward credential, and the record the first one finds is handed to the
- * dispatcher, which binds the project and the login exactly as it does for
- * a record on disk (ledger 443 and 472). A record this machine holds on disk
- * is left to the dispatcher's own read, and an id no stored login can read
- * is left to the platform.
+ * first, then the other logins stored for that server, one at a time, the
+ * same workspace before the rest, each with the forward credential this
+ * process already holds for it, and the asking stops at the first that
+ * reads the record. A member login is asked once per project it lists, on
+ * one exchange. Which login read an id is remembered for as long as this
+ * server runs, so the status poll and the act that follow cost one read
+ * each. The record is handed to the dispatcher, which binds the project and
+ * the login exactly as it does for a record on disk (ledger 443 and 472). A
+ * record this machine holds on disk is left to the dispatcher's own read; an
+ * id no stored login can read is left to the platform, and so is a record
+ * read by a login that is not in the store (EXTENSION_DEV_TOKEN), because
+ * that call already goes out with the login www answered.
  */
 export async function forwardedApproval(command: string, args: Args, deps: ForwarderDeps = {}): Promise<MintedApproval | null> {
   const approvalId = text(args.approvalId);
@@ -357,22 +373,30 @@ export async function forwardedApproval(command: string, args: Args, deps: Forwa
   if (!checked.ok || !resource) return null;
 
   const own = (deps.resolveLogin ?? resolveCredential)({ project: text(args.project) || undefined, api: named });
+  const keyOf = (login: StoredLogin): string => `${login.token} ${refOf(login.ref) ?? ""}`;
+  const held = `${checked.base} ${approvalId}`;
+  const rank = (login: StoredLogin): number => (keyOf(login) === approvalHolders.get(held) ? 0 : login === own ? 1 : login.ref?.workspace.toLowerCase() === own.ref?.workspace.toLowerCase() ? 2 : 3);
   const known = new Set<string>();
-  const logins = [own, ...(deps.storedLogins ?? storedLogins)(named)].filter((login) => {
-    const key = `${login.token} ${refOf(login.ref) ?? ""}`;
-    if (!login.token || known.has(key)) return false;
+  const logins = [own, ...(deps.storedLogins ?? storedLogins)(named)]
+    .filter((login) => {
+      if (!login.token || known.has(keyOf(login))) return false;
 
-    known.add(key);
+      known.add(keyOf(login));
 
-    return true;
-  });
-  const ask = (login: StoredLogin): Promise<MintedApproval | null> =>
-    wwwApprovalState({ api: checked.base, login: login.token, project: refOf(login.ref), resource, ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}) }).mintedApproval(checked.base, approvalId);
-  const [first, ...rest] = logins;
-  const found = first ? await ask(first) : null;
-  if (found) return found;
+      return true;
+    })
+    .sort((a, b) => rank(a) - rank(b));
 
-  return (await Promise.all(rest.map(ask))).find(Boolean) ?? null;
+  for (const login of logins) {
+    const found = await wwwApprovalState({ api: checked.base, login: login.token, project: refOf(login.ref), resource, ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}) }).mintedApproval(checked.base, approvalId);
+    if (!found) continue;
+
+    approvalHolders.set(held, keyOf(login));
+
+    return login === own && !storedLoginFor(found, named) ? null : found;
+  }
+
+  return null;
 }
 
 function personPage(url: unknown): url is string {
@@ -397,24 +421,54 @@ function personPage(url: unknown): url is string {
  * open command does not start, the answer says so instead of claiming an
  * open page.
  */
-function openLanePages(body: unknown, deps: ForwarderDeps): unknown {
+function openLanePages(body: unknown, deps: ForwarderDeps): { body: unknown; unopened: string | null } {
   const lane = (body && typeof body === "object" ? body : {}) as Args;
   const named = lane.value && typeof lane.value === "object" ? (lane.value as Args)[OPEN_PAGES_KEY] : undefined;
-  if (!Array.isArray(named)) return body;
+  if (!Array.isArray(named)) return { body, unopened: null };
 
   const value = Object.fromEntries(Object.entries(lane.value as Args).filter(([key]) => key !== OPEN_PAGES_KEY));
   const urls = named.filter(personPage).slice(0, OPEN_PAGES_MAX);
-  if (!urls.length) return { ...lane, value };
+  if (!urls.length) return { body: { ...lane, value }, unopened: null };
 
-  const opening = openPagesForPerson(urls, deps.env ?? process.env, deps.platform);
-  if (opening.opened) return { ...lane, value };
+  const env = deps.env ?? process.env;
+  const blocked = autoOpenBlock({ noShip: false }, env, deps.platform);
+  const opening = openPagesForPerson(urls, env, deps.platform);
+  if (opening.opened) return { body: { ...lane, value }, unopened: null };
+
+  return { body: unopenedAnswer({ ...lane, value }, opening.note), unopened: blocked ? null : openCommandBlock(deps.platform) };
+}
+
+function unopenedAnswer(lane: Args, note: string): Args {
+  const said = lane.value && typeof lane.value === "object" ? text((lane.value as Args).openedNote) : "";
+  const hint = said && said !== note && text(lane.hint).includes(said) ? text(lane.hint).replace(said, note) : [text(lane.hint), text(lane.hint).includes(note) ? "" : note].filter(Boolean).join(" ");
 
   return {
     ...lane,
-    value: { ...value, opened: false, openedNote: opening.note },
-    hint: [text(lane.hint), opening.note].filter(Boolean).join(" "),
-    warnings: [...(Array.isArray(lane.warnings) ? lane.warnings : []), opening.note],
+    value: { ...(lane.value as Args), opened: false, openedNote: note },
+    hint,
+    warnings: [...(Array.isArray(lane.warnings) ? lane.warnings : []), note],
   };
+}
+
+/* @invariant THE WORDS ABOUT A PAGE MATCH WHAT HAPPENED TO IT. The lane
+ * writes its sentences before this machine tries to open the page, so when
+ * the open command does not start, an answer that says the page is open in
+ * the browser would be false. The lane is asked once more for the same
+ * step's words, told the reason no page opened, with no wait and, for a
+ * connect, as the session the first answer began, so nothing is started
+ * twice; its second answer hands the person the url instead. If that
+ * second answer does not come, the first one stands, marked not opened.
+ */
+async function retoldUnopened(call: LaneCall, shaped: Args, facts: Args | null, first: Args, why: string): Promise<Args | null> {
+  const began = first.value && typeof first.value === "object" ? text((first.value as Args).connectSession) : "";
+  const asked = { ...shaped, waitSeconds: 0, ...(began ? { connectSession: began } : {}) };
+  const answer = await askLane({ ...call, key: crypto.randomBytes(24).toString("base64url"), sent: hostedArgs(asked, { ...facts, [PAGE_OPENING_FACT]: { block: why } }, call.session.resource) });
+  if (answer.kind !== "answer") return null;
+
+  const body = takeMemory(call.session.resource, answer.body);
+  const value = body.value && typeof body.value === "object" ? (body.value as Args) : null;
+
+  return body.ok === true && value && !(OPEN_PAGES_KEY in value) ? unopenedAnswer(body, notOpenedNote(why)) : null;
 }
 
 /* @invariant THE FORWARDER SENDS THE HOSTED LANE A PROJECT REF, NEVER A PATH,
@@ -433,7 +487,9 @@ function openLanePages(body: unknown, deps: ForwarderDeps): unknown {
  * a wait short; this process has no such limit, so a read that was cut is
  * asked again with the seconds still owed until the bound the caller asked
  * for has passed. An act is never sent twice to finish a wait: its answer
- * keeps the lane's notice and the tool's own next step.
+ * keeps the lane's notice and the tool's own next step. An answer that says
+ * the lane is closed, and an auth status, carry what the lane's preflight
+ * names as closed.
  */
 export async function forwardCall(command: string, args: Args, local: (args: Args) => Promise<string>, deps: ForwarderDeps = {}): Promise<string> {
   const rule = FORWARDED_TOOLS[command];
@@ -457,26 +513,51 @@ export async function forwardCall(command: string, args: Args, local: (args: Arg
     );
   }
 
-  const login = (deps.resolveLogin ?? resolveCredential)({ project: text(args.project) || undefined, api: named });
+  const answer = await forwardedAnswer({ command, tool, rule, args, api: checked.base, resource }, local, deps);
+  const answered = readAnswer(answer);
+  const closed = CLOSED_STATUSES.includes(text(answered?.status));
+  if (!answered || (!closed && !(command === "extension_auth" && actionOf(args, "status") === "status"))) return answer;
+
+  const read = await readLanePreflight(resource, deps.version ?? packageVersion, deps.fetchImpl);
+
+  return read ? JSON.stringify(withLanePreflight(answered, resource, read, closed || read.closed.length > 0)) : answer;
+}
+
+async function forwardedAnswer(asked: { command: string; tool: string; rule: ForwardRule; args: Args; api: string; resource: string }, local: (args: Args) => Promise<string>, deps: ForwarderDeps): Promise<string> {
+  const { command, tool, rule, args, resource } = asked;
+  const login = (deps.resolveLogin ?? resolveCredential)({ project: text(args.project) || undefined, api: text(args.api) || undefined });
   if (!login.token) return local(args);
 
-  const session: ForwardSession = { api: checked.base, login: login.token, project: refOf(login.ref), resource, ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}) };
+  const session: ForwardSession = { api: asked.api, login: login.token, project: refOf(login.ref), resource, ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}) };
 
   if (rule.local?.(args)) return withForwardSession(session, () => local(args));
 
-  const facts = (await rule.facts?.(args, deps)) ?? null;
+  let facts = (await rule.facts?.(args, deps, null)) ?? null;
   const shaped = rule.sent?.(args) ?? args;
-  const call: LaneCall = { command, tool, session, sent: hostedArgs(shaped, facts, resource), key: crypto.randomBytes(24).toString("base64url"), reads: rule.reads?.(args) === true, deps };
+  let call: LaneCall = { command, tool, session, sent: hostedArgs(shaped, facts, resource), key: crypto.randomBytes(24).toString("base64url"), reads: rule.reads?.(args) === true, deps };
   const startedAt = outcomeClock.now();
-  const answer = await askLane(call);
+  let answer = await askLane(call);
 
   if (answer.kind !== "answer") return answerText(call, answer);
 
   let body = takeMemory(resource, answer.body);
+  const wanted = rule.wants?.(body) ?? null;
+
+  if (wanted) {
+    facts = (await rule.facts?.(args, deps, wanted)) ?? null;
+    call = { ...call, sent: hostedArgs(shaped, facts, resource), key: crypto.randomBytes(24).toString("base64url") };
+    answer = await askLane(call);
+
+    if (answer.kind !== "answer") return answerText(call, answer);
+
+    body = takeMemory(resource, answer.body);
+  }
+
   if (laneStatus(body) === "local-half") return withForwardSession(session, () => local(args));
 
   let cut = call.reads ? hostedWaitOf(body) : null;
   const askedSeconds = cut?.askedSeconds ?? 0;
+  let legs = 1;
 
   while (cut) {
     const left = askedSeconds - Math.round((outcomeClock.now() - startedAt) / 1000);
@@ -489,11 +570,18 @@ export async function forwardCall(command: string, args: Args, local: (args: Arg
     const next = await askLane({ ...call, sent: { ...hostedArgs(shaped, facts, resource), waitSeconds: left } });
     if (next.kind !== "answer") break;
 
+    legs += 1;
     body = takeMemory(resource, next.body);
     cut = hostedWaitOf(body);
   }
 
-  return laneEnvelope(command, openLanePages(rule.answered ? rule.answered(args, body) : body, deps) as Args, deps);
+  if (legs > 1) body = withWholeWait(body, Math.round((outcomeClock.now() - startedAt) / 1000));
+
+  const shown = (rule.answered ? rule.answered(args, body) : body) as Args;
+  const opening = openLanePages(shown, deps);
+  const retold = opening.unopened ? await retoldUnopened(call, shaped, facts, shown, opening.unopened) : null;
+
+  return laneEnvelope(command, (retold ? ((rule.answered ? rule.answered(args, retold) : retold) as Args) : (opening.body as Args)), deps);
 }
 
 export function forwardable<T extends ToolModule>(module: T, deps: ForwarderDeps = {}): T {

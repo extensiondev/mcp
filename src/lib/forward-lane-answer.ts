@@ -180,6 +180,23 @@ export function withoutHostedWait(body: Args): Args {
   return { ...body, value, ...(warnings !== undefined ? { warnings } : {}) };
 }
 
+/* @invariant A WAIT THAT TOOK SEVERAL LANE CALLS IS REPORTED WHOLE. The
+ * lane cuts a long wait at its function's limit and the forwarder asks
+ * again with the seconds still owed, so the last answer knows only its own
+ * leg. The seconds the person actually waited are counted here, from the
+ * first send, and written over the last leg's figure in value.waited and in
+ * the sentence that names it.
+ */
+export function withWholeWait(body: Args, seconds: number): Args {
+  const waited = isRow(body.value) ? body.value.waited : null;
+  if (!isRow(waited) || typeof waited.seconds !== "number" || waited.seconds >= seconds) return body;
+
+  const said = new RegExp(`\\bThe ${waited.seconds}( ?)s wait\\b`);
+  const hint = typeof body.hint === "string" ? body.hint.replace(said, (_all, gap: string) => `The ${seconds}${gap}s wait`) : body.hint;
+
+  return { ...body, value: { ...(body.value as Args), waited: { ...waited, seconds } }, ...(hint !== undefined ? { hint } : {}) };
+}
+
 const carried = new Map<string, CarriedMemory>();
 
 /* @invariant THE FORWARDER IS THE PROCESS THAT SEES BOTH CALLS, SO IT KEEPS

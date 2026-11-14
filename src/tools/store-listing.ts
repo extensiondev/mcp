@@ -76,11 +76,13 @@ import {
   IMAGES_DOOR_MISSING_WARNING,
   IMAGE_NOT_ON_LISTING,
   IMAGE_NOT_ON_LISTING_NEXT,
+  stageFirstAnswer,
   stageListingImages,
   stagedImageGuard,
   stagedSentence,
   stagedPatch,
   stagedWriteBody,
+  unsentImages,
   type StagedImage,
 } from "../lib/listing-image-stage";
 import { firefoxCategoryCover } from "../lib/firefox-category-cover";
@@ -1257,14 +1259,24 @@ async function syncListingRun(args: ListingArgs, facts: ProjectFacts): Promise<s
   const sentPatches = new Map<ListingStore, ListingDigestPatch>();
 
   for (const [store, local] of locals) {
+    if (local.overLimit.length) continue;
+    if (store === "safari") await adoptAppRecordName(api, local);
+
+    await adoptBuildIcon(builds, store, local);
+  }
+
+  const plainAsk = askingOnly() && !text(args.approvalId);
+  const unsent = [...locals].flatMap(([store, local]) =>
+    local.overLimit.length || !filledFields(local.patch).length || stagedImageGuard(store, local.patch) || (plainAsk && !derivedListingFields(store, local.patch.listing).length) ? [] : unsentImages(store, local.patch),
+  );
+
+  if (unsent.length) return stageFirstAnswer(unsent);
+
+  for (const [store, local] of locals) {
     if (local.overLimit.length) {
       stores[store] = refusedByStoreMd(store, local);
       continue;
     }
-
-    if (store === "safari") await adoptAppRecordName(api, local);
-
-    await adoptBuildIcon(builds, store, local);
 
     const notFound = linesNotFound(local);
     const held = chromeWebStoreHeld(chromeWebStoreMd, store, notFound.map((row) => row.field));

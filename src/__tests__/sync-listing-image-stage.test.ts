@@ -13,6 +13,8 @@ import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { STAGED_IMAGE_MAX_BYTES, STAGED_IMAGES_PER_STORE, stageListingImages, stagedImageGuard } from "../lib/listing-image-stage";
+import { forwardSubmitFacts, imagesTheLaneWants, type StageImage } from "../lib/submit-facts-forward";
+import { handler as hosted } from "../tools/submit";
 import { handler as submit } from "../tools/submit-local";
 import { solidPng } from "./fixtures/png";
 import { API, PROJECT_ID, PROJECT_ROUTE, useProjectRoutes, type Call } from "./fixtures/project-routes";
@@ -187,6 +189,42 @@ describe("sync-listing stages each image through the listing images door, then w
 
     expect(first).toEqual(again);
     expect(platform.sent("PUT", IMAGES)).toHaveLength(1);
+  });
+
+  it("743: the hosted half names the images it would write before any upload or listing write, and a call it refuses names none", async () => {
+    if (process.platform === "win32") return;
+
+    const args = { action: "sync-listing", browsers: ["safari"], projectPath: root, screenshots: [shot(root, "a.png", 1)], api: API };
+    const uploads: string[] = [];
+
+    const door: StageImage = async (_store, kind, sent) => {
+      uploads.push(kind);
+
+      return { ok: true, json: { image: { sha256: `uploaded-${uploads.length}`, width: sent.width, height: sent.height, bytes: sent.size } } };
+    };
+
+    const asked = JSON.parse(await hosted(args, await forwardSubmitFacts(args)));
+    const wanted = imagesTheLaneWants(asked) ?? [];
+
+    expect(asked).toMatchObject({ ok: false, status: "sync-listing-refused", value: { platformCode: "IMAGE_BYTES_NOT_SENT" } });
+    expect(wanted.map((entry) => [entry.store, entry.kind])).toEqual([["safari", "icons"], ["safari", "screenshots"]]);
+    expect(asked.error.message).toContain("no listing was written and no approval was spent");
+    expect(platform.sent("PUT", LISTING)).toHaveLength(0);
+    expect(uploads).toEqual([]);
+
+    const written = JSON.parse(await hosted(args, await forwardSubmitFacts(args, { wanted, stage: door })));
+
+    expect(written.ok).toBe(true);
+    expect(uploads).toEqual(["icons", "screenshots"]);
+    expect(platform.sent("PUT", IMAGES)).toHaveLength(0);
+    expect(platform.sent("PUT", LISTING)[0]!.body.media.screenshots.map((row: any) => row.sha256)).toEqual(["uploaded-2"]);
+
+    fs.writeFileSync(path.join(root, "STORE.md"), STORE_MD.replace("Hide personal information", "Hide personal information ".repeat(40)));
+    const refused = JSON.parse(await hosted(args, await forwardSubmitFacts(args)));
+
+    expect(refused.ok).toBe(false);
+    expect(imagesTheLaneWants(refused)).toBeNull();
+    expect(platform.sent("PUT", LISTING)).toHaveLength(1);
   });
 
   it("names an image the forwarder uploaded by the door's answer, with no bytes and no request of its own", async () => {

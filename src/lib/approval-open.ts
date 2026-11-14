@@ -124,6 +124,8 @@ export type { PageOpening } from "./kernel-hooks";
 
 export const notOpenedNote = (why: string): string => `No page was opened: ${why}. Hand the person the urls in this answer instead of calling again for a window.`;
 
+export const openCommandBlock = (platform: NodeJS.Platform = process.platform): string => `the ${osOpenCommand("", platform)[0]} command did not start`;
+
 export function openPagesForPerson(urls: string[], env: Env = process.env, platform: NodeJS.Platform = process.platform): PageOpening {
   const block = autoOpenBlock({ noShip: false }, env, platform);
   if (block) return { opened: false, note: notOpenedNote(block) };
@@ -131,7 +133,7 @@ export function openPagesForPerson(urls: string[], env: Env = process.env, platf
   const wanted = urls.filter(Boolean);
   if (wanted.length && wanted.map((url) => opener(url)).every(Boolean)) return { opened: true, note: "" };
 
-  return { opened: false, note: notOpenedNote(`the ${osOpenCommand("", platform)[0]} command did not start`) };
+  return { opened: false, note: notOpenedNote(openCommandBlock(platform)) };
 }
 
 export function openApprovalOnce(result: string, options: { noShip: boolean }, env: Env = process.env, platform: NodeJS.Platform = process.platform): string {
