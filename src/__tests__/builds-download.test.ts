@@ -1,3 +1,4 @@
+import childProcess from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -6,7 +7,9 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handler as builds } from "../tools/builds";
+import { download, type DownloadLocal } from "../tools/builds-download";
 import { writeCredentials } from "../lib/credentials";
+import { withRequestCredential } from "../lib/credential-scope";
 
 const API = "http://localhost:3100";
 const PROJECT_ID = "prj_leon";
@@ -161,6 +164,33 @@ describe("extension_builds download saves the platform's package through www", (
     expect(platform.calls.some((call) => call.url.includes("registry.extension.land"))).toBe(false);
     expect(raw).not.toContain(TOKEN);
     expect(raw).not.toMatch(/github\.com|actions\/runs/);
+  });
+
+  it("runs its platform half on the request credential and the local half it is handed, reading no filesystem path itself", async () => {
+    const touched: string[] = [];
+    const fsNames = ["readFileSync", "existsSync", "statSync", "writeFileSync", "mkdirSync", "readdirSync", "openSync", "lstatSync", "realpathSync", "renameSync", "unlinkSync", "rmSync", "appendFileSync"] as const;
+    const childNames = ["spawn", "spawnSync", "execFile", "execFileSync"] as const;
+    for (const name of fsNames) vi.spyOn(fs, name).mockImplementation(((...args: unknown[]) => { touched.push(`${name} ${String(args[0])}`); throw new Error(`no ${name}`); }) as never);
+    for (const name of childNames) vi.spyOn(childProcess, name).mockImplementation(((...args: unknown[]) => { touched.push(`${name} ${String(args[0])}`); throw new Error(`no ${name}`); }) as never);
+    const saved = new Map<string, Buffer>();
+    const local: DownloadLocal = {
+      explicitTarget: vi.fn(() => ""),
+      defaultArtifactsDir: vi.fn((workspace: string, slug: string, buildId: string) => `/held/${workspace}/${slug}/${buildId}`),
+      save: vi.fn((_dir: string, filePath: string, bytes: Buffer) => void saved.set(filePath, bytes)),
+      readBack: vi.fn((filePath: string) => saved.get(filePath) ?? Buffer.alloc(0)),
+    };
+
+    const raw = await withRequestCredential(
+      { token: TOKEN, api: API, projects: [{ workspace: "acme", project: "leon" }], expiresAt: null, project: "acme/leon" },
+      () => download({ action: "download", buildId: FULL_SHA, browser: "edge", project: "acme/leon", api: API }, local),
+    ).finally(() => vi.restoreAllMocks());
+    const out = JSON.parse(raw);
+
+    expect(touched).toEqual([]);
+    expect(out.status).toBe("downloaded");
+    expect(out.value).toMatchObject({ path: `/held/acme/leon/${SHA}/edge.zip`, verified: true, sha256: sha256(EDGE_ZIP) });
+    expect(local.save).toHaveBeenCalledWith(`/held/acme/leon/${SHA}`, `/held/acme/leon/${SHA}/edge.zip`, expect.any(Buffer));
+    expect(local.readBack).toHaveBeenCalledTimes(1);
   });
 
   it("needs no projectPath for the default destination, and a project with no .gitignore gets the file without one being created", async () => {

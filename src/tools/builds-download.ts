@@ -7,14 +7,12 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { createHash } from "node:crypto";
-import fs from "node:fs";
 import path from "node:path";
 
 import { envelope } from "../lib/envelope";
 import { projectApiBytes } from "../lib/project-api-bytes";
 import { projectApiGet, projectApiReadFailure, type ProjectApi } from "../lib/project-api";
 import { trackUrl } from "../lib/track-url";
-import { userCacheDir } from "../lib/user-cache-dir";
 import { COMMAND, actRefusal, badRequest, isRow, openFor, text, type ActArgs } from "./builds-acts";
 
 export const DOWNLOAD_ACTION = "download";
@@ -34,17 +32,11 @@ export interface DownloadArgs extends ActArgs {
   projectPath?: string;
 }
 
-/* @invariant A READ NEVER DIRTIES THE OWNER'S REPOSITORY. The package a
- * download saves is a copy of what the platform holds, so by default it
- * lands in the user's cache directory, keyed by workspace, project and
- * build, and never under the project: the first version wrote it to
- * .extension.dev/artifacts/ inside the project and appended that folder to
- * the project's .gitignore, which left a tracked file modified after a
- * read-only ask (ledger 249). Only an explicit `to` writes anywhere else,
- * and no path this action takes touches .gitignore.
- */
-export function defaultArtifactsDir(workspace: string, project: string, buildId: string): string {
-  return path.join(userCacheDir(), ARTIFACTS_DIR, workspace, project, buildId);
+export interface DownloadLocal {
+  explicitTarget(to: string, projectPath: string): string;
+  defaultArtifactsDir(workspace: string, project: string, buildId: string): string;
+  save(dir: string, filePath: string, bytes: Buffer): void;
+  readBack(filePath: string): Buffer;
 }
 
 function shortSha(buildId: string): string {
@@ -94,15 +86,7 @@ export function judge(expected: string, actual: string): Verified {
   return expected === actual;
 }
 
-function explicitTarget(args: DownloadArgs, projectPath: string): string {
-  const to = text(args.to);
-
-  if (!to) return "";
-
-  return path.isAbsolute(to) ? path.resolve(to) : path.resolve(projectPath || process.cwd(), to);
-}
-
-export async function download(args: DownloadArgs): Promise<string> {
+export async function download(args: DownloadArgs, local: DownloadLocal): Promise<string> {
   const buildId = text(args.buildId);
   const browser = text(args.browser).toLowerCase();
   const projectPath = text(args.projectPath);
@@ -122,12 +106,12 @@ export async function download(args: DownloadArgs): Promise<string> {
   }
 
   const sha = shortSha(buildId);
-  const chosen = explicitTarget(args, projectPath);
+  const chosen = local.explicitTarget(text(args.to), projectPath);
   const opened = await openFor(args, DOWNLOAD_ACTION, value);
   if ("refused" in opened) return opened.refused;
 
   const api = opened.api;
-  const dir = chosen || defaultArtifactsDir(api.ref.workspace, api.ref.project, sha);
+  const dir = chosen || local.defaultArtifactsDir(api.ref.workspace, api.ref.project, sha);
   const buildPage = trackUrl("build", { workspace: api.ref.workspace, project: api.ref.project, buildId: sha }, args.api);
   const fileName = `${browser}.zip`;
   const [fetched, reportSha] = await Promise.all([
@@ -167,8 +151,7 @@ export async function download(args: DownloadArgs): Promise<string> {
   const filePath = path.join(dir, fileName);
 
   try {
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(filePath, fetched.bytes);
+    local.save(dir, filePath, fetched.bytes);
   } catch (err: any) {
     return envelope({
       ok: false,
@@ -179,7 +162,7 @@ export async function download(args: DownloadArgs): Promise<string> {
     });
   }
 
-  const written = fs.readFileSync(filePath);
+  const written = local.readBack(filePath);
   const actual = sha256Of(written);
   const expected = reportSha || expectedFromRelay(fetched.headers);
   const verified = judge(expected, actual);

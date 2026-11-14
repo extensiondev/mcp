@@ -32,6 +32,7 @@ import { configure } from "./builds-configure";
 import { createChannel } from "./builds-create-channel";
 import { CONFIGURE_CHANNEL, DELETE_CHANNEL, configureChannel, deleteChannelConsoleOnly } from "./builds-channel";
 import { DOWNLOAD_ACTION, download, type DownloadArgs } from "./builds-download";
+import { BUILDS_DOWNLOAD_LOCAL } from "./builds-download-local";
 import { notRecordedYet, readBuildWaiting } from "./builds-get-wait";
 import { DEFAULT_LIMIT, MAX_LIMIT, listBuilds } from "./builds-list";
 import { buildFailures, platformFault, readLogs } from "./builds-logs";
@@ -420,7 +421,7 @@ interface HandlerArgs extends DownloadArgs {
 export async function handler(args: HandlerArgs): Promise<string> {
   if (args.action === "get") return getBuild(args);
   if (args.action === "logs") return logs(args);
-  if (args.action === DOWNLOAD_ACTION) return download(args);
+  if (args.action === DOWNLOAD_ACTION) return download(args, BUILDS_DOWNLOAD_LOCAL);
   if (args.action === "rebuild") return rebuild(args);
   if (args.action === "recheck") return recheck(args);
   if (args.action === "configure") return configure(args);
