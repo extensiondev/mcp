@@ -167,9 +167,10 @@ describe("a real submit runs the preflight's two local checks before the approva
     expect(said(read)).not.toMatch(/workflow|store\.yml/i);
   });
 
-  it("treats a 409 MIRRORS_FROZEN or STORE_ACT_NOT_ON_LANE as a platform fault and leaves every other refusal alone", () => {
-    expect(storeRunUnavailable(409, { code: "MIRRORS_FROZEN", message: "The mirrors are frozen." })).toMatchObject({ code: "MIRRORS_FROZEN" });
-    expect(storeRunUnavailable(409, { code: "MIRRORS_FROZEN", message: "The mirrors are frozen." })).not.toHaveProperty("ownSentence");
+  it("683: treats a 409 STORE_ACT_NOT_ON_LANE as a platform fault and leaves every other refusal alone, the retired MIRRORS_FROZEN included", () => {
+    expect(storeRunUnavailable(409, { code: "STORE_ACT_NOT_ON_LANE", message: "This store act does not run on the lane yet." })).toMatchObject({ code: "STORE_ACT_NOT_ON_LANE" });
+    expect(storeRunUnavailable(409, { code: "STORE_ACT_NOT_ON_LANE", message: "This store act does not run on the lane yet." })).not.toHaveProperty("ownSentence");
+    expect(storeRunUnavailable(409, { code: "MIRRORS_FROZEN", act: "submit", message: "The mirrors are frozen." })).toBeNull();
     expect(storeRunUnavailable(409, { code: "STORE_ACT_NOT_ON_LANE", store: "safari", act: "submit", message: "Submitting to the App Store does not run on the extension.dev lane yet." })).toMatchObject({
       code: "STORE_ACT_NOT_ON_LANE",
       ownSentence: "Submitting to the App Store does not run on the extension.dev lane yet.",
@@ -190,27 +191,26 @@ describe("a real submit runs the preflight's two local checks before the approva
     expect(found.hand).toEqual({ handPath, handUrl: "https://appstoreconnect.apple.com/apps" });
     expect(found.ownSentence).toBe(`${message} To do it now, ${handPath}.`);
     expect(storeRunUnavailable(409, { code: "STORE_ACT_NOT_ON_LANE", store: "safari", act: "submit", message })).not.toHaveProperty("hand");
-    expect(storeRunUnavailable(409, { code: "MIRRORS_FROZEN", act: "submit", handPath, message })).not.toHaveProperty("hand");
   });
 
   it("567: says a Safari submit the platform cannot run yet in the platform's own words, with no approval and no report link", async () => {
-    const frozen =
-      "Submitting to the App Store does not run on the extension.dev lane yet, and the old run path it used is frozen, so nothing was sent to the store and no approval was asked for or spent. Leave safari out of this call until the lane runs it.";
+    const offLane =
+      "Submitting to the App Store does not run on the extension.dev lane yet, so nothing was sent to the store and no approval was asked for or spent. Leave safari out of this call until the lane runs it.";
 
     stores("safari");
     platform.routes[`POST ${DISPATCH}`] = () => ({
       status: 409,
-      body: { ok: false, code: "MIRRORS_FROZEN", store: "safari", act: "submit", refusedBeforeApproval: true, message: frozen },
+      body: { ok: false, code: "STORE_ACT_NOT_ON_LANE", store: "safari", act: "submit", refusedBeforeApproval: true, message: offLane },
     });
 
     const out = await real(["safari"]);
 
     expect(out.status).toBe(PLATFORM_UNAVAILABLE_STATUS);
-    expect(out.error).toMatchObject({ platformCode: "MIRRORS_FROZEN", message: frozen });
-    expect(out.value.sayToPerson).toBe(frozen);
-    expect(out.value.nextStep.say).toBe(frozen);
+    expect(out.error).toMatchObject({ platformCode: "STORE_ACT_NOT_ON_LANE", message: offLane });
+    expect(out.value.sayToPerson).toBe(offLane);
+    expect(out.value.nextStep.say).toBe(offLane);
     expect(out.value).not.toHaveProperty("reportUrl");
-    expect(out.hint).toBe(frozen);
+    expect(out.hint).toBe(offLane);
     expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
   });
 });

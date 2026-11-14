@@ -93,7 +93,6 @@ const HINTS: Record<string, string> = {
   ROLLBACK_HISTORY_UNREADABLE: "The platform could not read the channel's history just now, so it did not guess. Call again in a moment.",
   ROLLBACK_TARGET_MOVED: "The channel's history moved since this was asked. Call again with no approvalId for an approval of the build it would return to now.",
   RELEASE_WORKFLOW_NOT_FOUND: "The platform has no release setup for this project yet. Saving the project settings in the console sets it up again.",
-  NO_MIRROR: "The platform could not resolve this project's build lane, so nothing ran. Open the project in the console to confirm it still exists, then call again.",
   SUBMISSION_NOT_IN_REVIEW: `Only a submission the store is still reviewing can be withdrawn. Read each store's latest submission and its review state with ${STORES_READ}.`,
   SUBMISSION_NOT_FOUND: `Read the submission ids with ${STORES_READ} and pass one as submissionId.`,
   SUBMISSION_NOT_JOINABLE: `The platform cannot tie this submission to its store record, so it did not act on it. Read it with ${STORES_READ}.`,

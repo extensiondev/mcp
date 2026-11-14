@@ -19,7 +19,6 @@ type Row = Record<string, unknown>;
 
 export const PLATFORM_UNAVAILABLE_STATUS = "platform-unavailable";
 export const STORE_RUN_CHECK = "platform.store_run";
-export const MIRRORS_FROZEN_CODE = "MIRRORS_FROZEN";
 export { STORE_ACT_NOT_ON_LANE_CODE };
 export const PLATFORM_UNAVAILABLE_SENTENCE =
   "The platform cannot take this store submission right now; nothing in your project causes it, and no approval will be asked until it can";
@@ -35,7 +34,7 @@ export interface StoreRunUnavailable {
 }
 
 /* @invariant A STORE ACT THE PLATFORM NAMES AS NOT ON ITS LANE YET IS SAID IN
- * THE PLATFORM'S OWN SENTENCE. A 409 MIRRORS_FROZEN or STORE_ACT_NOT_ON_LANE
+ * THE PLATFORM'S OWN SENTENCE. A 409 STORE_ACT_NOT_ON_LANE
  * that names its store and act (a Safari submit while only Chrome, Edge and
  * Firefox run on the lane) is not an outage to report: the platform says
  * which store to leave out or the store's own hand path, and that sentence
@@ -46,7 +45,7 @@ export function storeRunUnavailable(status: number, body: unknown): StoreRunUnav
   const row = isRow(body) ? body : {};
   const code = text(row.code);
   const platformLine = text(row.message);
-  const actRefusal = code === MIRRORS_FROZEN_CODE || code === STORE_ACT_NOT_ON_LANE_CODE;
+  const actRefusal = code === STORE_ACT_NOT_ON_LANE_CODE;
   const hand = status === 409 ? offLaneHandOf(code, row) : null;
   const own = hand ? { ownSentence: byHandSentence(platformLine, hand), hand } : actRefusal && text(row.act) && platformLine ? { ownSentence: platformLine } : {};
 

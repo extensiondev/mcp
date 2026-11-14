@@ -257,18 +257,13 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
     }
   });
 
-  it("610: a project with no lane key is named in lane words, and an older www's NO_MIRROR promises no first build", () => {
+  it("610, 683: a project with no lane key is named in lane words, and the retired NO_MIRROR has no hint", () => {
     const laneKey = shipRefusalHint("NO_LANE_KEY") ?? "";
-    const mirror = shipRefusalHint("NO_MIRROR") ?? "";
 
     expect(laneKey).toContain("nothing was sent to the store");
     expect(laneKey).toContain("Open the project in the console to confirm it still exists");
-
-    for (const hint of [laneKey, mirror]) {
-      expect(hint).not.toMatch(/first build|\bmirror\b/i);
-    }
-
-    expect(mirror).toContain("Open the project in the console to confirm it still exists");
+    expect(laneKey).not.toMatch(/first build|\bmirror\b/i);
+    expect(shipRefusalHint("NO_MIRROR")).toBeUndefined();
   });
 
   it("681: a NO_LANE_KEY refusal before any approval names the act of the call and no approval, and only the queue replay keeps the queued wording", () => {
