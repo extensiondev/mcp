@@ -71,6 +71,33 @@ export function coveredProject(projects: ScopedProject[], named: unknown): Scope
   return matches.length === 1 ? (matches[0] ?? null) : null;
 }
 
+/* @invariant THE PROJECT A HOSTED CALL NAMES IS READ WHOLE BEFORE IT IS
+ * COVERED. A tool builds its ref from `workspace` and `project` together, so
+ * covering the slug alone let a caller who covers w1/b send workspace w2
+ * beside it and have the registry read w2/b while the platform half read
+ * w1/b. The two are joined the way the tool joins them: a bare slug beside a
+ * workspace is that workspace's project, a full ref must agree with the
+ * workspace beside it, and a workspace with no project must be one the
+ * credential covers. The answer is the ref that is not covered, or null.
+ */
+export function uncoveredRef(args: { workspace?: unknown; project?: unknown }, projects: readonly ScopedProject[]): string | null {
+  const project = slug(typeof args.project === "string" ? args.project : "");
+  const workspace = slug(typeof args.workspace === "string" ? args.workspace : "");
+
+  if (!project) return workspace && !projects.some((entry) => entry.workspace === workspace) ? workspace : null;
+
+  const [first = "", second, ...rest] = project.split("/");
+
+  if (rest.length || !first || (second !== undefined && (!second || (workspace && workspace !== first)))) {
+    return workspace && second === undefined ? `${workspace}/${project}` : project;
+  }
+
+  const wanted = second === undefined ? { workspace: workspace || null, project: first } : { workspace: first, project: second };
+  const matches = projects.filter((entry) => entry.project === wanted.project && (wanted.workspace === null || entry.workspace === wanted.workspace));
+
+  return matches.length === 1 ? null : wanted.workspace ? `${wanted.workspace}/${wanted.project}` : wanted.project;
+}
+
 export function withRequestCredential<T>(credential: RequestCredential, run: () => T): T {
   return scope.run(normalizeRequestCredential(credential), run);
 }

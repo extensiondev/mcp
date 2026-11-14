@@ -260,6 +260,33 @@ describe("hosted tool surface", () => {
     expect(seen).toEqual([]);
   });
 
+  it("covers workspace and project together, so a covered slug beside another workspace is refused before any request", async () => {
+    const seen = stubPlatformFetch();
+    const client = await hostedClient();
+    const other = PROJECT.workspace === "other" ? "elsewhere" : "other";
+
+    for (const args of [
+      { workspace: other, project: PROJECT.project },
+      { workspace: other, project: `${PROJECT.workspace}/${PROJECT.project}` },
+      { project: `${other}/${PROJECT.project}` },
+      { workspace: other },
+      { project: `${PROJECT.workspace}/` },
+    ]) {
+      for (const tool of ["extension_release_status", "extension_builds", "extension_workspace"]) {
+        const { envelope } = await call(client, tool, args);
+
+        expect(envelope.ok, `${tool} ${JSON.stringify(args)}`).toBe(false);
+        if (tool === "extension_release_status") expect(envelope, JSON.stringify(args)).toMatchObject({ status: "auth-refused", error: { code: "E_NO_LOGIN_FOR_PROJECT" } });
+      }
+    }
+
+    expect(seen).toEqual([]);
+
+    for (const args of [{ project: PROJECT.project }, { workspace: PROJECT.workspace, project: PROJECT.project }, { project: `${PROJECT.workspace}/${PROJECT.project}` }, {}]) {
+      expect((await call(client, "extension_release_status", args)).envelope.error?.code, JSON.stringify(args)).not.toBe("E_NO_LOGIN_FOR_PROJECT");
+    }
+  });
+
   it("forwards the request Bearer unchanged and never the token stored on disk", async () => {
     writeCredentials({ version: 1, token: "disk-token", workspaceSlug: "acme", projectSlug: "web", expiresAt: 4102444800, api: WWW });
     const seen = stubPlatformFetch();

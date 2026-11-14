@@ -8,7 +8,7 @@
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 
-import { withRequestCredential, type RequestCredential } from "./lib/credential-scope";
+import { normalizeRequestCredential, uncoveredRef, withRequestCredential, type RequestCredential } from "./lib/credential-scope";
 import { envelope } from "./lib/envelope";
 import { installPlatformKernelHooks } from "./lib/platform-kernel-hooks";
 import { installRequestFetch } from "./lib/request-fetch";
@@ -25,7 +25,7 @@ import { version } from "../package.json";
 import type { ServerOptions, ToolAnnotations } from "./lib/tool-policy";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
-export { withRequestCredential, requestCredential, type RequestCredential, type ScopedProject } from "./lib/credential-scope";
+export { withRequestCredential, requestCredential, uncoveredRef, type RequestCredential, type ScopedProject } from "./lib/credential-scope";
 
 installPlatformKernelHooks();
 
@@ -36,6 +36,7 @@ interface HostedProjection {
   description?: string;
   title?: string;
   annotations?: ToolAnnotations;
+  creates?: boolean;
 }
 
 const HOSTED_READ: ToolAnnotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
@@ -64,7 +65,7 @@ const PROJECTIONS: Record<string, HostedProjection> = {
     title: "Read the workspace",
     annotations: HOSTED_READ,
   },
-  extension_project_create: { module: projectCreate, drop: ["projects"] },
+  extension_project_create: { module: projectCreate, drop: ["projects"], creates: true },
   extension_builds: {
     module: builds,
     actions: ["list", "get", "logs", "rebuild", "recheck", "configure", "create-channel", "configure-channel", "delete-channel"],
@@ -160,6 +161,24 @@ function hostedRefusal(name: string, args: Record<string, unknown>): string | nu
   });
 }
 
+function uncoveredRefusal(name: string, args: Record<string, unknown>, credential: RequestCredential): string | null {
+  if (PROJECTIONS[name]?.creates) return null;
+
+  const projects = normalizeRequestCredential(credential).projects;
+  const outside = uncoveredRef(args, projects);
+  if (!outside) return null;
+
+  const covered = projects.map((entry) => `${entry.workspace}/${entry.project}`).join(", ");
+
+  return envelope({
+    ok: false,
+    command: name,
+    status: "auth-refused",
+    error: { code: "E_NO_LOGIN_FOR_PROJECT", message: `This connection covers ${covered}, not ${outside}. Name a project it covers, or sign in again from your MCP client to cover ${outside}.` },
+    value: { hosted: true, named: outside },
+  });
+}
+
 const HOSTED_PROJECTS_STEP =
   "extension_builds and extension_release_status read the ones this connection's token covers; to cover another project, sign in again from your MCP client, which takes you through the console sign-in on extension.dev.";
 
@@ -248,6 +267,7 @@ export function registerHostedTools(target: Server | McpServer, setup: HostedReg
     options: HOSTED_SERVER_OPTIONS,
     refuse: hostedRefusal,
     run: async (call, name, args) =>
+      uncoveredRefusal(name, args, credential()) ??
       hostedAnswer(
         name,
         await withRequestCredential(
