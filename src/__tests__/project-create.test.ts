@@ -1311,6 +1311,20 @@ describe("extension_project_create", () => {
     expect(seen.some((call) => call.url.endsWith("/api/cli/projects/create"))).toBe(false);
   });
 
+  it("names an approval whose approver left the workspace when the create refuses it, and asks for a fresh one", async () => {
+    const out = await reseedCall({
+      status: 403,
+      body: { code: "APPROVER_NOT_MEMBER", message: "Replacing a project's source with a token needs a workspace member's approval, and the person who approved this is not a member of this workspace now." },
+    });
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("approver-not-member");
+    expect(out.error.platformCode).toBe("APPROVER_NOT_MEMBER");
+    expect(out.error.message).toContain("not a member of this workspace now");
+    expect(out.value.nextStep).toEqual({ kind: "approve", say: out.value.sayToPerson, url: null });
+    expect(out.hint).toContain("Call again without approvalId to request a fresh approval, then have a workspace member approve it.");
+  });
+
   it("falls back to the device flow, after one upload, when the platform does not admit the login at the upload door", async () => {
     await storedLogin();
     const dir = extensionFolder("ext");

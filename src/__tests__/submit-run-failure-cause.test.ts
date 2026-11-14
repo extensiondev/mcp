@@ -218,6 +218,26 @@ describe("status reads a failed store run's own cause into failureReason with a 
     expect(out.value.stores[0].nextStep).toBeNull();
   });
 
+  it("answers a submit again step for a store run the platform never started, in a minute when the platform says so", async () => {
+    const unread =
+      "The platform could not start the firefox store run (extension.dev could not read the record of build ab12cd3 right now, so nothing was sent to the store. Try the submission again in a minute.). Nothing ran for firefox; submit firefox again.";
+    const refused = "The platform could not start the edge store run (The build lane refused this submission. Nothing was sent to the store.). Nothing ran for edge; submit edge again.";
+    const out = await status(
+      [
+        { store: "firefox", configured: true, lastSubmission: { id: "sub_f", version: "0.1.0", status: "failed", failureReason: unread }, submissionRun: null },
+        { store: "edge", configured: true, lastSubmission: { id: "sub_e", version: "0.1.0", status: "failed", failureReason: refused }, submissionRun: null },
+      ],
+      ["firefox", "edge"],
+    );
+    const [firefox, edge] = out.value.stores;
+
+    expect(firefox.failureReason).toBe(unread);
+    expect(firefox.nextStep.kind).toBe("resubmit");
+    expect(firefox.nextStep.say).toBe("The firefox store run never started, so nothing reached the store. Say submit again in a minute.");
+    expect(edge.nextStep.kind).toBe("resubmit");
+    expect(edge.nextStep.say).toBe("The edge store run never started, so nothing reached the store. Say submit again.");
+  });
+
   it("names the failing step beside the generic reason and grounds no next step when the cause is not known", async () => {
     const out = await status(
       [

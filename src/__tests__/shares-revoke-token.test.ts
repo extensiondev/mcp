@@ -99,6 +99,20 @@ describe("extension_shares revoke sends the named project's token", () => {
     expect(out.error.message).toContain("not touched");
   });
 
+  it("names an approval whose approver left the workspace and asks for a fresh one", async () => {
+    login("alpha");
+    captureDelete({ message: "Revoking a share with a token needs a workspace member's approval, and the person who approved this is not a member of this workspace now.", code: "APPROVER_NOT_MEMBER" }, 403);
+
+    const out = JSON.parse(await handler({ action: "revoke", artifactId: FULL_ID, approvalId: "apr_x" }));
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("approver-not-member");
+    expect(out.error.platformCode).toBe("APPROVER_NOT_MEMBER");
+    expect(out.value.nextStep).toEqual({ kind: "approve", say: out.value.sayToPerson, url: null });
+    expect(out.value.sayToPerson).toContain("no longer a member of the workspace");
+    expect(out.hint).toContain("Call again without approvalId to request a fresh approval, then have a workspace member approve it.");
+  });
+
   it("says a 401 is a refused token, not a missing one", async () => {
     login("alpha");
     captureDelete({ message: "Token revoked", code: "TOKEN_REVOKED" }, 401);

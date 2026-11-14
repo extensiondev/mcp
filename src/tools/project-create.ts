@@ -73,6 +73,7 @@ import { PROJECT_CREATE_LOCAL } from "./project-create-local";
 import { bearerFetch } from "../lib/platform-fetch";
 import { evaluateApproval, platformRequiresApproval, requestApprovalAfterRefusal, type ApprovalGateInput } from "../lib/approval-gate";
 import { projectHeader } from "../lib/request-fetch";
+import { namedRefusalOf } from "../lib/named-refusal";
 
 import type { ProjectApi, ProjectApiOpen } from "../lib/project-api";
 import type { SourceArchive } from "../lib/source-archive";
@@ -1118,6 +1119,24 @@ async function sendCreate(
         `The create request for ${ctx.project} got a ${res.status} with no platform code, which is an answer from in front of the platform while the create may still be running`,
         "E_PLATFORM",
       );
+    }
+
+    const refused = namedRefusalOf(code);
+
+    if (refused) {
+      return envelope({
+        ok: false,
+        command: COMMAND,
+        status: refused.status,
+        value: { project: ctx.project, sayToPerson: refused.say, nextStep: refused.nextStep },
+        error: {
+          code: "E_PLATFORM",
+          name: refused.name,
+          platformCode: code,
+          message: String(data.message || refused.say).slice(0, 500),
+        },
+        hint: refused.hint,
+      });
     }
 
     return fail(

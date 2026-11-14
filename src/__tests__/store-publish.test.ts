@@ -353,6 +353,46 @@ describe("extension_submit publish sends a Chrome draft to review after one appr
     expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
   });
 
+  it("answers upload-run-unread with a retry step, and calls no approval spent, when the platform could not read the upload's run", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${PUBLISH}`] = () => ({
+      status: 503,
+      body: {
+        code: "UPLOAD_RUN_UNREAD",
+        message: "extension.dev could not read the upload run of this Chrome Web Store draft (build 2bda5b2) right now, so nothing was sent to review. Try again in a minute.",
+        submissionId: "sub_fresh",
+        buildId: "2bda5b2",
+        refusedBeforeApproval: true,
+      },
+    });
+
+    const out = JSON.parse(await submit({ action: "publish", browsers: ["chrome"], api: API }));
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("upload-run-unread");
+    expect(out.error.name).toBe("UploadRunUnread");
+    expect(out.error.platformCode).toBe("UPLOAD_RUN_UNREAD");
+    expect(out.value.nextStep).toEqual({ kind: "retry", say: out.value.sayToPerson, url: null });
+    expect(out.value.sayToPerson).toContain("Say publish again in a minute.");
+    expect(out.hint).toContain("Make the same call again in a minute.");
+    expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
+
+    platform.routes[`POST ${PUBLISH}`] = () => ({
+      status: 403,
+      body: { code: "APPROVER_NOT_MEMBER", message: "The person who approved this is not a member of this workspace now. Nothing ran and the approval was not used." },
+    });
+
+    const left = JSON.parse(await submit({ action: "publish", browsers: ["chrome"], approvalId: "apr_left", api: API }));
+
+    expect(left.status).toBe("approver-not-member");
+    expect(left.error.platformCode).toBe("APPROVER_NOT_MEMBER");
+    expect(left.value.nextStep.kind).toBe("approve");
+    expect(left.hint).toContain("Call again without approvalId to request a fresh approval");
+    expect(JSON.stringify(left.warnings ?? [])).not.toContain("may have spent");
+  });
+
   it("keeps publish-refused for a draft the platform cannot join when no upload run is named", async () => {
     if (process.platform === "win32") return;
 

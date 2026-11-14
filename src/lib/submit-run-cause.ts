@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { isRow, text } from "./row";
+import { storeRunNeverStarted } from "./named-refusal";
 import { FIREFOX_SYNC_LISTING_CALL, SAFARI_DESCRIPTION_MAX } from "./store-preflight-local";
 import { nextStep, type NextStep } from "./store-connection";
 import { credentialFailureOf, credentialFailureStep } from "./store-credential-failure";
@@ -121,6 +122,12 @@ export function runCauseOf(store: string, submission: Row, run: Row, url: string
   const install = installRefusalLine(reasons);
 
   if (install) return { failed: true, failureReason: trimmed(install), nextStep: nextStep("resubmit", installRefusedSay(store, install), url ?? undefined) };
+
+  if (said && storeRunNeverStarted(said)) {
+    const say = `The ${store} store run never started, so nothing reached the store. Say submit again${/in a minute/i.test(said) ? " in a minute" : ""}.`;
+
+    return { failed: true, failureReason: trimmed(said), nextStep: nextStep("resubmit", say, url ?? undefined) };
+  }
 
   if (said) return { failed: true, failureReason: trimmed(said), nextStep: null };
 

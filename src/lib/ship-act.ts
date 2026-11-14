@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { approvalRoundTrip } from "./approval-outcome";
+import { namedRefusalOf } from "./named-refusal";
 import { billingUrl } from "./console-urls";
 import { envelope, type ErrorCode } from "./envelope";
 import {
@@ -186,7 +187,7 @@ export function shipRefusalHint(code: string, retryAfterSeconds?: number, store 
   if (code === "RATE_LIMITED") return `This login made too many of these requests.${wait}`;
   if (UNSURE.has(code)) return `The platform could not confirm this is within the workspace's allowance, so it refused instead of guessing.${wait || " Try again shortly."}`;
 
-  return HINTS[code];
+  return HINTS[code] ?? namedRefusalOf(code)?.hint;
 }
 
 const STATE_CODES: Record<string, string> = {
@@ -236,9 +237,11 @@ function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string
   const allowance = allowanceRefusal(read.body, billing);
   const hint = handSay || allowance?.message || (act.hints?.(read.code, read.retryAfterSeconds) ?? shipRefusalHint(read.code, read.retryAfterSeconds, text(act.value?.store), read.body, act.act, billing));
   const ownerOnly = read.code === OWNER_REQUIRED_CODE;
+  const named = namedRefusalOf(read.code);
   const status = ownerOnly
     ? "needs-owner"
-    : (STATE_CODES[read.code] ??
+    : (named?.status ??
+      STATE_CODES[read.code] ??
       (read.status === 400
         ? "bad-request"
         : ALLOWANCE.has(read.code) || read.status === 429
@@ -248,7 +251,7 @@ function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string
           : refusedStatus(act.act)));
   const code: ErrorCode = status === "bad-request" ? "E_BAD_REQUEST" : read.status === 403 ? "E_AUTH_DENIED" : "E_PLATFORM";
   const refunded = Boolean(act.approvalId) && body.approvalRefunded === true;
-  const spent = act.approvalId && !before && !refunded;
+  const spent = act.approvalId && !before && !refunded && !named;
 
   return envelope({
     ok: false,
@@ -295,11 +298,12 @@ function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string
       ...(read.retryAfterSeconds ? { retryAfterSeconds: read.retryAfterSeconds } : {}),
       ...allowanceValue(allowance),
       ...(hand ? byHandFields(handSay, hand) : {}),
+      ...(named ? { sayToPerson: named.say, nextStep: named.nextStep } : {}),
       ...(refunded ? { approvalId: act.approvalId, approvalRefunded: true, sayToPerson: REFUNDED_SAY, nextStep: REFUNDED_STEP } : {}),
     },
     error: {
       code,
-      name: ownerOnly ? "OwnerRequired" : "ActRefused",
+      name: ownerOnly ? "OwnerRequired" : (named?.name ?? "ActRefused"),
       ...(read.code ? { platformCode: read.code } : {}),
       message: hand ? handSay : allowance ? allowance.message : before ? `${closed(read.message)} Nothing ran and no approval was requested.` : read.message,
     },

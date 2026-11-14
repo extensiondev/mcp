@@ -36,6 +36,7 @@ import {
   platformHoldEnvelope,
   templatesOrigin,
 } from "../lib/platform-hold";
+import { namedRefusalOf } from "../lib/named-refusal";
 
 import type { SharedPreviewEntry } from "../lib/share-record";
 
@@ -532,18 +533,24 @@ async function revokeShare(args: {
     }
 
     const isAuth = result.error.name === "SharesAuthError";
+    const named = namedRefusalOf(result.error.code);
 
     return envelope({
       ok: false,
       command: "extension_shares",
-      status: "revoke-failed",
-      value: { action: "revoke", artifactId: ref },
+      status: named?.status ?? "revoke-failed",
+      value: {
+        action: "revoke",
+        artifactId: ref,
+        ...(named ? { sayToPerson: named.say, nextStep: named.nextStep } : {}),
+      },
       error: {
-        code: isAuth ? "E_AUTH_REQUIRED" : "E_PLATFORM",
-        name: result.error.name,
+        code: named ? "E_PLATFORM" : isAuth ? "E_AUTH_REQUIRED" : "E_PLATFORM",
+        name: named?.name ?? result.error.name,
+        ...(named ? { platformCode: result.error.code } : {}),
         message: result.error.message,
       },
-      ...(isAuth ? { hint: LOGIN_HINT } : {}),
+      ...(named ? { hint: named.hint } : isAuth ? { hint: LOGIN_HINT } : {}),
       warnings: [recordNote],
     });
   }
