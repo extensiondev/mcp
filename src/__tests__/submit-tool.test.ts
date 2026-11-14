@@ -359,6 +359,27 @@ describe("extension_submit: platform submit handler", () => {
     expect(JSON.stringify(out, (key, value) => (key === "platformLine" ? undefined : value))).not.toMatch(/workflow|store\.yml|fix the cause/i);
   });
 
+  it("666: says the approval was not spent when a 409 STORE_ACT_NOT_ON_LANE answer carries approvalRefunded true", async () => {
+    process.env.EXTENSION_DEV_TOKEN = claimsToken("acme", "widget");
+    const line = "This store act does not run on the extension.dev lane yet.";
+    global.fetch = (async () => jsonResponse({ code: "STORE_ACT_NOT_ON_LANE", message: line, approvalRefunded: true }, false, 409)) as unknown as typeof fetch;
+
+    const out = JSON.parse(await handler({ browsers: ["firefox"], buildSha: "4cec881", dryRun: false, approvalId: "apr_666" }));
+
+    expect(out.status).toBe(PLATFORM_UNAVAILABLE_STATUS);
+    expect(out.error).toMatchObject({ name: "PlatformUnavailable", platformCode: "STORE_ACT_NOT_ON_LANE" });
+    expect(out.value).toMatchObject({ approvalId: "apr_666", approvalRefunded: true, platformLine: line });
+    expect(out.hint).toContain("The platform says approval apr_666 was not spent, so once it can take the submission, call again with the same arguments and that approvalId.");
+    expect(out.hint).not.toContain("extension_approvals (action: status");
+
+    global.fetch = (async () => jsonResponse({ code: "STORE_ACT_NOT_ON_LANE", message: line }, false, 409)) as unknown as typeof fetch;
+
+    const unsaid = JSON.parse(await handler({ browsers: ["firefox"], buildSha: "4cec881", dryRun: false, approvalId: "apr_666" }));
+
+    expect(unsaid.value.approvalRefunded).toBe("unknown");
+    expect(unsaid.hint).toContain("extension_approvals (action: status, approvalId: apr_666)");
+  });
+
   it("answers a 503 with a code it does not know, such as an older platform's STORE_RUN_UNAVAILABLE, as a plain submit failure in the platform's words", async () => {
     process.env.EXTENSION_DEV_TOKEN = claimsToken("acme", "widget");
     const line = "Store submissions for this project run on the build lane, which is not taking them yet.";
