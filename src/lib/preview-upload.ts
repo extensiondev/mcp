@@ -16,6 +16,7 @@ import { bearerHeaders } from "./request-fetch";
 import { identityHeaders } from "./session-identity";
 import { wwwRevokeUrl } from "./artifacts-api";
 import { platformHoldMessage, sawPlatformHold } from "./platform-hold";
+import { withoutRedirects } from "./platform-fetch";
 
 type FetchImpl = typeof fetch;
 
@@ -205,7 +206,7 @@ export async function uploadPreview(options: {
   let res: Response;
 
   try {
-    res = await doFetch(`${apiCheck.base}/api/artifacts`, {
+    res = await withoutRedirects(doFetch)(`${apiCheck.base}/api/artifacts`, {
       method: "POST",
       headers: {
         ...bearerHeaders(token, options.ref),

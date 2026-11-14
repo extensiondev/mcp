@@ -11,6 +11,7 @@ import { resolveApiBase, safeApiBase } from "./login-flow";
 import { bearerHeaders } from "./request-fetch";
 import { kernelHook } from "./kernel-hooks";
 import { platformHoldMessage, sawPlatformHold } from "./platform-hold";
+import { withoutRedirects } from "./platform-fetch";
 
 type FetchImpl = typeof fetch;
 
@@ -73,7 +74,7 @@ export async function publish(
   let res: Response;
 
   try {
-    res = await doFetch(url, {
+    res = await withoutRedirects(doFetch)(url, {
       method: "POST",
       headers: {
         ...bearerHeaders(token, options.ref),

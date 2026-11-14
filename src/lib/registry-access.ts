@@ -12,6 +12,7 @@ import { readValidCredentials } from "./credentials";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { bearerHeaders } from "./request-fetch";
 import { identityHeaders } from "./session-identity";
+import { withoutRedirects } from "./platform-fetch";
 
 import type { ProjectRef } from "./registry";
 
@@ -119,7 +120,7 @@ export class RegistryAccessTokens {
     let res: Response;
 
     try {
-      res = await (this.fetchImpl ?? fetch)(`${check.base}/api/access-grant`, {
+      res = await withoutRedirects(this.fetchImpl ?? fetch)(`${check.base}/api/access-grant`, {
         method: "POST",
         headers: {
           ...bearerHeaders(token, ref),

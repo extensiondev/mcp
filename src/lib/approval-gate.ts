@@ -35,6 +35,7 @@ import {
   type ApprovalScope,
 } from "./approval-verify";
 import { SAFARI_RELEASE_ON_SALE } from "./safari-release-intent";
+import { withoutRedirects } from "./platform-fetch";
 
 function renderedArgs(args: Record<string, unknown>): string {
   return `{${Object.entries(args)
@@ -177,7 +178,7 @@ async function requestApproval(params: {
   let res: Response;
 
   try {
-    res = await doFetch(url, {
+    res = await withoutRedirects(doFetch)(url, {
       method: "POST",
       headers: {
         ...bearerHeaders(input.token, input.ref),

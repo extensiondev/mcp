@@ -27,6 +27,31 @@ export interface PlatformFetchOptions {
   fetchImpl?: typeof fetch;
 }
 
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+function carriesBearer(input: Parameters<typeof fetch>[0], init?: RequestInit): boolean {
+  if (new Headers(init?.headers).has("authorization")) return true;
+
+  return input instanceof Request && input.headers.has("authorization");
+}
+
+export async function bearerFetch(input: Parameters<typeof fetch>[0], init?: RequestInit, impl?: typeof fetch): Promise<Response> {
+  const doFetch = impl ?? globalThis.fetch;
+  if (!carriesBearer(input, init)) return doFetch(input, init);
+
+  const res = await doFetch(input, { ...init, redirect: "manual" });
+  if (res.type !== "opaqueredirect" && !REDIRECT_STATUSES.has(res.status)) return res;
+
+  await res.body?.cancel().catch(() => {});
+  const status = res.type === "opaqueredirect" ? "a redirect" : `a ${res.status} redirect`;
+
+  throw new Error(`the platform answered ${status}, and a credential is never sent to a redirect`);
+}
+
+export function withoutRedirects(impl?: typeof fetch): typeof fetch {
+  return ((input: Parameters<typeof fetch>[0], init?: RequestInit) => bearerFetch(input, init, impl)) as typeof fetch;
+}
+
 export function platformBoundMs(kind: PlatformFetchKind): number {
   return kind === "dispatch" ? PLATFORM_DISPATCH_TIMEOUT_MS : PLATFORM_READ_TIMEOUT_MS;
 }
@@ -121,7 +146,7 @@ export async function platformFetch(url: string, init: RequestInit, options: Pla
   else options.signal?.addEventListener("abort", onOuterAbort, { once: true });
 
   try {
-    const res = await Promise.race([doFetch(url, { ...init, signal: controller.signal }), expired]);
+    const res = await Promise.race([bearerFetch(url, { ...init, signal: controller.signal }, doFetch), expired]);
 
     return { ok: true, res };
   } catch (err) {

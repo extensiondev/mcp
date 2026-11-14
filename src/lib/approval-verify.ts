@@ -23,6 +23,7 @@ import { tokenProjectIdentity } from "./project-identity";
 import { envelope } from "./envelope";
 import { parseJsonObject } from "./json-object";
 import { platformHoldEnvelope, sawPlatformHold } from "./platform-hold";
+import { withoutRedirects } from "./platform-fetch";
 
 import type { PolicyWrite } from "./approval-policy";
 import type { MintedApproval } from "./approval-record";
@@ -201,7 +202,7 @@ export async function verifyApproval(params: {
   let res: Response;
 
   try {
-    res = await doFetch(url, {
+    res = await withoutRedirects(doFetch)(url, {
       method: "GET",
       headers: {
         ...bearerHeaders(input.token, input.ref),

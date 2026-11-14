@@ -12,6 +12,7 @@ import { resolveApiBase, safeApiBase } from "./login-flow";
 import { bearerHeaders } from "./request-fetch";
 import { kernelHook } from "./kernel-hooks";
 import { platformHoldMessage, sawPlatformHold } from "./platform-hold";
+import { withoutRedirects } from "./platform-fetch";
 
 type FetchImpl = typeof fetch;
 
@@ -189,7 +190,7 @@ export async function listArtifacts(options: {
   let res: Response;
 
   try {
-    res = await doFetch(url.toString(), {
+    res = await withoutRedirects(doFetch)(url.toString(), {
       headers: {
         ...bearerHeaders(token, options.ref),
         accept: "application/json",
@@ -292,7 +293,7 @@ export async function revokeArtifact(options: {
   let res: Response;
 
   try {
-    res = await doFetch(url, {
+    res = await withoutRedirects(doFetch)(url, {
       method: "DELETE",
       headers: {
         ...bearerHeaders(token, options.ref),

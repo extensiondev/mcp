@@ -26,6 +26,7 @@ import {
 import { buildCreateBody } from "./project-create-body";
 import { projectCreateUrl } from "./project-source-upload";
 import { consoleBase, consoleProjectUrl } from "./registry";
+import { bearerFetch } from "./platform-fetch";
 
 
 const COMMAND = "extension_project_create";
@@ -429,7 +430,7 @@ async function createOne(local: BatchCreateLocal, session: Session, entry: Batch
   const deadline = answerDeadline(callStartedAt);
 
   try {
-    res = await fetch(url, {
+    res = await bearerFetch(url, {
       method: "POST",
       headers: {
         authorization: `Bearer ${session.grant}`,

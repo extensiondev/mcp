@@ -27,6 +27,7 @@ import { CREATE_CEILING_SENTENCE, CREATE_STUCK_AFTER_SECONDS, creatingForWords, 
 import { laneClosedFacts, laneClosedHint, platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
 import { WORKSPACE_CREATE_LOCAL } from "./workspace-create-local";
 import { answerIsUnknownOutcome, readCreatedWorkspace } from "../lib/create-answer";
+import { bearerFetch } from "../lib/platform-fetch";
 
 const COMMAND = "extension_workspace_create";
 
@@ -434,7 +435,7 @@ async function sendCreate(ctx: CreateContext, kept: boolean, keepGrant: () => vo
   const deadline = answerDeadline(ctx.callStartedAt);
 
   try {
-    res = await fetch(url, {
+    res = await bearerFetch(url, {
       method: "POST",
       headers: {
         authorization: `Bearer ${token}`,

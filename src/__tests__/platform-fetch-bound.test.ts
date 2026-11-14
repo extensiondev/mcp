@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 
@@ -9,11 +10,14 @@ import { envelope } from "../lib/envelope";
 import {
   PLATFORM_DISPATCH_TIMEOUT_MS,
   PLATFORM_READ_TIMEOUT_MS,
+  bearerFetch,
   platformFetch,
   type PlatformFetchResult,
 } from "../lib/platform-fetch";
 import { attachTrack } from "../lib/track-url";
 import { handler as builds } from "../tools/builds";
+
+import type { AddressInfo } from "node:net";
 
 const API = "http://localhost:3100";
 const PROJECT_ID = "prj_probe";
@@ -187,5 +191,105 @@ describe("extension_builds list answers at the read bound", () => {
     expect(out.error.code).toBe("E_NETWORK");
     expect(out.error.message).toBe(`could not reach ${API}/api/projects/${PROJECT_ID}/builds?limit=2: the platform did not answer within 15 s`);
     expect(calls).toEqual([`${API}/api/cli/whoami`, `${API}/api/projects/${PROJECT_ID}/builds?limit=2`]);
+  });
+});
+
+describe("a bearer never follows a platform redirect", () => {
+  let tmp: string;
+  let prevXdg: string | undefined;
+  let prevApi: string | undefined;
+  let server: http.Server;
+  let base: string;
+  let seen: Array<{ path: string; authorization: string | null }>;
+
+  beforeEach(async () => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-redirect-"));
+    prevXdg = process.env.XDG_CONFIG_HOME;
+    prevApi = process.env.EXTENSION_DEV_API_URL;
+    delete process.env.EXTENSION_DEV_API_URL;
+    process.env.XDG_CONFIG_HOME = tmp;
+    seen = [];
+
+    server = http.createServer((req, res) => {
+      const at = new URL(String(req.url), "http://127.0.0.1");
+      seen.push({ path: at.pathname, authorization: req.headers.authorization ?? null });
+
+      if (at.pathname === "/api/cli/whoami") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ login: "acme/widget", live: true, projectId: PROJECT_ID, workspaceSlug: "acme", projectSlug: "widget" }));
+
+        return;
+      }
+
+      if (at.pathname === "/collect") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ builds: [] }));
+
+        return;
+      }
+
+      res.writeHead(302, { location: "/collect" });
+      res.end();
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+
+    writeCredentials({
+      version: 1,
+      token: "claims.sig",
+      workspaceSlug: "acme",
+      projectSlug: "widget",
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      api: base,
+    });
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = prevXdg;
+    if (prevApi === undefined) delete process.env.EXTENSION_DEV_API_URL;
+    else process.env.EXTENSION_DEV_API_URL = prevApi;
+
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it("refuses a 302 as an unreachable platform and never sends the bearer to the Location", async () => {
+    const out = JSON.parse(await builds({ api: base, action: "list", limit: 2 }));
+
+    expect(seen.map((hit) => hit.path)).not.toContain("/collect");
+    expect(seen.every((hit) => hit.authorization === "Bearer claims.sig")).toBe(true);
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("unavailable");
+    expect(out.error.code).toBe("E_NETWORK");
+    expect(out.error.message).toBe(
+      `could not reach ${base}/api/projects/${PROJECT_ID}/builds?limit=2: the platform answered a 302 redirect, and a credential is never sent to a redirect`,
+    );
+  });
+
+  it("refuses the redirect on a direct bearer call and still follows one that carries no bearer", async () => {
+    await expect(bearerFetch(`${base}/api/cli/approvals`, { headers: { authorization: "Bearer claims.sig" } })).rejects.toThrow(
+      "the platform answered a 302 redirect, and a credential is never sent to a redirect",
+    );
+
+    expect(seen.map((hit) => hit.path)).not.toContain("/collect");
+
+    const open = await bearerFetch(`${base}/api/public`);
+    expect(open.status).toBe(200);
+    expect(seen.map((hit) => hit.path)).toEqual(["/api/cli/approvals", "/api/public", "/collect"]);
+  });
+
+  it("sends every bearer in the source through a fetch that refuses redirects", () => {
+    const root = path.join(__dirname, "..");
+    const files = fs.readdirSync(root, { recursive: true, encoding: "utf8" }).filter((file) => file.endsWith(".ts") && !file.includes("__tests__"));
+    const loose = files.filter((file) => {
+      const text = fs.readFileSync(path.join(root, file), "utf8");
+      const bearer = /bearerHeaders\(|Bearer \$\{/.test(text) && !file.endsWith("request-fetch.ts");
+
+      return bearer && !/\b(platformFetch|bearerFetch|withoutRedirects)\(/.test(text);
+    });
+
+    expect(loose).toEqual([]);
   });
 });

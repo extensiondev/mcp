@@ -69,6 +69,7 @@ import {
   withheldBecause,
 } from "../lib/first-build";
 import { PROJECT_CREATE_LOCAL } from "./project-create-local";
+import { bearerFetch } from "../lib/platform-fetch";
 
 import type { SourceArchive } from "../lib/source-archive";
 import type { ProjectFoundByRead } from "../lib/created-project-read";
@@ -827,7 +828,7 @@ async function sendCreate(
   let res: Response;
   const deadline = createRequestDeadline(ctx.callStartedAt, ctx.callBlocks);
   const send = (signal: AbortSignal) =>
-    fetch(url, {
+    bearerFetch(url, {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json", ...local.identityHeaders(COMMAND) },
       body: JSON.stringify(body),

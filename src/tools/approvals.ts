@@ -18,6 +18,7 @@ import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
 import { resolveCredential } from "../lib/credential-source";
 import { bearerHeaders } from "../lib/request-fetch";
 import { expiredLoginRefusal } from "../lib/login-expired";
+import { bearerFetch } from "../lib/platform-fetch";
 
 const COMMAND = "extension_approvals";
 const APPROVAL_ID = /^apr_[A-Za-z0-9_-]{32}$/;
@@ -69,7 +70,7 @@ function refused(status: string, name: string, message: string, value: Record<st
 
 async function ask(base: string, path: string, method: "GET" | "POST", token: string, ref?: { workspace: string; project: string } | null): Promise<Read> {
   try {
-    const res = await fetch(`${base}${path}`, {
+    const res = await bearerFetch(`${base}${path}`, {
       method,
       headers: { ...bearerHeaders(token, ref), accept: "application/json" },
     });

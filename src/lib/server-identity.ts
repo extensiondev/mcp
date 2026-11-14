@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { bearerHeaders } from "./request-fetch";
+import { withoutRedirects } from "./platform-fetch";
 
 export type ServerIdentityAnswer =
   | { kind: "confirmed"; login: string; live: boolean }
@@ -22,7 +23,7 @@ export async function askServerIdentity(args: {
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
 }): Promise<ServerIdentityAnswer> {
-  const fetchImpl = args.fetchImpl ?? fetch;
+  const fetchImpl = withoutRedirects(args.fetchImpl ?? fetch);
   const controller = new AbortController();
   const timer = setTimeout(
     () => controller.abort(),

@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { withoutRedirects } from "./platform-fetch";
+
 export const SOURCE_TOO_LARGE_CODE = "SOURCE_TOO_LARGE";
 
 export const SOURCE_UPLOAD_CONSUMED_CODE = "SOURCE_UPLOAD_CONSUMED";
@@ -73,7 +75,7 @@ export async function uploadProjectSource(options: {
   let res: Response;
 
   try {
-    res = await fetchImpl(projectSourceUploadUrl(options.apiBase), {
+    res = await withoutRedirects(fetchImpl)(projectSourceUploadUrl(options.apiBase), {
       method: "POST",
       headers: {
         authorization: `Bearer ${options.token}`,
