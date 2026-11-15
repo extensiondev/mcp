@@ -11,6 +11,7 @@ import path from "node:path";
 
 import { APPROVAL_REJECTED_STATUS } from "./approval-outcome";
 import { answeredProject } from "./approval-scope";
+import { requestCredential } from "./credential-scope";
 import { targetServer } from "./credential-server";
 import { loginIdOf, readTokenClaims, splitRef } from "./credential-source";
 import { credentialsPath, readCredentials } from "./credentials";
@@ -275,7 +276,11 @@ function namedRef(named: string, record: MintedApproval): string {
  * name is made as the current one and told the move, a call under the new
  * name for a record that kept the old one is told the rename; a slug this
  * machine resolves to another project, or to none, is another project. An id
- * this machine did not mint is left to the platform.
+ * this machine did not mint is left to the platform. A call made under a
+ * request credential, which is every call the hosted lane runs, reads no
+ * file here: the record it binds is the one its caller handed it or none,
+ * because the machine it runs on is not the person's, and until 2026-11-15
+ * an approvals file there could refuse or rebind a person's call.
  */
 export function mintedWords(minted: Pick<MintedApproval, "action" | "mintedAt">): string {
   const words = [minted.action, minted.mintedAt].filter(Boolean).join(", ");
@@ -292,7 +297,7 @@ export function bindApprovalProject(
   if (!approvalId) return { args };
 
   const api = trimmed(args.api) || undefined;
-  const minted = record ?? mintedApproval(api, approvalId);
+  const minted = record ?? (requestCredential() ? null : mintedApproval(api, approvalId));
   if (!minted) return { args };
 
   const ref = `${minted.workspace}/${minted.project}`;
