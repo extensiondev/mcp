@@ -3,6 +3,7 @@ import zlib from "node:zlib";
 import { describe, expect, it } from "vitest";
 
 import { flattenPngAlpha, pngHeader } from "../lib/png-flat";
+import { screenshotRefusal, screenshotRule } from "../lib/store-listing-media";
 import { clearsStoreRow, STORE_SCREENSHOT_SPECS, storeSizeSentence } from "../lib/store-screenshot-sizes";
 import { rgbaPng } from "./fixtures/png-alpha";
 import { solidPng } from "./fixtures/png";
@@ -62,5 +63,13 @@ describe("the store screenshot table", () => {
     expect(clearsStoreRow("edge", 1280, 800, true)).toEqual({ clears: true });
     expect(clearsStoreRow("safari", 1366, 683, false)).toMatchObject({ clears: false, reason: expect.stringContaining("1280x800, 1440x900, 2560x1600, 2880x1800") });
     expect(storeSizeSentence("safari")).toBe("the App Store takes 1 to 10 screenshots at 1280x800 or 1440x900 or 2560x1600 or 2880x1800 px, 24-bit PNG or JPEG with no alpha (https://developer.apple.com/help/app-store-connect/reference/screenshot-specifications).");
+  });
+
+  it("787: one rule carries each store's screenshot count for the preflight gallery and the sync-listing refusal, and only a submission is held to the minimum", () => {
+    const stores = ["chrome", "edge", "firefox", "safari"] as const;
+    const counts = Object.fromEntries(stores.map((store) => [store, [screenshotRule(store).min, screenshotRule(store).max]]));
+
+    expect(counts).toEqual({ chrome: [1, 5], edge: [1, 6], firefox: [0, 10], safari: [1, 10] });
+    expect(stores.map((store) => screenshotRefusal(store, []))).toEqual([null, null, null, null]);
   });
 });

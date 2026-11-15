@@ -18,7 +18,23 @@ export const STORE_LISTING_ACTION = "extension_store.listing";
 export const MAX_SCREENSHOTS = 10;
 const SCREENSHOT_CAPS: Record<ListingStore, number> = { chrome: 5, edge: 6, firefox: MAX_SCREENSHOTS, safari: 10 };
 
+/* @invariant A STORE'S SCREENSHOT COUNT IS STATED ONCE, AND IT IS THE COUNT
+ * THE PLATFORM HOLDS A SUBMISSION TO. The submit preflight's gallery and the
+ * sync-listing refusal both read screenshotRule, so the two cannot drift.
+ * Chrome and the App Store require one and Firefox none. Partner Center
+ * lists Edge screenshots as Optional with a maximum of 6 (Step 7 of the
+ * Edge publish guide, STORE_SCREENSHOT_SPECS.edge.docs), and the platform
+ * asks for at least 1 all the same: its requirement row edge.screenshots is
+ * required and its readiness check blocks a submission without one, so the
+ * minimum here is the platform's, or the gallery would call ready what the
+ * submit refuses. The minimum judges readiness to submit; a sync-listing
+ * sends what is there, for every store, and refuses only what a store would
+ * not take: too many, a wrong size, too many bytes.
+ */
+const SCREENSHOT_MINIMUMS: Record<ListingStore, number> = { chrome: 1, edge: 1, firefox: 0, safari: 1 };
+
 export interface ScreenshotRule {
+  min: number;
   max: number;
   sizes: readonly string[] | null;
   shown: string;
@@ -26,8 +42,9 @@ export interface ScreenshotRule {
 
 export function screenshotRule(store: ListingStore): ScreenshotRule {
   const spec = STORE_SCREENSHOT_SPECS[store];
+  const min = SCREENSHOT_MINIMUMS[store];
   const max = SCREENSHOT_CAPS[store];
-  if (store === "firefox") return { max, sizes: null, shown: "any size, optional" };
+  if (store === "firefox") return { min, max, sizes: null, shown: "any size, optional" };
 
   const sizes = spec.sizes.map(sizeLabel);
   const listed = sizes.length > 1 ? `${sizes.slice(0, -1).join(", ")} or ${sizes[sizes.length - 1]}` : sizes[0]!;
@@ -36,7 +53,7 @@ export function screenshotRule(store: ListingStore): ScreenshotRule {
       ? `${spec.count} macOS screenshots at exactly ${listed}, showing the extension running in Safari`
       : `${spec.count} at ${listed}`;
 
-  return { max, sizes, shown };
+  return { min, max, sizes, shown };
 }
 
 const MAX_ICON_BYTES = 512 * 1024;
