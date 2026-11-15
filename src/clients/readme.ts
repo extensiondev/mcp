@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { PACKAGE, SERVER_NAME, buildRecipe, type ClientId, type Recipe } from "./index";
+import { buildRecipe, type ClientId, type Recipe } from "./index";
 
 export const README_SETUP_START = "<!-- setup:start (generated from src/clients, run pnpm readme:clients) -->";
 export const README_SETUP_END = "<!-- setup:end -->";
@@ -28,9 +28,6 @@ const PLUGIN_NOTE = [
 const recipe = (client: ClientId): Recipe =>
   buildRecipe({ client, reach: "everything", strictApproval: false, project: "" });
 
-const withYes = (command: string): string =>
-  command.replace(`npx ${PACKAGE}`, `npx -y ${PACKAGE}`);
-
 export function vscodeInstallLink(deeplink: string): string {
   return `https://insiders.vscode.dev/redirect?url=${encodeURIComponent(decodeURIComponent(deeplink))}`;
 }
@@ -45,16 +42,10 @@ export function renderReadmeSetup(): string {
     throw new Error("a recipe the README setup needs is missing");
   }
 
-  const config = JSON.parse(shared.text) as {
-    mcpServers: Record<string, { command: string; args: string[] }>;
-  };
-  const entry = config.mcpServers[SERVER_NAME];
-  entry.args = ["-y", ...entry.args];
-
   return [
     README_SETUP_START,
     "",
-    fence("bash", withYes(claude.command)),
+    fence("bash", claude.command),
     "",
     PLUGIN_NOTE,
     "",
@@ -62,7 +53,7 @@ export function renderReadmeSetup(): string {
     "",
     `Other clients take the same server as \`${shared.path}\`; every client's block, with a local-only form, is on [Install in your client](${CLIENTS_DOC}).`,
     "",
-    fence(shared.language, JSON.stringify(config, null, 2)),
+    fence(shared.language, shared.text),
     "",
     README_SETUP_END,
   ].join("\n");

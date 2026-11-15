@@ -31,11 +31,17 @@ describe("the README setup is generated from src/clients", () => {
     expect(renderReadmeSetup()).not.toMatch(/APPROVAL_GATE=0/);
   });
 
-  it("gives one install command, with -y, and one-click badges for Cursor and VS Code", () => {
+  it("783: gives one install command and one shared config, each the recipe docs/clients.json carries, and one-click badges for Cursor and VS Code", () => {
     const setup = renderReadmeSetup();
+    const documented = JSON.parse(fs.readFileSync(path.resolve(path.dirname(readmePath), "docs", "clients.json"), "utf8")) as {
+      clients: Array<{ id: string; recipes: { everything: { command?: string; config?: { text: string } } } }>;
+    };
+    const everything = (id: string) => documented.clients.find((client) => client.id === id)!.recipes.everything;
+
     expect(setup.match(/```bash/g)).toHaveLength(1);
-    expect(setup).toContain("claude mcp add extension-dev -- npx -y @extension.dev/mcp --features=local,platform");
-    expect(setup).toContain('"args": [\n        "-y",\n        "@extension.dev/mcp",');
+    expect(everything("claude-code").command).toBe("claude mcp add extension-dev -- npx @extension.dev/mcp --features=local,platform");
+    expect(setup).toContain(`\`\`\`bash\n${everything("claude-code").command}\n\`\`\``);
+    expect(setup).toContain(`\`\`\`json\n${everything("json").config!.text}\n\`\`\``);
     expect(setup).toContain("/plugin marketplace add extensiondev/skill\n/plugin install extension-dev@extensiondev");
     expect(setup).toContain("](https://cursor.com/en/install-mcp?name=extension-dev&config=");
     expect(setup).toContain("](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22extension-dev%22");

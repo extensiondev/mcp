@@ -20,7 +20,7 @@ Extension.js is the framework you run. extension.dev is where it ships. This ser
 <!-- setup:start (generated from src/clients, run pnpm readme:clients) -->
 
 ```bash
-claude mcp add extension-dev -- npx -y @extension.dev/mcp --features=local,platform
+claude mcp add extension-dev -- npx @extension.dev/mcp --features=local,platform
 ```
 
 Or install the `extension-dev` plugin, the MCP server pinned to one published version plus the `browser-extension` skill, in one step:
@@ -40,7 +40,6 @@ Other clients take the same server as `.mcp.json`; every client's block, with a 
     "extension-dev": {
       "command": "npx",
       "args": [
-        "-y",
         "@extension.dev/mcp",
         "--features=local,platform"
       ]
@@ -70,7 +69,7 @@ The agent scaffolds from a template, starts the dev session, a browser opens wit
 The platform tools need a login once. You approve a code at [extension.dev/device](https://extension.dev/device); the project-scoped token stays on this machine, is never returned to the agent, and lives at most 7 days. No project yet? Request access at [extension.dev](https://extension.dev).
 
 ```bash
-npx -y @extension.dev/mcp login --project <workspace>/<project>
+npx @extension.dev/mcp login --project <workspace>/<project>
 ```
 
 Details under [Platform tools](https://docs.extension.dev/tools/mcp/platform).
