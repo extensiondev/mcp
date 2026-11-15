@@ -8,10 +8,10 @@ import { handler as workspace, schema } from "../tools/workspace";
 import * as workspaceTool from "../tools/workspace";
 import { forwardable } from "../lib/hosted-forwarder";
 import { forwardOf, useForwardLane } from "./fixtures/forward-lane";
-
-import type { ToolModule } from "../lib/tool-dispatch";
 import { TOOL_POLICY } from "../lib/tool-policy";
 import { writeCredentials } from "../lib/credentials";
+
+import type { ToolModule } from "../lib/tool-dispatch";
 
 const API = "http://localhost:3100";
 const ALPHA_ID = "prj_alpha";

@@ -334,6 +334,7 @@ describe("the forwarder", () => {
       ["extension_publish", `Bearer forward-of-${envLogin}`, "acme/web"],
       ["extension_shares", `Bearer forward-of-${DOCS_LOGIN}`, "acme/docs"],
     ]);
+
     expect(lane().map((hit) => hit.authorization)).not.toContain(`Bearer forward-of-${WEB_LOGIN}`);
   });
 
