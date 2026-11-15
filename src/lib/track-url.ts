@@ -349,7 +349,24 @@ export interface TrackFields {
   trackLinks?: string[];
 }
 
-export function trackFields(command: string, call: TrackCall, projectOnly = false): TrackFields | null {
+interface NamedPage {
+  url: string;
+  said: string;
+}
+
+/* @invariant A SECOND PAGE AN ANSWER NAMES IS CALLED WHAT IT IS. A share
+ * answer's second page is the build's page; a submit to two stores has one
+ * submission page per store, and until 2026-11-15 the second store's page
+ * was introduced as "the build page". Each further page is said by the
+ * kind of page its step names, with the store when the step has one.
+ */
+function saidPage(step: TrackStep): string {
+  const store = text(step.target?.store);
+
+  return step.page === "submission" && store ? `The ${store} submission page` : `The ${step.page} page`;
+}
+
+function trackPages(command: string, call: TrackCall, projectOnly: boolean): { fields: TrackFields; also: NamedPage[] } | null {
   const plan = TRACK_ACTS[command]?.(call);
   if (!plan) return null;
 
@@ -358,23 +375,26 @@ export function trackFields(command: string, call: TrackCall, projectOnly = fals
   if (projectOnly && !ref.project) return null;
 
   const primary = urlOf(plan.track, ref, api);
-  const also = (plan.also ?? []).map((step) => urlOf(step, ref, api));
+  const also = (plan.also ?? []).map((step) => ({ url: urlOf(step, ref, api), said: saidPage(step) }));
   const approvalPage = APPROVAL_STATUSES.has(call.status) ? approvalPageOf(call.value) : "";
 
-  if (approvalPage) return { trackUrl: approvalPage, checkUrl: primary };
+  if (approvalPage) return { fields: { trackUrl: approvalPage, checkUrl: primary }, also: [] };
 
-  return also.length ? { trackUrl: primary, trackLinks: [primary, ...also] } : { trackUrl: primary };
+  return { fields: also.length ? { trackUrl: primary, trackLinks: [primary, ...also.map((page) => page.url)] } : { trackUrl: primary }, also };
 }
 
-function trackSentences(fields: TrackFields, hint: string, unreached = false, linkNamed = false): string[] {
+export function trackFields(command: string, call: TrackCall, projectOnly = false): TrackFields | null {
+  return trackPages(command, call, projectOnly)?.fields ?? null;
+}
+
+function trackSentences(fields: TrackFields, hint: string, also: NamedPage[], unreached = false, linkNamed = false): string[] {
   const out: string[] = [];
 
   if (unreached) return hint.includes(fields.trackUrl) ? out : [`The console page is ${fields.trackUrl}.`];
   if (!linkNamed && !hint.includes(fields.trackUrl)) out.push(fields.checkUrl ? `Approve it at ${fields.trackUrl}.` : `Track it at ${fields.trackUrl}.`);
   if (fields.checkUrl && !hint.includes(fields.checkUrl)) out.push(`Once it is approved and done, check ${fields.checkUrl}.`);
 
-  const buildPage = fields.trackLinks?.[1];
-  if (buildPage && !hint.includes(buildPage)) out.push(`The build page is ${buildPage}.`);
+  for (const page of also) if (!hint.includes(page.url)) out.push(`${page.said} is ${page.url}.`);
 
   return out;
 }
@@ -406,9 +426,8 @@ export function attachTrack(command: string, args: Row, result: string): string 
   if (refusal && (text(value.trackUrl) || frame.error?.code === "E_NO_LOGIN_FOR_PROJECT")) return result;
 
   const ambiguous = frame.error?.code === "E_PROJECT_AMBIGUOUS";
-  const fields = ambiguous
-    ? ambiguousFields(value, text(args.api) || undefined)
-    : trackFields(command, { args, status: String(frame.status), value }, refusal);
+  const pages = ambiguous ? null : trackPages(command, { args, status: String(frame.status), value }, refusal);
+  const fields = ambiguous ? ambiguousFields(value, text(args.api) || undefined) : (pages?.fields ?? null);
   if (!fields) return result;
 
   const hint = typeof frame.hint === "string" ? frame.hint.trim() : "";
@@ -426,6 +445,6 @@ export function attachTrack(command: string, args: Row, result: string): string 
     error: frame.error ?? undefined,
     warnings: frame.warnings,
     ...(frame.truncated !== undefined ? { truncated: frame.truncated } : {}),
-    hint: [hint, ...trackSentences(fields, hint, unreached || refusal, deviceLink)].filter(Boolean).join(" "),
+    hint: [hint, ...trackSentences(fields, hint, pages?.also ?? [], unreached || refusal, deviceLink)].filter(Boolean).join(" "),
   });
 }

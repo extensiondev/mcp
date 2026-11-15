@@ -186,6 +186,25 @@ describe("every platform act answers the console page that tracks it", () => {
     expect(JSON.parse(attachTrack("extension_builds_act", { action: "delete-channel", channel: "beta", api: WORLD_API }, asked)).value.checkUrl).toBe(`${CONSOLE}/acme/widget/project-settings/channels`);
   });
 
+  it("names each store's submission page for what it is on a submit to two stores, and the build page only for a build", () => {
+    const submitted = envelope({
+      ok: true,
+      command: "extension_submit",
+      status: "submitted",
+      value: { project: "acme/widget", submissions: [{ store: "chrome", id: "sub_c" }, { store: "firefox", id: "sub_f" }] },
+      hint: "Made: 2 submission pages.",
+    });
+    const shared = envelope({ ok: true, command: "extension_shares", status: "share-created", value: { project: "acme/widget", buildSha: "603fc8a" }, hint: "Shared." });
+    const two = JSON.parse(attachTrack("extension_submit", { browsers: ["chrome", "firefox"], buildSha: "603fc8a", dryRun: false, api: WORLD_API }, submitted));
+
+    expect(two.hint).toBe(`Made: 2 submission pages. Track it at ${CONSOLE}/acme/widget/submissions/chrome/sub_c. The firefox submission page is ${CONSOLE}/acme/widget/submissions/firefox/sub_f.`);
+    expect(two.value.trackLinks).toEqual([`${CONSOLE}/acme/widget/submissions/chrome/sub_c`, `${CONSOLE}/acme/widget/submissions/firefox/sub_f`]);
+    expect(two.hint).not.toContain("build page");
+    expect(JSON.parse(attachTrack("extension_shares", { action: "create", api: WORLD_API }, shared)).hint).toBe(
+      `Shared. Track it at ${CONSOLE}/acme/widget/project-settings/share-links. The build page is ${CONSOLE}/acme/widget/builds/603fc8a.`,
+    );
+  });
+
   it("builds each act's page from the call's api, never the env", () => {
     process.env.EXTENSION_DEV_API_URL = WORLD_API;
 
