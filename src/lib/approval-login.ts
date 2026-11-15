@@ -99,7 +99,8 @@ export function bindApprovalLogin(
 function loginRef(token: string, api?: string): string {
   const claims = readTokenClaims(token);
 
-  if (!claims || claims.member) return "";
+  if (!claims) return trimmed(requestCredential()?.project);
+  if (claims.member) return "";
 
   const claimed = `${claims.workspace}/${claims.project}`;
 
