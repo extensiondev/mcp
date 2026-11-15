@@ -91,6 +91,7 @@ export interface ReadyContract {
   webdriverUnavailableReason?: string;
   webdriverRequestPath?: string;
   pid?: number;
+  pidStartedAt?: string;
   ts?: string;
   compiledAt?: string | null;
   executorAttachedAt?: string;
@@ -102,8 +103,10 @@ export interface ReadyContract {
   profilePath?: string;
   profileReused?: boolean;
   browserPid?: number | null;
+  browserStartedAt?: string;
   binary?: string;
   launcherPid?: number;
+  launcherStartedAt?: string;
   extensionId?: string;
   extensionIdSource?: string;
   browserUpNotAttachedAt?: string;

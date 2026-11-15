@@ -5,10 +5,15 @@ import path from "node:path";
 
 import { describe, it, expect, afterEach, afterAll } from "vitest";
 
+import { emptyReason } from "../tools/logs";
 import * as stop from "../tools/stop";
+import { contractPidStartedAt, contractPidState } from "../lib/contract-pids";
+import { processStartedAt } from "../lib/process-identity";
 import { findSessionInfo, listSessionMarkers, registerSession } from "../lib/process-manager";
 import { readyContractPath } from "../lib/session-paths";
 import { attachedDevContract, readyContract } from "./fixtures/engine-answers";
+
+type Body = Record<string, unknown>;
 
 const posixOnly = process.platform === "win32" ? it.skip : it;
 
@@ -200,6 +205,111 @@ describe("extension_stop judges the contract's browser and launcher pids by thei
       expect(result.value.reaped).toEqual(expect.arrayContaining([browserPid, launcherPid]));
       expect(await waitGone(browserPid)).toBe(true);
       expect(await waitGone(launcherPid)).toBe(true);
+    },
+    15_000,
+  );
+});
+
+describe("a ready contract that dates its own pids is believed before any stamp this server took", () => {
+  const LONG_AGO = "2001-01-01T00:00:00.000Z";
+
+  posixOnly(
+    "trusts the contract's browser and launcher start times on a run this server never registered and records nothing",
+    async () => {
+      const projectPath = tmpProject();
+      const browserPid = spawnHolder("browser");
+      const launcherPid = spawnHolder("launcher");
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const browserStartedAt = processStartedAt(browserPid);
+      expect(typeof browserStartedAt).toBe("string");
+      const contract = attachedDevContract("chrome", {
+        pid: process.pid,
+        browserPid,
+        browserStartedAt,
+        launcherPid,
+        launcherStartedAt: LONG_AGO,
+      });
+      writeContract(projectPath, contract);
+
+      expect(contractPidStartedAt(projectPath, "chrome", contract, "browser")).toBe(browserStartedAt);
+      expect(contractPidState(projectPath, "chrome", contract, "browser")).toBe("alive");
+      expect(contractPidStartedAt(projectPath, "chrome", contract, "launcher")).toBe(LONG_AGO);
+      expect(contractPidState(projectPath, "chrome", contract, "launcher")).toBe("dead");
+      expect(stop.contractProcessHints(projectPath, "chrome").startedAt).toEqual({
+        [browserPid]: browserStartedAt,
+        [launcherPid]: LONG_AGO,
+      });
+
+      expect(findSessionInfo(projectPath, "chrome")).toBeUndefined();
+    },
+    15_000,
+  );
+
+  posixOnly(
+    "takes the contract's browser start time over the one in this server's record",
+    async () => {
+      const projectPath = tmpProject();
+      const serverPid = spawnHolder("server");
+      const browserPid = spawnHolder("browser");
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const browserStartedAt = processStartedAt(browserPid);
+      registerSession({
+        pid: serverPid,
+        browser: "chrome",
+        projectPath,
+        command: "dev",
+        browserPid,
+        browserStartedAt: LONG_AGO,
+      });
+
+      const contract = attachedDevContract("chrome", { pid: serverPid, browserPid, browserStartedAt, launcherPid: browserPid });
+
+      expect(contractPidStartedAt(projectPath, "chrome", contract, "browser")).toBe(browserStartedAt);
+      expect(contractPidState(projectPath, "chrome", contract, "browser")).toBe("alive");
+      expect(findSessionInfo(projectPath, "chrome")?.browserStartedAt).toBe(LONG_AGO);
+    },
+    15_000,
+  );
+
+  posixOnly(
+    "falls back to its own stamps when the contract carries no start time or one that is not a date",
+    async () => {
+      const projectPath = tmpProject();
+      const serverPid = spawnHolder("server");
+      const browserPid = spawnHolder("browser");
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const bare = attachedDevContract("chrome", { pid: serverPid, browserPid, launcherPid: browserPid });
+
+      expect(contractPidStartedAt(projectPath, "chrome", bare, "engine")).toBeNull();
+      expect(contractPidStartedAt(projectPath, "chrome", bare, "browser")).toBeNull();
+      expect(contractPidState(projectPath, "chrome", bare, "engine")).toBe("alive");
+
+      registerSession({ pid: serverPid, browser: "chrome", projectPath, command: "dev", processStartedAt: LONG_AGO });
+      const unreadable: Body = { ...bare, pidStartedAt: "not a date", browserStartedAt: 12 };
+
+      expect(contractPidStartedAt(projectPath, "chrome", unreadable, "engine")).toBe(LONG_AGO);
+      expect(contractPidStartedAt(projectPath, "chrome", unreadable, "browser")).toBe(processStartedAt(browserPid));
+      expect(findSessionInfo(projectPath, "chrome")).toMatchObject({ browserPid, browserStartedAt: processStartedAt(browserPid) });
+    },
+    15_000,
+  );
+
+  posixOnly(
+    "reads a reused dev server pid as dead on a run this server never registered, and extension_logs says so",
+    async () => {
+      const projectPath = tmpProject();
+      const serverPid = spawnHolder("someone-else");
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const contract = readyContract("dev", "chrome", { pid: serverPid, pidStartedAt: LONG_AGO });
+      writeContract(projectPath, contract);
+
+      expect(findSessionInfo(projectPath, "chrome")).toBeUndefined();
+      expect(contractPidStartedAt(projectPath, "chrome", contract, "engine")).toBe(LONG_AGO);
+      expect(contractPidState(projectPath, "chrome", contract, "engine")).toBe("dead");
+      expect(emptyReason(projectPath, "chrome")).toMatch(new RegExp(`dev-server pid ${serverPid} is dead`));
+
+      const honest: Body = { ...contract, pidStartedAt: processStartedAt(serverPid) };
+      expect(contractPidState(projectPath, "chrome", honest, "engine")).toBe("alive");
     },
     15_000,
   );

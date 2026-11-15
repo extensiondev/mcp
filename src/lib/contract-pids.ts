@@ -13,7 +13,10 @@ import type { ProcessInfo, ReadyContract } from "./types";
 
 export type ContractPidRole = "engine" | "browser" | "launcher";
 
-type ContractPids = Pick<ReadyContract, "pid" | "browserPid" | "launcherPid">;
+type ContractPids = Pick<
+  ReadyContract,
+  "pid" | "pidStartedAt" | "browserPid" | "browserStartedAt" | "launcherPid" | "launcherStartedAt"
+>;
 
 const LAUNCHED: Array<Exclude<ContractPidRole, "engine">> = ["browser", "launcher"];
 
@@ -27,6 +30,13 @@ export function contractPid(contract: ContractPids | null | undefined, role: Con
   return positivePid(role === "engine" ? contract.pid : role === "browser" ? contract.browserPid : contract.launcherPid);
 }
 
+function contractStamp(contract: ContractPids, role: ContractPidRole): string | null {
+  const stamp: unknown =
+    role === "engine" ? contract.pidStartedAt : role === "browser" ? contract.browserStartedAt : contract.launcherStartedAt;
+
+  return typeof stamp === "string" && Number.isFinite(Date.parse(stamp)) ? stamp : null;
+}
+
 function recordedStamp(session: ProcessInfo, role: Exclude<ContractPidRole, "engine">, pid: number): string | null {
   const recordedPid = role === "browser" ? session.browserPid : session.launcherPid;
   const recordedAt = role === "browser" ? session.browserStartedAt : session.launcherStartedAt;
@@ -37,7 +47,7 @@ function recordedStamp(session: ProcessInfo, role: Exclude<ContractPidRole, "eng
 function stampLaunched(projectPath: string, browser: string, session: ProcessInfo, contract: ContractPids): ContractPidRecord {
   const unstamped = LAUNCHED.map((role) => ({ role, pid: contractPid(contract, role) })).filter(
     (entry): entry is { role: Exclude<ContractPidRole, "engine">; pid: number } =>
-      entry.pid !== null && recordedStamp(session, entry.role, entry.pid) === null,
+      entry.pid !== null && contractStamp(contract, entry.role) === null && recordedStamp(session, entry.role, entry.pid) === null,
   );
   if (unstamped.length === 0) return {};
 
@@ -64,6 +74,9 @@ export function contractPidStartedAt(
 ): string | null {
   const pid = contractPid(contract, role);
   if (pid === null || !contract) return null;
+
+  const dated = contractStamp(contract, role);
+  if (dated !== null) return dated;
 
   const session = findSessionInfo(projectPath, browser);
   if (!session) return null;
