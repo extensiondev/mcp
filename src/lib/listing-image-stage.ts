@@ -151,10 +151,22 @@ export interface UnsentImage {
  * upload answered for its store is named back as one the local server
  * stages first, before any store is written and before an approval is
  * spent. A store the call would refuse or leave alone names none, so a
- * refused call stages nothing.
+ * refused call stages nothing. A store one of whose uploads the images door
+ * refused names none either: the local server stops at the first refusal,
+ * so the images after it were never sent, and asking for them again would
+ * hide the refusal the person has to read and send the same call round
+ * forever.
  */
 export function unsentImages(store: ListingStore, patch: ListingPatch): UnsentImage[] {
-  return queue(patch)
+  const queued = queue(patch);
+  const refused = queued.some(({ image }) => {
+    const read = forwardedRead(image, store);
+
+    return !read.ok && read.code !== IMAGE_BYTES_NOT_SENT;
+  });
+  if (refused) return [];
+
+  return queued
     .filter(({ image }) => !image.bytes && !cache.get(image)?.get(store) && !(image.staged && Object.prototype.hasOwnProperty.call(image.staged, store)))
     .map(({ kind, image }) => ({ store, kind, name: image.source }));
 }
