@@ -17,6 +17,13 @@ import { uploadPreview } from "../lib/preview-upload";
 import { handler as previewWeb } from "../tools/preview-web";
 import { handler as publish } from "../tools/publish";
 import { handler as shares } from "../tools/shares";
+import { forwardable } from "../lib/hosted-forwarder";
+import * as buildsTool from "../tools/builds";
+import * as publishTool from "../tools/publish";
+import * as releaseStatusTool from "../tools/release-status";
+import * as sharesTool from "../tools/shares";
+
+import type { ToolModule } from "../lib/tool-dispatch";
 
 const fetchCalls: string[] = [];
 let dir: string;
@@ -58,6 +65,28 @@ const namesProjectCreate = (text: unknown) => {
 };
 
 describe("a missing login names extension_project_create, since an extension with no project cannot log in at all", () => {
+  it.each([
+    ["extension_publish", publishTool, {}],
+    ["extension_shares", sharesTool, { action: "list" }],
+    ["extension_release_status", releaseStatusTool, { include: ["stores"] }],
+    ["extension_builds", buildsTool, { action: "list" }],
+  ] as const)("%s, a tool the hosted lane answers, is answered here and nothing is sent", async (tool, module, args) => {
+    const result = JSON.parse(await (forwardable(module as unknown as ToolModule).handler as (args: Record<string, unknown>) => Promise<string>)(args));
+
+    expect(result).toMatchObject({ ok: false, command: tool, status: "auth-required", error: { code: "E_AUTH_REQUIRED" } });
+    namesProjectCreate(`${result.error.message} ${result.hint}`);
+    expect(fetchCalls).toEqual([]);
+  });
+
+  it("names the project a call asked for when no login is stored for it, and sends nothing", async () => {
+    const result = JSON.parse(await (forwardable(sharesTool as unknown as ToolModule).handler as (args: Record<string, unknown>) => Promise<string>)({ action: "revoke", artifactId: `gen_${"a".repeat(64)}`, project: "acme/beta" }));
+
+    expect(result.status).toBe("auth-required");
+    expect(result.error.message).toContain("No stored login for acme/beta");
+    expect(result.error.message).toContain('extension_auth (action: login, project: "acme/beta")');
+    expect(fetchCalls).toEqual([]);
+  });
+
 
   it("extension_preview_web share:true", async () => {
     const result = JSON.parse(await previewWeb({ projectPath: dir, distPath: distDir(), share: true }));
