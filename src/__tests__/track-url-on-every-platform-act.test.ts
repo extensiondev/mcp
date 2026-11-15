@@ -171,6 +171,12 @@ describe("every platform act answers the console page that tracks it", () => {
     expect(JSON.parse(attachTrack("extension_builds", { action: "list", api: WORLD_API }, nobody)).value).toBeNull();
   });
 
+  it("adds no console page to an answer the platform's hold refused, since the console is held too", () => {
+    const held = envelope({ ok: false, command: "extension_release_promote", status: "platform-held", value: { project: "acme/widget", openSurface: "https://templates.extension.dev" }, error: { code: "E_PLATFORM", message: "extension.dev is not open to the public yet." }, hint: "Start from https://templates.extension.dev." });
+
+    expect(attachTrack("extension_release_promote", { buildId: "abc1234", channel: "stable", api: WORLD_API }, held)).toBe(held);
+  });
+
   it("builds each act's page from the call's api, never the env", () => {
     process.env.EXTENSION_DEV_API_URL = WORLD_API;
 

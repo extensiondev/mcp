@@ -16,6 +16,7 @@ import {
 import { consoleBase } from "./console-urls";
 import { resolveCredential } from "./credential-source";
 import { envelope, isEnvelope, type Envelope } from "./envelope";
+import { PLATFORM_HOLD_STATUS } from "./platform-hold";
 import { resolveProjectIdentity } from "./project-identity";
 
 type Row = Record<string, unknown>;
@@ -395,6 +396,7 @@ export function attachTrack(command: string, args: Row, result: string): string 
   const value = isRow(frame.value) ? frame.value : {};
   const unreached = frame.ok === false && UNREACHED_CODES.has(String(frame.error?.code ?? ""));
   const refusal = frame.ok !== true && !APPROVAL_STATUSES.has(String(frame.status)) && !unreached;
+  if (String(frame.status) === PLATFORM_HOLD_STATUS) return result;
   if (refusal && (text(value.trackUrl) || frame.error?.code === "E_NO_LOGIN_FOR_PROJECT")) return result;
 
   const ambiguous = frame.error?.code === "E_PROJECT_AMBIGUOUS";
