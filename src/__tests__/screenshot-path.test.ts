@@ -25,9 +25,41 @@ function tempDir(prefix: string): string {
   return dir;
 }
 
+function realOf(dir: string): string {
+  try {
+    return fs.realpathSync(dir);
+  } catch {
+    return path.resolve(dir);
+  }
+}
+
+function inside(root: string, target: string): boolean {
+  const relative = path.relative(root, target);
+
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+/* @invariant A REFUSAL IS TESTED IN A FOLDER THE CODE'S OWN ROOTS LEAVE OUT.
+ * The home folder is the usual one, but a run whose HOME is redirected under
+ * /tmp (the scratch home agents run under) has a home the temp root already
+ * sanctions, so the folder is picked against sanctionedScreenshotRoots: the
+ * home when no root holds it, else /var/tmp, which no temp root covers.
+ */
+function unsanctionedDir(): string {
+  const roots = sanctionedScreenshotRoots(os.tmpdir()).flatMap((root) => [path.resolve(root), realOf(root)]);
+  const found = [os.homedir(), "/var/tmp"].find((dir) => fs.existsSync(dir) && ![path.resolve(dir), realOf(dir)].some((at) => roots.some((root) => inside(root, at))));
+  if (!found) throw new Error("no folder outside the sanctioned screenshot roots to test a refusal in");
+
+  return found;
+}
+
 function homeDir(prefix: string): string {
-  const parent = path.join(os.homedir(), ".mcp-screenshot-path-tests");
+  const parent = path.join(unsanctionedDir(), ".mcp-screenshot-path-tests");
   fs.mkdirSync(parent, { recursive: true });
+  cleanups.push(() => {
+    if (fs.readdirSync(parent).length === 0) fs.rmdirSync(parent);
+  });
+
   const dir = fs.mkdtempSync(path.join(parent, prefix));
   cleanups.push(() => fs.rmSync(dir, { recursive: true, force: true }));
 
@@ -234,7 +266,7 @@ describe("400: a screenshot may land in the system temp folder or a client root,
 
   it("accepts a path under a client MCP root and refuses it once the root is gone", () => {
     const dir = project();
-    const home = path.join(os.homedir(), ".mcp-screenshot-root-probe");
+    const home = path.join(unsanctionedDir(), ".mcp-screenshot-root-probe");
     setClientRoots([`file://${home}`]);
 
     const allowed = resolveScreenshotPath(dir, "chrome", "page", path.join(home, "shot.png"));
@@ -250,10 +282,10 @@ describe("400: a screenshot may land in the system temp folder or a client root,
     expect(sanctionedScreenshotRoots(dir)).toContain(os.tmpdir());
   });
 
-  it("still refuses the user's home and a sibling of a project outside the temp folder", () => {
+  it("still refuses a folder no root sanctions, the user's home unless it sits under a temp root, and a sibling of a project outside the temp folder", () => {
     const dir = projectOutsideTemp();
 
-    for (const wanted of [path.join(os.homedir(), "shot.png"), path.join(path.dirname(dir), "sibling.png")]) {
+    for (const wanted of [path.join(unsanctionedDir(), "shot.png"), path.join(path.dirname(dir), "sibling.png")]) {
       const out = resolveScreenshotPath(dir, "chrome", "page", wanted);
 
       expect(out.ok).toBe(false);
