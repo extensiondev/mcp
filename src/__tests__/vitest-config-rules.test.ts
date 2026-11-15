@@ -1,5 +1,9 @@
+import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import http from "node:http";
 import net from "node:net";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
@@ -36,6 +40,46 @@ describe("no test reaches a real host, and one that tries fails by name", () => 
     expect(seen[1]).toContain("fetch http://127.0.0.1:9333/json");
     expect(seen[2]).toContain("socket unstubbed.example.com:443");
   });
+
+  it("fails the file for a refused call made while it loaded or in one of its hooks, whatever the file is called", () => {
+    const root = fileURLToPath(new URL("../..", import.meta.url));
+    const home = fs.mkdtempSync(path.join(root, "node_modules", ".guard-cells-"));
+    const leak = (name: string) => `await fetch("https://unstubbed.invalid.example.com/${name}").catch(() => "fail-soft");`;
+    const file = (name: string, body: string) => fs.writeFileSync(path.join(home, name), `import { afterAll, it } from "vitest";\n${body}\nit("clean", () => {});\n`);
+
+    try {
+      fs.writeFileSync(
+        path.join(home, "vitest.config.mjs"),
+        `export default { test: { include: ["*.test.ts"], setupFiles: [${JSON.stringify(path.join(root, "src/__tests__/setup-network-guard.ts"))}] } };\n`,
+      );
+
+      file("loaded.test.ts", leak("loaded"));
+      file("hook.live.test.ts", `afterAll(async () => { ${leak("hook")} });`);
+      file("quiet.test.ts", "");
+
+      const run = spawnSync(process.execPath, [path.join(root, "node_modules/vitest/vitest.mjs"), "run", "--root", home, "--config", path.join(home, "vitest.config.mjs"), "--reporter=json"], {
+        encoding: "utf8",
+        env: Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(VITEST|VITE_|TEST$|NODE_ENV$)/.test(key))),
+      });
+      const report = JSON.parse(run.stdout.slice(run.stdout.indexOf("{"))) as { testResults: Array<{ name: string; status: string; message: string; assertionResults: Array<{ failureMessages: string[] }> }> };
+
+      const of = (name: string) => {
+        const result = report.testResults.find((entry) => path.basename(entry.name) === name);
+
+        return { status: result?.status, said: `${result?.message ?? ""}${(result?.assertionResults ?? []).flatMap((entry) => entry.failureMessages).join("\n")}` };
+      };
+
+      expect(run.status, run.stderr).toBe(1);
+      expect(of("loaded.test.ts").status).toBe("failed");
+      expect(of("loaded.test.ts").said).toContain("Refused while the test file loaded:");
+      expect(of("loaded.test.ts").said).toContain(`${NETWORK_REFUSAL}: fetch https://unstubbed.invalid.example.com/loaded`);
+      expect(of("hook.live.test.ts").status).toBe("failed");
+      expect(of("hook.live.test.ts").said).toContain("Refused in a hook of this file, outside any test:");
+      expect(of("quiet.test.ts").status).toBe("passed");
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  }, 120_000);
 
   it("leaves a test's own loopback server alone", async () => {
     const server = http.createServer((_request, response) => response.end("own"));

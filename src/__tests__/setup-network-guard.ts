@@ -1,15 +1,17 @@
 import net from "node:net";
 
-import { afterEach, expect } from "vitest";
+import { afterAll, afterEach, beforeAll } from "vitest";
 
 /* @invariant NO TEST IN THIS PACKAGE REACHES A REAL HOST, AND ONE THAT TRIES
  * GOES RED. A test whose fetch nobody stubbed passed wherever the machine
  * could reach the host, and a fail-soft caller swallowed the error wherever
  * it could not, so the suite was green both ways. The global fetch and the
  * socket connect every other client ends at are refused, each refusal is
- * remembered, and the hook below fails the test that made it. A test that
- * stubs fetch replaces this guard for as long as its stub stands, which is
- * the statement that the call was thought about.
+ * remembered, and the hooks below fail whatever made it: the test, or the
+ * whole file when the call came while the file loaded or from one of its
+ * own hooks, where no test would otherwise answer for it. No file name is
+ * exempt. A test that stubs fetch replaces this guard for as long as its
+ * stub stands, which is the statement that the call was thought about.
  *
  * Loopback is open only on a port a server in this test's own process
  * listens on: a loopback name proves nothing about who answers. A unix
@@ -96,10 +98,12 @@ net.Server.prototype.listen = function guardedListen(this: net.Server, ...args: 
   return Reflect.apply(realListen, this, args);
 } as typeof realListen;
 
-if (!/\.live\.test\.ts$/.test(String(expect.getState().testPath ?? ""))) {
-  afterEach(() => {
-    const seen = drainRefusedCalls();
+function failOnRefusedCalls(where: string): void {
+  const seen = drainRefusedCalls();
 
-    if (seen.length > 0) throw new Error(seen.join("\n"));
-  });
+  if (seen.length > 0) throw new Error(`${where}\n${seen.join("\n")}`);
 }
+
+beforeAll(() => failOnRefusedCalls("Refused while the test file loaded:"));
+afterEach(() => failOnRefusedCalls("Refused during this test:"));
+afterAll(() => failOnRefusedCalls("Refused in a hook of this file, outside any test:"));
