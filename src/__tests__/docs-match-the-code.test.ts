@@ -1,4 +1,5 @@
 
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -234,6 +235,19 @@ describe("the docs say what the code does", () => {
     }
 
     expect(new Set(pkg.keywords).size).toBe(pkg.keywords.length);
+  });
+
+  it("tracks every bin entry as executable, the mode an install gives it, so installing leaves the checkout clean (ledger 820)", () => {
+    const { bin } = require("../../package.json") as { bin: Record<string, string> };
+    const root = fileURLToPath(new URL("../..", import.meta.url));
+
+    expect(Object.keys(bin).length).toBeGreaterThan(0);
+
+    for (const file of Object.values(bin)) {
+      const tracked = execFileSync("git", ["ls-files", "-s", "--", file], { cwd: root, encoding: "utf8" });
+
+      expect(tracked.split(" ")[0], file).toBe("100755");
+    }
   });
 
   it("lists the registry entry on the current schema, at the version package.json ships, with the flags and variables the launcher reads", () => {
