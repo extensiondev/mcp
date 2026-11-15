@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import { TOOL_DOCS } from "../lib/docs-meta";
 import { schema as promote } from "../tools/release-promote";
+import { schema as shares } from "../tools/shares";
 import { schema as submit } from "../tools/submit";
 
 const approvalIdOf = (tool: { inputSchema: { properties: Record<string, unknown> } }) =>
@@ -27,5 +29,11 @@ describe("a token promote and a real submission always ask a human", () => {
   it("says a real submission needs an owner's approval every time", () => {
     expect(submit.description).toContain("a workspace owner's token and approval of that exact submission, every time");
     expect(approvalIdOf(submit)).toContain("needs a workspace owner's approval every time");
+  });
+
+  it("785: says a share revoke needs a member's approval, the role the platform asks, never an owner's", () => {
+    expect(shares.description).toContain("A revoke is permanent and needs a workspace member's approval.");
+    expect(`${shares.description} ${TOOL_DOCS.extension_shares.gate}`).not.toMatch(/owner/i);
+    expect(TOOL_DOCS.extension_shares.gate).toContain("a revoke waits for a workspace member's approval");
   });
 });

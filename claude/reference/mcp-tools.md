@@ -477,7 +477,7 @@ Take a .png of one surface, page or targetId in a live session (Safari: pages on
 
 ## extension_shares
 
-List, create and revoke emulator preview links for a tester, and list and revoke build links (a build link or channel link comes from extension_publish). A revoke is permanent and needs an owner's approval.
+List, create and revoke emulator preview links for a tester, and list and revoke build links (a build link or channel link comes from extension_publish). A revoke is permanent and needs a workspace member's approval.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |

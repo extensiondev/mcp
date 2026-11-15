@@ -15,7 +15,7 @@ import { SHARES_LOCAL, listRecordedShares } from "./shares-local";
 
 export const schema = {
   name: "extension_shares",
-  description: "List, create and revoke emulator preview links for a tester, and list and revoke build links (a build link or channel link comes from extension_publish). A revoke is permanent and needs an owner's approval.",
+  description: "List, create and revoke emulator preview links for a tester, and list and revoke build links (a build link or channel link comes from extension_publish). A revoke is permanent and needs a workspace member's approval.",
   inputSchema: {
     type: "object" as const,
     properties: {

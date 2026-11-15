@@ -54,7 +54,7 @@ export const TOOL_DOCS: Record<string, ToolDocsMeta> = {
   extension_workspace_create: { tier: "platform", gate: PLATFORM, samplePrompt: "Create a workspace called acme on extension.dev" },
   extension_project_create: { tier: "platform", gate: PLATFORM, samplePrompt: "Create the extension.dev project for this build under acme" },
   extension_preview_web: { tier: "platform", gate: `${PLATFORM}; sharing needs a login`, samplePrompt: "Share this build with my designer" },
-  extension_shares: { tier: "platform", gate: `${LOGIN}; a revoke waits for a member's approval by default`, samplePrompt: "List every link I have shared and revoke the oldest one" },
+  extension_shares: { tier: "platform", gate: `${LOGIN}; a revoke waits for a workspace member's approval`, samplePrompt: "List every link I have shared and revoke the oldest one" },
   extension_publish: { tier: "platform", gate: `${LOGIN}; sync-captures needs a workspace owner's approval`, samplePrompt: "Send the latest build to my testers" },
   extension_release_promote: { tier: "platform", gate: `${LOGIN}; cut and rollback need a workspace owner's approval`, samplePrompt: "Release build 3f2a1c to Preview" },
   extension_submit: { tier: "platform", gate: `${LOGIN}; dryRun: false, cancel, rollout, release, publish, sync-listing and configure-store need a workspace owner's approval`, samplePrompt: "Dry run a Chrome and Firefox store submission of the latest build" },
