@@ -68,6 +68,32 @@ describe("extension_submit configure-store changes a store's settings as a plain
     expect("problem" in firefox && firefox.problem).toMatch(/"storeUrl", which is a raw platform field/);
   });
 
+  it("810: reads the Chrome ids by the platform's one rule: an item id is never a publisher id, and the dashboard address is chrome.google.com with or without /u/N/", () => {
+    const ITEM = "abcdefghijklmnopabcdefghijklmnop";
+    const PUBLISHER = "1a2b3c4d-1a2b-4c3d-8e9f-1a2b3c4d5e6f";
+
+    const problemOf = (settings: Record<string, unknown>): string => {
+      const read = readStoreSettingsChange("chrome", settings);
+
+      return "problem" in read ? read.problem : "";
+    };
+
+    expect(problemOf({ publisherId: ITEM })).toMatch(/^publisherId must be the Chrome Web Store publisher id, the token after \/devconsole\//);
+    expect(problemOf({ storeUrl: `https://chrome.google.com/webstore/devconsole/${ITEM}/${ITEM}/edit` })).toMatch(/storeUrl for chrome must be the item's address/);
+    expect(problemOf({ chromeItemId: `${ITEM.slice(0, 31)}q` })).toMatch(/^chromeItemId must be the item's 32-letter id/);
+    expect(readStoreSettingsChange("chrome", { chromeItemId: ITEM.toUpperCase() })).toMatchObject({ patch: { storeId: ITEM } });
+    expect(problemOf({ storeUrl: `https://evil.example/chrome.google.com/webstore/devconsole/${PUBLISHER}/${ITEM}` })).toMatch(/storeUrl for chrome must be the item's address/);
+    expect(problemOf({ publisherId: `https://evil.example/webstore/devconsole/${PUBLISHER}` })).toMatch(/^publisherId must be/);
+
+    for (const address of [`https://chrome.google.com/u/1/webstore/devconsole/${PUBLISHER}/${ITEM}/edit`, `chrome.google.com/webstore/devconsole/${PUBLISHER}/${ITEM}?hl=en`]) {
+      expect(readStoreSettingsChange("chrome", { storeUrl: address }), address).toMatchObject({ patch: { storeId: ITEM, publisherId: PUBLISHER } });
+      expect(readStoreSettingsChange("chrome", { chromeItemId: address }), address).toMatchObject({ patch: { storeId: ITEM } });
+    }
+
+    expect(readStoreSettingsChange("chrome", { publisherId: `https://chrome.google.com/u/0/webstore/devconsole/${PUBLISHER}` })).toMatchObject({ patch: { publisherId: PUBLISHER } });
+    expect(readStoreSettingsChange("chrome", { publisherId: PUBLISHER, chromeItemId: ITEM })).toMatchObject({ patch: { storeId: ITEM, publisherId: PUBLISHER } });
+  });
+
   it("writes a mode id as every field the platform derives it from", () => {
     expect(modeToPatch("chrome", "draft-until-public")).toEqual({ dryRun: false, skipPublish: null, stagedPublish: false });
     expect(modeToPatch("chrome", "draft")).toEqual({ dryRun: false, skipPublish: true, stagedPublish: false });

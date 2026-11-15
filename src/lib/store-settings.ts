@@ -39,10 +39,31 @@ const FIREFOX_ONLY_KEYS = new Set(["sourceArchive", "releaseChannel"]);
 
 export const ID_KEYS: Record<string, StoreSettingsStore> = { chromeItemId: "chrome", edgeProductId: "edge", firefoxAddonGuid: "firefox", appStoreId: "safari" };
 
-const CHROME_ITEM_ID = /^[a-p]{32}$/i;
+/* @invariant THE CHROME IDS ARE READ BY THE PLATFORM'S ONE RULE. The rule
+ * lives in the platform's contracts (registry/stores/chrome-ids.ts), which
+ * this public package cannot import, so it is mirrored here to the letter
+ * and a change there is a change here. An item id is 32 letters a to p. A
+ * publisher id is the dashboard's token and never an item id: both sit side
+ * by side in the dashboard address, and the item id in the publisher field
+ * sends every upload to a publisher that does not exist. The address is read
+ * only on chrome.google.com, with or without the scheme and the /u/<n>/
+ * account segment, as the two segments after /devconsole/. An item id typed
+ * in capitals is lowered first, so what is sent is always the platform's
+ * shape, and what the platform refuses is refused here, before anything is
+ * sent (ledger 810).
+ */
+const CHROME_ITEM_ID = /^[a-p]{32}$/;
 const CHROME_PUBLISHER_ID = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,62}[A-Za-z0-9])?$/;
-const CHROME_DASHBOARD_ADDRESS = /^(?:https?:\/\/)?chrome\.google\.com\/(?:u\/\d+\/)?webstore\/devconsole\/([^/\s?#]+)\/([a-p]{32})(?:[/?#]|$)/i;
-const CHROME_PUBLISHER_ADDRESS = /^(?:https?:\/\/)?chrome\.google\.com\/(?:u\/\d+\/)?webstore\/devconsole\/([^/\s?#]+)(?:[/?#]|$)/i;
+const CHROME_DASHBOARD_ADDRESS = /^(?:https?:\/\/)?chrome\.google\.com\/(?:u\/\d+\/)?webstore\/devconsole\/([^/?#\s]+)(?:\/([^/?#\s]+))?(?:[/?#].*)?$/i;
+
+const isChromePublisherId = (value: string): boolean => CHROME_PUBLISHER_ID.test(value) && !CHROME_ITEM_ID.test(value);
+
+function readChromeDashboardAddress(value: string): { publisherId: string; itemId: string } | null {
+  const match = CHROME_DASHBOARD_ADDRESS.exec(value.trim());
+
+  return match ? { publisherId: match[1] ?? "", itemId: match[2] ?? "" } : null;
+}
+
 const CHROME_DASHBOARD_FORM = composedDashboardUrl("https://chrome.google.com/webstore/devconsole/<publisherId>/<itemId>/edit");
 const EDGE_PRODUCT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const AMO_GUID = /^(?:\{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}|[a-z0-9._-]*@[a-z0-9._-]+)$/i;
@@ -221,22 +242,23 @@ function readStoreSettingsRow(store: StoreSettingsStore, raw: Row): StoreSetting
   }
 
   if (store === "chrome" && "storeUrl" in raw) {
-    const address = CHROME_DASHBOARD_ADDRESS.exec(text(raw.storeUrl));
-    const publisherId = address ? readChromePublisherId(address[1]!) : "";
+    const address = readChromeDashboardAddress(text(raw.storeUrl));
+    const publisherId = address && isChromePublisherId(address.publisherId) ? address.publisherId : "";
+    const itemId = address?.itemId.toLowerCase() ?? "";
 
-    if (!address || !publisherId) {
+    if (!address || !publisherId || !CHROME_ITEM_ID.test(itemId)) {
       return { problem: `storeSettings.storeUrl for chrome must be the item's address from the Chrome Web Store developer dashboard (${CHROME_DASHBOARD_FORM}), which names the publisher id and the item id together; got "${text(raw.storeUrl)}".` };
     }
 
-    if (patch.storeId && patch.storeId !== address[2]!.toLowerCase()) {
-      return { problem: `storeSettings.storeUrl names item ${address[2]!.toLowerCase()} and chromeItemId names ${patch.storeId}; pass one of them.` };
+    if (patch.storeId && patch.storeId !== itemId) {
+      return { problem: `storeSettings.storeUrl names item ${itemId} and chromeItemId names ${patch.storeId}; pass one of them.` };
     }
 
     if (patch.publisherId && patch.publisherId !== publisherId) {
       return { problem: `storeSettings.storeUrl names publisher ${publisherId} and publisherId names ${patch.publisherId}; pass one of them.` };
     }
 
-    patch.storeId = address[2]!.toLowerCase();
+    patch.storeId = itemId;
     patch.publisherId = publisherId;
     requested.chromeItemId = patch.storeId;
     requested.publisherId = publisherId;
@@ -362,9 +384,11 @@ function readStoreSettingsRow(store: StoreSettingsStore, raw: Row): StoreSetting
  */
 function readChromePublisherId(value: unknown): string {
   const given = text(value);
-  const bare = CHROME_PUBLISHER_ADDRESS.exec(given)?.[1] ?? given;
+  if (isChromePublisherId(given)) return given;
 
-  return CHROME_PUBLISHER_ID.test(bare) ? bare : "";
+  const fromAddress = readChromeDashboardAddress(given)?.publisherId ?? "";
+
+  return isChromePublisherId(fromAddress) ? fromAddress : "";
 }
 
 function readStoreId(store: StoreSettingsStore, raw: Row): { key: string; storeId: string } | { problem: string } | null {
@@ -374,10 +398,10 @@ function readStoreId(store: StoreSettingsStore, raw: Row): { key: string; storeI
   const value = text(raw[key]);
 
   if (store === "chrome") {
-    const bare = CHROME_ITEM_ID.test(value) ? value : CHROME_DASHBOARD_ADDRESS.exec(value)?.[2] ?? "";
+    const bare = (readChromeDashboardAddress(value)?.itemId ?? value).toLowerCase();
 
-    return bare
-      ? { key, storeId: bare.toLowerCase() }
+    return CHROME_ITEM_ID.test(bare)
+      ? { key, storeId: bare }
       : { problem: `chromeItemId must be the item's 32-letter id, or the item's address from the Chrome Web Store developer dashboard (chrome.google.com/webstore/devconsole/<publisher>/<item>); got "${value}".` };
   }
 
