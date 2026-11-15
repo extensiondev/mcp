@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { PROJECT_PIN_ENV, pinnedProject, sameProject } from "./credentials";
+import { PROJECT_PIN_ENV, moveLogin, pinnedProject, sameProject } from "./credentials";
 import { isEnvelope } from "./envelope";
 import { kernelHook } from "./kernel-hooks";
 
@@ -64,18 +64,24 @@ export function followSentence(move: Pick<ProjectMove, "from" | "to">): string {
 }
 
 /* @invariant A MOVE THE PLATFORM ANSWERS IS FOLLOWED BY EVERY NAME THIS
- * SERVER KEPT FOR THE PROJECT, AND ONLY THOSE. The login store already moves
- * its entry when a rename is seen; the record of projects this server
- * created or onboarded and the --project pin kept the old slug, so a pinned
- * server refused the new name and the created record never matched again.
- * Both are rewritten here when they name the project that moved, and left
- * alone when they do not: a move answered for a project this server never
- * recorded or pinned writes nothing. The pin lives in the process env the
+ * SERVER KEPT FOR THE PROJECT, AND ONLY THOSE. The stored login, the record
+ * of projects this server created or onboarded and the --project pin each
+ * keep the slug, so each is rewritten here when it names the project that
+ * moved, and left alone when it does not: a move answered for a project
+ * this server never signed in to, recorded or pinned writes nothing. The
+ * login moves here because the platform read that used to see the rename
+ * now runs on the hosted lane, which holds no login store: until 2026-11-15
+ * a forwarded call that was told "moved" asked again under the new slug and
+ * was answered that no login is stored for it. The pin lives in the process env the
  * server set from --project, which is what the credential layer reads, so
  * the env is rewritten rather than the option alone.
  */
 export function followProjectMove(args: { apiBase: string; move: ProjectMove }): string[] {
   const followed: string[] = [];
+  const [workspaceSlug = "", fromProjectSlug = ""] = args.move.from.split("/");
+  const [, toProjectSlug = ""] = args.move.to.split("/");
+
+  if (workspaceSlug && fromProjectSlug && toProjectSlug && moveLogin({ workspaceSlug, fromProjectSlug, toProjectSlug, api: args.apiBase, ...(args.move.projectId ? { projectId: args.move.projectId } : {}) })) followed.push("login");
 
   if (kernelHook("moveCreatedProject")(args.apiBase, args.move.from, args.move.to)) followed.push("created-projects");
 

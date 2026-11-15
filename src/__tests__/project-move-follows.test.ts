@@ -18,6 +18,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * re-evaluates it. This import pays the cold transform of the whole graph once,
  * at collection, so no cell's budget is spent compiling the server. */
 import "../index";
+import { envelope as relayed } from "../lib/envelope";
+import { useForwardLane } from "./fixtures/forward-lane";
 
 const API = "http://localhost:3100";
 const PROJECT_ID = "prj_a017a32f";
@@ -127,7 +129,7 @@ afterEach(() => {
 
 describe("a PROJECT_MOVED answer is followed once by the records this server keeps", () => {
 
-  it("rewrites nothing when the move names a project this server never recorded or pinned", async () => {
+  it("moves the stored login alone when the move names a project this server never recorded or pinned", async () => {
     if (process.platform === "win32") return;
 
     await login();
@@ -138,7 +140,8 @@ describe("a PROJECT_MOVED answer is followed once by the records this server kee
     const { followProjectMove } = await import("../lib/project-move");
     const followed = followProjectMove({ apiBase: API, move: { from: "acme/leon", to: "acme/lion", projectId: PROJECT_ID } });
 
-    expect(followed).toEqual([]);
+    expect(followed).toEqual(["login"]);
+    expect(followProjectMove({ apiBase: API, move: { from: "acme/never", to: "acme/ever", projectId: "prj_none" } })).toEqual([]);
     expect(await createdRefs()).toEqual(["acme/other"]);
     expect(process.env.EXTENSION_DEV_PROJECT).toBe("acme/other");
   });
@@ -156,5 +159,67 @@ describe("a PROJECT_MOVED answer is followed once by the records this server kee
     expect(movedAnswer(moved)).toEqual({ from: "acme/leon", to: "acme/lion", projectId: PROJECT_ID });
     expect(movedAnswer(envelope({ ok: true, command: "extension_builds", status: "listed", value: { moved: { from: "a/b", to: "a/c" } } }))).toBeNull();
     expect(movedAnswer(envelope({ ok: false, command: "extension_builds", status: "moved", value: {}, error: { code: "E_PLATFORM", message: "moved" } }))).toBeNull();
+  });
+});
+
+/* @invariant A MOVE THE HOSTED LANE RELAYS IS FOLLOWED ON THIS MACHINE. The
+ * lane reads the platform and answers "moved"; the records that name the
+ * old slug (the created list, the pin, the stored login) are this machine's,
+ * so this server rewrites them and asks the lane once more under the new
+ * name, and never a second time in one call.
+ */
+describe("a PROJECT_MOVED answer the lane relays is followed once by the records this server keeps", () => {
+  const lane = useForwardLane();
+
+  function relays(moves: number): void {
+    lane.answer = (hit) =>
+      lane.lane().length <= moves
+        ? JSON.parse(relayed({ ok: false, command: hit.tool, status: "moved", value: { moved: { from: "acme/leon", to: "acme/lion", projectId: PROJECT_ID } }, error: { code: "E_PLATFORM", name: "BuildsProjectMoved", message: MOVED_BODY.message } }))
+        : JSON.parse(relayed({ ok: true, command: hit.tool, status: "listed", value: { project: hit.project, builds: [] } }));
+  }
+
+  it("rewrites the created record and the pin, asks the lane once more under the new slug, and says so once", async () => {
+    if (process.platform === "win32") return;
+
+    await login();
+    await created("acme/leon", "acme/other");
+    process.env.EXTENSION_DEV_PROJECT = "acme/leon";
+    const client = await freshServer("acme/leon");
+    relays(1);
+
+    const out = await call(client, "extension_builds", { action: "list", limit: 2 });
+
+    expect(out.ok).toBe(true);
+    expect(out.status).toBe("listed");
+    expect(out.value.project).toBe("acme/lion");
+    expect(out.warnings).toContain(SENTENCE);
+    expect(out.warnings.filter((line: string) => line === SENTENCE)).toHaveLength(1);
+    expect(lane.lane().map((hit) => hit.project)).toEqual(["acme/leon", "acme/lion"]);
+    expect(await createdRefs()).toEqual(["acme/lion", "acme/other"]);
+    expect(process.env.EXTENSION_DEV_PROJECT).toBe("acme/lion");
+
+    const { listCredentials } = await import("../lib/credentials");
+
+    expect(listCredentials().map((entry) => `${entry.workspaceSlug}/${entry.projectSlug}`)).toEqual(["acme/lion"]);
+
+    const pinnedNew = await call(client, "extension_builds", { action: "list", limit: 2, project: "acme/lion" });
+
+    expect(pinnedNew.status).toBe("listed");
+  });
+
+  it("does not follow a second move answered in the same call", async () => {
+    if (process.platform === "win32") return;
+
+    await login();
+    await created("acme/leon");
+    relays(2);
+
+    const out = await call(await freshServer(), "extension_builds", { action: "list", limit: 2 });
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("moved");
+    expect(out.error.name).toBe("BuildsProjectMoved");
+    expect(lane.lane()).toHaveLength(2);
+    expect(await createdRefs()).toEqual(["acme/lion"]);
   });
 });
