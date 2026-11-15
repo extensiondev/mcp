@@ -5,6 +5,11 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { handler as workspace, schema } from "../tools/workspace";
+import * as workspaceTool from "../tools/workspace";
+import { forwardable } from "../lib/hosted-forwarder";
+import { forwardOf, useForwardLane } from "./fixtures/forward-lane";
+
+import type { ToolModule } from "../lib/tool-dispatch";
 import { TOOL_POLICY } from "../lib/tool-policy";
 import { writeCredentials } from "../lib/credentials";
 
@@ -196,6 +201,36 @@ describe("extension_workspace reads a workspace with any project login it holds"
       api,
     });
   }
+
+  describe("a workspace read is forwarded only with a login of the server it names", () => {
+    const lane = useForwardLane();
+    const forwarded = forwardable(workspaceTool as unknown as ToolModule).handler as (args: Record<string, unknown>) => Promise<string>;
+
+    it("ignores a login of that workspace minted on another server, and sends nothing", async () => {
+      login("acme", "alpha", "alpha.sig", "https://www.extension.dev");
+      login("globex", "tool", "other.sig");
+
+      const out = JSON.parse(await forwarded({ workspace: "acme", project: "acme/alpha", api: API }));
+
+      expect(out.ok).toBe(false);
+      expect(out.status).toBe("auth-required");
+      expect(out.error.code).toBe("E_AUTH_REQUIRED");
+      expect(out.error.message).toContain("acme/alpha");
+      expect(lane.sentAnything()).toBe(false);
+    });
+
+    it("reads a workspace with the login stored for this server, never the other server's", async () => {
+      login("acme", "alpha", "alpha.sig", "https://www.extension.dev");
+      login("acme", "beta", "beta.sig");
+
+      const out = JSON.parse(await forwarded({ workspace: "acme", api: API }));
+
+      expect(out.ok).toBe(true);
+      expect(lane.exchanged()).toEqual(["Bearer beta.sig"]);
+      expect(lane.lane().map((hit) => [hit.authorization, hit.project])).toEqual([[forwardOf("beta.sig"), "acme/beta"]]);
+      expect(JSON.stringify(lane.seen)).not.toContain("alpha.sig");
+    });
+  });
 
   it("is a platform tool fenced as untrusted, since names and build commands are user-written, and no longer read-only since it writes visibility and project settings", () => {
     expect(TOOL_POLICY.extension_workspace).toMatchObject({
