@@ -177,6 +177,15 @@ describe("every platform act answers the console page that tracks it", () => {
     expect(attachTrack("extension_release_promote", { buildId: "abc1234", channel: "stable", api: WORLD_API }, held)).toBe(held);
   });
 
+  it("tracks a channel change on the channel's releases and a channel delete on the Channels settings, never the builds list", () => {
+    const configured = envelope({ ok: true, command: "extension_builds_act", status: "channel-configured", value: { project: "acme/widget", channel: { name: "beta" } } });
+    const asked = envelope({ ok: false, command: "extension_builds_act", status: "approval-required", value: { project: "acme/widget", approvalUrl: `${WORLD_API}/device/approve/apr_1` }, error: { code: "E_APPROVAL_REQUIRED", message: "ask" } });
+
+    expect(JSON.parse(attachTrack("extension_builds_act", { action: "configure-channel", channel: "Beta", api: WORLD_API }, configured)).value.trackUrl).toBe(`${CONSOLE}/acme/widget/releases?channel=beta`);
+    expect(JSON.parse(attachTrack("extension_builds_act", { action: "configure-channel", channel: "Beta", audience: "public", api: WORLD_API }, asked)).value.checkUrl).toBe(`${CONSOLE}/acme/widget/releases?channel=beta`);
+    expect(JSON.parse(attachTrack("extension_builds_act", { action: "delete-channel", channel: "beta", api: WORLD_API }, asked)).value.checkUrl).toBe(`${CONSOLE}/acme/widget/project-settings/channels`);
+  });
+
   it("builds each act's page from the call's api, never the env", () => {
     process.env.EXTENSION_DEV_API_URL = WORLD_API;
 

@@ -247,7 +247,13 @@ export const TRACK_ACTS: Record<string, (call: TrackCall) => TrackPlan | null> =
 
     if (action === "rebuild" || action === "recheck") return { track: { page: "build", target: { buildId: buildOf(call) } } };
     if (action === "configure") return { track: { page: "build-settings" } };
-    if (action === "create-channel") return { track: { page: "channels" } };
+    if (action === "create-channel" || action === "delete-channel") return { track: { page: "channels" } };
+
+    if (action === "configure-channel") {
+      const row = isRow(call.value.channel) ? call.value.channel : {};
+
+      return { track: { page: "releases", target: { channel: text(row.name) || text(call.args.channel).toLowerCase() } } };
+    }
 
     return { track: { page: "builds" } };
   },
