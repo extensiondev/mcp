@@ -272,14 +272,69 @@ describe("the forwarder", () => {
 
     const other = await dispatched("extension_approvals", { approvalId: mine, project: "acme/docs" });
 
-    expect(other).toMatchObject({ ok: false, status: "approval-rejected" });
+    expect(other).toMatchObject({ ok: false, status: "approval-rejected", error: { name: "ApprovalOtherProject" }, value: { approvalId: mine, mintedFor: "acme/blog", named: "acme/docs" } });
     expect(other.error.message).toContain(`Approval ${mine} was minted for acme/blog, not acme/docs`);
+    expect(other.hint).toContain('project: "acme/blog"');
+    expect(lane()).toHaveLength(2);
 
     await dispatched("extension_approvals", { approvalId: theirs });
 
     expect(reads()).toEqual([["acme/web", true], ["acme/web", true]]);
     expect(exchanges()).toHaveLength(2);
     expect(lane()[2]).toMatchObject({ authorization: `Bearer forward-of-${WEB_LOGIN}`, project: "acme/web" });
+  });
+
+  it("answers the sign-in sentence, and asks the lane nothing, when the login that requested an approval is no longer stored", async () => {
+    twoLoginsDefaultWeb();
+    const gone = `apr_${"blog".padEnd(32, "0")}`;
+    const { seen, lane } = stubHostedPlatform(APPROVED(gone));
+    const older = globalThis.fetch;
+
+    vi.stubGlobal("fetch", async (input: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "null"));
+
+      if (!String(input).endsWith("/api/cli/forward/approvals") || body?.anyProject !== true) return older(input as string, init);
+
+      seen.push({ url: String(input), authorization: new Headers(init?.headers).get("authorization"), project: new Headers(init?.headers).get("x-extensiondev-project"), body });
+
+      return new Response(JSON.stringify({ project: "acme/blog", loginId: "tok_blog_gone" }), { status: 200 });
+    });
+
+    const out = await dispatched("extension_builds_act", { action: "configure", buildSettings: { firefox: { enabled: true } }, approvalId: gone });
+
+    expect(out).toMatchObject({ ok: false, status: "auth-required", error: { code: "E_AUTH_REQUIRED", name: "ApprovalLoginGone" }, value: { approvalId: gone, mintedFor: "acme/blog" } });
+    expect(out.error.message).toContain("the login that requested this approval is no longer stored; sign in to acme/blog again and request a new approval");
+    expect(out.hint).toContain('extension_auth (action: login, project: "acme/blog")');
+    expect(out.value.trackUrl).toContain("/blog");
+    expect(lane()).toEqual([]);
+  });
+
+  it("refuses a plaintext api URL before any login is exchanged or sent", async () => {
+    twoLoginsDefaultWeb();
+    const { seen } = stubHostedPlatform(LISTED);
+    const out = await dispatched("extension_publish", { api: "http://evil.example.com" });
+
+    expect(out.ok).toBe(false);
+    expect(out.error.message).toContain("Refusing to send the access token to http://evil.example.com: use https (http is allowed only for localhost).");
+    expect(seen).toEqual([]);
+  });
+
+  it("exchanges EXTENSION_DEV_TOKEN for an unnamed call and the stored login for a named one, never the active login in its place", async () => {
+    const envLogin = `${Buffer.from(JSON.stringify({ u: "acme", p: "web", n: "tok_env" })).toString("base64url")}.sig`;
+    twoLoginsDefaultWeb();
+    process.env.EXTENSION_DEV_TOKEN = envLogin;
+    const { seen, lane } = stubHostedPlatform(LISTED);
+    const exchanges = () => seen.filter((hit) => hit.url.endsWith("/api/cli/forward/exchange")).map((hit) => hit.authorization);
+
+    await dispatched("extension_publish", {});
+    await dispatched("extension_shares", { action: "list", project: "acme/docs" });
+
+    expect(exchanges()).toEqual([`Bearer ${envLogin}`, `Bearer ${DOCS_LOGIN}`]);
+    expect(lane().map((hit) => [hit.body.tool, hit.authorization, hit.project])).toEqual([
+      ["extension_publish", `Bearer forward-of-${envLogin}`, "acme/web"],
+      ["extension_shares", `Bearer forward-of-${DOCS_LOGIN}`, "acme/docs"],
+    ]);
+    expect(lane().map((hit) => hit.authorization)).not.toContain(`Bearer forward-of-${WEB_LOGIN}`);
   });
 
   it("733: reads an approval through a member login, one project at a time on one exchange", async () => {
