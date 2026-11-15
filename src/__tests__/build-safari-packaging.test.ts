@@ -888,14 +888,19 @@ describe("extension_build refuses a Safari packaging option it cannot honour", (
 });
 
 function engineIsValidBundleId(): RegExp {
-  const dist = fs.readFileSync(
-    path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../node_modules/extension-develop/dist/840~0.mjs"),
-    "utf8",
-  );
-  const match = dist.match(/function isValidBundleId\(value\) \{\s*return \/(.+?)\/\.test\(value\);/);
-  if (!match) throw new Error("extension-develop no longer defines isValidBundleId as a regex test");
+  const distDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../node_modules/extension-develop/dist");
 
-  return new RegExp(match[1]);
+  for (const name of fs.readdirSync(distDir).sort()) {
+    if (!/\.(mjs|cjs|js)$/.test(name)) continue;
+
+    const match = fs
+      .readFileSync(path.join(distDir, name), "utf8")
+      .match(/function isValidBundleId\(value\) \{\s*return \/(.+?)\/\.test\(value\);/);
+
+    if (match) return new RegExp(match[1]);
+  }
+
+  throw new Error("extension-develop no longer defines isValidBundleId as a regex test");
 }
 
 describe("the local bundle-id validator stays the engine's validator", () => {
