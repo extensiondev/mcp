@@ -269,6 +269,23 @@ describe("sync-captures refuses the set on this machine before anything is sent"
     return out;
   };
 
+  it("a browser the build pages do not show, a missing projectPath, and an approvalId with several browsers", async () => {
+    if (process.platform === "win32") return;
+
+    const brave = await sync({ projectPath: root, browsers: ["brave"] });
+
+    expect(brave.error.message).toContain("brave is not a browser the public build page shows captures for; use chrome, firefox, edge, safari");
+
+    const noPath = await sync({});
+
+    expect(noPath.error.message).toContain("sync-captures needs projectPath");
+
+    const two = await sync({ projectPath: root, browsers: ["chrome", "firefox"], approvalId: "apr_c" });
+
+    expect(two.error.message).toContain("pass one browser with its approvalId");
+    expect(platform.calls).toHaveLength(0);
+  });
+
   it("an alpha channel", async () => {
     if (process.platform === "win32") return;
 

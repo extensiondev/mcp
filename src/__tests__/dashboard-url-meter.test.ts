@@ -65,6 +65,32 @@ describe("a store dashboard address this server composes is counted once per ans
     expect(dashboardStoreOf("https://acme.extension.dev/widget/builds/abc1234")).toBeNull();
   });
 
+  it("counts an answer carrying a composed address, naming the tool, the status, the stores and the hosts", async () => {
+    const productPage = composedDashboardUrl("https://partner.microsoft.com/dashboard/microsoftedge/prod-123/packages/dashboard");
+    const keyPage = composedDashboardUrl("https://appstoreconnect.apple.com/access/integrations/api");
+
+    const properties = await meterComposedDashboardUrls(
+      {
+        command: "extension_submit",
+        status: "store-not-ready",
+        value: { partnerCenterUrl: productPage, nextStep: { url: keyPage } },
+        hint: `Create the product once at ${productPage}.`,
+      },
+      capture,
+    );
+
+    expect(properties).toEqual({
+      tool: "extension_submit",
+      status: "store-not-ready",
+      stores: "edge,safari",
+      dashboard_hosts: "partner.microsoft.com,appstoreconnect.apple.com",
+      count: 2,
+      composed_by: "mcp",
+    });
+
+    expect(sent).toEqual([{ event: DASHBOARD_URL_COMPOSED_EVENT, properties }]);
+  });
+
   it("counts nothing for a dashboard address the platform sent, even one the composed address prefixes", async () => {
     const newItem = itemLinkUrls([], "https://console.extension.dev/acme/widget/settings");
     const received = `${newItem.newItemUrl}/pub-1/item-1/edit`;
