@@ -123,15 +123,18 @@ stored login existed and nothing was sent to the lane.
    as not read-only because it writes a package to disk); `extension_builds_act` takes `rebuild`,
    `recheck`, `configure` and the channel actions and is annotated as a destructive act. An act
    name sent to the read tool is refused with a hint naming the act tool.
-2. The platform's refusals for a plan that does not include a macOS runner
-   (`MACOS_RUNNER_NOT_INCLUDED`, `MACOS_NOTARIZATION_NOT_INCLUDED`) still end with "Upgrade this
-   workspace ..." and the pricing page address in the sentence a tool relays. No hosted tool
-   starts a Safari build or a notarization on its own, but a rebuild of a project that targets
-   Safari alone can meet the first. The spent monthly allowance no longer carries a price: by the
-   owner's ruling of 2026-11-14 a tool answer states the limit reached, when it resets and the
-   billing page (`allowanceRefusal` in `src/lib/platform-hold.ts`), drops `upgradeUrl` everywhere
-   and drops any platform sentence that names a price, an upgrade or the pricing page for that
-   refusal.
+2. Closed (ledgers 748 and 831): a plan that does not include a macOS runner or notarization
+   (`MACOS_RUNNER_NOT_INCLUDED`, `MACOS_NOTARIZATION_NOT_INCLUDED`) is answered in the same
+   neutral shape as the spent monthly allowance. The platform still ends its own `message` with
+   "Upgrade this workspace ..." and the pricing page address, and sends `upgradeUrl`; both are
+   the console's, by the owner's ruling of 2026-11-14. Beside them it sends `limitReached`,
+   `neutralMessage` and `billingUrl` (`planBoundaryNotice` in www's
+   `src/services/usage/runner-class.ts`), and a tool answer relays only those: what the plan
+   does not include and the billing page, with no reset because a plan boundary does not clear
+   with the month (`allowanceRefusal` in `src/lib/platform-hold.ts`). Any platform sentence or
+   address that names a price, an upgrade or the pricing page is dropped, and `upgradeUrl` is
+   never relayed. The hosted server's submit spec pins both codes against a pitched platform
+   sentence.
 3. The OpenAI domain proof (`/.well-known/openai-apps-challenge`) is served only once the
    submission form hands out its token.
 4. Reviewer accounts for both directories are hand steps for the owner; see the checklist below.
