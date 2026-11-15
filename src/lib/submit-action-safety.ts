@@ -6,7 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { APPROVAL_GATE_ENV, approvalGateEnabled } from "./approval-gate-env";
 import { approvalVerdict } from "./approval-policy";
 import { envelope, isEnvelope } from "./envelope";
 import { STORE_SETTINGS_ACTION } from "./store-settings";
@@ -72,10 +71,6 @@ export function submitCheckRefusal(args: Args): string | null {
 
   if (typeof args.approvalId === "string" && args.approvalId.trim()) {
     return `${SUBMIT_CHECK_TOOL} never spends an approval: the call carrying approvalId ${args.approvalId.trim()} runs the ${action} it approved, so it ${RUN_THERE}`;
-  }
-
-  if (submitAsks(args) && !approvalGateEnabled(true)) {
-    return `This server runs with ${APPROVAL_GATE_ENV} off, so a ${action} call would go to the platform without asking for an approval here first; that call ${RUN_THERE}`;
   }
 
   if (action === "configure-store" && plainSetting(args)) {

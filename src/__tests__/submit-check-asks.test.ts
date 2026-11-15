@@ -91,7 +91,7 @@ describe("extension_submit_check asks for the approval of every store act and ex
 
 
 
-  it("refuses every act carrying an approvalId, a plain setting and any ask with the gate off, before anything is sent", async () => {
+  it("refuses every act carrying an approvalId and a plain setting, before anything is sent", async () => {
     world.login();
     writeRoutes();
     const refusedCalls = [
@@ -109,15 +109,6 @@ describe("extension_submit_check asks for the approval of every store act and ex
 
       expect(out.status, JSON.stringify(args)).toBe("check-refused");
       expect(out.value.useTool).toBe("extension_submit");
-    }
-
-    process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
-
-    for (const args of [{ action: "cancel", store: "chrome", submissionId: "sub_1" }, { action: "configure-store", store: "edge", storeSettings: { submissionMode: "review" } }]) {
-      const out = await world.call("extension_submit_check", { ...args, ...api });
-
-      expect(out.status, JSON.stringify(args)).toBe("check-refused");
-      expect(out.error.message).toContain("EXTENSION_DEV_APPROVAL_GATE");
     }
 
     expect(sent()).toEqual([]);

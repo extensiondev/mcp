@@ -50,7 +50,7 @@ describe("extension_submit_check takes the calls that only read or ask, under a 
     expect(checkedCalls).toEqual(platformReads());
   });
 
-  it("refuses a store act, the call spending an approval and a server with its gate off, before anything leaves the machine", async () => {
+  it("795: refuses a store act and the call spending an approval before anything leaves the machine, and takes an ask whatever EXTENSION_DEV_APPROVAL_GATE says", async () => {
     world.login();
     const refusedCalls = [
       { action: "publish", browsers: ["chrome"], approvalId: "apr_world", ...api },
@@ -66,11 +66,18 @@ describe("extension_submit_check takes the calls that only read or ask, under a 
       expect(out.value.useTool).toBe("extension_submit");
     }
 
-    process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
-    const ungated = await world.call("extension_submit_check", { browsers: ["chrome"], buildSha: "603fc8a", dryRun: false, ...api });
-
-    expect(ungated.status).toBe("check-refused");
-    expect(ungated.error.message).toContain("EXTENSION_DEV_APPROVAL_GATE");
     expect(sent()).toEqual([]);
+
+    process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
+
+    try {
+      const asked = await world.call("extension_submit_check", { browsers: ["chrome"], buildSha: "603fc8a", dryRun: false, ...api });
+
+      expect(asked.status).not.toBe("check-refused");
+      expect(JSON.stringify(asked)).not.toContain("EXTENSION_DEV_APPROVAL_GATE");
+      expect(sent()).not.toContain(STORE_SEND);
+    } finally {
+      delete process.env.EXTENSION_DEV_APPROVAL_GATE;
+    }
   });
 });

@@ -4,8 +4,8 @@ import { CLIENTS, buildRecipe, type ClientId, type Reach } from "../clients";
 import { resolveServerOptions } from "../lib/tool-policy";
 
 const project = "acme/app";
-const recipe = (client: ClientId, reach: Reach = "everything", strictApproval = false) =>
-  buildRecipe({ client, reach, strictApproval, project });
+const recipe = (client: ClientId, reach: Reach = "everything") =>
+  buildRecipe({ client, reach, project });
 
 describe("buildRecipe", () => {
   it("covers every listed client", () => {
@@ -22,8 +22,8 @@ describe("buildRecipe", () => {
     );
   });
 
-  it("drops the pin and strict approval for a local-only server, and still names the group", () => {
-    const local = recipe("claude-code", "local", true);
+  it("drops the pin for a local-only server, and still names the group", () => {
+    const local = recipe("claude-code", "local");
     expect(local.command).toBe("claude mcp add extension-dev -- npx @extension.dev/mcp --features=local");
     expect(resolveServerOptions([], {})).toEqual(resolveServerOptions(["--features=local"], {}));
   });
@@ -37,32 +37,12 @@ describe("buildRecipe", () => {
     }
   });
 
-  it("passes strict approval as env in each client's own syntax", () => {
-    expect(recipe("claude-code", "everything", true).command).toBe(
-      "claude mcp add extension-dev -e EXTENSION_DEV_APPROVAL_GATE=1 -- npx @extension.dev/mcp --features=local,platform --project acme/app",
-    );
-
-    expect(recipe("codex", "everything", true).command).toBe(
-      "codex mcp add extension-dev --env EXTENSION_DEV_APPROVAL_GATE=1 -- npx @extension.dev/mcp --features=local,platform --project acme/app",
-    );
-
-    expect(recipe("codex", "everything", true).config?.text).toContain(
-      '[mcp_servers.extension-dev.env]\nEXTENSION_DEV_APPROVAL_GATE = "1"',
-    );
-
-    expect(JSON.parse(recipe("json", "everything", true).config!.text)).toEqual({
-      mcpServers: {
-        "extension-dev": {
-          command: "npx",
-          args: ["@extension.dev/mcp", "--features=local,platform", "--project", "acme/app"],
-          env: { EXTENSION_DEV_APPROVAL_GATE: "1" },
-        },
-      },
-    });
-  });
-
-  it("ignores strict approval when the agent cannot ship", () => {
-    expect(recipe("json", "no-ship", true).config!.text).not.toContain("APPROVAL_GATE");
+  it("795: writes no approval gate variable in any recipe, since no tool reads one once the platform tools run on the hosted lane", () => {
+    for (const client of CLIENTS) {
+      for (const reach of ["everything", "no-ship", "local"] as const) {
+        expect(JSON.stringify(recipe(client.id, reach)), `${client.id} ${reach}`).not.toMatch(/APPROVAL_GATE|\benv\b/);
+      }
+    }
   });
 
   it("builds install links that decode to the same server", () => {
@@ -88,18 +68,6 @@ describe("buildRecipe", () => {
     for (const reach of ["everything", "no-ship", "local"] as const) {
       const args = JSON.parse(recipe("json", reach).config!.text).mcpServers["extension-dev"].args;
       expect(resolveServerOptions(args.slice(1), {}).ok, reach).toBe(true);
-    }
-  });
-
-  it("never emits an approval-off setting", () => {
-    for (const client of CLIENTS) {
-      for (const reach of ["everything", "no-ship", "local"] as const) {
-        for (const strict of [true, false]) {
-          expect(JSON.stringify(buildRecipe({ client: client.id, reach, strictApproval: strict, project }))).not.toMatch(
-            /APPROVAL_GATE["=: ]+"?0/,
-          );
-        }
-      }
     }
   });
 });

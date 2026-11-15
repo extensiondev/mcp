@@ -26,7 +26,7 @@ const PLUGIN_NOTE = [
 ].join("\n");
 
 const recipe = (client: ClientId): Recipe =>
-  buildRecipe({ client, reach: "everything", strictApproval: false, project: "" });
+  buildRecipe({ client, reach: "everything", project: "" });
 
 export function vscodeInstallLink(deeplink: string): string {
   return `https://insiders.vscode.dev/redirect?url=${encodeURIComponent(decodeURIComponent(deeplink))}`;

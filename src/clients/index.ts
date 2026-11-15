@@ -35,7 +35,6 @@ export interface Recipe {
 export interface RecipeInput {
   client: ClientId;
   reach: Reach;
-  strictApproval: boolean;
   project: string;
 }
 
@@ -51,12 +50,6 @@ export function serverArgs(input: Omit<RecipeInput, "client">): string[] {
   if (input.reach === "local") args.push("--features=local");
 
   return args;
-}
-
-export function serverEnv(input: Omit<RecipeInput, "client">): Record<string, string> {
-  return input.reach === "everything" && input.strictApproval
-    ? { EXTENSION_DEV_APPROVAL_GATE: "1" }
-    : {};
 }
 
 const shellQuote = (value: string): string =>
@@ -77,13 +70,7 @@ export function loginCommand(project: string): string {
 
 export function buildRecipe(input: RecipeInput): Recipe {
   const args = serverArgs(input);
-  const env = serverEnv(input);
-  const envEntries = Object.entries(env);
-  const stdio = {
-    command: "npx",
-    args,
-    ...(envEntries.length ? { env } : {}),
-  };
+  const stdio = { command: "npx", args };
   const login = loginCommand(input.project);
   const argLine = args.map(shellQuote).join(" ");
 
@@ -94,7 +81,6 @@ export function buildRecipe(input: RecipeInput): Recipe {
         command: [
           "claude mcp add",
           SERVER_NAME,
-          ...envEntries.map(([k, v]) => `-e ${k}=${shellQuote(v)}`),
           "-- npx",
           argLine,
         ].join(" "),
@@ -142,17 +128,11 @@ export function buildRecipe(input: RecipeInput): Recipe {
         `args = [${args.map(tomlString).join(", ")}]`,
       ];
 
-      if (envEntries.length) {
-        lines.push("", `[mcp_servers.${SERVER_NAME}.env]`);
-        for (const [k, v] of envEntries) lines.push(`${k} = ${tomlString(v)}`);
-      }
-
       return {
         client: "codex",
         command: [
           "codex mcp add",
           SERVER_NAME,
-          ...envEntries.map(([k, v]) => `--env ${k}=${shellQuote(v)}`),
           "-- npx",
           argLine,
         ].join(" "),

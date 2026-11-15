@@ -96,7 +96,7 @@ export function renderToolsJson(tools: ToolSchemaLike[], version: string): Tools
 
 export function renderClientsJson(version: string): ClientsDocsJson {
   const recipe = (client: (typeof CLIENTS)[number]["id"], reach: "everything" | "local") =>
-    buildRecipe({ client, reach, strictApproval: false, project: "" });
+    buildRecipe({ client, reach, project: "" });
 
   return {
     generatedFrom: "src/clients/index.ts; regenerate with pnpm docs:tools",
