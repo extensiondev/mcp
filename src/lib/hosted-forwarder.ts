@@ -23,6 +23,7 @@ import { CLOSED_STATUSES, readAnswer, readLanePreflight, withLanePreflight } fro
 import { expiredLoginRefusal } from "./login-expired";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { outcomeClock } from "./outcome-clock";
+import { resolveProjectIdentity } from "./project-identity";
 import { bearerFetch, unreachedBy } from "./platform-fetch";
 import { PROJECT_HEADER } from "./request-fetch";
 import { identityHeaders } from "./session-identity";
@@ -518,11 +519,26 @@ function askOnlyRefusal(command: string): string {
   return refusal(command, "ask-only", "E_TOOL_DISABLED", `${command} was called while only asking, and it has no ask-only form on the hosted lane, so nothing was sent.`, `Call ${command} itself to run it.`, { hosted: true });
 }
 
+/* @invariant A CALL MADE UNDER THE SLUG A PROJECT LEFT IS FORWARDED UNDER ITS
+ * CURRENT NAME. The login store keeps the old slug as an alias of the new
+ * one, so this machine resolves either name to the one login; the lane
+ * knows only the credential's current project and refuses any other name.
+ * Until 2026-11-15 the header carried the current slug and the arguments
+ * the old one, so a read under the old name was refused by the lane as a
+ * project the login does not cover.
+ */
+function underCurrentName(args: Args): Args {
+  const named = text(args.project);
+  const identity = named ? resolveProjectIdentity(text(args.api) || undefined, named) : null;
+
+  return identity?.movedFrom ? { ...args, project: identity.current } : args;
+}
+
 async function forwardedAnswer(asked: { command: string; tool: string; rule: ForwardRule; args: Args; session: ForwardSession }, local: (args: Args) => Promise<string>, deps: ForwarderDeps): Promise<string> {
   const { command, tool, rule, args, session } = asked;
   const resource = session.resource;
   let facts = (await rule.facts?.(args, deps, null)) ?? null;
-  const shaped = rule.sent?.(args) ?? args;
+  const shaped = underCurrentName(rule.sent?.(args) ?? args);
   let call: LaneCall = { command, tool, session, sent: hostedArgs(shaped, facts, resource), key: crypto.randomBytes(24).toString("base64url"), reads: rule.reads?.(args) === true, deps };
   const startedAt = outcomeClock.now();
   let answer = await askLane(call);

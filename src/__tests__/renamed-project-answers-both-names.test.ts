@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * re-evaluates it. This import pays the cold transform of the whole graph once,
  * at collection, so no cell's budget is spent compiling the server. */
 import "../index";
+import { useForwardLane } from "./fixtures/forward-lane";
 
 const API = "http://localhost:3100";
 const PROJECT_ID = "prj_a017a32f";
@@ -157,6 +158,61 @@ describe("a login stored under the old slug answers reads under both names", () 
     expect(sameStoredProject(API, "lion", "acme/leon")).toBe(true);
     expect(sameStoredProject(API, "acme/leon", "acme/ghost")).toBe(false);
     expect(resolveProjectIdentity(API, "")).toBeNull();
+  });
+});
+
+/* @invariant A FORWARDED CALL UNDER EITHER NAME OF A RENAMED PROJECT IS MADE
+ * AS THE PROJECT'S CURRENT NAME, WITH ITS ONE STORED LOGIN. The alias the
+ * login store keeps is this machine's, so the lane is asked for the current
+ * slug whichever name the agent used, and the old name is said to have
+ * moved every time it is used.
+ */
+describe("a forwarded call under the old slug or the new one is made as the project's current name", () => {
+  const lane = useForwardLane();
+  const asked = () => lane.lane().map((hit) => [hit.tool, hit.project, hit.args.project]);
+
+  it("lists builds under the new slug and under the old slug, the old one with the move said each time", async () => {
+    if (process.platform === "win32") return;
+
+    await loginThenRename();
+    const client = await freshServer();
+    const underNew = await call(client, "extension_builds", { action: "list", limit: 2, project: "acme/lion" });
+
+    expect(underNew.ok).toBe(true);
+    expect(underNew.warnings ?? []).not.toContain(LOGIN_MOVED);
+
+    for (let read = 0; read < 3; read += 1) {
+      const underOld = await call(client, "extension_builds", { action: "list", limit: 2, project: "acme/leon" });
+
+      expect(underOld.ok).toBe(true);
+      expect(underOld.status).not.toBe("auth-required");
+      expect(underOld.warnings).toContain(LOGIN_MOVED);
+    }
+
+    expect(asked()).toEqual(Array.from({ length: 4 }, () => ["extension_builds", "acme/lion", "acme/lion"]));
+    expect(lane.exchanged()).toEqual([`Bearer ${tokenFor("acme", "leon")}`]);
+
+    const { readCredentials } = await import("../lib/credentials");
+
+    expect(readCredentials({ project: "acme/leon", api: API })).toMatchObject({ projectSlug: "lion", movedFrom: "acme/leon" });
+  });
+
+  it("asks an approval status read under the new slug and under the old one as the current name", async () => {
+    if (process.platform === "win32") return;
+
+    await loginThenRename();
+    await mint();
+    const client = await freshServer();
+    const underNew = await call(client, "extension_approvals", { action: "status", approvalId: APPROVAL_ID, project: "acme/lion" });
+    const underOld = await call(client, "extension_approvals", { action: "status", approvalId: APPROVAL_ID, project: "acme/leon" });
+
+    expect(underNew.ok).toBe(true);
+    expect(underOld.ok).toBe(true);
+    expect(underOld.value.note).toContain("acme/leon is now acme/lion");
+    expect(asked()).toEqual([
+      ["extension_approvals", "acme/lion", "acme/lion"],
+      ["extension_approvals", "acme/lion", "acme/lion"],
+    ]);
   });
 });
 
