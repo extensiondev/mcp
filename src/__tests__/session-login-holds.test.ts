@@ -16,7 +16,15 @@ import { handler as builds } from "../tools/builds";
 import { handler as publish } from "../tools/publish";
 import { handler as promote } from "../tools/release-promote";
 import { readIdentity } from "../tools/whoami";
+import { forwardable } from "../lib/hosted-forwarder";
+import * as buildsActTool from "../tools/builds-act";
+import * as publishTool from "../tools/publish";
+import * as promoteTool from "../tools/release-promote";
+import * as submitTool from "../tools/submit";
+import { forwardOf, useForwardLane } from "./fixtures/forward-lane";
 import { API, useProjectRoutes, type Call } from "./fixtures/project-routes";
+
+import type { ToolModule } from "../lib/tool-dispatch";
 
 const WORKSPACE = "cezaraugusto";
 const LEON = "leon.sig";
@@ -106,6 +114,31 @@ describe("a server keeps the login it first resolved while another process signs
     const status = JSON.parse(await readIdentity(undefined, API));
     expect(status.value.projectSlug).toBe("leon");
     expect(status.warnings.join(" ")).toContain("rebeccat was signed in later by another process");
+  });
+
+  describe("a platform call with no project is forwarded as the login this server first resolved", () => {
+    const lane = useForwardLane();
+    const forwarded = (module: unknown) => forwardable(module as ToolModule).handler as (args: Record<string, unknown>) => Promise<string>;
+
+    it.each([
+      ["extension_release_promote", promoteTool, { buildId: BUILD, channel: "preview", browsers: ["chrome"] }],
+      ["extension_publish", publishTool, {}],
+      ["extension_submit", submitTool, { browsers: ["chrome"], buildSha: BUILD }],
+      ["extension_submit", submitTool, { action: "publish", browsers: ["chrome"] }],
+      ["extension_builds_act", buildsActTool, { action: "configure", buildSettings: { firefox: { enabled: true } } }],
+    ] as const)("%s with no project is exchanged with leon's login and asks the lane for leon, never rebeccat", async (tool, module, args) => {
+      if (process.platform === "win32") return;
+
+      walkStartsOnLeon();
+
+      const out = JSON.parse(await forwarded(module)({ ...args, api: API }));
+
+      expect(out.ok).toBe(true);
+      expect(lane.exchanged()).toEqual([`Bearer ${LEON}`]);
+      expect(lane.lane().map((hit) => [hit.tool, hit.authorization, hit.project])).toEqual([[tool, forwardOf(LEON), `${WORKSPACE}/leon`]]);
+      expect(JSON.stringify(lane.seen)).not.toContain("rebeccat");
+      expect(JSON.stringify(lane.seen)).not.toContain(REBECCAT_ID);
+    });
   });
 
   it("a named project still wins, and a login or logout made through this server moves the default", async () => {
