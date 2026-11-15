@@ -14,7 +14,15 @@ import { FEATURE_GROUPS } from "../lib/tool-policy";
 import { handler as publish } from "../tools/publish";
 import { handler as promote } from "../tools/release-promote";
 import { handler as releaseStatus } from "../tools/release-status";
+import * as publishTool from "../tools/publish";
+import * as promoteTool from "../tools/release-promote";
+import * as releaseStatusTool from "../tools/release-status";
+import * as submitTool from "../tools/submit";
+import { forwardable } from "../lib/hosted-forwarder";
+import { forwardOf, useForwardLane } from "./fixtures/forward-lane";
 import { promoteAnswer } from "./fixtures/platform-answers";
+
+import type { ToolModule } from "../lib/tool-dispatch";
 
 const KEYS = ["XDG_CONFIG_HOME", "EXTENSION_DEV_PROJECT", "EXTENSION_DEV_TOKEN", "EXTENSION_DEV_API_URL", "EXTENSION_DEV_APPROVAL_GATE"];
 const saved: Record<string, string | undefined> = {};
@@ -192,5 +200,74 @@ describe("a private registry read asks its grant with the named project's login"
     const grant = await tokens.get({ workspace: "acme", project: "never-signed-in" });
 
     expect(grant.status).toBe("no-credential");
+  });
+});
+
+/* @invariant A PLATFORM TOOL CALLED WITH PROJECT IS FORWARDED AS THAT
+ * PROJECT, WITH THAT PROJECT'S STORED LOGIN. The registry and platform reads
+ * these cells used to watch now happen on the hosted lane, under the
+ * credential this machine exchanged; what stays here, and what a wrong
+ * binding would break, is which login is exchanged and which project the
+ * lane is asked for.
+ */
+describe("a platform tool called with project is forwarded as that project's login, never the active one", () => {
+  const lane = useForwardLane();
+  const forwarded = (module: unknown) => forwardable(module as ToolModule).handler as (args: Record<string, unknown>) => Promise<string>;
+
+  const askedAs = (slug: string) => {
+    expect(lane.exchanged()).toEqual([`Bearer token-for-${slug}`]);
+    expect(lane.lane().map((hit) => [hit.authorization, hit.project])).toEqual([[forwardOf(`token-for-${slug}`), `${WS}/${slug}`]]);
+  };
+
+  it.each([
+    ["extension_publish", publishTool, {}],
+    ["extension_release_promote", promoteTool, { buildId: "abc1234", channel: "preview" }],
+    ["extension_submit", submitTool, { buildSha: "abc1234", browsers: ["chrome"] }],
+    ["extension_release_status", releaseStatusTool, { include: ["releases"] }],
+  ] as const)("%s asks the lane for the named project with its own login, and names the active one nowhere", async (tool, module, args) => {
+    const out = JSON.parse(await forwarded(module)({ project: NAMED, ...args }));
+
+    expect(out.ok).toBe(true);
+    askedAs("refined-github");
+    expect(lane.lane()[0]).toMatchObject({ tool, args: { project: NAMED } });
+    expect(JSON.stringify(lane.seen)).not.toContain(ACTIVE_SLUG);
+  });
+
+  it("does the same for each of several named projects in turn", async () => {
+    for (const slug of ["refined-github", "vue-devtools", ACTIVE_SLUG]) {
+      lane.seen.length = 0;
+      await forwarded(publishTool)({ project: `${WS}/${slug}` });
+
+      askedAs(slug);
+    }
+  });
+
+  it("still asks as the active login when no project is named", async () => {
+    await forwarded(publishTool)({});
+
+    askedAs(ACTIVE_SLUG);
+  });
+
+  it("answers a project named as '<workspace>/<project>' that has no stored login by that name, never a glued address, and sends nothing", async () => {
+    const out = JSON.parse(await forwarded(releaseStatusTool)({ project: "acme/app", include: ["releases"] }));
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("auth-required");
+    expect(out.error.message).toContain("acme/app");
+    expect(JSON.stringify(out)).not.toContain("%2F");
+    expect(JSON.stringify(out)).not.toContain(`${WS}/acme`);
+    expect(lane.sentAnything()).toBe(false);
+  });
+
+  it("asks for the pinned project on a pinned server, not the active login's", async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await createServer({ features: [...FEATURE_GROUPS], noShip: false, project: NAMED }).connect(serverTransport);
+    const client = new Client({ name: "named-ref-probe", version: "0.0.0" });
+    await client.connect(clientTransport);
+
+    await client.callTool({ name: "extension_release_status", arguments: { include: ["releases"] } });
+
+    askedAs("refined-github");
+    expect(JSON.stringify(lane.lane())).not.toContain("%2F");
   });
 });
