@@ -69,6 +69,53 @@ a hosted server does not have.
 - `https://mcp.extension.dev/.well-known/openai-apps-challenge` answers 404: the OpenAI domain
   proof is not served yet.
 
+## Signed out, replayed against production on 2026-11-15
+
+Read by hand with no login anywhere, after the www promote of 2026-11-15 (www health names
+commit `f6d35251c`). The local half ran this package at 11.0.0 with an empty home folder, so no
+stored login existed and nothing was sent to the lane.
+
+- Every line of the section above reads the same today. `POST /mcp` with no token answers 401
+  for `initialize` and for `tools/list` alike, with the same `WWW-Authenticate` header and the
+  body `{"error":"invalid_token","error_description":"Sign in to extension.dev from your MCP
+  client to use this server."}`. A `GET /mcp` with no token answers that same 401, so the 405 is
+  seen only once signed in.
+- The protected resource document also answers `bearer_methods_supported: ["header"]`,
+  `resource_name: "extension.dev MCP"` and
+  `resource_documentation: "https://docs.extension.dev/tools/mcp"`; the authorization server
+  document also answers a `revocation_endpoint` and
+  `authorization_response_iss_parameter_supported: true`.
+- The forward lane's preflight (`POST https://mcp.extension.dev/mcp/forward` with
+  `x-extensiondev-preflight: 1` and no credential) answers 200 with `ok: true`,
+  `status: "lane-ready"`, `value.closed: []`, `value.www: "read"`, `value.rateStore: "memory"`
+  and every switch `true`: `MCP_FORWARD_LANE`, `MCP_KILL_SWITCH`, `MCP_WWW_API_BASE`,
+  `WWW_FORWARD_LANE`, `WWW_PG_HOSTED_STATE`, `KV_REST_API_URL`, `WWW_STORE_VAULT_KEY`.
+- The same lane with no credential and no preflight header answers 200 with `ok: false`,
+  `status: "auth-refused"`, `error.code: "E_AUTH_DENIED"` and the message "extension.dev refused
+  this login: it was revoked, it expired, or it belongs to another environment. Call
+  extension_auth with action login to sign in again."
+- The local server lists 27 tools as installed and 41 with the platform group on. With the
+  group off, each tool of the eight cases answers `status: "tool-disabled"`,
+  `error.code: "E_TOOL_DISABLED"` and the hint "Add platform to --features (or
+  EXTENSION_DEV_FEATURES) in this server's MCP config, or ask the user to."
+- With the group on and no login, `extension_auth` (`action: "status"`) answers `ok: true`,
+  `status: "logged-out"` and the hint "No stored credentials. Run extension_auth (action: login)
+  to authenticate. Track it at https://console.extension.dev." The first tool of every other
+  case replayed (`extension_workspace` `projects`; `extension_builds` `list`, `get` and `logs`;
+  `extension_release_status`; `extension_release_promote`; `extension_builds_act` `rebuild`)
+  answers `ok: false`, `status: "auth-required"`, `error.code: "E_AUTH_REQUIRED"`,
+  `error.name: "PlatformAuthError"`, `value.hosted: true` and the message "No token. Run
+  extension_auth (action: login), or set EXTENSION_DEV_TOKEN (create one in the extension.dev
+  dashboard). An extension with no extension.dev project yet starts with
+  extension_project_create, which makes one from its GitHub repository, then extension_auth."
+  (`NO_TOKEN_MESSAGE` in `src/lib/credentials.ts`).
+- `extension_builds` with `action: "rebuild"` answers `status: "invalid-arguments"`,
+  `error.code: "E_INPUT_VALIDATION"` and the hint "rebuild moved to extension_builds_act in
+  11.0.0: call extension_builds_act {action: \"rebuild\"} with the same arguments.
+  extension_builds only reads and downloads now, and nothing ran."
+- Not replayed: `extension_project_create` of Negative 3. Signed out it asks the platform for a
+  device code, which is a write, so it waits for the reviewer account with the rest.
+
 ## Open items
 
 1. Closed in 11.0.0 (ledger 525, ruled 2026-11-14): `extension_builds` was split. The read tool
@@ -124,8 +171,10 @@ sample project called `<workspace>/<project>` below, from a client signed in to
 `https://mcp.extension.dev/mcp`. "Expected tools" are the hosted tools in call order. The
 expected answers are derived from the answer builders in `src/tools` and `src/lib` at the commit
 this page was written; a line marked "to replay after the www promote" quotes words the platform
-composes, which production www does not serve yet, and is confirmed by one replay once the
-promote lands. The tests in `src/__tests__/docs-match-the-code.test.ts` pin the eight headings.
+composes. The promote landed on 2026-11-15 and the signed-out half of every case but Negative 3
+was replayed that day (the section above), so each of those lines now waits on the reviewer
+account alone: every one reads a project, a build, a channel or an allowance that only a signed-in
+account holds. The tests in `src/__tests__/docs-match-the-code.test.ts` pin the eight headings.
 
 ### Positive 1: Who am I signed in as
 
