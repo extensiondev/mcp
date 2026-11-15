@@ -10,6 +10,8 @@ import crypto from "node:crypto";
 
 import { autoOpenBlock, notOpenedNote, openCommandBlock, openPagesForPerson } from "./approval-open";
 import { askingOnly } from "./ask-only";
+import { PACKAGE_HOLD_FACT } from "./build-inputs";
+import { localPackageHolds } from "./build-inputs-local";
 import { resolveCredential, type CredentialRef } from "./credential-source";
 import { LOGIN_STEPS, NO_TOKEN_MESSAGE, noStoredLoginHint } from "./credentials";
 import { envelope, isEnvelope } from "./envelope";
@@ -80,7 +82,12 @@ function actionOf(args: Args, fallback: string): string {
 }
 
 const SUBMIT_RULE: ForwardRule = {
-  facts: async (args, deps, wanted) => ({ facts: await forwardSubmitFacts(args as ForwardFactsArgs, wanted ? { wanted } : null), [PAGE_OPENING_FACT]: { block: autoOpenBlock({ noShip: false }, deps.env ?? process.env, deps.platform) } }),
+  facts: async (args, deps, wanted) => {
+    const facts = await forwardSubmitFacts(args as ForwardFactsArgs, wanted ? { wanted } : null);
+    const hold = localPackageHolds(text(args.projectPath), facts.project.gitHead);
+
+    return { facts, ...(hold ? { [PACKAGE_HOLD_FACT]: hold } : {}), [PAGE_OPENING_FACT]: { block: autoOpenBlock({ noShip: false }, deps.env ?? process.env, deps.platform) } };
+  },
   wants: imagesTheLaneWants,
   sent: (args) => (args.screenshots === undefined ? args : { ...args, screenshots: labeledScreenshots(args as ForwardFactsArgs) }),
   answered: (args, body) => withProjectRoot(body, args.projectPath),

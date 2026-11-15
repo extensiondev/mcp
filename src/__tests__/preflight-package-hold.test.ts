@@ -5,7 +5,8 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { isBuildInput } from "../lib/build-inputs";
+import { PACKAGE_HOLD_FACT, PACKAGE_HOLD_WINDOW, isBuildInput } from "../lib/build-inputs";
+import { FORWARDED_TOOLS } from "../lib/hosted-forwarder";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 const PREFLIGHT = `${PROJECT_ROUTE}/stores/chrome/submissions/preflight`;
@@ -58,3 +59,59 @@ describe("the rule for what a platform build reads mirrors the platform's own DO
 });
 
 const GIT_CELL_BUDGET_MS = 30_000;
+
+describe("the forwarder sends the lane what this repository proves about the builds behind HEAD", { timeout: GIT_CELL_BUDGET_MS }, () => {
+  const STORE_LINE = "# Store metadata\n\n## Listing\n\n- Name: Leon\n- Category: Productivity\n";
+
+  async function holdSent(args: Record<string, unknown>): Promise<unknown> {
+    const sent = await FORWARDED_TOOLS.extension_submit!.facts!(args, { env: {} }, null);
+
+    return sent?.[PACKAGE_HOLD_FACT];
+  }
+
+  it("names each commit behind HEAD whose diff to HEAD touches nothing a build reads, with the files that changed, and none once code changes", async () => {
+    if (process.platform === "win32") return;
+
+    const project = gitProject();
+    const built = execFileSync("git", ["rev-parse", "HEAD"], { cwd: project.root, encoding: "utf8" }).trim();
+    const docs = project.commit({ "STORE.md": STORE_LINE }, "store line");
+    const preflight = { action: "preflight", browsers: ["chrome"], projectPath: project.root };
+
+    expect(await holdSent(preflight)).toEqual({ head: docs, held: [{ build: built, changed: ["STORE.md"] }] });
+    expect(await holdSent({ ...preflight, action: "sync-listing" })).toEqual({ head: docs, held: [{ build: built, changed: ["STORE.md"] }] });
+    expect(await holdSent({ browsers: ["chrome"], buildSha: built.slice(0, 7), projectPath: project.root })).toBeUndefined();
+    expect(await holdSent({ action: "preflight", browsers: ["chrome"] })).toBeUndefined();
+
+    const readme = project.commit({ "README.md": "# Leon\n" }, "readme");
+
+    expect(await holdSent(preflight)).toEqual({
+      head: readme,
+      held: [
+        { build: docs, changed: ["README.md"] },
+        { build: built, changed: ["README.md", "STORE.md"] },
+      ],
+    });
+
+    const code = project.commit({ "src/index.ts": "export {};\n" }, "code");
+
+    expect(await holdSent(preflight)).toEqual({ head: code, held: [] });
+
+    fs.rmSync(project.root, { recursive: true, force: true });
+  });
+
+  it("proves nothing for a build further behind HEAD than the window", async () => {
+    if (process.platform === "win32") return;
+
+    const project = gitProject();
+    const built = execFileSync("git", ["rev-parse", "HEAD"], { cwd: project.root, encoding: "utf8" }).trim();
+
+    for (let step = 0; step <= PACKAGE_HOLD_WINDOW; step += 1) project.commit({ "README.md": `# Leon ${step}\n` }, `readme ${step}`);
+
+    const sent = (await holdSent({ action: "preflight", browsers: ["chrome"], projectPath: project.root })) as { held: Array<{ build: string }> };
+
+    expect(sent.held).toHaveLength(PACKAGE_HOLD_WINDOW);
+    expect(sent.held.map((hold) => hold.build)).not.toContain(built);
+
+    fs.rmSync(project.root, { recursive: true, force: true });
+  });
+});

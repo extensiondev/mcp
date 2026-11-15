@@ -16,6 +16,14 @@ export interface PackageHold {
   changed: string[];
 }
 
+export const PACKAGE_HOLD_FACT = "packageHold";
+export const PACKAGE_HOLD_WINDOW = 20;
+
+export interface PackageHoldFact {
+  head: string;
+  held: PackageHold[];
+}
+
 export function isBuildInput(path: string): boolean {
   const segments = path.split("/").filter(Boolean);
   if (!segments.length) return true;
