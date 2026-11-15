@@ -8,6 +8,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import { createServer } from "../index";
 import { writeCredentials } from "../lib/credentials";
+import { forgetForwardCredentials } from "../lib/forward-credential";
 import { createServerStamp, staleSentence, type ServerStampReader } from "../lib/server-stamp";
 
 import { version } from "../../package.json";
@@ -79,12 +80,16 @@ describe("a server that knows it was rebuilt and has no loader refuses platform 
         return jsonResponse({ login: "acme/widget", live: true, projectId: PROJECT_ID, workspaceSlug: "acme", projectSlug: "widget" });
       }
 
+      if (pathname === "/api/cli/forward/exchange") return jsonResponse({ access_token: "forward-credential", expires_in: 600 });
+      if (pathname === "/mcp/forward") return jsonResponse({ schema: 1, ok: true, command: "extension_builds", status: "listed", value: { builds: [BUILD_ROW] }, error: null, warnings: [] });
+
       if (pathname === `/api/projects/${PROJECT_ID}/builds`) return jsonResponse({ items: [BUILD_ROW], latest: BUILD_ROW });
 
       return jsonResponse({ message: "not found" }, 404);
     });
 
     vi.stubGlobal("fetch", fetchSpy);
+    forgetForwardCredentials();
 
     writeCredentials({
       version: 1,
@@ -104,6 +109,22 @@ describe("a server that knows it was rebuilt and has no loader refuses platform 
     else process.env.EXTENSION_DEV_API_URL = prevApi;
 
     fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it("a fresh server reads the platform as before and carries its stamp", async () => {
+    if (process.platform === "win32") return;
+
+    const stamp = createServerStamp(entryFile(tmp));
+
+    const { isError, out } = await call(stamp, "extension_builds", { action: "list", api: API });
+
+    expect(isError).toBe(false);
+    expect(out.ok).toBe(true);
+    expect(out.status).toBe("listed");
+    expect(out.value.builds).toHaveLength(1);
+    expect(out.value.server).toEqual({ version, commit: null, startedAt: expect.any(String), pid: process.pid, builtAt: "2026-10-23T14:19:47.654Z" });
+    expect(out.warnings).toEqual([]);
+    expect(fetchSpy.mock.calls.map((args) => new URL(String(args[0])).pathname)).toEqual(["/api/cli/forward/exchange", "/mcp/forward"]);
   });
 
   it("answers E_SERVER_STALE at once with the reconnect sentence and asks the platform nothing", async () => {
