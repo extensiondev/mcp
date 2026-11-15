@@ -169,7 +169,11 @@ describe("a script that measures the server runs it under a scratch config direc
   it("leaves the person's config directory without a server log after measuring the tool list", () => {
     const repo = path.resolve(import.meta.dirname, "..", "..");
 
-    expect(fs.existsSync(path.join(repo, "dist", "module.js")), "the script starts the built server; run pnpm compile first").toBe(true);
+    if (!fs.existsSync(path.join(repo, "dist", "module.js"))) {
+      const compile = spawnSync("pnpm", ["compile"], { cwd: repo, encoding: "utf8" });
+
+      expect(compile.status, `the script starts the built server and pnpm compile could not build it: ${compile.stderr}`).toBe(0);
+    }
 
     const person = tmp("mcp-person-config-");
     const run = spawnSync(process.execPath, [path.join(repo, "scripts", "tool-surface-size.mjs"), "--json"], {
@@ -180,5 +184,5 @@ describe("a script that measures the server runs it under a scratch config direc
     expect(run.status, run.stderr).toBe(0);
     expect(JSON.parse(run.stdout).rows.length).toBeGreaterThan(10);
     expect(fs.readdirSync(person)).toEqual([]);
-  }, 60_000);
+  }, 180_000);
 });
