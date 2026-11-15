@@ -7,10 +7,11 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { API_BASE } from "../lib/common-schema";
+import { resolveCredential } from "../lib/credential-source";
 import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
 import { hostedOnly } from "../lib/hosted-only";
 import { createShareFromBuild, type SharesLocal } from "./shares-create";
-import { SHARES_LOCAL } from "./shares-local";
+import { SHARES_LOCAL, listRecordedShares } from "./shares-local";
 
 export const schema = {
   name: "extension_shares",
@@ -80,10 +81,19 @@ export interface SharesCreateArgs extends Record<string, unknown> {
   buildId?: string;
   browser?: string;
   project?: string;
+  projectPath?: string;
   api?: string;
 }
 
+function listsFromRecord(args: Record<string, unknown>): boolean {
+  return (args.action === undefined || args.action === "list") && typeof args.projectPath === "string" && args.projectPath.trim() !== "";
+}
+
 export async function sharesWith(args: SharesCreateArgs, local: SharesLocal): Promise<string> {
+  if (listsFromRecord(args) && !resolveCredential({ project: args.project, api: args.api }).token) {
+    return listRecordedShares({ projectPath: String(args.projectPath), project: args.project, api: args.api });
+  }
+
   if (args.action !== "create") return hostedOnly(schema.name)(args);
 
   return createShareFromBuild({ buildId: args.buildId, browser: args.browser, project: args.project, api: args.api }, local);

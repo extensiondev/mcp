@@ -5,8 +5,12 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { handler, schema } from "../tools/shares";
+import * as sharesTool from "../tools/shares";
+import { forwardable } from "../lib/hosted-forwarder";
 import { parseArtifactRef } from "../lib/artifacts-api";
 import { recordSharedPreview, sharedPreviewsPath } from "../lib/share-record";
+
+import type { ToolModule } from "../lib/tool-dispatch";
 
 const LOCAL_ID = "gen_00000000000000000000000000000001";
 const REMOTE_ID = "gen_00000000000000000000000000000002";
@@ -132,5 +136,35 @@ describe("extension_shares", () => {
     expect(
       parseArtifactRef(`https://preview.extension.dev/?preview=${hex65}`),
     ).toBeNull();
+  });
+
+  it("776: a signed-out list for a project folder answers the folder's own share record beside the login hint, and nothing is sent", async () => {
+    delete process.env.EXTENSION_DEV_TOKEN;
+    const dir = tmpProject();
+    const reshared = "2026-08-03T10:00:00.000Z";
+
+    seedRecord(dir, LOCAL_ID);
+    recordSharedPreview(dir, { sharedAt: reshared, previewUrl: `https://preview.extension.dev/?preview=${LOCAL_ID}`, artifactId: LOCAL_ID, revokeUrl: `https://extension.dev/api/artifacts/${LOCAL_ID}` });
+    seedRecord(dir, GONE_ID);
+
+    const forwarded = forwardable(sharesTool as unknown as ToolModule).handler as (args: Record<string, unknown>) => Promise<string>;
+    const out = JSON.parse(await forwarded({ projectPath: dir }));
+
+    expect(out).toMatchObject({ ok: true, command: "extension_shares", status: "listed-local-only" });
+    expect(out.value.server).toMatchObject({ listed: false, errorName: "SharesAuthError" });
+    expect(out.value.server.loginHint).toContain("extension_auth");
+    expect(out.value.shares).toEqual([]);
+    expect(out.value.localOnly.map((row: { artifactId: string; sharedAt: string; revokeUrl: string }) => [row.artifactId, row.sharedAt, row.revokeUrl])).toEqual([
+      [LOCAL_ID, reshared, `https://www.extension.dev/api/artifacts/${LOCAL_ID}`],
+      [GONE_ID, "2026-07-20T10:00:00.000Z", `https://www.extension.dev/api/artifacts/${GONE_ID}`],
+    ]);
+
+    expect(out.value.localRecord).toMatchObject({ path: sharedPreviewsPath(dir), exists: true, entries: 3, shares: 2 });
+    expect(out.warnings.join(" ")).toContain("The platform was not asked");
+
+    const bare = JSON.parse(await forwarded({ action: "list" }));
+    const revoke = JSON.parse(await forwarded({ action: "revoke", artifactId: LOCAL_ID, projectPath: dir }));
+
+    expect([bare.status, revoke.status]).toEqual(["auth-required", "auth-required"]);
   });
 });

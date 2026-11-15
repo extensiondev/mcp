@@ -67,7 +67,7 @@ export interface ForwarderDeps {
 interface ForwardRule {
   reads?: (args: Args) => boolean;
   local?: (args: Args) => boolean;
-  signedOut?: true;
+  signedOut?: true | ((args: Args, login: StoredLogin) => boolean);
   facts?: (args: Args, deps: ForwarderDeps, wanted: WantedImage[] | null) => Args | null | Promise<Args | null>;
   wants?: (body: Args) => WantedImage[] | null;
   sent?: (args: Args) => Args;
@@ -136,6 +136,7 @@ export const FORWARDED_TOOLS: Readonly<Record<string, ForwardRule>> = Object.fre
     reads: reading("list", "list"),
     local: (args) => actionOf(args, "list") === "create",
     facts: (args) => (text(args.projectPath) ? { sharedPreviews: readSharedPreviews(text(args.projectPath)) } : null),
+    signedOut: (args, login) => !login.expired && actionOf(args, "list") === "list" && text(args.projectPath) !== "",
   },
   extension_workspace_create: { local: (args) => !text(args.deviceCode), signedOut: true },
   extension_project_create: { local: (args) => !text(args.deviceCode), signedOut: true },
@@ -147,6 +148,10 @@ export const FORWARDED_TOOLS: Readonly<Record<string, ForwardRule>> = Object.fre
   extension_submit: { reads: submitReads, ...SUBMIT_RULE },
   extension_submit_check: { reads: submitReads, ...SUBMIT_RULE },
 });
+
+function startsSignedOut(rule: ForwardRule, args: Args, login: StoredLogin): boolean {
+  return typeof rule.signedOut === "function" ? rule.signedOut(args, login) : rule.signedOut === true;
+}
 
 export function forwardedCallReads(command: string, args: Args): boolean {
   return FORWARDED_TOOLS[command]?.reads?.(args) === true;
@@ -441,7 +446,8 @@ async function retoldUnopened(call: LaneCall, shaped: Args, facts: Args | null, 
  * the lane would answer is refused here before any request leaves, in the
  * words the tool used when it ran in this process; a step that is how a
  * person without a login starts (a sign-in, a create and its device poll, a
- * preview) still runs here.
+ * preview) still runs here, and so does a share list for a project folder,
+ * answered from the folder's own record with no login.
  * The lane ends every call inside its function's limit and says when it cut
  * a wait short; this process has no such limit, so a read that was cut is
  * asked again with the seconds still owed until the bound the caller asked
@@ -464,7 +470,7 @@ export async function forwardCall(command: string, args: Args, local: (args: Arg
   const resource = forwardUrlFor(checked.base, deps.env);
   const login = (deps.resolveLogin ?? resolveCredential)({ project: text(args.project) || undefined, api: named });
 
-  if (!login.token) return here || rule.signedOut ? local(args) : signedOutRefusal(command, args, login, named);
+  if (!login.token) return here || startsSignedOut(rule, args, login) ? local(args) : signedOutRefusal(command, args, login, named);
   if (!tool) return here ? local(args) : askOnlyRefusal(command);
 
   if (!resource) {
