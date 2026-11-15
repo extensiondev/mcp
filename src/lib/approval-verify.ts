@@ -16,7 +16,7 @@ import {
 import { loginRefusedOnApproval } from "./approval-login";
 import { pageTraceSentence, readPageTrace } from "./approval-page-trace";
 import { mintedProjectMatches } from "./approval-record";
-import { linesSentence, readLines } from "./approval-lines";
+import { linesSentence, presentableActions, readLines } from "./approval-lines";
 import { readTokenClaims } from "./credential-source";
 import { bearerHeaders } from "./request-fetch";
 import { tokenProjectIdentity } from "./project-identity";
@@ -130,7 +130,7 @@ function linesAsked(scope: ApprovalScope): string[] {
   return Array.isArray(acts) ? acts.map((act) => String(act).trim().toLowerCase()).filter(Boolean) : [];
 }
 
-function scopeMismatch(input: ApprovalGateInput, approvalId: string, fingerprint: string, approvedFingerprint: string): { blocked: true; envelope: string } {
+function scopeMismatch(input: ApprovalGateInput, approvalId: string, fingerprint: string, approvedFingerprint: string, approvedAction = ""): { blocked: true; envelope: string } {
   return block(
     input.command,
     APPROVAL_REJECTED_STATUS,
@@ -142,6 +142,7 @@ function scopeMismatch(input: ApprovalGateInput, approvalId: string, fingerprint
       approvalId,
       expectedFingerprint: fingerprint,
       approvedFingerprint,
+      ...(approvedAction ? { approvedAction } : {}),
     },
   );
 }
@@ -307,6 +308,7 @@ export async function verifyApproval(params: {
     .trim()
     .toLowerCase();
   const storedFingerprint = String(data.fingerprint || "").trim();
+  const approvedAction = typeof data.action === "string" ? data.action.trim() : "";
   const used = data.used === true;
   const now = input.now ?? Date.now();
   const expiresAt =
@@ -319,6 +321,11 @@ export async function verifyApproval(params: {
         : NaN;
   const expired =
     status === "expired" || (Number.isFinite(expiresAt) && expiresAt <= now);
+
+  if (approvedAction && !presentableActions(input.action).includes(approvedAction)) {
+    return scopeMismatch(input, approvalId, fingerprint, storedFingerprint, approvedAction);
+  }
+
   const lines = readLines(data.lines);
   const asked = lines.length ? linesAsked(input.scope) : [];
   const outside = asked.filter((id) => !lines.some((line) => line.id === id));

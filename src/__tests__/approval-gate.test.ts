@@ -192,6 +192,32 @@ describe("the approval gate believes only a complete record", () => {
     expect(ms.blocked).toBe(false);
   });
 
+  it("804: refuses an approval the platform says was asked for another act, lets a version approval stand for the acts its lines cover, and reads a record with no action as before", async () => {
+    const lines = [{ id: "chrome:upload", store: "chrome", act: "upload", state: "pending" }];
+    const version = { status: "approved", fingerprint: actionFingerprint("extension_submit.version", { acts: ["chrome:upload", "firefox:upload"], buildSha: "abc1234", version: "" }), expiresAt: future, used: false, lines };
+    const presented = (gateAction: string, record: Record<string, unknown>) =>
+      evaluateApproval({
+        command: gateAction,
+        action: gateAction,
+        scope: gateAction === action ? scope : { browsers: ["chrome"], buildSha: "abc1234" },
+        description: "Act.",
+        approvalId: "apr_1",
+        token: "tok",
+        enabled: true,
+        fetchImpl: (async () => jsonResponse(record)) as unknown as typeof fetch,
+      });
+
+    const foreign = await presented(action, { ...version, action: "extension_submit.version" });
+
+    expect(foreign.blocked).toBe(true);
+    expect(JSON.parse((foreign as { envelope: string }).envelope).error.name).toBe("ApprovalScopeMismatch");
+    expect((await presented("extension_submit", { ...version, action: "extension_submit.version" })).blocked).toBe(false);
+    expect((await presented("extension_store.publish", { ...version, action: "extension_submit.version" })).blocked).toBe(false);
+    expect((await presented(action, version)).blocked).toBe(false);
+    expect((await verify({ status: "approved", action, fingerprint: actionFingerprint(action, scope), expiresAt: future, used: false })).blocked).toBe(false);
+    expect((await verify({ status: "approved", action: "extension_shares.revoke", fingerprint: actionFingerprint(action, scope), expiresAt: future, used: false })).blocked).toBe(true);
+  });
+
   it("says a spent approval may already have run the action, and to read its state first", async () => {
     const fingerprint = actionFingerprint(action, scope);
     const gate = await verify({ status: "approved", fingerprint, expiresAt: future, used: true });

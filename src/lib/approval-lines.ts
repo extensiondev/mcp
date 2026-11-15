@@ -47,6 +47,26 @@ const STATES = new Set<string>([
 
 export const lineId = (store: string, act = "upload"): string => `${store}:${act}`;
 
+/* @invariant AN APPROVAL IS PRESENTED ONLY TO THE ACT IT WAS ASKED FOR, AND A
+ * VERSION APPROVAL TO THE ACTS ITS LINES STAND FOR. Every act mints under its
+ * own action and presents under it. The one grant that crosses is the version
+ * approval: each of its lines is an upload, a publish or a listing write, so
+ * a submit, a store publish or a listing sync of fewer stores than were
+ * approved presents it under the single act's action. No other act may: a
+ * grant with lines is matched line by line, never by fingerprint, so the
+ * action the platform's read names is what tells a grant of another act
+ * before anything is sent (ledger 804).
+ */
+const LINE_ACT_ACTIONS: Record<string, string> = {
+  upload: "extension_submit",
+  publish: "extension_store.publish",
+  "sync-listing": "extension_store.listing",
+};
+
+export function presentableActions(action: string): string[] {
+  return action === VERSION_ACTION || Object.values(LINE_ACT_ACTIONS).includes(action) ? [...new Set([action, VERSION_ACTION])] : [action];
+}
+
 /* @invariant ONE VERSION, ONE APPROVAL, ONE LINE PER STORE. A real submit
  * naming several stores asks the platform for a version grant whose scope
  * is the build, the version label the call carries (an empty string when
