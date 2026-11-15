@@ -139,7 +139,7 @@ export const schema = {
         type: "string",
         enum: ["background", "popup", "options", "sidebar", "devtools", "newtab", "history", "bookmarks", "content", "page"],
         description:
-          "Default background; a closed surface is opened first (as extension_open does).",
+          "Default page on a Chromium MV3 session, else background; a closed surface is opened first (as extension_open does).",
       },
       url: { type: "string", description: "content/page: the tab by url." },
       tab: { type: "number", description: "chrome.tabs id to break a url tie." },

@@ -245,7 +245,7 @@ Evaluate JavaScript in a running extension's background, surface, content script
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
 | `expression` | string | yes |  | Expression to evaluate. |
-| `context` | "background" \| "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" \| "content" \| "page" | no |  | Default background; a closed surface is opened first (as extension_open does). |
+| `context` | "background" \| "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" \| "content" \| "page" | no |  | Default page on a Chromium MV3 session, else background; a closed surface is opened first (as extension_open does). |
 | `url` | string | no |  | content/page: the tab by url. |
 | `tab` | number | no |  | chrome.tabs id to break a url tie. |
 | `targetId` | string | no |  | targetId from extension_open or dom_snapshot listTargets; overrides url. |

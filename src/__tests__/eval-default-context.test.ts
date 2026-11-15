@@ -62,6 +62,15 @@ afterEach(() => {
 });
 
 describe("eval default context", () => {
+  it("782: the context input says the default the code picks, page on Chromium MV3 and background elsewhere", () => {
+    const said = (evalTool.schema.inputSchema.properties as Record<string, { description: string }>).context.description;
+    const mv3 = project({ "dist/chrome": { manifest_version: 3, name: "F" } });
+    const mv2 = project({ "dist/chrome": { manifest_version: 2, name: "F" } });
+
+    expect([evalTool.resolveDefaultEvalContext(mv3, "chrome"), evalTool.resolveDefaultEvalContext(mv2, "chrome"), evalTool.resolveDefaultEvalContext(mv3, "firefox")]).toEqual(["page", "background", "background"]);
+    expect(said).toMatch(/^Default page on a Chromium MV3 session, else background;/);
+  });
+
   it("defaults to page on a Chromium MV3 session and says why", async () => {
     const dir = project({
       "dist/chrome": { manifest_version: 3, name: "F", background: { service_worker: "background.js" } },

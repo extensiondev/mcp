@@ -1062,7 +1062,7 @@
           "name": "context",
           "type": "\"background\" | \"popup\" | \"options\" | \"sidebar\" | \"devtools\" | \"newtab\" | \"history\" | \"bookmarks\" | \"content\" | \"page\"",
           "required": false,
-          "description": "Default background; a closed surface is opened first (as extension_open does)."
+          "description": "Default page on a Chromium MV3 session, else background; a closed surface is opened first (as extension_open does)."
         },
         {
           "name": "url",
