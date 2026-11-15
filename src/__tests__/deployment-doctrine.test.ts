@@ -142,6 +142,26 @@ describe("an approval page opens itself once in the person's browser", () => {
     vi.unstubAllEnvs();
   });
 
+  it("opens a forwarded approval page once through the local server and says so in the hint", async () => {
+    if (process.platform === "win32") return;
+
+    world.login();
+    world.routes.push([/^POST \/api\/cli\/forward\/exchange$/, () => ({ body: { access_token: "forward-credential", expires_in: 600 } })]);
+    world.routes.push([/^POST \/mcp\/forward$/, () => ({ body: JSON.parse(approvalAnswer("apr_open")) })]);
+
+    const first = await world.call("extension_submit", SUBMIT_ARGS, { openApprovals: true });
+    const second = await world.call("extension_submit", SUBMIT_ARGS, { openApprovals: true });
+    const unopened = await world.call("extension_submit", SUBMIT_ARGS);
+
+    expect(first.status).toBe("approval-required");
+    expect(opened).toEqual([`${WORLD_API}/device/approve/apr_open`]);
+    expect(first.hint).toContain(APPROVAL_OPENED_SENTENCE);
+    expect(first.value.approvalOpened).toBe(true);
+    expect(second.hint ?? "").not.toContain(APPROVAL_OPENED_SENTENCE);
+    expect(unopened.status).toBe("approval-required");
+    expect(unopened.hint ?? "").not.toContain(APPROVAL_OPENED_SENTENCE);
+  });
+
   it("does not open with EXTENSION_DEV_NO_AUTO_OPEN=1", () => {
     vi.stubEnv("EXTENSION_DEV_NO_AUTO_OPEN", "1");
 
