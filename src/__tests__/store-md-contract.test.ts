@@ -32,7 +32,7 @@ const fixtures = fs
 const read = (name: string): string =>
   fs.readFileSync(path.join(fixturesDir, name), "utf8");
 
-const UPSTREAM_SUBMODULE = "packages/extensiondev-deploy";
+const UPSTREAM_SUBMODULE = "packages/deploy";
 
 const findDeclaringRoot = (): string | null => {
   const packageRoot = path.resolve(here, "..", "..");
