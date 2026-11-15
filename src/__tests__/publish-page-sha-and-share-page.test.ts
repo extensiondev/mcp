@@ -12,7 +12,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { pageShaShortened } from "../lib/publish-link";
+import { pageShaShortened, publishLinkFields } from "../lib/publish-link";
 import { handler } from "../tools/publish";
 
 const FULL = "F25F2B53548B6510836DE8FA675094F92E33F5FB";
@@ -102,5 +102,17 @@ describe("extension_publish names the build the way the page does and says wheth
     );
 
     expect(pageShaShortened("https://cezaraugusto.extension.dev/leon/channels/stable?share=x")).toBe("https://cezaraugusto.extension.dev/leon/channels/stable?share=x");
+  });
+
+  it("805: tells a private project how to get a link that never expires with what the console has today, the channel's Make public choice", () => {
+    const fields = publishLinkFields({
+      data: { visibility: "private", buildSha: SHORT, shareUrl: SHORT_PAGE, expiresAt: "2026-12-01T00:00:00.000Z" },
+      channel: null,
+      ref: { workspace: "cezaraugusto", project: "leon" },
+    });
+    const said = JSON.stringify(fields);
+
+    expect(said).toContain("makes one channel public with Make public in that channel's menu on the console Releases page");
+    expect(said).not.toMatch(/once it ships|ships later/);
   });
 });

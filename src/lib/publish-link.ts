@@ -330,7 +330,7 @@ export function publishLinkFields(input: LinkInput): LinkFields {
   const makeEvergreen = isPublic
     ? null
     : {
-        say: "For a channel link that never expires, a workspace owner or admin makes the project public in the console Settings, Visibility section, or, once it ships, makes one channel public with the channel Audience control on the console Releases page.",
+        say: "For a channel link that never expires, a workspace owner or admin makes the project public in the console Settings, Visibility section, or makes one channel public with Make public in that channel's menu on the console Releases page.",
         settingsUrl: consoleProjectUrl(ref, "settings/visibility", input.api),
         releasesUrl: consoleProjectUrl(ref, "releases", input.api),
       };
