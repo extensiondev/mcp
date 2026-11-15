@@ -36,4 +36,15 @@ describe("a token promote and a real submission always ask a human", () => {
     expect(`${shares.description} ${TOOL_DOCS.extension_shares.gate}`).not.toMatch(/owner/i);
     expect(TOOL_DOCS.extension_shares.gate).toContain("a revoke waits for a workspace member's approval");
   });
+
+  it("798: the gate line of every act names the role the platform's approval catalog asks", () => {
+    const gates = Object.fromEntries(Object.entries(TOOL_DOCS).map(([tool, docs]) => [tool, docs.gate]));
+
+    expect(gates.extension_release_promote).toContain("every release, cut and rollback needs a workspace owner's approval");
+    expect(gates.extension_publish).toContain("sync-captures needs a workspace owner's approval, and a link to a private project a workspace member's");
+    expect(gates.extension_submit).toContain("need a workspace owner's approval");
+    expect(gates.extension_builds_act).toContain("a public channel audience needs a workspace owner's approval");
+    expect(gates.extension_workspace).toContain("a public visibility needs a workspace owner's approval");
+    expect(gates.extension_shares).toContain("a revoke waits for a workspace member's approval");
+  });
 });
