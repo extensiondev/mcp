@@ -8,6 +8,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { memoryShelf, scratchShelf, withCallMemory } from "../lib/call-memory";
+import { withRequestCredential } from "../lib/credential-scope";
 import {
   DASHBOARD_URL_COMPOSED_EVENT,
   composedDashboardUrl,
@@ -159,5 +161,53 @@ describe("a store dashboard address this server composes is counted once per ans
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(posted).toHaveLength(1);
+  });
+
+  it("827: keeps an address composed during a call for that call only, and still counts it in that call's answer", async () => {
+    const item = { publisherId: "a1b2c3d4-0000-4000-8000-000000000827", itemId: "abcdefghijklmnopabcdefghijklmnop" };
+    const first = await withCallMemory(undefined, async () => {
+      const url = chromeItemUrl(item);
+      const counted = await meterComposedDashboardUrls({ command: "extension_submit", status: "submitted", value: { url } }, capture);
+
+      return { url, counted, known: composedDashboardUrls() };
+    });
+
+    expect(first.result.url).toContain(item.itemId);
+    expect(first.result.counted).toMatchObject({ stores: "chrome", count: 1 });
+    expect(first.result.known).toContain(first.result.url);
+    expect(first.memory).toEqual({});
+    expect(composedDashboardUrls()).not.toContain(first.result.url);
+    expect(composedDashboardUrls()).toContain(AMO_API_KEY_PAGE);
+
+    const second = await withCallMemory(undefined, async () => ({
+      known: composedDashboardUrls(),
+      counted: await meterComposedDashboardUrls({ command: "extension_submit", status: "submitted", value: { url: first.result.url } }, capture),
+    }));
+
+    expect(second.result.known).not.toContain(first.result.url);
+    expect(second.result.counted).toBeNull();
+  });
+
+  it("827: a shelf read under a hosted request and outside a call throws by name, and a person's own machine keeps its module shelf", async () => {
+    const isText = (value: unknown): value is string => typeof value === "string";
+    const hosted = { token: "tok", api: "https://www.extension.dev", projects: [], expiresAt: null };
+
+    memoryShelf("build-dispatches", isText).set("mine", "kept");
+
+    expect(memoryShelf("build-dispatches", isText).get("mine")).toBe("kept");
+
+    await withRequestCredential(hosted, async () => {
+      expect(() => memoryShelf("build-dispatches", isText)).toThrow(/"build-dispatches" shelf was read outside a call/);
+      expect(() => scratchShelf("create-sessions")).toThrow(/"create-sessions" shelf was read outside a call/);
+
+      const inside = await withCallMemory(undefined, async () => {
+        scratchShelf<string>("create-sessions").set("a", "b");
+
+        return [...memoryShelf("build-dispatches", isText).set("k", "v").keys()];
+      });
+
+      expect(inside.result).toEqual(["k"]);
+      expect(inside.memory).toEqual({ "build-dispatches": [["k", "v"]] });
+    });
   });
 });

@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { scratchOfCall } from "./call-memory";
+import { requestCredential } from "./credential-scope";
 import { captureCreationFunnelEvent } from "./funnel-telemetry";
 
 export const DASHBOARD_URL_COMPOSED_EVENT = "mcp_dashboard_url_composed";
@@ -44,6 +46,24 @@ type Capture = (event: string, properties: DashboardUrlProperties) => Promise<un
 
 const composed = new Map<string, ComposedUrl>();
 
+/* @invariant AN ADDRESS COMPOSED DURING A CALL IS KEPT FOR THAT CALL ONLY.
+ * The Chrome item address carries the caller's publisher and item ids, and a
+ * hosted function answers many callers from one process, so an address a tool
+ * composes inside a call memory scope sits on that call's scratch and ends
+ * with it. Outside a call (the constants composed when a module loads, and a
+ * person's own machine, which runs no call scope) the map is this module's,
+ * and a reader sees both. A hosted request outside a call keeps nothing.
+ */
+function composedHere(): Map<string, ComposedUrl> {
+  return scratchOfCall<ComposedUrl>("dashboard-urls") ?? (requestCredential() ? new Map() : composed);
+}
+
+function everyComposed(): ComposedUrl[] {
+  const call = scratchOfCall<ComposedUrl>("dashboard-urls");
+
+  return call ? [...composed.values(), ...call.values()] : [...composed.values()];
+}
+
 function escaped(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -73,20 +93,22 @@ export function composedDashboardUrl(url: string): string {
   const known = dashboardStoreOf(url);
   if (!known) return url;
 
-  composed.delete(url);
-  composed.set(url, { url, ...known, match: new RegExp(`${escaped(url)}(?=$|[\\s.,;:!?)"'\\]>])`) });
+  const held = composedHere();
 
-  for (const oldest of composed.keys()) {
-    if (composed.size <= COMPOSED_LIMIT) break;
+  held.delete(url);
+  held.set(url, { url, ...known, match: new RegExp(`${escaped(url)}(?=$|[\\s.,;:!?)"'\\]>])`) });
 
-    composed.delete(oldest);
+  for (const oldest of held.keys()) {
+    if (held.size <= COMPOSED_LIMIT) break;
+
+    held.delete(oldest);
   }
 
   return url;
 }
 
 export function composedDashboardUrls(): string[] {
-  return [...composed.keys()];
+  return everyComposed().map((row) => row.url);
 }
 
 function strings(value: unknown, depth: number, out: string[]): void {
@@ -104,7 +126,8 @@ function strings(value: unknown, depth: number, out: string[]): void {
 }
 
 export function composedDashboardUrlsIn(frame: Frame): ComposedUrl[] {
-  if (composed.size === 0) return [];
+  const rows = everyComposed();
+  if (rows.length === 0) return [];
 
   const texts: string[] = [];
   strings(frame.value, SCAN_DEPTH, texts);
@@ -113,7 +136,7 @@ export function composedDashboardUrlsIn(frame: Frame): ComposedUrl[] {
   strings(frame.error, 3, texts);
   if (!texts.length) return [];
 
-  return [...composed.values()].filter((row) => texts.some((text) => text.includes(row.url) && row.match.test(text)));
+  return rows.filter((row) => texts.some((text) => text.includes(row.url) && row.match.test(text)));
 }
 
 export function dashboardUrlProperties(frame: Frame, found: ComposedUrl[]): DashboardUrlProperties {

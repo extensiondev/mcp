@@ -8,6 +8,8 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 
+import { requestCredential } from "./credential-scope";
+
 export type MemoryRows = Array<[string, unknown]>;
 export type CarriedMemory = Record<string, MemoryRows>;
 
@@ -22,6 +24,22 @@ interface CallMemory {
 
 const calls = new AsyncLocalStorage<CallMemory>();
 const own = new Map<string, Map<string, unknown>>();
+
+/* @invariant A HOSTED REQUEST HAS NO SHELF OUTSIDE ITS OWN CALL. On a
+ * person's machine the process is one person's, so a shelf read outside
+ * withCallMemory is this module's map. A hosted function is warm for every
+ * caller it answers and runs each one under a request credential, and there
+ * the same fallback would hand one caller's rows to the next, silently, the
+ * day an entry point forgot the wrapper. So a shelf read under a request
+ * credential and outside a call throws by name instead of sharing.
+ */
+function outsideACall(name: string): Map<string, Map<string, unknown>> {
+  if (requestCredential()) {
+    throw new Error(`The "${name}" shelf was read outside a call. A hosted request keeps no memory between callers, so every tool runs inside withCallMemory.`);
+  }
+
+  return own;
+}
 
 function rowsOf(value: unknown): MemoryRows {
   if (!Array.isArray(value)) return [];
@@ -56,7 +74,7 @@ export function readCarriedMemory(value: unknown): CarriedMemory {
  */
 export function memoryShelf<V>(name: string, accepts: (value: unknown) => value is V): Map<string, V> {
   const call = calls.getStore();
-  const shelves = call ? call.shelves : own;
+  const shelves = call ? call.shelves : outsideACall(name);
   const held = shelves.get(name);
   if (held) return held as Map<string, V>;
 
@@ -67,7 +85,7 @@ export function memoryShelf<V>(name: string, accepts: (value: unknown) => value 
 }
 
 export function scratchShelf<V>(name: string): Map<string, V> {
-  const shelves = calls.getStore()?.scratch ?? own;
+  const shelves = calls.getStore()?.scratch ?? outsideACall(name);
   const held = shelves.get(`scratch:${name}`);
   if (held) return held as Map<string, V>;
 
@@ -75,6 +93,10 @@ export function scratchShelf<V>(name: string): Map<string, V> {
   shelves.set(`scratch:${name}`, shelf);
 
   return shelf as Map<string, V>;
+}
+
+export function scratchOfCall<V>(name: string): Map<string, V> | null {
+  return calls.getStore() ? scratchShelf<V>(name) : null;
 }
 
 export async function withCallMemory<T>(carried: unknown, run: () => Promise<T>): Promise<{ result: T; memory: CarriedMemory }> {
