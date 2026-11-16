@@ -131,7 +131,7 @@ claude mcp add --transport http extension-dev https://mcp.extension.dev/mcp
 | Flag | Environment variable | Default | Effect |
 | --- | --- | --- | --- |
 | `--features=<groups>` | `EXTENSION_DEV_FEATURES` | `local` | `local,platform` adds the platform group; `platform` lists only those |
-| `--no-ship` | `EXTENSION_DEV_NO_SHIP=1` | off | Refuses publish, promote, a real submit, a shared preview, a share create or revoke |
+| `--no-ship` | `EXTENSION_DEV_NO_SHIP=1` | off | Refuses publish, promote, a real submit, a store act (the listing sync included), a shared preview, a share create or revoke |
 | `--project <workspace>/<project>` | `EXTENSION_DEV_PROJECT` | unset | Refuses any call that names another project |
 | none | `EXTENSION_DEV_TOKEN` | unset | An [access token](https://docs.extension.dev/tools/access-tokens) in place of the device login, for CI |
 | none | `EXTENSION_DEV_NO_AUTO_OPEN=1` | off | Never opens the approval page in the default browser |

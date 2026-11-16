@@ -367,7 +367,7 @@ export function disabledToolEnvelope(
         message: `${name} with these arguments reaches people outside this machine, and this server was started in no-ship mode.`,
       },
       value: { noShip: true },
-      hint: `Dry runs, previews without share, and listing still work. To ship, the user removes --no-ship (or ${NO_SHIP_ENV}) from this server's MCP config.`,
+      hint: `Dry runs, preflight, status, previews without share, and reading the share links still work; a listing sync is refused with the other store acts. To ship, the user removes --no-ship (or ${NO_SHIP_ENV}) from this server's MCP config.`,
     });
   }
 

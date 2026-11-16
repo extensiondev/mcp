@@ -197,4 +197,18 @@ describe("the server honours the options", () => {
       expect(disabledToolEnvelope(name, args, noShip), name).toBeNull();
     }
   });
+
+  it("refuses a listing sync in no-ship mode and says so, naming only calls that still work", () => {
+    const noShip = { features: [...FEATURE_GROUPS], noShip: true };
+    const refused = JSON.parse(String(disabledToolEnvelope("extension_submit", { action: "sync-listing", browsers: ["firefox"], projectPath: "/nowhere" }, noShip)));
+
+    expect(refused.error.code).toBe("E_TOOL_DISABLED");
+    expect(refused.hint).toContain("a listing sync is refused with the other store acts");
+    expect(refused.hint).toContain("reading the share links still work");
+    expect(refused.hint).not.toMatch(/and listing still work/);
+
+    for (const args of [{ action: "preflight" }, { action: "status" }, { dryRun: true }]) {
+      expect(disabledToolEnvelope("extension_submit", args, noShip), JSON.stringify(args)).toBeNull();
+    }
+  });
 });
