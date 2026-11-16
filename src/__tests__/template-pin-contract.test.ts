@@ -247,3 +247,51 @@ describe("the corpus pin agrees across every declaration", () => {
     expect(pointer.catalog, `${LIVE_CATALOG_POINTER}.catalog`).toContain(PINNED_COMMIT);
   });
 });
+
+describe("the vendored theme files name a folder the superproject still holds", () => {
+  const VENDORED_THEME_DIR = path.join(
+    packageRoot,
+    "src",
+    "lib",
+    "vendor",
+    "chrome-theme",
+  );
+  const SYNC_SCRIPT = path.join(
+    packageRoot,
+    "scripts",
+    "sync-chrome-theme-vendor.mjs",
+  );
+  const SYNCED_FROM = /Synced verbatim from (packages\/[^/\s]+)\//;
+
+  it("reads a synced-from folder that .gitmodules declares, in every file and in the script", (ctx) => {
+    if (!monorepoRoot) return ctx.skip(NO_SUPERPROJECT);
+
+    const declared = fs.readFileSync(
+      path.join(monorepoRoot, ".gitmodules"),
+      "utf8",
+    );
+    const carriers = [
+      ...fs
+        .readdirSync(VENDORED_THEME_DIR)
+        .filter((name) => name.endsWith(".ts"))
+        .map((name) => path.join(VENDORED_THEME_DIR, name)),
+      SYNC_SCRIPT,
+    ];
+
+    expect(carriers.length).toBeGreaterThan(1);
+
+    for (const carrier of carriers) {
+      const folder = fs.readFileSync(carrier, "utf8").match(SYNCED_FROM)?.[1];
+
+      expect(
+        folder,
+        `${path.basename(carrier)} names no synced-from folder`,
+      ).toBeTruthy();
+
+      expect(
+        declared.includes(`path = ${folder}\n`),
+        `${path.basename(carrier)} names ${folder}, which the superproject's .gitmodules does not declare. If the folder moved, move the sync script and rerun it.`,
+      ).toBe(true);
+    }
+  });
+});

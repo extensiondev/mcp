@@ -1,6 +1,6 @@
 // VENDORED FILE - DO NOT HAND-EDIT.
 //
-// Synced verbatim from packages/extensiondev-emulator/src/browser-ui/lib/chrome-theme-reference.ts
+// Synced verbatim from packages/emulator/src/browser-ui/lib/chrome-theme-reference.ts
 // by public/mcp/scripts/sync-chrome-theme-vendor.mjs.
 //
 // The published @extension.dev/mcp must not take a workspace dependency on
