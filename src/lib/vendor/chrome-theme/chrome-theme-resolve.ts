@@ -7,23 +7,12 @@
 // @extension.dev/emulator (the carrier ships decoupled), so this pure resolver
 // is copied in. Edit the emulator source, then re-run the sync script.
 
-/**
- * resolveChromeTheme: given a theme manifest (the exact JSON a user would
- * install), produce every color current stable Chrome would paint, by
- * replaying the pipeline transcribed in chrome-theme-reference.ts:
- *
- *   1. pack build: BrowserThemePack::AdjustThemePack color steps
- *      (GenerateFrameColorsFromTints, SetFrameAndToolbarRelatedColors,
- *      GenerateWindowControlButtonColor, GenerateMissingNtpColors)
- *   2. render: the classic color mixers that remain active for themed
- *      clients (chrome_color_mixer, tab_strip_color_mixer,
- *      omnibox_color_mixer, plus the pack's own mixer which runs last).
- *
- * Image-DERIVED colors (k-means of frame/toolbar/tab images,
- * browser_theme_pack.cc ComputeImageColor) are not modeled yet; themes that
- * rely on images without colors resolve to the color defaults. That gap is
- * Phase 3 of THEME_REALISM_PLAN.md and is reported via `caveats`.
- */
+// ███████╗███╗   ███╗██╗   ██╗██╗      █████╗ ████████╗ ██████╗ ██████╗
+// ██╔════╝████╗ ████║██║   ██║██║     ██╔══██╗╚══██╔══╝██╔═══██╗██╔══██╗
+// █████╗  ██╔████╔██║██║   ██║██║     ███████║   ██║   ██║   ██║██████╔╝
+// ██╔══╝  ██║╚██╔╝██║██║   ██║██║     ██╔══██║   ██║   ██║   ██║██╔══██╗
+// ███████╗██║ ╚═╝ ██║╚██████╔╝███████╗██║  ██║   ██║   ╚██████╔╝██║  ██║
+// ╚══════╝╚═╝     ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝
 
 import {
   type HslTint,
@@ -61,7 +50,6 @@ export interface ChromeThemeManifestTheme {
   images?: Record<string, string>;
 }
 
-/** All hex unless noted. Slot names follow Chromium's color ids. */
 export interface ResolvedChromeTheme {
   frameActive: string;
   frameInactive: string;
@@ -84,7 +72,6 @@ export interface ResolvedChromeTheme {
   ntpText: string;
   ntpLink: string;
   ntpHeader: string;
-  /** rgba() string: header at 0x50 alpha (browser_theme_pack.cc:2010). */
   ntpSectionBorder: string;
   ntpLogoAlternate: 0 | 1;
   omniboxFieldBackground: string;
@@ -98,13 +85,42 @@ export interface ResolvedChromeTheme {
     ntpBackgroundAlignment: string;
     ntpBackgroundRepeat: "no-repeat" | "repeat" | "repeat-x" | "repeat-y";
   };
-  /** Honored manifest keys that were dropped/ignored, with reasons. */
-  ignoredKeys: Array<{ key: string; reason: string; section?: "colors" | "tints" | "properties" }>;
-  /** Fidelity caveats (e.g. image-derived colors not modeled). */
+  ignoredKeys: Array<{ key: string; reason: string }>;
   caveats: string[];
 }
 
-/** browser_theme_pack.cc:1405 ReadColorsFromJSON, honored keys only. */
+export function parseManifestColorValue(
+  value: unknown,
+): { color: RgbaColor } | { reason: string } {
+  if (!Array.isArray(value) || value.length < 3 || value.length > 4) {
+    return { reason: "malformed color value" };
+  }
+  const [r, g, b, alphaRaw] = value;
+  if (
+    [r, g, b].some(
+      (channel) =>
+        typeof channel !== "number" ||
+        !Number.isInteger(channel) ||
+        channel < 0 ||
+        channel > 255,
+    )
+  ) {
+    return { reason: "channel out of range" };
+  }
+  let a = 255;
+  if (value.length === 4) {
+    if (typeof alphaRaw !== "number" || alphaRaw < 0 || alphaRaw > 1) {
+      return { reason: "alpha out of range" };
+    }
+    a = Number.isInteger(alphaRaw)
+      ? alphaRaw
+        ? 255
+        : 0
+      : Math.round(alphaRaw * 255);
+  }
+  return { color: rgba(r as number, g as number, b as number, a) };
+}
+
 function parseManifestColors(
   colors: Record<string, number[]> | undefined,
   ignoredKeys: ResolvedChromeTheme["ignoredKeys"],
@@ -112,36 +128,12 @@ function parseManifestColors(
   const out = new Map<string, RgbaColor>();
   if (!colors) return out;
   for (const [key, value] of Object.entries(colors)) {
-    if (!Array.isArray(value) || value.length < 3 || value.length > 4) {
-      ignoredKeys.push({ key, reason: "malformed color value" });
+    const parsed = parseManifestColorValue(value);
+    if ("reason" in parsed) {
+      ignoredKeys.push({ key, reason: parsed.reason });
       continue;
     }
-    const [r, g, b, alphaRaw] = value;
-    if (
-      [r, g, b].some(
-        (channel) =>
-          typeof channel !== "number" ||
-          !Number.isInteger(channel) ||
-          channel < 0 ||
-          channel > 255,
-      )
-    ) {
-      ignoredKeys.push({ key, reason: "channel out of range" });
-      continue;
-    }
-    let a = 255;
-    if (value.length === 4) {
-      if (typeof alphaRaw !== "number" || alphaRaw < 0 || alphaRaw > 1) {
-        ignoredKeys.push({ key, reason: "alpha out of range" });
-        continue;
-      }
-      a = Number.isInteger(alphaRaw)
-        ? alphaRaw
-          ? 255
-          : 0
-        : Math.round(alphaRaw * 255);
-    }
-    const color = rgba(r as number, g as number, b as number, a);
+    const color = parsed.color;
 
     const info = CHROME_THEME_COLOR_KEYS[key];
     if (!info) {
@@ -176,23 +168,15 @@ function parseManifestColors(
   return out;
 }
 
-/** browser_theme_pack.cc:1340 SetTintsFromJSON + MakeHSLShiftValid. */
-function parseManifestTints(
+export function parseManifestTints(
   tints: Record<string, number[]> | undefined,
-  ignoredKeys: ResolvedChromeTheme["ignoredKeys"],
 ): Map<string, HslTint> {
   const out = new Map<string, HslTint>();
   if (!tints) return out;
   for (const [key, value] of Object.entries(tints)) {
-    if (!Array.isArray(value) || value.length !== 3) {
-      ignoredKeys.push({ key, section: "tints", reason: "malformed tint value, Chrome expects [h, s, l] with three numbers" });
-      continue;
-    }
+    if (!Array.isArray(value) || value.length !== 3) continue;
     const [h, s, l] = value;
-    if ([h, s, l].some((channel) => typeof channel !== "number")) {
-      ignoredKeys.push({ key, section: "tints", reason: "non-numeric tint channel, Chrome skips the tint" });
-      continue;
-    }
+    if ([h, s, l].some((channel) => typeof channel !== "number")) continue;
     out.set(
       key,
       makeHslShiftValid({ h: h as number, s: s as number, l: l as number }),
@@ -201,7 +185,6 @@ function parseManifestTints(
   return out;
 }
 
-/** chrome_color_provider_utils.cc:52 GetToolbarTopSeparatorColor. */
 function toolbarTopSeparatorColor(
   toolbar: RgbaColor,
   frame: RgbaColor,
@@ -228,7 +211,6 @@ function toolbarTopSeparatorColor(
   return getResultingPaintColor(generate(), frame);
 }
 
-/** browser_theme_pack.cc:615 ChooseOmniboxBgBlendTarget. */
 function chooseOmniboxBgBlendTarget(toolbar: RgbaColor): RgbaColor {
   const endpoint = getEndpointColorWithMinContrast(toolbar);
   return contrastRatio(toolbar, endpoint) >=
@@ -237,7 +219,6 @@ function chooseOmniboxBgBlendTarget(toolbar: RgbaColor): RgbaColor {
     : getColorWithMaxContrast(endpoint);
 }
 
-/** theme_properties.cc:167 StringToTiling (case-insensitive, default no-repeat). */
 function normalizeTiling(
   value: unknown,
 ): ResolvedChromeTheme["properties"]["ntpBackgroundRepeat"] {
@@ -246,7 +227,6 @@ function normalizeTiling(
   return "no-repeat";
 }
 
-/** theme_properties.cc:148 StringToAlignment + AlignmentToString round-trip. */
 function normalizeAlignment(value: unknown): string {
   const components =
     typeof value === "string" ? value.toLowerCase().split(/\s+/) : [];
@@ -259,20 +239,34 @@ function normalizeAlignment(value: unknown): string {
   return `${horizontal} ${vertical}`;
 }
 
+export interface ChromeThemeImageAnalysis {
+  colors: Partial<
+    Record<
+      | "frame"
+      | "frame_inactive"
+      | "toolbar"
+      | "background_tab"
+      | "background_tab_inactive"
+      | "ntp_text",
+      RgbaColor
+    >
+  >;
+  tabBackgroundGenerated: boolean;
+}
+
 export function resolveChromeTheme(
   theme: ChromeThemeManifestTheme,
+  imageAnalysis?: ChromeThemeImageAnalysis,
 ): ResolvedChromeTheme {
   const ignoredKeys: ResolvedChromeTheme["ignoredKeys"] = [];
   const caveats: string[] = [];
   const colors = parseManifestColors(theme.colors, ignoredKeys);
-  const tints = parseManifestTints(theme.tints, ignoredKeys);
+  const tints = parseManifestTints(theme.tints);
   const images = theme.images ?? {};
-  for (const [key, value] of Object.entries(theme.properties ?? {})) {
-    if (key === "ntp_logo_alternate" && typeof value !== "number") {
-      ignoredKeys.push({ key, section: "properties", reason: "not a number (Chrome reads 0 or 1), the logo falls back to the derived default" });
-    }
-    if ((key === "ntp_background_alignment" || key === "ntp_background_repeat") && typeof value !== "string") {
-      ignoredKeys.push({ key, section: "properties", reason: "not a string, Chrome falls back to the default" });
+
+  if (imageAnalysis) {
+    for (const [key, color] of Object.entries(imageAnalysis.colors)) {
+      if (color && !colors.has(key)) colors.set(key, color);
     }
   }
 
@@ -280,6 +274,7 @@ export function resolveChromeTheme(
     tints.get(key) ?? CHROME_THEME_DEFAULT_TINTS[key];
 
   if (
+    !imageAnalysis &&
     ["theme_frame", "theme_toolbar", "theme_tab_background"].some(
       (key) => images[key],
     )
@@ -289,7 +284,6 @@ export function resolveChromeTheme(
     );
   }
 
-  // GenerateFrameColorsFromTints (browser_theme_pack.cc:1787).
   const defaultFrame = parseHexColor(CHROME_THEME_DEFAULTS.frame);
   const frameActive =
     colors.get("frame") ?? hslShift(defaultFrame, tintOrDefault("frame"));
@@ -297,7 +291,6 @@ export function resolveChromeTheme(
     colors.get("frame_inactive") ??
     hslShift(frameActive, tintOrDefault("frame_inactive"));
 
-  // SetFrameAndToolbarRelatedColors (browser_theme_pack.cc:1630).
   const toolbarSpecified = colors.has("toolbar");
   const toolbar =
     colors.get("toolbar") ?? parseHexColor(CHROME_THEME_DEFAULTS.toolbar);
@@ -317,8 +310,6 @@ export function resolveChromeTheme(
     if (!colors.has("bookmark_text")) colors.set("bookmark_text", toolbarText);
     if (!colors.has("tab_text")) colors.set("tab_text", toolbarText);
   }
-  // browser_theme_pack.cc:1668: the active-tab foreground always carries to
-  // the inactive-window slot when present in the pack.
   const packTabFgActiveFrameInactive = colors.get("tab_text");
 
   const omniboxBackgroundSpecified = colors.has("omnibox_background");
@@ -339,7 +330,6 @@ export function resolveChromeTheme(
     );
   }
 
-  // GenerateWindowControlButtonColor (browser_theme_pack.cc:1808).
   const captionButtonBase = colors.get("button_background") ?? rgba(0, 0, 0, 0);
   const captionAlpha =
     captionButtonBase.a === 255
@@ -356,7 +346,6 @@ export function resolveChromeTheme(
     captionAlpha / 255,
   );
 
-  // GenerateMissingNtpColors (browser_theme_pack.cc:1961).
   const hasNtpImage = Boolean(images.theme_ntp_background);
   const ntpBackgroundSpecified = colors.has("ntp_background");
   if (ntpBackgroundSpecified) {
@@ -394,8 +383,6 @@ export function resolveChromeTheme(
   const ntpHeader =
     colors.get("ntp_header") ?? parseHexColor(CHROME_THEME_DEFAULTS.ntpHeader);
 
-  // Pack mixer + omnibox mixer (browser_theme_pack.cc:1122,
-  // omnibox_color_mixer.cc:279-306).
   const omniboxFieldBackground = blendForMinContrast(
     toolbar,
     toolbar,
@@ -407,10 +394,23 @@ export function resolveChromeTheme(
   const omniboxResultsBackground =
     colors.get("omnibox_background") ?? getColorWithMaxContrast(omniboxFieldText);
 
-  // tab_strip_color_mixer.cc.
   const tabBackgroundActiveFrameActive = toolbar;
   const tabBackgroundActiveFrameInactive = tabBackgroundActiveFrameActive;
   const backgroundTabTint = tints.get("background_tab") ?? HSL_NO_TINT;
+  const backgroundTabTintShifts =
+    tints.has("background_tab") &&
+    (backgroundTabTint.h >= 0 ||
+      backgroundTabTint.s >= 0 ||
+      backgroundTabTint.l >= 0);
+  if (
+    images.theme_frame &&
+    backgroundTabTintShifts &&
+    !imageAnalysis?.tabBackgroundGenerated
+  ) {
+    caveats.push(
+      "frame image with background_tab tint: Chrome HSL-shifts the frame bitmap when painting background tabs; this resolver shifts colors only and leaves the image untinted",
+    );
+  }
   const tabBackgroundInactiveFrameActive =
     colors.get("background_tab") ?? hslShift(frameActive, backgroundTabTint);
   const tabBackgroundInactiveFrameInactive =

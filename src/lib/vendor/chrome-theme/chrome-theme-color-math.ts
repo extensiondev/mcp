@@ -7,43 +7,30 @@
 // @extension.dev/emulator (the carrier ships decoupled), so this pure resolver
 // is copied in. Edit the emulator source, then re-run the sync script.
 
-/**
- * Exact TypeScript ports of the Chromium color math used by the browser
- * theme pipeline (ui/gfx/color_utils.cc, refs/heads/main, cached under
- * parity/chromium-src-cache, fetched 2026-07-04).
- *
- * Every function mirrors its Chromium namesake so the theme resolver can
- * reproduce Chrome's derived colors bit-for-bit. When editing, re-read the
- * cited source instead of "fixing" the math: several rules (HSL lightness
- * shift in RGB space, the luminance midpoint, alpha normalization) are
- * deliberately not the textbook versions.
- */
+// ███████╗███╗   ███╗██╗   ██╗██╗      █████╗ ████████╗ ██████╗ ██████╗
+// ██╔════╝████╗ ████║██║   ██║██║     ██╔══██╗╚══██╔══╝██╔═══██╗██╔══██╗
+// █████╗  ██╔████╔██║██║   ██║██║     ███████║   ██║   ██║   ██║██████╔╝
+// ██╔══╝  ██║╚██╔╝██║██║   ██║██║     ██╔══██║   ██║   ██║   ██║██╔══██╗
+// ███████╗██║ ╚═╝ ██║╚██████╔╝███████╗██║  ██║   ██║   ╚██████╔╝██║  ██║
+// ╚══════╝╚═╝     ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝
 
 export interface RgbaColor {
   r: number;
   g: number;
   b: number;
-  /** 0..255, like SkColor. */
   a: number;
 }
 
-/** HSL tint triple; -1 in a channel means "leave unchanged". */
 export interface HslTint {
   h: number;
   s: number;
   l: number;
 }
 
-/** color_utils.cc:35 g_darkest_color = gfx::kGoogleGrey900. */
 export const DARKEST_COLOR: RgbaColor = { r: 0x20, g: 0x21, b: 0x24, a: 255 };
 
-/**
- * color_utils.cc:40 g_luminance_midpoint: the luminance where white and
- * kGoogleGrey900 contrast equally. IsDark() pivots here, NOT at 0.5.
- */
 export const LUMINANCE_MIDPOINT = 0.211692036;
 
-/** color_utils.cc kMinimumReadableContrastRatio. */
 export const MINIMUM_READABLE_CONTRAST_RATIO = 4.5;
 
 export function rgba(r: number, g: number, b: number, a = 255): RgbaColor {
@@ -75,19 +62,16 @@ export function toHexColor(color: RgbaColor): string {
   return `#${to2(color.r)}${to2(color.g)}${to2(color.b)}`;
 }
 
-/** base::ClampRound for the 0..255 channel domain. */
 export function clampRound(value: number): number {
   return Math.min(255, Math.max(0, Math.round(value)));
 }
 
-/** color_utils.cc:62 Linearize (sRGB, the 0.04045 variant). */
 function linearize(component: number): number {
   return component <= 0.04045
     ? component / 12.92
     : ((component + 0.055) / 1.055) ** 2.4;
 }
 
-/** color_utils.cc:425 GetRelativeLuminance4f. */
 export function relativeLuminance(color: RgbaColor): number {
   return (
     0.2126 * linearize(color.r / 255) +
@@ -96,34 +80,28 @@ export function relativeLuminance(color: RgbaColor): number {
   );
 }
 
-/** color_utils.cc:412 GetContrastRatio (luminance form). */
 export function contrastRatioFromLuminance(a: number, b: number): number {
   const la = a + 0.05;
   const lb = b + 0.05;
   return la > lb ? la / lb : lb / la;
 }
 
-/** color_utils.cc:402 GetContrastRatio. */
 export function contrastRatio(a: RgbaColor, b: RgbaColor): number {
   return contrastRatioFromLuminance(relativeLuminance(a), relativeLuminance(b));
 }
 
-/** color_utils.cc:617 IsDark: luminance below the grey900/white midpoint. */
 export function isDarkChromium(color: RgbaColor): boolean {
   return relativeLuminance(color) < LUMINANCE_MIDPOINT;
 }
 
-/** color_utils.cc:621 GetColorWithMaxContrast: white or kGoogleGrey900. */
 export function getColorWithMaxContrast(color: RgbaColor): RgbaColor {
   return isDarkChromium(color) ? rgba(255, 255, 255) : { ...DARKEST_COLOR };
 }
 
-/** color_utils.cc:625 GetEndpointColorWithMinContrast. */
 export function getEndpointColorWithMinContrast(color: RgbaColor): RgbaColor {
   return isDarkChromium(color) ? { ...DARKEST_COLOR } : rgba(255, 255, 255);
 }
 
-/** color_utils.cc:436 SkColorToHSL. */
 export function skColorToHsl(color: RgbaColor): HslTint {
   const r = color.r / 255;
   const g = color.g / 255;
@@ -148,7 +126,6 @@ export function skColorToHsl(color: RgbaColor): HslTint {
   return { h, s, l };
 }
 
-/** color_utils.cc:44 calcHue. */
 function calcHue(temp1: number, temp2: number, hue: number): number {
   if (hue < 0) hue += 1;
   else if (hue > 1) hue -= 1;
@@ -159,7 +136,6 @@ function calcHue(temp1: number, temp2: number, hue: number): number {
   return clampRound(result * 255);
 }
 
-/** color_utils.cc:467 HSLToSkColor. */
 export function hslToSkColor(hsl: HslTint, alpha: number): RgbaColor {
   const { h, s, l } = hsl;
   if (!s) {
@@ -176,7 +152,30 @@ export function hslToSkColor(hsl: HslTint, alpha: number): RgbaColor {
   );
 }
 
-/** color_utils.cc:518 MakeHSLShiftValid: out-of-range channels become -1. */
+/* @invariant
+ * THE SIGNED-OUT AVATAR TAKES ITS STROKE FROM THE FRAME. SOURCE-READ at
+ * refs/tags/156.0.8065.0: the placeholder avatar is drawn in the profile's
+ * default_avatar_stroke_color (profile_avatar_icon_util.cc:923-955 through
+ * avatar_toolbar_button_state_manager.cc:197-201 and
+ * profile_colors_util.cc:41-53, :170-176 on kColorFrameActiveUnthemed), and
+ * GetDefaultAvatarColors (:223-246) takes kColorAvatarStroke, which is
+ * kColorToolbarButtonIcon (chrome_color_mixer.cc:385), when the frame is
+ * dark by IsDark (color_utils.cc:617-619 at the 0.211692036 midpoint) and
+ * otherwise the frame with its HSL lightness lowered by 0.5. MEASURED on
+ * window-idle-light-glassoff.chrome-156.0.8065.0.active.png: the glyph raw
+ * 10,82,200 on the #d3e3fd frame, the unit this port computes; on the dark
+ * capture 194,195,203, the icon tone (D-LIGHTAVATAR-156-1).
+ */
+export function avatarPlaceholderStroke(
+  frame: RgbaColor,
+  iconTone: RgbaColor,
+): RgbaColor {
+  if (isDarkChromium(frame)) return iconTone;
+  const hsl = skColorToHsl(frame);
+  hsl.l = Math.max(0, hsl.l - 0.5);
+  return hslToSkColor(hsl, frame.a);
+}
+
 export function makeHslShiftValid(tint: HslTint): HslTint {
   return {
     h: tint.h < 0 || tint.h > 1 ? -1 : tint.h,
@@ -185,15 +184,8 @@ export function makeHslShiftValid(tint: HslTint): HslTint {
   };
 }
 
-/** A tint that leaves the color unchanged. */
 export const HSL_NO_TINT: HslTint = { h: -1, s: -1, l: -1 };
 
-/**
- * color_utils.cc:534 HSLShift, Chrome's tint operation. NOT a plain HSL
- * replacement: hue is replaced, saturation is scaled around 0.5, and the
- * lightness shift happens in RGB space ("in the style of popular image
- * editors").
- */
 export function hslShift(color: RgbaColor, shift: HslTint): RgbaColor {
   const alpha = color.a;
   let working = { ...color };
@@ -223,10 +215,6 @@ export function hslShift(color: RgbaColor, shift: HslTint): RgbaColor {
   return rgba(clampRound(r), clampRound(g), clampRound(b), alpha);
 }
 
-/**
- * color_utils.cc:581 AlphaBlend(float): weights each side by its own alpha
- * times the blend factor (a foreground with alpha participates less).
- */
 export function alphaBlend(
   foreground: RgbaColor,
   background: RgbaColor,
@@ -248,7 +236,6 @@ export function alphaBlend(
   );
 }
 
-/** color_utils.cc:612 GetResultingPaintColor: composite fg over opaque bg. */
 export function getResultingPaintColor(
   foreground: RgbaColor,
   background: RgbaColor,
@@ -265,11 +252,6 @@ export interface BlendResult {
   color: RgbaColor;
 }
 
-/**
- * color_utils.cc:647 BlendForMinContrast: binary-search the smallest blend
- * of the target foreground into the default foreground that reaches
- * `targetContrastRatio` against `background`.
- */
 export function blendForMinContrast(
   defaultForeground: RgbaColor,
   background: RgbaColor,
@@ -306,7 +288,6 @@ export function blendForMinContrast(
   return { alpha: bestAlpha, color: bestColor };
 }
 
-/** browser_theme_pack.cc:605 IsColorGrayscale: channel range under 9. */
 export function isColorGrayscale(color: RgbaColor): boolean {
   const channels = [color.r, color.g, color.b];
   return Math.max(...channels) - Math.min(...channels) < 9;

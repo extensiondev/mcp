@@ -19,6 +19,10 @@ import {
   type ChromeThemeManifestTheme,
 } from "../lib/vendor/chrome-theme/chrome-theme-resolve";
 import { envelope } from "../lib/envelope";
+import {
+  discardedProperties,
+  discardedTints,
+} from "../lib/theme-manifest-discards";
 
 const COMMAND = "extension_theme_verify";
 
@@ -238,8 +242,16 @@ export async function handler(args: {
 
   const resolved = resolveChromeTheme(theme);
 
-  for (const { key, reason, section } of resolved.ignoredKeys) {
-    const slot = `${section ?? "colors"}.${key}`;
+  const discarded = [
+    ...resolved.ignoredKeys.map(({ key, reason }) => ({
+      slot: `colors.${key}`,
+      reason,
+    })),
+    ...discardedTints(declaredTints),
+    ...discardedProperties(declaredProps),
+  ];
+
+  for (const { slot, reason } of discarded) {
     findings.push({
       class: "D4",
       severity: "warn",
