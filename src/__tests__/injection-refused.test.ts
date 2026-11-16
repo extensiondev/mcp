@@ -6,6 +6,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 
 import { actFailure, attachedDevContract } from "./fixtures/engine-answers";
 import { writeEvalToken } from "./fixtures/ready-contract";
+import { nameRefusedInjection } from "../lib/injection-refusal";
 
 import type * as ExecModule from "../lib/exec";
 import type * as CdpPortModule from "../lib/cdp-port";
@@ -75,6 +76,25 @@ const calls = {
 };
 
 describe("a tab the browser refuses to script is named as such, never as a missing target", () => {
+  it("897: reads a long hostile document name in linear time", () => {
+    const refusal = () => ({ ok: false, status: "", hint: "", error: { name: "InjectionRefused", code: "E_COMMAND_UNSUPPORTED_FOR_TARGET", message: "refused" } });
+    const hostile = refusal();
+    const started = performance.now();
+
+    nameRefusedInjection(hostile, { browser: "firefox", url: `${".htm#".repeat(40_000)}\nx` });
+
+    expect(performance.now() - started).toBeLessThan(400);
+    expect(hostile.error.code).toBe("E_EXTENSION_PAGE_UNREACHABLE");
+
+    for (const [url, code] of [["options.html", "E_EXTENSION_PAGE_UNREACHABLE"], ["pages/popup.htm?a=1#b", "E_EXTENSION_PAGE_UNREACHABLE"], ["https://example.com/a.html", "E_PAGE_NOT_SCRIPTABLE"], ["*.html", "E_PAGE_NOT_SCRIPTABLE"], ["two words.html", "E_PAGE_NOT_SCRIPTABLE"]] as const) {
+      const frame = refusal();
+
+      nameRefusedInjection(frame, { browser: "firefox", url });
+
+      expect(frame.error.code, url).toBe(code);
+    }
+  });
+
   it.each(Object.keys(calls) as Array<keyof typeof calls>)(
     "%s answers a refused web page as not scriptable",
     async (tool) => {

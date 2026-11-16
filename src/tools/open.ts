@@ -10,6 +10,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import fs from "node:fs";
 import path from "node:path";
 
+import { cutAt } from "../lib/linear-text";
 import {
   CALL_TIMEOUT,
   SESSION_BROWSER,
@@ -107,7 +108,7 @@ async function pollForTarget(
   excludeIds?: ReadonlySet<string>,
 ): Promise<PolledTarget> {
   const deadline = Date.now() + budgetMs;
-  const wanted = url.replace(/#.*$/, "");
+  const wanted = cutAt(url, "#");
   let redirected: SettledTarget | null = null;
   let listed = false;
   let lastError: string | null = null;
@@ -200,7 +201,7 @@ async function browserRunsHeadless(
 }
 
 function sameDocument(tabUrl: string, destination: string): boolean {
-  const strip = (value: string) => value.replace(/#.*$/, "");
+  const strip = (value: string) => cutAt(value, "#");
 
   return Boolean(tabUrl) && strip(tabUrl) === strip(destination);
 }
@@ -379,7 +380,7 @@ export async function navigateToUrl(
       pageTargets.find(
         (t) =>
           isDisposableTab(String(t.url ?? ""), url, reuse, renderedTabTargets.has(String(t.id))) &&
-          (!avoid.has(String(t.url ?? "").replace(/#.*$/, "")) || renderedTabTargets.has(String(t.id))),
+          (!avoid.has(cutAt(String(t.url ?? ""), "#")) || renderedTabTargets.has(String(t.id))),
       );
     let navigatedTargetId: string | undefined;
     let previousUrl: string | undefined;
@@ -1922,7 +1923,16 @@ function readUnsupportedRefusal(raw: string): Record<string, any> | null {
 const GECKO_SIDEBAR_GESTURE =
   "Firefox opens a sidebar_action panel only from a user gesture (the toolbar button or View > Sidebar; Bugzilla 1392624), and the engine's open verb carries none, so it cannot open the panel";
 
-const GECKO_PANEL_CLOSED = /E_TARGET_NOT_FOUND|is not open|not open|no sidebar|no .*sidebar context/i;
+const GECKO_PANEL_CLOSED = /E_TARGET_NOT_FOUND|not open|no sidebar/i;
+
+export function geckoPanelClosed(signature: string): boolean {
+  if (GECKO_PANEL_CLOSED.test(signature)) return true;
+
+  const said = signature.toLowerCase();
+  const no = said.indexOf("no ");
+
+  return no !== -1 && said.includes("sidebar context", no + 3);
+}
 
 async function openGeckoSidebar(
   projectPath: string,
@@ -1967,7 +1977,7 @@ async function openGeckoSidebar(
     else {
       const signature = `${parsed?.error?.code ?? ""} ${parsed?.error?.message ?? ""}`;
 
-      if (!GECKO_PANEL_CLOSED.test(signature)) {
+      if (!geckoPanelClosed(signature)) {
         probeFailure = `${parsed?.error?.code ?? "no code"}: ${parsed?.error?.message ?? probe.slice(0, 200)}`;
       }
     }
@@ -1988,7 +1998,7 @@ async function openGeckoSidebar(
     if (renderedUrl) {
       const listed = await listBridgeTabs(projectPath, browser);
       renderedTabListed =
-        "tabs" in listed && listed.tabs.some((t) => t.url.replace(/#.*$/, "") === renderedUrl.replace(/#.*$/, ""));
+        "tabs" in listed && listed.tabs.some((t) => cutAt(t.url, "#") === cutAt(renderedUrl, "#"));
     }
 
     return envelope({

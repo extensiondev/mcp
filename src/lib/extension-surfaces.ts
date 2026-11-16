@@ -15,6 +15,7 @@ import { envelope } from "./envelope";
 import { manifestCandidates } from "./project-manifest";
 import { readyContractPath } from "./session-paths";
 import { geckoRecency } from "./target-pick";
+import { cutAt } from "./linear-text";
 
 export const EXTENSION_PAGE_CONTEXTS = [
   "popup",
@@ -37,11 +38,13 @@ export function surfaceForExtensionUrl(
   browser: string,
   url: string,
 ): { context: string; document: string } | null {
-  const bare = url
-    .replace(EXTENSION_ORIGIN, "")
-    .replace(/^[^/]*\//, (m) => (EXTENSION_ORIGIN.test(url) ? "" : m))
-    .replace(/^\.?\//, "")
-    .replace(/[?#].*$/, "");
+  const bare = cutAt(
+    url
+      .replace(EXTENSION_ORIGIN, "")
+      .replace(/^[^/]*\//, (m) => (EXTENSION_ORIGIN.test(url) ? "" : m))
+      .replace(/^\.?\//, ""),
+    "?#",
+  );
   if (!bare) return null;
 
   for (const context of EXTENSION_PAGE_CONTEXTS) {
@@ -64,7 +67,7 @@ export function geckoDocumentTab<T extends { url?: string }>(
   tabs: T[],
   document: string,
 ): T | undefined {
-  const wanted = document.replace(/^\.?\//, "").replace(/[?#].*$/, "");
+  const wanted = cutAt(document.replace(/^\.?\//, ""), "?#");
 
   return tabs.find((tab) => {
     const match = /^moz-extension:\/\/[^/]+\/([^?#]*)/.exec(String(tab.url ?? ""));
@@ -74,7 +77,7 @@ export function geckoDocumentTab<T extends { url?: string }>(
 }
 
 export function urlKey(url: string, wanted: string): string {
-  return wanted.includes("#") ? url : url.replace(/[?#].*$/, "");
+  return wanted.includes("#") ? url : cutAt(url, "?#");
 }
 
 export function geckoExtensionTabsByUrl<T extends { url?: string }>(tabs: T[], url: string): T[] {
@@ -147,7 +150,7 @@ export function namesExtensionDocument(
 ): boolean {
   if (isExtensionUrl(url)) return true;
 
-  const bare = url.replace(/^\.?\//, "").replace(/[?#].*$/, "");
+  const bare = cutAt(url.replace(/^\.?\//, ""), "?#");
 
   return surfaceForExtensionUrl(projectPath, browser, url)?.document === bare;
 }
@@ -160,7 +163,7 @@ export function bareExtensionDocument(projectPath: string, browser: string, url:
   if (!url || /^[a-z][a-z0-9+.-]*:/i.test(url)) return null;
 
   const doc = url.replace(/^\.?\//, "");
-  const file = doc.replace(/[?#].*$/, "");
+  const file = cutAt(doc, "?#");
   if (!file || file.endsWith("/")) return null;
   if (namesExtensionDocument(projectPath, browser, url)) return doc;
 

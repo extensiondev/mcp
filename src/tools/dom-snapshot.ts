@@ -65,6 +65,7 @@ import { listBridgeTabs, matchTabsByUrl } from "../lib/bridge-tabs";
 import { lacksScriptingOnMv3, readGeckoTabWithoutScripting } from "../lib/gecko-no-scripting";
 import { ELEMENT_LIST_CAP, ELEMENT_LIST_FUNCTION, ELEMENTS_INCLUDE_NOTE } from "../lib/element-list";
 import { readElementsOn, resolveObserveTarget, snapshotCallFor } from "../lib/observe-surface";
+import { cutAt } from "../lib/linear-text";
 
 const RDP_ACTOR_NOTE =
   "actor is an RDP tab descriptor actor id, NOT a chrome.tabs id: do not pass it as `tab`. " +
@@ -127,7 +128,7 @@ export const schema = {
 const GECKO_EXTENSION_URL = /^moz-extension:\/\//;
 
 const sameDocumentUrl = (a: unknown, b: string): boolean =>
-  String(a ?? "").replace(/[?#].*$/, "") === b.replace(/[?#].*$/, "");
+  cutAt(String(a ?? ""), "?#") === cutAt(b, "?#");
 
 export function wantsElements(include: string[] | undefined): boolean {
   return include?.includes("elements") === true;
@@ -768,7 +769,7 @@ async function snapshot(
           : null;
     const resolvedUrl = typeof resolvedTarget.url === "string" ? resolvedTarget.url : null;
 
-    if (reported && resolvedUrl && reported.replace(/#.*$/, "") !== resolvedUrl.replace(/#.*$/, "")) {
+    if (reported && resolvedUrl && cutAt(reported, "#") !== cutAt(resolvedUrl, "#")) {
       addWarning(
         parsed,
         `The snapshot reports ${reported} while the target this server resolved was ${resolvedUrl}; the tab navigated between the two reads, and the values describe what the snapshot reports.`,

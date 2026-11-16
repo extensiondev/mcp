@@ -15,6 +15,7 @@ import { envelope, isEnvelope } from "./envelope";
 import { handUploadSentence, platformVersionNote } from "./hand-upload";
 import { itemPackageUrl, packageAddressMode, packageFileOf, packagePathOf, type PackageScope } from "./package-address";
 import { isRow, text } from "./row";
+import { dropTrailing } from "./linear-text";
 
 import type { ProjectRef } from "./registry";
 
@@ -190,7 +191,7 @@ export function uploadedStepFailedStep(stores: string[], step: string, trackUrl:
 const RUN_STEP_FAILURE = /^([a-z]+): The step "([^"]+)" failed(?:: ([\s\S]*))?$/;
 
 export function submitFailedStep(failures: string[], trackUrl: string): NextStep {
-  const lines = failures.map((line) => line.trim().replace(/[.\s]+$/, ""));
+  const lines = failures.map((line) => dropTrailing(line.trim(), ".", { whitespace: true }));
   const stopped = lines.map((line) => RUN_STEP_FAILURE.exec(line)).filter((match) => match !== null);
   const answered = lines.filter((line) => !RUN_STEP_FAILURE.test(line));
   const stores = answered.map((line) => line.split(":")[0]?.trim() ?? "").filter(Boolean);
@@ -391,7 +392,7 @@ export function storeSwitchSentences(store: string, settingsUrl: string): string
  * where a workspace owner reconnects it once for every covered project.
  */
 export function failedCheckSentence(reason: string, store = "chrome", source?: ConnectionSource | null): string {
-  const said = reason.replace(/[.\s]+$/, "") || "no reason was recorded";
+  const said = dropTrailing(reason, ".", { whitespace: true }) || "no reason was recorded";
   const name = (STORE_NAMES[store] ?? store).replace(/^the /, "");
 
   return source === "workspace"

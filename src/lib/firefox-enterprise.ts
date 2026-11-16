@@ -12,6 +12,7 @@ import path from "node:path";
 import { engineManifestView } from "./engine-manifest-view";
 import { engineProjectRoot } from "./session-paths";
 import { isRow, text } from "./row";
+import { dropTrailing } from "./linear-text";
 
 type Row = Record<string, unknown>;
 
@@ -159,7 +160,7 @@ export function firefoxAgreementCheck(read: AgreementRead | null, now = Date.now
         };
   }
 
-  const why = read?.detail ? `: ${read.detail.replace(/[.\s]+$/, "")}` : " (the submit route's dry run did not answer it)";
+  const why = read?.detail ? `: ${dropTrailing(read.detail, ".", { whitespace: true })}` : " (the submit route's dry run did not answer it)";
   const unread = `whether the connected AMO account accepted the updated Firefox Add-on Distribution Agreement could not be read${why}`;
 
   return {

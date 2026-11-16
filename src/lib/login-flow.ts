@@ -24,6 +24,7 @@ import {
   type BatchCapability,
 } from "./project-batch";
 import { consoleBase, consoleProjectUrl } from "./console-urls";
+import { dropTrailing } from "./linear-text";
 
 const DEFAULT_API = PROD_ORIGINS.www;
 
@@ -56,9 +57,7 @@ export function tokenTtlNote(
 type FetchImpl = typeof fetch;
 
 export function resolveApiBase(api?: string): string {
-  return String(
-    api || requestCredential()?.api || process.env.EXTENSION_DEV_API_URL || DEFAULT_API,
-  ).replace(/\/+$/, "");
+  return dropTrailing(String(api || requestCredential()?.api || process.env.EXTENSION_DEV_API_URL || DEFAULT_API), "/");
 }
 
 function isExtensionDevHost(hostname: string): boolean {
@@ -101,7 +100,7 @@ export function safeApiBase(
     };
   }
 
-  return { ok: true, base: `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, "") };
+  return { ok: true, base: dropTrailing(`${parsed.origin}${parsed.pathname}`, "/") };
 }
 
 export interface LoginConfig {
@@ -139,7 +138,7 @@ export async function fetchLoginConfig(
     deviceCodeUrl: String(data.deviceCodeUrl || "/api/cli/device/code"),
     deviceTokenUrl: String(data.deviceTokenUrl || "/api/cli/device/token"),
     verificationUri: String(
-      data.verificationUri || `${apiBase.replace(/\/+$/, "")}/device`,
+      data.verificationUri || `${dropTrailing(apiBase, "/")}/device`,
     ),
     batch: readBatchCapability(data),
   };

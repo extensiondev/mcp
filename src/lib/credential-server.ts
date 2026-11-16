@@ -9,6 +9,7 @@
 import { DEV_LOCALHOST_ORIGINS, PROD_ORIGINS } from "@extension.dev/urls/origins";
 
 import { requestCredential } from "./credential-scope";
+import { dropTrailing } from "./linear-text";
 
 const LOCAL_WWW = new URL(DEV_LOCALHOST_ORIGINS.www);
 const LOCAL_ALIAS_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
@@ -38,12 +39,12 @@ function canonicalOrigin(parsed: URL): string {
 }
 
 function normalize(raw: string): string {
-  const trimmed = raw.trim().replace(/\/+$/, "");
+  const trimmed = dropTrailing(raw.trim(), "/");
 
   try {
     const parsed = new URL(trimmed);
 
-    return `${canonicalOrigin(parsed)}${parsed.pathname}`.replace(/\/+$/, "").toLowerCase();
+    return dropTrailing(`${canonicalOrigin(parsed)}${parsed.pathname}`, "/").toLowerCase();
   } catch {
     return trimmed.toLowerCase();
   }

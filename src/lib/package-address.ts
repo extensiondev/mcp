@@ -10,6 +10,7 @@ import { userlandHostMode } from "@extension.dev/urls/userland";
 
 import { mcpOrigins } from "./origins";
 import { userlandProjectUrl, type ProjectRef } from "./registry";
+import { dropTrailing } from "./linear-text";
 
 type Row = Record<string, unknown>;
 
@@ -75,7 +76,7 @@ export function packageFileOf(url: unknown): PackageFile | null {
   if (!match) return null;
 
   const sha = match[1] ?? "";
-  const file = (match[2] ?? "").replace(/\/+$/, "");
+  const file = dropTrailing(match[2] ?? "", "/");
   if (!sha || !file) return null;
 
   const name = file.split("/").pop() ?? "";

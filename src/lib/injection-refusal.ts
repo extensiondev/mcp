@@ -11,7 +11,7 @@ const REFUSED_INJECTION =
 
 const EXTENSION_PAGE = /\b(?:moz|chrome|safari-web|ms-browser)-extension:\/\//i;
 
-const RELATIVE_DOCUMENT = /^(?![a-z][a-z0-9+.-]*:)(?!\*)[^\s]*\.html?(?:[?#].*)?$/i;
+const RELATIVE_DOCUMENT = /^(?![a-z][a-z0-9+.-]*:)(?!\*)[^\s]*\.html?(?:[?#][\s\S]*)?$/i;
 
 export interface InjectionTarget {
   browser?: string;

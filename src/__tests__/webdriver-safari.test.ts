@@ -17,6 +17,10 @@ import * as evalTool from "../tools/eval";
 import * as logsTool from "../tools/logs";
 import * as openTool from "../tools/open";
 import * as waitTool from "../tools/wait";
+import { cutAt, dropTrailing } from "../lib/linear-text";
+import { resolveApiBase } from "../lib/login-flow";
+import { failedCheckSentence } from "../lib/store-connection";
+import { geckoPanelClosed } from "../tools/open";
 
 import type * as ActModule from "../lib/act";
 
@@ -215,6 +219,29 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
 
     expect(sameDocument("https://a.test/x", "https://a.test/y")).toBe(false);
     expect(sameDocument(null, "https://a.test/")).toBe(false);
+  });
+
+  it("897: reads a long hostile address in linear time, in every helper that cuts or trims one", () => {
+    const size = 100_000;
+    const started = performance.now();
+
+    expect(sameDocument(`https://a.test/x${"#".repeat(size)}\n`, "https://a.test/x")).toBe(true);
+    expect(sameDocument(`${"/".repeat(size)}x`, "https://a.test/x")).toBe(false);
+    expect(cutAt(`a${"?#".repeat(size)}\nb`, "?#")).toBe("a");
+    expect(dropTrailing(`${"/".repeat(size)}x`, "/")).toHaveLength(size + 1);
+    expect(dropTrailing(`${"\t".repeat(size)}x`, ".", { whitespace: true })).toHaveLength(size + 1);
+    expect(resolveApiBase(`https://a.test${"/".repeat(size)}x${"/".repeat(size)}`)).toBe(`https://a.test${"/".repeat(size)}x`);
+    expect(failedCheckSentence(`${". ".repeat(size)}x`)).toContain("x");
+    expect(geckoPanelClosed("no ".repeat(size))).toBe(false);
+    expect(performance.now() - started).toBeLessThan(400);
+
+    expect(cutAt("https://a.test/x?q=1#h", "#")).toBe("https://a.test/x?q=1");
+    expect(cutAt("https://a.test/x", "?#")).toBe("https://a.test/x");
+    expect(dropTrailing("https://a.test///", "/")).toBe("https://a.test");
+    expect(dropTrailing("It failed. . \n", ".", { whitespace: true })).toBe("It failed");
+    expect(geckoPanelClosed("E_X there is no extension sidebar context here")).toBe(true);
+    expect(geckoPanelClosed("E_X the sidebar is not open")).toBe(true);
+    expect(geckoPanelClosed("E_X sidebar context, and no more")).toBe(false);
   });
 
   it("evaluates in the page over the recorded session", async () => {

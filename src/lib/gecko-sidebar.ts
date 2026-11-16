@@ -11,13 +11,14 @@ import { geckoAddonId } from "./gecko-addon";
 import { rdpPortMissingReason, resolveRdpPort } from "./cdp-port";
 import { envelope } from "./envelope";
 import { rdpEvaluateInParentProcess } from "./rdp";
+import { cutAt } from "./linear-text";
 
 export type GeckoAddonIdentity = { addonId: string | null; host: string | null };
 
 export async function geckoAddonIdentity(projectPath: string, browser: string, timeout?: number): Promise<GeckoAddonIdentity | null> {
   const addonId = geckoAddonId(projectPath, browser);
   const base = addonId ? null : await resolveBridgeBaseUrl(projectPath, browser, timeout);
-  const host = base ? base.replace(/^[a-z-]+:\/\//, "").replace(/\/.*$/, "") : null;
+  const host = base ? cutAt(base.replace(/^[a-z-]+:\/\//, ""), "/") : null;
 
   return addonId || host ? { addonId, host } : null;
 }

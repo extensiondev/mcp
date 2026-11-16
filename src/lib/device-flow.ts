@@ -9,6 +9,7 @@
 import { requestCredential } from "./credential-scope";
 import { persistTokenResponse } from "./login-flow";
 import { bearerFetch } from "./platform-fetch";
+import { dropTrailing } from "./linear-text";
 
 import type { StoredCredentials } from "./credentials";
 
@@ -120,7 +121,7 @@ export async function requestDeviceCode(args: {
     deviceCode,
     userCode,
     verificationUri: String(
-      data.verification_uri || `${String(args.apiBase ?? "https://www.extension.dev").replace(/\/+$/, "")}/device`,
+      data.verification_uri || `${dropTrailing(String(args.apiBase ?? "https://www.extension.dev"), "/")}/device`,
     ),
     verificationUriComplete: String(
       data.verification_uri_complete || data.verification_uri || "",

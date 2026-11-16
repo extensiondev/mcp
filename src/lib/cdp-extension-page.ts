@@ -12,6 +12,7 @@ import { CDPClient } from "./cdp";
 import { diagnosePausedTarget, type PausedDiagnosis } from "./cdp-paused";
 import { extensionIsolatedContexts, type ExecutionContextDescription } from "./cdp-isolated-world";
 import { listDocumentTargets, type PageTarget } from "./cdp-targets";
+import { cutAt } from "./linear-text";
 
 const EVALUATE_DEFAULTS_WITHOUT_REPL_MODE = {
   returnByValue: true,
@@ -64,7 +65,7 @@ async function liveIsolatedWorld(
 }
 
 function stripHash(url: string): string {
-  return url.replace(/#.*$/, "");
+  return cutAt(url, "#");
 }
 
 export function matchExtensionPageTargets(

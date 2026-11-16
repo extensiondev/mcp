@@ -8,6 +8,8 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 
+import { dropTrailing } from "./linear-text";
+
 export interface ScopedProject {
   workspace: string;
   project: string;
@@ -48,7 +50,7 @@ export function normalizeRequestCredential(credential: RequestCredential): Reque
 
   return {
     token: String(credential.token ?? "").trim(),
-    api: String(credential.api ?? "").trim().replace(/\/+$/, ""),
+    api: dropTrailing(String(credential.api ?? "").trim(), "/"),
     projects,
     expiresAt: Number.isFinite(expiresAt) && expiresAt > 0 ? expiresAt : null,
     project: selected ? `${selected.workspace}/${selected.project}` : null,

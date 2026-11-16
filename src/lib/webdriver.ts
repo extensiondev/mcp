@@ -10,6 +10,7 @@ import fs from "node:fs";
 
 import { matchPatternCovers } from "./match-patterns";
 import { readyContractPath } from "./session-paths";
+import { cutAt, dropTrailing } from "./linear-text";
 
 import type { ReadyContract } from "./types";
 
@@ -285,7 +286,7 @@ export function sameDocument(current: string | null, wanted: string): boolean {
   if (!current) return false;
 
   const strip = (u: string) =>
-    (wanted.includes("#") ? u : u.replace(/[#?].*$/, "")).replace(/\/+$/, "");
+    dropTrailing(wanted.includes("#") ? u : cutAt(u, "#?"), "/");
 
   return strip(current) === strip(wanted);
 }

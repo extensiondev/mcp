@@ -11,13 +11,14 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { isLocalOrigin, resolveOrigins, type Origins } from "@extension.dev/urls/origins";
 
 import { requestCredential } from "./credential-scope";
+import { dropTrailing } from "./linear-text";
 
 const LOCAL_REGISTRY_ROUTE = "/api/local-registry";
 
 const callApi = new AsyncLocalStorage<string>();
 
 function trimmed(value: unknown): string {
-  return String(value ?? "").trim().replace(/\/+$/, "");
+  return dropTrailing(String(value ?? "").trim(), "/");
 }
 
 export function withCallApi<T>(api: unknown, run: () => T): T {
@@ -64,5 +65,5 @@ export function mcpOrigins(apiHint?: string): Origins {
 
   if (registry || !www || !isLocalOrigin(www)) return origins;
 
-  return { ...origins, registry: `${origins.www.replace(/\/+$/, "")}${LOCAL_REGISTRY_ROUTE}` };
+  return { ...origins, registry: `${dropTrailing(origins.www, "/")}${LOCAL_REGISTRY_ROUTE}` };
 }

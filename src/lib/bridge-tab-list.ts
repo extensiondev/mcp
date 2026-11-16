@@ -10,6 +10,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import { runActVerb } from "./act";
 import { WEBKIT_FAMILY } from "./browser-family";
+import { cutAt } from "./linear-text";
 
 export interface BridgeTab {
   tabId: number | null;
@@ -88,7 +89,7 @@ export async function pollForBridgeTab(
   budgetMs: number,
 ): Promise<BridgeTab | null | { unreadable: string }> {
   const deadline = Date.now() + budgetMs;
-  const wanted = url.replace(/#.*$/, "");
+  const wanted = cutAt(url, "#");
   let listedOnce = false;
   let lastError: string | null = null;
 
@@ -156,7 +157,7 @@ export async function pollForBridgeTabById(
   unreadable?: string;
 }> {
   const deadline = Date.now() + policy.budgetMs;
-  const wanted = url.replace(/#.*$/, "");
+  const wanted = cutAt(url, "#");
   let seen: BridgeTab | null = null;
   let listedOnce = false;
   let lastError: string | null = null;
