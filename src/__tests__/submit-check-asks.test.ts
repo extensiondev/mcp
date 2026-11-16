@@ -15,7 +15,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { actionFingerprint } from "../lib/approval-gate";
 import { runAskingOnly } from "../lib/ask-only";
 import { projectApiSend, type ProjectApi } from "../lib/project-api";
-import { SUBMIT_CHECK_ACTIONS, SUBMIT_CONNECT_ACTIONS, SUBMIT_READ_ACTIONS, SUBMIT_SETTING_ACTIONS, SUBMIT_SHIP_ACTIONS } from "../lib/submit-action-safety";
+import { SUBMIT_CHECK_ACTIONS, SUBMIT_CONNECT_ACTIONS, SUBMIT_READ_ACTIONS, SUBMIT_SETTING_ACTIONS, SUBMIT_SHIP_ACTIONS, submitCheckRefusal } from "../lib/submit-action-safety";
 import { schema as checkSchema } from "../tools/submit-check";
 import { SUBMIT_ACTIONS, schema as submitSchema } from "../tools/submit";
 import { usePlatformWorld, WORLD_API, WORLD_PROJECT_ID } from "./fixtures/platform-world";
@@ -112,6 +112,34 @@ describe("extension_submit_check asks for the approval of every store act and ex
     }
 
     expect(sent()).toEqual([]);
+  });
+
+  it("893: lets a write that names a real submission mode through to the lane, which asks the owner when it takes the store out of its dry run, and still refuses the way into a dry run", () => {
+    const check = (store: string, storeSettings: Record<string, unknown>) => submitCheckRefusal({ action: "configure-store", store, storeSettings });
+
+    for (const [store, submissionMode] of [
+      ["firefox", "unlisted"],
+      ["chrome", "draft"],
+      ["chrome", "draft-until-public"],
+      ["edge", "draft"],
+      ["safari", "Draft"],
+    ] as const) {
+      expect(check(store, { submissionMode }), `${store} ${submissionMode}`).toBeNull();
+    }
+
+    for (const [store, storeSettings] of [
+      ["firefox", { submissionMode: "dry-run" }],
+      ["firefox", { submissionMode: " Dry-Run " }],
+      ["firefox", { releaseChannel: "unlisted" }],
+      ["chrome", { enabled: true }],
+      ["edge", {}],
+    ] as const) {
+      const reason = check(store, storeSettings);
+
+      expect(reason, JSON.stringify(storeSettings)).toContain(`This ${store} settings change is a plain write`);
+      expect(reason).toContain("only a submission mode that takes the store out of its dry run, or that sends the next upload to a review that publishes it, asks for one");
+      expect(reason).toContain("extension_submit_check cannot ask for it");
+    }
   });
 
   it("never sends a write or an approvalId during a check call, even from a path that did not ask first", async () => {

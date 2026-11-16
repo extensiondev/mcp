@@ -26,7 +26,11 @@ export type ApprovalVerdict = "plain" | "approval" | "console";
  * and safari draft stay plain; safari review sits in that table under
  * ledger 324, because one version approval then also covers the publish act
  * that sends the TestFlight build to Apple's App Review, which an owner
- * cannot take back once Apple approves), a public
+ * cannot take back once Apple approves; and, since ledger 888, any write
+ * that takes a store out of its dry run, whatever real mode it lands on,
+ * because a dry run is the one mode under which nothing reaches the store
+ * and leaving it is what makes the next upload real, while the way into a
+ * dry run stays plain), a public
  * channel audience (asked at creation or set on an existing channel) and a
  * public project visibility, which opens every build the project ever made,
  * all keep the page; a channel delete is a person's act in the console, like
@@ -109,6 +113,7 @@ export const PUBLIC_SUBMISSION_MODE_CONSEQUENCES: Record<string, string> = {
 export interface PolicyWrite {
   store?: string;
   submissionMode?: string;
+  submissionModeBefore?: string;
   releaseChannel?: string;
   audience?: string;
   visibility?: string;
@@ -135,6 +140,18 @@ export function publicSubmissionMode(write: PolicyWrite): boolean {
   return publicModesOf(write.store).includes(lower(write.submissionMode)) || lower(write.releaseChannel) === "listed";
 }
 
+export const DRY_RUN_MODE = "dry-run";
+
+export function namesRealMode(write: PolicyWrite): boolean {
+  const after = lower(write.submissionMode);
+
+  return after !== "" && after !== DRY_RUN_MODE;
+}
+
+export function leavesDryRun(write: PolicyWrite): boolean {
+  return lower(write.submissionModeBefore) === DRY_RUN_MODE && namesRealMode(write);
+}
+
 export function publicSubmissionModeConsequence(write: PolicyWrite): string {
   return PUBLIC_SUBMISSION_MODE_CONSEQUENCES[`${lower(write.store)}.${modeOf(write)}`] ?? "";
 }
@@ -148,7 +165,7 @@ export function publicProjectVisibility(write: PolicyWrite): boolean {
 }
 
 export function approvalVerdict(act: PolicyAct, write: PolicyWrite = {}): ApprovalVerdict {
-  if (act === "extension_settings.store" && publicSubmissionMode(write)) return APPROVAL_POLICY["extension_settings.store-public-mode"];
+  if (act === "extension_settings.store" && (publicSubmissionMode(write) || leavesDryRun(write))) return APPROVAL_POLICY["extension_settings.store-public-mode"];
 
   if ((act === "extension_builds.create-channel" || act === "extension_builds.configure-channel" || act === "extension_settings.project") && publicChannelAudience(write)) {
     return APPROVAL_POLICY["extension_builds.channel-audience"];

@@ -19,7 +19,7 @@ export { VERSION_ACTION, lineId, linesSentence, readLines, retryStores, storesIn
 export type { ApprovalLineRow } from "./lib/approval-lines";
 export { APPROVAL_REQUIRED_STATUS, approvalRoundTrip, approvalUrlFor } from "./lib/approval-outcome";
 export { pageTraceSentence, readPageTrace } from "./lib/approval-page-trace";
-export { approvalVerdict, publicSubmissionModeConsequence, verdictOfAction } from "./lib/approval-policy";
+export { approvalVerdict, leavesDryRun, publicSubmissionModeConsequence, verdictOfAction } from "./lib/approval-policy";
 export type { ApprovalVerdict, PolicyWrite } from "./lib/approval-policy";
 export type { ApprovalState, HeldBatch, MintedApproval, PendingCreate, RememberApprovalArgs, StandingApprovalArgs } from "./lib/approval-state";
 export { approvalSubjectPhrase, subjectOf } from "./lib/approval-subject";
@@ -114,7 +114,7 @@ export { STORE_SCREENSHOT_SPECS, clearsStoreRow, isListingStoreName, sizeLabel, 
 export { CREDENTIAL_LABELS, SAFARI_RELEASE_LINE_SENTENCE, STORE_SETTINGS_ACTION, STORE_SETTINGS_STORES, SUBMISSION_MODE_IDS, isStoreSettingsStore, readStoreSettingsChange, requestedLines, storeSettingsDigest } from "./lib/store-settings";
 export type { StoreSettingsStore } from "./lib/store-settings";
 export { STORE_LABELS as STORE_TEXT_LIMIT_LABELS } from "./lib/store-text-limits";
-export { SUBMIT_ACTION_SAFETY, SUBMIT_CHECK_ACTIONS, SUBMIT_CHECK_TOOL, answeredAs, checkRefused, plainListingAsk, submitCheckRefused } from "./lib/submit-action-safety";
+export { SUBMIT_ACTION_SAFETY, SUBMIT_CHECK_ACTIONS, SUBMIT_CHECK_TOOL, answeredAs, checkRefused, plainListingAsk, plainSettingAsk, submitCheckRefused } from "./lib/submit-action-safety";
 export { factOf, staleSentence } from "./lib/submit-facts";
 export type { DraftFacts, GalleryFacts, IconOrigin, IconPick, IconStale, LocalIcon, ProjectFacts, SafariDescriptionRead, StoreMdRead, SubmitFacts } from "./lib/submit-facts";
 export { trackFields, trackUrl } from "./lib/track-url";

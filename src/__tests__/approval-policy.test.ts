@@ -55,6 +55,21 @@ describe("the approval policy table holds Cezar's ruling of 2026-10-23 (ledger 1
     expect(Object.keys(APPROVAL_POLICY).sort()).toEqual(RULED_TABLE.map(([act]) => act).sort());
   });
 
+  it("keeps a write that takes a store out of its dry run on the approve page, whatever real mode it lands on, while the way in and a move among drafts stay plain (ledger 888)", () => {
+    const move = (name: string, submissionModeBefore: string, submissionMode: string) => approvalVerdict("extension_settings.store", { store: name, submissionModeBefore, submissionMode });
+
+    expect(move("firefox", "dry-run", "unlisted")).toBe("approval");
+    expect(move("chrome", "dry-run", "draft")).toBe("approval");
+    expect(move("chrome", "Dry-Run", "draft-until-public")).toBe("approval");
+    expect(move("edge", "dry-run", "draft")).toBe("approval");
+    expect(move("safari", "dry-run", "draft")).toBe("approval");
+    expect(move("firefox", "dry-run", "dry-run")).toBe("plain");
+    expect(move("firefox", "unlisted", "dry-run")).toBe("plain");
+    expect(move("firefox", "listed", "dry-run")).toBe("plain");
+    expect(move("chrome", "draft", "draft-until-public")).toBe("plain");
+    expect(move("firefox", "listed", "unlisted")).toBe("plain");
+  });
+
   it("keeps every submission mode that sends the next upload to a review that publishes it on the approve page, per store, while the other modes are plain (ledger 328)", () => {
     const store = (name: string, submissionMode?: string) => approvalVerdict("extension_settings.store", { store: name, submissionMode });
 
