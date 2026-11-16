@@ -40,8 +40,9 @@ const findDeclaringRoot = (): string | null => {
     const modules = path.join(dir, ".gitmodules");
 
     if (
-      fs.existsSync(modules) &&
-      fs.readFileSync(modules, "utf8").includes(`path = ${UPSTREAM_SUBMODULE}`)
+      fs.existsSync(path.join(dir, UPSTREAM_SUBMODULE, "package.json")) ||
+      (fs.existsSync(modules) &&
+        fs.readFileSync(modules, "utf8").includes(`path = ${UPSTREAM_SUBMODULE}`))
     ) {
       return dir;
     }
