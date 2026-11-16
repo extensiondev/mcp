@@ -262,6 +262,8 @@ describe("the vendored theme files name a folder the superproject still holds", 
     "sync-chrome-theme-vendor.mjs",
   );
   const SYNCED_FROM = /Synced verbatim from (packages\/[^/\s]+)\//;
+  const SYNCED_SOURCE = /Synced verbatim from (packages\/\S+\.ts)\n/;
+  const HEADER_END = "then re-run the sync script.\n\n";
 
   it("reads a synced-from folder that .gitmodules declares, in every file and in the script", (ctx) => {
     if (!monorepoRoot) return ctx.skip(NO_SUPERPROJECT);
@@ -291,6 +293,66 @@ describe("the vendored theme files name a folder the superproject still holds", 
       expect(
         declared.includes(`path = ${folder}\n`),
         `${path.basename(carrier)} names ${folder}, which the superproject's .gitmodules does not declare. If the folder moved, move the sync script and rerun it.`,
+      ).toBe(true);
+    }
+  });
+
+  it("holds each vendored file equal to its header plus the emulator source", (ctx) => {
+    if (!monorepoRoot) return ctx.skip(NO_SUPERPROJECT);
+
+    const script = fs.readFileSync(SYNC_SCRIPT, "utf8");
+    const written = (name: string) => script.replace(/\$\{file\}/g, name);
+    const copies = fs
+      .readdirSync(VENDORED_THEME_DIR)
+      .filter((name) => name.endsWith(".ts"))
+      .map((name) => {
+        const copy = fs.readFileSync(
+          path.join(VENDORED_THEME_DIR, name),
+          "utf8",
+        );
+        const relative = copy.match(SYNCED_SOURCE)?.[1] ?? "";
+
+        return { name, copy, relative };
+      });
+
+    expect(copies.length).toBeGreaterThan(0);
+
+    for (const { name, relative } of copies) {
+      expect(
+        path.posix.basename(relative),
+        `${name} names no synced-from file of its own name`,
+      ).toBe(name);
+    }
+
+    const absent = copies
+      .map(({ relative }) => relative)
+      .filter((relative) => !fs.existsSync(path.join(monorepoRoot, relative)));
+
+    if (absent.length) {
+      return ctx.skip(
+        `${absent.join(", ")} is not in this checkout (the emulator submodule is not initialized), so the vendored theme copy is not compared here`,
+      );
+    }
+
+    for (const { name, copy, relative } of copies) {
+      const split = copy.indexOf(HEADER_END) + HEADER_END.length;
+      const source = fs.readFileSync(path.join(monorepoRoot, relative), "utf8");
+
+      expect(
+        copy.includes(HEADER_END),
+        `${name} carries no sync header`,
+      ).toBe(true);
+
+      for (const line of copy.slice(0, split).split("\n").filter(Boolean)) {
+        expect(
+          script.includes(`"${line}"`) || written(name).includes(`\`${line}\``),
+          `${name} opens with "${line}", which the sync script does not write`,
+        ).toBe(true);
+      }
+
+      expect(
+        copy.slice(split) === source,
+        `${name} differs from ${relative}. Edit the emulator source, then run node scripts/sync-chrome-theme-vendor.mjs from public/mcp; a hand edit here is lost at the next sync.`,
       ).toBe(true);
     }
   });
