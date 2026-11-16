@@ -183,6 +183,16 @@ describe("the server honours the options", () => {
     }
   });
 
+  it("answers the check tool in no-ship mode, since it executes nothing, while the same act through extension_submit stays refused", async () => {
+    const client = await connected({ features: [...FEATURE_GROUPS], noShip: true });
+    const act = { action: "publish", browsers: ["chrome"] };
+    const checked = await call(client, "extension_submit_check", act);
+
+    expect(checked.body.command).toBe("extension_submit_check");
+    expect(checked.body.error?.code).not.toBe("E_TOOL_DISABLED");
+    expect((await call(client, "extension_submit", act)).body.error?.code).toBe("E_TOOL_DISABLED");
+  });
+
   it("lets the non-shipping calls of a guarded tool through no-ship mode", () => {
     const noShip = { features: [...FEATURE_GROUPS], noShip: true };
 

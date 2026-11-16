@@ -12,7 +12,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { bindApprovalLogin } from "./approval-login";
-import { runAskingOnly } from "./ask-only";
+import { askingOnly, runAskingOnly } from "./ask-only";
 import { answerOnceDecided } from "./approval-wait";
 import { bindApprovalProject } from "./approval-record";
 import { withAnsweredProject, withApprovalLogin } from "./approval-scope";
@@ -288,7 +288,7 @@ export function createToolSurface(setup: ToolHandlerOptions): {
       (args ?? {}) as Record<string, unknown>,
     );
     const disabled =
-      disabledToolEnvelope(name, aliasedArgs, options) ?? setup.refuse?.(name, aliasedArgs) ?? null;
+      disabledToolEnvelope(name, aliasedArgs, askingOnly() ? { ...options, noShip: false } : options) ?? setup.refuse?.(name, aliasedArgs) ?? null;
 
     if (disabled) return refused(disabled);
 
