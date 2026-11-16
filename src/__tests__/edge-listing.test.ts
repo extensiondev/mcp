@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { edgeListingUrlOf, repairEdgeStoreUrl } from "../lib/edge-listing";
-import { storeConfigView } from "../lib/platform-store-records";
+import { historyEntry, storeConfigView } from "../lib/platform-store-records";
 
 const CRX = "beinobilkpkoinfeiljeplnjollkgmbp";
 const LISTING = `https://microsoftedge.microsoft.com/addons/detail/${CRX}`;
@@ -22,5 +22,14 @@ describe("Edge listing links", () => {
     expect(storeConfigView({ storeUrl: "https://chromewebstore.google.com/detail/x" }, "chrome")?.storeUrl).toBe(
       "https://chromewebstore.google.com/detail/x",
     );
+  });
+
+  it("859: a submission read by id says whether its upload was signed, a boolean and the record's sentence, nothing else under that name", () => {
+    const sentence = "This upload was signed with the project's Verified uploads key.";
+    const row = { id: "c3151505", status: "draft", version: "0.1.0" };
+
+    expect(historyEntry({ ...row, uploadSigned: true, uploadSignedSentence: sentence })).toMatchObject({ uploadSigned: true, uploadSignedSentence: sentence });
+    expect(historyEntry({ ...row, uploadSigned: false, uploadSignedSentence: sentence })).toEqual({ ...row, uploadSigned: false });
+    expect(historyEntry({ ...row, uploadSigned: "a-key", uploadSignedSentence: sentence })).toEqual(row);
   });
 });

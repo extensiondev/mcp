@@ -43,6 +43,8 @@ export interface StoreHistoryEntry {
   statusReadAt?: string;
   statusWord?: string;
   amoChannel?: "listed" | "unlisted";
+  uploadSigned?: boolean;
+  uploadSignedSentence?: string;
 }
 
 export type PlatformStoreRecords =
@@ -151,6 +153,13 @@ export function historyEntry(raw: Row): StoreHistoryEntry {
   if (statusReadAt) entry.statusReadAt = statusReadAt;
   if (statusWord) entry.statusWord = statusWord;
   if (amoChannel) entry.amoChannel = amoChannel;
+
+  if (typeof raw.uploadSigned === "boolean") {
+    const sentence = raw.uploadSigned ? str(raw.uploadSignedSentence) : "";
+
+    entry.uploadSigned = raw.uploadSigned;
+    if (sentence) entry.uploadSignedSentence = sentence;
+  }
 
   return entry;
 }
