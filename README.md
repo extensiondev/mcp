@@ -5,9 +5,9 @@
 [discord-image]: https://img.shields.io/discord/1253608412890271755?label=Discord&logo=discord&style=flat&color=26FFB8
 [discord-url]: https://discord.gg/v9h2RgeTSN
 
-# @extension.dev/mcp [![Version][npm-version-image]][npm-version-url] [![Downloads][npm-downloads-image]][npm-downloads-url] [![Discord][discord-image]][discord-url]
+# extension.dev MCP [![Version][npm-version-image]][npm-version-url] [![Downloads][npm-downloads-image]][npm-downloads-url] [![Discord][discord-image]][discord-url]
 
-> Ship browser extensions to four stores from your AI agent: create, run, test and submit to Chrome, Firefox, Edge and Safari.
+> Build, run, debug, test and ship Chrome, Firefox, Edge and Safari extensions from your AI agent.
 
 <img alt="Logo" align="right" src="https://media.extension.land/brand/extension-dev/logo-dock.png" width="20.7%" />
 

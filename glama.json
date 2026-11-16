@@ -3,7 +3,7 @@
   "maintainers": [
     "cezaraugusto"
   ],
-  "name": "extension.dev Browser Extensions",
+  "name": "extension.dev MCP",
   "description": "Build, run, debug, test and ship Chrome, Firefox, Edge and Safari extensions from your AI agent.",
   "categories": [
     "Developer Tools",

@@ -5,8 +5,10 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 import { describe, it, expect } from "vitest";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
-import { tools } from "../index";
+import { SERVER_TITLE, createServer, tools } from "../index";
 import { renderToolsDoc } from "../lib/docs-tools";
 import { renderClientsJson, renderToolsJson } from "../lib/docs-json";
 import { renderStoreMdFieldsDoc, renderStoreMdFieldsJson } from "../lib/docs-store-md-fields";
@@ -365,5 +367,51 @@ describe("the docs say what the code does", () => {
     expect(glama.description).toBe(server.description);
     expect(glama.categories).toHaveLength(3);
     expect(new Set(glama.categories).size).toBe(3);
+  });
+
+  it("carries one display name and one first line in every field a person reads, and leaves the identifiers alone (ledger 900)", async () => {
+    const NAME = "extension.dev MCP";
+    const LINE = "Build, run, debug, test and ship Chrome, Firefox, Edge and Safari extensions from your AI agent.";
+    const server = require("../../server.json") as { name: string; title: string; description: string };
+    const glama = require("../../glama.json") as { name: string; description: string };
+    const pkg = require("../../package.json") as { name: string; mcpName: string };
+    const readme = read("README.md").split("\n");
+    const heading = readme.findIndex((line) => line.startsWith("# "));
+
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await createServer().connect(serverTransport);
+    const client = new Client({ name: "name-probe", version: "0.0.0" });
+    await client.connect(clientTransport);
+    const info = client.getServerVersion();
+    await client.close();
+
+    expect({
+      constant: SERVER_TITLE,
+      serverInfo: info?.title,
+      registry: server.title,
+      glama: glama.name,
+      readme: readme[heading].slice(2).split(" [")[0],
+      install: read("llms-install.md").split("\n")[0],
+    }).toEqual({
+      constant: NAME,
+      serverInfo: NAME,
+      registry: NAME,
+      glama: NAME,
+      readme: NAME,
+      install: `# Install ${NAME}`,
+    });
+
+    expect(server.description).toBe(LINE);
+    expect(glama.description).toBe(LINE);
+    expect(readme.slice(heading + 1).find((line) => line.trim().length > 0)).toBe(`> ${LINE}`);
+
+    expect(info?.name).toBe("extension-dev");
+    expect(pkg.name).toBe("@extension.dev/mcp");
+    expect(pkg.mcpName).toBe("io.github.extensiondev/mcp");
+    expect(server.name).toBe(pkg.mcpName);
+
+    for (const file of ["server.json", "glama.json", "README.md", "llms-install.md", "package.json"]) {
+      expect(read(file), file).not.toContain("extension.dev Browser Extensions");
+    }
   });
 });

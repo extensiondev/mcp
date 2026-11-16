@@ -2,6 +2,7 @@
 
 ## 11.1.0
 
+- Ledger 900. The server has one display name, "extension.dev MCP", and one first line under it: "Build, run, debug, test and ship Chrome, Firefox, Edge and Safari extensions from your AI agent." The registry entry's `title`, the `glama.json` `name`, the README heading and `llms-install.md` carry it, and the server answers it as the `title` of its `serverInfo`, so a client that shows a server's title no longer shows the slug. No identifier changed: the package is still `@extension.dev/mcp`, the registry name `io.github.extensiondev/mcp`, the `serverInfo` `name` `extension-dev`, and every tool name is as it was. A test holds the name fields equal.
 - Ledger 897. A page this server opens in the person's browser is handed to the operating system as one argument, with no command shell on any platform (Windows went through `cmd`). Only an https address, or an http address on this machine, is opened, and an approval page opens only when it is on extension.dev or on the platform this server is configured for. An approval page anywhere else is still named in the answer, it is just not opened.
 - Ledger 897. Addresses, store answers and `STORE.md` text are cut and trimmed in linear time, so a very long hostile value (a tab address, a store's failure reason, an email line, a document name) no longer stalls the server.
 - Ledger 897. A comment in `STORE.md` or `CHROMEWEBSTORE.md` is removed even when removing one comment would join the text around it into another, so text meant as a comment never reaches a store field.

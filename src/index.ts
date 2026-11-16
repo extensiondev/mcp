@@ -224,6 +224,8 @@ export function serverInstructions(
 
 export const SERVER_INSTRUCTIONS = serverInstructions(DEFAULT_SERVER_OPTIONS);
 
+export const SERVER_TITLE = "extension.dev MCP";
+
 export function createServer(
   options: ServerOptions = DEFAULT_SERVER_OPTIONS,
   setup: { openApprovals?: boolean; stamp?: ServerStampReader; importBuild?: BuildImporter } = {},
@@ -233,6 +235,7 @@ export function createServer(
   const server = new Server(
     {
       name: "extension-dev",
+      title: SERVER_TITLE,
       version,
     },
     {
