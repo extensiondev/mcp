@@ -695,11 +695,12 @@ describe("extension_project_create", () => {
     return JSON.parse(String(createCall!.init?.body));
   }
 
-  it("keeps the Chrome-only default when no browsers are named, with the browser named in the build command", async () => {
+  it("keeps the Chrome-only default when no browsers are named, and leaves an unsaid command off the wire for the platform to read from the project", async () => {
     const body = await createBodyFor({});
-    expect(body.build.chrome).toMatchObject({
+    expect(body.build.chrome).toEqual({
       enabled: true,
-      buildCommand: "npm run build -- --browser chrome",
+      installCommand: "",
+      buildCommand: "",
       outputDirectory: "dist/chrome",
     });
 
@@ -707,16 +708,20 @@ describe("extension_project_create", () => {
     expect(body.build.firefox.enabled).toBe(false);
   });
 
-  it("names each enabled browser in its own default build command", async () => {
+  it("names each enabled browser's own output and still no command the caller did not say", async () => {
     const body = await createBodyFor({ browsers: ["chrome", "edge", "firefox"] });
 
     for (const name of ["chrome", "edge", "firefox"]) {
-      expect(body.build[name]).toMatchObject({
+      expect(body.build[name]).toEqual({
         enabled: true,
-        buildCommand: `npm run build -- --browser ${name}`,
+        installCommand: "",
+        buildCommand: "",
         outputDirectory: `dist/${name}`,
       });
     }
+
+    expect(schema.inputSchema.properties.installCommand).not.toHaveProperty("default");
+    expect(schema.inputSchema.properties.buildCommand).not.toHaveProperty("default");
   });
 
   it("enables every named browser with its own Extension.js output", async () => {
@@ -1361,6 +1366,17 @@ describe("extension_project_create", () => {
     expect(schema.description).toContain("again: re-seed and rebuild");
     expect(schema.inputSchema.properties.projectPath.description).toContain("with a login this re-seeds and rebuilds it after an approval");
     expect(schema.inputSchema.properties.projectPath.description).toContain("extension_builds_act rebuild rebuilds its stored tree without a new upload");
+  });
+
+  it("answers the settings the platform stored and warns with each note it sent about them", async () => {
+    const stored = {
+      build: { chrome: { enabled: true, installCommand: "pnpm install", buildCommand: "pnpm build", outputDirectory: "dist/chrome" } },
+      notes: ["Every browser was sent switched off, so chrome was switched on: a project builds at least one browser."],
+    };
+    const out = await createdWith({ initialBuild: { dispatched: true }, stored });
+
+    expect(out.value.stored).toEqual(stored);
+    expect(out.warnings).toContain(stored.notes[0]);
   });
 
   it("reports the names the platform registered, not the ones asked for", async () => {

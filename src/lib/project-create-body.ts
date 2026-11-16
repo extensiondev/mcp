@@ -6,8 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-export const DEFAULT_BUILD_COMMAND = "npm run build -- --browser <browser>";
-
 export type CreateBodySource =
   | { kind: "github"; owner: string; repoName: string; installationId?: string }
   | { kind: "upload"; uploadId: string };
@@ -24,8 +22,8 @@ export function buildCreateBody(args: {
   browsers?: string[];
   outputDirectories?: Record<string, unknown>;
 }): Record<string, unknown> {
-  const installCommand = String(args.installCommand || "npm install").trim();
-  const buildCommand = String(args.buildCommand || DEFAULT_BUILD_COMMAND).trim();
+  const installCommand = String(args.installCommand || "").trim();
+  const buildCommand = String(args.buildCommand || "").trim();
   const wanted = new Set(
     (Array.isArray(args.browsers) && args.browsers.length
       ? args.browsers

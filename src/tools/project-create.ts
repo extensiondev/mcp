@@ -30,7 +30,7 @@ import {
   type HeldCreateGrant,
 } from "../lib/held-create-grant-words";
 import { createProjectBatch, type BatchCreateLocal } from "../lib/project-create-batch";
-import { buildCreateBody, DEFAULT_BUILD_COMMAND, type CreateBodySource } from "../lib/project-create-body";
+import { buildCreateBody, type CreateBodySource } from "../lib/project-create-body";
 import {
   projectCreateUrl,
   SOURCE_UPLOAD_CONSUMED_CODE,
@@ -106,6 +106,12 @@ const FIRST_CALL_BUDGET_MS = 8_000;
 
 const CREATE_STUCK_MINUTES = CREATE_STUCK_AFTER_SECONDS / 60;
 
+function storedNotes(stored: unknown): string[] {
+  const notes = stored && typeof stored === "object" ? (stored as { notes?: unknown }).notes : null;
+
+  return Array.isArray(notes) ? notes.map((note) => String(note)) : [];
+}
+
 export const schema = {
   name: "extension_project_create",
   description:
@@ -139,13 +145,11 @@ export const schema = {
       },
       installCommand: {
         type: "string",
-        default: "npm install",
-        description: "Install command.",
+        description: "Install command; left out, the platform reads it from the project.",
       },
       buildCommand: {
         type: "string",
-        default: DEFAULT_BUILD_COMMAND,
-        description: "Run as it is per browser (does not add --browser); `<browser>` substituted.",
+        description: "Run as it is per browser (does not add --browser); `<browser>` substituted. Left out, the platform reads it from the project.",
       },
       outputDirectory: {
         type: "string",
@@ -1229,6 +1233,7 @@ async function sendCreate(
         : { projectPath: ctx.source.root, uploaded: uploaded ?? { bytes: ctx.source.bytes, files: ctx.source.files }, leftOut: ctx.source.leftOut }),
       ...(reseeded ? { reseeded: true, files: reseedFiles } : {}),
       outcome: recordedOutcome(reseeded ? "reseeded" : data.replayed === true ? "created-earlier" : "created"),
+      ...(data.stored && typeof data.stored === "object" ? { stored: data.stored } : {}),
       links,
       login: login.login,
       firstBuild: { ...firstBuildValue(firstBuild), ...(firstBuild.state === "dispatched" ? { spent: 1 } : {}) },
@@ -1253,6 +1258,7 @@ async function sendCreate(
       signedIn ? "" : `extension_auth (action: login, project: '${ref}') to mint the project token, then `
     }${buildNext} ${madeSentence(links)}`,
     warnings: [
+      ...storedNotes(data.stored),
       ...(ctx.source.kind === "upload" && ctx.source.defaulted
         ? [`projectPath was not given, so the server's cwd ${ctx.source.root} was uploaded because it holds the extension's manifest.`]
         : []),

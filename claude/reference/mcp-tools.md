@@ -376,8 +376,8 @@ Create an extension.dev project from a folder (projectPath, uploaded, no push; a
 | `installationId` | string | no |  | Omit; the platform finds it or answers a connect link. |
 | `displayName` | string | no |  | Human name; rename later with extension_workspace configure-project. |
 | `description` | string | no |  | Short description. |
-| `installCommand` | string | no | `"npm install"` | Install command. |
-| `buildCommand` | string | no | `"npm run build -- --browser <browser>"` | Run as it is per browser (does not add --browser); `<browser>` substituted. |
+| `installCommand` | string | no |  | Install command; left out, the platform reads it from the project. |
+| `buildCommand` | string | no |  | Run as it is per browser (does not add --browser); `<browser>` substituted. Left out, the platform reads it from the project. |
 | `outputDirectory` | string | no | `"dist/chrome"` | Build output; `<browser>` substituted. |
 | `browsers` | array of "chrome" \| "edge" \| "firefox" | no | `["chrome"]` | Browsers to build. |
 | `outputDirectories` | object | no |  | Per-browser outputDirectory overrides. |

@@ -13,9 +13,10 @@ describe("the auth and create tools describe what the platform does", () => {
     expect(createSchema.description).toMatch(/a signed-in workspace member approves/);
   });
 
-  it("create says the platform runs the stored build command as it is, so its default names the browser", () => {
+  it("create says the platform runs the stored build command as it is, and reads it from the project when it is left out", () => {
     const buildCommand = createSchema.inputSchema.properties.buildCommand;
-    expect(buildCommand.default).toBe("npm run build -- --browser <browser>");
+    expect(buildCommand).not.toHaveProperty("default");
+    expect(buildCommand.description).toMatch(/Left out, the platform reads it from the project/);
     expect(buildCommand.description).toMatch(/as it is/);
     expect(buildCommand.description).toMatch(/does not add --browser/);
     expect(createSchema.description).toMatch(/exactly as stored/);

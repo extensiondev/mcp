@@ -1661,15 +1661,13 @@
           "name": "installCommand",
           "type": "string",
           "required": false,
-          "default": "npm install",
-          "description": "Install command."
+          "description": "Install command; left out, the platform reads it from the project."
         },
         {
           "name": "buildCommand",
           "type": "string",
           "required": false,
-          "default": "npm run build -- --browser <browser>",
-          "description": "Run as it is per browser (does not add --browser); `<browser>` substituted."
+          "description": "Run as it is per browser (does not add --browser); `<browser>` substituted. Left out, the platform reads it from the project."
         },
         {
           "name": "outputDirectory",
