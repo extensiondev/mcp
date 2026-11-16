@@ -29,7 +29,7 @@ const COMMAND = "extension_theme_verify";
 export const schema = {
   name: "extension_theme_verify",
   description:
-    "Verify a Chrome theme manifest headless: the colors Chrome would paint and the keys it discards.",
+    "Verify a Chrome theme manifest, not an extension's: the colors Chrome paints and the keys it drops.",
   inputSchema: {
     type: "object" as const,
     properties: {

@@ -28,7 +28,7 @@ import {
 export const schema = {
   name: "extension_reload",
   description:
-    "Reload the extension's background, or a tab, over the control channel (allowControl); a background reload waits up to 5 s.",
+    "Reload a live session's background, or one tab, over the control channel (allowControl) when hot reload missed an edit; answers once it is back.",
   inputSchema: {
     type: "object" as const,
     properties: {

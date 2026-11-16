@@ -78,7 +78,7 @@ function scaffoldEnginePin(projectPath: string): string | null {
 export const schema = {
   name: "extension_create",
   description:
-    "Create an extension project from a template (extension_templates); it may init git. It is verified, so the next step is extension_dev, not a build; `scripts` name the outputs (`npm run build` writes dist/chromium). Sends one draft_seeded event; the readme's Telemetry section turns it off.",
+    "Create a new project from a template (extension_templates); it may init git. To add to one: extension_add_feature. It is verified, so the next step is extension_dev, not a build; `scripts` name the outputs (`npm run build`: dist/chromium). Sends a draft_seeded event (off: readme Telemetry section).",
   inputSchema: {
     type: "object" as const,
     properties: {

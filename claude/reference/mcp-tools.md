@@ -6,7 +6,7 @@ Generated from the schemas the server registers (`src/index.ts`); do not edit by
 
 ## extension_add_feature
 
-Plan the surface before adding an options page, a popup, a side panel, a content script, a devtools panel, a new tab page or a background script. It answers manifest additions, files and template and changes nothing; then validate the manifest and run extension_dev.
+Plan the surface before adding an options page, a popup, a side panel, a content script, a devtools panel, a new tab page or a background script. It answers the manifest additions and files to write and changes nothing; then validate the manifest and run extension_dev. New project: extension_create.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -133,7 +133,7 @@ Run a build act on the platform: rebuild, recheck, configure the build settings 
 
 ## extension_create
 
-Create an extension project from a template (extension_templates); it may init git. It is verified, so the next step is extension_dev, not a build; `scripts` name the outputs (`npm run build` writes dist/chromium). Sends one draft_seeded event; the readme's Telemetry section turns it off.
+Create a new project from a template (extension_templates); it may init git. To add to one: extension_add_feature. It is verified, so the next step is extension_dev, not a build; `scripts` name the outputs (`npm run build`: dist/chromium). Sends a draft_seeded event (off: readme Telemetry section).
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -445,7 +445,7 @@ Read where a project stands on extension.dev: channels, builds, store submission
 
 ## extension_reload
 
-Reload the extension's background, or a tab, over the control channel (allowControl); a background reload waits up to 5 s.
+Reload a live session's background, or one tab, over the control channel (allowControl) when hot reload missed an edit; answers once it is back.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -525,7 +525,7 @@ Run the PRODUCTION build in a browser (extension_dev is for writing code); no ho
 
 ## extension_stop
 
-Stop a dev or start session, naming the server and browser pid it ended. Call it when done.
+Stop a dev or start session and its browser when done; answers the server and browser pid it ended.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -622,7 +622,7 @@ Browse the template catalog or read a template's files. TypeScript is slug 'type
 
 ## extension_theme_verify
 
-Verify a Chrome theme manifest headless: the colors Chrome would paint and the keys it discards.
+Verify a Chrome theme manifest, not an extension's: the colors Chrome paints and the keys it drops.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |

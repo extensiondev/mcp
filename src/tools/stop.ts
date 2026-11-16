@@ -50,7 +50,7 @@ import type { ProcessInfo, ReadyContract } from "../lib/types";
 export const schema = {
   name: "extension_stop",
   description:
-    "Stop a dev or start session, naming the server and browser pid it ended. Call it when done.",
+    "Stop a dev or start session and its browser when done; answers the server and browser pid it ended.",
   inputSchema: {
     type: "object" as const,
     properties: {

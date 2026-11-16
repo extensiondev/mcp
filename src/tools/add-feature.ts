@@ -24,7 +24,7 @@ const EXAMPLES_TREE_BASE = `https://github.com/extension-js/examples/tree/${PINN
 export const schema = {
   name: "extension_add_feature",
   description:
-    "Plan the surface before adding an options page, a popup, a side panel, a content script, a devtools panel, a new tab page or a background script. It answers manifest additions, files and template and changes nothing; then validate the manifest and run extension_dev.",
+    "Plan the surface before adding an options page, a popup, a side panel, a content script, a devtools panel, a new tab page or a background script. It answers the manifest additions and files to write and changes nothing; then validate the manifest and run extension_dev. New project: extension_create.",
   inputSchema: {
     type: "object" as const,
     properties: {
