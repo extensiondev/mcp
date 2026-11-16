@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 import { createServer } from "../index";
 import { envelope } from "../lib/envelope";
 import { TOOL_POLICY } from "../lib/tool-policy";
-import { attachTrack, trackUrl } from "../lib/track-url";
+import { attachTrack, trackFields, trackUrl } from "../lib/track-url";
 import { WORLD_API, usePlatformWorld, type World } from "./fixtures/platform-world";
 import { WORLD_CASES } from "./fixtures/platform-world-cases";
 
@@ -220,5 +220,13 @@ describe("every platform act answers the console page that tracks it", () => {
     expect(trackUrl("store", { workspace: "acme", project: "widget", store: "firefox" }, WORLD_API)).toBe(`${CONSOLE}/acme/widget/submissions/firefox`);
     expect(trackUrl("build-settings", { workspace: "acme", project: "widget" }, WORLD_API)).toBe(`${CONSOLE}/acme/widget/project-settings/build`);
     expect(trackUrl("share-links", { workspace: "acme", project: "widget" }, WORLD_API)).toBe(`${CONSOLE}/acme/widget/project-settings/share-links`);
+  });
+
+  it("853: tracks a preflight whose Store publishing switch is off at the store settings, like every connect status", () => {
+    const page = (status: string) => trackFields("extension_submit", { args: { action: "preflight", browsers: ["firefox"], project: "acme/widget", api: WORLD_API }, status, value: {} })?.trackUrl;
+
+    expect(page("store-publishing-off")).toBe(`${CONSOLE}/acme/widget/project-settings/stores`);
+    expect(page("store-not-connected")).toBe(`${CONSOLE}/acme/widget/project-settings/stores`);
+    expect(page("preflight-read")).toBe(`${CONSOLE}/acme/widget/submissions/firefox`);
   });
 });
