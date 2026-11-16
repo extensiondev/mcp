@@ -313,4 +313,27 @@ describe("a ready contract that dates its own pids is believed before any stamp 
     },
     15_000,
   );
+
+  it(
+    "reads a live dev server as alive from the start time the engine reads off its own clock, as 4.1.40 stamps it on Windows",
+    async () => {
+      const projectPath = tmpProject();
+      const stampFile = path.join(projectPath, "own-clock.txt");
+      const script = `require("node:fs").writeFileSync(${JSON.stringify(stampFile)}, new Date(Date.now() - process.uptime() * 1000).toISOString()); setInterval(() => {}, 1000);`;
+      const child = spawn(process.execPath, ["-e", script], { detached: true, stdio: "ignore", windowsHide: true });
+      child.unref();
+      const serverPid = child.pid as number;
+      holders.push(serverPid);
+
+      const deadline = Date.now() + 10_000;
+      while (!fs.existsSync(stampFile) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const ownClock = fs.readFileSync(stampFile, "utf8");
+      const contract = readyContract("dev", "chrome", { pid: serverPid, pidStartedAt: ownClock });
+
+      expect(contractPidStartedAt(projectPath, "chrome", contract, "engine")).toBe(ownClock);
+      expect(contractPidState(projectPath, "chrome", contract, "engine")).toBe("alive");
+    },
+    30_000,
+  );
 });
