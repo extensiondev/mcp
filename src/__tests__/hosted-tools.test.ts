@@ -654,6 +654,59 @@ describe("the forwarder gives the person the wait they asked for and keeps what 
     expect(out).toMatchObject({ status: "promote-dispatched", value: { hostedWait: { askedSeconds: 180, grantedSeconds: 40 } }, warnings: ["The hosted lane cut this wait."] });
   });
 
+  it("884: finishes a cut submit wait with resume legs under new keys that carry the lane's memory, and keeps the dispatched answer when the lane has nothing to resume", async () => {
+    const SUBMIT = { browsers: ["firefox"], buildSha: "4cec881", dryRun: false, approvalId: "apr_884", project: "acme/web", waitSeconds: 180 };
+    const memory = { "submit-dispatches": [["https://www.extension.dev\nfirefox\n4cec881", { data: { ok: true, submissions: [{ id: "sub_w", store: "firefox" }] }, modes: {} }]] };
+    const dispatched = (granted: number) => ({
+      ok: true,
+      command: "extension_submit",
+      status: "submit-dispatched",
+      value: { submittedStores: ["firefox"], hostedWait: { askedSeconds: 180, grantedSeconds: granted, notice: "The hosted lane cut this wait." } },
+      warnings: ["The hosted lane cut this wait."],
+      memory,
+    });
+    const failed = { ok: false, command: "extension_submit", status: "submit-failed", error: { code: "E_PLATFORM", name: "SubmitFailed", message: "AMO refused the version." }, value: { submittedStores: ["firefox"] }, memory: {} };
+
+    const slowLane = (answers: unknown[]) => {
+      const { lane } = stubLane(answers);
+      const stubbed = globalThis.fetch;
+      let calls = 0;
+
+      vi.stubGlobal("fetch", async (input: unknown, init?: RequestInit) => {
+        if (String(input) === LANE && calls++ > 0) await outcomeClock.sleep(40_000);
+
+        return stubbed(input as string, init);
+      });
+
+      return lane;
+    };
+
+    const lane = slowLane([dispatched(29), dispatched(46), failed]);
+    const out = await forwarded("extension_submit", SUBMIT);
+
+    expect(out).toMatchObject({ ok: false, status: "submit-failed", error: { message: "AMO refused the version." } });
+    expect(out.value).not.toHaveProperty("hostedWait");
+    expect(lane().map((hit) => hit.body.args.local?.resumeAct)).toEqual([undefined, true, true]);
+    expect(lane().map((hit) => hit.body.args.waitSeconds)).toEqual([180, 180, 140]);
+    expect(lane().slice(1).every((hit) => hit.body.args.local?.memory?.["submit-dispatches"])).toBe(true);
+    expect(new Set(lane().map((hit) => hit.headers["idempotency-key"])).size).toBe(3);
+
+    const unknown = { ok: false, command: "extension_submit", status: "nothing-to-resume", error: { code: "E_BAD_REQUEST", name: "SubmitResumeUnknown", message: "No dispatched submit is remembered." }, value: {} };
+    const second = slowLane([dispatched(29), unknown]);
+    const kept = await forwarded("extension_submit", SUBMIT);
+
+    expect(second()).toHaveLength(2);
+    expect(kept).toMatchObject({ ok: true, status: "submit-dispatched", value: { hostedWait: { askedSeconds: 180, grantedSeconds: 29 } } });
+
+    forgetCarriedMemory();
+
+    const older = slowLane([{ ...dispatched(29), memory: {} }, failed]);
+    const once = await forwarded("extension_submit", SUBMIT);
+
+    expect(older()).toHaveLength(1);
+    expect(once).toMatchObject({ status: "submit-dispatched", value: { hostedWait: { grantedSeconds: 29 } } });
+  });
+
   it("carries what the lane's tools remembered into the next call and never shows it to the agent", async () => {
     const memory = { "build-dispatches": [["https://www.extension.dev\nprj_1", [{ sha: "abc1234", dispatchedAt: "2026-11-14T12:00:00Z" }]]] };
     const { lane } = stubLane([{ ...LISTED, memory }, { ...LISTED, memory: {} }, LISTED]);

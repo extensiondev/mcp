@@ -72,6 +72,7 @@ interface ForwardRule {
   wants?: (body: Args) => WantedImage[] | null;
   sent?: (args: Args) => Args;
   answered?: (args: Args, body: unknown) => unknown;
+  resumes?: (body: Args) => boolean;
 }
 
 function text(value: unknown): string {
@@ -145,7 +146,7 @@ export const FORWARDED_TOOLS: Readonly<Record<string, ForwardRule>> = Object.fre
   extension_builds_act: {},
   extension_preview_web: { local: () => true },
   extension_publish: { local: (args) => actionOf(args, "publish") === "sync-captures" },
-  extension_submit: { reads: submitReads, ...SUBMIT_RULE },
+  extension_submit: { reads: submitReads, ...SUBMIT_RULE, resumes: (body) => laneStatus(body) === SUBMIT_DISPATCHED_STATUS },
   extension_submit_check: { reads: submitReads, ...SUBMIT_RULE },
 });
 
@@ -540,6 +541,22 @@ function underCurrentName(args: Args): Args {
   return identity?.movedFrom ? { ...args, project: identity.current } : args;
 }
 
+/* @invariant A CUT SUBMIT WAIT IS FINISHED BY RESUME LEGS, NEVER BY SENDING
+ * THE SUBMIT AGAIN. The lane ends a call before a store run finishes and
+ * hands back what its submit tool remembered of the dispatch. While the
+ * answer still reads dispatched and seconds of the asked wait are left, the
+ * forwarder asks again with the resume mark under a new key: the lane then
+ * waits on the same records and dispatches nothing, and with nothing
+ * remembered it refuses, in which case the dispatched answer and the lane's
+ * notice stand. A lane that handed back no remembered dispatch is one that
+ * cannot resume, so it is never asked. Every other act is still sent once
+ * (ledger 884).
+ */
+const SUBMIT_DISPATCHED_STATUS = "submit-dispatched";
+const RESUME_UNKNOWN_STATUS = "nothing-to-resume";
+const RESUME_ACT_FACT = "resumeAct";
+const SUBMIT_DISPATCHES_SHELF = "submit-dispatches";
+
 async function forwardedAnswer(asked: { command: string; tool: string; rule: ForwardRule; args: Args; session: ForwardSession }, local: (args: Args) => Promise<string>, deps: ForwarderDeps): Promise<string> {
   const { command, tool, rule, args, session } = asked;
   const resource = session.resource;
@@ -566,7 +583,8 @@ async function forwardedAnswer(asked: { command: string; tool: string; rule: For
 
   if (laneStatus(body) === "local-half") return withForwardSession(session, () => local(args));
 
-  let cut = call.reads ? hostedWaitOf(body) : null;
+  const resumes = !call.reads && rule.resumes?.(body) === true && (carriedMemory(resource)[SUBMIT_DISPATCHES_SHELF] ?? []).length > 0;
+  let cut = call.reads || resumes ? hostedWaitOf(body) : null;
   const askedSeconds = cut?.askedSeconds ?? 0;
   let legs = 1;
 
@@ -574,16 +592,23 @@ async function forwardedAnswer(asked: { command: string; tool: string; rule: For
     const left = askedSeconds - Math.round((outcomeClock.now() - startedAt) / 1000);
 
     if (left <= 0) {
-      body = withoutHostedWait(body);
+      if (!resumes) body = withoutHostedWait(body);
+
       break;
     }
 
-    const next = await askLane({ ...call, sent: { ...hostedArgs(shaped, facts, resource), waitSeconds: left } });
+    const leg = resumes
+      ? { ...call, key: crypto.randomBytes(24).toString("base64url"), sent: { ...hostedArgs(shaped, { ...(facts ?? {}), [RESUME_ACT_FACT]: true }, resource), waitSeconds: left } }
+      : { ...call, sent: { ...hostedArgs(shaped, facts, resource), waitSeconds: left } };
+    const next = await askLane(leg);
     if (next.kind !== "answer") break;
 
+    const answered = takeMemory(resource, next.body);
+    if (resumes && laneStatus(answered) === RESUME_UNKNOWN_STATUS) break;
+
     legs += 1;
-    body = takeMemory(resource, next.body);
-    cut = hostedWaitOf(body);
+    body = answered;
+    cut = !resumes || rule.resumes?.(body) === true ? hostedWaitOf(body) : null;
   }
 
   if (legs > 1) body = withWholeWait(body, Math.round((outcomeClock.now() - startedAt) / 1000));
