@@ -129,8 +129,8 @@ export function matchPatternRegexSource(pattern: string): string {
 
   const scheme = m[1] === "*" ? "https?" : m[1];
   const host = m[2] === "*" ? "[^/]*" : m[2].startsWith("*.")
-    ? `([^/]*\\.)?${  m[2].slice(2).replace(/[.]/g, "\\.")}`
-    : m[2].replace(/[.]/g, "\\.");
+    ? `([^/]*\\.)?${  m[2].slice(2).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`
+    : m[2].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pathPart = (m[3] ?? "/").replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
 
   return `^${  scheme  }://${  host  }${pathPart  }$`;

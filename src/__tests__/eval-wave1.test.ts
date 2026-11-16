@@ -79,6 +79,15 @@ describe("wave 1: extension_eval says where and what it ran", () => {
     expect(executeScriptExpression("youtube", "1")).toContain("indexOf(");
   });
 
+  it("897: a host in a match pattern is read as text, never as a regular expression", () => {
+    const hostile = new RegExp(matchPatternRegexSource("https://(a+)+b|evil.test/*"));
+
+    expect(hostile.test("https://evil.test/")).toBe(false);
+    expect(hostile.test("https://(a+)+b|evil.test/x")).toBe(true);
+    expect(matchPatternRegexSource("*://*.exa[mp]le.com/*")).toContain("exa\\[mp\\]le\\.com");
+    expect(new RegExp(matchPatternRegexSource("*://*.exa[mp]le.com/*")).test("https://a.exale.com/")).toBe(false);
+  });
+
   it("the generated picker runs and picks the right tab", () => {
     const code = executeScriptExpression("https://www.youtube.com/*", "1");
     const script = `const tabs=[{id:1,url:"https://news.test/"},{id:2,url:"https://www.youtube.com/watch?v=x"}];
