@@ -11,6 +11,7 @@ import { spawn } from "node:child_process";
 import { envelope, isEnvelope } from "./envelope";
 import { envIsHeadless } from "./launch-flags";
 import { APPROVAL_REQUIRED_STATUS } from "./approval-outcome";
+import { mcpOrigins } from "./origins";
 import { isRow, text } from "./row";
 
 import type { PageOpening } from "./kernel-hooks";
@@ -38,18 +39,59 @@ const truthy = (raw: string | undefined): boolean => {
   return value !== "" && value !== "0" && value !== "false" && value !== "off";
 };
 
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+const PLATFORM_DOMAIN = "extension.dev";
+
+export function openableUrl(raw: string): string {
+  let parsed: URL;
+
+  try {
+    parsed = new URL(String(raw ?? ""));
+  } catch {
+    return "";
+  }
+
+  if (parsed.username || parsed.password || !parsed.hostname) return "";
+  if (parsed.protocol === "https:") return parsed.href;
+
+  return parsed.protocol === "http:" && LOOPBACK_HOSTS.has(parsed.hostname.toLowerCase()) ? parsed.href : "";
+}
+
+function hostOf(origin: string | undefined): string {
+  try {
+    return new URL(String(origin ?? "")).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+export function approvalPageUrl(raw: string): string {
+  const href = openableUrl(raw);
+  const host = hostOf(href);
+  if (!host) return "";
+  if (host === PLATFORM_DOMAIN || host.endsWith(`.${PLATFORM_DOMAIN}`) || LOOPBACK_HOSTS.has(host)) return href;
+
+  const origins = mcpOrigins();
+
+  return [origins.www, origins.console].some((origin) => hostOf(origin) === host) ? href : "";
+}
+
 export function osOpenCommand(url: string, platform: NodeJS.Platform = process.platform): [string, string[]] {
   if (platform === "darwin") return ["open", [url]];
-  if (platform === "win32") return ["cmd", ["/c", "start", '""', url.replace(/[&^|<>]/g, (c) => `^${c}`)]];
+  if (platform === "win32") return ["rundll32", ["url.dll,FileProtocolHandler", url]];
 
   return ["xdg-open", [url]];
 }
 
 export const osOpen: UrlOpener = (url) => {
-  const [command, args] = osOpenCommand(url);
+  const href = openableUrl(url);
+  if (!href) return false;
+
+  const [command, args] = osOpenCommand(href);
 
   try {
-    const child = spawn(command, args, { detached: true, stdio: "ignore", windowsVerbatimArguments: process.platform === "win32" });
+    const child = spawn(command, args, { detached: true, stdio: "ignore", shell: false });
     child.on("error", () => undefined);
     child.unref();
 
@@ -148,8 +190,8 @@ export function openApprovalOnce(result: string, options: { noShip: boolean }, e
   if (!isEnvelope(parsed) || parsed.status !== APPROVAL_REQUIRED_STATUS) return result;
 
   const value = isRow(parsed.value) ? parsed.value : {};
-  const approvalUrl = text(value.approvalUrl);
-  if (!/^https?:\/\//i.test(approvalUrl)) return result;
+  const approvalUrl = approvalPageUrl(text(value.approvalUrl));
+  if (!approvalUrl) return result;
 
   const key = text(value.approvalId) || approvalUrl;
   if (opened.has(key) || !canAutoOpen(options, env, platform)) return result;

@@ -40,10 +40,13 @@ describe("approvals opened together open one page that lists them all (ledger 17
 
       return true;
     });
+
+    vi.stubEnv("EXTENSION_DEV_API_URL", API);
   });
 
   afterEach(() => {
     restore();
+    vi.unstubAllEnvs();
     vi.useRealTimers();
   });
 
@@ -72,7 +75,7 @@ describe("approvals opened together open one page that lists them all (ledger 17
     vi.setSystemTime(new Date("2026-11-01T18:00:00.000Z"));
     openApprovalOnce(asked(CHROME), { noShip: false }, DESKTOP, "darwin");
     vi.setSystemTime(new Date("2026-11-01T18:05:00.000Z"));
-    openApprovalOnce(asked(EDGE, "https://other.test"), { noShip: false }, DESKTOP, "darwin");
+    openApprovalOnce(asked(EDGE, "https://staging.extension.dev"), { noShip: false }, DESKTOP, "darwin");
     vi.setSystemTime(new Date("2026-11-01T18:11:00.000Z"));
     openApprovalOnce(asked(FIREFOX), { noShip: false }, DESKTOP, "darwin");
 

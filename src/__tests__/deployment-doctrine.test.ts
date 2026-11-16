@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEPLOYMENT_DOCTRINE, serverInstructions } from "../index";
 import { actionFingerprint } from "../lib/approval-gate";
-import { APPROVAL_OPENED_SENTENCE, canAutoOpen, forgetOpenedApprovals, openApprovalOnce, osOpenCommand, setApprovalOpener } from "../lib/approval-open";
+import { APPROVAL_OPENED_SENTENCE, canAutoOpen, forgetOpenedApprovals, openApprovalOnce, openableUrl, osOpen, osOpenCommand, setApprovalOpener } from "../lib/approval-open";
 import { envelope } from "../lib/envelope";
 import { WORLD_API, WORLD_PROJECT_ID, usePlatformWorld } from "./fixtures/platform-world";
 
@@ -197,6 +197,47 @@ describe("an approval page opens itself once in the person's browser", () => {
   it("uses the OS opener for each platform", () => {
     expect(osOpenCommand("https://x.test/a", "darwin")).toEqual(["open", ["https://x.test/a"]]);
     expect(osOpenCommand("https://x.test/a", "linux")).toEqual(["xdg-open", ["https://x.test/a"]]);
-    expect(osOpenCommand("https://x.test/a?b=1&c=2", "win32")).toEqual(["cmd", ["/c", "start", '""', "https://x.test/a?b=1^&c=2"]]);
+    expect(osOpenCommand("https://x.test/a?b=1&c=2", "win32")).toEqual(["rundll32", ["url.dll,FileProtocolHandler", "https://x.test/a?b=1&c=2"]]);
+  });
+
+  it("897: hands the OS opener one argument and no shell, on Windows too", () => {
+    const hostile = "https://x.test/a?b=%USERPROFILE%&c=1|d";
+
+    for (const platform of ["darwin", "linux", "win32"] as const) {
+      const [command, args] = osOpenCommand(hostile, platform);
+
+      expect(command, platform).not.toMatch(/^(cmd|powershell|pwsh|sh|bash)(\.exe)?$/i);
+      expect(args[args.length - 1], platform).toBe(hostile);
+      expect(args.join(" "), platform).not.toContain("^");
+    }
+  });
+
+  it("897: opens only an https page, or an http page on this machine, and hands the opener its parsed form", () => {
+    expect(openableUrl("https://www.extension.dev/device/approve/apr_a")).toBe("https://www.extension.dev/device/approve/apr_a");
+    expect(openableUrl("http://localhost:3100/device/approve/apr_a")).toBe("http://localhost:3100/device/approve/apr_a");
+    expect(openableUrl('https://x.test/a b"c\n?d=<e>')).toBe("https://x.test/a%20b%22c?d=%3Ce%3E");
+
+    for (const refused of ["file:///Applications/Calculator.app", "-a Calculator", "-aCalculator", "javascript:alert(1)", "http://example.com/a", "https://person:secret@x.test/a", "calc.exe", "", "https://"]) {
+      expect(openableUrl(refused), refused).toBe("");
+      expect(osOpen(refused), refused).toBe(false);
+    }
+  });
+
+  it("897: does not open an approval page on a host that is neither extension.dev nor the configured platform", () => {
+    const answer = (approvalId: string, approvalUrl: string) => envelope({ ok: false, command: "extension_submit", status: "approval-required", value: { approvalId, approvalUrl } });
+
+    for (const [index, foreign] of ["https://evil.test/device/approve/apr_a", "https://www.extension.dev.evil.test/device/approve/apr_a", "https://www.extension.dev@evil.test/device/approve/apr_a", "https://evilextension.dev/device/approve/apr_a", "HTTPS://evil.test/%USERPROFILE%"].entries()) {
+      const raw = answer(`apr_foreign_${index}`, foreign);
+
+      expect(openApprovalOnce(raw, { noShip: false }, DESKTOP, "darwin"), foreign).toBe(raw);
+    }
+
+    expect(opened).toEqual([]);
+
+    openApprovalOnce(answer("apr_home", "https://console.extension.dev/acme/web/approvals/apr_home"), { noShip: false }, DESKTOP, "darwin");
+    vi.stubEnv("EXTENSION_DEV_API_URL", "https://platform.example.test");
+    openApprovalOnce(answer("apr_configured", "https://platform.example.test/device/approve/apr_configured"), { noShip: false }, DESKTOP, "darwin");
+
+    expect(opened).toEqual(["https://console.extension.dev/acme/web/approvals/apr_home", "https://platform.example.test/device/approve/apr_configured"]);
   });
 });
