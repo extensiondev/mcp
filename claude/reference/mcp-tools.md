@@ -152,7 +152,7 @@ Run the extension while you edit it (dev build, hot reload, browser): the first 
 | `browser` | "chrome" \| "chromium" \| "edge" \| "brave" \| "opera" \| "vivaldi" \| "yandex" \| "firefox" \| "waterfox" \| "librewolf" \| "zen" \| "floorp" \| "safari" \| "chromium-based" \| "gecko-based" \| "firefox-based" \| "webkit-based" | no | `"chrome"` | Target browser; *-based pairs with chromiumBinary or geckoBinary. |
 | `port` | number | no |  | Port (0 picks one). |
 | `noBrowser` | boolean | no | `false` | No browser. |
-| `polyfill` | boolean | no | `true` | Cross-browser polyfill. |
+| `polyfill` | boolean | no | `false` | Cross-browser polyfill. |
 | `profile` | string | no |  | Profile path; "false" reuses the real one. |
 | `startingUrl` | string | no |  | URL opened on launch. |
 | `chromiumBinary` | string | no |  | Chromium binary; browser still names the target family. |
@@ -504,7 +504,7 @@ Run the PRODUCTION build in a browser (extension_dev is for writing code); no ho
 | `projectPath` | string | yes |  | Extension project root |
 | `browser` | "chrome" \| "chromium" \| "edge" \| "brave" \| "opera" \| "vivaldi" \| "yandex" \| "firefox" \| "waterfox" \| "librewolf" \| "zen" \| "floorp" \| "safari" \| "chromium-based" \| "gecko-based" \| "firefox-based" \| "webkit-based" | no | `"chrome"` | Target browser; *-based pairs with chromiumBinary or geckoBinary. |
 | `build` | boolean | no | `true` | false: launch the existing dist. |
-| `polyfill` | boolean | no | `true` | Cross-browser polyfill. |
+| `polyfill` | boolean | no | `false` | Cross-browser polyfill. |
 | `port` | number | no |  | Engine --port; unused here. |
 | `noBrowser` | boolean | no | `false` | Build only; the process ends with the build. |
 | `allowControl` | boolean | no | `false` | Control channel for the bridge verbs. |

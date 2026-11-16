@@ -138,4 +138,14 @@ describe("extension_dev carries the control channel unless asked not to", () => 
       unlocked: "storage, reload, open, dom_snapshot, eval",
     });
   }, 15_000);
+
+  it("hands the engine the polyfill choice either way and nothing when unset, since 4.1.40 leaves it off unless asked", async () => {
+    await dev.handler({ wait: false, projectPath: tmpProject() });
+    await dev.handler({ wait: false, projectPath: tmpProject(), polyfill: true });
+    await dev.handler({ wait: false, projectPath: tmpProject(), polyfill: false });
+
+    expect(cliArgsSeen[0]).not.toContain("--polyfill");
+    expect(cliArgsSeen[1].slice(cliArgsSeen[1].indexOf("--polyfill"), cliArgsSeen[1].indexOf("--polyfill") + 2)).toEqual(["--polyfill", "true"]);
+    expect(cliArgsSeen[2].slice(cliArgsSeen[2].indexOf("--polyfill"), cliArgsSeen[2].indexOf("--polyfill") + 2)).toEqual(["--polyfill", "false"]);
+  }, 15_000);
 });

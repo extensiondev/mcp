@@ -623,7 +623,7 @@
           "name": "polyfill",
           "type": "boolean",
           "required": false,
-          "default": true,
+          "default": false,
           "description": "Cross-browser polyfill."
         },
         {
@@ -2259,7 +2259,7 @@
           "name": "polyfill",
           "type": "boolean",
           "required": false,
-          "default": true,
+          "default": false,
           "description": "Cross-browser polyfill."
         },
         {

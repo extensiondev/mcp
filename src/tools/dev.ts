@@ -93,7 +93,7 @@ export const schema = {
       },
       polyfill: {
         type: "boolean",
-        default: true,
+        default: false,
         description: "Cross-browser polyfill.",
       },
       ...LAUNCH_FLAG_SCHEMA,
@@ -173,7 +173,7 @@ export async function handler(
   const cliArgs = ["dev", args.projectPath, "--browser", browser];
   if (args.port !== undefined) cliArgs.push("--port", String(args.port));
   if (args.noBrowser) cliArgs.push("--no-browser");
-  if (args.polyfill === false) cliArgs.push("--polyfill", "false");
+  if (args.polyfill !== undefined) cliArgs.push("--polyfill", String(args.polyfill));
 
   cliArgs.push(...launchFlagArgs(args));
   cliArgs.push(...safariDevOptionArgs(args));

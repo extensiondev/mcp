@@ -70,7 +70,7 @@ const isFirefoxLike =
 
 ## Storage API
 
-Use `chrome.storage.local` for persistent data. It works cross-browser when the polyfill is active (default).
+Use `chrome.storage.local` for persistent data. It works cross-browser with no polyfill, since Firefox accepts `chrome.*` for it.
 
 ## Permissions
 

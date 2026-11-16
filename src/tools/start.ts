@@ -60,7 +60,7 @@ export const schema = {
       },
       polyfill: {
         type: "boolean",
-        default: true,
+        default: false,
         description: "Cross-browser polyfill.",
       },
       port: {
@@ -201,7 +201,7 @@ export async function handler(
 
   const cliArgs = [command, args.projectPath, "--browser", browser];
   if (outputPath) cliArgs.push("--output-path", outputPath);
-  if (building && args.polyfill === false) cliArgs.push("--polyfill", "false");
+  if (building && args.polyfill !== undefined) cliArgs.push("--polyfill", String(args.polyfill));
   if (args.port !== undefined) cliArgs.push("--port", String(args.port));
   if (args.noBrowser) cliArgs.push("--no-browser");
 

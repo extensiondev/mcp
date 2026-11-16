@@ -129,5 +129,14 @@ describe("extension_start runs a prebuilt unpacked extension through the engine'
 
     expect(spawnedArgs[0][0]).toBe("start");
     expect(spawnedArgs[0]).not.toContain("--output-path");
+    expect(spawnedArgs[0]).not.toContain("--polyfill");
+  });
+
+  it("hands the engine the polyfill choice either way, since 4.1.40 leaves it off unless asked", async () => {
+    await start.handler({ wait: false, projectPath: tmpProject(), polyfill: true });
+    await start.handler({ wait: false, projectPath: tmpProject(), polyfill: false });
+
+    expect(spawnedArgs[0].slice(spawnedArgs[0].indexOf("--polyfill"), spawnedArgs[0].indexOf("--polyfill") + 2)).toEqual(["--polyfill", "true"]);
+    expect(spawnedArgs[1].slice(spawnedArgs[1].indexOf("--polyfill"), spawnedArgs[1].indexOf("--polyfill") + 2)).toEqual(["--polyfill", "false"]);
   });
 });
