@@ -27,6 +27,7 @@ import {
   disabledToolEnvelope,
   isToolListed,
   pinProjectArgs,
+  runsOnPlatform,
   type ServerOptions,
   type ToolAnnotations,
   toolTitle,
@@ -180,7 +181,7 @@ export function createToolSurface(setup: ToolHandlerOptions): {
 
     listedAt = rebuilt;
     const byName = new Map(fresh.map((tool) => [tool.name, tool]));
-    const follows = (name: string): boolean => active.local || TOOL_POLICY[name]?.group === "platform";
+    const follows = (name: string): boolean => active.local || runsOnPlatform(name);
     const known = new Set(loaded.map((tool) => tool.name));
     const added = active.local ? fresh.filter((tool) => !known.has(tool.name)) : [];
 
@@ -309,7 +310,7 @@ export function createToolSurface(setup: ToolHandlerOptions): {
     }
 
     const untrusted = TOOL_POLICY[name]?.untrusted === true;
-    const platform = TOOL_POLICY[name]?.group === "platform";
+    const platform = runsOnPlatform(name);
     const refusedAct = (text: string, callArgs: Record<string, unknown>): ToolFrame => refused(platform ? attachTrack(name, callArgs, text) : text);
     const pinned = pinProjectArgs(name, aliasedArgs, tool.schema.inputSchema, options);
 

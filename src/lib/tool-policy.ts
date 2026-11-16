@@ -14,9 +14,9 @@ import { TOOL_ANNOTATIONS, type ToolAnnotations } from "./tool-annotations";
 
 export type { ToolAnnotations } from "./tool-annotations";
 
-export type FeatureGroup = "local" | "platform";
+export type FeatureGroup = "local" | "platform" | "extras";
 
-export const FEATURE_GROUPS: FeatureGroup[] = ["local", "platform"];
+export const FEATURE_GROUPS: FeatureGroup[] = ["local", "platform", "extras"];
 
 export const FEATURES_ENV = "EXTENSION_DEV_FEATURES";
 export const NO_SHIP_ENV = "EXTENSION_DEV_NO_SHIP";
@@ -28,6 +28,7 @@ export interface ToolPolicy {
   annotations: ToolAnnotations;
   ships?: "always" | ((args: Args) => boolean);
   untrusted?: true;
+  onThisMachine?: true;
   actsAs?: { tool: string; refuse: (args: Args) => string | null };
 }
 
@@ -99,7 +100,7 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
   },
   extension_stop: { group: "local", annotations: TOOL_ANNOTATIONS.extension_stop },
   extension_manifest_validate: { group: "local", annotations: TOOL_ANNOTATIONS.extension_manifest_validate },
-  extension_theme_verify: { group: "local", annotations: TOOL_ANNOTATIONS.extension_theme_verify },
+  extension_theme_verify: { group: "extras", annotations: TOOL_ANNOTATIONS.extension_theme_verify },
   extension_analyze: { group: "local", annotations: TOOL_ANNOTATIONS.extension_analyze },
   extension_assert: {
     group: "local",
@@ -123,9 +124,10 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
     untrusted: true,
   },
   extension_try: {
-    group: "local",
+    group: "platform",
     annotations: TOOL_ANNOTATIONS.extension_try,
     untrusted: true,
+    onThisMachine: true,
   },
   extension_list_extensions: {
     group: "local",
@@ -158,7 +160,7 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
     untrusted: true,
   },
   extension_network: {
-    group: "local",
+    group: "extras",
     annotations: TOOL_ANNOTATIONS.extension_network,
     untrusted: true,
   },
@@ -232,6 +234,12 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
   },
 };
 
+export function runsOnPlatform(name: string): boolean {
+  const policy = TOOL_POLICY[name];
+
+  return policy?.group === "platform" && policy.onThisMachine !== true;
+}
+
 export interface ServerOptions {
   features: FeatureGroup[];
   noShip: boolean;
@@ -304,7 +312,7 @@ export function resolveServerOptions(
   if (unknown.length) {
     return {
       ok: false,
-      message: `Unknown feature group ${unknown.map((n) => `"${n}"`).join(", ")}. Use ${FEATURE_GROUPS.join(" or ")}, comma-separated.`,
+      message: `Unknown feature group ${unknown.map((n) => `"${n}"`).join(", ")}. Use ${FEATURE_GROUPS.slice(0, -1).join(", ")} or ${FEATURE_GROUPS[FEATURE_GROUPS.length - 1]}, comma-separated.`,
     };
   }
 
@@ -340,6 +348,8 @@ export function disabledToolEnvelope(
   if (!policy) return null;
 
   if (!options.features.includes(policy.group)) {
+    const add = `--features=${FEATURE_GROUPS.filter((group) => group === policy.group || options.features.includes(group)).join(",")}`;
+
     return envelope({
       ok: false,
       command: name,
@@ -348,8 +358,8 @@ export function disabledToolEnvelope(
         code: "E_TOOL_DISABLED",
         message: `${name} is in the "${policy.group}" feature group, which this server was started without.`,
       },
-      value: { group: policy.group, features: options.features },
-      hint: `Add ${policy.group} to --features (or ${FEATURES_ENV}) in this server's MCP config, or ask the user to.`,
+      value: { group: policy.group, features: options.features, add },
+      hint: `Add ${policy.group} to --features (or ${FEATURES_ENV}) in this server's MCP config, so it reads ${add}, or ask the user to.`,
     });
   }
 

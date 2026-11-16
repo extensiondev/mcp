@@ -71,7 +71,7 @@ All are optional.
 
 | Variable | Effect |
 | --- | --- |
-| `EXTENSION_DEV_FEATURES` | `local` (default) or `local,platform`; same as `--features` |
+| `EXTENSION_DEV_FEATURES` | `local` (default), `local,platform`, or either with `,extras` for the theme check and the network stubs; same as `--features` |
 | `EXTENSION_DEV_NO_SHIP` | `1` refuses every call that puts something in front of other people |
 | `EXTENSION_DEV_PROJECT` | `<workspace>/<project>`; refuses any call that names another project |
 | `EXTENSION_DEV_TOKEN` | An access token in place of the device login, for CI |

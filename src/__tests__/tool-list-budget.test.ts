@@ -10,7 +10,8 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
-import { createServer } from "../index";
+import { createServer, tools } from "../index";
+import { FEATURE_GROUPS } from "../lib/tool-policy";
 
 /* @invariant THE TOOL LIST IS PAID BEFORE THE FIRST CALL. Every session
  * that loads the server pays for tools/list before it calls anything, and
@@ -34,7 +35,7 @@ let listed: Listed[] = [];
 
 beforeAll(async () => {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  await createServer({ features: ["local", "platform"], noShip: false }).connect(serverTransport);
+  await createServer({ features: [...FEATURE_GROUPS], noShip: false }).connect(serverTransport);
   const client = new Client({ name: "budget-probe", version: "0.0.0" });
   await client.connect(clientTransport);
   listed = (await client.listTools()).tools;
@@ -57,8 +58,8 @@ const properties = (schema: Schema | undefined, path: string): Array<[string, Sc
 };
 
 describe("the tool list fits a session's budget", () => {
-  it("lists every tool at --features=local,platform", () => {
-    expect(listed.length).toBeGreaterThanOrEqual(38);
+  it("measures every tool the server registers, with every group on", () => {
+    expect(listed.length).toBe(tools.length);
   });
 
   it(`keeps the whole list under ${WHOLE_LIST} characters`, () => {

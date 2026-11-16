@@ -18,10 +18,7 @@ const read = (relative: string): string =>
 
 const registeredNames = ALL_TOOLS.map((t) => t.schema.name).sort();
 const count = ALL_TOOLS.length;
-const platformCount = ALL_TOOLS.filter(
-  (t) => TOOL_POLICY[t.schema.name]?.group === "platform",
-).length;
-const localCount = count - platformCount;
+const inGroup = (group: string): number => ALL_TOOLS.filter((t) => TOOL_POLICY[t.schema.name]?.group === group).length;
 
 const RETIRED_TOOL_NAMES = [
   "extension_deploy",
@@ -51,7 +48,7 @@ const NUMBER_WORDS: Record<string, number> = {
 };
 
 const COUNT_PATTERN = new RegExp(
-  `\\b(\\d+|${Object.keys(NUMBER_WORDS).join("|")})\\+?\\s+(?:(MCP|platform|local)\\s+)?tools\\b`,
+  `\\b(\\d+|${Object.keys(NUMBER_WORDS).join("|")})\\+?\\s+(?:(MCP|platform|local|extras)\\s+)?tools\\b`,
   "gi",
 );
 
@@ -61,7 +58,7 @@ const countsIn = (text: string): StatedCount[] =>
   [...text.matchAll(COUNT_PATTERN)].map((m) => {
     const word = m[1].toLowerCase();
     const qualifier = (m[2] || "").toLowerCase();
-    const expected = qualifier === "platform" ? platformCount : qualifier === "local" ? localCount : count;
+    const expected = qualifier && qualifier !== "mcp" ? inGroup(qualifier) : count;
 
     return { stated: word in NUMBER_WORDS ? NUMBER_WORDS[word] : Number(word), expected, text: m[0] };
   });

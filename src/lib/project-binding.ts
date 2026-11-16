@@ -14,7 +14,7 @@ import { envelope, isEnvelope } from "./envelope";
 import { kernelHook } from "./kernel-hooks";
 import { noLoginForProjectRefusal } from "./no-login-for-project";
 import { clientProjectDir } from "./client-roots";
-import { TOOL_POLICY, type ServerOptions } from "./tool-policy";
+import { runsOnPlatform, type ServerOptions } from "./tool-policy";
 
 type Args = Record<string, unknown>;
 
@@ -26,7 +26,7 @@ function text(value: unknown): string {
 }
 
 function takesProject(name: string, args: Args, inputSchema: Record<string, unknown>): boolean {
-  if (TOOL_POLICY[name]?.group !== "platform" || UNBOUND.has(name)) return false;
+  if (!runsOnPlatform(name) || UNBOUND.has(name)) return false;
 
   const properties = inputSchema.properties;
   if (!properties || typeof properties !== "object" || !("project" in properties)) return false;

@@ -14,7 +14,7 @@ import { storeMdFieldRows } from "../lib/store-md-fields";
 import { LISTING_STORES, STORE_FIELDS } from "../lib/store-md-listing";
 import { TOOL_DOCS } from "../lib/docs-meta";
 import { validateToolInput } from "../lib/validate-input";
-import { DEFAULT_SERVER_OPTIONS, FEATURES_ENV, NO_SHIP_ENV, TOOL_POLICY, isServerFlag, resolveServerOptions } from "../lib/tool-policy";
+import { DEFAULT_SERVER_OPTIONS, FEATURES_ENV, NO_SHIP_ENV, TOOL_POLICY, isServerFlag, resolveServerOptions, runsOnPlatform } from "../lib/tool-policy";
 import { PROJECT_PIN_ENV } from "../lib/credentials";
 import { NO_AUTO_OPEN_ENV } from "../lib/approval-open";
 import { NO_TELEMETRY_ENV } from "../lib/session-identity";
@@ -178,7 +178,8 @@ describe("the docs say what the code does", () => {
     for (const [name, meta] of Object.entries(TOOL_DOCS)) {
       expect(meta.samplePrompt.trim().length, `${name} sample prompt`).toBeGreaterThan(10);
       expect(meta.gate.trim().length, `${name} gate`).toBeGreaterThan(0);
-      expect(TOOL_POLICY[name]?.group === "platform", `${name} tier vs group`).toBe(meta.tier === "platform");
+      expect(runsOnPlatform(name), `${name} tier vs the lane that answers it`).toBe(meta.tier === "platform");
+      if (TOOL_POLICY[name]?.group !== "local") expect(meta.gate, `${name} gate names its group`).toContain(TOOL_POLICY[name]!.group);
     }
   });
 
@@ -287,7 +288,7 @@ describe("the docs say what the code does", () => {
     expect(named.map((arg) => arg.name)).toEqual(["--features", "--project"]);
     for (const arg of named) expect(isServerFlag(arg.name!), arg.name).toBe(true);
     const features = named.find((arg) => arg.name === "--features")!;
-    expect(features.choices).toEqual(["local", "local,platform"]);
+    expect(features.choices).toEqual(["local", "local,platform", "local,extras", "local,platform,extras"]);
     expect(features.default).toBe(DEFAULT_SERVER_OPTIONS.features.join(","));
 
     for (const choice of features.choices!) {

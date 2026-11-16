@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 
 import { createServer } from "../index";
 import { envelope } from "../lib/envelope";
-import { TOOL_POLICY } from "../lib/tool-policy";
+import { runsOnPlatform } from "../lib/tool-policy";
 import { attachTrack, trackFields, trackUrl } from "../lib/track-url";
 import { WORLD_API, usePlatformWorld, type World } from "./fixtures/platform-world";
 import { WORLD_CASES } from "./fixtures/platform-world-cases";
@@ -71,7 +71,7 @@ async function listedPlatformTools(): Promise<string[]> {
   await client.connect(clientTransport);
   const { tools } = await client.listTools();
 
-  return tools.map((tool) => tool.name).filter((name) => TOOL_POLICY[name]?.group === "platform");
+  return tools.map((tool) => tool.name).filter((name) => runsOnPlatform(name));
 }
 
 const RUNS_HERE = ["extension_preview_web", "extension_workspace_create", "extension_project_create", "extension_auth"];

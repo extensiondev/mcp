@@ -21,6 +21,7 @@ const EVAL = "a session started with allowEval: true on extension_dev";
 const CHROMIUM_SESSION = "a live Chromium dev or start session with its debug port; no allowEval";
 const PLATFORM = "the server started with --features=local,platform";
 const LOGIN = `${PLATFORM}, and a login`;
+const EXTRAS = "the server started with extras in --features, as in --features=local,platform,extras";
 
 export const TOOL_DOCS: Record<string, ToolDocsMeta> = {
   extension_create: { tier: "build", gate: NONE, samplePrompt: "Create a new tab extension with React in ./my-newtab" },
@@ -30,7 +31,7 @@ export const TOOL_DOCS: Record<string, ToolDocsMeta> = {
   extension_build: { tier: "build", gate: NONE, samplePrompt: "Build this extension for Chrome and Firefox" },
   extension_dev: { tier: "run", gate: NONE, samplePrompt: "Run my extension in Chrome and let me act on it" },
   extension_start: { tier: "run", gate: NONE, samplePrompt: "Launch the production build in Edge" },
-  extension_try: { tier: "run", gate: NONE, samplePrompt: "Try cezaraugusto/rebeccat for me and show me what it does" },
+  extension_try: { tier: "run", gate: `${PLATFORM}; a public project needs no login, a private one a login for it`, samplePrompt: "Try cezaraugusto/rebeccat for me and show me what it does" },
   extension_wait: { tier: "run", gate: SESSION, samplePrompt: "Wait until the dev session is ready, then tell me the ports" },
   extension_stop: { tier: "run", gate: SESSION, samplePrompt: "Stop the running session and close its browser" },
   extension_manifest_validate: { tier: "see", gate: NONE, samplePrompt: "Will this manifest load on Firefox and Safari?" },
@@ -41,9 +42,9 @@ export const TOOL_DOCS: Record<string, ToolDocsMeta> = {
   extension_list_extensions: { tier: "see", gate: SESSION, samplePrompt: "Which extensions are loaded in the dev browser right now?" },
   extension_logs: { tier: "see", gate: SESSION, samplePrompt: "Show me every log line since the session started, in order" },
   extension_doctor: { tier: "see", gate: SESSION, samplePrompt: "The session looks stuck. Diagnose it" },
-  extension_theme_verify: { tier: "see", gate: NONE, samplePrompt: "Does this theme manifest paint the colors it declares?" },
+  extension_theme_verify: { tier: "see", gate: EXTRAS, samplePrompt: "Does this theme manifest paint the colors it declares?" },
   extension_assert: { tier: "test", gate: SESSION, samplePrompt: "Check that the worker booted, the popup rendered and the console is clean" },
-  extension_network: { tier: "test", gate: `${SESSION} on a Chromium browser`, samplePrompt: "Make the API answer 500 and show me what the popup renders" },
+  extension_network: { tier: "test", gate: `${EXTRAS}; ${SESSION} on a Chromium browser`, samplePrompt: "Make the API answer 500 and show me what the popup renders" },
   extension_eval: { tier: "act", gate: EVAL, samplePrompt: "Evaluate chrome.runtime.id in the background and in the popup" },
   extension_storage: { tier: "act", gate: CONTROL, samplePrompt: "Read chrome.storage.local and set settings.theme to dark" },
   extension_reload: { tier: "act", gate: CONTROL, samplePrompt: "Reload the extension and confirm the worker came back" },

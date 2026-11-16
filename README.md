@@ -52,7 +52,7 @@ Other clients take the same server as `.mcp.json`; every client's block, with a 
 
 <!-- setup:end -->
 
-The local tools need no account; the platform tools, on with `--features=local,platform`, ask for a login the first time they reach extension.dev.
+The local tools need no account; the platform tools, on with `--features=local,platform`, ask for a login the first time they reach extension.dev. Add `extras` (`--features=local,platform,extras`) to list `extension_theme_verify` and `extension_network`.
 
 ## Your first prompt
 
@@ -130,7 +130,7 @@ claude mcp add --transport http extension-dev https://mcp.extension.dev/mcp
 
 | Flag | Environment variable | Default | Effect |
 | --- | --- | --- | --- |
-| `--features=<groups>` | `EXTENSION_DEV_FEATURES` | `local` | `local,platform` adds the platform group; `platform` lists only those |
+| `--features=<groups>` | `EXTENSION_DEV_FEATURES` | `local` | `local,platform` adds the platform group; `extras`, off unless named, adds the theme check and the network stubs; a group named alone lists only its tools |
 | `--no-ship` | `EXTENSION_DEV_NO_SHIP=1` | off | Refuses publish, promote, a real submit, a store act (the listing sync included), a shared preview, a share create or revoke |
 | `--project <workspace>/<project>` | `EXTENSION_DEV_PROJECT` | unset | Refuses any call that names another project |
 | none | `EXTENSION_DEV_TOKEN` | unset | An [access token](https://docs.extension.dev/tools/access-tokens) in place of the device login, for CI |
@@ -143,7 +143,7 @@ claude mcp add --transport http extension-dev https://mcp.extension.dev/mcp
 
 ## Tools
 
-The local group scaffolds, builds, runs, inspects, drives and asserts; the platform group logs in, shares, promotes, submits and reads builds, releases and approvals. Every tool has a page under the [tool reference](https://docs.extension.dev/tools/mcp#reference), generated from the schema the server registers, with its inputs, whether it only reads, the gate it needs and a prompt that reaches for it.
+The local group scaffolds, builds, runs, inspects, drives and asserts; the platform group logs in, shares, promotes, submits, reads builds, releases and approvals, and runs a published build with `extension_try`; the extras group, off unless named, verifies a Chrome theme and stubs network responses. Every tool has a page under the [tool reference](https://docs.extension.dev/tools/mcp#reference), generated from the schema the server registers, with its inputs, whether it only reads, the gate it needs and a prompt that reaches for it.
 
 ## Pair with the skill
 
@@ -157,7 +157,7 @@ npx skills add extensiondev/skill
 
 Every refusal carries a `hint` naming the next call. The five most common:
 
-- **`E_TOOL_DISABLED`**: the tool's group is off, or the call reaches outside this machine in no-ship mode. Add `platform` to `--features`, or drop `--no-ship`, in the client's config, then call again.
+- **`E_TOOL_DISABLED`**: the tool's group is off, or the call reaches outside this machine in no-ship mode. Add the group the hint names (`platform` or `extras`) to `--features`, or drop `--no-ship`, in the client's config, then call again.
 - **`approval-required`**: have a workspace owner approve the act at the link, then repeat the call with the same arguments and the returned `approvalId`.
 - **`E_AUTH_REQUIRED`** or **`E_AUTH_EXPIRED`**: the login lives at most 7 days. Run `extension_auth` (`action: "login"`, `project: "<workspace>/<project>"`), then call again.
 - **`E_NO_SESSION`**: nothing is running. Start `extension_dev`, then `extension_wait` for ready.

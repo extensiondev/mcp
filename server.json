@@ -33,11 +33,13 @@
         {
           "type": "named",
           "name": "--features",
-          "description": "Tool groups to expose. local is everything that runs on this machine; local,platform adds the extension.dev tools that share, release and submit to the stores, which need a login.",
+          "description": "Tool groups to expose. local is everything that runs on this machine; platform adds the extension.dev tools that share, release and submit to the stores, which need a login; extras adds the theme check and the network stubs.",
           "default": "local",
           "choices": [
             "local",
-            "local,platform"
+            "local,platform",
+            "local,extras",
+            "local,platform,extras"
           ]
         },
         {
@@ -54,7 +56,9 @@
           "default": "local",
           "choices": [
             "local",
-            "local,platform"
+            "local,platform",
+            "local,extras",
+            "local,platform,extras"
           ]
         },
         {
