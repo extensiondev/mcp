@@ -8,6 +8,7 @@
 
 import { spawn } from "node:child_process";
 
+import { dashboardStoreOf } from "./dashboard-url-meter";
 import { envelope, isEnvelope } from "./envelope";
 import { envIsHeadless } from "./launch-flags";
 import { APPROVAL_REQUIRED_STATUS } from "./approval-outcome";
@@ -75,6 +76,27 @@ export function approvalPageUrl(raw: string): string {
   const origins = mcpOrigins();
 
   return [origins.www, origins.console].some((origin) => hostOf(origin) === host) ? href : "";
+}
+
+/* @invariant
+ * A PAGE THE HOSTED LANE NAMES OPENS ONLY ON THE PLATFORM OR ON A STORE'S
+ * DEVELOPER DASHBOARD.
+ *
+ * The lane's answer is text from the network, and opening a page puts it in
+ * front of a person who was just told to expect one. So a named page opens
+ * only when an approval page would (extension.dev, the configured platform,
+ * this machine) or when it is one of the four store dashboards this server
+ * itself composes addresses for: the Chrome Web Store developer console,
+ * Mozilla's developer hub, Microsoft Partner Center and App Store Connect.
+ * Anything else stays in the answer as text.
+ */
+export function lanePageUrl(raw: string): string {
+  const platform = approvalPageUrl(raw);
+  if (platform) return platform;
+
+  const href = openableUrl(raw);
+
+  return href && dashboardStoreOf(href) ? href : "";
 }
 
 export function osOpenCommand(url: string, platform: NodeJS.Platform = process.platform): [string, string[]] {

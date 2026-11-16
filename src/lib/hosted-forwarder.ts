@@ -8,7 +8,7 @@
 
 import crypto from "node:crypto";
 
-import { autoOpenBlock, notOpenedNote, openCommandBlock, openPagesForPerson } from "./approval-open";
+import { autoOpenBlock, lanePageUrl, notOpenedNote, openCommandBlock, openPagesForPerson } from "./approval-open";
 import { askingOnly } from "./ask-only";
 import { PACKAGE_HOLD_FACT } from "./build-inputs";
 import { localPackageHolds } from "./build-inputs-local";
@@ -47,6 +47,12 @@ export const HOSTED_DROPPED_ARGS = ["api", "projectPath"] as const;
 export const PAGE_OPENING_FACT = "pageOpening";
 export const OPEN_PAGES_KEY = "openPages";
 export const OPEN_PAGES_MAX = 4;
+export const PAGES_NOT_OPENED_KEY = "pagesNotOpened";
+
+const PAGES_REFUSED_WHY = "the page named is neither on extension.dev nor on a store's developer dashboard";
+
+const pagesRefusedNote = (pages: string[]): string =>
+  `Not opened, since ${pages.length > 1 ? "they are" : "it is"} neither on extension.dev nor on a store's developer dashboard: ${pages.join(", ")}. Give the person the address as text and say where it came from.`;
 
 export interface StoredLogin {
   token: string;
@@ -384,16 +390,19 @@ function openLanePages(body: unknown, deps: ForwarderDeps): { body: unknown; uno
   const named = lane.value && typeof lane.value === "object" ? (lane.value as Args)[OPEN_PAGES_KEY] : undefined;
   if (!Array.isArray(named)) return { body, unopened: null };
 
-  const value = Object.fromEntries(Object.entries(lane.value as Args).filter(([key]) => key !== OPEN_PAGES_KEY));
-  const urls = named.filter(personPage).slice(0, OPEN_PAGES_MAX);
-  if (!urls.length) return { body: { ...lane, value }, unopened: null };
+  const pages = named.filter(personPage).slice(0, OPEN_PAGES_MAX);
+  const urls = pages.map(lanePageUrl).filter(Boolean);
+  const refused = pages.filter((page) => !lanePageUrl(page));
+  const value = { ...Object.fromEntries(Object.entries(lane.value as Args).filter(([key]) => key !== OPEN_PAGES_KEY)), ...(refused.length ? { [PAGES_NOT_OPENED_KEY]: refused } : {}) };
+  const kept = refused.length ? { ...lane, value, warnings: [...(Array.isArray(lane.warnings) ? lane.warnings : []), pagesRefusedNote(refused)] } : { ...lane, value };
+  if (!urls.length) return { body: refused.length ? unopenedAnswer(kept, notOpenedNote(PAGES_REFUSED_WHY)) : kept, unopened: null };
 
   const env = deps.env ?? process.env;
   const blocked = autoOpenBlock({ noShip: false }, env, deps.platform);
   const opening = openPagesForPerson(urls, env, deps.platform);
-  if (opening.opened) return { body: { ...lane, value }, unopened: null };
+  if (opening.opened) return { body: kept, unopened: null };
 
-  return { body: unopenedAnswer({ ...lane, value }, opening.note), unopened: blocked ? null : openCommandBlock(deps.platform) };
+  return { body: unopenedAnswer(kept, opening.note), unopened: blocked ? null : openCommandBlock(deps.platform) };
 }
 
 function unopenedAnswer(lane: Args, note: string): Args {

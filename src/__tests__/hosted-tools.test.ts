@@ -12,7 +12,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { setApprovalOpener } from "../lib/approval-open";
+import { lanePageUrl, setApprovalOpener } from "../lib/approval-open";
 import { loginIdOf } from "../lib/credential-source";
 import { credentialsPath, writeCredentials } from "../lib/credentials";
 import { envelope as envelopeOf } from "../lib/envelope";
@@ -396,6 +396,46 @@ describe("the forwarder", () => {
       expect(held.value).toMatchObject({ connectUrl, opened: false, openedNote: expect.stringContaining("No page was opened: EXTENSION_HEADLESS=1") });
       expect(held.value).not.toHaveProperty("openPages");
       expect(local).not.toHaveBeenCalled();
+    } finally {
+      restore();
+    }
+  });
+
+  it("899: opens a page the lane names only on the platform or a store's developer dashboard, and keeps any other as text", async () => {
+    const opened: string[] = [];
+    const restore = setApprovalOpener((url) => {
+      opened.push(url);
+
+      return true;
+    });
+    const connectUrl = "https://console.extension.dev/acme/web/submissions/edge/connect";
+    const keyPage = "https://partner.microsoft.com/dashboard/microsoftedge/publishapi";
+    const elsewhere = "https://login.example.test/dashboard";
+    const lookalike = "https://partner.microsoft.com.example.test/dashboard";
+    const answer = (openPages: string[]) => JSON.parse(envelopeOf({ ok: true, command: "extension_submit", status: "connect-pending", value: { connectUrl, opened: true, openPages } }));
+
+    try {
+      const { lane } = stubLane([answer([keyPage, elsewhere, connectUrl, lookalike]), answer([elsewhere])]);
+      const local = vi.fn(async () => "local");
+      const out = JSON.parse(await forwardCall("extension_submit", { action: "connect", store: "edge", projectPath: tmp }, local, { ...FORWARDING, platform: "darwin" }));
+
+      expect(lane()).toHaveLength(1);
+      expect(opened).toEqual([keyPage, connectUrl]);
+      expect(out.value).toEqual({ connectUrl, opened: true, pagesNotOpened: [elsewhere, lookalike] });
+      expect(out.warnings.join(" ")).toContain(`neither on extension.dev nor on a store's developer dashboard: ${elsewhere}, ${lookalike}`);
+
+      const alone = JSON.parse(await forwardCall("extension_submit", { action: "connect", store: "edge", projectPath: tmp }, local, { ...FORWARDING, platform: "darwin" }));
+
+      expect(opened).toHaveLength(2);
+      expect(alone.value).toMatchObject({ opened: false, pagesNotOpened: [elsewhere] });
+
+      for (const page of ["https://chrome.google.com/webstore/devconsole/p/i/edit", "https://addons.mozilla.org/developers/addon/api/key/", "https://appstoreconnect.apple.com/access/integrations/api", "https://www.extension.dev/device/approve", "http://localhost:3100/x"]) {
+        expect(lanePageUrl(page), page).toBe(page);
+      }
+
+      for (const page of ["https://chrome.google.com/search", "https://addons.mozilla.org/firefox/addon/x/", "https://appstoreconnect.apple.com@example.test/", "https://extension.dev.example.test/", "http://partner.microsoft.com/dashboard", "javascript:alert(1)"]) {
+        expect(lanePageUrl(page), page).toBe("");
+      }
     } finally {
       restore();
     }
