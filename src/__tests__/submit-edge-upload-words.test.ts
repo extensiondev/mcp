@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { actionFingerprint } from "../lib/approval-gate";
 import { writeCredentials } from "../lib/credentials";
-import { doneStep, PUBLISH_SENTENCE } from "../lib/store-connection";
+import { doneStep, PUBLISH_SENTENCE, submitFailedStep } from "../lib/store-connection";
 import { WORLD_API, usePlatformWorld, type World } from "./fixtures/platform-world";
 
 const SUBMIT = /^POST \/api\/cli\/stores\/submit$/;
@@ -130,3 +130,21 @@ function serve(row: Record<string, unknown>): typeof fetch {
     return jsonResponse({ message: "not found" }, false, 404);
   }) as unknown as typeof fetch;
 }
+
+describe("a failed submission's next step tells the run's own step from the store's answer", () => {
+  const url = "https://console.extension.dev/acme/ghost-app/submissions/firefox";
+
+  it("says a run that stopped at its own step never called the store, and keeps the store's words for a failure the store gave", () => {
+    const stopped = submitFailedStep(['firefox: The step "Resolve submission settings" failed: the project settings name no workspace.'], url);
+
+    expect(stopped.say).toBe(
+      `The firefox submit run stopped at its own step "Resolve submission settings" before the store was called; the step said: the project settings name no workspace. Nothing was sent to a store and nothing is in review. Fix the cause, then submit the same build again; ${url} holds the run's own words.`,
+    );
+
+    const mixed = submitFailedStep(['firefox: The step "Resolve submission settings" failed', "chrome: The item is in review."], url);
+
+    expect(mixed.say).toContain('The firefox submit run stopped at its own step "Resolve submission settings" before the store was called.');
+    expect(mixed.say).toContain("The submission did not reach the Chrome Web Store; nothing is in review. The store answered: chrome: The item is in review.");
+    expect(mixed.say).not.toContain("answered: firefox");
+  });
+});

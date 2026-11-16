@@ -180,14 +180,30 @@ export function uploadedStepFailedStep(stores: string[], step: string, trackUrl:
  * were. A record that reads failed says so with the store's own words, that
  * nothing is in review, and that the same build is submitted again once the
  * cause is fixed; the track page holds the run's words.
+ *
+ * A RUN THAT STOPPED AT ITS OWN STEP IS NOT THE STORE'S ANSWER. The lane
+ * records a run that failed before its submit step as `The step "<name>"
+ * failed: <its line>`, and no store was called on it, so that failure names
+ * the step and says the store was never called; only a failure the store
+ * gave reads "the store answered" (ledger 876).
  */
+const RUN_STEP_FAILURE = /^([a-z]+): The step "([^"]+)" failed(?:: ([\s\S]*))?$/;
+
 export function submitFailedStep(failures: string[], trackUrl: string): NextStep {
-  const stores = failures.map((line) => line.split(":")[0]?.trim() ?? "").filter(Boolean);
-  const answered = failures.map((line) => line.trim().replace(/[.\s]+$/, ""));
+  const lines = failures.map((line) => line.trim().replace(/[.\s]+$/, ""));
+  const stopped = lines.map((line) => RUN_STEP_FAILURE.exec(line)).filter((match) => match !== null);
+  const answered = lines.filter((line) => !RUN_STEP_FAILURE.test(line));
+  const stores = answered.map((line) => line.split(":")[0]?.trim() ?? "").filter(Boolean);
+  const stoppedSay = stopped
+    .map((match) => `The ${match[1]} submit run stopped at its own step "${match[2]}" before the store was called${match[3] ? `; the step said: ${match[3]}` : ""}.`)
+    .join(" ");
+  const answeredSay = answered.length
+    ? `The submission did not reach ${storeNames(stores)}; nothing is in review. The store answered: ${answered.join("; ")}.`
+    : "Nothing was sent to a store and nothing is in review.";
 
   return nextStep(
     "resubmit",
-    `The submission did not reach ${storeNames(stores)}; nothing is in review. The store answered: ${answered.join("; ")}. Fix the cause, then submit the same build again; ${trackUrl} holds the run's own words.`,
+    `${stoppedSay ? `${stoppedSay} ` : ""}${answeredSay} Fix the cause, then submit the same build again; ${trackUrl} holds the run's own words.`,
     trackUrl,
   );
 }

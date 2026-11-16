@@ -2,6 +2,7 @@
 
 ## 11.0.0
 
+- Ledger 876. The failed-submission next step tells a run that stopped at its own step from a store's answer. A record whose reason reads `The step "<name>" failed: ...` now says the run stopped at that step before the store was called and that nothing was sent; it read "The submission did not reach <store>" and "The store answered: ..." for a store that was never called. A failure the store gave keeps its words.
 - Ledger 866. `extension_submit_check` answers under `--no-ship`. The check executes nothing, it reads or asks for an approval, yet it was refused as `E_TOOL_DISABLED` for every store act because it runs through `extension_submit`'s gate. The same act through `extension_submit` stays refused.
 - Ledger 867. `extension_project_create` leaves an unsaid `installCommand` or `buildCommand` off the wire, so the platform reads it from the project (its package manager, a `build:<browser>` script, an Extension.js build). It sent `npm install` and `npm run build -- --browser <browser>` for every create that named none, and the two inputs no longer declare those as defaults. A command the caller gives is sent as given.
 - Ledger 868. The create answer carries `value.stored`, the browsers and commands the platform stored, and warns with each note the platform sends when that is not what was sent, such as Chrome switched on because every browser was off.
