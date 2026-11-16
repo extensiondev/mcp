@@ -13,7 +13,7 @@
 
 Extension.js is the framework you run. extension.dev is where it ships. This server covers both: the local tools run Extension.js on your machine, and the platform lane takes the build the rest of the way to the stores.
 
-These tools build, run, inspect and ship one extension across Chrome, Edge, Firefox and Safari. When a browser vendor's own skill is installed, such as Chrome's `chrome-extensions`, follow it for that browser's API guidance and use these tools to run and verify what it suggests.
+These tools build, run, inspect and ship one extension across Chrome, Edge, Firefox and Safari.
 
 [Docs](https://docs.extension.dev/tools/mcp) · [Tools](#tools) · [Skill](https://www.npmjs.com/package/@extension.dev/skill) · [Changelog](CHANGELOG.md) · [Troubleshooting](#troubleshooting) · [Discord](https://discord.gg/v9h2RgeTSN)
 

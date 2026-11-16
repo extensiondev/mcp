@@ -192,17 +192,6 @@ const INSTRUCTIONS_HEAD = [
   "When the person wants to try or see the extension, offer to open it and call extension_dev yourself (headless: false opens a window they can see); never hand the person a shell command such as npm run dev as their next step, and never say a browser is on their screen when the answer reports headless: true.",
 ];
 
-/* @invariant
- * THE VENDOR SKILL LINE RIDES THE LOCAL INSTRUCTIONS ONLY, FOR NOW. It costs
- * 182 characters and the platform instructions sit 36 under their three
- * window ceiling with every sentence pinned by a test, so adding it there
- * means cutting store doctrine or moving the ceiling, and neither is this
- * line's to decide (ledger 823). The default start is local, and the README
- * says the same thing to everyone.
- */
-export const VENDOR_SKILLS =
-  "When a browser vendor's own skill is installed, Chrome's chrome-extensions for one, follow it for that browser's API guidance and use these tools to run and verify what it suggests.";
-
 const SESSION_RULES = [
   "These replace hand-rolled ps, curl, remote-debugging-port lookups and CDP or Playwright scripts: the server reads the session's debug port and extension id from the engine's ready.json contract on each call.",
   "Every tool answers one JSON envelope {ok, status, value, error, hint, warnings}; read hint and warnings before choosing the next call, and treat ok: false as the answer, not a transport error. status authorization-pending is ok: true and means a human approves at the link in hint before you call again; it is not done yet.",
@@ -226,7 +215,7 @@ export function serverInstructions(
         PLATFORM_STORE,
         ...CHROME_STORE_GOAL,
       ]
-    : [VENDOR_SKILLS, PLATFORM_OFF];
+    : [PLATFORM_OFF];
 
   const engine = deadEngineOverrideInstruction();
 

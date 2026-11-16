@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-
-import { INSTRUCTIONS_WINDOW, serverInstructions, VENDOR_SKILLS } from "../index";
+import { INSTRUCTIONS_WINDOW, serverInstructions } from "../index";
 
 const PLATFORM_ON = { features: ["local", "platform"] as Array<"local" | "platform">, noShip: false };
 
@@ -47,26 +44,5 @@ describe("427: the hold is a condition on an answer, not the state of the platfo
     expect(text).toMatch(/A platform answer with status platform-held means extension\.dev is not open to that caller yet: say so plainly and offer no other host\./);
     expect(text).not.toMatch(/While extension\.dev is not open to the public yet/);
     expect(text).not.toMatch(/these tools answer platform-held/);
-  });
-});
-
-describe("823: the server says once how its tools sit beside a browser vendor's own skill", () => {
-  it("carries the line in the local instructions, inside the window, and in the README opening", () => {
-    const local = serverInstructions();
-    const readme = readFileSync(fileURLToPath(new URL("../../README.md", import.meta.url)), "utf8");
-    const opening = readme.slice(0, readme.indexOf("## Install"));
-
-    expect(VENDOR_SKILLS).toBe(
-      "When a browser vendor's own skill is installed, Chrome's chrome-extensions for one, follow it for that browser's API guidance and use these tools to run and verify what it suggests.",
-    );
-
-    expect(local.split(VENDOR_SKILLS)).toHaveLength(2);
-    expect(local.indexOf(VENDOR_SKILLS) + VENDOR_SKILLS.length).toBeLessThanOrEqual(INSTRUCTIONS_WINDOW);
-    expect(serverInstructions(PLATFORM_ON)).not.toContain(VENDOR_SKILLS);
-    expect(opening).toContain(
-      "When a browser vendor's own skill is installed, such as Chrome's `chrome-extensions`, follow it for that browser's API guidance and use these tools to run and verify what it suggests.",
-    );
-
-    expect(`${local}\n${opening}`).not.toMatch(/\b(versus|vs\.?|unlike|better than)\b/i);
   });
 });
