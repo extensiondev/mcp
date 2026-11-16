@@ -23,6 +23,7 @@ import { bounded, type OverLimitMeasure } from "./store-md-bounded";
 import { bulletLine, storeOwnLinesBody } from "./store-md-bullets";
 import { safariTitle } from "./store-md-safari-title";
 import { screenshotFilesListed } from "./store-md-screenshots";
+import { stripHtmlComments } from "./html-comments";
 
 export * from "./store-md-declarations";
 
@@ -134,7 +135,7 @@ function bullets(body: string): Array<{ key: string; value: string }> {
     current = null;
   };
 
-  for (const line of body.replace(/<!--[\s\S]*?-->/g, "").split("\n")) {
+  for (const line of stripHtmlComments(body).split("\n")) {
     const bullet = bulletLine(line);
 
     if (bullet) {
@@ -276,7 +277,7 @@ function parseCategories(raw: string): ParsedCategories {
 
 function fieldText(body: string, prefix: string): string {
   for (const sub of splitSections(body, 3)) {
-    if (sub.heading.toLowerCase().startsWith(prefix)) return usable(sub.body.replace(/<!--[\s\S]*?-->/g, "").trim());
+    if (sub.heading.toLowerCase().startsWith(prefix)) return usable(stripHtmlComments(sub.body).trim());
   }
 
   return "";
@@ -288,7 +289,7 @@ function privacyProse(body: string): string {
   const kept: string[] = [];
   let skipping = false;
 
-  for (const line of body.replace(/<!--[\s\S]*?-->/g, "").split("\n")) {
+  for (const line of stripHtmlComments(body).split("\n")) {
     if (POLICY_ROW.test(line)) {
       skipping = true;
       continue;

@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { stripHtmlComments } from "./html-comments";
+
 export const STORE_MD_FILENAME = "STORE.md";
 export const CHROMEWEBSTORE_MD_FILENAME = "CHROMEWEBSTORE.md";
 
@@ -31,7 +33,7 @@ function classifyStoreHeading(heading: string): StoreKeyInMd | undefined {
 }
 
 function stripComments(body: string): string {
-  return body.replace(/<!--[\s\S]*?-->/g, "");
+  return stripHtmlComments(body);
 }
 
 interface Section {

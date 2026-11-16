@@ -15,6 +15,13 @@ import {
 } from "./store-md-declarations";
 import { STORE_LABELS, storeSearchTermsProblem, storeTextOverLimit } from "./store-text-limits";
 
+export function emailShaped(value: string): boolean {
+  const at = value.indexOf("@");
+  if (at < 1 || at !== value.lastIndexOf("@") || /\s/.test(value)) return false;
+
+  return value.slice(at + 2, -1).includes(".");
+}
+
 const E164 = /^\+[1-9]\d{6,14}$/;
 
 const E164_REASON = "is not an E.164 phone number (a plus, the country code and the digits, for example +5511999999999)";
@@ -56,7 +63,7 @@ export function bounded(field: string, value: unknown, skipped: string[], store:
     const emailField = field === "supportEmail" || field === "reviewContactEmail";
     const shapeless =
       (/Url$/.test(field) && !/^https?:\/\/\S+$/i.test(text)) ||
-      (emailField && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text));
+      (emailField && !emailShaped(text));
 
     if (text && shapeless) {
       return { reason: `is not ${emailField ? "an email address" : "an http or https URL"}` };

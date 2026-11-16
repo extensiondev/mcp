@@ -13,6 +13,7 @@ import { kernelHook } from "./kernel-hooks";
 import { STORE_MD_FILENAME } from "./store-md";
 import { bulletLine, storeOwnLinesBody } from "./store-md-bullets";
 import { classifyStore } from "./store-md-listing";
+import { stripHtmlComments } from "./html-comments";
 
 export type AmoChannel = "listed" | "unlisted";
 
@@ -47,7 +48,7 @@ function firefoxSectionBody(content: string): string | null {
   const kept: string[] = [];
   let inside = false;
 
-  for (const line of content.replace(/<!--[\s\S]*?-->/g, "").split("\n")) {
+  for (const line of stripHtmlComments(content).split("\n")) {
     const heading = SECTION_HEADING.exec(line);
 
     if (heading) {

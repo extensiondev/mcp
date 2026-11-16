@@ -6,6 +6,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { actionFingerprint } from "../lib/approval-gate";
 import { CHROMEWEBSTORE_MD_PREFILL_CALL } from "../lib/chromewebstore-md";
+import { stripHtmlComments } from "../lib/html-comments";
+import { parseStoreMd } from "../lib/store-md";
+import { emailShaped } from "../lib/store-md-bounded";
 import { listingDigest } from "../lib/store-listing-media";
 import { STORE_FIELDS, derivedListingFields, listingForStore, parseStoreMdListing } from "../lib/store-md-listing";
 import { TOOL_POLICY } from "../lib/tool-policy";
@@ -116,6 +119,28 @@ function project(): string {
 }
 
 describe("STORE.md fills the store listing", () => {
+  it("897: leaves no comment behind when removing one closes another, in linear time", () => {
+    expect(stripHtmlComments("a<!-- one -->b<!--\ntwo\n-->c")).toBe("abc");
+    expect(stripHtmlComments("a<!-<!-- inner -->- hidden -->b")).toBe("ab");
+    expect(stripHtmlComments("a<!-- never closed")).toBe("a<!-- never closed");
+    expect(stripHtmlComments("a --> b")).toBe("a --> b");
+    expect(parseStoreMd("## Firefox\n\n### Reviewer notes\n\nSign in first.<!-<!-- x -->- test account: hidden -->\n").firefox?.approvalNotes).toBe("Sign in first.");
+
+    const started = performance.now();
+
+    expect(stripHtmlComments("<!--".repeat(100_000))).toHaveLength(400_000);
+    expect(stripHtmlComments("<!-".repeat(50_000) + "<!-- x -->" + "- y -->".repeat(50_000))).toBe("");
+    expect(emailShaped(`!@!.${"!.".repeat(50_000)}@`)).toBe(false);
+    expect(performance.now() - started).toBeLessThan(400);
+  });
+
+  it("897: reads an email address by the same rule as before", () => {
+    for (const [value, shaped] of [["a@b.co", true], ["first.last@mail.example.org", true], ["a@.b.c", true], ["a@b", false], ["a@b.", false], ["a@.b", false], ["@b.co", false], ["a@b@c.co", false], ["a b@c.co", false], ["", false]] as const) {
+      expect(emailShaped(value), value).toBe(shaped);
+      expect(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value), value).toBe(shaped);
+    }
+  });
+
   it("reads the listing copy, per store categories and notes, and leaves TODO lines out", () => {
     const parsed = parseStoreMdListing(STORE_MD);
     const chrome = listingForStore(parsed, "chrome").listing;

@@ -11,6 +11,7 @@ import { CHROMEWEBSTORE_MD_FILENAME } from "./store-md";
 import { stripQuotes } from "./store-md-bullets";
 import { STORE_FIELDS, type ListingField, type ListingStore, type ListingText, type PermissionJustification } from "./store-md-declarations";
 import { linesNotFound, storeMdLineOf, storeMdSectionOf } from "./store-md-fields";
+import { stripHtmlComments } from "./html-comments";
 
 import type { LocalListingRead } from "./store-listing-local";
 
@@ -86,7 +87,7 @@ const NOT_MAPPED_SECTIONS: Array<{ heading: RegExp; why: string }> = [
   { heading: /^review notes/, why: "Review Notes are your own record; the Chrome Web Store takes no reviewer note" },
 ];
 
-const stripComments = (content: string): string => content.replace(/<!--[\s\S]*?-->/g, "");
+const stripComments = stripHtmlComments;
 
 const placeholder = (value: string): boolean => !value || /^\[.*\]$/.test(value) || (/ \/ /.test(value) && value.split(" / ").every((option) => option.length <= 30));
 
