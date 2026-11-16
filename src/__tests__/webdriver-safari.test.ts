@@ -17,6 +17,7 @@ import * as evalTool from "../tools/eval";
 import * as logsTool from "../tools/logs";
 import * as openTool from "../tools/open";
 import * as waitTool from "../tools/wait";
+import { ignoreGlobMatcher } from "../lib/ignore-glob";
 import { cutAt, dropTrailing } from "../lib/linear-text";
 import { urlPatternMatcher } from "../lib/cdp-targets";
 import { parseChromeWebStoreMd } from "../lib/chromewebstore-md";
@@ -269,6 +270,151 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
     for (const refused of ["ada@example", "ada@.com", "ada@example.", "a@b@c.d", "@example.com", "ada @example.com"]) {
       expect(parseChromeWebStoreMd(`## Store Listing\n\n**Support URL / Email**\n${refused}\n`).listing.supportEmail, refused).toBeUndefined();
     }
+  });
+
+  it("901: reads a hostile .gitignore against long paths inside the budget", () => {
+    const deep = `${"a/".repeat(30)}y`;
+    const run = `${"a".repeat(34)}c`;
+    const started = performance.now();
+    const modest = parseGitignore(`${"**/".repeat(9)}x\n${"*a".repeat(10)}b\nq${"**a".repeat(10)}b\n`);
+
+    expect(modest).toHaveLength(3);
+    expect(gitignored(deep, false, modest)).toBe(false);
+    expect(gitignored(run, false, modest)).toBe(false);
+    expect(gitignored(`q${run}`, false, modest)).toBe(false);
+    expect(performance.now() - started).toBeLessThan(400);
+
+    const again = performance.now();
+    const hostile = parseGitignore(
+      [`${"**/".repeat(400)}x`, `${"*a".repeat(400)}b`, `q${"**a".repeat(400)}b`, `${"**/*a".repeat(300)}/b`, `${"*".repeat(100_000)}b`, `${"[!b]*".repeat(300)}b`, `${"?*".repeat(300)}b`, "[z-a]", `[${"a-".repeat(2_000)}]`].join("\n"),
+    );
+
+    expect(hostile).toHaveLength(9);
+
+    for (const subject of [`${"a/".repeat(400)}y`, `${"a".repeat(900)}c`, `q${"a".repeat(900)}c`, `${"a/a".repeat(300)}c`]) {
+      expect(gitignored(subject, false, hostile), subject.slice(0, 12)).toBe(false);
+    }
+
+    expect(performance.now() - again).toBeLessThan(400);
+    expect(gitignored(`${"a/".repeat(400)}x`, false, hostile)).toBe(true);
+    expect(gitignored(`${"a".repeat(900)}b`, false, hostile)).toBe(true);
+  });
+
+  it("901: answers every ignore pattern as the regular expression builder did, over a generated corpus", () => {
+    const special = /[.*+?^${}()|[\]\\/]/g;
+
+    const before = (pattern: string, anchored: boolean): RegExp => {
+      let out = "";
+
+      for (let i = 0; i < pattern.length; i += 1) {
+        const ch = pattern[i]!;
+
+        if (ch === "*") {
+          if (pattern[i + 1] === "*") {
+            if (pattern[i + 2] === "/") {
+              out += "(?:.*/)?";
+              i += 2;
+            } else {
+              out += ".*";
+              i += 1;
+            }
+          } else {
+            out += "[^/]*";
+          }
+        } else if (ch === "?") {
+          out += "[^/]";
+        } else if (ch === "[") {
+          const end = pattern.indexOf("]", i + 1);
+
+          if (end > i + 1) {
+            const body = pattern.slice(i + 1, end);
+            out += `[${(body.startsWith("!") ? `^${body.slice(1)}` : body).replace(/\\/g, "\\\\")}]`;
+            i = end;
+          } else {
+            out += "\\[";
+          }
+        } else if (ch === "\\" && i + 1 < pattern.length) {
+          out += pattern[i + 1]!.replace(special, "\\$&");
+          i += 1;
+        } else {
+          out += ch.replace(special, "\\$&");
+        }
+      }
+
+      return anchored ? new RegExp(`^${out}$`) : new RegExp(`(?:^|/)${out}$`);
+    };
+
+    let seed = 901;
+
+    const random = (): number => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+
+      return seed / 0x80000000;
+    };
+
+    const pick = (from: string[]): string => from[Math.floor(random() * from.length)]!;
+    const pieces = ["a", "a", "b", "c", "/", "/", "*", "*", "**", "**/", "/**", "?", ".", "[ab]", "[!a]", "[^a]", "[a-c]", "[c-a]", "[!]", "[]", "[", "]", "[a\\]", "[--b]", "[a-]", "\\*", "\\a", "\\", "!", "-", "é", "+"];
+    const letters = ["a", "a", "b", "c", "/", "/", ".", "*", "[", "]", "\\", "-", "é", "+", "!"];
+    let cases = 0;
+    let matched = 0;
+    let unbuildable = 0;
+    const differing: string[] = [];
+
+    for (let round = 0; round < 6_000; round += 1) {
+      let pattern = "";
+      const subjects: string[] = [];
+
+      for (let i = Math.floor(random() * 7); i >= 0; i -= 1) pattern += pick(pieces);
+
+      for (let n = 0; n < 6; n += 1) {
+        let subject = "";
+
+        for (let i = Math.floor(random() * 9); i > 0; i -= 1) subject += pick(letters);
+
+        subjects.push(subject);
+      }
+
+      subjects.push(pattern.replace(/\*\*\/|\*|\?|\[[^\]]*\]|\\/g, "a"), pattern.replace(/\*\*\/|\*|\?|\\/g, ""));
+
+      for (const anchored of [true, false]) {
+        const now = ignoreGlobMatcher(pattern, anchored);
+        let was: RegExp;
+
+        try {
+          was = before(pattern, anchored);
+        } catch {
+          unbuildable += 1;
+
+          for (const subject of subjects) expect(typeof now(subject)).toBe("boolean");
+
+          continue;
+        }
+
+        for (const subject of subjects) {
+          const expected = was.test(subject);
+
+          cases += 1;
+          if (expected) matched += 1;
+          if (now(subject) !== expected && differing.length < 8) differing.push(JSON.stringify([pattern, anchored, subject, expected]));
+        }
+      }
+    }
+
+    expect(differing).toEqual([]);
+    expect(cases).toBeGreaterThan(80_000);
+    expect(matched).toBeGreaterThan(4_000);
+    expect(unbuildable).toBeGreaterThan(50);
+  });
+
+  it("901: keeps negation, anchoring, directory-only lines, escapes and a nested file's base", () => {
+    const rules = [...parseGitignore("# note\n*.log\n!keep.log\n/root.txt\nout/\ndocs/**/draft.md\n**/tmp\nsrc/*.map\n\\#hash\n\\!bang\nwith\\ space\nimg[0-9].png\n[z-a].txt\n"), ...parseGitignore("*.gen.ts\n/only-here\n", "packages/app")];
+    const ignored = (file: string, directory = false): boolean => gitignored(file, directory, rules);
+
+    expect(rules).toHaveLength(14);
+    expect(["a.log", "deep/er/a.log", "root.txt", "docs/draft.md", "docs/a/b/draft.md", "tmp", "a/b/tmp", "src/x.map", "#hash", "!bang", "with space", "a/img7.png", "packages/app/x.gen.ts", "packages/app/src/x.gen.ts", "packages/app/only-here"].filter((file) => !ignored(file))).toEqual([]);
+    expect(["keep.log", "deep/keep.log", "sub/root.txt", "out", "a/docs/x/draft.md", "src/deep/x.map", "tmpfile", "hash", "imgA.png", "z.txt", "x.gen.ts", "packages/other/x.gen.ts", "packages/app/src/only-here"].filter((file) => ignored(file))).toEqual([]);
+    expect(ignored("out", true)).toBe(true);
+    expect(ignored("a/out", true)).toBe(true);
   });
 
   it("899: leaves no trailing-run or cut pattern in shipped source", () => {

@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 
+import { ignoreGlobMatcher } from "./ignore-glob";
 import { SOURCE_SKIPPED_EXTENSIONS, SOURCE_SKIPPED_FOLDERS } from "./source-archive-words";
 import { dropTrailing } from "./linear-text";
 
@@ -36,50 +37,7 @@ interface IgnoreRule {
   negated: boolean;
   directoryOnly: boolean;
   base: string;
-  test: RegExp;
-}
-
-const ESCAPED = /[.*+?^${}()|[\]\\/]/g;
-
-function globToRegExp(pattern: string): string {
-  let out = "";
-
-  for (let i = 0; i < pattern.length; i += 1) {
-    const ch = pattern[i]!;
-
-    if (ch === "*") {
-      if (pattern[i + 1] === "*") {
-        if (pattern[i + 2] === "/") {
-          out += "(?:.*/)?";
-          i += 2;
-        } else {
-          out += ".*";
-          i += 1;
-        }
-      } else {
-        out += "[^/]*";
-      }
-    } else if (ch === "?") {
-      out += "[^/]";
-    } else if (ch === "[") {
-      const end = pattern.indexOf("]", i + 1);
-
-      if (end > i + 1) {
-        const body = pattern.slice(i + 1, end);
-        out += `[${(body.startsWith("!") ? `^${body.slice(1)}` : body).replace(/\\/g, "\\\\")}]`;
-        i = end;
-      } else {
-        out += "\\[";
-      }
-    } else if (ch === "\\" && i + 1 < pattern.length) {
-      out += pattern[i + 1]!.replace(ESCAPED, "\\$&");
-      i += 1;
-    } else {
-      out += ch.replace(ESCAPED, "\\$&");
-    }
-  }
-
-  return out;
+  test: (subject: string) => boolean;
 }
 
 function dropUnescapedTrailingSpace(line: string): string {
@@ -113,14 +71,11 @@ export function parseGitignore(text: string, base = ""): IgnoreRule[] {
 
     if (!line) continue;
 
-    const anchored = line.includes("/");
-    const body = globToRegExp(line.replace(/^\//, ""));
-
     rules.push({
       negated,
       directoryOnly,
       base,
-      test: anchored ? new RegExp(`^${body}$`) : new RegExp(`(?:^|/)${body}$`),
+      test: ignoreGlobMatcher(line.replace(/^\//, ""), line.includes("/")),
     });
   }
 
@@ -141,7 +96,7 @@ export function gitignored(relativePath: string, isDirectory: boolean, rules: Ig
       subject = relativePath.slice(rule.base.length + 1);
     }
 
-    if (rule.test.test(subject)) ignored = !rule.negated;
+    if (rule.test(subject)) ignored = !rule.negated;
   }
 
   return ignored;
