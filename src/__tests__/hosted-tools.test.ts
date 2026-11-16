@@ -436,6 +436,27 @@ describe("the forwarder", () => {
       for (const page of ["https://chrome.google.com/search", "https://addons.mozilla.org/firefox/addon/x/", "https://appstoreconnect.apple.com@example.test/", "https://extension.dev.example.test/", "http://partner.microsoft.com/dashboard", "javascript:alert(1)"]) {
         expect(lanePageUrl(page), page).toBe("");
       }
+
+      for (const page of ["https://partner.microsoft.com/dashboard/microsoftedge/overview", "https://partner.microsoft.com/dashboard/microsoftedge/903d21e4-0e5b-4507-95f2-4620fcf06f1c/packages/dashboard", "https://appstoreconnect.apple.com/apps", "https://appstoreconnect.apple.com/apps/6826223107/distribution"]) {
+        expect(lanePageUrl(page), page).toBe(page);
+      }
+
+      for (const page of [
+        "https://partner.microsoft.com/",
+        "https://partner.microsoft.com/redirect?url=https://example.test",
+        "https://partner.microsoft.com/dashboard/microsoftedge/../../redirect?url=https://example.test",
+        "https://partner.microsoft.com/dashboard/microsoftedge/%2e%2e/%2e%2e/redirect",
+        "https://partner.microsoft.com/dashboard/microsoftedge/..%2f..%2fredirect",
+        "https://partner.microsoft.com/dashboard/microsoftedge\\..\\..\\redirect",
+        "https://partner.microsoft.com//example.test/dashboard/microsoftedge",
+        "https://appstoreconnect.apple.com/",
+        "https://appstoreconnect.apple.com/login?targetUrl=https://example.test/apps",
+        "https://appstoreconnect.apple.com/apps/../login",
+        "https://appstoreconnect.apple.com/apps/..%5Clogin",
+        "https://appstoreconnect.apple.com/access/users",
+      ]) {
+        expect(lanePageUrl(page), page).toBe("");
+      }
     } finally {
       restore();
     }

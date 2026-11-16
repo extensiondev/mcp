@@ -12,12 +12,14 @@ import { captureCreationFunnelEvent } from "./funnel-telemetry";
 
 export const DASHBOARD_URL_COMPOSED_EVENT = "mcp_dashboard_url_composed";
 
-export const DASHBOARD_HOSTS: ReadonlyArray<{ store: string; host: string; test: RegExp }> = [
-  { store: "chrome", host: "chrome.google.com", test: /^https:\/\/chrome\.google\.com\/webstore\/devconsole(?:[/?#]|$)/i },
-  { store: "edge", host: "partner.microsoft.com", test: /^https:\/\/partner\.microsoft\.com(?:[/?#]|$)/i },
-  { store: "firefox", host: "addons.mozilla.org", test: /^https:\/\/addons\.mozilla\.org\/developers(?:[/?#]|$)/i },
-  { store: "safari", host: "appstoreconnect.apple.com", test: /^https:\/\/appstoreconnect\.apple\.com(?:[/?#]|$)/i },
+export const DASHBOARD_HOSTS: ReadonlyArray<{ store: string; host: string; paths: readonly string[] }> = [
+  { store: "chrome", host: "chrome.google.com", paths: ["/webstore/devconsole"] },
+  { store: "edge", host: "partner.microsoft.com", paths: ["/dashboard/microsoftedge"] },
+  { store: "firefox", host: "addons.mozilla.org", paths: ["/developers"] },
+  { store: "safari", host: "appstoreconnect.apple.com", paths: ["/apps", "/access/integrations/api"] },
 ];
+
+const ENCODED_SEPARATOR = /%2f|%5c/i;
 
 const COMPOSED_LIMIT = 64;
 const SCAN_DEPTH = 8;
@@ -69,10 +71,21 @@ function escaped(value: string): string {
 }
 
 export function dashboardStoreOf(url: unknown): { store: string; host: string } | null {
-  const value = typeof url === "string" ? url.trim() : "";
-  if (!value) return null;
+  let parsed: URL;
 
-  const row = DASHBOARD_HOSTS.find((host) => host.test.test(value));
+  try {
+    parsed = new URL(typeof url === "string" ? url.trim() : "");
+  } catch {
+    return null;
+  }
+
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.port) return null;
+
+  const host = parsed.hostname.toLowerCase();
+  const pathname = parsed.pathname.toLowerCase();
+  if (ENCODED_SEPARATOR.test(pathname)) return null;
+
+  const row = DASHBOARD_HOSTS.find((known) => known.host === host && known.paths.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)));
 
   return row ? { store: row.store, host: row.host } : null;
 }

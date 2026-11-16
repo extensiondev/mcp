@@ -67,6 +67,64 @@ describe("a store dashboard address this server composes is counted once per ans
     expect(dashboardStoreOf("https://acme.extension.dev/widget/builds/abc1234")).toBeNull();
   });
 
+  it("901: knows Partner Center and App Store Connect only on the paths the product opens, read as the browser reads them", () => {
+    const edge = { store: "edge", host: "partner.microsoft.com" };
+    const safari = { store: "safari", host: "appstoreconnect.apple.com" };
+
+    for (const page of ["https://partner.microsoft.com/dashboard/microsoftedge/publishapi", "https://partner.microsoft.com/dashboard/microsoftedge/overview", "https://partner.microsoft.com/dashboard/microsoftedge/903d21e4-0e5b-4507-95f2-4620fcf06f1c/packages/dashboard", "https://partner.microsoft.com/dashboard/microsoftedge", "https://PARTNER.microsoft.com/dashboard/microsoftedge/overview"]) {
+      expect(dashboardStoreOf(page), page).toEqual(edge);
+    }
+
+    for (const page of ["https://appstoreconnect.apple.com/apps", "https://appstoreconnect.apple.com/apps/6826223107/distribution", "https://appstoreconnect.apple.com/access/integrations/api", "https://appstoreconnect.apple.com/access/integrations/api/"]) {
+      expect(dashboardStoreOf(page), page).toEqual(safari);
+    }
+
+    for (const page of [
+      "https://partner.microsoft.com",
+      "https://partner.microsoft.com/",
+      "https://partner.microsoft.com/dashboard",
+      "https://partner.microsoft.com/dashboard/home",
+      "https://partner.microsoft.com/dashboard/microsoftedgex",
+      "https://partner.microsoft.com/redirect?url=https://example.test/dashboard/microsoftedge",
+      "https://partner.microsoft.com//example.test/dashboard/microsoftedge",
+      "https://partner.microsoft.com/go/dashboard/microsoftedge/overview",
+      "https://partner.microsoft.com/dashboard/microsoftedge/../../redirect?url=https://example.test",
+      "https://partner.microsoft.com/dashboard/microsoftedge/%2e%2e/%2E%2E/redirect",
+      "https://partner.microsoft.com/dashboard/microsoftedge/..%2f..%2fredirect",
+      "https://partner.microsoft.com/dashboard/microsoftedge/..%5C..%5Credirect",
+      "https://partner.microsoft.com/dashboard/microsoftedge\\..\\..\\redirect",
+      "https://partner.microsoft.com/dashboard%2Fmicrosoftedge/overview",
+      "https://partner.microsoft.com/dashboard/\tmicrosoftedge/../../redirect",
+      "https://partner.microsoft.com:8443/dashboard/microsoftedge/overview",
+      "https://partner.microsoft.com.example.test/dashboard/microsoftedge/overview",
+      "https://partner.microsoft.com@example.test/dashboard/microsoftedge/overview",
+      "https://example.test/#https://partner.microsoft.com/dashboard/microsoftedge/overview",
+      "http://partner.microsoft.com/dashboard/microsoftedge/overview",
+      "https://appstoreconnect.apple.com",
+      "https://appstoreconnect.apple.com/",
+      "https://appstoreconnect.apple.com/login?targetUrl=https://example.test/apps",
+      "https://appstoreconnect.apple.com/appsx",
+      "https://appstoreconnect.apple.com/access/users",
+      "https://appstoreconnect.apple.com/access/integrations",
+      "https://appstoreconnect.apple.com/apps/../login?targetUrl=https://example.test",
+      "https://appstoreconnect.apple.com/apps/%2e%2e/login",
+      "https://appstoreconnect.apple.com/apps/..%2Flogin",
+      "https://appstoreconnect.apple.com/apps\\..\\login",
+      "https://appstoreconnect.apple.com//example.test/apps",
+      "https://chrome.google.com/webstore/devconsole/../../url?q=https://example.test",
+      "https://chrome.google.com/webstore/devconsole/..%2f..%2furl",
+      "https://addons.mozilla.org/developers/../firefox/addon/x/",
+      "https://addons.mozilla.org/developers/%2e%2e/firefox/addon/x/",
+      "not an address",
+    ]) {
+      expect(dashboardStoreOf(page), page).toBeNull();
+    }
+
+    expect(dashboardStoreOf("https://chrome.google.com/webstore/devconsole/<publisherId>/<itemId>/edit")).toEqual({ store: "chrome", host: "chrome.google.com" });
+    expect(dashboardStoreOf("https://chrome.google.com/webstore/devconsole")).toEqual({ store: "chrome", host: "chrome.google.com" });
+    expect(dashboardStoreOf("https://addons.mozilla.org/developers/addon/api/key/")).toEqual({ store: "firefox", host: "addons.mozilla.org" });
+  });
+
   it("counts an answer carrying a composed address, naming the tool, the status, the stores and the hosts", async () => {
     const productPage = composedDashboardUrl("https://partner.microsoft.com/dashboard/microsoftedge/prod-123/packages/dashboard");
     const keyPage = composedDashboardUrl("https://appstoreconnect.apple.com/access/integrations/api");
