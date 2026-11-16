@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { joinWildcards } from "./wildcard-join";
+
 const ALL_URLS = "<all_urls>";
 
 const ALL_URLS_SCHEMES = new Set(["http", "https", "file", "ftp", "urn"]);
@@ -15,9 +17,9 @@ const STAR_SCHEMES = new Set(["http", "https"]);
 const PATTERN = /^([a-z*][a-z0-9*+.-]*):\/\/([^/]*)(\/.*)$/i;
 
 function globToRegExp(glob: string): RegExp {
-  const escaped = glob.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pieces = glob.split("*").map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
 
-  return new RegExp(`^${escaped.replace(/\\\*/g, ".*")}$`);
+  return new RegExp(`^${joinWildcards(pieces)}$`);
 }
 
 function hostMatches(patternHost: string, host: string): boolean {

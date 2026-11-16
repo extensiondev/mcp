@@ -12,6 +12,7 @@ import { sanitizeMcpProperties } from "./analytics-scrub";
 import { mcpOrigins } from "./origins";
 import { sessionId, telemetryDisabled } from "./session-identity";
 import { resolvedTemplateCommit } from "./template-artifact-source";
+import { dropTrailing } from "./linear-text";
 
 const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com";
 
@@ -45,7 +46,7 @@ export function posthogHost(): string {
 }
 
 function trimSlashes(value: string): string {
-  return String(value || "").replace(/\/+$/, "");
+  return dropTrailing(String(value || ""), "/");
 }
 
 export function funnelEnvironment(): string {

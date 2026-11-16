@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { CDPClient } from "./cdp";
+import { joinWildcards } from "./wildcard-join";
 
 export interface PageTarget {
   targetId: string;
@@ -66,11 +67,8 @@ export function urlPatternMatcher(needle: string): (text: string) => boolean {
     return (text) => text.toLowerCase().includes(wanted);
   }
 
-  const literal = needle
-    .split("*")
-    .map((part) => part.replace(/[.+?^${}()|[\]\\/]/g, "\\$&"))
-    .join(".*");
-  const expression = new RegExp(`^${literal}$`, "i");
+  const pieces = needle.split("*").map((part) => part.replace(/[.+?^${}()|[\]\\/]/g, "\\$&"));
+  const expression = new RegExp(`^${joinWildcards(pieces)}$`, "i");
 
   return (text) => expression.test(text);
 }

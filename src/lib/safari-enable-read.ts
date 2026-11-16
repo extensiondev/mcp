@@ -29,6 +29,7 @@ import { describeIdentity, parseSafariExtensionsPlist, plistIdentityOf, UNSIGNED
 import { safariPersonSteps, type SafariPersonStep } from "./safari-person-steps";
 import { parseCodesignIdentity, safariAppPath, type SigningIdentity } from "./safari-signing";
 import { posixPath, readyContractPath } from "./session-paths";
+import { dropTrailing } from "./linear-text";
 
 export { safariEnableProbes, SAFARI_WEB_EXTENSION_PROTOCOL, type AutomationProbe, type SafariEnableProbes } from "./safari-enable-probes";
 export { manualSteps, type SafariBlocker, type SafariBlockerKind } from "./safari-enable-blockers";
@@ -44,7 +45,7 @@ export function parsePluginkitList(text: string): PluginkitEntry[] {
   const entries: PluginkitEntry[] = [];
 
   for (const line of text.split("\n")) {
-    const match = line.match(/^\s*([+!-]?)\s*(\S+?)\(([^)]*)\)\t[^\t]*\t[^\t]*\t(.+?)\s*$/);
+    const match = line.match(/^\s*([+!-]?)\s*(\S+?)\(([^)]*)\)\t[^\t]*\t[^\t]*\t(.+)$/);
     if (!match) continue;
 
     const [, mark, bundleId, version, appexPath] = match;
@@ -52,7 +53,7 @@ export function parsePluginkitList(text: string): PluginkitEntry[] {
       enabled: mark === "+" ? true : mark === "!" ? null : false,
       bundleId: bundleId!,
       version: version?.trim() || null,
-      path: appexPath!,
+      path: dropTrailing(appexPath!, "", { whitespace: true }),
     });
   }
 
@@ -91,7 +92,7 @@ function appOf(appexPath: string): string {
 }
 
 function registeredUnder(entry: PluginkitEntry, root: string | null): boolean {
-  return root !== null && posixPath(entry.path).startsWith(`${posixPath(root).replace(/\/+$/, "")}/`);
+  return root !== null && posixPath(entry.path).startsWith(`${dropTrailing(posixPath(root), "/")}/`);
 }
 
 const NOT_CONNECTED = "The background has not connected yet: call extension_wait again; if it stays unattached, open a page the extension matches with extension_open url.";

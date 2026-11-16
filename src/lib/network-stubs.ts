@@ -9,6 +9,7 @@
 import path from "node:path";
 
 import { CDPClient } from "./cdp";
+import { joinWildcards } from "./wildcard-join";
 
 export interface StubLink {
   sendCommand(
@@ -70,12 +71,14 @@ export const stubLinks = {
 export function patternMatches(pattern: string, url: string): boolean {
   if (!/[*?]/.test(pattern)) return pattern === url;
 
-  const source = pattern
-    .split(/([*?])/)
-    .map((part) => (part === "*" ? ".*" : part === "?" ? "." : part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
-    .join("");
+  const pieces = pattern.split("*").map((part) =>
+    part
+      .split("?")
+      .map((piece) => piece.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join("."),
+  );
 
-  return new RegExp(`^${source}$`).test(url);
+  return new RegExp(`^${joinWildcards(pieces)}$`).test(url);
 }
 
 export function ruleMatches(rule: StubRule, method: string, url: string): boolean {

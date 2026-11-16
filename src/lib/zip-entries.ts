@@ -10,6 +10,8 @@ import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 
+import { dropTrailing } from "./linear-text";
+
 const EOCD_SIGNATURE = 0x06054b50;
 const CENTRAL_SIGNATURE = 0x02014b50;
 const EOCD_MIN_LENGTH = 22;
@@ -228,7 +230,7 @@ export function unpackZip(
   let total = 0;
 
   for (const entry of directory.entries) {
-    const checked = entry.name.replace(/\/+$/, "");
+    const checked = dropTrailing(entry.name, "/");
 
     if (checked !== "" && checked !== "." && !safeEntryPath(intoDir, checked)) {
       return { ok: false, message: `the archive entry "${entry.name}" points outside the folder it unpacks into` };

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Ledger 899. A page the hosted lane names for the person opens only on extension.dev, on the platform this server is configured for, on this machine, or on one of the four store dashboards this server composes addresses for: the Chrome Web Store developer console (`chrome.google.com/webstore/devconsole`), Mozilla's developer hub (`addons.mozilla.org/developers`), Microsoft Partner Center (`partner.microsoft.com`) and App Store Connect (`appstoreconnect.apple.com`). A page anywhere else is not opened; it stays in the answer as text under `value.pagesNotOpened`, with a warning that says why.
+- Ledger 899. A wildcard pattern (`url` on the tab pickers, a network stub's `url`, a page-world resource pattern, a match pattern's path) is matched without retrying earlier wildcards, so a pattern with many `*` against a long address answers at once instead of stalling the server. The answer for every pattern is the one it was.
+- Ledger 899. The remaining trailing-run and cut patterns on outside text (platform addresses, store answers, tab addresses, archive entry names, ignore lines, `CHROMEWEBSTORE.md` lines and its support email) are read in linear time, as the ones ledger 897 changed.
+- Ledger 898. The `STORE.md` contract with the platform's parser runs again in a monorepo checkout, where the parser is now a workspace package and no longer a submodule, and its corpus holds a comment nested in a broken opener.
+
 ## 11.1.0
 
 - Ledger 900. The server has one display name, "extension.dev MCP", and one first line under it: "Build, run, debug, test and ship Chrome, Firefox, Edge and Safari extensions from your AI agent." The registry entry's `title`, the `glama.json` `name`, the README heading and `llms-install.md` carry it, and the server answers it as the `title` of its `serverInfo`, so a client that shows a server's title no longer shows the slug. No identifier changed: the package is still `@extension.dev/mcp`, the registry name `io.github.extensiondev/mcp`, the `serverInfo` `name` `extension-dev`, and every tool name is as it was. A test holds the name fields equal.

@@ -10,6 +10,7 @@ import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
 import { consoleProjectUrl } from "./console-urls";
 import { envelope, isEnvelope, type Envelope } from "./envelope";
+import { dropTrailing } from "./linear-text";
 
 type Row = Record<string, unknown>;
 
@@ -115,8 +116,8 @@ function isBuildArtifact(link: string): boolean {
 export function scrubInfraText(input: string): string {
   const kept: string[] = [];
   const held = input.replace(REGISTRY_URL, (link) => {
-    const tail = /[.,;:!?]+$/.exec(link)?.[0] ?? "";
-    const bare = link.slice(0, link.length - tail.length);
+    const bare = dropTrailing(link, ".,;:!?");
+    const tail = link.slice(bare.length);
 
     if (isBuildArtifact(bare)) {
       kept.push(bare);

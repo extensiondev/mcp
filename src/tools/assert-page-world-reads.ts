@@ -9,6 +9,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { joinWildcards } from "../lib/wildcard-join";
+
 const DOM_HIT_CAP = 20;
 const GLOB_FILE_CAP = 2000;
 
@@ -152,13 +154,12 @@ function hasGlob(pattern: string): boolean {
 }
 
 function globToRegExp(pattern: string): RegExp {
-  const source = pattern
+  const pieces = pattern
     .replace(/^\/+/, "")
     .split("*")
-    .map((part) => part.split("?").map((piece) => piece.replace(/[.+^${}()|[\]\\]/g, "\\$&")).join("."))
-    .join(".*");
+    .map((part) => part.split("?").map((piece) => piece.replace(/[.+^${}()|[\]\\]/g, "\\$&")).join("."));
 
-  return new RegExp(`^${source}$`);
+  return new RegExp(`^${joinWildcards(pieces)}$`);
 }
 
 export function matchesResourcePattern(pattern: string, file: string): boolean {

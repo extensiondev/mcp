@@ -14,6 +14,7 @@ import { STORE_MD_FILENAME } from "./store-md";
 import { bulletLine, storeOwnLinesBody } from "./store-md-bullets";
 import { classifyStore } from "./store-md-listing";
 import { stripHtmlComments } from "./html-comments";
+import { dropTrailing } from "./linear-text";
 
 export type AmoChannel = "listed" | "unlisted";
 
@@ -29,7 +30,7 @@ export const UPDATE_URL_LINT_CODE = "MANIFEST_UPDATE_URL";
 const UPDATE_URL_LINE = /\bAMO error MANIFEST_UPDATE_URL\b/;
 const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
 const CHANNEL_KEY = /^(?:(?:amo|release|firefox|add-ons?) )?channel$/i;
-const SECTION_HEADING = /^## +(.+?)\s*$/;
+const SECTION_HEADING = /^## +(.+)$/;
 const FIREFOX_BROWSERS = new Set(["firefox", "firefox-based"]);
 
 export function amoChannelOf(value: string): AmoChannel | null {
@@ -54,7 +55,7 @@ function firefoxSectionBody(content: string): string | null {
     if (heading) {
       if (inside) break;
 
-      inside = classifyStore(heading[1]!).includes("firefox");
+      inside = classifyStore(dropTrailing(heading[1]!, "", { whitespace: true })).includes("firefox");
       continue;
     }
 

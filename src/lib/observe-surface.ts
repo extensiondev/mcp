@@ -24,6 +24,7 @@ import {
   type ElementList,
   type Observation,
 } from "./element-list";
+import { cutAt } from "./linear-text";
 
 export type ObserveTarget =
   | { kind: "cdp"; port: number; targetId: string; url: string; label: string }
@@ -63,10 +64,10 @@ export function observeAsked(observe: unknown): ObserveAsk {
 }
 
 const sameDocument = (a: unknown, b: string): boolean =>
-  String(a ?? "").replace(/[?#].*$/, "") === b.replace(/[?#].*$/, "");
+  cutAt(String(a ?? ""), "?#") === cutAt(b, "?#");
 
 function geckoTabShowing<T extends { url?: string }>(tabs: T[], document: string): T | undefined {
-  const wanted = document.replace(/^\.?\//, "").replace(/[?#].*$/, "");
+  const wanted = cutAt(document.replace(/^\.?\//, ""), "?#");
 
   return tabs.find((tab) => /^moz-extension:\/\/[^/]+\/([^?#]*)/.exec(String(tab.url ?? ""))?.[1] === wanted);
 }

@@ -13,6 +13,7 @@ import path from "node:path";
 import { PROD_ORIGINS } from "@extension.dev/urls/origins";
 
 import { mcpOrigins } from "./origins";
+import { dropTrailing } from "./linear-text";
 
 const DEFAULT_CATALOG_URL = `${PROD_ORIGINS.registry}/extension-dev/catalog/latest.json`;
 
@@ -152,7 +153,7 @@ export function templateCatalogUrl(
   slug: string,
   utmSource: TemplateCatalogUtmSource = "mcp",
 ): string {
-  const origin = mcpOrigins().templates.replace(/\/+$/, "");
+  const origin = dropTrailing(mcpOrigins().templates, "/");
 
   return `${origin}/${encodeURIComponent(slug)}?utm_source=${utmSource}&utm_medium=tool`;
 }

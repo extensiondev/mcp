@@ -9,6 +9,7 @@
 import { API_BASE } from "../lib/common-schema";
 import { envelope } from "../lib/envelope";
 import { mcpOrigins } from "../lib/origins";
+import { dropTrailing } from "../lib/linear-text";
 
 const COMMAND = "extension_docs_search";
 
@@ -51,7 +52,7 @@ export async function handler(args: {
     });
   }
 
-  const base = mcpOrigins(args.api).www.replace(/\/+$/, "");
+  const base = dropTrailing(mcpOrigins(args.api).www, "/");
   const limit = Math.min(8, Math.max(1, Math.floor(Number(args.limit) || 5)));
   const url = `${base}/api/docs/search?q=${encodeURIComponent(query)}&limit=${limit}`;
 

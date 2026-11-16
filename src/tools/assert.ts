@@ -85,6 +85,7 @@ import {
 import { serverVersion } from "../lib/producer-version";
 import { openCall, openClosedSurface, openFailedSentence } from "../lib/open-if-closed";
 import { notReadyCheck } from "../lib/verdict-not-ready";
+import { dropTrailing } from "../lib/linear-text";
 
 const COMMAND = "extension_assert";
 
@@ -1079,7 +1080,7 @@ function samePage(eventUrl: string, wanted: string): boolean {
   try {
     const a = new URL(eventUrl);
     const b = new URL(wanted);
-    const strip = (pathname: string) => pathname.replace(/\/+$/, "") || "/";
+    const strip = (pathname: string) => dropTrailing(pathname, "/") || "/";
 
     return a.origin === b.origin && strip(a.pathname) === strip(b.pathname);
   } catch {

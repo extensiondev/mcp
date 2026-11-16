@@ -11,6 +11,7 @@ import path from "node:path";
 import zlib from "node:zlib";
 
 import { SOURCE_SKIPPED_EXTENSIONS, SOURCE_SKIPPED_FOLDERS } from "./source-archive-words";
+import { dropTrailing } from "./linear-text";
 
 export { megabytes, SOURCE_SKIPPED_EXTENSIONS, SOURCE_SKIPPED_FOLDERS } from "./source-archive-words";
 
@@ -81,11 +82,17 @@ function globToRegExp(pattern: string): string {
   return out;
 }
 
+function dropUnescapedTrailingSpace(line: string): string {
+  const bare = dropTrailing(line, "", { whitespace: true });
+
+  return bare.endsWith("\\") && bare.length < line.length ? line.slice(0, bare.length + 1) : bare;
+}
+
 export function parseGitignore(text: string, base = ""): IgnoreRule[] {
   const rules: IgnoreRule[] = [];
 
   for (const raw of text.split("\n")) {
-    let line = raw.replace(/\r$/, "").replace(/(?<!\\)\s+$/, "");
+    let line = dropUnescapedTrailingSpace(raw.replace(/\r$/, ""));
     if (!line || line.startsWith("#")) continue;
 
     let negated = false;
@@ -101,7 +108,7 @@ export function parseGitignore(text: string, base = ""): IgnoreRule[] {
 
     if (line.endsWith("/")) {
       directoryOnly = true;
-      line = line.replace(/\/+$/, "");
+      line = dropTrailing(line, "/");
     }
 
     if (!line) continue;

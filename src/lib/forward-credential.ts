@@ -11,6 +11,7 @@ import crypto from "node:crypto";
 import { serverOf } from "./credential-server";
 import { bearerFetch } from "./platform-fetch";
 import { PROJECT_HEADER } from "./request-fetch";
+import { dropTrailing } from "./linear-text";
 
 export const FORWARD_URL_OVERRIDE = "EXTENSION_DEV_FORWARD_URL";
 export const FORWARD_PATH = "/mcp/forward";
@@ -125,7 +126,7 @@ export async function forwardCredential(input: ExchangeInput): Promise<Exchanged
 
   try {
     res = await bearerFetch(
-      `${input.api.replace(/\/+$/, "")}${EXCHANGE_PATH}`,
+      `${dropTrailing(input.api, "/")}${EXCHANGE_PATH}`,
       {
         method: "POST",
         headers: {

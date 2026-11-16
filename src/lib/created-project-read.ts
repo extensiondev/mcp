@@ -9,6 +9,7 @@
 import { serverOf } from "./credential-server";
 import { listCredentials } from "./credentials";
 import { platformApiGet } from "./project-api";
+import { dropTrailing } from "./linear-text";
 
 export interface ProjectFoundByRead {
   workspaceSlug: string;
@@ -43,7 +44,7 @@ export async function findProjectByStoredLogin(args: {
   const [workspace = "", project = ""] = args.project.toLowerCase().split("/");
   if (!workspace || !project) return null;
 
-  const base = args.apiBase.replace(/\/+$/, "");
+  const base = dropTrailing(args.apiBase, "/");
 
   for (const login of loginsOfWorkspace(base, workspace, project)) {
     const api = { base, token: login.token, command: args.command, ref: { workspace: login.workspaceSlug, project: login.projectSlug } };

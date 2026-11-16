@@ -19,6 +19,7 @@ import { safariEnableFrame } from "./safari-enable-read";
 import { safariSigningFrame } from "./safari-signing";
 import { browserProfileRootDir } from "./session-paths";
 import { sessionPorts } from "./session-ports";
+import { dropTrailing } from "./linear-text";
 
 import type { ExecutorRecovery } from "./executor-recovery";
 import type { ReadyContract } from "./types";
@@ -136,7 +137,7 @@ export function freshProfilePath(input: {
   const stamp = freshProfileStamp(input.now);
   const current =
     typeof input.profilePath === "string"
-      ? input.profilePath.trim().replace(/[\\/]+$/, "")
+      ? dropTrailing(input.profilePath.trim(), "\\/")
       : "";
 
   if (current) return `${current}-fresh-${stamp}`;

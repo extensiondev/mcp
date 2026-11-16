@@ -14,6 +14,7 @@ import { CDPClient } from "./cdp";
 import { clientRoots } from "./client-roots";
 import { RdpSession } from "./rdp";
 import { browserArtifactsDir } from "./session-paths";
+import { dropTrailing } from "./linear-text";
 
 export interface CaptureSize {
   width?: number;
@@ -283,7 +284,7 @@ export function resolveScreenshotPath(projectPath: string, browser: string, cont
     return {
       ok: false,
       message: `path ${wanted} does not end in .png and is not an existing folder, so this tool will not write a .png image there. ${SCREENSHOT_PATH_RULES}`,
-      hint: `To write into a folder named ${wanted}, pass ${wanted.replace(/[\\/]*$/, "")}/ (trailing slash); to write a file, end its name in .png.`,
+      hint: `To write into a folder named ${wanted}, pass ${dropTrailing(wanted, "\\/")}/ (trailing slash); to write a file, end its name in .png.`,
     };
   }
 

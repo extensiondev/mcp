@@ -43,6 +43,7 @@ import {
 import { safariSigningFrame } from "../lib/safari-signing";
 import { teamUnknownToXcodeRefusal } from "../lib/xcode-teams";
 import { reviewCoverageNotes, reviewDistReport, reviewRiskWarnings } from "../lib/store-review";
+import { dropTrailing } from "../lib/linear-text";
 
 const COMMAND = "extension_build";
 const DEV_SESSION_OWNS_THE_DIST = "E_DEV_SESSION_DIST_SHARED" as const;
@@ -523,11 +524,7 @@ function freshFile(file: string, since: number): boolean {
 
 function explicitZipStem(zipFilename: string): string {
   const flat = path.basename(zipFilename.trim());
-  const safe = [...flat]
-    .filter((ch) => !'<>:"/\\|?*'.includes(ch) && ch.charCodeAt(0) > 0x1f)
-    .join("")
-    .replace(/\.+$/, "")
-    .trim();
+  const safe = dropTrailing([...flat].filter((ch) => !'<>:"/\\|?*'.includes(ch) && ch.charCodeAt(0) > 0x1f).join(""), ".").trim();
 
   return (safe || "extension").replace(/\.zip$/i, "");
 }

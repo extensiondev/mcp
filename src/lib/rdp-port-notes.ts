@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { dropTrailing } from "./linear-text";
+
 export const RDP_READY_FLOOR = "4.1.39";
 
 export type RdpPortRead = { port: number | null; rdpPortError?: string } | null | undefined;
@@ -13,7 +15,7 @@ export type RdpPortRead = { port: number | null; rdpPortError?: string } | null 
 export const RDP_PORT_ERROR_NEXT_STEP = "extension_logs shows the launcher's last lines, and extension_dev with replace: true starts a new session";
 
 export function rdpPortErrorReason(value: unknown): string {
-  return typeof value === "string" ? value.trim().replace(/\.+$/, "") : "";
+  return typeof value === "string" ? dropTrailing(value.trim(), ".") : "";
 }
 
 export function olderGeckoEngineNote(engine = ""): string {

@@ -62,7 +62,6 @@ import {
 } from "../lib/cdp-port";
 import { rdpEvaluateInTab, rdpListTabs, type RdpTab } from "../lib/rdp";
 import { observeAfterAct, observeAsked, OBSERVE_PROPERTY } from "../lib/observe-surface";
-import type { RdpPortRead } from "../lib/rdp-port-notes";
 import { matchPatternCovers } from "../lib/match-patterns";
 import {
   evaluateOnExtensionPage,
@@ -120,6 +119,9 @@ import {
 } from "../lib/gecko-no-scripting";
 import { safariContextRefusal } from "../lib/safari-eval";
 import { readOpeningIfClosed, surfaceOpening } from "../lib/open-if-closed";
+import { cutAt } from "../lib/linear-text";
+
+import type { RdpPortRead } from "../lib/rdp-port-notes";
 
 const pageRef = (t: { targetId: string; url: string }): TargetRef => ({ targetId: t.targetId, url: t.url });
 
@@ -1258,7 +1260,7 @@ async function evaluateExtensionTabBeforeInjection(
   const parsed = parseFrameObject(answer);
   if (!parsed) return answer;
 
-  const document = String(tab.url).replace(MOZ_EXTENSION_TAB, "").replace(/[?#].*$/, "");
+  const document = cutAt(String(tab.url).replace(MOZ_EXTENSION_TAB, ""), "?#");
   const surface = surfaceForExtensionUrl(args.projectPath, browser, String(tab.url));
   addWarning(
     parsed,

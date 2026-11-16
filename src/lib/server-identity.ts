@@ -8,6 +8,7 @@
 
 import { bearerHeaders } from "./request-fetch";
 import { withoutRedirects } from "./platform-fetch";
+import { dropTrailing } from "./linear-text";
 
 export type ServerIdentityAnswer =
   | { kind: "confirmed"; login: string; live: boolean }
@@ -32,7 +33,7 @@ export async function askServerIdentity(args: {
 
   try {
     const res = await fetchImpl(
-      `${args.apiBase.replace(/\/+$/, "")}/api/cli/whoami`,
+      `${dropTrailing(args.apiBase, "/")}/api/cli/whoami`,
       {
         headers: {
           ...bearerHeaders(args.token, args.ref),

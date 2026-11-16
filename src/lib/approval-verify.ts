@@ -24,6 +24,7 @@ import { envelope } from "./envelope";
 import { parseJsonObject } from "./json-object";
 import { platformHoldEnvelope, sawPlatformHold } from "./platform-hold";
 import { withoutRedirects } from "./platform-fetch";
+import { dropTrailing } from "./linear-text";
 
 import type { PolicyWrite } from "./approval-policy";
 import type { MintedApproval } from "./approval-record";
@@ -117,7 +118,7 @@ export function sentenceCase(text: string): string {
 }
 
 export function withoutClosingStop(text: string): string {
-  return text.trim().replace(/[.!?\s]+$/, "");
+  return dropTrailing(text.trim(), ".!?", { whitespace: true });
 }
 
 function describedBy(input: ApprovalGateInput, minted?: MintedApproval | null): string {

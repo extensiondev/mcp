@@ -138,11 +138,11 @@ function posixProcessStartTimes(pids: number[]): Map<number, string> {
   }
 
   for (const line of out.split("\n")) {
-    const match = /^\s*(\d+)\s+(.+?)\s*$/.exec(line);
+    const match = /^\s*(\d+)\s+(.+)$/.exec(line);
     if (!match) continue;
 
     const pid = Number.parseInt(match[1], 10);
-    const iso = isoStart(match[2]);
+    const iso = isoStart(match[2].trimEnd());
 
     if (Number.isInteger(pid) && pid > 0 && iso) found.set(pid, iso);
   }

@@ -10,6 +10,7 @@ import { wwwImportPath } from "@extension.dev/urls/paths";
 
 import { envelope } from "./envelope";
 import { effectiveApiBase, mcpOrigins } from "./origins";
+import { dropTrailing } from "./linear-text";
 
 export const PLATFORM_HOLD_CODE = "PLATFORM_NOT_OPEN";
 
@@ -34,7 +35,7 @@ export const PLATFORM_HOLD_STILL_WORKS = [
 ];
 
 export function templatesOrigin(apiHint?: string): string {
-  return mcpOrigins(apiHint).templates.replace(/\/+$/, "");
+  return dropTrailing(mcpOrigins(apiHint).templates, "/");
 }
 
 function holdWayBack(apiHint?: string): string {
@@ -254,7 +255,7 @@ function createForm(www: string, prefill: CreatePrefill): Required<Pick<LaneClos
   };
 
   return {
-    createUrl: `${www.replace(/\/+$/, "")}${wwwImportPath(query)}`,
+    createUrl: `${dropTrailing(www, "/")}${wwwImportPath(query)}`,
     prefilled: Object.keys(query),
     askedOnTheForm: [...(repo ? [] : ["repository"]), "browsers"],
   };

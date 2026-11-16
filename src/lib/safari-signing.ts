@@ -13,6 +13,7 @@ import { describeCodeSignature } from "./codesign";
 import { findSessionInfo, sessionSidecarPath } from "./process-manager";
 import { isSafariTarget } from "./safari-dev-options";
 import { engineProjectRoot, readyContractPath } from "./session-paths";
+import { dropTrailing } from "./linear-text";
 
 export type SigningIdentity = `team:${string}` | "ad-hoc" | "unknown";
 
@@ -123,7 +124,7 @@ export function safariAppPath(
 
   const appName = sanitizeSafariAppName(options.appName || manifestName(projectPath, browser) || "Extension");
 
-  return path.join(`${distPath(projectPath, browser).replace(/[\\/]+$/, "")}-xcode`, ".derived", "Build", "Products", "Release", `${appName}.app`);
+  return path.join(`${dropTrailing(distPath(projectPath, browser), "\\/")}-xcode`, ".derived", "Build", "Products", "Release", `${appName}.app`);
 }
 
 function readRecord(file: string): SigningRecord | null {

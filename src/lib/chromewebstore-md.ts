@@ -12,6 +12,7 @@ import { stripQuotes } from "./store-md-bullets";
 import { STORE_FIELDS, type ListingField, type ListingStore, type ListingText, type PermissionJustification } from "./store-md-declarations";
 import { linesNotFound, storeMdLineOf, storeMdSectionOf } from "./store-md-fields";
 import { stripHtmlComments } from "./html-comments";
+import { dropTrailing } from "./linear-text";
 
 import type { LocalListingRead } from "./store-listing-local";
 
@@ -55,7 +56,6 @@ const RULE = /^---+\s*$/;
 const TABLE_ROW = /^\|(.+)\|\s*$/;
 const TABLE_RULE = /^\|?\s*:?-{2,}/;
 const TABLE_HEADER = /^(permission|asset|data type|version|date)$/i;
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const URL = /^https?:\/\/\S+$/i;
 const PERMISSIONS_SECTION = /^permissions? justifications?$/;
 const PRIVACY_SECTION = /^privacy (&|and) data use/;
@@ -88,6 +88,16 @@ const NOT_MAPPED_SECTIONS: Array<{ heading: RegExp; why: string }> = [
 ];
 
 const stripComments = stripHtmlComments;
+
+function isEmail(value: string): boolean {
+  const at = value.indexOf("@");
+  if (at < 1 || at !== value.lastIndexOf("@") || /\s/.test(value)) return false;
+
+  const domain = value.slice(at + 1);
+  const dot = domain.indexOf(".", 1);
+
+  return dot !== -1 && dot < domain.length - 1;
+}
 
 const placeholder = (value: string): boolean => !value || /^\[.*\]$/.test(value) || (/ \/ /.test(value) && value.split(" / ").every((option) => option.length <= 30));
 
@@ -134,7 +144,7 @@ function boldFields(body: string): BoldField[] {
       current = { key: bold[1]!.trim(), lines: bold[2]!.trim() ? [bold[2]!.trim()] : [] };
     } else if (HEADING.test(line) || RULE.test(line)) {
       flush();
-    } else if (current) current.lines.push(line.replace(/\s+$/, ""));
+    } else if (current) current.lines.push(dropTrailing(line, "", { whitespace: true }));
   }
 
   flush();
@@ -215,7 +225,7 @@ function takeBold(bold: BoldField, read: Omit<ChromeWebStoreMd, "file">): void {
       return;
     }
 
-    if (!EMAIL.test(value)) return;
+    if (!isEmail(value)) return;
 
     listing.supportEmail = value;
   } else if (field === "categories") {

@@ -61,7 +61,7 @@ export function resolveApiBase(api?: string): string {
 }
 
 function isExtensionDevHost(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/\.+$/, "");
+  const host = dropTrailing(hostname.toLowerCase(), ".");
 
   return host === "extension.dev" || host.endsWith(".extension.dev");
 }

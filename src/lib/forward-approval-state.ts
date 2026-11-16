@@ -12,6 +12,7 @@ import { FILE_APPROVAL_STATE } from "./approval-state-local";
 import { forwardCredential } from "./forward-credential";
 import { bearerFetch } from "./platform-fetch";
 import { PROJECT_HEADER } from "./request-fetch";
+import { dropTrailing } from "./linear-text";
 
 import type { ApprovalState, HeldBatch, MintedApproval, PendingCreate } from "./approval-state";
 
@@ -84,7 +85,7 @@ async function call(session: ForwardSession, method: "POST" | "PUT" | "DELETE", 
 
   try {
     const res = await bearerFetch(
-      `${session.api.replace(/\/+$/, "")}${path}`,
+      `${dropTrailing(session.api, "/")}${path}`,
       {
         method,
         headers: {

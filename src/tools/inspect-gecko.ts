@@ -32,6 +32,7 @@ import {
   EXTENSION_ORIGIN,
   surfaceForExtensionUrl,
 } from "../lib/extension-surfaces";
+import { joinWildcards } from "../lib/wildcard-join";
 
 const TOOL = inspectSchema.name;
 
@@ -125,13 +126,13 @@ export function matchPatternRegexSource(pattern: string): string {
   if (pattern === "<all_urls>") return "^(https?|file|ftp):";
 
   const m = /^(\*|https?|file|ftp|wss?):\/\/([^/]*)(\/.*)?$/.exec(pattern);
-  if (!m) return `^${  pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")  }$`;
+  if (!m) return `^${  joinWildcards(pattern.split("*").map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&")))  }$`;
 
   const scheme = m[1] === "*" ? "https?" : m[1];
   const host = m[2] === "*" ? "[^/]*" : m[2].startsWith("*.")
-    ? `([^/]*\\.)?${  m[2].slice(2).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`
+    ? `(?:[^/]*\\.)?${  m[2].slice(2).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`
     : m[2].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const pathPart = (m[3] ?? "/").replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
+  const pathPart = joinWildcards((m[3] ?? "/").split("*").map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&")));
 
   return `^${  scheme  }://${  host  }${pathPart  }$`;
 }

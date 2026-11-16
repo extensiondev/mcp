@@ -26,6 +26,7 @@ import { platformFetch } from "./platform-fetch";
 import { bearerHeaders } from "./request-fetch";
 import { kernelHook } from "./kernel-hooks";
 import { tokenRefusal } from "./token-refusal";
+import { dropTrailing } from "./linear-text";
 
 export { tokenRefusal } from "./token-refusal";
 
@@ -176,7 +177,7 @@ export async function openProjectApi(args: {
   const apiCheck = safeApiBase(resolveApiBase(args.api), args.api);
   if (!apiCheck.ok) return { ok: false, reason: "bad-api", message: apiCheck.message };
 
-  const base = apiCheck.base.replace(/\/+$/, "");
+  const base = dropTrailing(apiCheck.base, "/");
   const cacheKey = projectIdCacheKey(base, credential.token, credential.ref);
   let projectId = projectIds.get(cacheKey) ?? "";
 

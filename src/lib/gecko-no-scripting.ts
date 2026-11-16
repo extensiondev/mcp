@@ -17,6 +17,7 @@ import { matchPatternCovers } from "./match-patterns";
 import { manifestCandidates } from "./project-manifest";
 import { rdpEvaluateInTab } from "./rdp";
 import { geckoRecency } from "./target-pick";
+import { cutAt } from "./linear-text";
 
 import type { RdpTab } from "./rdp";
 
@@ -73,7 +74,7 @@ export function noScriptingReason(projectPath: string, browser: string): string 
 }
 
 function sameDocument(a: string, b: string): boolean {
-  return a.replace(/#.*$/, "") === b.replace(/#.*$/, "");
+  return cutAt(a, "#") === cutAt(b, "#");
 }
 
 export function webTabsByUrl(tabs: RdpTab[], url: string): RdpTab[] {

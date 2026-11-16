@@ -8,6 +8,8 @@
 
 import { setTimeout as sleep } from "node:timers/promises";
 
+import { cutAt } from "./linear-text";
+
 export interface NetworkWatchConnection {
   sendCommand(
     method: string,
@@ -302,7 +304,7 @@ export function normalizeAllowHost(entry: string): string {
   let host = entry.trim().toLowerCase();
   host = host.replace(/^[a-z][a-z0-9+.-]*:\/\//, "");
   host = host.replace(/^\*\./, "");
-  host = host.replace(/[/:].*$/, "");
+  host = cutAt(host, "/:");
 
   return host;
 }

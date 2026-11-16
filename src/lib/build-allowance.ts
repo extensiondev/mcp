@@ -10,6 +10,7 @@ import { spendNarration, type SpendNarration } from "./allowance";
 import { serverOf } from "./credential-server";
 import { listCredentials } from "./credentials";
 import { platformApiGet } from "./project-api";
+import { dropTrailing } from "./linear-text";
 
 export const LOW_BUILDS_REMAINING = 10;
 
@@ -92,7 +93,7 @@ export async function readWorkspaceBuildAllowance(args: {
   const workspace = args.workspace.trim().toLowerCase();
   if (!workspace) return null;
 
-  const base = args.apiBase.replace(/\/+$/, "");
+  const base = dropTrailing(args.apiBase, "/");
   const server = serverOf(base);
   const now = Math.floor(Date.now() / 1000);
   const login = listCredentials()

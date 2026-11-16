@@ -18,6 +18,13 @@ import * as logsTool from "../tools/logs";
 import * as openTool from "../tools/open";
 import * as waitTool from "../tools/wait";
 import { cutAt, dropTrailing } from "../lib/linear-text";
+import { urlPatternMatcher } from "../lib/cdp-targets";
+import { parseChromeWebStoreMd } from "../lib/chromewebstore-md";
+import { matchPatternCovers } from "../lib/match-patterns";
+import { patternMatches } from "../lib/network-stubs";
+import { gitignored, parseGitignore } from "../lib/source-archive";
+import { matchesResourcePattern } from "../tools/assert-page-world-reads";
+import { matchPatternRegexSource } from "../tools/inspect-gecko";
 import { resolveApiBase } from "../lib/login-flow";
 import { failedCheckSentence } from "../lib/store-connection";
 import { geckoPanelClosed } from "../tools/open";
@@ -219,6 +226,62 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
 
     expect(sameDocument("https://a.test/x", "https://a.test/y")).toBe(false);
     expect(sameDocument(null, "https://a.test/")).toBe(false);
+  });
+
+  it.each([
+    ["a resource pattern", (glob: string, text: string) => matchesResourcePattern(glob, text)],
+    ["a tab address pattern", (glob: string, text: string) => urlPatternMatcher(glob)(text)],
+    ["a network stub pattern", (glob: string, text: string) => patternMatches(glob, text)],
+    ["a match pattern path", (glob: string, text: string) => matchPatternCovers(`https://a.test/${glob}`, `https://a.test/${text}`)],
+    ["a Firefox tab picker pattern", (glob: string, text: string) => new RegExp(matchPatternRegexSource(`https://a.test/${glob}`)).test(`https://a.test/${text}`)],
+    ["a Firefox tab picker pattern with no scheme", (glob: string, text: string) => new RegExp(matchPatternRegexSource(glob)).test(text)],
+  ])("899: matches %s with many wildcards against long hostile text inside the budget, with the answer the open chain gave", (_name, matches) => {
+    const started = performance.now();
+
+    expect(matches("*a*b", `${"a".repeat(60_000)}!`)).toBe(false);
+    expect(matches("*a*a*a*a*a*a*b", `${"a".repeat(60_000)}!`)).toBe(false);
+    expect(performance.now() - started).toBeLessThan(400);
+
+    expect(matches("*a*a*b", "xayazb")).toBe(true);
+    expect(matches("a*b*c", "a-b-b-c")).toBe(true);
+    expect(matches("a*b*c", "a-c-b")).toBe(false);
+    expect(matches("a**b", "ab")).toBe(true);
+    expect(matches("*", "anything")).toBe(true);
+    expect(matches("a*", "ba")).toBe(false);
+  });
+
+  it("899: reads a hostile ignore line and a hostile listing file inside the budget", () => {
+    const size = 50_000;
+    const started = performance.now();
+
+    expect(parseGitignore(`${" ".repeat(size)}x\nbuild/  \nkeep\\ \n`)).toHaveLength(3);
+    expect(parseChromeWebStoreMd(`## Store Listing\n\n**Support URL / Email**\na@${".".repeat(size)}@\n`).listing.supportEmail).toBeUndefined();
+    expect(parseChromeWebStoreMd(`## Store Listing\n\n**Detailed Description**\nx${" ".repeat(size)}y\n`).listing.fullDescription).toHaveLength(size + 2);
+    expect(performance.now() - started).toBeLessThan(400);
+
+    const rules = parseGitignore("build/  \nkeep\\ \n*.log\n");
+
+    expect(gitignored("build", true, rules)).toBe(true);
+    expect(gitignored("keep ", false, rules)).toBe(true);
+    expect(gitignored("a.log", false, rules)).toBe(true);
+    expect(parseChromeWebStoreMd("## Store Listing\n\n**Support URL / Email**\nada@example.com\n").listing.supportEmail).toBe("ada@example.com");
+
+    for (const refused of ["ada@example", "ada@.com", "ada@example.", "a@b@c.d", "@example.com", "ada @example.com"]) {
+      expect(parseChromeWebStoreMd(`## Store Listing\n\n**Support URL / Email**\n${refused}\n`).listing.supportEmail, refused).toBeUndefined();
+    }
+  });
+
+  it("899: leaves no trailing-run or cut pattern in shipped source", () => {
+    const srcDir = path.resolve(__dirname, "..");
+    const slow = /\.replace\(\/(?!\^)[^/\n]*(?:\\\/[^/\n]*)*\+\$\/[a-z]*,|\[\?#\]\.\*\$\/|\.join\("\.\*"\)|\/g, "\.\*"\)/;
+    const walk = (dir: string): string[] =>
+      fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => (entry.name === "__tests__" ? [] : entry.isDirectory() ? walk(path.join(dir, entry.name)) : entry.name.endsWith(".ts") ? [path.join(dir, entry.name)] : []));
+    const carrying = walk(srcDir)
+      .filter((file) => slow.test(fs.readFileSync(file, "utf8")))
+      .map((file) => path.relative(srcDir, file).split(path.sep).join("/"))
+      .sort();
+
+    expect(carrying).toEqual(["lib/package-address.ts"]);
   });
 
   it("897: reads a long hostile address in linear time, in every helper that cuts or trims one", () => {

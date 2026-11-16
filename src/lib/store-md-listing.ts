@@ -201,11 +201,12 @@ function storeNote(value: string): StoreNote | null {
   const stores: ListingStore[] = [];
 
   for (const item of noted[2]!.split(",")) {
-    const pair = /^\s*([^:]+?)\s*:\s*(.+?)\s*$/.exec(item);
-    const named = classifyStore(pair ? pair[1]! : item);
+    const colon = item.indexOf(":");
+    const pair = colon > 0 && colon < item.length - 1 ? { name: item.slice(0, colon).trim() || " ", value: item.slice(colon + 1).trim() || " " } : null;
+    const named = classifyStore(pair ? pair.name : item);
 
     if (pair && named.length) {
-      for (const store of named) perStore[store] = pair[2]!;
+      for (const store of named) perStore[store] = pair.value;
     } else stores.push(...named);
   }
 

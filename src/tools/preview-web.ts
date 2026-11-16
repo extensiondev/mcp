@@ -21,6 +21,7 @@ import {
   templatesOrigin,
 } from "../lib/platform-hold";
 import { PREVIEW_WEB_LOCAL } from "./preview-web-local";
+import { dropTrailing } from "../lib/linear-text";
 
 import type { uploadPreview } from "../lib/preview-upload";
 import type { recordSharedPreview } from "../lib/share-record";
@@ -45,7 +46,7 @@ const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 function safeHostBase(
   raw: string,
 ): { ok: true; base: string } | { ok: false; message: string } {
-  const trimmed = String(raw || "").replace(/\/+$/, "");
+  const trimmed = dropTrailing(String(raw || ""), "/");
   let parsed: URL;
 
   try {

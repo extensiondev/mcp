@@ -20,6 +20,7 @@ import {
   WebDriverClient,
   webdriverSessionEnded,
 } from "./webdriver";
+import { cutAt } from "./linear-text";
 
 import type { ReadyContract } from "./types";
 
@@ -55,7 +56,7 @@ export function wakeUrlFromMatchPattern(pattern: string): string | null {
   if (!host || host.includes("*")) return null;
 
   const scheme = found[1] === "*" ? "https" : found[1];
-  const path = (found[3] ?? "/").replace(/\*.*$/, "");
+  const path = cutAt(found[3] ?? "/", "*");
 
   return `${scheme}://${host}${path || "/"}`;
 }

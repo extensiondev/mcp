@@ -9,6 +9,7 @@
 import { PER_STORE_CATEGORY_RULE } from "./store-categories";
 import { storeMdFieldRows, type StoreMdFieldRow } from "./store-md-fields";
 import { LISTING_SECTION, LISTING_STORES, PRIVACY_SECTION, STORE_SECTIONS, type ListingStore } from "./store-md-listing";
+import { dropTrailing } from "./linear-text";
 
 const STORE_TITLES: Record<ListingStore, string> = {
   chrome: "Chrome Web Store",
@@ -72,7 +73,7 @@ export function renderStoreMdFieldsDoc(): string {
     lines.push("");
   }
 
-  return lines.join("\n").replace(/\n+$/, "");
+  return dropTrailing(lines.join("\n"), "\n");
 }
 
 export function renderStoreMdFieldsJson(version: string): StoreMdFieldsJson {
