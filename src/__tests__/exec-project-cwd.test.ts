@@ -7,6 +7,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import {
   describeExtensionInvocation,
   resolveExtensionInvocation,
+  runExtensionCli,
   spawnExtensionCli,
   type SpawnedCli,
 } from "../lib/exec";
@@ -92,5 +93,37 @@ describe("the npx fallback takes its version from the pin or the override", () =
       if (prev === undefined) delete process.env.EXTENSION_MCP_CLI_VERSION;
       else process.env.EXTENSION_MCP_CLI_VERSION = prev;
     }
+  });
+});
+
+describe("908: a spawn the operating system refuses leaves nothing behind", () => {
+  function privateTmp(): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-exec-tmp-"));
+    const prev = process.env.TMPDIR;
+    process.env.TMPDIR = dir;
+    cleanups.push(() => {
+      if (prev === undefined) delete process.env.TMPDIR;
+      else process.env.TMPDIR = prev;
+
+      fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    return dir;
+  }
+
+  posixOnly("runExtensionCli rejects with the system's error and removes its capture folder", async () => {
+    const project = fakeProject("exit 0");
+    const tmp = privateTmp();
+
+    await expect(runExtensionCli(["build", "a\u0000b"], { cwd: project })).rejects.toMatchObject({ code: "ERR_INVALID_ARG_VALUE" });
+    expect(fs.readdirSync(tmp)).toEqual([]);
+  });
+
+  posixOnly("spawnExtensionCli throws the system's error and removes its log folder", () => {
+    const project = fakeProject("exit 0");
+    const tmp = privateTmp();
+
+    expect(() => spawnExtensionCli(["dev", "a\u0000b"], { projectDir: project })).toThrow("null bytes");
+    expect(fs.readdirSync(tmp)).toEqual([]);
   });
 });

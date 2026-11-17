@@ -146,7 +146,7 @@ export function runExtensionCli(
 ): Promise<CliResult> {
   const { command, prefixArgs, refusal } = resolveExtensionInvocation(options?.cwd);
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     if (refusal) {
       resolve({ code: 1, stdout: "", stderr: refusal });
 
@@ -190,11 +190,21 @@ export function runExtensionCli(
     };
 
     const budgetMs = (options?.timeoutMs ?? 30_000) + KILL_HEADROOM_PAST_ENGINE_TIMEOUT_MS;
-    const child = spawn(command, [...prefixArgs, ...args], {
-      cwd: options?.cwd,
-      stdio: ["ignore", outFd, errFd],
-      env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
-    });
+    let child: ChildProcess;
+
+    try {
+      child = spawn(command, [...prefixArgs, ...args], {
+        cwd: options?.cwd,
+        stdio: ["ignore", outFd, errFd],
+        env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
+      });
+    } catch (err) {
+      cleanup();
+      reject(err);
+
+      return;
+    }
+
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
@@ -216,6 +226,30 @@ export function runExtensionCli(
       resolve({ code: 1, stdout, stderr: stderr || String(err) });
     });
   });
+}
+
+/* @invariant A PROCESS THE OPERATING SYSTEM REFUSES TO START FOR ITS
+ * ARGUMENTS IS THE CALLER'S INPUT, NEVER A TRANSIENT FAILURE. Node throws
+ * these from spawn before any child exists: ENAMETOOLONG for a working
+ * directory or a path past the system's limit, E2BIG for an argument list
+ * past it, EINVAL for an argument the system cannot pass, and a TypeError for
+ * a NUL byte. The same call fails the same way every time, so the dispatcher
+ * answers E_INPUT_VALIDATION with retry "no" (ledger 908); as E_INTERNAL
+ * they read retry "safe" and an agent looped on them. ENAMETOOLONG is an
+ * over-long name whatever the system call; the other two count only from
+ * spawn, where an argument is the one cause.
+ */
+export function argumentFailure(err: unknown): string | null {
+  if (!(err instanceof Error)) return null;
+
+  const { code, syscall } = err as NodeJS.ErrnoException;
+  const fromSpawn = typeof syscall === "string" && syscall.startsWith("spawn");
+  const refused =
+    code === "ENAMETOOLONG" ||
+    (fromSpawn && (code === "E2BIG" || code === "EINVAL")) ||
+    (code === "ERR_INVALID_ARG_VALUE" && err.message.includes("null bytes"));
+
+  return refused ? err.message : null;
 }
 
 export interface SpawnedCli {
@@ -257,12 +291,22 @@ export function spawnExtensionCli(
     };
   }
 
-  const child = spawn(command, [...prefixArgs, ...args], {
-    cwd: options?.cwd ?? options?.projectDir,
-    detached: true,
-    stdio: ["ignore", fd, fd],
-    env: { ...process.env, ...options?.env, FORCE_COLOR: "0", NO_COLOR: "1" },
-  });
+  let child: ChildProcess;
+
+  try {
+    child = spawn(command, [...prefixArgs, ...args], {
+      cwd: options?.cwd ?? options?.projectDir,
+      detached: true,
+      stdio: ["ignore", fd, fd],
+      env: { ...process.env, ...options?.env, FORCE_COLOR: "0", NO_COLOR: "1" },
+    });
+  } catch (err) {
+    fs.closeSync(fd);
+    fs.rmSync(logDir, { recursive: true, force: true });
+
+    throw err;
+  }
+
   fs.closeSync(fd);
 
   let spawnFailure: Error | null = null;

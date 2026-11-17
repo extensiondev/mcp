@@ -18,6 +18,7 @@ import { bindApprovalProject } from "./approval-record";
 import { withAnsweredProject, withApprovalLogin } from "./approval-scope";
 import { withCallWaits } from "./call-waits";
 import { envelope } from "./envelope";
+import { argumentFailure } from "./exec";
 import { kernelHook } from "./kernel-hooks";
 import { crashAnswerFields, watchCall } from "./server-crash-log";
 import { resolveApiBase } from "./login-flow";
@@ -49,6 +50,7 @@ import {
   inputValidationError,
   type InputIssue,
   normalizeArgAliases,
+  projectFolderIssues,
   validateToolInput,
 } from "./validate-input";
 
@@ -345,7 +347,10 @@ export function createToolSurface(setup: ToolHandlerOptions): {
     if ("refused" in bound) return refusedAct(bound.refused, pinned.args);
 
     const normalizedArgs = bound.args;
-    const issues = validateToolInput(tool.schema.inputSchema, normalizedArgs);
+    const argumentIssues = validateToolInput(tool.schema.inputSchema, normalizedArgs);
+    const issues = argumentIssues.some((issue) => issue.path === "projectPath")
+      ? argumentIssues
+      : [...argumentIssues, ...projectFolderIssues(name, tool.schema.inputSchema, normalizedArgs)];
 
     /* @invariant A CALL REFUSED FOR ITS ARGUMENTS POINTS ONLY AT THE PROJECT
      * THE SAME CALL WOULD HAVE ANSWERED FOR. Validation runs before the
@@ -411,6 +416,19 @@ export function createToolSurface(setup: ToolHandlerOptions): {
 
       return toolResultFrame(held ? markStaleLocal(result, stamp.stamp(), held) : stamp.brand(result), untrusted);
     } catch (err) {
+      const refusedBySystem = argumentFailure(err);
+
+      if (refusedBySystem) {
+        return refused(
+          inputValidationError(
+            name,
+            [{ path: "arguments", message: `the operating system refused them before the tool could run (${refusedBySystem})` }],
+            tool.schema.inputSchema,
+            "A path or value in this call is longer than this system takes, or holds a character it cannot pass to a process. Shorten or correct it; the same call fails the same way.",
+          ),
+        );
+      }
+
       return toolResultFrame(
         stamp.brand(
           envelope({

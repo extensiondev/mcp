@@ -1,17 +1,28 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
 import { describe, it, expect } from "vitest";
 
 import { tools } from "../index";
+import { createToolDispatcher, type ToolModule } from "../lib/tool-dispatch";
 import {
   ANNOTATION_KEYWORDS,
+  CONTENT_ARGUMENT_LIMIT,
   ENFORCED_KEYWORDS,
   ENFORCED_TYPES,
+  STRING_ARGUMENT_LIMIT,
   validateToolInput,
   inputValidationError,
   normalizeArgAliases,
 } from "../lib/validate-input";
+import * as buildTool from "../tools/build";
+import * as doctorTool from "../tools/doctor";
+import * as startTool from "../tools/start";
+import * as stopTool from "../tools/stop";
 import { schema as manifestValidateSchema } from "../tools/manifest-validate";
 import { schema as createSchema } from "../tools/create";
-import { schema as devSchema } from "../tools/dev";
+import * as devTool from "../tools/dev";
 import { schema as logsSchema } from "../tools/logs";
 import { schema as submitSchema } from "../tools/submit";
 import { schema as releasePromoteSchema } from "../tools/release-promote";
@@ -24,6 +35,8 @@ import { schema as themeVerifySchema } from "../tools/theme-verify";
 import { schema as evalSchema } from "../tools/eval";
 import { schema as docsSearchSchema } from "../tools/docs-search";
 import { schema as elementSchema } from "../tools/element";
+
+const devSchema = devTool.schema;
 
 describe("validateToolInput", () => {
   it("accepts valid args", () => {
@@ -383,5 +396,135 @@ describe("inputValidationError", () => {
       ),
     );
     expect(out.value.args.aliases.timeout).toEqual(["timeoutMillis"]);
+  });
+});
+
+describe("908: a string argument no process, path or address can carry is refused before the tool runs", () => {
+  it("refuses a NUL byte in any string argument and names it", () => {
+    const issues = validateToolInput(startTool.schema.inputSchema, { projectPath: "/tmp/x", profile: "a\u0000b" });
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0].path).toBe("profile");
+    expect(issues[0].message).toContain("NUL byte");
+  });
+
+  it("refuses a NUL byte inside an array of strings and names the item", () => {
+    const issues = validateToolInput(devTool.schema.inputSchema, { projectPath: "/tmp/x", extensions: ["/tmp/a", "/tmp/b\u0000"] });
+
+    expect(issues.map((issue) => issue.path)).toEqual(["extensions[1]"]);
+  });
+
+  it(`refuses a path, name or id over ${STRING_ARGUMENT_LIMIT} characters and takes one at the limit`, () => {
+    const over = validateToolInput(buildTool.schema.inputSchema, { projectPath: `/tmp/${"a".repeat(5000)}` });
+
+    expect(over).toHaveLength(1);
+    expect(over[0].path).toBe("projectPath");
+    expect(over[0].message).toContain("5005 characters");
+    expect(over[0].message).toContain(String(STRING_ARGUMENT_LIMIT));
+    expect(validateToolInput(buildTool.schema.inputSchema, { projectPath: "a".repeat(STRING_ARGUMENT_LIMIT) })).toEqual([]);
+  });
+
+  it("takes a long expression and a long data URL, which carry content and not a name", () => {
+    const expression = `(() => { ${"window.x = 1; ".repeat(2000)} })()`;
+    const url = `data:text/html;base64,${"QUJD".repeat(20000)}`;
+
+    expect(expression.length).toBeGreaterThan(STRING_ARGUMENT_LIMIT);
+    expect(validateToolInput(evalSchema.inputSchema, { projectPath: "/tmp/x", expression, url })).toEqual([]);
+    expect(validateToolInput(devTool.schema.inputSchema, { projectPath: "/tmp/x", startingUrl: url })).toEqual([]);
+  });
+
+  it(`refuses content over ${CONTENT_ARGUMENT_LIMIT} characters`, () => {
+    const issues = validateToolInput(evalSchema.inputSchema, { projectPath: "/tmp/x", expression: "1".repeat(CONTENT_ARGUMENT_LIMIT + 1) });
+
+    expect(issues.map((issue) => issue.path)).toEqual(["expression"]);
+  });
+});
+
+describe("908: a call whose arguments cannot work answers E_INPUT_VALIDATION with retry no, before any process is started", () => {
+  const local = [buildTool, devTool, startTool, doctorTool, stopTool] as unknown as ToolModule[];
+  const dispatch = createToolDispatcher({ tools: local, options: { features: ["local"], noShip: true } });
+  const call = async (name: string, args: Record<string, unknown>) => JSON.parse((await dispatch({ name, arguments: args })).content[0]?.text ?? "{}");
+  const missing = path.join(os.tmpdir(), "mcp-908-no-such-folder");
+  const spawning = ["extension_build", "extension_dev", "extension_start", "extension_doctor"];
+
+  it("a NUL byte and a 5,000-character projectPath are refused by name on build, dev, start and doctor", async () => {
+    for (const name of spawning) {
+      for (const projectPath of [`/tmp/${"a".repeat(5000)}`, "/tmp/a\u0000b"]) {
+        const out = await call(name, { projectPath });
+
+        expect(out.error.code, name).toBe("E_INPUT_VALIDATION");
+        expect(out.error.retry, name).toBe("no");
+        expect(out.value.issues[0].path, name).toBe("projectPath");
+      }
+    }
+  });
+
+  it("a projectPath that is not there is refused in the same words on every tool, naming the folder", async () => {
+    const messages = new Set<string>();
+
+    for (const name of spawning) {
+      const out = await call(name, { projectPath: missing });
+
+      expect(out.error.code, name).toBe("E_INPUT_VALIDATION");
+      expect(out.error.retry, name).toBe("no");
+      expect(out.status, name).toBe("invalid-arguments");
+      expect(out.value.issues[0].path, name).toBe("projectPath");
+      messages.add(out.value.issues[0].message);
+    }
+
+    expect([...messages]).toEqual([`no folder at ${missing}; pass the extension project's root, absolute or relative to this server's working directory ${process.cwd()}`]);
+  });
+
+  it("a projectPath that is a file is refused as not a folder, and a relative one is read from the server's working directory", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-908-"));
+    const file = path.join(dir, "manifest.json");
+    fs.writeFileSync(file, "{}");
+
+    try {
+      const out = await call("extension_build", { projectPath: file });
+
+      expect(out.error.code).toBe("E_INPUT_VALIDATION");
+      expect(out.value.issues[0].message).toContain(`${file} is a file, not a folder`);
+
+      const relative = await call("extension_doctor", { projectPath: "mcp-908-no-such-folder" });
+
+      expect(relative.value.issues[0].message).toContain(`no folder at ${path.resolve("mcp-908-no-such-folder")}`);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("extension_stop still answers for a folder that is gone, so a session whose project was deleted can be ended", async () => {
+    const out = await call("extension_stop", { projectPath: missing, browser: "chrome" });
+
+    expect(out.error?.code).not.toBe("E_INPUT_VALIDATION");
+  });
+
+  it("a process the operating system refuses to start for its arguments is an input refusal, never E_INTERNAL", async () => {
+    const thrower = (error: Error): ToolModule => ({
+      schema: { name: "extension_doctor", description: "", inputSchema: { type: "object", properties: {} } },
+      handler: async () => {
+        throw error;
+      },
+    });
+    const answer = async (error: Error) =>
+      JSON.parse((await createToolDispatcher({ tools: [thrower(error)], options: { features: ["local"], noShip: false } })({ name: "extension_doctor", arguments: {} })).content[0]?.text ?? "{}");
+
+    for (const error of [
+      Object.assign(new Error("spawn ENAMETOOLONG"), { code: "ENAMETOOLONG", syscall: "spawn" }),
+      Object.assign(new Error("spawn E2BIG"), { code: "E2BIG", syscall: "spawn" }),
+      Object.assign(new Error("spawn EINVAL"), { code: "EINVAL", syscall: "spawn" }),
+      Object.assign(new TypeError("The argument 'args[7]' must be a string without null bytes. Received 'a\\x00b'"), { code: "ERR_INVALID_ARG_VALUE" }),
+    ]) {
+      const out = await answer(error);
+
+      expect(out.error.code, error.message).toBe("E_INPUT_VALIDATION");
+      expect(out.error.retry, error.message).toBe("no");
+      expect(out.error.message, error.message).toContain(error.message);
+    }
+
+    const unknown = await answer(new Error("boom"));
+
+    expect(unknown.error.code).toBe("E_INTERNAL");
   });
 });

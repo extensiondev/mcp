@@ -390,7 +390,7 @@ describe("a server that knows it was rebuilt reloads its platform code instead o
     expect(first.out.value.server).toEqual({ version, commit: null, startedAt: expect.any(String), pid: process.pid, builtAt: BUILT, stale: true, newerBuild: { version: null, builtAt: REBUILT } });
     expect(reason).toMatch(/because import of the 2026-10-23T23:37:13\.000Z build failed: /);
 
-    const verdict = await call("extension_assert", { projectPath: path.join(tmp, "nowhere"), expect: [{ assert: "background-worker-booted" }] });
+    const verdict = await call("extension_assert", { projectPath: tmp, expect: [{ assert: "background-worker-booted" }] });
 
     expect(verdict.out.value.producer).toEqual({ name: "@extension.dev/mcp", version, stale: true, newerBuild: { version: null, builtAt: REBUILT } });
     expect(verdict.out.value.server.stale).toBe(true);
