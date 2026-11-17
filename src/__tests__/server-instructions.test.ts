@@ -43,6 +43,17 @@ describe("the initialize result carries instructions, the one field a search-fir
     expect(SERVER_INSTRUCTIONS).toMatch(/CDP or Playwright/);
   });
 
+  it("915: names creating, scaffolding and starting from a template first among the asks to search this server for, at no cost to either budget", () => {
+    const sentence = SERVER_INSTRUCTIONS.split("\n").find((line) => line.includes("search this server first")) ?? "";
+
+    expect(sentence).toMatch(/^When the ask is to create, scaffold, start from a template, run, start, wait for, watch, inspect, drive, test, debug or build a browser extension, search this server first and use its tools: extension_dev /);
+    expect(tools.map((tool) => tool.schema.name)).toEqual(expect.arrayContaining(["extension_create", "extension_templates"]));
+    expect(isToolListed("extension_create", DEFAULT_SERVER_OPTIONS) && isToolListed("extension_templates", DEFAULT_SERVER_OPTIONS)).toBe(true);
+    expect(sentence.length).toBeLessThanOrEqual(740);
+    expect(SERVER_INSTRUCTIONS.length).toBeLessThanOrEqual(3_150);
+    expect(serverInstructions({ features: ["local", "platform"], noShip: false }).length).toBeLessThan(3 * 4_096);
+  });
+
   it("513: the retry doctrine names error.retry and its three values once", () => {
     const text = serverInstructions({ features: ["local", "platform"], noShip: false });
     const doctrine = text.split("\n").find((line) => line.startsWith("Try again is idempotent")) ?? "";
