@@ -899,6 +899,15 @@ export async function handler(args: {
       browser,
       args.projectPath,
     );
+    const declarationByValidator = (preflight?.warnings ?? []).some((line) =>
+      line.includes("no browser_specific_settings.gecko.data_collection_permissions"),
+    );
+    const isEngineDeclarationLine = (line: string): boolean =>
+      line.includes("data_collection_permissions for new add-ons");
+    const shownBuildWarnings = declarationByValidator
+      ? buildWarnings.filter((line) => !isEngineDeclarationLine(line))
+      : buildWarnings;
+    const declarationSaid = declarationByValidator || buildWarnings.some(isEngineDeclarationLine);
     const buildWarningsTruncated =
       buildWarnings.length &&
       typeof engineSummary?.warnings_count === "number" &&
@@ -1097,8 +1106,8 @@ export async function handler(args: {
         ...warnings,
         ...(preflight?.warnings ?? []).filter((line) => !isDroppedRuntimePageWarning(line)),
         ...droppedPages.map((page) => page.say),
-        ...buildWarnings,
-        ...reviewRiskWarnings(risks),
+        ...shownBuildWarnings,
+        ...reviewRiskWarnings(declarationSaid ? risks.filter((risk) => risk.code !== "FIREFOX_DATA_COLLECTION_MISSING") : risks),
         ...reviewCoverageNotes(review),
         ...zipNotes,
         ...duplicates.map(duplicateAssetSentence),

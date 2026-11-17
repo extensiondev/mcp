@@ -120,3 +120,31 @@ describe("424: the build answers the toolchain the engine recorded instead of as
     expect(result.value.toolchain).toBeUndefined();
   });
 });
+
+describe("a Firefox build says the missing data collection declaration once", () => {
+  const ENGINE_LINE =
+    '⚠ ⏵⏵⏵ addons.mozilla.org requires browser_specific_settings.gecko.data_collection_permissions for new add-ons.\n  │ Declare {"required": ["none"]} if this extension transmits no data.';
+
+  it("keeps the validator's line and the review risk, and drops the engine's copy and the Store review echo from warnings", async () => {
+    const dir = project();
+    summaryOverride = { warnings_count: 1, warnings: [ENGINE_LINE] };
+
+    const result = JSON.parse(await build.handler({ projectPath: dir, browser: "firefox" }));
+    const said = result.warnings.filter((w: string) => w.includes("data_collection_permissions"));
+
+    expect(result.ok).toBe(true);
+    expect(said).toHaveLength(1);
+    expect(said[0]).toContain("ask the person and write their answer");
+    expect(result.value.reviewRisks.map((r: { code: string }) => r.code)).toContain("FIREFOX_DATA_COLLECTION_MISSING");
+    expect(result.value.buildWarningsTruncated).toBeUndefined();
+  });
+
+  it("carries the engine's line when validation was skipped, since nothing else says it", async () => {
+    const dir = project();
+    summaryOverride = { warnings_count: 1, warnings: [ENGINE_LINE] };
+
+    const result = JSON.parse(await build.handler({ projectPath: dir, browser: "firefox", skipValidation: true }));
+
+    expect(result.warnings).toContain(ENGINE_LINE);
+  });
+});
