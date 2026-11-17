@@ -141,10 +141,7 @@ function piecesOf(pattern: string): Piece[] | null {
   return pieces;
 }
 
-export function ignoreGlobMatcher(pattern: string, anchored: boolean): (subject: string) => boolean {
-  const pieces = piecesOf(pattern);
-  if (!pieces) return () => false;
-
+function walker(pieces: Piece[]): (subject: string, from: number, anchored: boolean) => boolean {
   const end = pieces.length;
   const seen = new Uint32Array(end + 1);
   let stamp = 0;
@@ -185,12 +182,12 @@ export function ignoreGlobMatcher(pattern: string, anchored: boolean): (subject:
     }
   };
 
-  return (subject) => {
+  return (subject, from, anchored) => {
     here.length = 0;
     turn();
     enter(0, here);
 
-    for (let i = 0; i < subject.length; i += 1) {
+    for (let i = from; i < subject.length; i += 1) {
       const code = subject.charCodeAt(i);
 
       next.length = 0;
@@ -228,5 +225,59 @@ export function ignoreGlobMatcher(pattern: string, anchored: boolean): (subject:
     }
 
     return seen[end] === stamp;
+  };
+}
+
+function literalRun(pieces: Piece[], from: number, step: number): string {
+  let run = "";
+
+  for (let i = from; i >= 0 && i < pieces.length && pieces[i]!.kind === LITERAL; i += step) {
+    run = step > 0 ? run + String.fromCharCode(pieces[i]!.code) : String.fromCharCode(pieces[i]!.code) + run;
+  }
+
+  return run;
+}
+
+function staysInOneSegment(item: Piece): boolean {
+  if (item.kind === LITERAL) return item.code !== SLASH;
+  if (item.kind === CLASS) return !inClass(item, SLASH);
+
+  return item.kind === ONE || item.kind === STAR;
+}
+
+export function ignoreGlobMatcher(pattern: string, anchored: boolean): (subject: string) => boolean {
+  const pieces = piecesOf(pattern);
+  if (!pieces) return () => false;
+
+  const head = literalRun(pieces, 0, 1);
+
+  if (head.length === pieces.length) {
+    if (anchored) return (subject) => subject === head;
+
+    return (subject) => subject.endsWith(head) && (subject.length === head.length || subject.charCodeAt(subject.length - head.length - 1) === SLASH);
+  }
+
+  const tail = literalRun(pieces, pieces.length - 1, -1);
+  const walk = walker(pieces);
+
+  if (!anchored && pieces.every(staysInOneSegment)) {
+    const open = pieces.length === head.length + tail.length + 1 && pieces[head.length]!.kind === STAR;
+    const least = head.length + tail.length;
+
+    return (subject) => {
+      if (!subject.endsWith(tail)) return false;
+
+      const from = subject.lastIndexOf("/") + 1;
+      if (!subject.startsWith(head, from)) return false;
+
+      return open ? subject.length - from >= least : walk(subject, from, true);
+    };
+  }
+
+  return (subject) => {
+    if (!subject.endsWith(tail)) return false;
+    if (anchored && !subject.startsWith(head)) return false;
+
+    return walk(subject, 0, anchored);
   };
 }

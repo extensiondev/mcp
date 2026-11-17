@@ -406,6 +406,66 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
     expect(unbuildable).toBeGreaterThan(50);
   });
 
+  it("902: packs 20,000 paths against 100 ordinary ignore lines inside the budget, with the answers the walker gave", () => {
+    const names = ["node_modules", "dist", "build", "out", "coverage", "tmp", "cache", "logs", "vendor", "target", "bin", "obj", "public", "static", "generated", "fixtures", "snapshots", "reports", "bundles", "artifacts"];
+    const kinds = ["log", "tmp", "map", "bak", "swp", "pyc", "class", "o", "tgz", "zip", "pem", "cache", "orig", "rej", "lock", "pid", "seed", "gz", "tsbuildinfo", "sqlite"];
+    const lines = [
+      ...names.map((name, i) => (i % 2 ? `${name}/` : name)),
+      ...kinds.map((kind) => `*.${kind}`),
+      ...names.map((name) => `/${name}-root`),
+      ...kinds.map((kind, i) => `.${kind}${i % 2 ? "*" : "rc"}`),
+      "src/*.map",
+      "docs/**/draft.md",
+      "**/scratch",
+      "packages/*/dist",
+      "apps/**/*.gen.ts",
+      "*.py[cod]",
+      "npm-debug.log*",
+      "!keep.log",
+      "!packages/core/dist",
+      "file?.txt",
+      "img[0-9].png",
+      "a**z.bin",
+      "[!a]bc.dat",
+      "\\#notes",
+      "report-*-final.csv",
+      "**/deep/**/leaf.txt",
+      "/top/*/inner/*.json",
+      "*~",
+      ".#*",
+      "x/**",
+    ];
+    const rules = parseGitignore(lines.join("\n"));
+    const roots = ["src", "packages/core", "packages/app", "apps/web", "docs", "docs/guide", "top/a/inner", "x", "deep/one/two", "lib"];
+    const files = ["index.ts", "a.log", "keep.log", "x.map", "draft.md", "scratch", "dist", "file7.txt", "img4.png", "aqz.bin", "xbc.dat", "#notes", "report-q3-final.csv", "leaf.txt", "data.json", "note~", ".#lock", "page.gen.ts", "mod.pyc", "README.md", ".logrc", ".tmpfile", "npm-debug.log.1", "main.tsx", "styles.css"];
+    const paths: string[] = [];
+
+    for (let i = 0; paths.length < 20_000; i += 1) {
+      const folder = `${roots[i % roots.length]}/m${i % 97}/n${i % 13}`;
+
+      paths.push(`${folder}/${files[i % files.length]!.replace(/^(?=[a-z]+\.tsx?$)/, i % 3 ? `u${i}-` : "")}`);
+    }
+
+    expect(rules).toHaveLength(100);
+    expect(paths).toHaveLength(20_000);
+
+    const started = performance.now();
+    let ignored = 0;
+    let sum = 0;
+
+    paths.forEach((file, i) => {
+      if (!gitignored(file, false, rules)) return;
+
+      ignored += 1;
+      sum += i;
+    });
+
+    const took = performance.now() - started;
+
+    expect([ignored, sum]).toEqual([13_600, 135_986_800]);
+    expect(took).toBeLessThan(400);
+  });
+
   it("901: keeps negation, anchoring, directory-only lines, escapes and a nested file's base", () => {
     const rules = [...parseGitignore("# note\n*.log\n!keep.log\n/root.txt\nout/\ndocs/**/draft.md\n**/tmp\nsrc/*.map\n\\#hash\n\\!bang\nwith\\ space\nimg[0-9].png\n[z-a].txt\n"), ...parseGitignore("*.gen.ts\n/only-here\n", "packages/app")];
     const ignored = (file: string, directory = false): boolean => gitignored(file, directory, rules);
