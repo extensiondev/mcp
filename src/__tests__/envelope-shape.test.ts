@@ -140,6 +140,8 @@ describe("513: every failed frame says in error.retry whether repeating the call
     expect(failed("extension_publish", { code: "E_NETWORK" }).retry).toBe("after-read");
     expect(failed("extension_screenshot", { code: "E_CDP" }).retry).toBe("safe");
     expect(failed("extension_eval", { code: "E_WAIT_TIMEOUT" }).retry).toBe("after-read");
+    expect(failed("extension_stop", { code: "E_STOP_INCOMPLETE" }).retry).toBe("safe");
+    expect(failed("extension_try", { code: "E_STOP_INCOMPLETE" }).retry).toBe("after-read");
     expect(validateAgainstSchema(envelopeObject({ ok: false, command: "extension_publish", status: "failed", error: { code: "E_NETWORK", message: "x" } }), schema)).toEqual([]);
   });
 
