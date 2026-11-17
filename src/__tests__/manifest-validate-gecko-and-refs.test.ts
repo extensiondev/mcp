@@ -113,7 +113,12 @@ describe("the Firefox report names what Firefox itself would say", () => {
     const result = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"] }));
 
     expect(result.value.warnings.find((w: string) => w.includes("gecko.id"))).toBeUndefined();
-    expect(result.value.warnings.find((w: string) => w.includes("data_collection_permissions"))).toContain('{"required": ["none"]}');
+    const declaration = result.value.warnings.find((w: string) => w.includes("data_collection_permissions"));
+
+    expect(declaration).toContain("ask the person and write their answer");
+    expect(declaration).toContain('{"required": ["none"]} is the form only when they say it transmits no data');
+    expect(declaration).toContain("Do not add it on their behalf");
+    expect(declaration).not.toContain("the minimal form is");
 
     const complete = project(
       {

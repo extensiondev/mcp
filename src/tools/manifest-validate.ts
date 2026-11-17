@@ -765,7 +765,7 @@ export async function handler(args: {
 
       if (!dataCollection || typeof dataCollection !== "object") {
         result.warnings.push(
-          'Firefox: no browser_specific_settings.gecko.data_collection_permissions. AMO requires it for new add-ons and the Firefox build warns on every run; the minimal form is firefox:browser_specific_settings.gecko.data_collection_permissions: {"required": ["none"]}.',
+          'Firefox: no browser_specific_settings.gecko.data_collection_permissions. AMO requires it for new add-ons and the Firefox build warns on every run. What the extension collects is the owner\'s declaration to Mozilla, so ask the person and write their answer under firefox:browser_specific_settings.gecko.data_collection_permissions; {"required": ["none"]} is the form only when they say it transmits no data. Do not add it on their behalf.',
         );
       }
 

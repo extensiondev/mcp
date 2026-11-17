@@ -64,6 +64,13 @@ describe("reviewDistReport risks", () => {
     manifest({});
     expect(codes("firefox")).toContain("FIREFOX_DATA_COLLECTION_MISSING");
     expect(codes("chrome")).not.toContain("FIREFOX_DATA_COLLECTION_MISSING");
+
+    const fix = reviewDistReport(dist, "firefox").risks.find((r) => r.code === "FIREFOX_DATA_COLLECTION_MISSING")?.fix ?? "";
+
+    expect(fix).toContain("Ask the owner what the extension collects");
+    expect(fix).toContain('{ "required": ["none"] } is the form only when they say it transmits no data');
+    expect(fix).toContain("do not fill it in for them");
+
     manifest({
       browser_specific_settings: { gecko: { data_collection_permissions: { required: ["none"] } } },
     });
