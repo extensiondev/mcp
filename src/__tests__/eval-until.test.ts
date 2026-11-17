@@ -14,7 +14,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { actVerbAnswer, evalFrame } from "./fixtures/engine-answers";
+import { actVerbAnswer, evalFrame, evalRefusal } from "./fixtures/engine-answers";
 
 import type * as ActModule from "../lib/act";
 import type * as CdpPortModule from "../lib/cdp-port";
@@ -51,6 +51,7 @@ vi.mock("../lib/cdp-port", async (importOriginal) => {
 });
 
 const { handler } = await import("../tools/eval");
+const { registerSession, removeSession, removeSessionMarker } = await import("../lib/process-manager");
 const { createServer } = await import("../index");
 
 let dir: string;
@@ -185,6 +186,67 @@ describe("extension_eval until", () => {
     expect(result.ok).toBe(false);
     expect(result.status).toBe("eval-disabled");
     expect(result.value.polls).toBe(1);
+  });
+});
+
+describe("extension_eval until with no session", () => {
+  const noSession = (): string =>
+    actVerbAnswer(
+      evalRefusal({
+        code: "E_SESSION_NOT_FOUND",
+        name: "CliError",
+        engine: "firefox",
+        message: "No active control channel found for firefox. Run `extension dev --allow-eval` first.",
+      }),
+      "extension_eval",
+    );
+
+  it("answers the no-session refusal on the first poll instead of polling the budget out", async () => {
+    project("firefox", { manifest_version: 3, name: "F", background: { scripts: ["bg.js"] } });
+    engine.answers = [noSession()];
+    const started = Date.now();
+
+    const result = JSON.parse(
+      await handler({
+        projectPath: dir,
+        browser: "firefox",
+        context: "background",
+        expression: "globalThis.ready",
+        until: { timeoutMs: 3000, intervalMs: 100 },
+      }),
+    );
+
+    expect(Date.now() - started).toBeLessThan(1500);
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("not-found");
+    expect(result.error.code).toBe("E_SESSION_NOT_FOUND");
+    expect(result.value.polls).toBe(1);
+    expect(engine.calls).toHaveLength(1);
+    expect(result.hint).toMatch(/polling cannot change/);
+  });
+
+  it("keeps polling while a session this server started has not opened its control channel yet", async () => {
+    project("firefox", { manifest_version: 3, name: "F", background: { scripts: ["bg.js"] } });
+    registerSession({ pid: process.pid, browser: "firefox", projectPath: dir, command: "dev", allowControl: true });
+    engine.answers = [noSession(), noSession(), answer(true)];
+
+    try {
+      const result = JSON.parse(
+        await handler({
+          projectPath: dir,
+          browser: "firefox",
+          context: "background",
+          expression: "globalThis.ready",
+          until: { timeoutMs: 5000, intervalMs: 100 },
+        }),
+      );
+
+      expect(result.status).toBe("condition-met");
+      expect(result.value.polls).toBe(3);
+    } finally {
+      removeSession(dir, "firefox", process.pid);
+      removeSessionMarker(dir, "firefox", process.pid);
+    }
   });
 });
 

@@ -53,6 +53,14 @@ const TERMINAL_EVAL_STATUSES = new Set([
   "browser-required",
 ]);
 
+const SESSION_NOT_FOUND = "E_SESSION_NOT_FOUND";
+
+function errorCode(error: unknown): string | null {
+  const code = (error as { code?: unknown } | null | undefined)?.code;
+
+  return typeof code === "string" ? code : null;
+}
+
 function clamp(value: unknown, fallback: number, min: number, max: number): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
 
@@ -93,6 +101,7 @@ export async function evalUntilTruthy(
   browser: string,
   context: string | undefined,
   until: EvalUntil,
+  sessionKnown: () => boolean = () => true,
 ): Promise<string> {
   const budgetMs = clamp(until.timeoutMs, DEFAULT_TIMEOUT_MS, MIN_TIMEOUT_MS, MAX_TIMEOUT_MS);
   const intervalMs = clamp(until.intervalMs, DEFAULT_INTERVAL_MS, MIN_INTERVAL_MS, MAX_INTERVAL_MS);
@@ -134,7 +143,7 @@ export async function evalUntilTruthy(
     } else {
       lastError = frame.error ?? null;
 
-      if (TERMINAL_EVAL_STATUSES.has(frame.status)) {
+      if (TERMINAL_EVAL_STATUSES.has(frame.status) || (errorCode(frame.error) === SESSION_NOT_FOUND && !sessionKnown())) {
         return envelope({
           ok: false,
           command,

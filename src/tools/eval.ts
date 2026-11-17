@@ -32,6 +32,7 @@ import { envelope } from "../lib/envelope";
 import { noSessionEnvelope } from "../lib/production-receipt";
 import { EVAL_UNTIL_PROPERTY, evalUntilTruthy, pollTimeoutWithin, type EvalUntil } from "../lib/eval-until";
 import { parseFrameObject } from "../lib/frame-json";
+import { findSessionInfo } from "../lib/process-manager";
 import { awaitsAtTopLevel, isOneExpression, isSingleExpression, protocolExpression } from "../lib/one-expression";
 import {
   ambiguousSessionRefusal,
@@ -1607,6 +1608,7 @@ async function evaluateAsAsked(args: EvalArgs): Promise<string> {
     browser,
     args.context,
     until,
+    () => findSessionInfo(args.projectPath, browser) !== undefined,
   );
 }
 
