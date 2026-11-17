@@ -29,6 +29,7 @@ const live = {
   landContract: null as null | (() => void),
   child: null as null | (EventEmitter & { pid: number; exitCode: number | null; signalCode: string | null }),
   output: "",
+  bootExit: null as null | { exitCode: number | null; signal: string | null; output: string },
 };
 
 vi.mock("../lib/exec", async (importOriginal) => {
@@ -55,6 +56,12 @@ vi.mock("../lib/boot-verdict", async (importOriginal) => {
     ...actual,
     pollBootVerdict: async () => {
       live.landContract?.();
+
+      if (live.bootExit) {
+        const { exitCode, signal, output } = live.bootExit;
+
+        return { verdict: { kind: "exited", exitCode, signal }, evidenceTail: output, warnings: [] };
+      }
 
       return { verdict: { kind: "alive" }, evidenceTail: "", warnings: [] };
     },
@@ -121,6 +128,7 @@ beforeEach(() => {
   live.landContract = () => stampReady();
   live.child = null;
   live.output = "";
+  live.bootExit = null;
 });
 
 function engineExits(exitCode: number | null, signalCode: string | null = null): void {
@@ -274,7 +282,7 @@ describe("extension_start waits for the build and the browser the way extension_
     expect(result.value.waited).toBeUndefined();
   });
 
-  it("never waits for a browser on a noBrowser start, and an engine that ends with its build is not a failed launch there", async () => {
+  it("never waits for a browser on a noBrowser start, and an engine that ends with its build after the boot check answers built", async () => {
     live.landContract = () => {
       stampReady();
       engineExits(0);
@@ -283,6 +291,73 @@ describe("extension_start waits for the build and the browser the way extension_
     const result = JSON.parse(await handler({ projectPath: live.project, noBrowser: true }));
 
     expect(live.waitCalls).toEqual([]);
-    expect(result.status).toBe("started");
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe("built");
+    expect(result.value).toMatchObject({ sessionRunning: false, exitCode: 0, distPath: path.join(live.project, "dist", "chrome") });
+    expect(result.value.pid).toBeUndefined();
+  });
+
+  it("answers built, with no session, when a noBrowser start ends cleanly with its build during the boot check", async () => {
+    live.bootExit = { exitCode: 0, signal: null, output: "Extension built for production in dist/chrome (34.4 KB).\n" };
+
+    const result = JSON.parse(await handler({ projectPath: live.project, noBrowser: true }));
+
+    expect(live.waitCalls).toEqual([]);
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe("built");
+    expect(result.error).toBeFalsy();
+    expect(result.value).toMatchObject({
+      projectPath: live.project,
+      browser: "chrome",
+      verb: "start",
+      built: true,
+      sessionRunning: false,
+      exitCode: 0,
+      distPath: path.join(live.project, "dist", "chrome"),
+    });
+
+    expect(result.value.output).toContain("Extension built for production");
+    expect(result.hint).toMatch(/no session is running/);
+    expect(result.hint).toMatch(/nothing needs extension_stop/);
+    expect(result.hint).toMatch(/without noBrowser/);
+  });
+
+  it("says nothing was built or launched when noBrowser rides build: false", async () => {
+    fs.mkdirSync(path.join(live.project, "dist", "chrome"), { recursive: true });
+    live.landContract = null;
+    live.bootExit = { exitCode: 0, signal: null, output: "" };
+
+    const result = JSON.parse(await handler({ projectPath: live.project, noBrowser: true, build: false }));
+
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe("not-launched");
+    expect(result.value).toMatchObject({ verb: "preview", built: false, sessionRunning: false });
+    expect(result.value.distPath).toBeUndefined();
+  });
+
+  it.each([
+    ["an exit code", 1, null, "exit code 1"],
+    ["a signal", null, "SIGTERM", "signal SIGTERM"],
+  ])("keeps a noBrowser start that ends by %s during the boot check a failure", async (_how, exitCode, signal, words) => {
+    live.bootExit = { exitCode, signal, output: "ERROR in ./src/background.js\n" };
+
+    const result = JSON.parse(await handler({ projectPath: live.project, noBrowser: true }));
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("exited");
+    expect(result.error.code).toBe("E_SESSION_EXITED");
+    expect(result.error.message).toContain(words);
+  });
+
+  it("refuses a noBrowser start whose engine exits non-zero after the boot check", async () => {
+    live.landContract = () => engineExits(1);
+
+    const result = JSON.parse(await handler({ projectPath: live.project, noBrowser: true }));
+
+    expect(live.waitCalls).toEqual([]);
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("launch-failed");
+    expect(result.error.code).toBe("E_SESSION_EXITED");
+    expect(result.value.exitCode).toBe(1);
   });
 });

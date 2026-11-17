@@ -271,6 +271,18 @@ export async function handler(
 
   if (boot.verdict.kind === "exited") {
     const { exitCode: code, signal } = boot.verdict;
+
+    if (args.noBrowser && code === 0 && !signal) {
+      return buildOnlyAnswer({
+        projectPath: args.projectPath,
+        browser,
+        verb: command,
+        distPath: readFreshContract(args.projectPath, browser, spawnedAt)?.distPath,
+        output: cleanOutput,
+        warnings: boot.warnings,
+      });
+    }
+
     const refusedFlag = allowControl
       ? /unknown option '(--allow-(?:control|eval))'/.exec(`${cleanOutput}\n${spawned.readOutput()}`)
       : null;
@@ -390,6 +402,19 @@ export async function handler(
   const landing =
     args.wait === false || args.noBrowser ? null : await awaitStartLanding(args.projectPath, browser);
   const freshContract = readFreshContract(args.projectPath, browser, spawnedAt);
+  const engineExit = engineExitAfterBoot(child, spawned.readOutput);
+
+  if (args.noBrowser && engineExit?.exitCode === 0 && !engineExit.signal) {
+    return buildOnlyAnswer({
+      projectPath: args.projectPath,
+      browser,
+      verb: command,
+      distPath: freshContract?.distPath,
+      output: engineExit.output,
+      warnings: boot.warnings,
+    });
+  }
+
   const profileReused = profileReusedAt(carryover, freshContract?.profilePath, spawnedAt);
 
   if (profileReused !== carryover.reused) {
@@ -440,7 +465,7 @@ export async function handler(
     contract: freshContract,
     replacedSession: replaced[0],
     landing,
-    engineExit: args.noBrowser ? null : engineExitAfterBoot(child, spawned.readOutput),
+    engineExit,
     warnings: [
       profileReused && !args.noBrowser
         ? `${reusedProfileNote(freshContract?.profilePath ?? carryover.profilePath)}${identity.copyId && !isGeckoFamily(browser) ? ` That carry-over does not reach this controlled copy: its id ${loaded.extensionId ?? identity.copyId} is its own, so its chrome.storage starts empty and it holds no grants from the plain build's runs.` : ""}`
@@ -456,6 +481,41 @@ export async function handler(
         /Could not remove/i.test(stale.note) &&
         `${stale.note} A Live Preview carrier is still in ./extensions and the engine loads that folder, so this run has the debug companion beside your extension.`,
     ],
+  });
+}
+
+function buildOnlyAnswer(facts: {
+  projectPath: string;
+  browser: string;
+  verb: "start" | "preview";
+  distPath: unknown;
+  output: string;
+  warnings: string[];
+}): string {
+  const { projectPath, browser, verb, output } = facts;
+  const built = verb === "start";
+  const distPath = typeof facts.distPath === "string" && facts.distPath ? facts.distPath : path.join(projectPath, "dist", browser);
+  const nothingRuns = "No browser was launched and no session is running, so nothing needs extension_stop or extension_wait, and the session verbs have nothing to attach to.";
+
+  return envelope({
+    ok: true,
+    command: schema.name,
+    status: built ? "built" : "not-launched",
+    value: {
+      projectPath,
+      browser,
+      verb,
+      built,
+      sessionRunning: false,
+      exitCode: 0,
+      ...(built ? { distPath } : {}),
+      output: output.slice(0, 2000),
+      ...(output.length > 2000 ? { outputTruncated: { shown: 2000, total: output.length, kept: "head" } } : {}),
+    },
+    hint: built
+      ? `noBrowser: true builds and ends: the production build is at ${distPath} and the engine exited cleanly (exit code 0). ${nothingRuns} To run this build in ${browser}, call extension_start again without noBrowser (build: false launches the dist as it is); extension_build packages it and reports its size.`
+      : `noBrowser: true with build: false or outputPath builds nothing and launches nothing: the engine exited cleanly (exit code 0) without touching the dist. ${nothingRuns} Drop noBrowser to launch the existing dist in ${browser}, or drop build: false to build it.`,
+    warnings: facts.warnings,
   });
 }
 
