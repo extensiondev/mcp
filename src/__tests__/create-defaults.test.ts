@@ -16,6 +16,7 @@ let withScripts = false;
 let recordRef: string | null = null;
 let refSeen: string | undefined;
 let withStoreMd = false;
+let depsLeftOut = false;
 
 const SAMPLE_STORE_MD = `# Store metadata
 
@@ -43,7 +44,9 @@ TODO what changed for users in this version, in their words.
 `;
 
 vi.mock("extension-create", () => ({
-  extensionCreate: vi.fn(async (_input: string, opts: { template: string }) => {
+  extensionCreate: vi.fn(async (_input: string, opts: { template: string; logger?: { log: (line: string) => void } }) => {
+    opts.logger?.log("probe is ready.\n\nNext steps:\n  1. cd probe\n  2. npm install\n  3. npm run dev");
+
     const monorepo = opts.template.includes("monorepo");
     const manifestDir = monorepo ? path.join(scaffoldTarget, "packages", "extension", "src") : scaffoldTarget;
     fs.mkdirSync(manifestDir, { recursive: true });
@@ -82,7 +85,7 @@ vi.mock("extension-create", () => ({
       projectPath: scaffoldTarget,
       projectName: path.basename(scaffoldTarget),
       template: opts.template,
-      depsInstalled: true,
+      depsInstalled: !depsLeftOut,
       packageManager: "bun",
     };
   }),
@@ -121,6 +124,7 @@ afterEach(() => {
   }
 
   withStoreMd = false;
+  depsLeftOut = false;
 
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -267,6 +271,24 @@ describe("extension_create defaultsApplied", () => {
     const result = JSON.parse(await create.handler({ projectName: "probe" }));
 
     expect(result.value.defaultsApplied.gitInit).toBe(true);
+  });
+
+  it("keeps the engine's log out of warnings when install: false was asked, and carries it when an asked install did not happen", async () => {
+    depsLeftOut = true;
+    scaffoldTarget = path.join(tmpDir(), "probe");
+
+    const asked = JSON.parse(await create.handler({ projectName: "probe", install: false }));
+
+    expect(asked.value.depsInstalled).toBe(false);
+    expect(asked.warnings).toEqual([]);
+    expect(asked.value.nextSteps.join(" ")).toContain("Dependencies were not installed: run `bun install`");
+
+    scaffoldTarget = path.join(tmpDir(), "probe");
+
+    const failed = JSON.parse(await create.handler({ projectName: "probe" }));
+
+    expect(failed.value.depsInstalled).toBe(false);
+    expect(failed.warnings.join("\n")).toContain("probe is ready.");
   });
 
   it("490 and 489: the ship step names extension_project_create straight from the scaffolded folder, no push, never the /new?template deploy link", async () => {

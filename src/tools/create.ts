@@ -400,7 +400,7 @@ export async function handler(args: {
     warnings: [
       engineWarning,
       corpusWarning,
-      ...(result.depsInstalled ? [] : logTail()),
+      ...(result.depsInstalled || args.install === false ? [] : logTail()),
     ],
   });
 }
