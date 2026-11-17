@@ -104,7 +104,7 @@ describe("fenceUntrusted", () => {
       expect(at).toBeLessThan(end);
     }
 
-    expect(count(text, INJECTION)).toBe(4);
+    expect(count(text, INJECTION)).toBe(5);
   });
 
   it("parses back to the same envelope fields, byte for byte", () => {

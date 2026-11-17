@@ -11,7 +11,7 @@ import path from "node:path";
 
 import { isProjectRef } from "../lib/credentials";
 import { compareVersions, resolvedEngineFacts } from "../lib/engine-version";
-import { envelope } from "../lib/envelope";
+import { envelope, okOrRefusal } from "../lib/envelope";
 import { packageAddress } from "../lib/package-address";
 import { PRODUCTION_DEBUG_PORT_FLOOR } from "../lib/production-launch";
 import { userlandProjectUrl, type ProjectRef } from "../lib/registry";
@@ -182,11 +182,14 @@ async function close(args: Args, project: string): Promise<string> {
   const left = closed.filter((entry) => !entry.removed || entry.browserGone === false);
 
   return envelope({
-    ok: left.length === 0,
+    ...okOrRefusal(left.length === 0, () => ({
+      code: "E_STOP_INCOMPLETE",
+      message: `${left.length} of ${closed.length} tries of ${project} were not fully removed.`,
+      hint: `value.closed marks each try left behind with removed: false or browserGone: false. Call ${COMMAND} with action: "close" again to end them.`,
+    })),
     command: COMMAND,
     status: runs.length === 0 ? "nothing-to-close" : left.length ? "close-incomplete" : "closed",
     value: { project, closed, screenshots: tryScreenshotsDir() },
-    ...(left.length ? { error: { code: "E_INTERNAL", message: `${left.length} of ${closed.length} tries of ${project} were not fully removed.` } } : {}),
     hint: runs.length === 0
       ? `No try of ${project} is running on this machine; nothing was removed.`
       : `Ended ${closed.length} ${closed.length === 1 ? "try" : "tries"} of ${project}: the browser, its profile and the unpacked extension are gone${left.length ? ", except where removed is false or browserGone is false" : ""}. Screenshots stay in ${tryScreenshotsDir()}.`,

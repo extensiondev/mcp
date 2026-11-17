@@ -704,11 +704,11 @@ async function finishFromPoll(
     }
 
     return envelope({
-      ok: stored !== null,
       command: COMMAND,
       status: stored ? "project-exists-logged-in" : "project-exists",
       ...(stored
         ? {
+            ok: true as const,
             value: {
               ...stored,
               ...(stored.expiresAt ? { expiresAtIso: new Date(stored.expiresAt * 1000).toISOString() } : {}),
@@ -716,6 +716,7 @@ async function finishFromPoll(
             },
           }
         : {
+            ok: false as const,
             error: {
               code: "E_PLATFORM",
               message: `Project ${ctx.project} already exists on this host, so there is nothing to create${storeFailure ? `, and the login the platform minted for it could not be stored (${storeFailure})` : ", and the platform minted no login for it"}.`,

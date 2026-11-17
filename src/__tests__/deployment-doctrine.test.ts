@@ -224,7 +224,7 @@ describe("an approval page opens itself once in the person's browser", () => {
   });
 
   it("897: does not open an approval page on a host that is neither extension.dev nor the configured platform", () => {
-    const answer = (approvalId: string, approvalUrl: string) => envelope({ ok: false, command: "extension_submit", status: "approval-required", value: { approvalId, approvalUrl } });
+    const answer = (approvalId: string, approvalUrl: string) => envelope({ ok: false, command: "extension_submit", status: "approval-required", error: { code: "E_APPROVAL_REQUIRED", message: "x" }, value: { approvalId, approvalUrl } });
 
     for (const [index, foreign] of ["https://evil.test/device/approve/apr_a", "https://www.extension.dev.evil.test/device/approve/apr_a", "https://www.extension.dev@evil.test/device/approve/apr_a", "https://evilextension.dev/device/approve/apr_a", "HTTPS://evil.test/%USERPROFILE%"].entries()) {
       const raw = answer(`apr_foreign_${index}`, foreign);

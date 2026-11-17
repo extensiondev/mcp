@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { envelope, isEnvelope } from "./envelope";
+import { isEnvelope, reframed } from "./envelope";
 
 export function appendWarnings(out: string, warnings: string[] | undefined): string {
   if (!warnings?.length) return out;
@@ -23,7 +23,7 @@ export function appendWarnings(out: string, warnings: string[] | undefined): str
 
   const frame = parsed as typeof parsed & { hint?: string };
 
-  return envelope({
+  return reframed({
     ok: frame.ok,
     command: frame.command,
     status: frame.status,

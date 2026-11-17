@@ -8,7 +8,7 @@
 
 import { extensionUninstall } from "extension-install";
 
-import { envelope } from "../lib/envelope";
+import { envelope, okOrRefusal } from "../lib/envelope";
 
 export async function uninstallManagedBrowser(args: {
   browser?: string;
@@ -51,7 +51,10 @@ export async function uninstallManagedBrowser(args: {
             : "uninstalled";
 
     return envelope({
-      ok: rows.length > 0,
+      ...okOrRefusal(rows.length > 0, () => ({
+        code: "E_BROWSER_UNINSTALL",
+        message: "The uninstaller returned no per-browser result, so nothing is known to have been removed.",
+      })),
       command: "extension_browsers",
       status,
       value: {
@@ -61,14 +64,6 @@ export async function uninstallManagedBrowser(args: {
         results: rows,
         duration: Date.now() - start,
       },
-      ...(rows.length === 0
-        ? {
-            error: {
-              code: "E_BROWSER_UNINSTALL",
-              message: "The uninstaller returned no per-browser result, so nothing is known to have been removed.",
-            },
-          }
-        : {}),
       hint:
         status === "not-installed"
           ? `${absent.join(", ")} ${absent.length === 1 ? "was" : "were"} not installed in the managed cache, so nothing was removed.`

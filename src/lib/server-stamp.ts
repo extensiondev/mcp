@@ -9,7 +9,7 @@
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { envelope, isEnvelope, type Envelope } from "./envelope";
+import { envelope, isEnvelope, type Envelope, reframed } from "./envelope";
 import { serverCommit, serverVersion } from "./producer-version";
 
 type Row = Record<string, unknown>;
@@ -74,7 +74,7 @@ export function markListStale(result: string, listedAt: string | null, builtAt: 
   const stale: ListStaleStamp = { ...server, listStale: true, listedAt };
   const sentence = listStaleSentence(listedAt, builtAt);
 
-  return envelope({
+  return reframed({
     ok: parsed.ok,
     command: parsed.command,
     status: parsed.status,
@@ -175,7 +175,7 @@ export function createServerStamp(entry: string): {
 
     const warnings = [...(Array.isArray(parsed.warnings) ? parsed.warnings : []), ...(rebuilt ? [rebuiltWarning(rebuilt)] : [])];
 
-    return envelope({
+    return reframed({
       ok: parsed.ok,
       command: parsed.command,
       status: parsed.status,
@@ -195,7 +195,7 @@ export function createServerStamp(entry: string): {
     const value: Row = parsed.value ? (parsed.value as Row) : {};
     if (value.server !== undefined || !stampDue(parsed.command)) return result;
 
-    return envelope({
+    return reframed({
       ok: parsed.ok,
       command: parsed.command,
       status: parsed.status,

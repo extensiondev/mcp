@@ -155,7 +155,7 @@ npx skills add extensiondev/skill
 
 ## Troubleshooting
 
-Every refusal carries a `hint` naming the next call. The five most common:
+Every refusal carries an error code and a hint (`error.hint`) naming what to change or the next call. The five most common:
 
 - **`E_TOOL_DISABLED`**: the tool's group is off, or the call reaches outside this machine in no-ship mode. Add the group the hint names (`platform` or `extras`) to `--features`, or drop `--no-ship`, in the client's config, then call again.
 - **`approval-required`**: have a workspace owner approve the act at the link, then repeat the call with the same arguments and the returned `approvalId`.

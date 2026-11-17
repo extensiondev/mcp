@@ -21,7 +21,7 @@ export interface MenuItemArgs {
   timeout?: number;
 }
 
-const refuse = (init: Omit<EnvelopeInit, "ok" | "command">): string => envelope({ ok: false, command: COMMAND, ...init });
+const refuse = (init: Omit<Extract<EnvelopeInit, { ok: false }>, "ok" | "command">): string => envelope({ ok: false, command: COMMAND, ...init });
 
 const NO_GESTURE = "The replay carries no user gesture, so no activeTab grant came with it.";
 

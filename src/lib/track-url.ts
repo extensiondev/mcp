@@ -15,7 +15,7 @@ import {
 
 import { consoleBase } from "./console-urls";
 import { resolveCredential } from "./credential-source";
-import { envelope, isEnvelope, type Envelope } from "./envelope";
+import { isEnvelope, type Envelope, reframed } from "./envelope";
 import { PLATFORM_HOLD_STATUS } from "./platform-hold";
 import { resolveProjectIdentity } from "./project-identity";
 
@@ -437,7 +437,7 @@ export function attachTrack(command: string, args: Row, result: string): string 
     ? { links: [{ kind: "track", url: fields.trackUrl, audience: "workspace members", expiresAt: null, made: false }, ...value.links] }
     : {};
 
-  return envelope({
+  return reframed({
     ok: frame.ok,
     command: frame.command,
     status: frame.status,

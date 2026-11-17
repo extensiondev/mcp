@@ -26,7 +26,7 @@ const BROWSER_ERROR_PAGE = /^(chrome|edge)-error:\/\//;
 
 const isBrowserErrorPage = (url: string): boolean => BROWSER_ERROR_PAGE.test(url);
 
-const refuse = (init: Omit<EnvelopeInit, "ok" | "command">): string => envelope({ ok: false, command: COMMAND, ...init });
+const refuse = (init: Omit<Extract<EnvelopeInit, { ok: false }>, "ok" | "command">): string => envelope({ ok: false, command: COMMAND, ...init });
 
 export interface TargetArgs {
   projectPath: string;

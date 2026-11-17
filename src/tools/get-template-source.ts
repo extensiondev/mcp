@@ -14,7 +14,7 @@ import {
   templateFileUrls,
   resolvedTemplateCommit,
 } from "../lib/template-artifact-source";
-import { envelope } from "../lib/envelope";
+import { envelope, okOrRefusal } from "../lib/envelope";
 
 const COMMAND = "extension_templates";
 
@@ -143,15 +143,13 @@ export async function readTemplateSource(args: {
     .sort();
 
   return envelope({
-    ok: errors.length === 0,
+    ...okOrRefusal(errors.length === 0, () => ({
+      code: "E_TEMPLATE_FETCH",
+      message: `${errors.length} of ${errors.length + Object.keys(fileContents).length} file(s) could not be read from the template.`,
+      hint: "warnings names each file that was not read; call extension_templates with action: \"source\" and the same slug again to read them, and use fileContents for the rest.",
+    })),
     command: COMMAND,
     status: errors.length ? "partial" : "read",
-    error: errors.length
-      ? {
-          code: "E_TEMPLATE_FETCH",
-          message: `${errors.length} of ${errors.length + Object.keys(fileContents).length} file(s) could not be read from the template.`,
-        }
-      : null,
     value: {
       ...meta,
       fileContents,

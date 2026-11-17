@@ -29,7 +29,7 @@ import {
 } from "../lib/webdriver";
 import { CDPClient } from "../lib/cdp";
 import { CDP_PORT_MISSING_HINT, resolveCdpPort } from "../lib/cdp-port";
-import { envelope, isEnvelope } from "../lib/envelope";
+import { envelope, isEnvelope, okOrRefusal } from "../lib/envelope";
 import { verifyGuestLoaded } from "../lib/guest-load-oracle";
 import { sessionGuestIdentity } from "../lib/extension-identity";
 import { engineManifestView } from "../lib/engine-manifest-view";
@@ -1653,7 +1653,15 @@ export async function handler(args: {
   const compileErrors = contractCompileErrors(args.projectPath, browser);
 
   return envelope({
-    ok: verdict.passed,
+    ...okOrRefusal(verdict.passed, () => ({
+      code: "E_ASSERT_FAILED",
+      message: `The verdict is ${verdict.outcome}: ${verdictSentence(verdict)}`,
+      hint: compileErrors.length
+        ? "Fix the compile error this answer names, let the dev server recompile (extension_wait with for: \"rebuild\"), then call extension_assert again."
+        : verdict.failures.length
+          ? `Fix what the failing check${verdict.failures.length === 1 ? "" : "s"} (${verdict.failures.join(", ")}) say${verdict.failures.length === 1 ? "s" : ""} in value.checks, then call extension_assert again.`
+          : "Nothing failed, but not every check could be judged: do what each inconclusive check in value.checks names in settledBy or detail, then call extension_assert again.",
+    })),
     command: COMMAND,
     status: verdict.outcome,
     value: verdict,

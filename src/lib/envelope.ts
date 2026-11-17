@@ -9,6 +9,7 @@
 import { meterComposedDashboardUrls } from "./dashboard-url-meter";
 import { takeDeferredWarnings } from "./deferred-warnings";
 import { deadEngineOverrideLine } from "./engine-override-warning";
+import { withRefusalHint } from "./refusal-hints";
 import { withRetry, type RetryVerdict } from "./retry";
 
 export type { RetryVerdict } from "./retry";
@@ -113,7 +114,21 @@ export type ErrorCode =
   | "E_UNKNOWN_TOOL"
   | "E_UNSUPPORTED_BROWSER"
   | "E_WAIT_TIMEOUT"
-  | "E_WEBDRIVER_SESSION_ENDED";
+  | "E_WEBDRIVER_SESSION_ENDED"
+  | "E_ASSERT_FAILED"
+  | "E_CAPTURE_FAILED"
+  | "E_CAPTURE_TIMEOUT"
+  | "E_COMMAND_UNSUPPORTED_FOR_TARGET"
+  | "E_CONTROL_DENIED"
+  | "E_CONTROL_UNAVAILABLE"
+  | "E_CSP_BLOCKS_EVAL"
+  | "E_NOT_IMPLEMENTED"
+  | "E_SESSION_NOT_FOUND"
+  | "E_STOP_INCOMPLETE"
+  | "E_SURFACE_NOT_CAPTURABLE"
+  | "E_UNHEALTHY"
+  | "E_UNSPECIFIED"
+  | "E_USER_GESTURE_REQUIRED";
 
 export const ERROR_CODES: ErrorCode[] = [
   "E_ACTION_NOT_REPLAYED",
@@ -213,6 +228,20 @@ export const ERROR_CODES: ErrorCode[] = [
   "E_UNSUPPORTED_BROWSER",
   "E_WAIT_TIMEOUT",
   "E_WEBDRIVER_SESSION_ENDED",
+  "E_ASSERT_FAILED",
+  "E_CAPTURE_FAILED",
+  "E_CAPTURE_TIMEOUT",
+  "E_COMMAND_UNSUPPORTED_FOR_TARGET",
+  "E_CONTROL_DENIED",
+  "E_CONTROL_UNAVAILABLE",
+  "E_CSP_BLOCKS_EVAL",
+  "E_NOT_IMPLEMENTED",
+  "E_SESSION_NOT_FOUND",
+  "E_STOP_INCOMPLETE",
+  "E_SURFACE_NOT_CAPTURABLE",
+  "E_UNHEALTHY",
+  "E_UNSPECIFIED",
+  "E_USER_GESTURE_REQUIRED",
 ];
 
 export interface EnvelopeError {
@@ -225,27 +254,56 @@ export interface EnvelopeError {
   [key: string]: unknown;
 }
 
+export interface EnvelopeFailure extends EnvelopeError {
+  hint: string;
+  retry: RetryVerdict;
+}
+
 export interface Envelope {
   schema: typeof ENVELOPE_SCHEMA;
   ok: boolean;
   command: string;
   status: string;
   value: unknown;
-  error: EnvelopeError | null;
+  error: EnvelopeFailure | null;
   truncated?: boolean;
   hint?: string;
   warnings: string[];
 }
 
-export interface EnvelopeInit {
-  ok: boolean;
+interface EnvelopeFields {
   command: string;
   status: string;
   value?: unknown;
-  error?: EnvelopeError | null;
   truncated?: boolean;
   hint?: string;
   warnings?: Array<string | null | undefined | false>;
+}
+
+/* @invariant A FAILURE CANNOT BE BUILT WITHOUT AN ERROR, AND NO FAILURE
+ * LEAVES WITHOUT error.hint. The init type is a union on `ok`: `ok: false`
+ * takes an error with a code and a message, so a refusal written with none
+ * does not compile, and a call whose `ok` is computed has to say which side
+ * it is on. envelopeObject then fills error.hint from the site's own hint,
+ * the frame's hint or the code's line in refusal-hints.ts, in that order,
+ * the way it fills error.retry. Before ledger 912 extension_stop answered
+ * `ok: false, error: null` for a project with no session and
+ * extension_doctor did for a failing check. A frame rebuilt from parsed
+ * JSON (reframed below) is not typed on `ok`, so a failure that reaches it
+ * with no error leaves as E_UNSPECIFIED instead of as null.
+ */
+export type EnvelopeInit = EnvelopeFields & (
+  | { ok: true; error?: null }
+  | { ok: false; error: EnvelopeError }
+);
+
+export function okOrRefusal(ok: boolean, refusal: () => EnvelopeError): { ok: true } | { ok: false; error: EnvelopeError } {
+  return ok ? { ok: true } : { ok: false, error: refusal() };
+}
+
+export interface ParsedFrame extends EnvelopeFields {
+  ok: boolean;
+  error?: EnvelopeError | null;
 }
 
 const collectWarnings = (
@@ -300,14 +358,24 @@ function plainText<T>(field: T): T {
   return plain as T;
 }
 
-export function envelopeObject(init: EnvelopeInit): Envelope {
+function failureOf(init: ParsedFrame): EnvelopeFailure | null {
+  const error = init.error ?? (init.ok ? null : { code: "E_UNSPECIFIED", message: `${init.command} answered ${init.status} and named no error.` });
+
+  if (!error) return null;
+
+  const judged = withRetry(error, init.command, init.value);
+
+  return plainText(init.ok ? (judged as EnvelopeFailure) : withRefusalHint(judged, init.command, init.hint));
+}
+
+export function reframedObject(init: ParsedFrame): Envelope {
   const frame: Envelope = {
     schema: ENVELOPE_SCHEMA,
     ok: init.ok,
     command: init.command,
     status: init.status,
     value: init.value === undefined ? null : plainText(init.value),
-    error: init.error ? plainText(withRetry(init.error, init.command, init.value)) : null,
+    error: failureOf(init),
     warnings: collectWarnings([...(init.warnings ?? []), ...takeDeferredWarnings(), deadEngineOverrideLine()].map(plainText)),
   };
   if (init.truncated !== undefined) frame.truncated = init.truncated;
@@ -318,8 +386,35 @@ export function envelopeObject(init: EnvelopeInit): Envelope {
   return frame;
 }
 
+export function envelopeObject(init: EnvelopeInit): Envelope {
+  return reframedObject(init);
+}
+
 export function envelope(init: EnvelopeInit): string {
-  return JSON.stringify(envelopeObject(init));
+  return JSON.stringify(reframedObject(init));
+}
+
+export function reframed(parsed: ParsedFrame): string {
+  return JSON.stringify(reframedObject(parsed));
+}
+
+export function hintedAnswer(text: string): string {
+  if (!text.includes('"ok":false')) return text;
+
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return text;
+  }
+
+  if (!isEnvelope(parsed) || parsed.ok !== false) return text;
+  if (parsed.error && typeof parsed.error.hint === "string" && parsed.error.hint.trim()) return text;
+
+  const error = parsed.error ?? { code: "E_UNSPECIFIED", message: `${parsed.command} answered ${parsed.status} and named no error.` };
+
+  return JSON.stringify({ ...parsed, error: withRefusalHint(withRetry(error, parsed.command, parsed.value), parsed.command, parsed.hint) });
 }
 
 export function sessionCommandSinceEnvelopeOwnsCommand(contract: {

@@ -18,7 +18,7 @@ import {
   resolveChromeTheme,
   type ChromeThemeManifestTheme,
 } from "../lib/vendor/chrome-theme/chrome-theme-resolve";
-import { envelope } from "../lib/envelope";
+import { envelope, okOrRefusal } from "../lib/envelope";
 import {
   discardedProperties,
   discardedTints,
@@ -369,7 +369,11 @@ export async function handler(args: {
   ];
 
   return envelope({
-    ok: verdict !== "invalid",
+    ...okOrRefusal(verdict !== "invalid", () => ({
+      code: "E_BAD_MANIFEST",
+      message: `The theme manifest is not one Chrome loads: ${grammarErrors.join("; ")}.`,
+      hint: "Fix what error.message lists in the theme's manifest.json, then call extension_theme_verify again.",
+    })),
     command: COMMAND,
     status: verdict,
     value: {

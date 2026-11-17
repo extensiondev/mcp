@@ -12,7 +12,7 @@ import path from "node:path";
 import { engineManifestView } from "../lib/engine-manifest-view";
 import { CHROMIUM_FAMILY, GECKO_FAMILY, WEBKIT_FAMILY, isChromiumFamily, isGeckoFamily } from "../lib/browser-family";
 import { listTemplates } from "../lib/templates-cache";
-import { envelope } from "../lib/envelope";
+import { envelope, okOrRefusal } from "../lib/envelope";
 import { apiUsesIn, type ApiUse } from "../lib/guarded-api-uses";
 import { droppedRuntimePages } from "../lib/dropped-runtime-pages";
 import { ADMIN_INSTALL_ONLY_KEY, ENTERPRISE_CHANNEL_SENTENCE, adminInstallOnlyOf, adminInstallOnlyTypeIssue } from "../lib/firefox-enterprise";
@@ -951,7 +951,11 @@ export async function handler(args: {
   result.valid = result.errors.length === 0;
 
   return envelope({
-    ok: result.valid,
+    ...okOrRefusal(result.valid, () => ({
+      code: "E_BAD_MANIFEST",
+      message: `The manifest has ${result.errors.length} error${result.errors.length === 1 ? "" : "s"}, the first: ${result.errors[0]}`,
+      hint: "Fix each line of value.errors in the manifest, then call extension_manifest_validate again; extension_build refuses the same errors.",
+    })),
     command: COMMAND,
     status: result.valid ? "valid" : "invalid",
     value: {

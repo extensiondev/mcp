@@ -22,7 +22,7 @@ import {
 } from "../lib/profile-carryover";
 import { isGeckoFamily } from "../lib/browser-family";
 import { removeCarrier } from "../lib/carrier";
-import { envelope, isEnvelope, type Envelope } from "../lib/envelope";
+import { envelope, isEnvelope, type Envelope, reframed } from "../lib/envelope";
 import { buildIsolatedRun, isolatedEngineRefusal, isolatedSentence, openIsolatedRun, removeIsolatedRun, type IsolatedRun } from "../lib/isolated-run";
 import { productionLaunchEvidence, readFreshContract, readLoadOverDebugPort } from "../lib/production-launch";
 import { awaitStartLanding, engineExitAfterBoot, startAnswer } from "../lib/start-answer";
@@ -542,7 +542,7 @@ function isolatedAnswer(answer: string, run: IsolatedRun): string {
     startedAt: run.startedAt,
   };
 
-  return envelope({
+  return reframed({
     ok: frame.ok,
     command: frame.command,
     status: frame.status,

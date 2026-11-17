@@ -89,7 +89,7 @@ export interface ElementArgs {
   timeout?: number;
 }
 
-const refuse = (init: Omit<EnvelopeInit, "ok" | "command">): string => envelope({ ok: false, command: schema.name, ...init });
+const refuse = (init: Omit<Extract<EnvelopeInit, { ok: false }>, "ok" | "command">): string => envelope({ ok: false, command: schema.name, ...init });
 
 function unsupportedBrowser(browser: string): string {
   return refuse({

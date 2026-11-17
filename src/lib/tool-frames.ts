@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { envelope, isEnvelope, type Envelope } from "./envelope";
+import { hintedAnswer, isEnvelope, type Envelope, reframed } from "./envelope";
 import { fenceUntrusted } from "./untrusted-fence";
 
 import type { ToolFrame } from "./server-reload";
@@ -19,7 +19,18 @@ function isEnvelopeText(result: string): boolean {
   }
 }
 
-export function toolResultFrame(result: string, untrusted = false): ToolFrame {
+/* @invariant NO REFUSAL LEAVES THE DISPATCHER WITHOUT error.code AND
+ * error.hint. envelope() fills both for every frame this server builds
+ * (envelope.ts), and the two serializers that do not pass through it do so
+ * on purpose: an act frame the engine wrote (act.ts) and an answer the
+ * hosted lane wrote, relayed as its bytes (hosted-forwarder.ts). Both
+ * frames end here, so this is the one place a failure written by another
+ * program, or by an engine older than the hint, is completed before the
+ * client reads it (ledger 912). A frame that already says its hint is
+ * returned as the same string.
+ */
+export function toolResultFrame(answer: string, untrusted = false): ToolFrame {
+  const result = hintedAnswer(answer);
   let refused: boolean;
 
   try {
@@ -41,7 +52,7 @@ export function toolResultFrame(result: string, untrusted = false): ToolFrame {
 }
 
 export function refusedFrame(text: string): ToolFrame {
-  return { content: [{ type: "text" as const, text }], isError: true };
+  return { content: [{ type: "text" as const, text: hintedAnswer(text) }], isError: true };
 }
 
 export function frameText(frame: ToolFrame): string {
@@ -65,7 +76,7 @@ export function annotate(result: string, said: { note?: string; warning?: string
   const value = frame.value && typeof frame.value === "object" && !Array.isArray(frame.value) ? (frame.value as Record<string, unknown>) : {};
   const note = said.note ? (typeof value.note === "string" && value.note.trim() ? `${value.note.trim()} ${said.note}` : said.note) : undefined;
 
-  return envelope({
+  return reframed({
     ok: frame.ok,
     command: frame.command,
     status: frame.status,

@@ -102,6 +102,17 @@ describe("extension_stop", () => {
     expect(result.value.pid).toBeNull();
   });
 
+  it("912: answers a project with no session as E_NO_SESSION with what to pass instead, never ok: false with no error", async () => {
+    const result = JSON.parse(await stop.handler({ projectPath: tmpProject(), browser: "chrome" }));
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("not-found");
+    expect(result.error.code).toBe("E_NO_SESSION");
+    expect(result.error.message).toMatch(/^No known session for this project\/browser/);
+    expect(result.error.hint).toBe("Nothing was stopped. If the session runs from another folder or browser, pass that projectPath and browser; all: true sweeps every session recorded on this machine.");
+    expect(result.error.retry).toBe("no");
+  });
+
   it("takes the session's network stub rules down with it, even when no pid is on record", async () => {
     const projectPath = tmpProject();
     const originalOpen = stubLinks.open;

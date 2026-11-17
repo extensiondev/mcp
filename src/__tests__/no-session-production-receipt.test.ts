@@ -10,6 +10,7 @@ import { runActVerb } from "../lib/act";
 import { registerSession, removeSession } from "../lib/process-manager";
 import { navigateToUrl } from "../tools/open";
 import { readyContract } from "./fixtures/engine-answers";
+import { REFUSAL_HINTS } from "../lib/refusal-hints";
 
 import type * as ExecModule from "../lib/exec";
 
@@ -214,7 +215,7 @@ describe("the no-session answer reads the start receipt before choosing its word
     expect(noSessionWords(empty, "chrome", { ...DEV, hint: CDP_PORT_MISSING_HINT })).toEqual({ ...DEV, hint: CDP_PORT_MISSING_HINT });
 
     const envelope = JSON.parse(noSessionEnvelope({ command: "extension_open", projectPath: empty, browser: "chrome", need: "so nothing opens", dev: DEV, name: "NoSession" }));
-    expect(envelope.error).toEqual({ code: "E_NO_SESSION", name: "NoSession", message: DEV.message, retry: "no" });
+    expect(envelope.error).toEqual({ code: "E_NO_SESSION", name: "NoSession", message: DEV.message, retry: "no", hint: REFUSAL_HINTS.E_NO_SESSION });
     expect(envelope.hint).toBeUndefined();
   });
 });

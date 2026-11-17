@@ -28,6 +28,10 @@ describe("manifest_version is part of the grammar", () => {
     const r = await verify({ manifest: bare });
     expect(r.status).toBe("invalid");
     expect(JSON.stringify(r.value)).toMatch(/manifest_version is missing/);
+    expect(r.ok).toBe(false);
+    expect(r.error.code).toBe("E_BAD_MANIFEST");
+    expect(r.error.message).toMatch(/^The theme manifest is not one Chrome loads: .*manifest_version is missing/);
+    expect(r.error.hint).toBe("Fix what error.message lists in the theme's manifest.json, then call extension_theme_verify again.");
   });
 
   it("accepts the Extension.js prefixed chromium:manifest_version", async () => {

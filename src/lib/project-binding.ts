@@ -10,7 +10,7 @@ import { approvalLogin } from "./approval-scope";
 import { envToken, requestCredential } from "./credential-scope";
 import { resolveCredential } from "./credential-source";
 import { pinnedProject, readCredentials } from "./credentials";
-import { envelope, isEnvelope } from "./envelope";
+import { envelope, isEnvelope, reframed } from "./envelope";
 import { kernelHook } from "./kernel-hooks";
 import { noLoginForProjectRefusal } from "./no-login-for-project";
 import { clientProjectDir } from "./client-roots";
@@ -185,7 +185,7 @@ export function stampAnsweredFor(answer: string, answeredFor: string | null): st
 
   const frame = parsed as typeof parsed & { hint?: string };
 
-  return envelope({
+  return reframed({
     ok: frame.ok,
     command: frame.command,
     status: frame.status,

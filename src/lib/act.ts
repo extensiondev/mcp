@@ -21,10 +21,12 @@ import {
 } from "./safari-background";
 import {
   envelope,
-  envelopeObject,
+  hintedAnswer,
   isEnvelope,
   type ErrorCode,
+  reframedObject,
 } from "./envelope";
+import { withRefusalHint } from "./refusal-hints";
 import { withRetry } from "./retry";
 
 export function toMcpSpeak(text: string): string {
@@ -183,7 +185,7 @@ function wrapLegacyFrame(frame: any, command: string): Record<string, unknown> {
   } = frame as Record<string, unknown>;
   const raw = (error ?? {}) as Record<string, unknown>;
   const name = typeof raw.name === "string" ? raw.name : undefined;
-  const wrapped = envelopeObject({
+  const wrapped = reframedObject({
     ok: ok === true,
     command,
     status: ok === true ? "ok" : "failed",
@@ -271,7 +273,7 @@ export async function runActVerb(
       if (isEnvelope(frame)) {
         frame.command = command;
         if (!Array.isArray(frame.warnings)) frame.warnings = [];
-        if (frame.error) frame.error = withRetry(frame.error, command, frame.value);
+        if (frame.error) frame.error = frame.ok ? withRetry(frame.error, command, frame.value) : withRefusalHint(withRetry(frame.error, command, frame.value), command, frame.hint);
 
         return JSON.stringify(frame);
       }
@@ -337,7 +339,7 @@ export function addWarning(frame: any, text: unknown): void {
 }
 
 export function actFrameJson(frame: unknown): string {
-  return JSON.stringify(frame);
+  return hintedAnswer(JSON.stringify(frame));
 }
 
 function patchKeepingScalarResult(

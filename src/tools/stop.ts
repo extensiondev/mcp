@@ -39,7 +39,7 @@ import { contractPidStartedAt } from "../lib/contract-pids";
 import { contractBrowserPid, describeEnded, endedProcesses, readReadyContract } from "../lib/stop-ended";
 import { sweepCarriers, type CarrierSweepEntry } from "../lib/carrier-exit";
 import { readRememberedCarriers } from "../lib/carrier-registry";
-import { envelope } from "../lib/envelope";
+import { envelope, okOrRefusal, type EnvelopeError } from "../lib/envelope";
 import { dropNetworkStubs } from "../lib/network-stubs";
 import { describeGroups, groupByProject, onlyLiveSession } from "../lib/only-live-session";
 import { killWindowsTree } from "../lib/exec";
@@ -338,6 +338,40 @@ function pidFromReadyContract(
   }
 }
 
+/* @invariant A STOP THAT ENDED NOTHING IS A REFUSAL WITH A CODE AND A NEXT
+ * STEP. It stays `ok: false` with the status it had ("not-found",
+ * "still-alive"): value.stopped is false, the sibling call with no
+ * projectPath already answers E_NO_SESSION for the same fact, and a caller
+ * that named the wrong folder or browser has to learn the session it meant
+ * is still up, which `ok: true` would hide. Before ledger 912 the answer
+ * was `ok: false` with `error: null`. No session on record, or a record
+ * whose process is already gone, is E_NO_SESSION; a process that was
+ * signalled and still reports alive is E_STOP_INCOMPLETE.
+ */
+function notStoppedRefusal(outcome: StopOutcome): EnvelopeError {
+  if (outcome.staleRecord) {
+    return {
+      code: "E_NO_SESSION",
+      message: outcome.detail,
+      hint: "No session was left to stop and its stale records are gone. Start a new one with extension_dev.",
+    };
+  }
+
+  if (outcome.pid === null && !outcome.reapUnconfirmed?.length) {
+    return {
+      code: "E_NO_SESSION",
+      message: outcome.detail,
+      hint: "Nothing was stopped. If the session runs from another folder or browser, pass that projectPath and browser; all: true sweeps every session recorded on this machine.",
+    };
+  }
+
+  return {
+    code: "E_STOP_INCOMPLETE",
+    message: outcome.detail,
+    hint: "A process this answer names still reports alive. Call extension_stop with the same projectPath and browser again; if its pid survives, ask the person to end it.",
+  };
+}
+
 export async function stopOne(
   projectPath: string,
   browser: string,
@@ -512,6 +546,10 @@ export async function handler(args: {
         ok: false,
         command: schema.name,
         status: "confirm-required",
+        error: {
+          code: "E_BAD_REQUEST",
+          message: `Nothing was stopped: all: true would end ${candidates.size} sessions across ${wouldStop.length} projects, which takes confirm: true.`,
+        },
         value: {
           wouldStop,
           foreign: skippedForeign,
@@ -548,7 +586,11 @@ export async function handler(args: {
 
     if (candidates.size === 0 && carriers.length === 0) {
       return envelope({
-        ok: unreadNotes.length === 0,
+        ...okOrRefusal(unreadNotes.length === 0, () => ({
+          code: "E_STOP_INCOMPLETE",
+          message: "Nothing was found to stop, but part of the session record could not be read, so a session may still be running.",
+          hint: "warnings names what could not be read. Fix that and call extension_stop with all: true again, or pass projectPath to stop one project's session from its own folder.",
+        })),
         command: schema.name,
         status: unreadNotes.length ? "nothing-found-unreadable" : "nothing-to-stop",
         value: { stopped: [], ...(skippedForeign.length ? { skippedForeign } : {}), trackUrl: consolePage },
@@ -559,8 +601,14 @@ export async function handler(args: {
       });
     }
 
+    const unstopped = outcomes.filter((o) => !o.stopped);
+
     return envelope({
-      ok: outcomes.every((o) => o.stopped),
+      ...okOrRefusal(unstopped.length === 0, () => ({
+        code: "E_STOP_INCOMPLETE",
+        message: `${unstopped.length} of ${outcomes.length} sessions were not stopped: ${unstopped.map((o) => `${o.browser} on ${o.projectPath}`).join("; ")}.`,
+        hint: "warnings says why for each. Call extension_stop with that projectPath and browser to try one again.",
+      })),
       command: schema.name,
       status: "stopped-all",
       value: {
@@ -630,7 +678,7 @@ export async function handler(args: {
   const outcome = await stopOne(projectPath, browser);
 
   return envelope({
-    ok: outcome.stopped,
+    ...okOrRefusal(outcome.stopped, () => notStoppedRefusal(outcome)),
     command: schema.name,
     status:
       outcome.pid === null

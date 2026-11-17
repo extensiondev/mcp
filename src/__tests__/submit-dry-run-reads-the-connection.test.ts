@@ -61,6 +61,7 @@ describe("the shared answer guard strips registry and workflow internals", () =>
       ok: false,
       command: "extension_release_status",
       status: "read",
+      error: { code: "E_PLATFORM", message: "The store record is missing." },
       value: {
         statusUrl: "https://registry.extension.land/acme/widget/_extension-dev-system/stores/status.json",
         channelsUrl: "https://registry.extension.land/acme/widget/_extension-dev/channels.json",

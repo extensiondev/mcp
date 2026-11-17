@@ -14,7 +14,7 @@ import { PACKAGE_HOLD_FACT } from "./build-inputs";
 import { localPackageHolds } from "./build-inputs-local";
 import { resolveCredential, type CredentialRef } from "./credential-source";
 import { LOGIN_STEPS, NO_TOKEN_MESSAGE, noStoredLoginHint } from "./credentials";
-import { envelope, isEnvelope } from "./envelope";
+import { envelope, isEnvelope, reframed } from "./envelope";
 import { forwardSession, withForwardSession, type ForwardSession } from "./forward-approval-state";
 import { approvalHeldByPerson, forgetApprovalHolders } from "./forwarded-approval";
 import { forgetForwardCredential, forwardCredential, forwardUrlFor, type ExchangedCredential } from "./forward-credential";
@@ -238,7 +238,7 @@ function laneEnvelope(command: string, answered: Args, deps: ForwarderDeps): str
 
   const error = (body.error && typeof body.error === "object" ? body.error : {}) as Args;
 
-  return envelope({
+  return reframed({
     ok: body.ok === true,
     command,
     status: text(body.status),

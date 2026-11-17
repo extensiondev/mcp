@@ -111,7 +111,9 @@ describe("extension_stop all: true asks before it crosses projects", () => {
 
     expect(result.ok).toBe(false);
     expect(result.status).toBe("confirm-required");
-    expect(result.error).toBeNull();
+    expect(result.error.code).toBe("E_BAD_REQUEST");
+    expect(result.error.message).toBe("Nothing was stopped: all: true would end 2 sessions across 2 projects, which takes confirm: true.");
+    expect(result.error.hint).toBe(result.hint);
     expect(result.value.wouldStop).toEqual([
       { projectPath: leon, sessions: [{ browser: "firefox", pid: firefox, mode: "dev" }] },
       { projectPath: rebeccat, sessions: [{ browser: "chrome", pid: chrome, mode: "start" }] },

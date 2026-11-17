@@ -9,7 +9,7 @@
 import { TRANSIENT_READ_STATUSES, missesSentence, outcomeClock, waitBound } from "./outcome-clock";
 import { APPROVAL_PENDING_RETRY_SECONDS, APPROVAL_PENDING_STATUS } from "./approval-outcome";
 import { resolveCredential } from "./credential-source";
-import { envelope, isEnvelope, type Envelope } from "./envelope";
+import { isEnvelope, type Envelope, reframed } from "./envelope";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { platformFetch } from "./platform-fetch";
 import { bearerHeaders } from "./request-fetch";
@@ -83,7 +83,7 @@ function withWaited(answer: string, waitedSeconds: number, pending: boolean, rea
     ? `This call waited ${waitedSeconds} s for the approval, which nobody has decided yet${readProblem ? `; the approval itself could not always be read (${readProblem})` : ""}.`
     : `This call waited ${waitedSeconds} s for the approval, then went on once it was decided.`;
 
-  return envelope({
+  return reframed({
     ok: frame.ok,
     command: frame.command,
     status: frame.status,

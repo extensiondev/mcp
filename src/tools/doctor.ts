@@ -20,7 +20,7 @@ import {
 import { resolveEngineOverride } from "../lib/engine-override";
 import { projectEngineCheck, projectEngineValue } from "../lib/project-engine-check";
 import { toMcpSpeak } from "../lib/act";
-import { envelope, isEnvelope } from "../lib/envelope";
+import { envelope, isEnvelope, okOrRefusal, type EnvelopeError } from "../lib/envelope";
 import {
   ambiguousSessionRefusal,
   liveProjectSessions,
@@ -200,12 +200,39 @@ async function environmentPreflight(): Promise<string> {
   const serverLog = serverLogRead();
 
   return envelope({
-    ok: healthy,
+    ...okOrRefusal(healthy, () => unhealthyRefusal(checks)),
     command: schema.name,
     status: healthy ? "healthy" : "unhealthy",
     value: { mode: "environment", checks, serverLog },
     hint: `Pass projectPath to diagnose a live session (extension_dev or extension_start) end-to-end.${lastExitSentence(serverLog)}`,
   });
+}
+
+/* @invariant AN UNHEALTHY DOCTOR ANSWER IS A REFUSAL WITH A CODE AND A NEXT
+ * STEP, NOT `ok: false` WITH NO ERROR. The verdict stays what it was
+ * (`ok: false`, status "unhealthy", the legs in value.checks): the tool
+ * description promises a diagnosis leg by leg, and a caller that branches
+ * on `ok` to learn whether the session is usable keeps working. What ledger
+ * 912 adds is error.code E_UNHEALTHY, the failing legs by name in
+ * error.message, and error.hint sending the reader to each leg's detail
+ * and remediation, which were always there and never pointed at.
+ */
+function unhealthyRefusal(checks: Array<{ check: string; status: string }>): EnvelopeError {
+  const failing = checks.filter((leg) => leg.status === "fail").map((leg) => leg.check);
+
+  if (failing.length === 0) {
+    return {
+      code: "E_UNHEALTHY",
+      message: "The session did not pass, though no single check is marked as failed.",
+      hint: "Read detail and remediation on each check in value.checks that is not pass, do what they say, then call extension_doctor again.",
+    };
+  }
+
+  return {
+    code: "E_UNHEALTHY",
+    message: `${failing.length} of ${checks.length} checks failed: ${failing.join(", ")}.`,
+    hint: `value.checks says what is wrong with ${failing.join(", ")} in detail and what to do in remediation. Do that, then call extension_doctor again.`,
+  };
 }
 
 function safeStringify(value: unknown): string {
@@ -403,6 +430,11 @@ export async function handler(args: {
       ok: false,
       command: schema.name,
       status: "unhealthy",
+      error: {
+        code: "E_UNHEALTHY",
+        message: `1 of 1 checks failed: ${engine.check}.`,
+        hint: "The engine override is set but names no bin, so no engine was spawned. Fix or unset it as value.checks says in remediation, then call extension_doctor again.",
+      },
       value: { browser, ...engineFields, checks: [engine] },
       hint: "No engine was spawned: the engine override is set but names no bin, so the session could not be diagnosed. Fix or unset it and call extension_doctor again.",
     });
@@ -556,7 +588,7 @@ export async function handler(args: {
     const capabilitiesRead = await readSessionCapabilities(projectPath, browser);
 
     return envelope({
-      ok: healthy || readOnly,
+      ...okOrRefusal(healthy || readOnly, () => unhealthyRefusal(checks)),
       command: schema.name,
       status: healthy ? "healthy" : readOnly ? "read-only" : "unhealthy",
       value: {

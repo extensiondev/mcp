@@ -109,7 +109,7 @@ describe("410: an approval names the call that spends it with its tool and the r
   });
 
   it("rewrites the command of an answer the acted-as tool made, and leaves any other answer alone", () => {
-    const made = envelope({ ok: false, command: "extension_submit", status: "approval-required" });
+    const made = envelope({ ok: false, command: "extension_submit", status: "approval-required", error: { code: "E_APPROVAL_REQUIRED", message: "x" } });
 
     expect(JSON.parse(answeredAs(made, "extension_submit_check", "extension_submit")).command).toBe("extension_submit_check");
     expect(answeredAs(made, "extension_submit_check", "extension_builds")).toBe(made);

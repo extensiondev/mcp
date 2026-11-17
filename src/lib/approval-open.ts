@@ -9,7 +9,7 @@
 import { spawn } from "node:child_process";
 
 import { dashboardStoreOf } from "./dashboard-url-meter";
-import { envelope, isEnvelope } from "./envelope";
+import { isEnvelope, reframed } from "./envelope";
 import { envIsHeadless } from "./launch-flags";
 import { APPROVAL_REQUIRED_STATUS } from "./approval-outcome";
 import { mcpOrigins } from "./origins";
@@ -225,7 +225,7 @@ export function openApprovalOnce(result: string, options: { noShip: boolean }, e
   const hint = text(parsed.hint);
   const said = batch.count > 1 ? approvalBatchSentence(batch.count) : /click approve, then tell me/i.test(hint) ? APPROVAL_OPENED_SHORT : APPROVAL_OPENED_SENTENCE;
 
-  return envelope({
+  return reframed({
     ok: parsed.ok,
     command: parsed.command,
     status: parsed.status,

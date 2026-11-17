@@ -11,7 +11,7 @@ import { ConsoleProjectPage, consoleWorkspacePath } from "@extension.dev/urls/pa
 import { approvalSubjectPhrase, subjectOf } from "./approval-subject";
 import { consoleBase, consoleProjectUrl } from "./console-urls";
 import { composedDashboardUrl } from "./dashboard-url-meter";
-import { envelope, isEnvelope } from "./envelope";
+import { isEnvelope, reframed } from "./envelope";
 import { handUploadSentence, platformVersionNote } from "./hand-upload";
 import { itemPackageUrl, packageAddressMode, packageFileOf, packagePathOf, type PackageScope } from "./package-address";
 import { isRow, text } from "./row";
@@ -321,7 +321,7 @@ export function withApproveStep(out: string, reviewSentence: boolean | string): 
     .filter(Boolean)
     .join(" ");
 
-  return envelope({
+  return reframed({
     ok: parsed.ok,
     command: parsed.command,
     status: parsed.status,
@@ -526,7 +526,7 @@ export function withReviewPromise(out: string, reviewSentence: string = REVIEW_P
   const closing = [expiresAt ? `The approval expires at ${expiresAt}.` : "", reviewSentence].filter(Boolean).join(" ");
   const hint = text(parsed.hint);
 
-  return envelope({
+  return reframed({
     ok: parsed.ok,
     command: parsed.command,
     status: parsed.status,

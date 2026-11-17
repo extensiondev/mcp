@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { envelope, isEnvelope, type Envelope } from "./envelope";
+import { envelope, isEnvelope, type Envelope, reframed } from "./envelope";
 import { SERVER_STALE_STATUS, staleLocalWarning, type ServerStamp } from "./server-stamp";
 import { ASSERT_CHECKS } from "./verdict";
 
@@ -69,7 +69,7 @@ export function markStaleLocal(result: string, stamp: ServerStamp, held: HeldLoc
   const newerBuild = newerBuildOf(held);
   const producer = row(value.producer);
 
-  return envelope({
+  return reframed({
     ok: parsed.ok,
     command: parsed.command,
     status: parsed.status,

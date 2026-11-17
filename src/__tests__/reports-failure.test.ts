@@ -132,6 +132,10 @@ describe("doctor reports failure when the extension is broken", () => {
     );
     expect(runtime.status).toBe("fail");
     expect(runtime.detail).toContain("missing.js");
+    expect(result.error.code).toBe("E_UNHEALTHY");
+    expect(result.error.message).toMatch(/^\d+ of \d+ checks failed: .*runtime-errors/);
+    expect(result.error.hint).toMatch(/^value\.checks says what is wrong with .*runtime-errors.* in detail and what to do in remediation\. Do that, then call extension_doctor again\.$/);
+    expect(result.error.retry).toBe("no");
   });
 });
 

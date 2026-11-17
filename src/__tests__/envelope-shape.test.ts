@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { tools as ALL_TOOLS } from "../index";
-import { ERROR_CODES, envelopeObject } from "../lib/envelope";
+import { ERROR_CODES, envelope, envelopeObject, hintedAnswer, reframed, type EnvelopeInit } from "../lib/envelope";
+import { ENGINE_CODE_HINT, REFUSAL_HINTS, defaultRefusalHint } from "../lib/refusal-hints";
 import { validateAgainstSchema } from "./envelope-validate";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -157,5 +158,97 @@ describe("513: every failed frame says in error.retry whether repeating the call
     const refunded = envelopeObject({ ok: false, command: "extension_submit", status: "platform-unavailable", value: { approvalRefunded: true }, error: { code: "E_PLATFORM", message: "x" } });
     expect(refunded.error?.retry).toBe("safe");
     expect(envelopeObject({ ok: true, command: "extension_templates", status: "ok", value: {} }).error).toBeNull();
+  });
+});
+
+describe("912: every refusal carries error.code and a non-empty error.hint that names the next step", () => {
+  const quoted = new Set<string>();
+
+  for (const { text } of sources) {
+    for (const match of text.matchAll(/["'`](E_[A-Z0-9]+(?:_[A-Z0-9]+)+)["'`]/g)) quoted.add(match[1]);
+  }
+
+  it("holds one line of its own for every code in the union and for every code the source spells out", () => {
+    expect(Object.keys(REFUSAL_HINTS).sort()).toEqual([...ERROR_CODES].sort());
+    expect(quoted.size).toBeGreaterThan(90);
+
+    for (const code of quoted) {
+      expect(Object.keys(REFUSAL_HINTS), `${code} is spelled out in src and has no line in REFUSAL_HINTS (add it to the ErrorCode union)`).toContain(code);
+    }
+  });
+
+  it("builds a failure frame with a usable hint for every code, with no hint given by the call site", () => {
+    for (const code of new Set([...ERROR_CODES, ...quoted])) {
+      const error = envelopeObject({ ok: false, command: "extension_dev", status: "failed", error: { code, message: "x" } }).error;
+      const hint = error?.hint ?? "";
+
+      expect(error?.code, code).toBe(code);
+      expect(hint.trim().length, `${code} has a hint too short to act on: ${JSON.stringify(hint)}`).toBeGreaterThanOrEqual(40);
+      expect(hint.length, `${code} has a hint of ${hint.length} characters; it is paid on every refusal`).toBeLessThanOrEqual(200);
+      expect(hint, `${code} leaves a placeholder in its hint`).not.toMatch(/[{}]/);
+      expect(hint, `${code} answers with the line kept for codes this server does not know`).not.toBe(ENGINE_CODE_HINT);
+      expect(hint, `${code} tells the reader to check something and names nothing`).not.toMatch(/check (the|your) (arguments|input)|try again later\.?$/i);
+    }
+  });
+
+  it("names only registered tools, and puts the answering tool where a line says to call again", () => {
+    for (const [code, line] of Object.entries(REFUSAL_HINTS)) {
+      for (const [name] of line.matchAll(/\bextension_[a-z_]+/g)) {
+        expect(registered, `${code} sends the reader to ${name}, which is not a registered tool`).toContain(name);
+      }
+    }
+
+    expect(defaultRefusalHint("E_BAD_REQUEST", "extension_open")).toBe("Nothing ran. Change the argument error.message names and call extension_open again.");
+  });
+
+  it("answers a code this server has never seen with the engine's line, which still names a tool", () => {
+    const error = envelopeObject({ ok: false, command: "extension_dev", status: "failed", error: { code: "E_FROM_A_NEWER_ENGINE", message: "x" } }).error;
+
+    expect(error?.hint).toBe(ENGINE_CODE_HINT);
+    expect(ENGINE_CODE_HINT).toContain("extension_doctor");
+  });
+
+  it("keeps the call site's own hint, then the frame's hint, before the code's line", () => {
+    const own = envelopeObject({ ok: false, command: "extension_dev", status: "failed", error: { code: "E_NO_SESSION", message: "x", hint: "Site hint." }, hint: "Frame hint." });
+    const framed = envelopeObject({ ok: false, command: "extension_dev", status: "failed", error: { code: "E_NO_SESSION", message: "x" }, hint: "Frame hint." });
+    const blank = envelopeObject({ ok: false, command: "extension_dev", status: "failed", error: { code: "E_NO_SESSION", message: "x", hint: "  " } });
+
+    expect(own.error?.hint).toBe("Site hint.");
+    expect(own.hint).toBe("Frame hint.");
+    expect(framed.error?.hint).toBe("Frame hint.");
+    expect(blank.error?.hint).toBe(REFUSAL_HINTS.E_NO_SESSION);
+    expect(envelopeObject({ ok: true, command: "extension_dev", status: "ready", value: {} }).error).toBeNull();
+  });
+
+  it("does not compile a failure with no error, and completes one that reaches the serializer untyped", () => {
+    // @ts-expect-error a failure takes an error
+    const untyped: EnvelopeInit = { ok: false, command: "extension_stop", status: "not-found" };
+    // @ts-expect-error a failure takes an error, not null
+    const nulled: EnvelopeInit = { ok: false, command: "extension_stop", status: "not-found", error: null };
+
+    for (const init of [untyped, nulled]) {
+      const error = envelopeObject(init).error;
+
+      expect(error?.code).toBe("E_UNSPECIFIED");
+      expect(error?.message).toBe("extension_stop answered not-found and named no error.");
+      expect(error?.hint).toBe(REFUSAL_HINTS.E_UNSPECIFIED);
+      expect(error?.retry).toBe("no");
+    }
+
+    expect(JSON.parse(reframed({ ok: false, command: "extension_doctor", status: "unhealthy", error: null })).error.code).toBe("E_UNSPECIFIED");
+  });
+
+  it("completes a failure another program serialized, and hands back a complete one as the same string", () => {
+    const fromEngine = JSON.stringify({ schema: 1, ok: false, command: "extension_eval", status: "failed", value: null, error: { code: "E_SESSION_NOT_FOUND", message: "no session" }, warnings: [] });
+    const withNull = JSON.stringify({ schema: 1, ok: false, command: "extension_stop", status: "not-found", value: null, error: null, warnings: [] });
+    const complete = envelope({ ok: false, command: "extension_eval", status: "failed", error: { code: "E_EVAL", message: "x" } });
+    const fine = envelope({ ok: true, command: "extension_eval", status: "ok", value: { nested: '"ok":false' } });
+
+    expect(JSON.parse(hintedAnswer(fromEngine)).error).toEqual({ code: "E_SESSION_NOT_FOUND", message: "no session", retry: "no", hint: REFUSAL_HINTS.E_SESSION_NOT_FOUND });
+    expect(JSON.parse(hintedAnswer(withNull)).error.code).toBe("E_UNSPECIFIED");
+    expect(hintedAnswer(complete)).toBe(complete);
+    expect(hintedAnswer(fine)).toBe(fine);
+    expect(hintedAnswer("not json")).toBe("not json");
+    expect(validateAgainstSchema(JSON.parse(hintedAnswer(fromEngine)), schema)).toEqual([]);
   });
 });

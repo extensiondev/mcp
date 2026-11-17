@@ -7,7 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { approvalVerdict, namesRealMode } from "./approval-policy";
-import { envelope, isEnvelope } from "./envelope";
+import { envelope, isEnvelope, reframed } from "./envelope";
 import { STORE_SETTINGS_ACTION } from "./store-settings";
 
 type Args = Record<string, unknown>;
@@ -130,5 +130,5 @@ export function answeredAs(out: string, calledAs: string, actedAs: string): stri
 
   const { schema: _schema, ...frame } = parsed;
 
-  return envelope({ ...frame, command: calledAs });
+  return reframed({ ...frame, command: calledAs });
 }

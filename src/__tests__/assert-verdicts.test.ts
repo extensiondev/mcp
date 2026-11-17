@@ -1054,6 +1054,9 @@ describe("the verdict document", () => {
     expect(frame.value.passed).toBe(false);
     expect(frame.ok).toBe(false);
     expect(frame.warnings.join(" ")).toContain("Inconclusive");
+    expect(frame.error.code).toBe("E_ASSERT_FAILED");
+    expect(frame.error.message).toMatch(/^The verdict is inconclusive: /);
+    expect(frame.error.hint).toBe("Nothing failed, but not every check could be judged: do what each inconclusive check in value.checks names in settledBy or detail, then call extension_assert again.");
   });
 
   it("refuses a stage that states nothing", async () => {

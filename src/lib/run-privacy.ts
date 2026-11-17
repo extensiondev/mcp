@@ -9,7 +9,7 @@
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
 import { consoleProjectUrl } from "./console-urls";
-import { envelope, isEnvelope, type Envelope } from "./envelope";
+import { isEnvelope, type Envelope, reframed } from "./envelope";
 import { dropTrailing } from "./linear-text";
 
 type Row = Record<string, unknown>;
@@ -224,7 +224,7 @@ export function scrubRunAnswer(result: string): string {
   const buildPage = buildPageOf(frame.value);
   const error = frame.error ? (scrubValue(frame.error, buildPage, false) as Envelope["error"]) : null;
 
-  return envelope({
+  return reframed({
     ok: frame.ok,
     command: frame.command,
     status: frame.status,
