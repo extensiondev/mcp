@@ -16,6 +16,7 @@ import { resolveEngineOverride } from "../lib/engine-override";
 import { captureTemplateSeed } from "../lib/funnel-telemetry";
 import { pinnedTemplateCommit, templateCatalogUrl } from "../lib/template-artifact-source";
 import { envelope } from "../lib/envelope";
+import { inputValidationError } from "../lib/validate-input";
 import { shellPath } from "../lib/shell-words";
 import { scaffoldScripts } from "../lib/scaffold-scripts";
 import { STORE_MD_FILENAME } from "../lib/store-md";
@@ -148,6 +149,28 @@ export async function handler(args: {
   install?: boolean;
 }): Promise<string> {
   const start = Date.now();
+
+  if (args.parentDir) {
+    const parent = path.resolve(args.parentDir);
+    const inside = path.relative(parent, path.resolve(parent, args.projectName));
+    const escapes = inside === ".." || inside.startsWith(`..${path.sep}`) || path.isAbsolute(inside);
+
+    if (inside === "" || escapes) {
+      return inputValidationError(
+        COMMAND,
+        [
+          {
+            path: "projectName",
+            message: escapes
+              ? `${JSON.stringify(args.projectName)} resolves outside parentDir`
+              : `${JSON.stringify(args.projectName)} resolves to parentDir itself, not to a directory inside it`,
+          },
+        ],
+        schema.inputSchema,
+        `Nothing was written. Pass projectName as a directory name that lands inside ${parent} (a plain name such as "my-extension"), or point parentDir at the directory the project belongs in.`,
+      );
+    }
+  }
 
   const projectInput = args.parentDir
     ? path.resolve(args.parentDir, args.projectName)

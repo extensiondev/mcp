@@ -337,6 +337,53 @@ describe("extension_create defaultsApplied", () => {
     expect(result.warnings).toContainEqual(expect.stringContaining(`EXTENSION_MCP_ENGINE_DIR=${empty} names no engine bin`));
   });
 
+  it.each([
+    ["a name that climbs out with ../", "../outside/probe"],
+    ["a name that climbs out past a nested segment", "nested/../../probe"],
+    ["an absolute name outside it", path.join(os.tmpdir(), "mcp-create-elsewhere", "probe")],
+    ["an empty name", ""],
+    ["a name that is parentDir itself", "."],
+    ["a name that comes back to parentDir", "nested/.."],
+  ])("refuses %s under an explicit parentDir and writes nothing", async (_what, projectName) => {
+    const { extensionCreate } = await import("extension-create");
+    const parent = path.join(tmpDir(), "parent");
+    fs.mkdirSync(parent);
+    scaffoldTarget = path.resolve(parent, projectName);
+    vi.mocked(extensionCreate).mockClear();
+
+    const result = JSON.parse(await create.handler({ projectName, parentDir: parent }));
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("invalid-arguments");
+    expect(result.error.code).toBe("E_INPUT_VALIDATION");
+    expect(result.error.message).toContain("projectName");
+    expect(result.value.issues).toEqual([expect.objectContaining({ path: "projectName" })]);
+    expect(result.hint).toContain(parent);
+    expect(extensionCreate).not.toHaveBeenCalled();
+    expect(fs.readdirSync(path.dirname(parent))).toEqual(["parent"]);
+    expect(fs.readdirSync(parent)).toEqual([]);
+  });
+
+  it("keeps a nested name that stays inside parentDir, and a bare name without parentDir as the engine takes it", async () => {
+    const { extensionCreate } = await import("extension-create");
+    const parent = tmpDir();
+    scaffoldTarget = path.join(parent, "apps", "probe");
+    vi.mocked(extensionCreate).mockClear();
+
+    const nested = JSON.parse(await create.handler({ projectName: "apps/probe", parentDir: parent }));
+
+    expect(nested.ok).toBe(true);
+    expect(vi.mocked(extensionCreate).mock.calls[0][0]).toBe(path.join(parent, "apps", "probe"));
+
+    scaffoldTarget = path.join(tmpDir(), "probe");
+    vi.mocked(extensionCreate).mockClear();
+
+    const bare = JSON.parse(await create.handler({ projectName: "../probe" }));
+
+    expect(bare.ok).toBe(true);
+    expect(vi.mocked(extensionCreate).mock.calls[0][0]).toBe("../probe");
+  });
+
   it("documents the name alias and the cwd default in the schema itself", () => {
     const props = create.schema.inputSchema.properties;
     expect(props.projectName.description).toContain("Alias: name");
