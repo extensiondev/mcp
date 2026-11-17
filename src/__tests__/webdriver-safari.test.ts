@@ -406,7 +406,7 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
     expect(unbuildable).toBeGreaterThan(50);
   });
 
-  it("902: packs 20,000 paths against 100 ordinary ignore lines inside the budget, with the answers the walker gave", () => {
+  it("902: answers 100 ordinary ignore lines over 20,000 paths as the walker did, at a fraction of what walking every path costs", () => {
     const names = ["node_modules", "dist", "build", "out", "coverage", "tmp", "cache", "logs", "vendor", "target", "bin", "obj", "public", "static", "generated", "fixtures", "snapshots", "reports", "bundles", "artifacts"];
     const kinds = ["log", "tmp", "map", "bak", "swp", "pyc", "class", "o", "tgz", "zip", "pem", "cache", "orig", "rej", "lock", "pid", "seed", "gz", "tsbuildinfo", "sqlite"];
     const lines = [
@@ -449,7 +449,6 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
     expect(rules).toHaveLength(100);
     expect(paths).toHaveLength(20_000);
 
-    const started = performance.now();
     let ignored = 0;
     let sum = 0;
 
@@ -460,10 +459,32 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
       sum += i;
     });
 
-    const took = performance.now() - started;
-
     expect([ignored, sum]).toEqual([13_600, 135_986_800]);
-    expect(took).toBeLessThan(400);
+
+    const walked = parseGitignore(Array.from({ length: 100 }, (_, i) => `**/q${i}*/**`).join("\n"));
+    const sample = paths.slice(0, 300);
+
+    const fastest = (set: typeof rules): number => {
+      let best = Infinity;
+
+      for (let round = 0; round < 3; round += 1) {
+        const started = performance.now();
+
+        for (const file of sample) gitignored(file, false, set);
+
+        best = Math.min(best, performance.now() - started);
+      }
+
+      return best;
+    };
+
+    expect(walked).toHaveLength(100);
+    expect(sample.some((file) => gitignored(file, false, walked))).toBe(false);
+
+    const walkedTook = fastest(walked);
+    const ordinaryTook = fastest(rules);
+
+    expect(ordinaryTook * 5, `100 ordinary lines took ${ordinaryTook.toFixed(1)} ms over 300 paths, and 100 lines that walk every path took ${walkedTook.toFixed(1)} ms`).toBeLessThan(walkedTook);
   });
 
   it("901: keeps negation, anchoring, directory-only lines, escapes and a nested file's base", () => {
