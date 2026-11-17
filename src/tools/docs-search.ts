@@ -53,7 +53,7 @@ export async function handler(args: {
   }
 
   const base = dropTrailing(mcpOrigins(args.api).www, "/");
-  const limit = Math.min(8, Math.max(1, Math.floor(Number(args.limit) || 5)));
+  const limit = Math.floor(args.limit ?? 5);
   const url = `${base}/api/docs/search?q=${encodeURIComponent(query)}&limit=${limit}`;
 
   let res: Response;

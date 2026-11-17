@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 
+import { tools } from "../index";
 import {
+  ANNOTATION_KEYWORDS,
+  ENFORCED_KEYWORDS,
+  ENFORCED_TYPES,
   validateToolInput,
   inputValidationError,
   normalizeArgAliases,
@@ -12,6 +16,14 @@ import { schema as logsSchema } from "../tools/logs";
 import { schema as submitSchema } from "../tools/submit";
 import { schema as releasePromoteSchema } from "../tools/release-promote";
 import { schema as authSchema } from "../tools/auth";
+import { schema as submitCheckSchema } from "../tools/submit-check";
+import { schema as buildsActSchema } from "../tools/builds-act";
+import { schema as workspaceSchema } from "../tools/workspace";
+import { schema as projectCreateSchema } from "../tools/project-create";
+import { schema as themeVerifySchema } from "../tools/theme-verify";
+import { schema as evalSchema } from "../tools/eval";
+import { schema as docsSearchSchema } from "../tools/docs-search";
+import { schema as elementSchema } from "../tools/element";
 
 describe("validateToolInput", () => {
   it("accepts valid args", () => {
@@ -79,6 +91,156 @@ describe("validateToolInput", () => {
     const wrongType = validateToolInput(authSchema.inputSchema, { action: "login", projects: 7 });
     expect(wrongType).toHaveLength(1);
     expect(wrongType[0].message).toContain("expected array or string");
+  });
+
+  it("refuses everything but a whole number on an integer argument (ledger 907)", () => {
+    for (const schema of [submitSchema, submitCheckSchema]) {
+      for (const buildNumber of [true, "12", [12], { n: 12 }, null, 1.5]) {
+        const issues = validateToolInput(schema.inputSchema, { browsers: ["safari"], buildNumber });
+        expect(issues, `${schema.name} buildNumber ${JSON.stringify(buildNumber)}`).toHaveLength(1);
+        expect(issues[0].path).toBe("buildNumber");
+        expect(issues[0].message).toContain("expected integer");
+      }
+
+      expect(validateToolInput(schema.inputSchema, { browsers: ["safari"], buildNumber: 12 })).toEqual([]);
+    }
+  });
+
+  it("refuses an array, null or a primitive on an object argument (ledger 907)", () => {
+    const cases: Array<[{ name: string; inputSchema: Record<string, unknown> }, string, Record<string, unknown>]> = [
+      [submitSchema, "storeSettings", { browsers: ["chrome"] }],
+      [submitCheckSchema, "storeSettings", { browsers: ["chrome"] }],
+      [buildsActSchema, "buildSettings", { action: "configure" }],
+      [workspaceSchema, "settings", { action: "configure-project" }],
+      [projectCreateSchema, "outputDirectories", {}],
+      [themeVerifySchema, "manifest", {}],
+      [evalSchema, "until", { projectPath: "/tmp/x", expression: "1" }],
+    ];
+
+    for (const [schema, key, base] of cases) {
+      for (const value of [123, "{}", true, [], [{}], null]) {
+        const issues = validateToolInput(schema.inputSchema, { ...base, [key]: value });
+        expect(issues, `${schema.name} ${key} ${JSON.stringify(value)}`).toHaveLength(1);
+        expect(issues[0].path).toBe(key);
+        expect(issues[0].message).toContain("expected object");
+      }
+
+      expect(validateToolInput(schema.inputSchema, { ...base, [key]: {} }), `${schema.name} ${key} {}`).toEqual([]);
+    }
+  });
+
+  it("refuses a number outside the schema's minimum and maximum instead of clamping it (ledger 907)", () => {
+    const below = validateToolInput(authSchema.inputSchema, { action: "status", waitSeconds: -1 });
+    expect(below).toEqual([{ path: "waitSeconds", message: "must be at least 0, got -1" }]);
+
+    const above = validateToolInput(projectCreateSchema.inputSchema, { waitSeconds: 901 });
+    expect(above).toEqual([{ path: "waitSeconds", message: "must be at most 900, got 901" }]);
+
+    expect(validateToolInput(docsSearchSchema.inputSchema, { query: "x", limit: 0 })).toEqual([
+      { path: "limit", message: "must be at least 1, got 0" },
+    ]);
+
+    expect(validateToolInput(docsSearchSchema.inputSchema, { query: "x", limit: 9 })).toEqual([
+      { path: "limit", message: "must be at most 8, got 9" },
+    ]);
+
+    expect(validateToolInput(submitSchema.inputSchema, { browsers: ["safari"], buildNumber: 0 })).toEqual([
+      { path: "buildNumber", message: "must be at least 1, got 0" },
+    ]);
+
+    for (const waitSeconds of [0, 900]) {
+      expect(validateToolInput(authSchema.inputSchema, { action: "status", waitSeconds })).toEqual([]);
+    }
+
+    for (const limit of [1, 8]) {
+      expect(validateToolInput(docsSearchSchema.inputSchema, { query: "x", limit })).toEqual([]);
+    }
+  });
+
+  it("checks what a nested object declares and leaves its undeclared keys alone (ledger 907)", () => {
+    const base = { projectPath: "/tmp/x", expression: "1" };
+
+    expect(validateToolInput(evalSchema.inputSchema, { ...base, until: { timeoutMs: "5000" } })).toEqual([
+      { path: "until.timeoutMs", message: "expected number, got string" },
+    ]);
+
+    expect(validateToolInput(evalSchema.inputSchema, { ...base, until: { timeoutMs: 5000, intervalMs: 250, extra: "kept" } })).toEqual([]);
+
+    expect(validateToolInput(elementSchema.inputSchema, { projectPath: "/tmp/x", action: "move", points: [{ x: 1, y: 2 }, { x: 3 }, 7] })).toEqual([
+      { path: "points[1].y", message: "required argument is missing" },
+      { path: "points[2]", message: "expected object, got number" },
+    ]);
+
+    expect(validateToolInput(submitSchema.inputSchema, { browsers: ["firefox"], storeSettings: { enabled: "yes", releaseChannel: "beta" } })).toEqual([
+      { path: "storeSettings.enabled", message: "expected boolean, got string" },
+      { path: "storeSettings.releaseChannel", message: "must be one of: listed, unlisted" },
+    ]);
+  });
+
+  it("enforces every type and range keyword a registered tool schema declares (ledger 907)", () => {
+    const known = new Set<string>([...ENFORCED_KEYWORDS, ...ANNOTATION_KEYWORDS]);
+    const types = new Set<string>(ENFORCED_TYPES);
+    const unenforced: string[] = [];
+    let nodes = 0;
+
+    const walk = (at: string, node: unknown): void => {
+      if (!node || typeof node !== "object" || Array.isArray(node)) return;
+
+      const schema = node as Record<string, unknown>;
+      nodes += 1;
+
+      for (const keyword of Object.keys(schema)) {
+        if (!known.has(keyword)) unenforced.push(`${at}: ${keyword}`);
+      }
+
+      for (const type of [schema.type ?? []].flat() as string[]) {
+        if (!types.has(type)) unenforced.push(`${at}: type ${type}`);
+      }
+
+      for (const [key, nested] of Object.entries((schema.properties ?? {}) as Record<string, unknown>)) {
+        walk(`${at}.${key}`, nested);
+      }
+
+      walk(`${at}[]`, schema.items);
+    };
+
+    for (const tool of tools) walk(tool.schema.name, tool.schema.inputSchema);
+
+    expect(tools.length).toBeGreaterThanOrEqual(41);
+    expect(nodes).toBeGreaterThan(400);
+    expect(unenforced).toEqual([]);
+
+    const probe = {
+      type: "object",
+      properties: {
+        s: { type: "string", enum: ["a"] },
+        n: { type: "number", minimum: 1, maximum: 2 },
+        i: { type: "integer" },
+        b: { type: "boolean" },
+        a: { type: "array", items: { type: "integer" } },
+        o: { type: "object", properties: { k: { type: "string" } }, required: ["k"] },
+      },
+      required: ["s"],
+    };
+
+    expect(validateToolInput(probe, { s: "a", n: 1.5, i: 3, b: false, a: [1], o: { k: "v" } })).toEqual([]);
+    expect(validateToolInput(probe, { n: 3, i: 0.5, b: 0, a: [1.5], o: {} }).map((issue) => issue.path)).toEqual([
+      "s",
+      "n",
+      "i",
+      "b",
+      "a[0]",
+      "o.k",
+    ]);
+
+    expect(validateToolInput(probe, { s: "b", n: 0, i: "1", b: "no", a: {}, o: [] }).map((issue) => issue.path)).toEqual([
+      "s",
+      "n",
+      "i",
+      "b",
+      "a",
+      "o",
+    ]);
   });
 });
 

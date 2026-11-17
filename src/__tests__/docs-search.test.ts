@@ -48,7 +48,7 @@ describe("extension_docs_search", () => {
     ];
     respond(200, { query: "side panel", results });
 
-    const out = JSON.parse(await handler({ query: "side panel", limit: 20 }));
+    const out = JSON.parse(await handler({ query: "side panel", limit: 8 }));
 
     expect(out.ok).toBe(true);
     expect(out.status).toBe("found");

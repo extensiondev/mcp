@@ -13,10 +13,20 @@ export interface InputIssue {
   message: string;
 }
 
+export const ENFORCED_TYPES = ["string", "number", "integer", "boolean", "array", "object"] as const;
+
+export const ENFORCED_KEYWORDS = ["type", "enum", "minimum", "maximum", "items", "properties", "required"] as const;
+
+export const ANNOTATION_KEYWORDS = ["description", "default"] as const;
+
 interface PropertySchema {
   type?: string | string[];
   enum?: unknown[];
-  items?: { type?: string | string[]; enum?: unknown[] };
+  minimum?: number;
+  maximum?: number;
+  items?: PropertySchema;
+  properties?: Record<string, PropertySchema>;
+  required?: string[];
 }
 
 interface ObjectSchema {
@@ -32,7 +42,20 @@ function typeOf(value: unknown): string {
   return typeof value;
 }
 
-function checkPrimitive(
+function describeValue(value: unknown, allowed: string[]): string {
+  if (typeof value === "number" && allowed.includes("integer")) return `number ${value}`;
+
+  return typeOf(value);
+}
+
+function matchesType(type: string, value: unknown): boolean {
+  if (type === "integer") return typeof value === "number" && Number.isInteger(value);
+  if (type === "number") return typeof value === "number" && Number.isFinite(value);
+
+  return typeOf(value) === type;
+}
+
+function checkValue(
   path: string,
   value: unknown,
   schema: PropertySchema,
@@ -43,33 +66,22 @@ function checkPrimitive(
     : Array.isArray(schema.type)
       ? schema.type
       : [schema.type];
-  const primitives = allowed.filter((t) =>
-    ["string", "number", "boolean"].includes(t),
-  );
 
-  if (primitives.length > 0 && primitives.length === allowed.length) {
-    if (!primitives.includes(typeOf(value))) {
-      issues.push({
-        path,
-        message: `expected ${primitives.join(" or ")}, got ${typeOf(value)}`,
-      });
+  if (allowed.length > 0 && !allowed.some((type) => matchesType(type, value))) {
+    issues.push({
+      path,
+      message: `expected ${allowed.join(" or ")}, got ${describeValue(value, allowed)}`,
+    });
 
-      return;
-    }
+    return;
   }
 
-  if (allowed.includes("array") && (Array.isArray(value) || !allowed.includes(typeOf(value)))) {
-    if (!Array.isArray(value)) {
-      issues.push({ path, message: `expected ${allowed.join(" or ")}, got ${typeOf(value)}` });
-
-      return;
-    }
-
+  if (Array.isArray(value)) {
     const itemSchema = schema.items;
 
     if (itemSchema) {
       value.forEach((item, i) =>
-        checkPrimitive(`${path}[${i}]`, item, itemSchema, issues),
+        checkValue(`${path}[${i}]`, item, itemSchema, issues),
       );
     }
 
@@ -82,7 +94,35 @@ function checkPrimitive(
         path,
         message: `must be one of: ${schema.enum.map(String).join(", ")}`,
       });
+
+      return;
     }
+  }
+
+  if (typeof value === "number") {
+    if (typeof schema.minimum === "number" && value < schema.minimum) {
+      issues.push({ path, message: `must be at least ${schema.minimum}, got ${value}` });
+    } else if (typeof schema.maximum === "number" && value > schema.maximum) {
+      issues.push({ path, message: `must be at most ${schema.maximum}, got ${value}` });
+    }
+
+    return;
+  }
+
+  if (typeOf(value) !== "object") return;
+
+  const record = value as Record<string, unknown>;
+
+  for (const key of schema.required ?? []) {
+    if (record[key] === undefined) {
+      issues.push({ path: `${path}.${key}`, message: "required argument is missing" });
+    }
+  }
+
+  for (const [key, nested] of Object.entries(schema.properties ?? {})) {
+    if (record[key] === undefined) continue;
+
+    checkValue(`${path}.${key}`, record[key], nested, issues);
   }
 }
 
@@ -159,7 +199,7 @@ export function validateToolInput(
 
     if (value === undefined) continue;
 
-    checkPrimitive(key, value, propSchema, issues);
+    checkValue(key, value, propSchema, issues);
   }
 
   return issues;
