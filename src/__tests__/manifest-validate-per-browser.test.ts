@@ -167,6 +167,16 @@ describe("a permission gap names the key that holds the grant and the key this t
     expect(out.value.browserSupport.firefox.issues).toEqual([]);
   });
 
+  it("says a browser prefix on a permission item belongs on the key, and keeps the typo line for any other unknown name", async () => {
+    const dir = project({ ...BASE, permissions: ["storage", "chromium:sidePanel", "sidePanle"] });
+    const out = await validate(dir, ["chrome"]);
+    const warnings = out.value.warnings.join("\n");
+
+    expect(warnings).toContain('"chromium:sidePanel" in permissions is not a permission name: a browser prefix goes on the key, not on an item. Write "chromium:permissions": ["sidePanel"]');
+    expect(warnings).not.toContain('Unrecognized permission "chromium:sidePanel"');
+    expect(warnings).toContain('Unrecognized permission "sidePanle", check for a typo');
+  });
+
   it("names the other target's prefixed key when that is the only place the grant is declared", async () => {
     const dir = withCall({ ...BASE, "firefox:permissions": ["storage"], "chromium:permissions": ["sidePanel"] });
     const out = await validate(dir, ["chrome", "firefox"]);

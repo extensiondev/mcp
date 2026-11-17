@@ -625,7 +625,13 @@ export async function handler(args: {
       continue;
     }
 
-    if (!KNOWN_PERMISSIONS.has(perm)) {
+    const prefixed = /^([a-z-]+):(.+)$/.exec(perm);
+
+    if (prefixed && KNOWN_PERMISSIONS.has(prefixed[2])) {
+      result.warnings.push(
+        `"${perm}" in permissions is not a permission name: a browser prefix goes on the key, not on an item. Write "${prefixed[1]}:permissions": ["${prefixed[2]}"] (a prefixed key replaces "permissions" for that browser, so list there every permission that browser needs).`,
+      );
+    } else if (!KNOWN_PERMISSIONS.has(perm)) {
       result.warnings.push(
         `Unrecognized permission "${perm}", check for a typo (host/match patterns belong in host_permissions, not permissions).`,
       );
