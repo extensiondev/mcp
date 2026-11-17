@@ -139,3 +139,49 @@ describe("the permission scan reaches src/ first and says when it stopped", () =
     expect(out.value.warnings.join("\n")).toMatch(/could not be read.*gone\.js/);
   });
 });
+
+describe("a permission gap names the key that holds the grant and the key this target reads", () => {
+  const BASE = {
+    "chromium:manifest_version": 3,
+    "firefox:manifest_version": 2,
+    name: "G",
+    version: "1.0.0",
+    background: { "chromium:service_worker": "background.js", "firefox:scripts": ["background.js"] },
+  };
+
+  const withCall = (manifest: Record<string, unknown>): string => {
+    const dir = project(manifest);
+    fs.writeFileSync(path.join(dir, "src", "background.js"), 'chrome.storage.local.get("a");');
+
+    return dir;
+  };
+
+  it("says chromium:permissions replaced the unprefixed permissions that list the grant, and to add it there", async () => {
+    const dir = withCall({ ...BASE, permissions: ["storage"], "chromium:permissions": ["sidePanel"] });
+    const out = await validate(dir, ["chrome", "firefox"]);
+    const issue = out.value.browserSupport.chrome.issues.join("\n");
+
+    expect(issue).toContain('"permissions" lists it, but "chromium:permissions" replaces "permissions" for chrome and does not list it');
+    expect(issue).toContain('add "storage" to "chromium:permissions"');
+    expect(issue).not.toContain("declared only under another target's prefixed key");
+    expect(out.value.browserSupport.firefox.issues).toEqual([]);
+  });
+
+  it("names the other target's prefixed key when that is the only place the grant is declared", async () => {
+    const dir = withCall({ ...BASE, "firefox:permissions": ["storage"], "chromium:permissions": ["sidePanel"] });
+    const out = await validate(dir, ["chrome", "firefox"]);
+    const issue = out.value.browserSupport.chrome.issues.join("\n");
+
+    expect(issue).toContain('it is declared only under "firefox:permissions", which chrome does not read');
+    expect(issue).toContain('add "storage" to "chromium:permissions"');
+  });
+
+  it("points at the unprefixed permissions when this target has no prefixed key of its own", async () => {
+    const dir = withCall({ ...BASE, "firefox:permissions": ["storage"] });
+    const out = await validate(dir, ["chrome", "firefox"]);
+    const issue = out.value.browserSupport.chrome.issues.join("\n");
+
+    expect(issue).toContain('it is declared only under "firefox:permissions", which chrome does not read');
+    expect(issue).toContain('add "storage" to "permissions"');
+  });
+});

@@ -253,6 +253,34 @@ function grantPhrase(api: string): string {
   return grantsFor(api).map((p) => `"${p}"`).join(" or ");
 }
 
+const PERMISSION_KEYS = ["permissions", "optional_permissions"];
+
+function permissionGapReason(manifest: Record<string, unknown>, browser: string, api: string): string {
+  const grants = grantsFor(api);
+  const baseOf = (key: string): string => key.slice(key.indexOf(":") + 1);
+  const keys = Object.keys(manifest).filter((key) => PERMISSION_KEYS.includes(baseOf(key)));
+  const holders = keys.filter((key) => {
+    const list = manifest[key];
+
+    return Array.isArray(list) && grants.some((grant) => list.includes(grant));
+  });
+  const readHere = (base: string): string | undefined =>
+    keys.find((key) => key !== base && baseOf(key) === base && engineManifestView({ [key]: ["probe"] }, browser)[base] !== undefined);
+  const replaced = PERMISSION_KEYS.find((base) => holders.includes(base) && readHere(base));
+  const fixKey = readHere(replaced ?? "permissions") ?? "permissions";
+  const fix = `to grant it here, add ${grantPhrase(api)} to "${fixKey}"`;
+
+  if (replaced) {
+    return `"${replaced}" lists it, but "${fixKey}" replaces "${replaced}" for ${browser} and does not list it; ${fix}`;
+  }
+
+  const elsewhere = holders.filter((key) => key.includes(":"));
+
+  return elsewhere.length
+    ? `it is declared only under ${elsewhere.map((key) => `"${key}"`).join(" and ")}, which ${browser} does not read; ${fix}`
+    : `it is declared for another target only; ${fix}`;
+}
+
 function supplementNote(declared: Set<string>, api: string, ns: string): string {
   const s = API_SUPPLEMENTS[api];
 
@@ -836,7 +864,7 @@ export async function handler(args: {
       const guarded = uses.filter((use) => use.guarded);
       const unproven = uses.filter((use) => !use.guarded && use.checked);
       const unguarded = uses.filter((use) => !use.guarded && !use.checked);
-      const gap = `the ${browser} build's permissions do not include ${grantPhrase(api)} (it is declared only under another target's prefixed key, e.g. chromium:permissions)`;
+      const gap = `the ${browser} build's permissions do not include ${grantPhrase(api)} (${permissionGapReason(manifest, browser, api)})`;
       const gapSentence = `${gap[0].toUpperCase()}${gap.slice(1)}`;
 
       if (!uses.length) {
