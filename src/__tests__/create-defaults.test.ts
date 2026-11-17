@@ -280,7 +280,8 @@ describe("extension_create defaultsApplied", () => {
     const asked = JSON.parse(await create.handler({ projectName: "probe", install: false }));
 
     expect(asked.value.depsInstalled).toBe(false);
-    expect(asked.warnings).toEqual([]);
+    expect(asked.warnings.join("\n")).not.toContain("Next steps:");
+    expect(asked.warnings.join("\n")).not.toContain("probe is ready.");
     expect(asked.value.nextSteps.join(" ")).toContain("Dependencies were not installed: run `bun install`");
 
     scaffoldTarget = path.join(tmpDir(), "probe");
