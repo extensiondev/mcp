@@ -80,6 +80,7 @@ export function dashboardStoreOf(url: unknown): { store: string; host: string } 
   }
 
   if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.port) return null;
+  if (parsed.href.includes("?") || parsed.href.includes("#")) return null;
 
   const host = parsed.hostname.toLowerCase();
   const pathname = parsed.pathname.toLowerCase();

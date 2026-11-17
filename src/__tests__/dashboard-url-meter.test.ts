@@ -125,6 +125,47 @@ describe("a store dashboard address this server composes is counted once per ans
     expect(dashboardStoreOf("https://addons.mozilla.org/developers/addon/api/key/")).toEqual({ store: "firefox", host: "addons.mozilla.org" });
   });
 
+  it("902: refuses a query string or a fragment on a store dashboard address, since no product address carries one", () => {
+    for (const page of [
+      "https://partner.microsoft.com/dashboard/microsoftedge/x?url=https://example.test",
+      "https://partner.microsoft.com/dashboard/microsoftedge/overview?redirect=https%3A%2F%2Fexample.test",
+      "https://partner.microsoft.com/dashboard/microsoftedge/overview?returnUrl=//example.test",
+      "https://partner.microsoft.com/dashboard/microsoftedge?next=/logout",
+      "https://partner.microsoft.com/dashboard/microsoftedge/overview?",
+      "https://partner.microsoft.com/dashboard/microsoftedge/overview?#",
+      "https://partner.microsoft.com/dashboard/microsoftedge/overview\t?url=https://example.test",
+      "https://partner.microsoft.com/dashboard/microsoftedge/overview#https://example.test",
+      "https://partner.microsoft.com/dashboard/microsoftedge/overview#//example.test",
+      "https://partner.microsoft.com/dashboard/microsoftedge/overview#url=https%3A%2F%2Fexample.test",
+      "https://partner.microsoft.com/dashboard/microsoftedge/overview#",
+      "https://appstoreconnect.apple.com/apps?targetUrl=https://example.test",
+      "https://appstoreconnect.apple.com/apps/6826223107/distribution?continue=https://example.test",
+      "https://appstoreconnect.apple.com/access/integrations/api#/redirect/https://example.test",
+      "https://chrome.google.com/webstore/devconsole?continue=https://example.test",
+      "https://chrome.google.com/webstore/devconsole/abc/def/edit?hl=en&q=https://example.test",
+      "https://chrome.google.com/webstore/devconsole/abc/def/edit#https://example.test",
+      "https://addons.mozilla.org/developers/addon/api/key/?to=https://example.test",
+      "https://addons.mozilla.org/developers/?next=//example.test",
+      "https://addons.mozilla.org/developers/addon/api/key/#next=https://example.test",
+    ]) {
+      expect(dashboardStoreOf(page), page).toBeNull();
+      expect(composedDashboardUrl(page), page).toBe(page);
+    }
+
+    expect(composedDashboardUrls().filter((url) => /[?#]/.test(url))).toEqual([]);
+
+    for (const page of [
+      "https://partner.microsoft.com/dashboard/microsoftedge/publishapi",
+      "https://partner.microsoft.com/dashboard/microsoftedge/a%3Fb/packages/dashboard",
+      "https://appstoreconnect.apple.com/apps/6826223107/distribution",
+      "https://chrome.google.com/webstore/devconsole/abc/def/edit",
+      "https://addons.mozilla.org/developers/addon/api/key/",
+      "https://addons.mozilla.org/developers/addon/pii-shield%40example/versions",
+    ]) {
+      expect(dashboardStoreOf(page), page).not.toBeNull();
+    }
+  });
+
   it("counts an answer carrying a composed address, naming the tool, the status, the stores and the hosts", async () => {
     const productPage = composedDashboardUrl("https://partner.microsoft.com/dashboard/microsoftedge/prod-123/packages/dashboard");
     const keyPage = composedDashboardUrl("https://appstoreconnect.apple.com/access/integrations/api");
