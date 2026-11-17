@@ -14,6 +14,7 @@ import { envelope } from "./envelope";
 export interface InputIssue {
   path: string;
   message: string;
+  fix?: string;
 }
 
 export const ENFORCED_TYPES = ["string", "number", "integer", "boolean", "array", "object"] as const;
@@ -58,6 +59,47 @@ function matchesType(type: string, value: unknown): boolean {
   return typeOf(value) === type;
 }
 
+const TYPE_WORDS: Record<string, string> = {
+  string: "a string",
+  number: "a number",
+  integer: "a whole number",
+  boolean: "true or false",
+  array: "an array",
+  object: "an object",
+};
+
+/* @invariant A REFUSED ARGUMENT IS ANSWERED WITH WHAT TO PASS INSTEAD, READ
+ * FROM THE SAME SCHEMA THAT REFUSED IT. Each issue carries a `fix` beside
+ * its message: the argument by name, the type it takes, the values its enum
+ * lists and the range its minimum and maximum set. inputValidationError
+ * joins the first three into error.hint and keeps `fix` out of
+ * value.issues, so the frame says each thing once. Before ledger 912 the
+ * refusal named what was wrong ("expected string, got number") and left
+ * the allowed values to a second read of the tool list; the lab's matrix
+ * counted 2,166 such refusals with no hint.
+ */
+export function expectation(schema: PropertySchema): string {
+  const allowed = schema.type === undefined ? [] : Array.isArray(schema.type) ? schema.type : [schema.type];
+  const said = allowed.map((type) => TYPE_WORDS[type] ?? type).join(" or ");
+  const parts = [said || "a value"];
+
+  if (Array.isArray(schema.enum) && schema.enum.length) {
+    parts.push(`one of ${schema.enum.map((option) => JSON.stringify(option)).join(", ")}`);
+  }
+
+  if (typeof schema.minimum === "number" && typeof schema.maximum === "number") {
+    parts.push(`from ${schema.minimum} to ${schema.maximum}`);
+  } else if (typeof schema.minimum === "number") {
+    parts.push(`at least ${schema.minimum}`);
+  } else if (typeof schema.maximum === "number") {
+    parts.push(`at most ${schema.maximum}`);
+  }
+
+  if (allowed.includes("array") && schema.items) parts.push(`each item ${expectation(schema.items)}`);
+
+  return parts.join(", ");
+}
+
 function checkValue(
   path: string,
   value: unknown,
@@ -74,6 +116,7 @@ function checkValue(
     issues.push({
       path,
       message: `expected ${allowed.join(" or ")}, got ${describeValue(value, allowed)}`,
+      fix: `Pass ${path} as ${expectation(schema)}.`,
     });
 
     return;
@@ -96,6 +139,7 @@ function checkValue(
       issues.push({
         path,
         message: `must be one of: ${schema.enum.map(String).join(", ")}`,
+        fix: `Pass ${path} as ${expectation(schema)}.`,
       });
 
       return;
@@ -104,9 +148,9 @@ function checkValue(
 
   if (typeof value === "number") {
     if (typeof schema.minimum === "number" && value < schema.minimum) {
-      issues.push({ path, message: `must be at least ${schema.minimum}, got ${value}` });
+      issues.push({ path, message: `must be at least ${schema.minimum}, got ${value}`, fix: `Pass ${path} as ${expectation(schema)}.` });
     } else if (typeof schema.maximum === "number" && value > schema.maximum) {
-      issues.push({ path, message: `must be at most ${schema.maximum}, got ${value}` });
+      issues.push({ path, message: `must be at most ${schema.maximum}, got ${value}`, fix: `Pass ${path} as ${expectation(schema)}.` });
     }
 
     return;
@@ -118,7 +162,13 @@ function checkValue(
 
   for (const key of schema.required ?? []) {
     if (record[key] === undefined) {
-      issues.push({ path: `${path}.${key}`, message: "required argument is missing" });
+      const nested = schema.properties?.[key];
+
+      issues.push({
+        path: `${path}.${key}`,
+        message: "required argument is missing",
+        fix: `Pass ${path}.${key}${nested ? ` as ${expectation(nested)}` : ""}; it is required.`,
+      });
     }
   }
 
@@ -173,7 +223,11 @@ function checkStringBounds(key: string, at: string, value: unknown, issues: Inpu
   if (typeof value !== "string") return;
 
   if (value.includes("\u0000")) {
-    issues.push({ path: at, message: "contains a NUL byte, which no path, command argument or address can carry" });
+    issues.push({
+      path: at,
+      message: "contains a NUL byte, which no path, command argument or address can carry",
+      fix: `Remove the NUL byte from ${at}.`,
+    });
 
     return;
   }
@@ -181,7 +235,11 @@ function checkStringBounds(key: string, at: string, value: unknown, issues: Inpu
   const limit = CONTENT_ARGUMENTS.has(key) ? CONTENT_ARGUMENT_LIMIT : STRING_ARGUMENT_LIMIT;
 
   if (value.length > limit) {
-    issues.push({ path: at, message: `is ${value.length} characters, over the limit of ${limit} for this argument` });
+    issues.push({
+      path: at,
+      message: `is ${value.length} characters, over the limit of ${limit} for this argument`,
+      fix: `Shorten ${at} to ${limit} characters or fewer.`,
+    });
   }
 }
 
@@ -212,16 +270,17 @@ export function projectFolderIssues(
 
   const folder = resolveFolder(given);
   const where = `pass the extension project's root, absolute or relative to this server's working directory ${process.cwd()}`;
+  const fix = "Pass projectPath as the folder that holds the extension project (its manifest.json or package.json); extension_create scaffolds a new one.";
 
   try {
     if (statSync(folder).isDirectory()) return [];
 
-    return [{ path: "projectPath", message: `${folder} is a file, not a folder; ${where}` }];
+    return [{ path: "projectPath", message: `${folder} is a file, not a folder; ${where}`, fix }];
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
 
-    if (code === "ENOENT" || code === "ENOTDIR") return [{ path: "projectPath", message: `no folder at ${folder}; ${where}` }];
-    if (code === "ENAMETOOLONG") return [{ path: "projectPath", message: `is ${given.length} characters, longer than a path on this system can be` }];
+    if (code === "ENOENT" || code === "ENOTDIR") return [{ path: "projectPath", message: `no folder at ${folder}; ${where}`, fix }];
+    if (code === "ENAMETOOLONG") return [{ path: "projectPath", message: `is ${given.length} characters, longer than a path on this system can be`, fix: "Pass a shorter projectPath." }];
 
     return [];
   }
@@ -281,7 +340,13 @@ export function validateToolInput(
 
   for (const key of schema.required ?? []) {
     if (args[key] === undefined) {
-      issues.push({ path: key, message: "required argument is missing" });
+      const wanted = properties[key];
+
+      issues.push({
+        path: key,
+        message: "required argument is missing",
+        fix: `Pass ${key}${wanted ? ` as ${expectation(wanted)}` : ""}; it is required.`,
+      });
     }
   }
 
@@ -293,6 +358,7 @@ export function validateToolInput(
       issues.push({
         path: key,
         message: `unknown argument${known.length ? ` (known: ${known.join(", ")})` : ""}`,
+        fix: `Remove ${key}, which this tool does not take.`,
       });
 
       continue;
@@ -328,6 +394,18 @@ export function describeToolArgs(inputSchema: Record<string, unknown>): {
   return { required, optional, aliases };
 }
 
+const FIXES_SAID = 3;
+
+export function inputFixHint(toolName: string, issues: InputIssue[], hint?: string): string {
+  const fixes = [...new Set(issues.map((issue) => issue.fix).filter((fix): fix is string => !!fix))];
+
+  if (fixes.length === 0) return hint || `Correct ${issues.map((issue) => issue.path).join(", ")} as error.message says, then call ${toolName} again.`;
+
+  const more = fixes.length - FIXES_SAID;
+
+  return `${fixes.slice(0, FIXES_SAID).join(" ")}${more > 0 ? ` value.issues names ${more} more.` : ""}`;
+}
+
 export function inputValidationError(
   toolName: string,
   issues: InputIssue[],
@@ -344,9 +422,10 @@ export function inputValidationError(
       message: `Invalid arguments for ${toolName}: ${issues
         .map((i) => `${i.path}: ${i.message}`)
         .join("; ")}${hint ? `. ${hint}` : ""}`,
+      hint: inputFixHint(toolName, issues, hint),
     },
     value: {
-      issues,
+      issues: issues.map(({ path, message }) => ({ path, message })),
       ...(inputSchema ? { args: describeToolArgs(inputSchema) } : {}),
     },
     ...(hint ? { hint } : {}),

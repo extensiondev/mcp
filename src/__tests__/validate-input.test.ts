@@ -38,6 +38,8 @@ import { schema as elementSchema } from "../tools/element";
 
 const devSchema = devTool.schema;
 
+const said = (issues: Array<{ path: string; message: string }>) => issues.map(({ path: at, message }) => ({ path: at, message }));
+
 describe("validateToolInput", () => {
   it("accepts valid args", () => {
     expect(
@@ -143,21 +145,21 @@ describe("validateToolInput", () => {
   });
 
   it("refuses a number outside the schema's minimum and maximum instead of clamping it (ledger 907)", () => {
-    const below = validateToolInput(authSchema.inputSchema, { action: "status", waitSeconds: -1 });
+    const below = said(validateToolInput(authSchema.inputSchema, { action: "status", waitSeconds: -1 }));
     expect(below).toEqual([{ path: "waitSeconds", message: "must be at least 0, got -1" }]);
 
-    const above = validateToolInput(projectCreateSchema.inputSchema, { waitSeconds: 901 });
+    const above = said(validateToolInput(projectCreateSchema.inputSchema, { waitSeconds: 901 }));
     expect(above).toEqual([{ path: "waitSeconds", message: "must be at most 900, got 901" }]);
 
-    expect(validateToolInput(docsSearchSchema.inputSchema, { query: "x", limit: 0 })).toEqual([
+    expect(said(validateToolInput(docsSearchSchema.inputSchema, { query: "x", limit: 0 }))).toEqual([
       { path: "limit", message: "must be at least 1, got 0" },
     ]);
 
-    expect(validateToolInput(docsSearchSchema.inputSchema, { query: "x", limit: 9 })).toEqual([
+    expect(said(validateToolInput(docsSearchSchema.inputSchema, { query: "x", limit: 9 }))).toEqual([
       { path: "limit", message: "must be at most 8, got 9" },
     ]);
 
-    expect(validateToolInput(submitSchema.inputSchema, { browsers: ["safari"], buildNumber: 0 })).toEqual([
+    expect(said(validateToolInput(submitSchema.inputSchema, { browsers: ["safari"], buildNumber: 0 }))).toEqual([
       { path: "buildNumber", message: "must be at least 1, got 0" },
     ]);
 
@@ -173,18 +175,18 @@ describe("validateToolInput", () => {
   it("checks what a nested object declares and leaves its undeclared keys alone (ledger 907)", () => {
     const base = { projectPath: "/tmp/x", expression: "1" };
 
-    expect(validateToolInput(evalSchema.inputSchema, { ...base, until: { timeoutMs: "5000" } })).toEqual([
+    expect(said(validateToolInput(evalSchema.inputSchema, { ...base, until: { timeoutMs: "5000" } }))).toEqual([
       { path: "until.timeoutMs", message: "expected number, got string" },
     ]);
 
     expect(validateToolInput(evalSchema.inputSchema, { ...base, until: { timeoutMs: 5000, intervalMs: 250, extra: "kept" } })).toEqual([]);
 
-    expect(validateToolInput(elementSchema.inputSchema, { projectPath: "/tmp/x", action: "move", points: [{ x: 1, y: 2 }, { x: 3 }, 7] })).toEqual([
+    expect(said(validateToolInput(elementSchema.inputSchema, { projectPath: "/tmp/x", action: "move", points: [{ x: 1, y: 2 }, { x: 3 }, 7] }))).toEqual([
       { path: "points[1].y", message: "required argument is missing" },
       { path: "points[2]", message: "expected object, got number" },
     ]);
 
-    expect(validateToolInput(submitSchema.inputSchema, { browsers: ["firefox"], storeSettings: { enabled: "yes", releaseChannel: "beta" } })).toEqual([
+    expect(said(validateToolInput(submitSchema.inputSchema, { browsers: ["firefox"], storeSettings: { enabled: "yes", releaseChannel: "beta" } }))).toEqual([
       { path: "storeSettings.enabled", message: "expected boolean, got string" },
       { path: "storeSettings.releaseChannel", message: "must be one of: listed, unlisted" },
     ]);
@@ -396,6 +398,54 @@ describe("inputValidationError", () => {
       ),
     );
     expect(out.value.args.aliases.timeout).toEqual(["timeoutMillis"]);
+  });
+});
+
+describe("912: an argument refusal says what to pass, read from the schema that refused it", () => {
+  const hintOf = (tool: { name: string; inputSchema: Record<string, unknown> }, args: Record<string, unknown>): string =>
+    JSON.parse(inputValidationError(tool.name, validateToolInput(tool.inputSchema, args), tool.inputSchema)).error.hint;
+
+  it("names the argument, its type and every value its enum lists", () => {
+    expect(hintOf(submitSchema, { browsers: ["firefox"], storeSettings: { enabled: "yes", releaseChannel: "beta" } })).toBe(
+      'Pass storeSettings.enabled as true or false. Pass storeSettings.releaseChannel as a string, one of "listed", "unlisted".',
+    );
+
+    expect(hintOf(authSchema, { action: "signin" })).toBe('Pass action as a string, one of "status", "login", "logout".');
+  });
+
+  it("names the range a number has to sit in", () => {
+    expect(hintOf(docsSearchSchema, { query: "x", limit: 9 })).toBe("Pass limit as a number, from 1 to 8.");
+    expect(hintOf(authSchema, { action: "status", waitSeconds: -1 })).toMatch(/^Pass waitSeconds as a (whole )?number, from 0 to \d+\.$/);
+  });
+
+  it("says a missing argument is required and what it takes, and tells an unknown one to go", () => {
+    expect(hintOf(docsSearchSchema, {})).toBe("Pass query as a string; it is required.");
+    expect(hintOf(docsSearchSchema, { query: "x", nope: 1 })).toBe("Remove nope, which this tool does not take.");
+  });
+
+  it("says how to shorten an over-long value and to drop a NUL byte", () => {
+    expect(hintOf(devSchema, { projectPath: `/tmp/${"x".repeat(STRING_ARGUMENT_LIMIT)}` })).toBe(`Shorten projectPath to ${STRING_ARGUMENT_LIMIT} characters or fewer.`);
+    expect(hintOf(devSchema, { projectPath: "/tmp/a\u0000b" })).toBe("Remove the NUL byte from projectPath.");
+  });
+
+  it("says the first three fixes and counts the rest, and keeps fix out of value.issues", () => {
+    const out = JSON.parse(
+      inputValidationError("extension_docs_search", validateToolInput(docsSearchSchema.inputSchema, { a: 1, b: 2, c: 3, d: 4, limit: 99 }), docsSearchSchema.inputSchema),
+    );
+
+    expect(out.error.hint).toBe("Pass query as a string; it is required. Remove a, which this tool does not take. Remove b, which this tool does not take. value.issues names 3 more.");
+    expect(out.value.issues).toHaveLength(6);
+    expect(out.value.issues.every((issue: Record<string, unknown>) => Object.keys(issue).join() === "path,message")).toBe(true);
+  });
+
+  it("answers a wrong type through the dispatcher with the hint in error.hint", async () => {
+    const dispatch = createToolDispatcher({ tools: [buildTool as ToolModule], options: { features: ["local"], noShip: true } });
+    const frame = await dispatch({ name: "extension_build", arguments: { projectPath: os.tmpdir(), browser: 7 } });
+    const out = JSON.parse(frame.content[0]!.text);
+
+    expect(out.error.code).toBe("E_INPUT_VALIDATION");
+    expect(out.error.hint).toMatch(/^Pass browser as a string, one of "chrome", /);
+    expect(out.error.hint).toContain('"firefox"');
   });
 });
 
