@@ -42,7 +42,7 @@ import {
 } from "../lib/safari-build-options";
 import { safariSigningFrame } from "../lib/safari-signing";
 import { teamUnknownToXcodeRefusal } from "../lib/xcode-teams";
-import { reviewCoverageNotes, reviewDistReport, reviewRiskWarnings } from "../lib/store-review";
+import { reviewCoverageNotes, reviewDistReport, reviewRiskPointer } from "../lib/store-review";
 import { STORE_MD_FILENAME } from "../lib/store-md";
 import { dropTrailing } from "../lib/linear-text";
 
@@ -196,7 +196,7 @@ export function addonLintFrame(summary: EngineBuildSummary | null, distRoot: str
 
   if (status === "missing") {
     warnings.push(
-      `The addons.mozilla.org lint did not run: addons-linter is not installed in this project, so this answer carries no AMO findings for the package. Install it (${ADDON_LINT_INSTALL}) and build again, or set commands.build.addonLint to false in extension.config.js (the --no-addon-lint flag) to skip it on purpose.`,
+      `The addons.mozilla.org lint did not run: addons-linter is not installed, so this answer carries no AMO findings. Install it (${ADDON_LINT_INSTALL}) and build again, or set commands.build.addonLint to false in extension.config.js to skip it on purpose.`,
     );
   }
 
@@ -880,7 +880,7 @@ export async function handler(args: {
   const engine = readEngineOutput(stdout ?? "", stderr ?? "");
   const out = engine.narration;
   const lastLines = (text: string, n: number): string =>
-    text.split("\n").slice(-n).join("\n");
+    withoutInstallNoise(text).split("\n").slice(-n).join("\n");
 
   if (code === 0) {
     const inlineSummary = summaryForBrowser(
@@ -911,15 +911,11 @@ export async function handler(args: {
       args.zip && !fs.existsSync(path.join(storeMdRoot, STORE_MD_FILENAME))
         ? ` No ${STORE_MD_FILENAME} is in ${storeMdRoot}: a store submission through extension.dev reads the listing copy, the permission justifications and each store's reviewer notes from that file, so write it before submitting (extension_docs_search with "${STORE_MD_FILENAME}" answers its format), and leave every data-use and privacy answer in it for the person.`
         : "";
-    const declarationByValidator = (preflight?.warnings ?? []).some((line) =>
-      line.includes("no browser_specific_settings.gecko.data_collection_permissions"),
-    );
+    const isValidatorDeclarationLine = (line: string): boolean =>
+      line.includes("no browser_specific_settings.gecko.data_collection_permissions");
     const isEngineDeclarationLine = (line: string): boolean =>
       line.includes("data_collection_permissions for new add-ons");
-    const shownBuildWarnings = declarationByValidator
-      ? buildWarnings.filter((line) => !isEngineDeclarationLine(line))
-      : buildWarnings;
-    const declarationSaid = declarationByValidator || buildWarnings.some(isEngineDeclarationLine);
+    const declarationByValidator = (preflight?.warnings ?? []).some(isValidatorDeclarationLine);
     const buildWarningsTruncated =
       buildWarnings.length &&
       typeof engineSummary?.warnings_count === "number" &&
@@ -970,6 +966,11 @@ export async function handler(args: {
     const specialFolderNote = specialFolderMissingNote(specialEntrypoints, distDir);
     const review = reviewDistReport(distDir, browser);
     const risks = review.risks;
+    const declarationByRisk = risks.some((risk) => risk.code === "FIREFOX_DATA_COLLECTION_MISSING");
+    const shownBuildWarnings =
+      declarationByRisk || declarationByValidator
+        ? buildWarnings.filter((line) => !isEngineDeclarationLine(line))
+        : buildWarnings;
     const contamination = carrierContamination(path.dirname(distDir));
     const uncheckedNote = contamination.unchecked.length
       ? `Could not read the entry table of ${contamination.unchecked.join(", ")}, so those archives were not checked for the live-preview carrier. Unpack and check them yourself before submitting.`
@@ -1076,6 +1077,9 @@ export async function handler(args: {
         })
       : null;
 
+    const answerPointsAtOutput =
+      !engineSummary || zipNotes.length > 0 || buildWarningsTruncated !== undefined || Boolean(safariIdentityMissingNote);
+
     return envelope({
       ok: true,
       command: COMMAND,
@@ -1113,14 +1117,16 @@ export async function handler(args: {
         ...(zipPath ? { zipPath } : {}),
         ...(zipSourcePath ? { zipSourcePath } : {}),
         duration,
-        ...(args.silent ? {} : { output: lastLines(out, 12) }),
+        ...(args.silent || !answerPointsAtOutput ? {} : { output: lastLines(out, 12) }),
       },
       warnings: [
         ...warnings,
-        ...(preflight?.warnings ?? []).filter((line) => !isDroppedRuntimePageWarning(line)),
+        ...(preflight?.warnings ?? []).filter(
+          (line) => !isDroppedRuntimePageWarning(line) && !(declarationByRisk && isValidatorDeclarationLine(line)),
+        ),
         ...droppedPages.map((page) => page.say),
         ...shownBuildWarnings,
-        ...reviewRiskWarnings(declarationSaid ? risks.filter((risk) => risk.code !== "FIREFOX_DATA_COLLECTION_MISSING") : risks),
+        ...reviewRiskPointer(risks),
         ...reviewCoverageNotes(review),
         ...zipNotes,
         ...duplicates.map(duplicateAssetSentence),
@@ -1133,7 +1139,7 @@ export async function handler(args: {
         ...(signingFrame?.warnings ?? []),
         ...(signingFrame?.hints ?? []),
       ],
-      hint: `The ${mode === "none" ? "" : `${mode} `}build is in ${distDir}.${modeSentence(mode) ? ` ${modeSentence(mode)}` : ""} To read what is in it, call extension_analyze with this projectPath and browser "${browser}": it answers the sizes, the entry points and the store checks a reviewer runs, plus the emitted manifest of every built browser and the resolved keys that differ between them (manifestByBrowser), so there is no need to list or grep the folder by hand or to read dist/<browser>/manifest.json.${zipPath ? ` The store zip is ${zipPath}.` : ""}${storeMdMissingNote}${dependenciesNote}${platformListed() ? " To send the extension to someone, extension_publish gives the project's build on extension.dev a page with a download and a run command for each browser (the platform builds the source it holds, not this folder: extension_builds_act action:\"rebuild\" starts that build with no push, and a project built from a repository also builds on a push)." : ""}`,
+      hint: `The ${mode === "none" ? "" : `${mode} `}build is in ${distDir}.${modeSentence(mode) ? ` ${modeSentence(mode)}` : ""} To read what is in it, call extension_analyze with this projectPath and browser "${browser}" (sizes, entry points, store checks and each built browser's emitted manifest in manifestByBrowser) instead of listing or grepping the folder.${zipPath ? ` The store zip is ${zipPath}.` : ""}${storeMdMissingNote}${dependenciesNote}${platformListed() ? " To send the extension to someone, extension_publish gives the project's build on extension.dev a page with a download and a run command for each browser (the platform builds the source it holds, not this folder: extension_builds_act action:\"rebuild\" starts that build with no push)." : ""}`,
     });
   }
 
@@ -1204,13 +1210,22 @@ export async function handler(args: {
       browser,
       duration,
       ...(compileErrors.length ? { errors: compileErrors } : {}),
-      ...(tail && !compileErrors.length ? { output: tail.slice(-4000) } : {}),
+      ...(tail && !compileErrors.length ? { output: withoutInstallNoise(tail).slice(-4000) } : {}),
     },
     warnings,
     hint: compileErrors.length
       ? `Fix the ${compileErrors.length} compile error${compileErrors.length === 1 ? "" : "s"} in value.errors (file, loader and message as the bundler printed them) and build again. extension_manifest_validate covers the manifest; the engine installs dependencies only when none of the declared ones is present, so a missing one beside installed ones is yours to install`
       : "Read value.output for the bundler's own report. The manifest may live at the project root or under src; a failure here is usually a compile error, a manifest the engine refuses, or a Safari toolchain the host does not have.",
   });
+}
+
+const INSTALL_NOISE_LINE = /^\s*npm (notice|warn)\b/i;
+
+export function withoutInstallNoise(text: string): string {
+  return text
+    .split("\n")
+    .filter((line) => line.trim() !== "" && !INSTALL_NOISE_LINE.test(line))
+    .join("\n");
 }
 
 const ANSI_SEQUENCE = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");

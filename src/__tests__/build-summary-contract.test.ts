@@ -14,6 +14,8 @@ import {
 
 import type * as ExecModule from "../lib/exec";
 
+let installNoise = "";
+
 vi.mock("../lib/exec", async (importOriginal) => {
   const actual = await importOriginal<typeof ExecModule>();
 
@@ -26,7 +28,7 @@ vi.mock("../lib/exec", async (importOriginal) => {
       return {
         code: 0,
         stdout: `${JSON.stringify(preSummariesBuildFrame(args[1]!, [browser]))}\n`,
-        stderr: buildNarration(browser),
+        stderr: `${buildNarration(browser)}${installNoise}`,
       };
     },
   };
@@ -147,9 +149,9 @@ describe("build consumes the engine's persisted BuildSummary when the frame on s
 
     expect(result.ok).toBe(true);
     expect(result.hint).toMatch(/call extension_analyze with this projectPath and browser "chrome"/);
-    expect(result.hint).toMatch(/sizes, the entry points and the store checks/);
-    expect(result.hint).toMatch(/no need to list or grep the folder by hand/);
-    expect(result.hint).toMatch(/emitted manifest of every built browser.*manifestByBrowser/);
+    expect(result.hint).toMatch(/sizes, entry points, store checks/);
+    expect(result.hint).toMatch(/instead of listing or grepping the folder/);
+    expect(result.hint).toMatch(/each built browser's emitted manifest in manifestByBrowser/);
     expect(result.hint).toContain(result.value.outputPath);
   });
 
@@ -160,6 +162,21 @@ describe("build consumes the engine's persisted BuildSummary when the frame on s
 
     expect(result.ok).toBe(true);
     expect(result.value.outputPath).toBe(path.join(project, "dist", "chrome"));
+  });
+
+  it("916: with no summary to read, the output tail is the engine's own lines, with no npm notice and no blank line", async () => {
+    installNoise = "npm notice\nnpm notice New minor version of npm available! 11.6.0 -> 11.7.0\nnpm notice To update run: npm install -g npm@11.7.0\nnpm warn deprecated glob@7.2.3\n\n";
+
+    try {
+      const result = JSON.parse(await build.handler({ projectPath: completeProject() }));
+      const lines: string[] = result.value.output.split("\n");
+
+      expect(result.ok).toBe(true);
+      expect(lines[lines.length - 1]).toBe("⏵⏵⏵ Extension built for production in dist/chrome (165 B).");
+      expect(lines.filter((line) => line.trim() === "" || /^npm (notice|warn)/.test(line))).toEqual([]);
+    } finally {
+      installNoise = "";
+    }
   });
 
   it.each([

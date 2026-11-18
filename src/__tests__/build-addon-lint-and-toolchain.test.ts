@@ -125,26 +125,80 @@ describe("a Firefox build says the missing data collection declaration once", ()
   const ENGINE_LINE =
     '⚠ ⏵⏵⏵ addons.mozilla.org requires browser_specific_settings.gecko.data_collection_permissions for new add-ons.\n  │ Declare {"required": ["none"]} if this extension transmits no data.';
 
-  it("keeps the validator's line and the review risk, and drops the engine's copy and the Store review echo from warnings", async () => {
+  it.each([
+    ["with the manifest check", {}],
+    ["with validation skipped", { skipValidation: true }],
+  ])("%s, says it in value.reviewRisks alone, with the owner's rule, and warnings carry neither the validator's line nor the engine's", async (_label, extra) => {
     const dir = project();
     summaryOverride = { warnings_count: 1, warnings: [ENGINE_LINE] };
 
-    const result = JSON.parse(await build.handler({ projectPath: dir, browser: "firefox" }));
-    const said = result.warnings.filter((w: string) => w.includes("data_collection_permissions"));
+    const text = await build.handler({ projectPath: dir, browser: "firefox", ...extra });
+    const result = JSON.parse(text);
+    const risk = result.value.reviewRisks.find((r: { code: string }) => r.code === "FIREFOX_DATA_COLLECTION_MISSING");
 
     expect(result.ok).toBe(true);
-    expect(said).toHaveLength(1);
-    expect(said[0]).toContain("ask the person and write their answer");
-    expect(result.value.reviewRisks.map((r: { code: string }) => r.code)).toContain("FIREFOX_DATA_COLLECTION_MISSING");
+    expect(risk.fix).toContain("Ask the owner what the extension collects");
+    expect(risk.fix).toContain("do not fill it in for them");
+    expect(result.warnings.filter((w: string) => w.includes("data_collection_permissions"))).toEqual([]);
+    expect(text.split("data_collection_permissions")).toHaveLength(3);
     expect(result.value.buildWarningsTruncated).toBeUndefined();
   });
+});
 
-  it("carries the engine's line when validation was skipped, since nothing else says it", async () => {
+describe("916: a build answer says each review risk once and stays light", () => {
+  function riskyProject(): string {
     const dir = project();
-    summaryOverride = { warnings_count: 1, warnings: [ENGINE_LINE] };
+    fs.writeFileSync(
+      path.join(dir, "src", "manifest.json"),
+      JSON.stringify({
+        manifest_version: 3,
+        name: "Fixture",
+        version: "1.0.0",
+        icons: { 128: "icon.png" },
+        browser_specific_settings: { gecko: { id: "fixture@example.com" } },
+        content_scripts: [{ matches: ["<all_urls>"], js: ["content.js"] }],
+      }),
+    );
 
-    const result = JSON.parse(await build.handler({ projectPath: dir, browser: "firefox", skipValidation: true }));
+    fs.writeFileSync(path.join(dir, "src", "content.js"), "console.log('ok')\n");
+    fs.writeFileSync(path.join(dir, "src", "icon.png"), "");
 
-    expect(result.warnings).toContain(ENGINE_LINE);
+    return dir;
+  }
+
+  it("carries each risk in value.reviewRisks and names its code in one Store review line, never its message or fix a second time", async () => {
+    const dir = riskyProject();
+    summaryOverride = { addon_lint: { status: "missing" }, toolchain: TOOLCHAIN };
+
+    const text = await build.handler({ projectPath: dir, browser: "firefox" });
+    const result = JSON.parse(text);
+    const risks: Array<{ code: string; message: string; fix: string }> = result.value.reviewRisks;
+    const pointers = result.warnings.filter((w: string) => w.startsWith("Store review:"));
+
+    expect(risks.map((risk) => risk.code)).toEqual(expect.arrayContaining(["BROAD_HOST_ACCESS", "FIREFOX_DATA_COLLECTION_MISSING"]));
+    expect(pointers).toHaveLength(1);
+    expect(pointers[0]).toContain("value.reviewRisks");
+
+    for (const risk of risks) {
+      expect(pointers[0], risk.code).toContain(risk.code);
+      expect(text.split(JSON.stringify(risk.message).slice(1, -1)), risk.code).toHaveLength(2);
+      expect(text.split(JSON.stringify(risk.fix).slice(1, -1)), risk.code).toHaveLength(2);
+    }
+  });
+
+  it("answers a Firefox build with two review risks, a missing lint and a toolchain in under 2,300 characters, with a hint under 300 and no output tail the fields already carry", async () => {
+    const dir = riskyProject();
+    summaryOverride = { addon_lint: { status: "missing" }, toolchain: TOOLCHAIN };
+
+    const text = (await build.handler({ projectPath: dir, browser: "firefox" })).split(dir).join("/work");
+    const result = JSON.parse(text);
+
+    expect(result.ok).toBe(true);
+    expect(text.length, `${text.length} characters`).toBeLessThanOrEqual(2_300);
+    expect(result.hint.length, result.hint).toBeLessThanOrEqual(300);
+    expect(result.hint).toMatch(/^The production build is in \/work\/dist\/firefox\. /);
+    expect(result.hint).toContain('call extension_analyze with this projectPath and browser "firefox"');
+    expect(result.value).not.toHaveProperty("output");
+    expect(result.value.outputPath).toBe("/work/dist/firefox");
   });
 });

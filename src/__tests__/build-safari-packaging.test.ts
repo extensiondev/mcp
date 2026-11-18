@@ -394,7 +394,7 @@ describe("extension_build reads the build numbers off the engine, not off its pr
     expect(result.warnings).toContain("asset size limit exceeded");
   });
 
-  it("keeps the engine's human lines out of the parsed envelope but in the output tail", async () => {
+  it("keeps the engine's human lines out of the parsed envelope, and out of the answer when the summary carries the build", async () => {
     const dir = project();
     distFor(dir, "chrome");
     cliResponse = {
@@ -405,8 +405,8 @@ describe("extension_build reads the build numbers off the engine, not off its pr
     const result = await run({ projectPath: dir, browser: "chrome" });
 
     expect(result.value.totalBytes).toBe(5);
-    expect(result.value.output).toContain("Extension built for production in dist/chrome");
-    expect(result.value.output).not.toContain('"schema"');
+    expect(result.value).not.toHaveProperty("output");
+    expect(JSON.stringify(result)).not.toContain("Extension built for production");
   });
 
   it("answers no output tail when silent was asked for", async () => {
@@ -498,7 +498,7 @@ describe("extension_build against an engine older than the summaries contract", 
     expect(result.ok).toBe(true);
     expect(result.value.totalBytes).toBe(999);
     expect(result.value.engineBuildStatus).toBeUndefined();
-    expect(result.value.output).toContain("Extension built for production in dist/chrome");
+    expect(result.value).not.toHaveProperty("output");
   });
 
   it("recovers the Safari identity from the persisted summary when the envelope has none", async () => {

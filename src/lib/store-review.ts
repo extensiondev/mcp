@@ -269,6 +269,14 @@ export function reviewRiskWarnings(risks: ReviewRisk[]): string[] {
   return risks.map((risk) => `Store review: ${risk.message} ${risk.fix}`);
 }
 
+export function reviewRiskPointer(risks: ReviewRisk[]): string[] {
+  if (!risks.length) return [];
+
+  return [
+    `Store review: value.reviewRisks carries ${risks.length} risk${risks.length === 1 ? "" : "s"} to fix or justify before a store submission (${risks.map((risk) => risk.code).join(", ")}).`,
+  ];
+}
+
 function listFiles(dir: string, base = ""): Array<{ path: string }> {
   let entries: fs.Dirent[];
 
