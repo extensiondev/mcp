@@ -61,8 +61,8 @@ export const schema = {
       },
       include: {
         type: "array",
-        items: { type: "string", enum: ["urls"] },
-        description: "list: urls adds each row's repositoryUrl, catalogUrl and downloads.",
+        items: { type: "string", enum: ["details", "urls"] },
+        description: "list: details adds each row's tags, difficulty, featured and useCases; urls its repositoryUrl, catalogUrl and downloads.",
       },
     },
     required: [],

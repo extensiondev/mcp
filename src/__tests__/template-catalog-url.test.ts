@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { templateCatalogUrl } from "../lib/template-artifact-source";
+import { createToolDispatcher, type ToolModule } from "../lib/tool-dispatch";
 import { searchTemplates } from "../tools/list-templates";
+import * as templatesTool from "../tools/templates";
 
 const ROWS = [
     {
@@ -12,7 +14,7 @@ const ROWS = [
       tags: ["react"],
       difficulty: "beginner",
       featured: true,
-      useCases: [],
+      useCases: ["Injecting a React widget into a page", "A panel over a site the person does not own"],
       repositoryUrl:
         "https://github.com/extension-js/examples/tree/abc/examples/content-react",
       downloads: { chrome: "https://example.com/content-react-chrome.zip" },
@@ -53,7 +55,7 @@ describe("extension_templates list emission", () => {
   it("keeps the per-row URLs behind include: ['urls'], where catalogUrl sits beside repositoryUrl and downloads (ledger 503)", async () => {
     const plain = JSON.parse(await searchTemplates({}));
     expect(plain.ok).toBe(true);
-    expect(Object.keys(plain.value.templates[0])).toEqual(["slug", "description", "uiFramework", "frameworkLabel", "surfaces", "tags", "difficulty", "featured", "useCases"]);
+    expect(Object.keys(plain.value.templates[0])).toEqual(["slug", "description", "frameworkLabel", "surfaces"]);
 
     const frame = JSON.parse(await searchTemplates({ include: ["urls"] }));
     expect(frame.ok).toBe(true);
@@ -66,5 +68,31 @@ describe("extension_templates list emission", () => {
     expect(t.catalogUrl).toBe(
       "https://templates.extension.dev/content-react?utm_source=mcp&utm_medium=tool",
     );
+  });
+
+  it("916: a row is the four fields a pick needs and under 200 characters, and include: ['details'] adds the rest", async () => {
+    const plain = JSON.parse(await searchTemplates({}));
+    const row = plain.value.templates[0];
+
+    expect(row).toEqual({ slug: "content-react", description: "A content script starter", frameworkLabel: "react", surfaces: ["content"] });
+    expect(JSON.stringify(row).length).toBeLessThanOrEqual(200);
+
+    const detailed = JSON.parse(await searchTemplates({ include: ["details"] })).value.templates[0];
+
+    expect(detailed).toEqual({ ...row, tags: ["react"], difficulty: "beginner", featured: true, useCases: ROWS[0]!.useCases });
+    expect(detailed.repositoryUrl).toBeUndefined();
+  });
+
+  it("916: the schema takes details beside urls and refuses any other include before the catalog is read", async () => {
+    const dispatch = createToolDispatcher({ tools: [templatesTool as unknown as ToolModule], options: { features: ["local"], noShip: true } });
+    const call = async (include: string[]) => JSON.parse((await dispatch({ name: "extension_templates", arguments: { include } })).content[0]!.text);
+
+    expect(Object.keys((await call(["details", "urls"])).value.templates[0])).toEqual(["slug", "description", "frameworkLabel", "surfaces", "tags", "difficulty", "featured", "useCases", "repositoryUrl", "catalogUrl", "downloads"]);
+
+    const refused = await call(["everything"]);
+
+    expect(refused.error.code).toBe("E_INPUT_VALIDATION");
+    expect(refused.error.hint).toContain('"details"');
+    expect(refused.value.issues[0].path).toMatch(/^include/);
   });
 });

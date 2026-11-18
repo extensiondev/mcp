@@ -618,7 +618,7 @@ Browse the template catalog or read a template's files. TypeScript is slug 'type
 | `framework` | "react" \| "vue" \| "svelte" \| "preact" \| "" | no |  | list: UI framework; empty string is vanilla. |
 | `tags` | array of string | no |  | list: tags, e.g. ['ai']. |
 | `featured` | boolean | no |  | list: featured only. |
-| `include` | array of "urls" | no |  | list: urls adds each row's repositoryUrl, catalogUrl and downloads. |
+| `include` | array of "details" \| "urls" | no |  | list: details adds each row's tags, difficulty, featured and useCases; urls its repositoryUrl, catalogUrl and downloads. |
 
 ## extension_theme_verify
 

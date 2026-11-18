@@ -19,18 +19,16 @@ export async function searchTemplates(args: {
   include?: string[];
 }): Promise<string> {
   const { templates, source, note } = await listTemplatesWithSource(args);
-  const withUrls = Array.isArray(args.include) && args.include.includes("urls");
+  const include = Array.isArray(args.include) ? args.include : [];
+  const withUrls = include.includes("urls");
+  const withDetails = include.includes("details");
 
   const results = templates.map((t) => ({
     slug: t.slug,
     description: t.description,
-    uiFramework: t.uiFramework,
     frameworkLabel: t.uiFramework || "vanilla",
     surfaces: t.surfaces,
-    tags: t.tags,
-    difficulty: t.difficulty,
-    featured: t.featured,
-    useCases: t.useCases,
+    ...(withDetails ? { tags: t.tags, difficulty: t.difficulty, featured: t.featured, useCases: t.useCases } : {}),
     ...(withUrls ? { repositoryUrl: t.repositoryUrl, catalogUrl: templateCatalogUrl(t.slug), downloads: t.downloads } : {}),
   }));
 

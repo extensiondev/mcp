@@ -2823,9 +2823,9 @@
         },
         {
           "name": "include",
-          "type": "array of \"urls\"",
+          "type": "array of \"details\" | \"urls\"",
           "required": false,
-          "description": "list: urls adds each row's repositoryUrl, catalogUrl and downloads."
+          "description": "list: details adds each row's tags, difficulty, featured and useCases; urls its repositoryUrl, catalogUrl and downloads."
         }
       ]
     },
