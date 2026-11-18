@@ -146,4 +146,51 @@ describe("extension_docs_search", () => {
     expect(out.ok).toBe(true);
     expect(out.status).toBe("no-match");
   });
+
+  it("932: says on a found answer that the hold kept platform pages back, and passes the count through", async () => {
+    const results = [{ title: "contracts/error-codes", url: "https://extension.js.org/docs/contracts/error-codes", snippet: "x", score: 3 }];
+    respond(200, { query: "UNKNOWN_CHANNEL", results, heldBack: { platformPages: 12 } });
+    const out = JSON.parse(await handler({ query: "UNKNOWN_CHANNEL" }));
+
+    expect(out.status).toBe("found");
+    expect(out.value.results).toEqual(results);
+    expect(out.value.heldBack).toEqual({ platformPages: 12 });
+    expect(out.hint).toBe(
+      "The public hold is on: the platform held back 12 of its own platform pages from these results server-side, so this list is partial and an extension.dev topic can be absent for that reason alone.",
+    );
+  });
+
+  it("932: says the same on no-match after the no-match guidance when the route sends the count", async () => {
+    respond(200, { query: "preview and stable channels", results: [], heldBack: { platformPages: 1 } });
+    const out = JSON.parse(await handler({ query: "preview and stable channels" }));
+
+    expect(out.status).toBe("no-match");
+    expect(out.value.heldBack).toEqual({ platformPages: 1 });
+    expect(out.hint).toBe(
+      "No page matched. Try fewer or different words, or browse https://extension.js.org/docs; answer from memory only after that, and say the docs had no page. The public hold is on: the platform held back 1 of its own platform pages from these results server-side, so this list is partial and an extension.dev topic can be absent for that reason alone.",
+    );
+  });
+
+  it("932: says nothing about the hold on a found answer when the route sends no count, a zero or a value that is not a count", async () => {
+    const results = [{ title: "a", url: "https://extension.js.org/docs/a", snippet: "x", score: 3 }];
+
+    for (const heldBack of [undefined, { platformPages: 0 }, { platformPages: "3" }, { platformPages: -1 }, { platformPages: 1.5 }, "yes", null]) {
+      respond(200, { query: "a", results, ...(heldBack === undefined ? {} : { heldBack }) });
+      const out = JSON.parse(await handler({ query: "a" }));
+
+      expect(out.status).toBe("found");
+      expect(out.hint).toBeUndefined();
+      expect(out.value).toEqual({ query: "a", results });
+    }
+  });
+
+  it("932: keeps the conditional hold sentence on no-match against a route that sends no count", async () => {
+    respond(200, { query: "zzz", results: [] });
+    const out = JSON.parse(await handler({ query: "zzz" }));
+
+    expect(out.value).toEqual({ query: "zzz", results: [] });
+    expect(out.hint).toBe(
+      "No page matched. Try fewer or different words, or browse https://extension.js.org/docs; answer from memory only after that, and say the docs had no page. While the public hold is on, the platform filters its own platform pages out of these results server-side, so an extension.dev topic can be absent for that reason alone.",
+    );
+  });
 });

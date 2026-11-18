@@ -38,6 +38,21 @@ export const schema = {
 
 type Result = { title: string; url: string; snippet: string; score: number };
 
+const NO_MATCH = "No page matched. Try fewer or different words, or browse https://extension.js.org/docs; answer from memory only after that, and say the docs had no page.";
+const HOLD_MAY_FILTER = "While the public hold is on, the platform filters its own platform pages out of these results server-side, so an extension.dev topic can be absent for that reason alone.";
+
+function heldBackPlatformPages(heldBack: unknown): number {
+  if (!heldBack || typeof heldBack !== "object") return 0;
+
+  const count = (heldBack as { platformPages?: unknown }).platformPages;
+
+  return typeof count === "number" && Number.isInteger(count) && count > 0 ? count : 0;
+}
+
+function holdFiltered(count: number): string {
+  return `The public hold is on: the platform held back ${count} of its own platform pages from these results server-side, so this list is partial and an extension.dev topic can be absent for that reason alone.`;
+}
+
 export async function handler(args: {
   query: string;
   limit?: number;
@@ -83,7 +98,7 @@ export async function handler(args: {
     });
   }
 
-  let body: { results?: Result[]; message?: string; retryAfterSeconds?: number } = {};
+  let body: { results?: Result[]; message?: string; retryAfterSeconds?: number; heldBack?: unknown } = {};
   let bodyUnreadable: string | null = null;
 
   try {
@@ -124,14 +139,14 @@ export async function handler(args: {
   }
 
   const results = body.results;
+  const held = heldBackPlatformPages(body.heldBack);
+  const hint = [results.length ? "" : NO_MATCH, held ? holdFiltered(held) : results.length ? "" : HOLD_MAY_FILTER].filter(Boolean).join(" ");
 
   return envelope({
     ok: true,
     command: COMMAND,
     status: results.length ? "found" : "no-match",
-    value: { query, results },
-    ...(results.length
-      ? {}
-      : { hint: "No page matched. Try fewer or different words, or browse https://extension.js.org/docs; answer from memory only after that, and say the docs had no page. While the public hold is on, the platform filters its own platform pages out of these results server-side, so an extension.dev topic can be absent for that reason alone." }),
+    value: { query, results, ...(held ? { heldBack: { platformPages: held } } : {}) },
+    ...(hint ? { hint } : {}),
   });
 }
