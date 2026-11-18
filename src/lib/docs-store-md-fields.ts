@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { tableCell as cell } from "./docs-tools";
 import { PER_STORE_CATEGORY_RULE } from "./store-categories";
 import { storeMdFieldRows, type StoreMdFieldRow } from "./store-md-fields";
 import { LISTING_SECTION, LISTING_STORES, PRIVACY_SECTION, STORE_SECTIONS, type ListingStore } from "./store-md-listing";
@@ -37,8 +38,6 @@ export interface StoreMdFieldsJson {
   rules: string[];
   stores: Record<ListingStore, StoreMdFieldRow[]>;
 }
-
-const cell = (text: string): string => text.replace(/\|/g, "\\|");
 
 export function renderStoreMdFieldsDoc(): string {
   const lines: string[] = [];

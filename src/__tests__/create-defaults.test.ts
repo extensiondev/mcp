@@ -230,7 +230,10 @@ describe("extension_create defaultsApplied", () => {
     expect(storeMd).not.toContain("npx extension build --browser firefox");
     expect(note).toMatchObject({ node, extensionJs: "4.1.39", buildCommand: "bun run build:firefox", file: path.join(scaffoldTarget, "STORE.md") });
     expect(note.packageManager.name).toBe("bun");
-    expect(note.sentence).toMatch(new RegExp(`^Build from source with Node ${node.replace(/\./g, "\\.")}, bun( \\d+\\.\\d+\\.\\d+)? and Extension\\.js 4\\.1\\.39: run bun install, then bun run build:firefox\\.$`));
+    const opening = `Build from source with Node ${node}, bun`;
+
+    expect(note.sentence.startsWith(opening)).toBe(true);
+    expect(note.sentence.slice(opening.length)).toMatch(/^( \d+\.\d+\.\d+)? and Extension\.js 4\.1\.39: run bun install, then bun run build:firefox\.$/);
     expect(storeMd.replace(/\s+/g, " ")).toContain(`${note.sentence} The upload is dist/firefox, byte for byte.`);
     expect(storeMd.split("\n").every((line) => line.length <= 76)).toBe(true);
     expect(reviewerNoteBuildLine(parseStoreMd(storeMd).firefox!.approvalNotes!)).toMatchObject({ sample: false, node, extensionJs: "4.1.39", packageManager: { name: "bun" } });

@@ -9,7 +9,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import { SERVER_TITLE, createServer, tools } from "../index";
-import { renderToolsDoc } from "../lib/docs-tools";
+import { renderToolsDoc, tableCell } from "../lib/docs-tools";
 import { renderClientsJson, renderToolsJson } from "../lib/docs-json";
 import { renderStoreMdFieldsDoc, renderStoreMdFieldsJson } from "../lib/docs-store-md-fields";
 import { storeMdFieldRows } from "../lib/store-md-fields";
@@ -88,6 +88,17 @@ describe("the docs say what the code does", () => {
 
     expect(read("claude/reference/mcp-tools.md")).toBe(rendered);
     for (const tool of tools) expect(read("claude/reference/mcp-tools.md")).toContain(`## ${tool.schema.name}`);
+  });
+
+  it("897: writes a backslash and a pipe into a table cell so that both read back as themselves", () => {
+    expect(tableCell("a | b")).toBe("a \\| b");
+    expect(tableCell("C:\\dir|x")).toBe("C:\\\\dir\\|x");
+    expect(tableCell("ends with \\")).toBe("ends with \\\\");
+    expect(tableCell("plain `code` text")).toBe("plain `code` text");
+
+    const row = renderToolsDoc([{ name: "probe", description: "d", inputSchema: { properties: { p: { type: ["string", "null"], description: "one \\| two | three \\" } } } }]).split("\n").find((line) => line.startsWith("| `p`"));
+
+    expect(row).toBe("| `p` | string \\| null | no |  | one \\\\\\| two \\| three \\\\ |");
   });
 
   it("keeps claude/rules small enough to load into every session, with the generated tool reference outside it", () => {

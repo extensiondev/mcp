@@ -32,6 +32,10 @@ export function typeOf(property: PropertySchema): string {
   return base;
 }
 
+export function tableCell(text: string): string {
+  return text.replace(/[\\|]/g, "\\$&");
+}
+
 export function renderToolsDoc(tools: ToolSchemaLike[]): string {
   const lines: string[] = [];
   lines.push("# MCP tools");
@@ -59,8 +63,8 @@ export function renderToolsDoc(tools: ToolSchemaLike[]): string {
       for (const name of names) {
         const property = properties[name] ?? {};
         const def = property.default === undefined ? "" : `\`${JSON.stringify(property.default)}\``;
-        const description = String(property.description ?? "").replace(/\s+/g, " ").replace(/\|/g, "\\|").trim();
-        lines.push(`| \`${name}\` | ${typeOf(property).replace(/\|/g, "\\|")} | ${required.has(name) ? "yes" : "no"} | ${def} | ${description} |`);
+        const description = String(property.description ?? "").replace(/\s+/g, " ").trim();
+        lines.push(`| \`${name}\` | ${tableCell(typeOf(property))} | ${required.has(name) ? "yes" : "no"} | ${def} | ${tableCell(description)} |`);
       }
     }
 

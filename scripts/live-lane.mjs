@@ -99,7 +99,7 @@ const firstNote = (env) => {
   return "";
 };
 
-const cell = (text) => String(text ?? "").replace(/\|/g, "\\|").replace(/\s+/g, " ").trim();
+const cell = (text) => String(text ?? "").replace(/[\\|]/g, "\\$&").replace(/\s+/g, " ").trim();
 const clip = (text, n = noteChars) => (text.length > n ? `${text.slice(0, n - 1)}...` : text);
 
 const withTimeout = (promise, ms, label) =>
