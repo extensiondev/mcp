@@ -107,17 +107,29 @@ const cellsOf = (line: string): string[] | null => {
   return row && !TABLE_RULE.test(line.trim()) ? row[1]!.split("|").map((cell) => cell.trim()) : null;
 };
 
+const LINE_ENDS = ["\r", "\u2028", "\u2029"];
+
+function headingOf(line: string): string | null {
+  if (!line.startsWith("##") || line.charAt(2).trim() !== "" || line.length < 4) return null;
+
+  const rest = line.slice(3);
+  const cut = Math.max(...LINE_ENDS.map((end) => rest.lastIndexOf(end))) + 1;
+  const title = rest.slice(cut);
+
+  return title.length > 0 && rest.slice(0, cut).trim() === "" ? title.trim() : null;
+}
+
 function sections(content: string): Section[] {
   const out: Section[] = [];
   let current: Section | null = null;
 
   for (const line of content.split("\n")) {
-    const heading = /^##\s+(.+)$/.exec(line);
+    const heading = headingOf(line);
 
-    if (heading) {
+    if (heading !== null) {
       if (current) out.push(current);
 
-      current = { heading: heading[1]!.trim(), body: "" };
+      current = { heading, body: "" };
     } else if (current) current.body += `${line}\n`;
   }
 

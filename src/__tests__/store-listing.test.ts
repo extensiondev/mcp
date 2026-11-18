@@ -5,7 +5,7 @@ import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { actionFingerprint } from "../lib/approval-gate";
-import { CHROMEWEBSTORE_MD_PREFILL_CALL } from "../lib/chromewebstore-md";
+import { CHROMEWEBSTORE_MD_PREFILL_CALL, parseChromeWebStoreMd } from "../lib/chromewebstore-md";
 import { stripHtmlComments } from "../lib/html-comments";
 import { parseStoreMd } from "../lib/store-md";
 import { emailShaped } from "../lib/store-md-bounded";
@@ -132,6 +132,26 @@ describe("STORE.md fills the store listing", () => {
     expect(stripHtmlComments("<!-".repeat(50_000) + "<!-- x -->" + "- y -->".repeat(50_000))).toBe("");
     expect(emailShaped(`!@!.${"!.".repeat(50_000)}@`)).toBe(false);
     expect(performance.now() - started).toBeLessThan(400);
+  });
+
+  it("897: reads a CHROMEWEBSTORE.md heading by the same rule as before, in linear time", () => {
+    const table = "\n\n| Permission | Justification |\n| --- | --- |\n| tabs | Reads the open tabs. |\n";
+    const headingOf = (line: string) => parseChromeWebStoreMd(`${line}${table}`).headings.permissionJustifications ?? null;
+
+    for (const line of ["## Permission justifications", "##\tPermission justifications  ", "##   Permissions Justification", "## \r Permission justifications", "##Permission justifications", "# Permission justifications", "## Permission justifications\r", "## Permission\rjustifications"]) {
+      const before = /^##\s+(.+)$/.exec(line)?.[1]?.trim();
+
+      expect(headingOf(line), JSON.stringify(line)).toBe(before !== undefined && /^permissions? justifications?$/i.test(before) ? `## ${before}` : null);
+    }
+
+    expect(headingOf("## Permission justifications")).toBe("## Permission justifications");
+    expect(headingOf("##Permission justifications")).toBeNull();
+
+    const started = performance.now();
+
+    expect(parseChromeWebStoreMd(`##${" ".repeat(200_000)}\r${table}`).headings).toEqual({});
+    expect(parseChromeWebStoreMd(`${`##${" ".repeat(2_000)}\r\n`.repeat(200)}${table}`).headings).toEqual({});
+    expect(performance.now() - started).toBeLessThan(2_000);
   });
 
   it("897: reads an email address by the same rule as before", () => {
