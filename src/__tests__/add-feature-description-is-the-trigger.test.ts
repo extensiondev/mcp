@@ -26,6 +26,6 @@ describe("extension_add_feature's description is the trigger for a plain add-a-s
   });
 
   it("hands the follow-up to the manifest check and the dev session instead of leaving the agent to shell out", () => {
-    expect(schema.description).toMatch(/validate the manifest and run extension_dev/);
+    expect(schema.description).toMatch(/validate the manifest, extension_build, extension_dev/);
   });
 });

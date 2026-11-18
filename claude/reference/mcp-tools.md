@@ -6,7 +6,7 @@ Generated from the schemas the server registers (`src/index.ts`); do not edit by
 
 ## extension_add_feature
 
-Plan the surface before adding an options page, a popup, a side panel, a content script, a devtools panel, a new tab page or a background script. It answers the manifest additions and files to write and changes nothing; then validate the manifest and run extension_dev. New project: extension_create.
+Plan the surface before adding an options page, a popup, a side panel, a content script, a devtools panel, a new tab page or a background script. It lists manifest additions and new files and changes nothing; then validate the manifest, extension_build, extension_dev. New project: extension_create.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
