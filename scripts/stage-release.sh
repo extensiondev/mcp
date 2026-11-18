@@ -33,7 +33,7 @@ PKG="$(node -p 'require("./package.json").name')"
 ACCESS="$(node -p 'require("./package.json").publishConfig?.access || "public"')"
 
 restore() {
-  git checkout --quiet -- package.json server.json docs/tools.json docs/clients.json docs/store-md-fields.json README.md
+  git checkout --quiet -- package.json server.json docs/tools.json docs/clients.json docs/store-md-fields.json
 }
 trap restore EXIT
 
@@ -47,7 +47,6 @@ if [ "$BUILT" != "$VERSION" ]; then
   exit 1
 fi
 
-node scripts/readme-logo-width.mjs npm
 npm stage publish --provenance=false --access "$ACCESS" --tag latest --ignore-scripts
 
 echo

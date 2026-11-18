@@ -252,33 +252,4 @@ describe("the release rails fail closed", () => {
       remove();
     }
   }, GIT_CELL_BUDGET_MS);
-
-  it("fails the README width step when nothing was replaced", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-readme-width-"));
-    const readme = path.join(dir, "README.md");
-    fs.writeFileSync(readme, "<img src=\"logo.png\" width=\"99%\">\n");
-
-    try {
-      const result = spawnSync(process.execPath, [fileURLToPath(new URL("../../scripts/readme-logo-width.mjs", import.meta.url)), "npm"], {
-        env: { ...process.env, README_LOGO_WIDTH_PATH: readme },
-        encoding: "utf8",
-      });
-      expect(result.status).not.toBe(0);
-      expect(result.stderr).toMatch(/holds neither/);
-      fs.writeFileSync(readme, "<img src=\"logo.png\" width=\"15.5%\">\n");
-      const ok = spawnSync(process.execPath, [fileURLToPath(new URL("../../scripts/readme-logo-width.mjs", import.meta.url)), "npm"], {
-        env: { ...process.env, README_LOGO_WIDTH_PATH: readme },
-        encoding: "utf8",
-      });
-      expect(ok.status).toBe(0);
-      expect(fs.readFileSync(readme, "utf8")).toContain('width="20.7%"');
-      const again = spawnSync(process.execPath, [fileURLToPath(new URL("../../scripts/readme-logo-width.mjs", import.meta.url)), "npm"], {
-        env: { ...process.env, README_LOGO_WIDTH_PATH: readme },
-        encoding: "utf8",
-      });
-      expect(again.status, "already at the npm width is done, not an error").toBe(0);
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
-  });
 });

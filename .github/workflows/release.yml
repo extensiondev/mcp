@@ -225,9 +225,6 @@ jobs:
           git remote set-url --push origin "git@github.com:${{ github.repository }}.git"
           git config core.sshCommand "ssh -i ~/.ssh/release_push_key -o IdentitiesOnly=yes"
 
-      - name: Prepare npm README
-        run: node scripts/readme-logo-width.mjs npm
-
       # OIDC trusted publishing needs npm >= 11.5.1; pin the newest npm so we
       # never depend on which patch of npm the Node runtime happens to ship.
       - name: Upgrade npm for trusted publishing
@@ -349,7 +346,6 @@ jobs:
               echo "git checkout $BUILT_FROM"
               echo "pnpm install --frozen-lockfile"
               echo "node scripts/set-release-version.mjs $VERSION && pnpm compile"
-              echo "node scripts/readme-logo-width.mjs npm"
               echo "npm publish --access $ACCESS --tag $DIST_TAG --ignore-scripts --provenance=false --otp=<code>"
               echo "git checkout -- ."
               echo '```'
