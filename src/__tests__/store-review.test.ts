@@ -5,7 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { STORE_SECTIONS, SUBSECTION_KEYS } from "../lib/store-md-declarations";
-import { reviewDistReport, reviewRisksReport, storeMdLine } from "../lib/store-review";
+import { reviewDistReport, reviewRisksReport, storeMdLine, wasmGrantLine } from "../lib/store-review";
 
 let dist: string;
 
@@ -246,5 +246,98 @@ describe("919: storeMdLine says where the permission justifications go", () => {
     expect(storeMdLine(dist, [risk])).toBe(
       'STORE.md: check that a "### Permissions justification" bullet under "## Chrome Web Store" covers each permission, host permission and content script match the manifest declares.',
     );
+  });
+});
+
+describe("934: the review reads WebAssembly, where it is loaded from and what the policy grants", () => {
+  const POLICY = "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'";
+  const remote = () => reviewDistReport(dist, "chrome").risks.find((r) => r.code === "REMOTE_CODE");
+
+  it("flags a .wasm fetched from another origin, with the file and the address, and says to ship it in the package", () => {
+    manifest({ content_security_policy: { extension_pages: POLICY } });
+    write("newtab.js", 'const WASM_URL = "https://cdn.jsdelivr.net/npm/@bokuweb/zstd-wasm@0.0.27/dist/web/zstd.wasm"; init(WASM_URL);');
+
+    const risk = remote()!;
+
+    expect(risk.message).toContain("a WebAssembly binary loaded from https://cdn.jsdelivr.net/npm/@bokuweb/zstd-wasm@0.0.27/dist/web/zstd.wasm");
+    expect(risk.message).toContain("Stores treat a .wasm fetched from another origin as remotely hosted code");
+    expect(risk.fix).toMatch(/^Ship the \.wasm in the package and load it by a packaged URL \(new URL\("<file>\.wasm", import\.meta\.url\) or chrome\.runtime\.getURL\)/);
+    expect(risk.files).toEqual(["newtab.js"]);
+  });
+
+  it("flags a remote base handed to a loader option, minified or not, and names the option", () => {
+    manifest({ content_security_policy: { extension_pages: POLICY } });
+    write("background/service_worker.js", "const t=await e({locateFile:e=>`https://cdn.jsdelivr.net/npm/sql.js@1.14.2/dist/$" + "{e}`});");
+    write("worker.js", 'createFFmpeg({\n  corePath: "https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js",\n});');
+
+    const risk = remote()!;
+
+    expect(risk.message).toContain("a WebAssembly binary loaded from https://cdn.jsdelivr.net/npm/sql.js@1.14.2/dist/ (locateFile)");
+    expect(risk.message).toContain("https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js (corePath)");
+    expect(risk.files).toEqual(expect.arrayContaining(["background/service_worker.js", "worker.js"]));
+  });
+
+  it("leaves a packaged .wasm URL, an API endpoint, a localhost address and an address beside an unrelated loader option alone", () => {
+    manifest({ content_security_policy: { extension_pages: POLICY } });
+    write("add.wasm", "");
+    write(
+      "background.js",
+      [
+        'const a = new URL("sql.js/dist/sql-wasm-browser.wasm", import.meta.url).href;',
+        'const b = chrome.runtime.getURL("add.wasm");',
+        'const c = new URL(/* asset */ "./add.wasm", import.meta.url);',
+        'fetch("https://api.example.com/v1/items?kind=wasm");',
+        'fetch("http://localhost:8080/dev/add.wasm");',
+        'boot({ locateFile: (file) => file, api: "https://api.example.com/v2" });',
+        'const docs = "See https://emscripten.org/docs/api_reference/module.html for locateFile";',
+      ].join("\n"),
+    );
+
+    expect(codes()).toEqual([]);
+  });
+
+  it("flags a built .wasm beside a Manifest V3 manifest without the grant, and not once the grant is there", () => {
+    manifest({ background: { service_worker: "background.js" } });
+    write("assets/zstd.wasm", "");
+    write("background.js", "self.x = 1;");
+
+    const risk = reviewDistReport(dist, "chrome").risks.find((r) => r.code === "WASM_GRANT_MISSING")!;
+
+    expect(risk.message).toBe("The build ships assets/zstd.wasm and the manifest has no 'wasm-unsafe-eval' in content_security_policy.extension_pages, so extension pages and the background service worker or script cannot compile it.");
+    expect(risk.fix).toBe(`Add "content_security_policy": { "extension_pages": "${POLICY}" } to the source manifest and build again. A content script compiles under the host page's policy, which this grant does not change.`);
+    expect(risk.files).toEqual(["assets/zstd.wasm"]);
+
+    manifest({ content_security_policy: { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'" } });
+    expect(codes()).toEqual([]);
+
+    manifest({ manifest_version: 2, content_security_policy: "script-src 'self'" });
+    expect(codes("firefox")).not.toContain("WASM_GRANT_MISSING");
+  });
+
+  it("flags 'unsafe-eval' in a Manifest V3 policy and names the narrow grant, and never reads 'wasm-unsafe-eval' as it", () => {
+    manifest({ content_security_policy: { extension_pages: "script-src 'self' 'unsafe-eval'; object-src 'self'" } });
+    write("assets/zstd.wasm", "");
+
+    const report = reviewDistReport(dist, "chrome");
+    const risk = report.risks.find((r) => r.code === "CSP_UNSAFE_EVAL")!;
+
+    expect(report.risks.map((r) => r.code)).toEqual(["CSP_UNSAFE_EVAL"]);
+    expect(risk.message).toBe("content_security_policy.extension_pages carries 'unsafe-eval'. Manifest V3 permits only 'self', 'none' and 'wasm-unsafe-eval' in script-src, and reviewers read it as leave to run code the package did not ship.");
+    expect(risk.fix).toBe("For WebAssembly write 'wasm-unsafe-eval' in its place, the narrow grant that compiles a module and nothing else; otherwise remove it.");
+    expect(wasmGrantLine(report)).toBeNull();
+
+    manifest({ content_security_policy: { extension_pages: POLICY } });
+    expect(codes()).toEqual([]);
+  });
+
+  it("says once that the grant is the narrow one and where STORE.md justifies it, only for a manifest that carries it", () => {
+    manifest({ content_security_policy: { extension_pages: POLICY } });
+
+    expect(wasmGrantLine(reviewDistReport(dist, "chrome"))).toBe(
+      `STORE.md: the manifest grants 'wasm-unsafe-eval', the narrow grant for WebAssembly, and reviewers ask what compiles under it. Say which module does and that its binary ships in the package, in "### Reviewer notes" under "## Firefox Add-ons" and "### Certification notes" under "## Edge Add-ons".`,
+    );
+
+    manifest({});
+    expect(wasmGrantLine(reviewDistReport(dist, "chrome"))).toBeNull();
   });
 });

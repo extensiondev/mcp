@@ -29,6 +29,7 @@ import { envelope, type ErrorCode } from "../lib/envelope";
 import { WEBKIT_FAMILY } from "../lib/browser-family";
 import { contractPidState } from "../lib/contract-pids";
 import { sessionStartingEnvelope, startingSession } from "../lib/session-starting";
+import { WASM_GRANT, WASM_POLICY_BLOCK } from "../lib/wasm-policy";
 import { safariSilentLogReason } from "../lib/safari-session-notes";
 import {
   ambiguousSessionRefusal,
@@ -101,6 +102,27 @@ export function emptyReason(
   return undefined;
 }
 
+const WASM_REFUSAL = "'wasm-eval'";
+
+function wasmRefusalNotes(events: any[]): string[] {
+  const refused = events.filter((event) =>
+    [event?.message, ...(Array.isArray(event?.messageParts) ? event.messageParts : [])].some((part) => typeof part === "string" && part.includes(WASM_REFUSAL)),
+  );
+
+  if (!refused.length) return [];
+
+  const inContent = refused.filter((event) => event?.context === "content").length;
+
+  return [
+    inContent < refused.length
+      ? `${WASM_REFUSAL} in that Chromium error is not a manifest keyword: the grant is ${WASM_GRANT}. Add ${WASM_POLICY_BLOCK} to the manifest and reload; it covers extension pages and the background service worker.`
+      : null,
+    inContent
+      ? `A content script logged the WebAssembly refusal: it compiles under the host page's policy, which the manifest's ${WASM_GRANT} does not change, so compile it in an extension page or the background and message the result.`
+      : null,
+  ].filter((line): line is string => line !== null);
+}
+
 function summarize(
   events: any[],
   source: "file" | "stream",
@@ -153,6 +175,7 @@ function summarize(
       reason ?? null,
       stale ? (staleNote ?? null) : null,
       streamNote ?? null,
+      ...wasmRefusalNotes(out),
     ],
   });
 }

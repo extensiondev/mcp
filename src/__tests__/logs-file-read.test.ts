@@ -109,3 +109,32 @@ describe("679: extension_logs judges the contract's engine pid by its start time
     expect(emptyReason(dir, "chrome")).toBeUndefined();
   });
 });
+
+describe("934: Chromium's WebAssembly refusal names a keyword no manifest accepts, so the answer names the right one", () => {
+  const REFUSAL =
+    "CompileError: WebAssembly.instantiate(): Refused to compile or instantiate WebAssembly module because neither 'wasm-eval' nor 'unsafe-eval' is an allowed source of script in the following Content Security Policy directive: \"script-src 'self'\"";
+
+  it("names 'wasm-unsafe-eval' and the policy value for a refusal logged by a page or the background", async () => {
+    writeLog(logFile("run-1", [logEvent("background", "error", [REFUSAL], { seq: 1 })]));
+
+    const out = await read();
+    const said = out.warnings.filter((w: string) => w.includes("wasm-unsafe-eval"));
+
+    expect(said).toHaveLength(1);
+    expect(said[0]).toContain("'wasm-eval' in that Chromium error is not a manifest keyword: the grant is 'wasm-unsafe-eval'");
+    expect(said[0]).toContain('"content_security_policy": { "extension_pages": "script-src \'self\' \'wasm-unsafe-eval\'; object-src \'self\'" }');
+  });
+
+  it("says the grant does not reach a content script, and nothing at all for a log without the refusal", async () => {
+    writeLog(logFile("run-1", [logEvent("content", "error", [REFUSAL], { seq: 1 })]));
+
+    const content = (await read()).warnings.join(" ");
+
+    expect(content).toContain("the host page's policy");
+    expect(content).toContain("compile it in an extension page or the background");
+
+    writeLog(logFile("run-1", [logEvent("background", "error", ["TypeError: x is not a function"], { seq: 1 })]));
+
+    expect((await read()).warnings.join(" ")).not.toContain("wasm");
+  });
+});

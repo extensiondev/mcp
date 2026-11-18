@@ -46,7 +46,8 @@ import {
 } from "../lib/safari-build-options";
 import { safariSigningFrame } from "../lib/safari-signing";
 import { teamUnknownToXcodeRefusal } from "../lib/xcode-teams";
-import { reviewCoverageNotes, reviewDistReport, reviewRiskPointer, storeMdLine } from "../lib/store-review";
+import { isWasmPolicyLine } from "../lib/wasm-policy";
+import { reviewCoverageNotes, reviewDistReport, reviewRiskPointer, storeMdLine, wasmGrantLine } from "../lib/store-review";
 import { dropTrailing } from "../lib/linear-text";
 
 const COMMAND = "extension_build";
@@ -968,6 +969,7 @@ export async function handler(args: {
     const risks = review.risks;
     const declarationByRisk = risks.some((risk) => risk.code === "FIREFOX_DATA_COLLECTION_MISSING");
     const iconByRisk = risks.some((risk) => risk.code === "ICON_128_MISSING");
+    const policyByRisk = risks.some((risk) => risk.code === "WASM_GRANT_MISSING" || risk.code === "CSP_UNSAFE_EVAL");
     const shownBuildWarnings =
       declarationByRisk || declarationByValidator
         ? buildWarnings.filter((line) => !isEngineDeclarationLine(line))
@@ -1131,13 +1133,15 @@ export async function handler(args: {
           (line) =>
             !isDroppedRuntimePageWarning(line) &&
             !(declarationByRisk && isValidatorDeclarationLine(line)) &&
-            !(iconByRisk && line.startsWith("No 128x128 icon declared")),
+            !(iconByRisk && line.startsWith("No 128x128 icon declared")) &&
+            !(policyByRisk && isWasmPolicyLine(line)),
         ),
         ...droppedPages.map((page) => page.say),
         ...shownBuildWarnings,
         ...reviewRiskPointer(risks),
         mode === "development" ? null : storeMdLine(path.dirname(storeMdPath(args.projectPath)), risks),
         mode === "development" ? null : storeMdFoundNote(args.projectPath),
+        mode === "development" ? null : wasmGrantLine(review),
         ...reviewCoverageNotes(review),
         ...zipNotes,
         ...duplicates.map(duplicateAssetSentence),

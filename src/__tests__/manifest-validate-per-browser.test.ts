@@ -275,3 +275,95 @@ describe("924: a theme Chromium cannot load is a Chromium issue, and a theme man
     expect(extension.value.warnings.join("\n")).toContain("no browser_specific_settings.gecko.data_collection_permissions");
   });
 });
+
+describe("934: a project that loads WebAssembly is told about the 'wasm-unsafe-eval' grant", () => {
+  const MV3 = { manifest_version: 3, name: "W", version: "1.0.0", background: { service_worker: "background.js" } };
+  const POLICY = "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'";
+  const wasmLines = (out: { value: { warnings: string[] } }) => out.value.warnings.filter((w) => w.includes("wasm-unsafe-eval"));
+
+  function put(dir: string, rel: string, body: string): void {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), body);
+  }
+
+  it("names the import, the three places that cannot compile it and the exact policy value, and stays valid", async () => {
+    const dir = project(MV3, ["src/background.js"]);
+    put(dir, "src/background.js", 'import initSqlJs from "sql.js/dist/sql-wasm-browser.js";\ninitSqlJs({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/sql.js@1.14.2/dist/$' + '{file}` });\n');
+
+    const out = await validate(dir);
+    const lines = wasmLines(out);
+
+    expect(out.status).toBe("valid");
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/^WebAssembly: src\/background\.js imports sql\.js\/dist\/sql-wasm-browser\.js, and the chrome, firefox, edge manifest has no 'wasm-unsafe-eval' in content_security_policy\.extension_pages/);
+    expect(lines[0]).toContain("extension pages and the background service worker or script cannot compile it");
+    expect(lines[0]).toContain(`"content_security_policy": { "extension_pages": "${POLICY}" }`);
+    expect(lines[0]).toContain("A content script compiles under the host page's policy, which this grant does not change.");
+  });
+
+  it("names a .wasm under public/ and the installed dependency that ships one", async () => {
+    const dir = project(MV3, ["src/background.js", "public/vendor/zstd.wasm", "node_modules/@bokuweb/zstd-wasm/dist/web/zstd.wasm", "node_modules/left-pad/index.js"]);
+    put(dir, "package.json", JSON.stringify({ dependencies: { "@bokuweb/zstd-wasm": "0.0.27", "left-pad": "1.3.0" } }));
+
+    const lines = wasmLines(await validate(dir, ["chrome"]));
+
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("the project holds public/vendor/zstd.wasm");
+    expect(lines[0]).toContain("the dependency @bokuweb/zstd-wasm ships dist/web/zstd.wasm");
+    expect(lines[0]).not.toContain("left-pad");
+  });
+
+  it("says nothing when the view carries the grant, under a plain key or a browser prefix, and nothing when no WebAssembly is in sight", async () => {
+    const source = 'const module = await WebAssembly.instantiateStreaming(fetch(new URL("add.wasm", import.meta.url)));\n';
+    const granted = project({ ...MV3, content_security_policy: { extension_pages: POLICY } }, ["src/background.js"]);
+    const prefixed = project(
+      {
+        ...MV3,
+        manifest_version: undefined,
+        "chromium:manifest_version": 3,
+        "firefox:manifest_version": 2,
+        "chromium:content_security_policy": { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'" },
+        "firefox:content_security_policy": "script-src 'self' 'wasm-unsafe-eval'",
+      },
+      ["src/background.js"],
+    );
+    const plain = project(MV3, ["src/background.js"]);
+
+    put(granted, "src/background.js", source);
+    put(prefixed, "src/background.js", source);
+    put(plain, "src/background.js", "chrome.runtime.onInstalled.addListener(() => fetch('https://api.example.com/v1/items'));\n");
+
+    expect(wasmLines(await validate(granted))).toEqual([]);
+    expect(wasmLines(await validate(prefixed))).toEqual([]);
+    expect((await validate(plain)).value.warnings.join("\n")).not.toMatch(/WebAssembly|unsafe-eval/);
+  });
+
+  it("asks only the Manifest V3 views: a Firefox Manifest V2 view compiles without the grant", async () => {
+    const dir = project({ ...MV3, manifest_version: undefined, "chromium:manifest_version": 3, "firefox:manifest_version": 2 }, ["src/background.js", "src/add.wasm"]);
+
+    const lines = wasmLines(await validate(dir));
+
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("the project holds src/add.wasm, and the chrome, edge manifest has no 'wasm-unsafe-eval'");
+  });
+
+  it("reads 'unsafe-eval' and 'wasm-unsafe-eval' as two sources: the first is flagged with its replacement, the second never is", async () => {
+    const unsafe = project({ ...MV3, content_security_policy: { extension_pages: "script-src 'self' 'unsafe-eval'; object-src 'self'" } }, ["src/background.js", "src/add.wasm"]);
+    const narrow = project({ ...MV3, content_security_policy: { extension_pages: POLICY } }, ["src/background.js", "src/add.wasm"]);
+
+    const lines = (await validate(unsafe, ["chrome"])).value.warnings.filter((w: string) => w.includes("unsafe-eval"));
+
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toBe("chrome: content_security_policy.extension_pages carries 'unsafe-eval', and Manifest V3 permits only 'self', 'none' and 'wasm-unsafe-eval' in script-src. For WebAssembly write 'wasm-unsafe-eval' in its place; otherwise remove it.");
+    expect((await validate(narrow, ["chrome"])).value.warnings.join("\n")).not.toContain("unsafe-eval");
+  });
+
+  it("tells a policy that lacks the grant to add the source to its script-src", async () => {
+    const dir = project({ ...MV3, content_security_policy: { extension_pages: "script-src 'self'; object-src 'self'" } }, ["src/background.js", "src/add.wasm"]);
+
+    const lines = wasmLines(await validate(dir, ["chrome"]));
+
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain(`Add 'wasm-unsafe-eval' to script-src in content_security_policy.extension_pages ("${POLICY}")`);
+  });
+});

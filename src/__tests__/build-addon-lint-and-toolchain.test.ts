@@ -219,6 +219,22 @@ describe("916: a build answer says each review risk once and stays light", () =>
     }
   });
 
+  it("934: a build that ships a .wasm the manifest cannot compile carries the risk once, and the validator's WebAssembly line is not said beside it", async () => {
+    const dir = project();
+    fs.writeFileSync(path.join(dir, "src", "manifest.json"), JSON.stringify({ manifest_version: 3, name: "Fixture", version: "1.0.0", background: { service_worker: "background.js" } }));
+    fs.writeFileSync(path.join(dir, "src", "background.js"), 'WebAssembly.instantiateStreaming(fetch(new URL("add.wasm", import.meta.url)));\n');
+    fs.writeFileSync(path.join(dir, "src", "add.wasm"), "");
+
+    const text = await build.handler({ projectPath: dir, browser: "chrome" });
+    const result = JSON.parse(text);
+    const risk = result.value.reviewRisks.find((r: { code: string }) => r.code === "WASM_GRANT_MISSING");
+
+    expect(risk.files).toEqual(["add.wasm"]);
+    expect(result.warnings.find((w: string) => w.startsWith("Store review:"))).toContain("WASM_GRANT_MISSING");
+    expect(text.split("'wasm-unsafe-eval'; object-src 'self'")).toHaveLength(2);
+    expect(result.warnings.join("\n")).not.toMatch(/^WebAssembly:/m);
+  });
+
   it("answers a Firefox build with two review risks, a missing lint, a toolchain and the STORE.md line of ledger 919 in under 2,600 characters, with a hint under 300 and no output tail the fields already carry", async () => {
     const dir = riskyProject();
     summaryOverride = { addon_lint: { status: "missing" }, toolchain: TOOLCHAIN };

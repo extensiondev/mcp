@@ -19,6 +19,7 @@ import { icon128Fix } from "../lib/store-review";
 import { geckoIdWarning, proposedGeckoId } from "../lib/firefox-addon-id";
 import { chromeThemeRefusalLines } from "../lib/theme-manifest-discards";
 import { toolListed } from "../lib/tool-policy";
+import { CONTENT_SCRIPT_SENTENCE, UNSAFE_EVAL_PHRASE, WASM_GRANT, WASM_POLICY, WASM_POLICY_BLOCK, WASM_POLICY_KEY, WASM_WARNING_PREFIX, needsWasmGrant, wasmEvidence, wasmPolicyOf, wasmSignIn, type WasmSeen } from "../lib/wasm-policy";
 import { ADMIN_INSTALL_ONLY_KEY, ENTERPRISE_CHANNEL_SENTENCE, adminInstallOnlyOf, adminInstallOnlyTypeIssue } from "../lib/firefox-enterprise";
 
 const COMMAND = "extension_manifest_validate";
@@ -305,7 +306,8 @@ const SCAN_FILE_CAP = 300;
 function scanApiUsage(
   roots: string[],
   excluded: string[] = [],
-): { used: Set<string>; sources: Map<string, string>; filesRead: number; capped: boolean; unreadable: string[] } {
+): { used: Set<string>; sources: Map<string, string>; filesRead: number; capped: boolean; unreadable: string[]; wasm: WasmSeen } {
+  const wasm: WasmSeen = { files: [], references: [] };
   const used = new Set<string>();
   const sources = new Map<string, string>();
   const unreadable: string[] = [];
@@ -327,6 +329,13 @@ function scanApiUsage(
     }
 
     const files = entries.filter((e) => !e.isDirectory() && /\.(js|mjs|cjs|ts|tsx|jsx|svelte|vue)$/.test(e.name));
+
+    for (const e of entries) {
+      const full = path.join(dir, e.name);
+
+      if (!e.isDirectory() && e.name.endsWith(".wasm") && !wasm.files.includes(full)) wasm.files.push(full);
+    }
+
     const dirs = entries
       .filter((e) => e.isDirectory() && e.name !== "node_modules" && e.name !== "dist" && !e.name.startsWith("."))
       .sort((a, b) => (a.name === "src" ? -1 : b.name === "src" ? 1 : a.name.localeCompare(b.name)));
@@ -353,6 +362,10 @@ function scanApiUsage(
         continue;
       }
 
+      const sign = wasmSignIn(src);
+
+      if (sign) wasm.references.push({ file: full, sign });
+
       const re = /\b(?:chrome|browser)\.(\w+)/g;
       let m: RegExpExecArray | null;
 
@@ -369,7 +382,7 @@ function scanApiUsage(
 
   for (const root of new Set(roots)) walk(root, 0);
 
-  return { used, sources, filesRead, capped, unreadable };
+  return { used, sources, filesRead, capped, unreadable, wasm };
 }
 
 const DEFAULT_BROWSERS = ["chrome", "firefox", "edge"];
@@ -605,6 +618,36 @@ export async function handler(args: {
         `${base}; it may be undefined at runtime, add ${grantPhrase(api)} if you use it.${note}`,
       );
     }
+  }
+
+  const wasmLacking: string[] = [];
+  const wasmUnsafe: string[] = [];
+  let wasmPolicyHeld = false;
+
+  for (const [b, view] of effectiveByBrowser) {
+    if (!needsWasmGrant(view)) continue;
+
+    const read = wasmPolicyOf(view);
+
+    if (read.unsafeEval) wasmUnsafe.push(b);
+    else if (!read.granted) {
+      wasmLacking.push(b);
+      wasmPolicyHeld ||= read.policy !== null;
+    }
+  }
+
+  const wasmSeen = wasmLacking.length ? wasmEvidence(projectRoot, scan.wasm) : [];
+
+  if (wasmUnsafe.length) {
+    result.warnings.push(
+      `${wasmUnsafe.join(", ")}: ${UNSAFE_EVAL_PHRASE}, and Manifest V3 permits only 'self', 'none' and ${WASM_GRANT} in script-src. For WebAssembly write ${WASM_GRANT} in its place; otherwise remove it.`,
+    );
+  }
+
+  if (wasmSeen.length) {
+    result.warnings.push(
+      `${WASM_WARNING_PREFIX}${wasmSeen.join("; ")}, and the ${wasmLacking.join(", ")} manifest has no ${WASM_GRANT} in ${WASM_POLICY_KEY}, so extension pages and the background service worker or script cannot compile it. ${wasmPolicyHeld ? `Add ${WASM_GRANT} to script-src in ${WASM_POLICY_KEY} ("${WASM_POLICY}")` : `Add ${WASM_POLICY_BLOCK} to the manifest`}. ${CONTENT_SCRIPT_SENTENCE} Found by a file and text search, so confirm the module is loaded.`,
+    );
   }
 
   if (!chromiumManifest.manifest_version) {

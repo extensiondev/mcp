@@ -126,6 +126,30 @@ describe("extension_analyze tells a development build from a production one", ()
     expect(dev.warnings.join(" ")).not.toContain("STORE.md");
   });
 
+  it("934: names a built .wasm the manifest cannot compile and a binary fetched from a CDN, and for a granted build says only where STORE.md justifies the grant", async () => {
+    const dir = project();
+    const out = dist(dir, "chrome", { ...MANIFEST, icons: { "128": "icon.png" }, background: { service_worker: "bg.js" } });
+    write(out, "icon.png", "png");
+    write(out, "assets/sql-wasm.wasm", "");
+    write(out, "bg.js", "init({locateFile:e=>`https://cdn.jsdelivr.net/npm/sql.js@1.14.2/dist/$" + "{e}`})");
+
+    const broken = JSON.parse(await analyze({ projectPath: dir }));
+
+    expect(broken.value.reviewRisks.map((r: { code: string }) => r.code)).toEqual(["REMOTE_CODE", "WASM_GRANT_MISSING"]);
+    expect(broken.warnings.join("\n")).toContain("https://cdn.jsdelivr.net/npm/sql.js@1.14.2/dist/ (locateFile)");
+    expect(broken.warnings.join("\n")).not.toContain("the narrow grant for WebAssembly, and reviewers ask");
+
+    fs.writeFileSync(path.join(out, "manifest.json"), JSON.stringify({ ...MANIFEST, icons: { "128": "icon.png" }, background: { service_worker: "bg.js" }, content_security_policy: { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'" } }));
+    write(out, "bg.js", 'init({locateFile:()=>new URL("assets/sql-wasm.wasm",import.meta.url).href})');
+
+    const working = JSON.parse(await analyze({ projectPath: dir }));
+
+    expect(working.value.reviewRisks).toEqual([]);
+    expect(working.warnings.filter((w: string) => w.includes("wasm-unsafe-eval"))).toEqual([
+      `STORE.md: the manifest grants 'wasm-unsafe-eval', the narrow grant for WebAssembly, and reviewers ask what compiles under it. Say which module does and that its binary ships in the package, in "### Reviewer notes" under "## Firefox Add-ons" and "### Certification notes" under "## Edge Add-ons".`,
+    ]);
+  });
+
   it("reads production from a dist whose only oddity is its .map files", async () => {
     const dir = project();
     const out = dist(dir, "chrome", { ...MANIFEST, icons: { "128": "icon.png" } });

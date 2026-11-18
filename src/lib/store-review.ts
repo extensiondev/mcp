@@ -15,10 +15,13 @@ import { ENTERPRISE_CHANNEL_SENTENCE, adminInstallOnlyOf } from "./firefox-enter
 import { declaredIcon128, readPngSize } from "./store-listing-media";
 import { STORE_SECTIONS, SUBSECTION_KEYS } from "./store-md-declarations";
 import { STORE_MD_FILENAME } from "./store-md";
+import { CONTENT_SCRIPT_SENTENCE, WASM_GRANT, WASM_POLICY_BLOCK, WASM_POLICY_KEY, needsWasmGrant, remoteWasmIn, wasmPolicyOf } from "./wasm-policy";
 
 export type ReviewRiskCode =
   | "BROAD_HOST_ACCESS"
+  | "CSP_UNSAFE_EVAL"
   | "REMOTE_CODE"
+  | "WASM_GRANT_MISSING"
   | "FIREFOX_DATA_COLLECTION_MISSING"
   | "FIREFOX_ENTERPRISE_CHANNEL"
   | "ICON_128_MISSING"
@@ -71,6 +74,8 @@ const REMOTE_CODE_PATTERNS: Array<[string, RegExp]> = [
   ["importScripts from a URL", /importScripts\(\s*["'`]https?:/],
   ["import() from a URL", /\bimport\(\s*["'`]https?:/],
 ];
+
+const REMOTE_WASM_LABEL = "a WebAssembly binary loaded from";
 
 const REMOTE_SCRIPT_TAG = /<script[^>]+src\s*=\s*["']https?:/i;
 
@@ -173,6 +178,7 @@ export interface ReviewReport {
   unreadable: string[];
   notScanned: string[];
   manifestUnreadable?: string;
+  wasmGranted?: boolean;
 }
 
 export function reviewRisks(input: Parameters<typeof reviewRisksReport>[0]): ReviewRisk[] {
@@ -216,6 +222,7 @@ export function reviewRisksReport(input: {
   const scripts = input.files.filter((f) => /\.(m?js|cjs)$/.test(f.path) && !f.path.endsWith(".map"));
   const pages = input.files.filter((f) => /\.html?$/.test(f.path));
   const hits = new Map<string, Set<string>>();
+  const remoteWasm = new Map<string, string>();
 
   const note = (label: string, file: string) => {
     if (!hits.has(label)) hits.set(label, new Set());
@@ -245,6 +252,11 @@ export function reviewRisksReport(input: {
     for (const [label, pattern] of REMOTE_CODE_PATTERNS) {
       if (pattern.test(text)) note(label, file.path);
     }
+
+    for (const found of remoteWasmIn(text)) {
+      remoteWasm.set(found.address, found.option ? `${found.address} (${found.option})` : found.address);
+      note(REMOTE_WASM_LABEL, file.path);
+    }
   }
 
   for (const file of pages) {
@@ -261,12 +273,38 @@ export function reviewRisksReport(input: {
   }
 
   if (hits.size && !development) {
-    const labels = [...hits.keys()];
+    const addresses = [...remoteWasm.values()];
+    const labels = [...hits.keys()].map((label) =>
+      label === REMOTE_WASM_LABEL ? `${label} ${addresses.slice(0, 3).join(", ")}${addresses.length > 3 ? `, and ${addresses.length - 3} more` : ""}` : label,
+    );
+    const calls = labels.length > (addresses.length ? 1 : 0);
     risks.push({
       code: "REMOTE_CODE",
-      message: `The package contains ${labels.join(", ")}. Manifest V3 stores reject extensions that run code they did not ship, and reviewers flag these patterns even inside a bundled library.`,
-      fix: "Remove the call, or confirm it only ever runs code that ships in the package and be ready to say so in review.",
+      message: `The package contains ${labels.join(", ")}. ${addresses.length ? "Stores treat a .wasm fetched from another origin as remotely hosted code. " : ""}Manifest V3 stores reject extensions that run code they did not ship${calls ? ", and reviewers flag these patterns even inside a bundled library" : ""}.`,
+      fix: [
+        addresses.length ? 'Ship the .wasm in the package and load it by a packaged URL (new URL("<file>.wasm", import.meta.url) or chrome.runtime.getURL).' : "",
+        calls ? `Remove the ${addresses.length ? "other " : ""}call, or confirm it only ever runs code that ships in the package and be ready to say so in review.` : "",
+      ].filter(Boolean).join(" "),
       files: [...new Set([...hits.values()].flatMap((set) => [...set]))].slice(0, 10),
+    });
+  }
+
+  const policy = wasmPolicyOf(input.manifest);
+  const governed = needsWasmGrant(input.manifest);
+  const binaries = input.files.filter((f) => f.path.endsWith(".wasm")).map((f) => f.path);
+
+  if (governed && policy.unsafeEval) {
+    risks.push({
+      code: "CSP_UNSAFE_EVAL",
+      message: `${WASM_POLICY_KEY} carries 'unsafe-eval'. Manifest V3 permits only 'self', 'none' and ${WASM_GRANT} in script-src, and reviewers read it as leave to run code the package did not ship.`,
+      fix: `For WebAssembly write ${WASM_GRANT} in its place, the narrow grant that compiles a module and nothing else; otherwise remove it.`,
+    });
+  } else if (governed && !policy.granted && binaries.length) {
+    risks.push({
+      code: "WASM_GRANT_MISSING",
+      message: `The build ships ${binaries.slice(0, 2).join(" and ")}${binaries.length > 2 ? ` and ${binaries.length - 2} more .wasm` : ""} and the manifest has no ${WASM_GRANT} in ${WASM_POLICY_KEY}, so extension pages and the background service worker or script cannot compile it.`,
+      fix: `${policy.policy ? `Add ${WASM_GRANT} to script-src in ${WASM_POLICY_KEY} of the source manifest` : `Add ${WASM_POLICY_BLOCK} to the source manifest`} and build again. ${CONTENT_SCRIPT_SENTENCE}`,
+      files: binaries.slice(0, 10),
     });
   }
 
@@ -312,7 +350,7 @@ export function reviewRisksReport(input: {
     }
   }
 
-  return { risks, unreadable, notScanned };
+  return { risks, unreadable, notScanned, wasmGranted: policy.granted && !policy.unsafeEval };
 }
 
 export function reviewCoverageNotes(report: ReviewReport): string[] {
@@ -357,8 +395,15 @@ export function reviewRiskPointer(risks: ReviewRisk[]): string[] {
 
 const JUSTIFICATION_HEADING = SUBSECTION_KEYS.find((key) => key.field === "permissionJustifications")!.heading;
 const REVIEWER_NOTES_HEADING = SUBSECTION_KEYS.find((key) => key.field === "reviewerNotes")!.heading;
+const CERTIFICATION_NOTES_HEADING = SUBSECTION_KEYS.find((key) => key.field === "certificationNotes")!.heading;
 const JUSTIFICATION_BULLETS = `a "${JUSTIFICATION_HEADING}" bullet under "${STORE_SECTIONS.chrome}"`;
 const JUSTIFIED = "each permission, host permission and content script match the manifest declares";
+
+export function wasmGrantLine(report: ReviewReport): string | null {
+  if (!report.wasmGranted) return null;
+
+  return `${STORE_MD_FILENAME}: the manifest grants ${WASM_GRANT}, the narrow grant for WebAssembly, and reviewers ask what compiles under it. Say which module does and that its binary ships in the package, in "${REVIEWER_NOTES_HEADING}" under "${STORE_SECTIONS.firefox}" and "${CERTIFICATION_NOTES_HEADING}" under "${STORE_SECTIONS.edge}".`;
+}
 
 export function storeMdLine(root: string, risks: ReviewRisk[]): string | null {
   if (!fs.existsSync(path.join(root, STORE_MD_FILENAME))) {
