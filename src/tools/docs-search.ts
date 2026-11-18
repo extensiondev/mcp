@@ -10,8 +10,10 @@ import { API_BASE } from "../lib/common-schema";
 import { envelope } from "../lib/envelope";
 import { mcpOrigins } from "../lib/origins";
 import { dropTrailing } from "../lib/linear-text";
+import { STORE_MD_FORMAT_URL, renderStoreMdFormat } from "../lib/docs-store-md-fields";
 
 const COMMAND = "extension_docs_search";
+const NAMES_STORE_MD = /\bstore\.md\b/i;
 
 export const schema = {
   name: COMMAND,
@@ -49,6 +51,15 @@ export async function handler(args: {
       command: COMMAND,
       status: "bad-request",
       error: { code: "E_BAD_REQUEST", message: "query is required." },
+    });
+  }
+
+  if (NAMES_STORE_MD.test(query)) {
+    return envelope({
+      ok: true,
+      command: COMMAND,
+      status: "found",
+      value: { query, results: [{ title: "STORE.md format", url: STORE_MD_FORMAT_URL, snippet: renderStoreMdFormat() }] },
     });
   }
 

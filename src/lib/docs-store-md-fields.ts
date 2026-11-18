@@ -75,6 +75,38 @@ export function renderStoreMdFieldsDoc(): string {
   return dropTrailing(lines.join("\n"), "\n");
 }
 
+export const STORE_MD_FORMAT_URL = "https://extension.js.org/docs/workflows/store-metadata";
+
+const FORMAT_INTRO =
+  'STORE.md is one file in the project root; extension_submit preflight and sync-listing read it. A "##" heading opens a section, and a line is a "- Key: value" bullet or a "###" sub-heading with its text below; a value that starts with TODO counts as absent. Each line names the stores that read it and its limit. A store\'s own section may repeat a "## Listing" line for that store alone. The data-use and privacy answers are the owner\'s to give.';
+
+export function renderStoreMdFormat(): string {
+  const sections = [LISTING_SECTION, PRIVACY_SECTION, ...LISTING_STORES.map((store) => STORE_SECTIONS[store])];
+  const entries = new Map<string, Array<{ line: string; limit: string; stores: ListingStore[] }>>(sections.map((section) => [section, []]));
+
+  for (const store of LISTING_STORES) {
+    for (const row of storeMdFieldRows(store)) {
+      const limit = row.limit.replaceAll(`\`${STORE_SECTIONS[store]}\``, "the store's own section");
+      const shared = row.alsoRead.find((section) => entries.get(section)?.some((entry) => entry.line === row.line && entry.limit === limit));
+      const list = entries.get(shared ?? row.section) ?? [];
+      const entry = list.find((item) => item.line === row.line && item.limit === limit);
+
+      if (entry) entry.stores.push(store);
+      else list.push({ line: row.line, limit, stores: [store] });
+    }
+  }
+
+  const lines = [FORMAT_INTRO];
+
+  for (const section of sections) {
+    lines.push("", section);
+
+    for (const entry of entries.get(section) ?? []) lines.push(`${entry.line} (${entry.stores.join(", ")}): ${entry.limit}`);
+  }
+
+  return lines.join("\n");
+}
+
 export function renderStoreMdFieldsJson(version: string): StoreMdFieldsJson {
   const stores = Object.fromEntries(LISTING_STORES.map((store) => [store, storeMdFieldRows(store)])) as Record<ListingStore, StoreMdFieldRow[]>;
 

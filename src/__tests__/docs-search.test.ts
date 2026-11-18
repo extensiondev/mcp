@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { BULLET_KEYS, LISTING_SECTION, PRIVACY_SECTION, STORE_SECTIONS, SUBSECTION_KEYS } from "../lib/store-md-declarations";
 import { handler, schema } from "../tools/docs-search";
 
 const calls: string[] = [];
@@ -54,6 +55,42 @@ describe("extension_docs_search", () => {
     expect(out.status).toBe("found");
     expect(out.value.results).toEqual(results);
     expect(calls[0]).toBe("https://www.extension.dev/api/docs/search?q=side%20panel&limit=8");
+  });
+
+  it("921: answers the STORE.md format from the parser's own lists, first and without calling out, when the query names the file", async () => {
+    respond(200, { query: "STORE.md", results: [] });
+
+    for (const query of ["STORE.md", "what goes in store.md for Firefox?"]) {
+      const out = JSON.parse(await handler({ query }));
+      const [first] = out.value.results;
+
+      expect(out.ok).toBe(true);
+      expect(out.status).toBe("found");
+      expect(out.value.results).toHaveLength(1);
+      expect(first.title).toBe("STORE.md format");
+      expect(first.url).toBe("https://extension.js.org/docs/workflows/store-metadata");
+
+      for (const section of [LISTING_SECTION, PRIVACY_SECTION, ...Object.values(STORE_SECTIONS)]) {
+        expect(first.snippet).toContain(`\n${section}\n`);
+      }
+
+      for (const key of SUBSECTION_KEYS) expect(first.snippet).toContain(key.heading);
+      for (const key of BULLET_KEYS) expect(first.snippet).toContain(`- ${key.line}:`);
+
+      expect(first.snippet).toContain("### Permissions justification (chrome, edge): one `- <permission>: <reason>` bullet each");
+      expect(first.snippet).toContain("- License: (firefox)");
+      expect(first.snippet).not.toMatch(/\bnone\b|collects nothing|no data/i);
+      expect(first.snippet.length).toBeLessThan(3400);
+    }
+
+    expect(calls).toHaveLength(0);
+  });
+
+  it("921: still asks the public route for a query that only names a store", async () => {
+    respond(200, { query: "chrome web store review", results: [] });
+    await handler({ query: "chrome web store review" });
+
+    expect(calls).toHaveLength(1);
   });
 
   it("says no-match with a hint when nothing ranks", async () => {
