@@ -102,6 +102,7 @@ function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-dev-safari-signing-"));
   tmpDirs.push(dir);
   fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "package.json"), "{}");
   fs.writeFileSync(path.join(dir, "src", "manifest.json"), JSON.stringify({ name: "Leon", version: "0.1.0" }));
   fs.mkdirSync(path.join(dir, "dist", "safari-xcode", ".derived", "Build", "Products", "Release", "Leon.app"), { recursive: true });
 

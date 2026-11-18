@@ -11,6 +11,7 @@ import path from "node:path";
 import { chromePasteLines, type PasteLines } from "./chrome-paste-lines";
 import { withChromeVisibility } from "./chrome-visibility";
 import { chromeWebStoreHeld, chromeWebStoreHeldSentence, chromeWebStoreMdOf } from "./chromewebstore-md";
+import { storeMdPath } from "./session-paths";
 import { STORE_MD_FILENAME } from "./store-md";
 import { STORE_FIELDS, listingForStore, parseStoreMdListing, type ListingField, type ListingStore, type StoreMdPrivacy, type UnreadLine } from "./store-md-listing";
 import { storeMdOverLimitOf, type StoreMdOverLimit } from "./store-md-over-limit";
@@ -57,7 +58,7 @@ export function localListingOf(
   store: ListingStore,
   screenshots?: ListingImage[],
 ): LocalListing | { problem: string } {
-  const file = path.join(project.projectPath, STORE_MD_FILENAME);
+  const file = storeMdPath(project.projectPath);
   const content = project.storeMd;
 
   if (content === null) {

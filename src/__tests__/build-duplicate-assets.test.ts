@@ -36,6 +36,7 @@ function project(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-build-dupes-"));
   tmpDirs.push(dir);
   fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "package.json"), "{}");
   fs.writeFileSync(path.join(dir, "src", "manifest.json"), JSON.stringify({ manifest_version: 3, name: "Fixture", version: "1.0.0" }));
 
   return dir;

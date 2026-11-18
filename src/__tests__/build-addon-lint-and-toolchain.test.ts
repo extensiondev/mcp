@@ -26,6 +26,7 @@ vi.mock("../lib/exec", async (importOriginal) => {
 });
 
 const build = await import("../tools/build");
+const analyze = await import("../tools/analyze");
 const { buildCliAnswer, browserFromCliArgs, writeEngineDist } = await import("./fixtures/engine-answers");
 
 const tmpDirs: string[] = [];
@@ -33,8 +34,21 @@ const tmpDirs: string[] = [];
 function project(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-build-lint-"));
   tmpDirs.push(dir);
+  fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: "fixture", private: true }));
+  srcManifest(dir);
+
+  return dir;
+}
+
+function srcManifest(dir: string): void {
   fs.mkdirSync(path.join(dir, "src"), { recursive: true });
   fs.writeFileSync(path.join(dir, "src", "manifest.json"), JSON.stringify({ manifest_version: 3, name: "Fixture", version: "1.0.0" }));
+}
+
+function bareSrcProject(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-build-bare-"));
+  tmpDirs.push(dir);
+  srcManifest(dir);
 
   return dir;
 }
@@ -264,5 +278,62 @@ describe("916: a build answer says each review risk once and stays light", () =>
     fs.writeFileSync(path.join(dir, "src", "images", "logo.png"), Buffer.concat([Buffer.from("89504e470d0a1a0a0000000d49484452", "hex"), Buffer.from([0, 0, 0, 128, 0, 0, 0, 128, 8, 6, 0, 0, 0])]));
 
     expect(await fixOf()).toBe('images/logo.png under the manifest\'s folder is 128x128: add "icons": { "128": "images/logo.png" } to the manifest and build again.');
+  });
+});
+
+describe("925: one project root an answer, the folder the engine built from", () => {
+  it("answers a src manifest with no package.json from the manifest's folder: dist, the zip, the STORE.md line and value.projectRoot agree, in one line", async () => {
+    const dir = bareSrcProject();
+    const root = path.join(dir, "src");
+
+    const text = await build.handler({ projectPath: dir, browser: "chrome" });
+    const result = JSON.parse(text);
+    const rootLines = result.warnings.filter((w: string) => w.startsWith("Project root:"));
+
+    expect(result.ok).toBe(true);
+    expect(result.value.projectRoot).toBe(root);
+    expect(result.value.outputPath).toBe(path.join(root, "dist", "chrome"));
+    expect(fs.existsSync(path.join(root, "dist", "chrome", "manifest.json"))).toBe(true);
+    expect(fs.existsSync(path.join(dir, "dist"))).toBe(false);
+    expect(result.warnings.find((w: string) => w.includes("STORE.md is in"))).toContain(`No STORE.md is in ${root}.`);
+    expect(rootLines).toHaveLength(1);
+    expect(rootLines[0]).toContain(root);
+    expect(rootLines[0]).toContain("conventional layout");
+    expect(rootLines[0]).not.toMatch(/\b(add|create|move)\b/i);
+    expect(result.hint).toContain(`The production build is in ${path.join(root, "dist", "chrome")}.`);
+    expect(text.split(JSON.stringify(dir).slice(1, -1)).join("/work").length).toBeLessThanOrEqual(2_300);
+  });
+
+  it("lets extension_analyze read that build from the projectPath the build was given, with the same root line and STORE.md folder", async () => {
+    const dir = bareSrcProject();
+    const root = path.join(dir, "src");
+    await build.handler({ projectPath: dir, browser: "chrome" });
+
+    const analyzed = JSON.parse(await analyze.handler({ projectPath: dir, browser: "chrome" }));
+
+    expect(analyzed.ok).toBe(true);
+    expect(analyzed.value.projectRoot).toBe(root);
+    expect(analyzed.warnings.filter((w: string) => w.startsWith("Project root:"))).toHaveLength(1);
+    expect(analyzed.warnings.find((w: string) => w.includes("STORE.md is in"))).toContain(`No STORE.md is in ${root}.`);
+  });
+
+  it("reads a STORE.md already beside src and asks for no second one", async () => {
+    const dir = bareSrcProject();
+    fs.writeFileSync(path.join(dir, "STORE.md"), "## Chrome Web Store\n");
+
+    const result = JSON.parse(await build.handler({ projectPath: dir, browser: "chrome" }));
+
+    expect(result.warnings.filter((w: string) => w.includes("No STORE.md"))).toEqual([]);
+  });
+
+  it("names no root and adds no line when a package.json sits beside src, the conventional layout", async () => {
+    const dir = project();
+
+    const result = JSON.parse(await build.handler({ projectPath: dir, browser: "chrome" }));
+
+    expect(result.value).not.toHaveProperty("projectRoot");
+    expect(result.value.outputPath).toBe(path.join(dir, "dist", "chrome"));
+    expect(result.warnings.filter((w: string) => w.startsWith("Project root:"))).toEqual([]);
+    expect(result.warnings.find((w: string) => w.includes("STORE.md is in"))).toContain(`No STORE.md is in ${dir}.`);
   });
 });

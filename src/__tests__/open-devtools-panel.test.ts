@@ -133,6 +133,7 @@ function project(options: { devtools?: boolean; browser?: string } = {}): { dir:
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-open-devtools-"));
   dirs.push(dir);
   fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "package.json"), "{}");
   const manifest: Record<string, unknown> = {
     manifest_version: 3,
     name: "F",

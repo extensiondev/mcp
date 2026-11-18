@@ -136,6 +136,7 @@ afterEach(() => {
 function chromeProject(manifest: Record<string, unknown>): { dir: string; id: string } {
   const dir = tmpDir("mcp-unreadable-");
   fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "package.json"), "{}");
   fs.writeFileSync(path.join(dir, "src", "manifest.json"), JSON.stringify(manifest));
   const distPath = path.join(dir, "dist", "chrome");
   fs.mkdirSync(distPath, { recursive: true });

@@ -11,6 +11,8 @@ import path from "node:path";
 
 import * as bridge from "extension-develop/bridge";
 
+import { STORE_MD_FILENAME } from "./store-md";
+
 const PROJECT_MANIFEST_FILENAMES = ["package.json", "deno.jsonc", "deno.json"];
 const PACKAGE_MANIFEST = "package.json";
 const DENO_MANIFESTS = ["deno.jsonc", "deno.json"];
@@ -123,7 +125,41 @@ export function engineProjectRoot(projectPath: string): string {
   const deno = nearestAbove(manifestDir, DENO_MANIFESTS);
   if (deno && ownsManifest(deno, manifest)) return path.dirname(deno);
 
-  return start;
+  return manifestDir;
+}
+
+/* @invariant ONE PROJECT ROOT AN ANSWER, THE ENGINE'S. With no package.json
+ * or deno.json that owns the manifest the engine builds from the manifest's
+ * own folder, so a project that is src/manifest.json alone gets src/dist,
+ * its zips and its session state under src/. This server took the folder it
+ * was passed as the root there, so one build answer reported dist in src/
+ * and looked for STORE.md in the folder above, and extension_analyze on the
+ * same projectPath found no dist (ledger 925). engineProjectRoot is the
+ * engine's root in every layout, every dist, session and STORE.md path is
+ * read from it, and an answer whose root is not the folder it was passed
+ * says so once and names the conventional layout without asking for it. */
+export function projectRootNote(projectPath: string): string | null {
+  const start = path.resolve(projectPath);
+  const root = engineProjectRoot(start);
+  if (root === start) return null;
+
+  if (root === path.join(start, "src")) {
+    return `Project root: ${root}. src/manifest.json has no package.json that owns it, so the engine builds from the manifest's folder, and dist, zips and ${STORE_MD_FILENAME} live there. With a package.json beside src/ (the conventional layout) the root is the folder above.`;
+  }
+
+  return `Project root: ${root}, the folder of the package.json or deno.json that owns this manifest; dist, zips and ${STORE_MD_FILENAME} live there.`;
+}
+
+export function statedProjectRoot(projectPath: string): { root: string; note: string } | null {
+  const note = projectRootNote(projectPath);
+
+  return note ? { root: engineProjectRoot(projectPath), note } : null;
+}
+
+export function storeMdPath(projectPath: string): string {
+  const passed = path.join(projectPath, STORE_MD_FILENAME);
+
+  return isFile(passed) ? passed : path.join(engineProjectRoot(projectPath), STORE_MD_FILENAME);
 }
 
 export function sourceManifestPath(projectPath: string): string | null {

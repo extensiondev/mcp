@@ -7,7 +7,7 @@ import { engineProjectRoot } from "../../lib/session-paths";
 type Body = Record<string, unknown>;
 
 export function writeEngineDist(projectPath: string, browser: string): string {
-  const distDir = path.join(projectPath, "dist", browser);
+  const distDir = path.join(engineProjectRoot(projectPath), "dist", browser);
   const manifest = path.join(distDir, "manifest.json");
   if (fs.existsSync(manifest)) {
     const now = new Date();

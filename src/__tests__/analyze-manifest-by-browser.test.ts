@@ -29,6 +29,7 @@ function project(source: Record<string, unknown>): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-analyze-by-browser-"));
   dirs.push(dir);
   fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "package.json"), "{}");
   fs.writeFileSync(path.join(dir, "src", "manifest.json"), JSON.stringify(source));
 
   return dir;

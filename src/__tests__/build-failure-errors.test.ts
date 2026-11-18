@@ -51,6 +51,7 @@ function project(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-build-errors-"));
   dirs.push(dir);
   fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "package.json"), "{}");
   fs.writeFileSync(
     path.join(dir, "src", "manifest.json"),
     JSON.stringify({ manifest_version: 3, name: "F", version: "1.0.0" }),

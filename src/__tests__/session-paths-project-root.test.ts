@@ -8,6 +8,7 @@ import * as bridge from "extension-develop/bridge";
 import {
   engineProjectRoot,
   ownsManifest,
+  projectRootNote,
   readyContractPath,
   logsPath,
   sessionArtifactsRootDir,
@@ -75,6 +76,29 @@ describe("a package root is adopted only when it owns the manifest, as the engin
     expect(engineProjectRoot(inner)).toBe(inner);
     expect(readyContractPath(inner, "chrome")).toBe(bridge.readyContractPath(inner, "chrome"));
     expect(ownsManifest(path.join(stranger, "package.json"), path.join(inner, "manifest.json"))).toBe(false);
+  });
+
+  it("925: makes the manifest's folder the root of a src layout with no package.json, where the engine writes dist", () => {
+    const bare = tmp();
+    const src = manifestAt(bare, "src");
+
+    expect(engineProjectRoot(bare)).toBe(src);
+    expect(engineProjectRoot(src)).toBe(src);
+    expect(fs.realpathSync(engineProjectRoot(bare))).toBe(fs.realpathSync(bridge.resolveSessionProjectRoot(bare)));
+    expect(readyContractPath(bare, "chrome")).toBe(bridge.readyContractPath(src, "chrome"));
+    expect(projectRootNote(bare)).toBe(
+      `Project root: ${src}. src/manifest.json has no package.json that owns it, so the engine builds from the manifest's folder, and dist, zips and STORE.md live there. With a package.json beside src/ (the conventional layout) the root is the folder above.`,
+    );
+  });
+
+  it("925: says nothing about the root when it is the folder passed, and names a package root above it in a short line", () => {
+    const repo = tmp();
+    fs.writeFileSync(path.join(repo, "package.json"), JSON.stringify({ name: "plain" }));
+    const src = manifestAt(repo, "src");
+
+    expect(projectRootNote(repo)).toBeNull();
+    expect(projectRootNote(src)).toBe(`Project root: ${repo}, the folder of the package.json or deno.json that owns this manifest; dist, zips and STORE.md live there.`);
+    expect(projectRootNote(manifestAt(tmp()))).toBeNull();
   });
 
   it("keeps the documented src layout on the package root whatever the package declares", () => {

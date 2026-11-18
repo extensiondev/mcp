@@ -101,6 +101,7 @@ describe("codesign output is read into one identity", () => {
 
   it("falls back to the engine's layout under dist/<browser>-xcode with the manifest name sanitized the engine's way", () => {
     fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "package.json"), "{}");
     fs.writeFileSync(path.join(dir, "src", "manifest.json"), JSON.stringify({ name: "Leon: blur/faces" }));
 
     expect(safariAppPath(dir, "safari", {})).toBe(

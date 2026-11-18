@@ -327,6 +327,7 @@ describe("background-worker-booted", () => {
   it("is inconclusive on a worker the dev build injected for a project that declares no background", async () => {
     writeManifest({ background: { service_worker: "background/service_worker.js" } });
     fs.mkdirSync(path.join(project, "src"), { recursive: true });
+    fs.writeFileSync(path.join(project, "package.json"), "{}");
     fs.writeFileSync(path.join(project, "src", "manifest.json"), JSON.stringify({ name: "x", action: { default_popup: "popup.html" } }));
     liveSession();
     live.targets = [{ id: "sw", type: "service_worker", url: `chrome-extension://${GUEST_ID}/background/service_worker.js` }];

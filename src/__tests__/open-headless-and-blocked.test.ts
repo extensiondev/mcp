@@ -115,6 +115,7 @@ function project(browser = "chrome"): { dir: string; id: string } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-open-headless-"));
   dirs.push(dir);
   fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "package.json"), "{}");
   const manifest =
     browser === "firefox"
       ? {

@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { kernelHook } from "./kernel-hooks";
+import { storeMdPath } from "./session-paths";
 import { STORE_MD_FILENAME } from "./store-md";
 import { bulletLine, storeOwnLinesBody } from "./store-md-bullets";
 import { classifyStore } from "./store-md-listing";
@@ -81,7 +82,7 @@ function storeMdChannelOf(projectPath: string): AmoChannel | null {
   if (!projectPath.trim()) return null;
 
   try {
-    return storeMdFirefoxChannel(fs.readFileSync(path.join(projectPath, STORE_MD_FILENAME), "utf8"));
+    return storeMdFirefoxChannel(fs.readFileSync(storeMdPath(projectPath), "utf8"));
   } catch {
     return null;
   }

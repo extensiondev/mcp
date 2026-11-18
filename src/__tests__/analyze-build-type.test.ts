@@ -14,6 +14,7 @@ function project(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-analyze-build-type-"));
   dirs.push(dir);
   fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "package.json"), "{}");
   fs.writeFileSync(path.join(dir, "src", "manifest.json"), JSON.stringify(MANIFEST));
 
   return dir;

@@ -23,6 +23,8 @@ import {
   sessionPathHint,
   engineProjectRoot,
   sourceManifestPath,
+  statedProjectRoot,
+  storeMdPath,
 } from "../lib/session-paths";
 import { type Envelope, envelope, isEnvelope } from "../lib/envelope";
 import { platformListed } from "../lib/tool-policy";
@@ -1073,6 +1075,8 @@ export async function handler(args: {
         })
       : null;
 
+    const stated = statedProjectRoot(args.projectPath);
+
     const answerPointsAtOutput =
       !engineSummary || zipNotes.length > 0 || buildWarningsTruncated !== undefined || Boolean(safariIdentityMissingNote);
 
@@ -1085,6 +1089,7 @@ export async function handler(args: {
         mode,
         ...(safariIdentity ? { safariApp: safariIdentity } : {}),
         ...(signingFrame ? { signing: signingFrame.signing } : {}),
+        ...(stated ? { projectRoot: stated.root } : {}),
         outputPath: distDir,
         ...(typeof engineSummary?.total_bytes === "number"
           ? { totalBytes: engineSummary.total_bytes }
@@ -1116,6 +1121,7 @@ export async function handler(args: {
         ...(args.silent || !answerPointsAtOutput ? {} : { output: lastLines(out, 12) }),
       },
       warnings: [
+        stated?.note,
         ...warnings,
         ...(preflight?.warnings ?? []).filter(
           (line) =>
@@ -1126,7 +1132,7 @@ export async function handler(args: {
         ...droppedPages.map((page) => page.say),
         ...shownBuildWarnings,
         ...reviewRiskPointer(risks),
-        mode === "development" ? null : storeMdLine(engineProjectRoot(args.projectPath), risks),
+        mode === "development" ? null : storeMdLine(path.dirname(storeMdPath(args.projectPath)), risks),
         ...reviewCoverageNotes(review),
         ...zipNotes,
         ...duplicates.map(duplicateAssetSentence),

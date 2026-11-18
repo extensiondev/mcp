@@ -14,7 +14,7 @@ import { envelope } from "../lib/envelope";
 import { engineBrowserName } from "../lib/browser-family";
 import { readBuildType } from "../lib/build-type";
 import { reviewCoverageNotes, reviewRiskWarnings, reviewRisksReport, storeMdLine } from "../lib/store-review";
-import { engineProjectRoot, sourceManifestPath } from "../lib/session-paths";
+import { engineProjectRoot, sourceManifestPath, statedProjectRoot, storeMdPath } from "../lib/session-paths";
 import { specialFolderEntrypoints, specialFolderSettings } from "../lib/special-folder-entries";
 import { manifestByBrowser } from "../lib/manifest-by-browser";
 import { duplicateAssetSentence, duplicateOf, findDuplicateAssets } from "../lib/duplicate-assets";
@@ -279,8 +279,11 @@ export async function handler(args: {
   const review = development ? null : reviewRisksReport({ distPath, browser, manifest, files, development, sourceManifest: sourceManifestPath(args.projectPath) });
   const risks = review?.risks ?? null;
 
+  const stated = statedProjectRoot(args.projectPath);
+
   const result = {
     browser,
+    ...(stated ? { projectRoot: stated.root } : {}),
     distPath,
     reviewRisks: risks,
     reviewCoverage: review ? { unreadable: review.unreadable, notScanned: review.notScanned } : null,
@@ -366,8 +369,9 @@ export async function handler(args: {
     value: result,
     ...(devSentence ? { hint: devSentence } : {}),
     warnings: [
+      stated?.note,
       ...(risks ? reviewRiskWarnings(risks) : []),
-      risks ? storeMdLine(engineProjectRoot(args.projectPath), risks) : null,
+      risks ? storeMdLine(path.dirname(storeMdPath(args.projectPath)), risks) : null,
       ...(review ? reviewCoverageNotes(review) : []),
       ...sizeWarnings,
       ...duplicates.map(duplicateAssetSentence),

@@ -53,6 +53,7 @@ const OPENS_THE_PANEL = [
 function project(manifestKeys: Record<string, unknown>, background = OPENS_THE_PANEL): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-dropped-page-"));
   tmpDirs.push(dir);
+  write(dir, "package.json", "{}");
   write(dir, "src/manifest.json", JSON.stringify({
     "chromium:manifest_version": 3,
     "firefox:manifest_version": 2,

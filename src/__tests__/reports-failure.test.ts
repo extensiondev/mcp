@@ -217,6 +217,7 @@ describe("build reports failure when the artifact is unusable", () => {
   ): string {
     const dir = tmpProject();
     fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "package.json"), "{}");
     fs.writeFileSync(
       path.join(dir, "src", "manifest.json"),
       JSON.stringify(manifest),
@@ -545,6 +546,7 @@ describe("swarm-found lies stay fixed", () => {
   ): string {
     const dir = tmpProject();
     fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "package.json"), "{}");
     fs.writeFileSync(
       path.join(dir, "src", "manifest.json"),
       JSON.stringify(manifest),
@@ -631,6 +633,7 @@ describe("swarm-found lies stay fixed", () => {
   it("build's completeness contract covers every declared surface", async () => {
     const dir = tmpProject();
     fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "package.json"), "{}");
     fs.writeFileSync(
       path.join(dir, "src", "manifest.json"),
       JSON.stringify({ manifest_version: 3, name: "F", version: "1.0.0" }),
@@ -667,6 +670,7 @@ describe("manifest_validate verdicts are always explainable", () => {
     const manifestValidate = await import("../tools/manifest-validate");
     const dir = tmpProject();
     fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "package.json"), "{}");
     fs.writeFileSync(
       path.join(dir, "src", "manifest.json"),
       JSON.stringify({
@@ -692,6 +696,7 @@ describe("manifest_validate verdicts are always explainable", () => {
     const manifestValidate = await import("../tools/manifest-validate");
     const dir = tmpProject();
     fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "package.json"), "{}");
     fs.writeFileSync(
       path.join(dir, "src", "manifest.json"),
       JSON.stringify({
@@ -721,6 +726,7 @@ describe("manifest_validate verdicts are always explainable", () => {
     const manifestValidate = await import("../tools/manifest-validate");
     const dir = tmpProject();
     fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "package.json"), "{}");
     fs.writeFileSync(
       path.join(dir, "src", "manifest.json"),
       JSON.stringify({
@@ -793,6 +799,7 @@ describe("build reports what the production artifact lost", () => {
   it("flags dropped permissions and stripped web_accessible_resources", async () => {
     const dir = tmpProject();
     fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "package.json"), "{}");
     fs.writeFileSync(
       path.join(dir, "src", "manifest.json"),
       JSON.stringify({
@@ -854,6 +861,7 @@ describe("wave-2 swarm lies stay fixed", () => {
     const manifestValidate = await import("../tools/manifest-validate");
     const dir = tmpProject();
     fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "package.json"), "{}");
     fs.writeFileSync(
       path.join(dir, "src", "manifest.json"),
       JSON.stringify({

@@ -173,6 +173,7 @@ function project(): { dir: string; id: string; url: string } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-open-gesture-"));
   tmpDirs.push(dir);
   fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "package.json"), "{}");
   fs.writeFileSync(
     path.join(dir, "src", "manifest.json"),
     JSON.stringify({

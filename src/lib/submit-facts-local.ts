@@ -23,7 +23,7 @@ import {
   storeMdAt,
   toolchainFactsOf,
 } from "./store-facts-local";
-import { STORE_MD_FILENAME } from "./store-md";
+import { storeMdPath } from "./session-paths";
 import { LISTING_STORES, type ListingStore } from "./store-md-declarations";
 import { emptyProjectFacts, type ProjectFacts, type StoreMdRead, type SubmitFacts } from "./submit-facts";
 import { localListingOf } from "./store-listing-local";
@@ -63,7 +63,7 @@ function readProjectFacts(args: SubmitFactsArgs, action: string): ProjectFacts {
   const asked = askedOf(args);
   const stores = [...new Set([...STORES, ...browsersOf(args), ...asked])];
   const exists = fs.existsSync(projectPath);
-  const storeMd = readText(path.join(projectPath, STORE_MD_FILENAME));
+  const storeMd = readText(storeMdPath(projectPath));
   const preflight = action === "preflight";
   const listing = action === "sync-listing" ? listingStoresOf(asked) : null;
 
@@ -86,7 +86,7 @@ function readProjectFacts(args: SubmitFactsArgs, action: string): ProjectFacts {
 
 export function readSubmitFacts(args: SubmitFactsArgs): SubmitFacts {
   const action = args.action === undefined ? "submit" : args.action;
-  const warningsStoreMd = action === "submit" ? storeMdAt(String(args.projectPath || "").trim() || process.cwd()) : UNREAD;
+  const warningsStoreMd = action === "submit" ? storeMdAt(path.dirname(storeMdPath(String(args.projectPath || "").trim() || process.cwd()))) : UNREAD;
 
   return { project: readProjectFacts(args, action), warningsStoreMd };
 }
@@ -95,7 +95,7 @@ export function readLocalListing(projectPath: string, store: ListingStore, scree
   return localListingOf(
     {
       projectPath,
-      storeMd: readText(path.join(projectPath, STORE_MD_FILENAME)),
+      storeMd: readText(storeMdPath(projectPath)),
       chromeWebStoreMd: chromeWebStoreMdText(projectPath),
       icons: { [store]: localIcon(projectPath, store) },
     },
