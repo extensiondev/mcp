@@ -108,6 +108,36 @@ describe("the forwarder", () => {
     expect(lane()).toHaveLength(1);
   });
 
+  it("926: sends the lane where STORE.md was read as a path under the label, and reads a lane answer that names it back as the file on this machine", async () => {
+    const bare = path.join(tmp, "bare");
+    const repo = path.join(tmp, "repo");
+    fs.mkdirSync(path.join(bare, "src"), { recursive: true });
+    fs.mkdirSync(path.join(repo, "src"), { recursive: true });
+    fs.writeFileSync(path.join(bare, "src", "manifest.json"), JSON.stringify({ manifest_version: 3, name: "x", version: "1.0.0" }));
+    fs.writeFileSync(path.join(bare, "src", "STORE.md"), "# Store\n\n## Listing\n\n- Summary: hello\n");
+    fs.writeFileSync(path.join(repo, "package.json"), JSON.stringify({ name: "plain" }));
+    fs.writeFileSync(path.join(repo, "src", "manifest.json"), JSON.stringify({ manifest_version: 3, name: "x", version: "1.0.0" }));
+    fs.writeFileSync(path.join(repo, "STORE.md"), "# Store\n\n## Listing\n\n- Summary: hello\n");
+    const answer = (file: string) => JSON.parse(envelopeOf({ ok: true, command: "extension_submit_check", status: "preflight-read", value: { file }, hint: `Read ${file}. Then go on.` }));
+    const { lane } = stubLane([answer("{projectPath}/src/STORE.md"), answer("{projectPath}/../STORE.md"), answer("{projectPath}/STORE.md")]);
+    const ask = async (projectPath: string) => JSON.parse(await forwardCall("extension_submit_check", { action: "preflight", browsers: ["chrome"], projectPath }, async () => "local", FORWARDING));
+    const inSrc = await ask(bare);
+    const above = await ask(path.join(repo, "src"));
+    const beside = await ask(repo);
+    const sent = lane().map((hit) => hit.body.args.local.facts.project);
+
+    expect(sent.map((project) => [project.projectPath, project.storeMdFile, project.storeMd === null])).toEqual([
+      ["{projectPath}", "src/STORE.md", false],
+      ["{projectPath}", "../STORE.md", false],
+      ["{projectPath}", "STORE.md", false],
+    ]);
+
+    expect(inSrc).toMatchObject({ value: { file: path.join(bare, "src", "STORE.md") }, hint: `Read ${path.join(bare, "src", "STORE.md")}. Then go on.` });
+    expect(above).toMatchObject({ value: { file: path.join(repo, "STORE.md") }, hint: `Read ${path.join(repo, "STORE.md")}. Then go on.` });
+    expect(beside).toMatchObject({ value: { file: path.join(repo, "STORE.md") } });
+    expect(JSON.stringify(lane().map((hit) => hit.body))).not.toContain(tmp);
+  });
+
   it("retries a lane that did not answer, and a refused cached credential, with the same key", async () => {
     const denied = { ok: false, status: "auth-refused", error: { code: "E_AUTH_DENIED", message: "Refused." } };
     const { lane } = stubLane([new Error("socket hang up"), LISTED, denied, LISTED]);

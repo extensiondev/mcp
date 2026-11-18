@@ -11,12 +11,11 @@ import path from "node:path";
 import { chromePasteLines, type PasteLines } from "./chrome-paste-lines";
 import { withChromeVisibility } from "./chrome-visibility";
 import { chromeWebStoreHeld, chromeWebStoreHeldSentence, chromeWebStoreMdOf } from "./chromewebstore-md";
-import { storeMdPath } from "./session-paths";
 import { STORE_MD_FILENAME } from "./store-md";
 import { STORE_FIELDS, listingForStore, parseStoreMdListing, type ListingField, type ListingStore, type StoreMdPrivacy, type UnreadLine } from "./store-md-listing";
 import { storeMdOverLimitOf, type StoreMdOverLimit } from "./store-md-over-limit";
 import { screenshotsLineSentence } from "./store-md-screenshots";
-import { factOf, type IconOrigin, type IconStale, type LocalIcon, type ProjectFacts } from "./submit-facts";
+import { factOf, storeMdFileOf, type IconOrigin, type IconStale, type LocalIcon, type ProjectFacts } from "./submit-facts";
 
 import type { CategoryRead } from "./store-categories";
 import type { ListingImage, ListingPatch } from "./store-listing-media";
@@ -49,7 +48,7 @@ export interface LocalListing {
 
 export type LocalListingRead = LocalListing | { problem: string } | null;
 
-export type ListingFacts = Pick<ProjectFacts, "projectPath" | "storeMd" | "chromeWebStoreMd" | "icons">;
+export type ListingFacts = Pick<ProjectFacts, "projectPath" | "storeMdFile" | "storeMd" | "chromeWebStoreMd" | "icons">;
 
 const NO_ICON_READ: LocalIcon = { missing: "no manifest.json in the project" };
 
@@ -58,7 +57,7 @@ export function localListingOf(
   store: ListingStore,
   screenshots?: ListingImage[],
 ): LocalListing | { problem: string } {
-  const file = storeMdPath(project.projectPath);
+  const file = storeMdFileOf(project);
   const content = project.storeMd;
 
   if (content === null) {

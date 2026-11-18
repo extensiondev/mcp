@@ -6,6 +6,10 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import path from "node:path";
+
+import { STORE_MD_FILENAME } from "./store-md";
+
 import type { FirefoxManifestRead } from "./firefox-enterprise";
 import type { PngHeader } from "./png-flat";
 import type { CodeFacts } from "./store-code-facts";
@@ -92,6 +96,7 @@ export interface ProjectFacts {
   projectPath: string;
   exists: boolean;
   storeMd: string | null;
+  storeMdFile?: string;
   chromeWebStoreMd: string | null;
   gitHead: string;
   icons: Record<string, LocalIcon>;
@@ -125,6 +130,23 @@ export function emptyProjectFacts(projectPath = ""): ProjectFacts {
     draft: null,
     shots: null,
   };
+}
+
+/* @invariant ONE PLACE SAYS WHICH FILE STORE.md IS. The local half finds the
+ * file on disk (the folder passed first, then the engine's root) and sends
+ * where it sits as storeMdFile, a path relative to projectPath with forward
+ * slashes. The hosted half holds projectPath as a label and no disk, so it
+ * names the file from that fact; a forwarder that sends none, or anything
+ * that is not a relative path ending in STORE.md, reads as STORE.md beside
+ * projectPath.
+ */
+export function storeMdFileOf(project: Pick<ProjectFacts, "projectPath" | "storeMdFile">): string {
+  const sent = typeof project.storeMdFile === "string" ? project.storeMdFile : "";
+  const relative = sent && !path.posix.isAbsolute(sent) && !path.win32.isAbsolute(sent) && path.posix.basename(sent) === STORE_MD_FILENAME ? sent : STORE_MD_FILENAME;
+
+  if (path.isAbsolute(project.projectPath)) return path.join(project.projectPath, ...relative.split("/"));
+
+  return project.projectPath ? `${project.projectPath}/${relative}` : relative;
 }
 
 export function factOf<T>(record: Record<string, T>, key: string): T | undefined {

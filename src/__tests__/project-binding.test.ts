@@ -18,6 +18,7 @@ import { clientDirs, setClientRoots } from "../lib/client-roots";
 import { resolveCredential } from "../lib/credential-source";
 import { credentialKey, credentialsPath, writeCredentials } from "../lib/credentials";
 import { okOrRefusal, reframed } from "../lib/envelope";
+import { storeMdFileOf } from "../lib/submit-facts";
 import { loginForPath, pathIdentity } from "../lib/path-project";
 import { PLATFORM_KERNEL_HOOKS, installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
 import { forwardable } from "../lib/hosted-forwarder";
@@ -363,6 +364,21 @@ describe("ledger 252: with several logins stored, an unpinned platform call neve
     expect(kernel.createToolDispatcher).toBe(createToolDispatcher);
     expect(kernel.reframed).toBe(reframed);
     expect(kernel.okOrRefusal).toBe(okOrRefusal);
+
+    expect(kernel.storeMdFileOf).toBe(storeMdFileOf);
+    expect(kernel.storeMdFileOf({ projectPath: "{projectPath}", storeMdFile: "src/STORE.md" })).toBe("{projectPath}/src/STORE.md");
+    expect(kernel.storeMdFileOf({ projectPath: "{projectPath}", storeMdFile: "../STORE.md" })).toBe("{projectPath}/../STORE.md");
+    expect(kernel.storeMdFileOf({ projectPath: "{projectPath}" })).toBe("{projectPath}/STORE.md");
+    expect(kernel.storeMdFileOf({ projectPath: dir, storeMdFile: "../STORE.md" })).toBe(path.join(tmp, "STORE.md"));
+
+    for (const storeMdFile of ["/etc/STORE.md", "C:\\Users\\x\\STORE.md", "src/notes.md", "", 7 as unknown as string]) {
+      expect(kernel.storeMdFileOf({ projectPath: "{projectPath}", storeMdFile })).toBe("{projectPath}/STORE.md");
+    }
+
+    const labeled = kernel.localListingOf({ projectPath: "{projectPath}", storeMdFile: "src/STORE.md", storeMd: "# Store\n\n## Listing\n\n- Summary: hello\n", chromeWebStoreMd: null, icons: {} }, "chrome");
+
+    expect("file" in labeled && labeled.file).toBe("{projectPath}/src/STORE.md");
+    expect(kernel.localListingOf({ projectPath: "{projectPath}", storeMdFile: "src/STORE.md", storeMd: null, chromeWebStoreMd: null, icons: {} }, "chrome")).toMatchObject({ problem: expect.stringMatching(/^No STORE\.md at \{projectPath\}\/src\/STORE\.md\. /) });
 
     const parsed: kernel.ParsedFrame = { ok: false, command: "extension_release_status", status: "status-unavailable", error: null };
 

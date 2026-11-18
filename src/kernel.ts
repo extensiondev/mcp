@@ -116,7 +116,7 @@ export { CREDENTIAL_LABELS, SAFARI_RELEASE_LINE_SENTENCE, STORE_SETTINGS_ACTION,
 export type { StoreSettingsStore } from "./lib/store-settings";
 export { STORE_LABELS as STORE_TEXT_LIMIT_LABELS } from "./lib/store-text-limits";
 export { SUBMIT_ACTION_SAFETY, SUBMIT_CHECK_ACTIONS, SUBMIT_CHECK_TOOL, answeredAs, checkRefused, plainListingAsk, plainSettingAsk, submitCheckRefused } from "./lib/submit-action-safety";
-export { factOf, staleSentence } from "./lib/submit-facts";
+export { factOf, staleSentence, storeMdFileOf } from "./lib/submit-facts";
 export type { DraftFacts, GalleryFacts, IconOrigin, IconPick, IconStale, LocalIcon, ProjectFacts, SafariDescriptionRead, StoreMdRead, SubmitFacts } from "./lib/submit-facts";
 export { trackFields, trackUrl } from "./lib/track-url";
 export type { InputIssue } from "./lib/validate-input";

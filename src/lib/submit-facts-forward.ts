@@ -12,10 +12,9 @@ import { openProjectApi, projectApiSend, type ProjectApi } from "./project-api";
 import { IMAGE_BYTES_NOT_SENT } from "./listing-image-stage";
 import { isRow, text } from "./row";
 import { screenshotRefusal, type ListingImage, type StageRead } from "./store-listing-media";
-import { STORE_MD_FILENAME } from "./store-md";
 import { LISTING_STORES, type ListingStore } from "./store-md-declarations";
-import { factOf, type SubmitFacts } from "./submit-facts";
-import { readSubmitFacts, type SubmitFactsArgs } from "./submit-facts-local";
+import { factOf, storeMdFileOf, type SubmitFacts } from "./submit-facts";
+import { readSubmitFacts, storeMdFileFact, type SubmitFactsArgs } from "./submit-facts-local";
 
 type Kind = "icons" | "screenshots";
 
@@ -104,9 +103,10 @@ function withoutBytes(value: unknown): unknown {
  * uploaded from here straight to the platform's listing images door, with the
  * stored login, and each image crosses the lane as its digest, its size and
  * the door's own answer; an image the hosted half would refuse before staging
- * is not uploaded. The project root crosses as a label, and every lane answer
- * that names the label is read back with the real root, so a sentence still
- * names the file on this machine.
+ * is not uploaded. The project root crosses as a label, STORE.md crosses as
+ * where it was read relative to that root, and every lane answer that names
+ * the label is read back with the real root, so a sentence still names the
+ * file on this machine.
  */
 export async function forwardSubmitFacts(args: ForwardFactsArgs, staging: { wanted: WantedImage[]; stage?: StageImage } | null = null): Promise<SubmitFacts> {
   const facts = readSubmitFacts(args);
@@ -123,7 +123,7 @@ export async function forwardSubmitFacts(args: ForwardFactsArgs, staging: { want
 
   return {
     project: { ...sent.project, projectPath: sent.project.projectPath ? PROJECT_PATH_LABEL : "" },
-    warningsStoreMd: { ...sent.warningsStoreMd, file: sent.warningsStoreMd.file ? `${PROJECT_PATH_LABEL}/${STORE_MD_FILENAME}` : "" },
+    warningsStoreMd: { ...sent.warningsStoreMd, file: sent.warningsStoreMd.file ? storeMdFileOf({ projectPath: PROJECT_PATH_LABEL, storeMdFile: storeMdFileFact(text(args.projectPath) || process.cwd()) }) : "" },
   };
 }
 
@@ -137,7 +137,7 @@ export function labeledScreenshots(args: ForwardFactsArgs): unknown {
 export function withProjectRoot(value: unknown, projectPath: unknown): unknown {
   const root = text(projectPath) || process.cwd();
 
-  if (typeof value === "string") return value.replace(LABELED, (_all, tail: string) => root + tail.split("/").join(path.sep));
+  if (typeof value === "string") return value.replace(LABELED, (_all, tail: string) => (tail.includes("/../") ? path.normalize(root + tail) : root + tail.split("/").join(path.sep)));
   if (Array.isArray(value)) return value.map((entry) => withProjectRoot(entry, projectPath));
   if (isRow(value)) return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, withProjectRoot(entry, projectPath)]));
 

@@ -34,6 +34,10 @@ const STORES = ["chrome", "firefox", "edge", "safari"];
 const READ_ACTIONS = new Set(["submit", "preflight", "sync-listing"]);
 const UNREAD: StoreMdRead = { file: "", content: null };
 
+export function storeMdFileFact(projectPath: string): string {
+  return path.relative(path.resolve(projectPath), storeMdPath(projectPath)).split(path.sep).join("/");
+}
+
 export interface SubmitFactsArgs {
   action?: string;
   store?: string;
@@ -71,6 +75,7 @@ function readProjectFacts(args: SubmitFactsArgs, action: string): ProjectFacts {
     projectPath,
     exists,
     storeMd,
+    storeMdFile: storeMdFileFact(projectPath),
     chromeWebStoreMd: chromeWebStoreMdText(projectPath),
     gitHead: action === "submit" ? "" : gitHead(projectPath),
     icons: Object.fromEntries(stores.map((store) => [store, localIcon(projectPath, store as ListingStore)])),
@@ -94,7 +99,8 @@ export function readSubmitFacts(args: SubmitFactsArgs): SubmitFacts {
 export function readLocalListing(projectPath: string, store: ListingStore, screenshots?: ListingImage[]): ReturnType<typeof localListingOf> {
   return localListingOf(
     {
-      projectPath,
+      projectPath: path.resolve(projectPath),
+      storeMdFile: storeMdFileFact(projectPath),
       storeMd: readText(storeMdPath(projectPath)),
       chromeWebStoreMd: chromeWebStoreMdText(projectPath),
       icons: { [store]: localIcon(projectPath, store) },
