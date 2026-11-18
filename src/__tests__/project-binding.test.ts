@@ -19,7 +19,7 @@ import { resolveCredential } from "../lib/credential-source";
 import { credentialKey, credentialsPath, writeCredentials } from "../lib/credentials";
 import { okOrRefusal, reframed } from "../lib/envelope";
 import { storeMdFileOf } from "../lib/submit-facts";
-import { loginForPath, pathIdentity } from "../lib/path-project";
+import { loginForPath, pathIdentity, serverLogins } from "../lib/path-project";
 import { PLATFORM_KERNEL_HOOKS, installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
 import { forwardable } from "../lib/hosted-forwarder";
 import { createToolDispatcher, type ToolModule } from "../lib/tool-dispatch";
@@ -27,6 +27,7 @@ import * as builds from "../tools/builds";
 import * as releaseStatus from "../tools/release-status";
 import * as kernel from "../kernel";
 import * as submit from "../tools/submit";
+import { readIdentity } from "../tools/whoami";
 import { forwardOf, useForwardLane } from "./fixtures/forward-lane";
 
 installPlatformKernelHooks();
@@ -160,6 +161,109 @@ describe("a project directory names its project, by package name or GitHub origi
  * with and the project the lane is asked for are this server's binding, and
  * a call it cannot bind sends nothing: no exchange and no lane call.
  */
+describe("ledger 940: an expired login is no choice", () => {
+  const lane = useForwardLane();
+  const PAST = Math.floor(Date.now() / 1000) - 3 * 86_400;
+
+  function stored(logins: Array<{ slug: string; workspace?: string; expired?: boolean }>, active: string): void {
+    const file = credentialsPath();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const rows = logins.map((login) => ({ ...entry(login.slug), workspaceSlug: login.workspace ?? WORKSPACE, ...(login.expired ? { expiresAt: PAST } : {}) }));
+    const entries = Object.fromEntries(rows.map((row) => [credentialKey(row.workspaceSlug, row.projectSlug, API), row]));
+
+    fs.writeFileSync(file, JSON.stringify({ version: 2, active: credentialKey(WORKSPACE, active, API), entries }));
+  }
+
+  const identity = async () =>
+    JSON.parse(await readIdentity({ fetchImpl: (async () => new Response(JSON.stringify({ login: "cezaraugusto/leon", live: true }), { status: 200 })) as unknown as typeof fetch }, API));
+
+  for (const active of ["widget", "leon"]) {
+    it(`answers an unnamed call for the one live login when the ${active === "widget" ? "expired" : "live"} one is the store's newest`, async () => {
+      stored([{ slug: "widget", expired: true }, { slug: "leon" }], active);
+
+      expect(serverLogins(API)).toEqual({ live: ["cezaraugusto/leon"], kept: null, expired: ["cezaraugusto/widget"] });
+
+      const out = await call("extension_builds", { limit: 3, api: API });
+
+      expect(out.status).not.toBe("project-ambiguous");
+      expect(out.error?.code).not.toBe("E_AUTH_EXPIRED");
+      expect(out.value.answeredFor).toBe("cezaraugusto/leon");
+      expect(lane.exchanged()).toEqual(["Bearer leon.sig"]);
+      expect(resolveCredential({ api: API })).toMatchObject({ token: "leon.sig", ref: { project: "leon" }, expired: null });
+    });
+  }
+
+  it("lists only the live logins in the refusal and says the expired one is not a choice", async () => {
+    stored([{ slug: "widget", expired: true }, { slug: "rebeccat" }, { slug: "leon" }], "leon");
+
+    const out = await call("extension_builds", { limit: 3, api: API });
+
+    expect(out.error.code).toBe("E_PROJECT_AMBIGUOUS");
+    expect(out.error.message).toContain("holds 2 logins for this server (cezaraugusto/rebeccat, cezaraugusto/leon)");
+    expect(out.value.logins).toEqual(["cezaraugusto/rebeccat", "cezaraugusto/leon"]);
+    expect(out.hint).toContain("Pass project: one of 'cezaraugusto/rebeccat', 'cezaraugusto/leon'");
+    expect(out.hint).toContain("'cezaraugusto/widget' is stored too but has expired, so it is not a choice");
+    expect(lane.sentAnything()).toBe(false);
+  });
+
+  it("says the login expired, never ambiguity or no login, when every stored login has expired", async () => {
+    stored([{ slug: "widget", expired: true }, { slug: "leon", expired: true }], "leon");
+
+    const resolved = resolveCredential({ api: API });
+    const out = await call("extension_builds", { limit: 3, api: API });
+
+    expect(serverLogins(API)).toMatchObject({ live: [], expired: ["cezaraugusto/widget", "cezaraugusto/leon"] });
+    expect(resolved).toMatchObject({ token: "", expired: { project: "cezaraugusto/leon" } });
+    expect(out.ok).toBe(false);
+    expect(out.error.code).toBe("E_AUTH_EXPIRED");
+    expect(out.status).toBe("not-signed-in");
+    expect(out.value.login).toMatchObject({ project: "cezaraugusto/leon", sent: false, renew: { tool: "extension_auth", args: { action: "login", project: "cezaraugusto/leon" } } });
+    expect(out.error.message).toContain("The login for cezaraugusto/leon expired at");
+    expect(out.error.hint).toContain('Sign in again with extension_auth {action: "login", project: "cezaraugusto/leon"}');
+    expect(lane.exchanged()).toEqual([]);
+  });
+
+  it("keeps this server's default once it expires, and says so, where it would otherwise move to another project", async () => {
+    stored([{ slug: "leon" }], "leon");
+    expect(resolveCredential({ api: API }).ref).toMatchObject({ project: "leon" });
+
+    stored([{ slug: "leon", expired: true }, { slug: "rebeccat" }], "rebeccat");
+
+    expect(serverLogins(API)).toEqual({ live: ["cezaraugusto/rebeccat"], kept: "cezaraugusto/leon", expired: ["cezaraugusto/leon"] });
+    expect(resolveCredential({ api: API })).toMatchObject({ token: "", expired: { project: "cezaraugusto/leon" } });
+  });
+
+  it("binds a folder to the live login of its name when an expired login in another workspace has the same name", () => {
+    stored([{ slug: "rebeccat", workspace: "acme", expired: true }, { slug: "rebeccat" }], "rebeccat");
+
+    const dir = path.join(tmp, "plain");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: "rebeccat" }));
+
+    expect(loginForPath(dir, API)).toEqual({ state: "match", project: "cezaraugusto/rebeccat", via: "package.json name" });
+  });
+
+  it("whoami calls the one live login the default and marks the expired one, as the tools answer", async () => {
+    stored([{ slug: "widget", expired: true }, { slug: "leon" }], "widget");
+
+    const out = await identity();
+
+    expect(out.status).toBe("logged-in");
+    expect(out.value.projectSlug).toBe("leon");
+    expect(out.hint).toContain("2 logins are stored on this machine (cezaraugusto/widget (expired), cezaraugusto/leon); the one above is the default for token-scoped tools on");
+  });
+
+  it("whoami says a call has to name project when two live logins are stored and none is this server's default", async () => {
+    stored([{ slug: "widget", expired: true }, { slug: "rebeccat" }, { slug: "leon" }], "leon");
+
+    const out = await identity();
+
+    expect(out.hint).not.toContain("the one above is the default");
+    expect(out.hint).toContain("none of them is the default on http://localhost:3100: 2 are live there (cezaraugusto/rebeccat, cezaraugusto/leon), so a token-scoped tool has to name `project`");
+    expect((await call("extension_builds", { limit: 3, api: API })).error.code).toBe("E_PROJECT_AMBIGUOUS");
+  });
+});
+
 describe("ledger 252: with several logins stored, an unpinned platform call never answers for the newest", () => {
   const lane = useForwardLane();
 

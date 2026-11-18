@@ -150,6 +150,10 @@ export function bindCallProject(
       };
     }
 
+    const expired = logins.expired ?? [];
+    const expiredSaid = expired.length
+      ? ` ${quoted(expired)} ${expired.length === 1 ? "is stored too but has expired, so it is not a choice" : "are stored too but have expired, so they are not choices"}; extension_auth (action: login, project: "${expired[0]}") signs in again.`
+      : "";
     const unbound = text(args.projectPath) ? "the folder at projectPath names no project this server could bind" : "the call named neither project nor projectPath";
 
     return {
@@ -157,7 +161,7 @@ export function bindCallProject(
         name,
         "project-ambiguous",
         `This machine holds ${logins.live.length} logins for this server (${logins.live.join(", ")}) and ${unbound}, so it was not sent: the newest login could be another agent's project.`,
-        `Pass project: one of ${quoted(logins.live)}${takesPath(inputSchema) ? ", or projectPath for the extension's directory" : ""}.`,
+        `Pass project: one of ${quoted(logins.live)}${takesPath(inputSchema) ? ", or projectPath for the extension's directory" : ""}.${expiredSaid}`,
         { logins: logins.live },
       ),
     };

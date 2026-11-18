@@ -11,7 +11,7 @@ import path from "node:path";
 
 import { requestCredential } from "./credential-scope";
 import { serverOf, targetServer } from "./credential-server";
-import { credentialsPath, loginEntries, readCredentialStore, storeKey, type StoredCredentials } from "./credentials";
+import { credentialsPath, liveAt, loginEntries, readCredentialStore, storeKey, type StoredCredentials } from "./credentials";
 import { keptLogin } from "./session-login";
 
 export interface PathIdentity {
@@ -141,7 +141,9 @@ export function loginForPath(projectPath: string, api?: string): PathLogin {
   }
 
   for (const slug of slugs) {
-    const found = entries.filter(([, entry]) => !entry.movedTo && entry.projectSlug.toLowerCase() === slug);
+    const named = entries.filter(([, entry]) => !entry.movedTo && entry.projectSlug.toLowerCase() === slug);
+    const unexpired = named.filter(([, entry]) => liveAt(entry));
+    const found = unexpired.length > 0 ? unexpired : named;
     const [only] = found;
 
     if (found.length === 1 && only) return { state: "match", project: refOf(only[1]), via: via(slug) };
@@ -168,17 +170,32 @@ export function loginForOrigin(dir: string, api?: string): { project: string; ow
 export interface ServerLogins {
   live: string[];
   kept: string | null;
+  expired: string[];
 }
+
+/* @invariant AN EXPIRED LOGIN IS NO CHOICE. A login past its expiry can
+ * answer nothing, so it does not count toward the logins a call has to
+ * choose between and is never offered as one. On 2026-11-18 (ledger 940) a
+ * store with one live login and one expired three days earlier refused every
+ * unnamed platform call as project-ambiguous and offered both. live lists
+ * the logins that have not expired, expired the rest. kept stays this
+ * server's default even once it has expired: the call then says that login
+ * expired, and never moves to another project on its own.
+ */
 
 export function serverLogins(api?: string): ServerLogins {
   const store = readCredentialStore();
   const server = targetServer(api);
-  const live = store
+  const stored = store
     ? loginEntries(store).filter(([, entry]) => serverOf(entry.api) === server && !entry.movedTo)
     : [];
   const held = requestCredential() ? null : keptLogin(credentialsPath(), server);
-  const named = held ? live.filter(([, entry]) => storeKey(entry) === held) : [];
+  const named = held ? stored.filter(([, entry]) => storeKey(entry) === held) : [];
   const kept = named.length === 1 ? named[0]?.[1] : undefined;
 
-  return { live: live.map(([, entry]) => refOf(entry)), kept: kept ? refOf(kept) : null };
+  return {
+    live: stored.filter(([, entry]) => liveAt(entry)).map(([, entry]) => refOf(entry)),
+    kept: kept ? refOf(kept) : null,
+    expired: stored.filter(([, entry]) => !liveAt(entry)).map(([, entry]) => refOf(entry)),
+  };
 }

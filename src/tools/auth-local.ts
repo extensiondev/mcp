@@ -9,7 +9,7 @@
 import { createdOnServer } from "../lib/created-projects";
 import { credentialStoreProblem, defaultLoginDrift, isProjectRef, listCredentials, readCredentials } from "../lib/credentials";
 import { resolveCredential } from "../lib/credential-source";
-import { loginForPath, pathIdentity } from "../lib/path-project";
+import { loginForPath, pathIdentity, serverLogins } from "../lib/path-project";
 import {
   projectPresenceWith,
   sameSlugElsewhereWith,
@@ -25,6 +25,7 @@ export const AUTH_LOCAL: AuthLocal = {
   listCredentials,
   defaultLoginDrift,
   resolveCredential,
+  keptLogin: (api) => serverLogins(api).kept,
 };
 
 export function projectAtPath(projectPath: string, api?: string): { project: string; via: string } | null {

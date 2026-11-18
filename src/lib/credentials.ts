@@ -76,7 +76,7 @@ function memberView(entry: StoredCredentials, project: string): StoredCredential
   return { ...entry, projectSlug: project };
 }
 
-function liveAt(entry: Pick<StoredCredentials, "expiresAt">, nowSeconds: number): boolean {
+export function liveAt(entry: Pick<StoredCredentials, "expiresAt">, nowSeconds: number = Math.floor(Date.now() / 1000)): boolean {
   return !entry.expiresAt || entry.expiresAt > nowSeconds;
 }
 
@@ -400,9 +400,11 @@ function selectEntry(
     const file = requestCredential() ? "" : credentialsPath();
     const held = file ? keptLogin(file, server) : null;
     const session = held ? live.find(([key]) => key === held) : undefined;
-    const chosen = session ?? live.find(([key]) => key === store.active) ?? live[live.length - 1];
+    const unexpired = live.filter(([, entry]) => liveAt(entry));
+    const usable = unexpired.length > 0 ? unexpired : live;
+    const chosen = session ?? usable.find(([key]) => key === store.active) ?? usable[usable.length - 1];
 
-    if (chosen && file && !session && live.length === 1) keepLogin(file, server, chosen[0]);
+    if (chosen && file && !session && usable.length === 1) keepLogin(file, server, chosen[0]);
 
     const entry = chosen?.[1] ?? null;
     const listed = memberProjects(entry);

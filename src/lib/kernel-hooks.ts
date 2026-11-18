@@ -31,7 +31,7 @@ export interface KernelHooks {
   shapeStoreAnswer(command: string, args: Args, result: string): string;
   openApprovalOnce(result: string, options: { noShip: boolean }): string;
   connectSessionProject(session: unknown): string | null;
-  serverLogins(api?: string): { live: string[]; kept: string | null };
+  serverLogins(api?: string): { live: string[]; kept: string | null; expired?: string[] };
   loginForPath(projectPath: string, api?: string): PathLoginRead;
   loginForOrigin(dir: string, api?: string): { project: string; owner: string; repo: string } | null;
   unloggedProjectStep(ref: string, projectPath: string, api?: string): UnloggedProjectStep;

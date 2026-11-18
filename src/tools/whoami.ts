@@ -11,6 +11,7 @@ import {
   isMemberLogin,
   loginDriftSentence,
   memberLabel,
+  pinnedProject,
   memberProjects,
   type CredentialSelector,
   type StoredCredentials,
@@ -34,6 +35,7 @@ export interface AuthLocal {
   listCredentials(): StoredLoginEntry[];
   defaultLoginDrift(api?: string): { kept: string; newest: string } | null;
   resolveCredential(options?: { project?: string; api?: string }): ResolvedCredential;
+  keptLogin?(api?: string): string | null;
 }
 
 type ServerCheck =
@@ -286,9 +288,16 @@ export async function readIdentityWith(local: AuthLocal, deps?: {
       ? `The server resolves this token to ${check.login}, not to the ${expectedLogin} the stored file claims; the file's slugs are stale or were edited. Log in again to refresh them.`
       : null;
   const logins = wanted ? [] : storedLogins(local, target, now);
+  const liveHere = logins.filter((l) => l.server === target && !l.expired).flatMap((l) => l.projects ?? [l.project]);
+  const settled = hosted || envTokenSet || Boolean(pinnedProject()) || Boolean(local.keptLogin?.(api)) || liveHere.length === 1;
+  const defaultSaid = settled
+    ? `the one above is the default for token-scoped tools on ${target}, each of them takes \`project\` to use another`
+    : liveHere.length === 0
+      ? `every login for ${target} has expired, so a token-scoped tool there is refused until extension_auth (action: login) signs in again`
+      : `none of them is the default on ${target}: ${liveHere.length} are live there (${liveHere.join(", ")}), so a token-scoped tool has to name \`project\`, or a projectPath whose project is one of them, and a call that names neither is refused`;
   const loginsNote =
     logins.length > 1
-      ? `${logins.length} logins are stored on this machine (${logins.map((l) => (l.server === target ? l.project : `${l.project} on ${l.server}`)).join(", ")}); the one above is the default for token-scoped tools on ${target}, each of them takes \`project\` to use another, and a login minted on another server is used only when a call targets that server.`
+      ? `${logins.length} logins are stored on this machine (${logins.map((l) => `${l.server === target ? l.project : `${l.project} on ${l.server}`}${l.expired ? " (expired)" : ""}`).join(", ")}); ${defaultSaid}, and a login minted on another server is used only when a call targets that server.`
       : null;
   const drift = hosted || wanted ? null : local.defaultLoginDrift(api);
   const driftNote = drift ? loginDriftSentence(drift) : null;
