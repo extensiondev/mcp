@@ -151,7 +151,7 @@ describe("the registry catalog behind extension_templates", () => {
     expect(listed.templates.map((t) => t.slug)).toEqual(["action"]);
     expect(listed.templates[0]!.downloads).toEqual(ROW.downloads);
     expect(await resolvedTemplateCommit()).toBe(PINNED_COMMIT);
-    expect(seen.some((url) => url.includes("raw.githubusercontent.com"))).toBe(false);
+    expect(seen.some((url) => new URL(url).hostname === "raw.githubusercontent.com")).toBe(false);
   });
 
   it("refuses a pointer at another commit and reads raw GitHub at the pin instead", async () => {

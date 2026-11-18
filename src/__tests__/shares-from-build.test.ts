@@ -177,7 +177,7 @@ describe("extension_shares create shares a platform build as a public link", () 
     const out = JSON.parse(await shares({ action: "create", buildId: "603fc8a", api: API }));
     const upload = calls.find((call) => call.url === `${API}/api/artifacts` && call.method === "POST");
 
-    expect(calls.some((call) => call.url.startsWith("https://registry.extension.land"))).toBe(false);
+    expect(calls.some((call) => new URL(call.url).hostname === "registry.extension.land")).toBe(false);
     expect(upload?.auth).toBe("Bearer claims.sig");
     expect(upload?.body.kind).toBe("dist");
     expect(upload?.body.generation).toMatchObject({ name: "Widget", version: "0.1.0", browser: "chrome", manifestVersion: 3 });

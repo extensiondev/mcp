@@ -55,18 +55,23 @@ function awkwardDir(): string {
 }
 
 function cdWord(text: string): string {
-  const word = /cd (.+?) && /.exec(text)?.[1];
-  expect(word).toBeDefined();
+  const start = text.indexOf("cd ");
+  const end = start === -1 ? -1 : text.indexOf(" && ", start + 4);
+  expect(end).not.toBe(-1);
 
-  return word!;
+  return text.slice(start + 3, end);
+}
+
+function typedInto(shell: string, line: string): string {
+  return execFileSync(shell, ["-s"], { input: `${line}\n`, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
 }
 
 function landsIn(shell: string, word: string): string {
-  return execFileSync(shell, ["-c", `cd ${word} && pwd -P`], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  return typedInto(shell, `cd ${word} && pwd -P`).trim();
 }
 
 function printed(shell: string, word: string): string {
-  return execFileSync(shell, ["-c", `printf '%s' ${word}`], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  return typedInto(shell, `printf '%s' ${word}`);
 }
 
 afterEach(() => {
