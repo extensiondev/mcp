@@ -847,6 +847,8 @@ export async function handler(args: {
   if (safari) cliArgs.push(...safariBuildCliArgs(args, signingTeam.team));
   if (signingTeam.kept) warnings.push(keptTeamNote(signingTeam.team));
 
+  const modulesDir = path.join(engineProjectRoot(args.projectPath), "node_modules");
+  const modulesBefore = fs.existsSync(modulesDir);
   const spawn = { cwd: args.projectPath, timeoutMs: buildBudgetMs(browser) };
   const verdict = await outputJsonVerdict("build", args.projectPath);
   const engineKnownTooOld = verdict.supported === false;
@@ -900,6 +902,10 @@ export async function handler(args: {
       browser,
       args.projectPath,
     );
+    const dependenciesInstalled = !modulesBefore && fs.existsSync(modulesDir);
+    const dependenciesNote = dependenciesInstalled
+      ? ` The engine installed the project's dependencies first (${path.dirname(modulesDir)} had no node_modules), which is most of this build's ${Math.round(duration / 1000)} s; the next build skips that.`
+      : "";
     const storeMdRoot = engineProjectRoot(args.projectPath);
     const storeMdMissingNote =
       args.zip && !fs.existsSync(path.join(storeMdRoot, STORE_MD_FILENAME))
@@ -1094,6 +1100,7 @@ export async function handler(args: {
         ...(duplicates.length ? { duplicateFiles: duplicates } : {}),
         ...(addonLint.value ? { addonLint: addonLint.value } : {}),
         ...(toolchain ? { toolchain } : {}),
+        ...(dependenciesInstalled ? { dependenciesInstalled } : {}),
         ...(engineRefusedJsonOutput ? { engineRejectedJsonOutput: true } : {}),
         ...(entrypoints.length ? { entrypoints } : {}),
         ...(risks.length ? { reviewRisks: risks } : {}),
@@ -1126,7 +1133,7 @@ export async function handler(args: {
         ...(signingFrame?.warnings ?? []),
         ...(signingFrame?.hints ?? []),
       ],
-      hint: `The ${mode === "none" ? "" : `${mode} `}build is in ${distDir}.${modeSentence(mode) ? ` ${modeSentence(mode)}` : ""} To read what is in it, call extension_analyze with this projectPath and browser "${browser}": it answers the sizes, the entry points and the store checks a reviewer runs, plus the emitted manifest of every built browser and the resolved keys that differ between them (manifestByBrowser), so there is no need to list or grep the folder by hand or to read dist/<browser>/manifest.json.${zipPath ? ` The store zip is ${zipPath}.` : ""}${storeMdMissingNote}${platformListed() ? " To send the extension to someone, extension_publish gives the project's build on extension.dev a page with a download and a run command for each browser (the platform builds the source it holds, not this folder: extension_builds_act action:\"rebuild\" starts that build with no push, and a project built from a repository also builds on a push)." : ""}`,
+      hint: `The ${mode === "none" ? "" : `${mode} `}build is in ${distDir}.${modeSentence(mode) ? ` ${modeSentence(mode)}` : ""} To read what is in it, call extension_analyze with this projectPath and browser "${browser}": it answers the sizes, the entry points and the store checks a reviewer runs, plus the emitted manifest of every built browser and the resolved keys that differ between them (manifestByBrowser), so there is no need to list or grep the folder by hand or to read dist/<browser>/manifest.json.${zipPath ? ` The store zip is ${zipPath}.` : ""}${storeMdMissingNote}${dependenciesNote}${platformListed() ? " To send the extension to someone, extension_publish gives the project's build on extension.dev a page with a download and a run command for each browser (the platform builds the source it holds, not this folder: extension_builds_act action:\"rebuild\" starts that build with no push, and a project built from a repository also builds on a push)." : ""}`,
     });
   }
 

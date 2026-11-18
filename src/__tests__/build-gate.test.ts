@@ -63,6 +63,42 @@ afterEach(() => {
   }
 });
 
+describe("extension_build says when the engine installed the project's dependencies first", () => {
+  const withPackageJson = (): string => {
+    const dir = project({ manifest_version: 3, name: "Deps", version: "1.0.0" });
+    fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: "deps", devDependencies: { extension: "latest" } }));
+
+    return dir;
+  };
+
+  it("answers dependenciesInstalled and says so in the hint when node_modules appeared during the build", async () => {
+    const dir = withPackageJson();
+
+    onCli = () => fs.mkdirSync(path.join(dir, "node_modules"), { recursive: true });
+
+    const result = JSON.parse(await build.handler({ projectPath: dir }));
+
+    expect(result.ok).toBe(true);
+    expect(result.value.dependenciesInstalled).toBe(true);
+    expect(result.hint).toContain(`The engine installed the project's dependencies first (${dir} had no node_modules)`);
+    expect(result.hint).toContain("the next build skips that");
+  });
+
+  it("says nothing when node_modules was already there, or when none was written", async () => {
+    const installed = withPackageJson();
+    fs.mkdirSync(path.join(installed, "node_modules"));
+
+    const warm = JSON.parse(await build.handler({ projectPath: installed }));
+
+    expect(warm.value.dependenciesInstalled).toBeUndefined();
+    expect(warm.hint).not.toContain("installed the project's dependencies");
+
+    const bare = JSON.parse(await build.handler({ projectPath: project({ manifest_version: 3, name: "Bare", version: "1.0.0" }) }));
+
+    expect(bare.value.dependenciesInstalled).toBeUndefined();
+  });
+});
+
 describe("extension_build validation gate", () => {
   it("refuses to build a manifest with build-blocking errors", async () => {
     const dir = project({ manifest_version: 3, version: "1.0.0" });
