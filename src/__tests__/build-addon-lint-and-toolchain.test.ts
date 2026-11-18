@@ -214,8 +214,9 @@ describe("916: a build answer says each review risk once and stays light", () =>
 
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain(`No STORE.md is in ${dir}. Before a store submission, write it there`);
-    expect(lines[0]).toContain('with a "### Permissions justification" bullet under "## Chrome Web Store" for each permission, host permission and content script match the manifest declares');
-    expect(lines[0]).toContain('extension_docs_search with "STORE.md" answers the rest');
+    expect(lines[0]).toContain("## Chrome Web Store with a ### Permissions justification bullet per declared permission, host permission and content script match");
+    expect(lines[0]).toContain("## Firefox Add-ons with ### Reviewer notes, ## Edge Add-ons");
+    expect(lines[0]).toContain('extension_docs_search "STORE.md" has the rest');
     expect(lines[0]).toContain("ask the owner for its data-use and privacy answers");
     expect(lines[0]).not.toMatch(/none|collects nothing|no data/i);
     expect(missing.hint).not.toContain("STORE.md");

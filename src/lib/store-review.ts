@@ -292,12 +292,13 @@ export function reviewRiskPointer(risks: ReviewRisk[]): string[] {
 }
 
 const JUSTIFICATION_HEADING = SUBSECTION_KEYS.find((key) => key.field === "permissionJustifications")!.heading;
+const REVIEWER_NOTES_HEADING = SUBSECTION_KEYS.find((key) => key.field === "reviewerNotes")!.heading;
 const JUSTIFICATION_BULLETS = `a "${JUSTIFICATION_HEADING}" bullet under "${STORE_SECTIONS.chrome}"`;
 const JUSTIFIED = "each permission, host permission and content script match the manifest declares";
 
 export function storeMdLine(root: string, risks: ReviewRisk[]): string | null {
   if (!fs.existsSync(path.join(root, STORE_MD_FILENAME))) {
-    return `No ${STORE_MD_FILENAME} is in ${root}. Before a store submission, write it there, with ${JUSTIFICATION_BULLETS} for ${JUSTIFIED} (extension_docs_search with "${STORE_MD_FILENAME}" answers the rest); ask the owner for its data-use and privacy answers.`;
+    return `No ${STORE_MD_FILENAME} is in ${root}. Before a store submission, write it there, one section per store: ${STORE_SECTIONS.chrome} with a ${JUSTIFICATION_HEADING} bullet per declared permission, host permission and content script match, ${STORE_SECTIONS.firefox} with ${REVIEWER_NOTES_HEADING}, ${STORE_SECTIONS.edge} (extension_docs_search "${STORE_MD_FILENAME}" has the rest); ask the owner for its data-use and privacy answers.`;
   }
 
   if (!risks.length) return null;

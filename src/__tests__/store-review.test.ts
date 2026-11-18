@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { STORE_SECTIONS, SUBSECTION_KEYS } from "../lib/store-md-declarations";
 import { reviewDistReport, reviewRisksReport, storeMdLine } from "../lib/store-review";
 
 let dist: string;
@@ -189,12 +190,16 @@ describe("reviewDistReport risks", () => {
 describe("919: storeMdLine says where the permission justifications go", () => {
   const risk = { code: "BROAD_HOST_ACCESS" as const, message: "m", fix: "f" };
 
-  it("says to write STORE.md at a root that has none, names the bullet for each declared permission, host permission and content script match, and leaves data use to the owner", () => {
+  it("says to write STORE.md at a root that has none, names the Chrome, Firefox and Edge sections, the bullet for each declared permission, host permission and content script match and the Firefox reviewer notes, and leaves data use to the owner", () => {
     const line = storeMdLine(dist, [])!;
 
     expect(line).toBe(
-      `No STORE.md is in ${dist}. Before a store submission, write it there, with a "### Permissions justification" bullet under "## Chrome Web Store" for each permission, host permission and content script match the manifest declares (extension_docs_search with "STORE.md" answers the rest); ask the owner for its data-use and privacy answers.`,
+      `No STORE.md is in ${dist}. Before a store submission, write it there, one section per store: ## Chrome Web Store with a ### Permissions justification bullet per declared permission, host permission and content script match, ## Firefox Add-ons with ### Reviewer notes, ## Edge Add-ons (extension_docs_search "STORE.md" has the rest); ask the owner for its data-use and privacy answers.`,
     );
+
+    for (const store of ["chrome", "firefox", "edge"] as const) expect(line).toContain(STORE_SECTIONS[store]);
+
+    expect(line).toContain(`${STORE_SECTIONS.firefox} with ${SUBSECTION_KEYS.find((key) => key.field === "reviewerNotes")!.heading}`);
 
     expect(line).not.toMatch(/none|collects nothing|no data/i);
   });
