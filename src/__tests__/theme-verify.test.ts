@@ -155,6 +155,39 @@ describe("leg [4] D4 acceptance gap: keys Chrome silently discards", () => {
   });
 });
 
+describe("924: a value Chromium refuses fails the theme, it is not a key Chromium drops", () => {
+  const HEX = { frame: "#1b263b", toolbar: "#415a77" };
+
+  it("answers invalid for hex colors, with the array to write, and lists none of them as discarded", async () => {
+    const r = await verify({ manifest: { ...CLEAN, theme: { colors: HEX } } });
+
+    expect(r.ok).toBe(false);
+    expect(r.status).toBe("invalid");
+    expect(r.error.code).toBe("E_BAD_MANIFEST");
+    expect(r.error.message).toContain('Chromium refuses to load this theme ("Invalid value for theme colors - colors must be integers")');
+    expect(r.error.message).toContain("theme.colors.frame as [27, 38, 59] and theme.colors.toolbar as [65, 90, 119]");
+    expect(r.value.legs.chromeAccepts.discarded).toEqual([]);
+    expect(r.value.summary.errors).toBe(1);
+  });
+
+  it("answers invalid for a tint that is not three numbers", async () => {
+    const r = await verify({ manifest: { ...CLEAN, theme: { colors: CLEAN.theme.colors, tints: { buttons: [0.5, 0.5] } } } });
+
+    expect(r.status).toBe("invalid");
+    expect(r.error.message).toContain("write theme.tints.buttons that way");
+    expect(r.value.legs.chromeAccepts.discarded).toEqual([]);
+  });
+
+  it("reads the theme Chromium gets from an Extension.js manifest: chromium:theme, not firefox:theme", async () => {
+    const { theme: _omit, ...bare } = CLEAN;
+    const r = await verify({ manifest: { ...bare, "chromium:theme": CLEAN.theme, "firefox:theme": { colors: HEX } } });
+
+    expect(r.ok).toBe(true);
+    expect(r.status).toBe("headless-clean");
+    expect(r.value.legs.manifestSays.declared.colors).toEqual(["frame", "toolbar"]);
+  });
+});
+
 describe("D1 fabrication candidate is advisory, not a false failure", () => {
   it("flags opaque black on a derivable key without flipping the verdict", async () => {
     const r = await verify({

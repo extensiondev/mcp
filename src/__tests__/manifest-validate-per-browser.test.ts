@@ -6,6 +6,7 @@ import path from "node:path";
 import { describe, it, expect, afterEach, vi } from "vitest";
 
 import type * as TemplatesCacheModule from "../lib/templates-cache";
+import { DEFAULT_SERVER_OPTIONS, setServerOptions } from "../lib/tool-policy";
 
 vi.mock("../lib/templates-cache", async (importOriginal) => {
   const actual = await importOriginal<typeof TemplatesCacheModule>();
@@ -193,5 +194,84 @@ describe("a permission gap names the key that holds the grant and the key this t
 
     expect(issue).toContain('it is declared only under "firefox:permissions", which chrome does not read');
     expect(issue).toContain('add "storage" to "permissions"');
+  });
+});
+
+describe("924: a theme Chromium cannot load is a Chromium issue, and a theme manifest is sent to extension_theme_verify", () => {
+  const HEX = { frame: "#1b263b", toolbar: "#415a77", tab_background_text: "#e0e1dd", ntp_background: "#0d1b2a", ntp_text: "#e0e1dd" };
+  const ARRAYS = { frame: [27, 38, 59], toolbar: [65, 90, 119], tab_background_text: [224, 225, 221], ntp_background: [13, 27, 42], ntp_text: [224, 225, 221] };
+  const THEME = { manifest_version: 3, name: "harbor-dusk", version: "1.0.0", browser_specific_settings: { gecko: { id: "harbor-dusk@example.com" } } };
+
+  afterEach(() => setServerOptions(DEFAULT_SERVER_OPTIONS));
+
+  it("refuses hex colors for chrome with the array to write for each key, and keeps them for firefox", async () => {
+    const out = await validate(project({ ...THEME, theme: { colors: HEX } }), ["chrome", "firefox"]);
+    const issue = out.value.browserSupport.chrome.issues.join("\n");
+
+    expect(out.status).toBe("invalid");
+    expect(out.ok).toBe(false);
+    expect(out.value.browserSupport.chrome.supported).toBe(false);
+    expect(out.value.browserSupport.firefox).toEqual({ supported: true, issues: [] });
+    expect(issue).toContain('Chromium refuses to load this theme ("Invalid value for theme colors - colors must be integers")');
+    expect(issue).toContain("theme.colors.frame as [27, 38, 59], theme.colors.toolbar as [65, 90, 119], theme.colors.tab_background_text as [224, 225, 221], theme.colors.ntp_background as [13, 27, 42] and theme.colors.ntp_text as [224, 225, 221]");
+    expect(issue).toContain('Firefox reads the same arrays, so one manifest serves both, and CSS color strings kept for Firefox go under "firefox:theme" with the arrays under "chromium:theme"');
+    expect(out.value.errors).toEqual([`chrome: ${issue}`]);
+    expect(out.value.buildBlocking).toBe(true);
+    expect(out.error.hint).toContain("extension_theme_verify");
+  });
+
+  it("answers valid for arrays, and for hex under firefox:theme beside arrays under chromium:theme", async () => {
+    const arrays = await validate(project({ ...THEME, theme: { colors: ARRAYS } }), ["chrome", "firefox"]);
+    const prefixed = await validate(project({ ...THEME, "chromium:theme": { colors: ARRAYS }, "firefox:theme": { colors: HEX } }), ["chrome", "firefox"]);
+
+    for (const out of [arrays, prefixed]) {
+      expect(out.status).toBe("valid");
+      expect(out.value.browserSupport.chrome).toEqual({ supported: true, issues: [] });
+      expect(out.value.browserSupport.firefox).toEqual({ supported: true, issues: [] });
+    }
+  });
+
+  it("writes the array for short hex, hex with alpha and rgb(), and asks for the values of a named color", async () => {
+    const out = await validate(project({ ...THEME, theme: { colors: { frame: "#fff", toolbar: "#41 5a77", ntp_text: "#e0e1dd80", ntp_link: "rgb(1, 2, 3)", ntp_header: "navy" } } }), ["chrome"]);
+    const issue = out.value.browserSupport.chrome.issues.join("\n");
+
+    expect(issue).toContain("theme.colors.frame as [255, 255, 255]");
+    expect(issue).toContain("theme.colors.toolbar as its [r, g, b] values");
+    expect(issue).toContain("theme.colors.ntp_text as [224, 225, 221, 0.5]");
+    expect(issue).toContain("theme.colors.ntp_link as [1, 2, 3]");
+    expect(issue).toContain("theme.colors.ntp_header as its [r, g, b] values");
+  });
+
+  it("refuses a tint that is not three numbers, in Chromium's own words", async () => {
+    const out = await validate(project({ ...THEME, theme: { colors: ARRAYS, tints: { buttons: "#fff", frame: [0.5, 0.5, 0.5] } } }), ["chrome"]);
+    const issue = out.value.browserSupport.chrome.issues.join("\n");
+
+    expect(out.status).toBe("invalid");
+    expect(issue).toContain('"Invalid value for theme images - tints must be decimal numbers."');
+    expect(issue).toContain("write theme.tints.buttons that way");
+    expect(issue).not.toContain("theme.tints.frame");
+  });
+
+  it("names extension_theme_verify as the next step of a theme manifest, with the group to add while it is not listed", async () => {
+    const dir = project({ ...THEME, theme: { colors: ARRAYS } });
+    const unlisted = await validate(dir, ["chrome"]);
+
+    setServerOptions({ features: ["local", "extras"], noShip: false });
+    const listed = await validate(dir, ["chrome"]);
+    const extension = await validate(project({ ...THEME }), ["chrome"]);
+
+    expect(unlisted.hint).toBe(`This is a theme manifest: extension_theme_verify with manifestPath "${fs.realpathSync(path.join(dir, "src", "manifest.json"))}" reads the colors Chromium paints from it and the keys it drops; it is in the extras feature group, so add extras to --features in this server's MCP config, or ask the user to, then call it.`.replace(fs.realpathSync(dir), dir));
+    expect(unlisted.hint).toContain("add extras to --features");
+    expect(listed.hint).toMatch(/keys it drops; call it next\.$/);
+    expect(listed.hint).not.toContain("--features");
+    expect(extension.hint).toBeUndefined();
+  });
+
+  it("does not ask a static theme for the Firefox data collection declaration, which AMO's linter asks of an extension only", async () => {
+    const theme = await validate(project({ ...THEME, theme: { colors: ARRAYS } }), ["firefox"]);
+    const extension = await validate(project({ ...THEME }), ["firefox"]);
+
+    expect(theme.value.warnings.join("\n")).not.toContain("data_collection_permissions");
+    expect(extension.value.warnings.join("\n")).toContain("no browser_specific_settings.gecko.data_collection_permissions");
   });
 });

@@ -355,6 +355,10 @@ export function setServerOptions(options: ServerOptions): void {
   activeServerOptions = options;
 }
 
+export function toolListed(name: string): boolean {
+  return isToolListed(name, activeServerOptions);
+}
+
 export function platformListed(): boolean {
   return isToolListed("extension_publish", activeServerOptions);
 }

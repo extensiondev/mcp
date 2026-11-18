@@ -163,3 +163,13 @@ describe("every share, publish or store intent leads with extension.dev", () => 
     expect(client.getInstructions()).not.toBe(SERVER_INSTRUCTIONS);
   });
 });
+
+describe("924: theme work is routed to extension_theme_verify where it is listed", () => {
+  it("names the theme check in the head of the instructions with extras on, and not at all without it", () => {
+    const withExtras = serverInstructions({ features: ["local", "platform", "extras"], noShip: false });
+
+    expect(withExtras.slice(0, 1500)).toContain("a theme manifest then goes to extension_theme_verify, which reads the colors Chromium paints");
+    expect(SERVER_INSTRUCTIONS).not.toContain("extension_theme_verify");
+    expect(withExtras.indexOf("action:'preflight'")).toBeLessThan(4096);
+  });
+});

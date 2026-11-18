@@ -16,6 +16,8 @@ import { envelope, okOrRefusal } from "../lib/envelope";
 import { apiUsesIn, type ApiUse } from "../lib/guarded-api-uses";
 import { droppedRuntimePages } from "../lib/dropped-runtime-pages";
 import { icon128Fix } from "../lib/store-review";
+import { chromeThemeRefusalLines } from "../lib/theme-manifest-discards";
+import { toolListed } from "../lib/tool-policy";
 import { ADMIN_INSTALL_ONLY_KEY, ENTERPRISE_CHANNEL_SENTENCE, adminInstallOnlyOf, adminInstallOnlyTypeIssue } from "../lib/firefox-enterprise";
 
 const COMMAND = "extension_manifest_validate";
@@ -710,6 +712,8 @@ export async function handler(args: {
         }
       }
 
+      issues.push(...chromeThemeRefusalLines(effective.theme).map((line) => `${line}.`));
+
       if (manifest["firefox:browser_action"] && !effective.action) {
         result.warnings.push(
           `${browser}: firefox:browser_action is declared and no action for Chromium, so the ${browser} build ships no toolbar action; Chromium MV3 reads "action" (chromium:action). The build itself is not refused.`,
@@ -770,7 +774,14 @@ export async function handler(args: {
       const dataCollection = (bss?.gecko as Record<string, unknown> | undefined)
         ?.data_collection_permissions;
 
-      if (!dataCollection || typeof dataCollection !== "object") {
+      /* @invariant
+       * Measured with addons-linter 10.15.0 (2026-11-18): a static theme with
+       * no data_collection_permissions draws nothing, and the same manifest
+       * with a background script draws MISSING_DATA_COLLECTION_PERMISSIONS.
+       */
+      const staticTheme = Boolean(effective.theme) && typeof effective.theme === "object";
+
+      if (!staticTheme && (!dataCollection || typeof dataCollection !== "object")) {
         result.warnings.push(
           'Firefox: no browser_specific_settings.gecko.data_collection_permissions. AMO requires it for new add-ons and the Firefox build warns on every run. What the extension collects is the owner\'s declaration to Mozilla, so ask the person and write the block under firefox:browser_specific_settings.gecko.data_collection_permissions with the categories they state (https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/). Do not add it on their behalf.',
         );
@@ -985,12 +996,18 @@ export async function handler(args: {
 
   result.valid = result.errors.length === 0;
 
+  const isTheme = [chromiumManifest, ...effectiveByBrowser.values()].some((view) => Boolean(view.theme) && typeof view.theme === "object");
+  const themeStep = isTheme
+    ? `This is a theme manifest: extension_theme_verify with manifestPath "${path.resolve(manifestPath)}" reads the colors Chromium paints from it and the keys it drops; ${toolListed("extension_theme_verify") ? "call it next." : "it is in the extras feature group, so add extras to --features in this server's MCP config, or ask the user to, then call it."}`
+    : "";
+
   return envelope({
     ...okOrRefusal(result.valid, () => ({
       code: "E_BAD_MANIFEST",
       message: `The manifest has ${result.errors.length} error${result.errors.length === 1 ? "" : "s"}, the first: ${result.errors[0]}`,
-      hint: "Fix each line of value.errors in the manifest, then call extension_manifest_validate again; extension_build refuses the same errors.",
+      hint: `Fix each line of value.errors in the manifest, then call extension_manifest_validate again; extension_build refuses the same errors.${themeStep ? ` ${themeStep}` : ""}`,
     })),
+    ...(themeStep && result.valid ? { hint: themeStep } : {}),
     command: COMMAND,
     status: result.valid ? "valid" : "invalid",
     value: {

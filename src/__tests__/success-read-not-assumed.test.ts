@@ -114,20 +114,17 @@ describe("extension_theme_verify does not call a theme-less manifest clean", () 
     expect(out.status).toBe("no-theme");
   });
 
-  it("lists a malformed tint as a key Chrome throws away", async () => {
+  it("answers invalid for a malformed tint, which Chromium refuses the whole theme for (ledger 924)", async () => {
     const out = await verify({
       manifest_version: 3,
       name: "x",
       version: "1.0",
       theme: { colors: { frame: [1, 2, 3] }, tints: { buttons: [0.5, 0.5], frame: ["red", 0, 0] } },
     });
-    expect(out.status).toBe("diverged");
-    const keys = out.value.findings.map((f: { key?: string }) => f.key);
-    expect(keys).toContain("tints.buttons");
-    expect(keys).toContain("tints.frame");
-    const detail = out.value.findings.find((f: { key?: string }) => f.key === "tints.buttons").detail;
-    expect(detail).toMatch(/tints\.buttons/);
-    expect(detail).not.toMatch(/colors\./);
+    expect(out.status).toBe("invalid");
+    expect(out.error.message).toContain("write theme.tints.buttons and theme.tints.frame that way");
+    expect(out.error.message).not.toMatch(/colors\./);
+    expect(out.value.findings.map((f: { key?: string }) => f.key)).toEqual([]);
   });
 
   it("lists a non-numeric ntp_logo_alternate as ignored", async () => {

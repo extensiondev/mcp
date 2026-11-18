@@ -20,9 +20,11 @@ import {
 } from "../lib/vendor/chrome-theme/chrome-theme-resolve";
 import { envelope, okOrRefusal } from "../lib/envelope";
 import {
+  chromeThemeRefusalLines,
+  chromeThemeRefusals,
   discardedProperties,
-  discardedTints,
 } from "../lib/theme-manifest-discards";
+import { engineManifestView } from "../lib/engine-manifest-view";
 
 const COMMAND = "extension_theme_verify";
 
@@ -107,10 +109,12 @@ function coerceInput(raw: unknown): {
   }
 
   const obj = raw as Record<string, unknown>;
-  const manifest =
+  const manifest = engineManifestView(
     obj.manifest && typeof obj.manifest === "object"
       ? (obj.manifest as Record<string, unknown>)
-      : obj;
+      : obj,
+    "chrome",
+  );
   const themeBlock =
     manifest.theme && typeof manifest.theme === "object"
       ? (manifest.theme as ChromeThemeManifestTheme)
@@ -241,15 +245,18 @@ export async function handler(args: {
   const declaredProps = (theme.properties ?? {}) as Record<string, unknown>;
 
   const resolved = resolveChromeTheme(theme);
+  const refusals = chromeThemeRefusals(theme);
+  const refused = new Set([...refusals.colors, ...refusals.tints].map(({ slot }) => slot));
+
+  grammarErrors.push(...chromeThemeRefusalLines(theme));
 
   const discarded = [
     ...resolved.ignoredKeys.map(({ key, reason }) => ({
       slot: `colors.${key}`,
       reason,
     })),
-    ...discardedTints(declaredTints),
     ...discardedProperties(declaredProps),
-  ];
+  ].filter(({ slot }) => !refused.has(slot));
 
   for (const { slot, reason } of discarded) {
     findings.push({
