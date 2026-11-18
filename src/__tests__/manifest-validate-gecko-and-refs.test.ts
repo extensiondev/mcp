@@ -119,7 +119,7 @@ describe("the Firefox report names what Firefox itself would say", () => {
     expect(declaration).toContain("with the categories they state");
     expect(declaration).toContain("https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/");
     expect(declaration).not.toMatch(/\bnone\b|"required"|transmits no data/i);
-    expect(declaration).toContain("Do not add it on their behalf");
+    expect(declaration).toContain("Do not add it on their behalf, and do not propose a value for it either");
     expect(declaration).not.toContain("the minimal form is");
 
     const complete = project(

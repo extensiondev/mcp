@@ -281,7 +281,7 @@ describe("extension_build zip path reporting", () => {
       expect(said).toHaveLength(1);
       expect(said[0]).toContain(`No STORE.md is in ${dir}`);
       expect(said[0]).toContain('extension_docs_search "STORE.md" has the rest');
-      expect(said[0]).toContain("ask the owner for its data-use and privacy answers");
+      expect(said[0]).toContain("Leave only its data-use and privacy rows unanswered");
       expect(missing.hint).not.toContain("STORE.md");
     }
 

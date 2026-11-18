@@ -74,7 +74,7 @@ describe("reviewDistReport risks", () => {
     expect(fix).toContain("Ask the owner what the extension collects");
     expect(fix).toContain("with the categories they state");
     expect(fix).toContain("https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/");
-    expect(fix).toContain("Do not fill it in for them");
+    expect(fix).toContain("Do not fill it in for them or suggest a value");
 
     manifest({
       browser_specific_settings: { gecko: { data_collection_permissions: { required: ["none"] } } },
@@ -226,8 +226,10 @@ describe("919: storeMdLine says where the permission justifications go", () => {
     const line = storeMdLine(dist, [])!;
 
     expect(line).toBe(
-      `No STORE.md is in ${dist}. Before a store submission, write it there, one section per store: ## Chrome Web Store with a ### Permissions justification bullet per declared permission, host permission and content script match, ## Firefox Add-ons with ### Reviewer notes, ## Edge Add-ons (extension_docs_search "STORE.md" has the rest); ask the owner for its data-use and privacy answers.`,
+      `No STORE.md is in ${dist}. Write it there now from the manifest and the code, one section per store: ## Chrome Web Store with a ### Permissions justification bullet per declared permission, host permission and content script match, ## Firefox Add-ons with ### Reviewer notes, ## Edge Add-ons (extension_docs_search "STORE.md" has the rest). Leave only its data-use and privacy rows unanswered for the owner, and show them what the code stores and sends.`,
     );
+
+    expect(line).not.toMatch(/before a store submission|ask the owner for/i);
 
     for (const store of ["chrome", "firefox", "edge"] as const) expect(line).toContain(STORE_SECTIONS[store]);
 

@@ -277,8 +277,8 @@ export function reviewRisksReport(input: {
     if (!gecko || !("data_collection_permissions" in gecko)) {
       risks.push({
         code: "FIREFOX_DATA_COLLECTION_MISSING",
-        message: "The Firefox manifest has no browser_specific_settings.gecko.data_collection_permissions. AMO requires it for new add-ons and for updates of existing ones, and the platform's own Firefox preflight repeats the warning on every submission.",
-        fix: 'Ask the owner what the extension collects and write "browser_specific_settings": { "gecko": { "data_collection_permissions": ... } } with the categories they state (https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/). Do not fill it in for them.',
+        message: "The Firefox manifest has no browser_specific_settings.gecko.data_collection_permissions. AMO requires it for new add-ons and for updates.",
+        fix: 'Ask the owner what the extension collects and write "browser_specific_settings": { "gecko": { "data_collection_permissions": ... } } with the categories they state (https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/). Do not fill it in for them or suggest a value.',
       });
     }
 
@@ -362,7 +362,7 @@ const JUSTIFIED = "each permission, host permission and content script match the
 
 export function storeMdLine(root: string, risks: ReviewRisk[]): string | null {
   if (!fs.existsSync(path.join(root, STORE_MD_FILENAME))) {
-    return `No ${STORE_MD_FILENAME} is in ${root}. Before a store submission, write it there, one section per store: ${STORE_SECTIONS.chrome} with a ${JUSTIFICATION_HEADING} bullet per declared permission, host permission and content script match, ${STORE_SECTIONS.firefox} with ${REVIEWER_NOTES_HEADING}, ${STORE_SECTIONS.edge} (extension_docs_search "${STORE_MD_FILENAME}" has the rest); ask the owner for its data-use and privacy answers.`;
+    return `No ${STORE_MD_FILENAME} is in ${root}. Write it there now from the manifest and the code, one section per store: ${STORE_SECTIONS.chrome} with a ${JUSTIFICATION_HEADING} bullet per declared permission, host permission and content script match, ${STORE_SECTIONS.firefox} with ${REVIEWER_NOTES_HEADING}, ${STORE_SECTIONS.edge} (extension_docs_search "${STORE_MD_FILENAME}" has the rest). Leave only its data-use and privacy rows unanswered for the owner, and show them what the code stores and sends.`;
   }
 
   if (!risks.length) return null;

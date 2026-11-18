@@ -783,7 +783,7 @@ export async function handler(args: {
 
       if (!staticTheme && (!dataCollection || typeof dataCollection !== "object")) {
         result.warnings.push(
-          'Firefox: no browser_specific_settings.gecko.data_collection_permissions. AMO requires it for new add-ons and the Firefox build warns on every run. What the extension collects is the owner\'s declaration to Mozilla, so ask the person and write the block under firefox:browser_specific_settings.gecko.data_collection_permissions with the categories they state (https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/). Do not add it on their behalf.',
+          'Firefox: no browser_specific_settings.gecko.data_collection_permissions. AMO requires it for new add-ons and the Firefox build warns on every run. What the extension collects is the owner\'s declaration to Mozilla, so ask the person and write the block under firefox:browser_specific_settings.gecko.data_collection_permissions with the categories they state (https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/). Do not add it on their behalf, and do not propose a value for it either.',
         );
       }
 
