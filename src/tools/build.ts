@@ -43,6 +43,7 @@ import {
 import { safariSigningFrame } from "../lib/safari-signing";
 import { teamUnknownToXcodeRefusal } from "../lib/xcode-teams";
 import { reviewCoverageNotes, reviewDistReport, reviewRiskWarnings } from "../lib/store-review";
+import { STORE_MD_FILENAME } from "../lib/store-md";
 import { dropTrailing } from "../lib/linear-text";
 
 const COMMAND = "extension_build";
@@ -899,6 +900,11 @@ export async function handler(args: {
       browser,
       args.projectPath,
     );
+    const storeMdRoot = engineProjectRoot(args.projectPath);
+    const storeMdMissingNote =
+      args.zip && !fs.existsSync(path.join(storeMdRoot, STORE_MD_FILENAME))
+        ? ` No ${STORE_MD_FILENAME} is in ${storeMdRoot}: a store submission through extension.dev reads the listing copy, the permission justifications and each store's reviewer notes from that file, so write it before submitting (extension_docs_search with "${STORE_MD_FILENAME}" answers its format), and leave every data-use and privacy answer in it for the person.`
+        : "";
     const declarationByValidator = (preflight?.warnings ?? []).some((line) =>
       line.includes("no browser_specific_settings.gecko.data_collection_permissions"),
     );
@@ -1120,7 +1126,7 @@ export async function handler(args: {
         ...(signingFrame?.warnings ?? []),
         ...(signingFrame?.hints ?? []),
       ],
-      hint: `The ${mode === "none" ? "" : `${mode} `}build is in ${distDir}.${modeSentence(mode) ? ` ${modeSentence(mode)}` : ""} To read what is in it, call extension_analyze with this projectPath and browser "${browser}": it answers the sizes, the entry points and the store checks a reviewer runs, plus the emitted manifest of every built browser and the resolved keys that differ between them (manifestByBrowser), so there is no need to list or grep the folder by hand or to read dist/<browser>/manifest.json.${zipPath ? ` The store zip is ${zipPath}.` : ""}${platformListed() ? " To send the extension to someone, extension_publish gives the project's build on extension.dev a page with a download and a run command for each browser (the platform builds the source it holds, not this folder: extension_builds_act action:\"rebuild\" starts that build with no push, and a project built from a repository also builds on a push)." : ""}`,
+      hint: `The ${mode === "none" ? "" : `${mode} `}build is in ${distDir}.${modeSentence(mode) ? ` ${modeSentence(mode)}` : ""} To read what is in it, call extension_analyze with this projectPath and browser "${browser}": it answers the sizes, the entry points and the store checks a reviewer runs, plus the emitted manifest of every built browser and the resolved keys that differ between them (manifestByBrowser), so there is no need to list or grep the folder by hand or to read dist/<browser>/manifest.json.${zipPath ? ` The store zip is ${zipPath}.` : ""}${storeMdMissingNote}${platformListed() ? " To send the extension to someone, extension_publish gives the project's build on extension.dev a page with a download and a run command for each browser (the platform builds the source it holds, not this folder: extension_builds_act action:\"rebuild\" starts that build with no push, and a project built from a repository also builds on a push)." : ""}`,
     });
   }
 

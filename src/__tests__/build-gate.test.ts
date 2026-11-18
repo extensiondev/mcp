@@ -231,6 +231,28 @@ describe("extension_build zip path reporting", () => {
     expect(result.warnings.join(" ")).not.toContain("names no zip");
   });
 
+  it("says a zipped build has no STORE.md beside it and where its format is, and says nothing once the file is there or no zip was asked", async () => {
+    const dir = builtProject("zip-probe-ext");
+    const zip = path.join(dir, "dist", "zipprobeext-1.0.0-chrome.zip");
+    engineWrites(dir, [zip]);
+
+    const missing = JSON.parse(await build.handler({ projectPath: dir, zip: true }));
+
+    expect(missing.hint).toContain(`No STORE.md is in ${dir}`);
+    expect(missing.hint).toContain('extension_docs_search with "STORE.md" answers its format');
+    expect(missing.hint).toContain("leave every data-use and privacy answer in it for the person");
+
+    const plain = JSON.parse(await build.handler({ projectPath: dir }));
+
+    expect(plain.hint).not.toContain("STORE.md");
+
+    fs.writeFileSync(path.join(dir, "STORE.md"), "# Store metadata\n");
+
+    const present = JSON.parse(await build.handler({ projectPath: dir, zip: true }));
+
+    expect(present.hint).not.toContain("No STORE.md");
+  });
+
   it("finds the engine's name at the dist root when the summary carries no list", async () => {
     const dir = builtProject("zip-probe-ext");
     const zip = path.join(dir, "dist", "zipprobeext-1.0.0-chrome.zip");
