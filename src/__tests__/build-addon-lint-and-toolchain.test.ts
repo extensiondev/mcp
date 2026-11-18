@@ -247,9 +247,22 @@ describe("916: a build answer says each review risk once and stays light", () =>
     const result = JSON.parse(text);
     const risk = result.value.reviewRisks.find((r: { code: string }) => r.code === "ICON_128_MISSING");
 
-    expect(risk.fix).toContain('declare it as "icons": { "128": "<path>" }');
+    expect(risk.fix).toContain('add "icons": { "128": "icons/icon-128.png" } to the manifest');
     expect(result.warnings.find((w: string) => w.startsWith("Store review:"))).toContain("ICON_128_MISSING");
     expect(result.warnings.filter((w: string) => w.includes("No 128x128 icon declared"))).toEqual([]);
     expect(text.split("128x128")).toHaveLength(3);
+  });
+
+  it("the missing icon fix names the 128 pixel PNG the project already holds, and a placeholder to save and report when it holds none", async () => {
+    const dir = project();
+    fs.writeFileSync(path.join(dir, "STORE.md"), "# Store metadata\n");
+    const fixOf = async () => JSON.parse(await build.handler({ projectPath: dir })).value.reviewRisks.find((r: { code: string }) => r.code === "ICON_128_MISSING").fix;
+
+    expect(await fixOf()).toContain('save a plain placeholder PNG there as icons/icon-128.png, add "icons": { "128": "icons/icon-128.png" } to the manifest, build again and tell the owner it is a placeholder');
+
+    fs.mkdirSync(path.join(dir, "src", "images"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "src", "images", "logo.png"), Buffer.concat([Buffer.from("89504e470d0a1a0a0000000d49484452", "hex"), Buffer.from([0, 0, 0, 128, 0, 0, 0, 128, 8, 6, 0, 0, 0])]));
+
+    expect(await fixOf()).toBe('images/logo.png under the manifest\'s folder is 128x128: add "icons": { "128": "images/logo.png" } to the manifest and build again.');
   });
 });

@@ -9,6 +9,8 @@ import { reviewDistReport, reviewRisksReport, storeMdLine } from "../lib/store-r
 
 let dist: string;
 
+const PNG_128 = Buffer.concat([Buffer.from("89504e470d0a1a0a0000000d49484452", "hex"), Buffer.from([0, 0, 0, 128, 0, 0, 0, 128, 8, 6, 0, 0, 0])]);
+
 function write(rel: string, content: string) {
   const file = path.join(dist, rel);
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -184,6 +186,36 @@ describe("reviewDistReport risks", () => {
 
     manifest({ icons: { "128": "/icons/128.png" } });
     expect(codes()).not.toContain("ICON_128_MISSING");
+  });
+
+  it("names the 128 pixel PNG already under the manifest's folder to declare, and a placeholder to save and report when none is there", () => {
+    const source = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-review-src-"));
+    const sourceManifest = path.join(source, "src", "manifest.json");
+    const fixOf = () => reviewDistReport(dist, "chrome", sourceManifest).risks.find((r) => r.code === "ICON_128_MISSING")!.fix;
+
+    fs.mkdirSync(path.join(source, "src", "images"), { recursive: true });
+    fs.mkdirSync(path.join(source, "src", "node_modules", "dep"), { recursive: true });
+    fs.writeFileSync(sourceManifest, "{}");
+    fs.writeFileSync(path.join(source, "src", "node_modules", "dep", "logo.png"), PNG_128);
+    fs.writeFileSync(path.join(source, "src", "images", "small.png"), "png");
+    manifest({ icons: { "16": "icons/16.png" } });
+
+    expect(fixOf()).toBe(
+      'No 128x128 PNG is under the manifest\'s folder, and the artwork is the owner\'s. Until they supply it, save a plain placeholder PNG there as icons/icon-128.png, add "icons": { "128": "icons/icon-128.png" } to the manifest, build again and tell the owner it is a placeholder to replace before submitting.',
+    );
+
+    manifest({ icons: { "128": "./images/gone.png" } });
+
+    expect(fixOf()).toBe(
+      "No 128x128 PNG is under the manifest's folder, and the artwork is the owner's. Until they supply it, save a plain placeholder PNG there as images/gone.png, build again and tell the owner it is a placeholder to replace before submitting.",
+    );
+
+    fs.writeFileSync(path.join(source, "src", "images", "logo.png"), PNG_128);
+    manifest({ icons: { "16": "icons/16.png" } });
+
+    expect(fixOf()).toBe('images/logo.png under the manifest\'s folder is 128x128: add "icons": { "128": "images/logo.png" } to the manifest and build again.');
+
+    fs.rmSync(source, { recursive: true, force: true });
   });
 });
 

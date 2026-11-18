@@ -113,6 +113,7 @@ describe("extension_analyze tells a development build from a production one", ()
     const said = answer.warnings.filter((w: string) => w.includes("STORE.md"));
 
     expect(answer.value.reviewRisks.map((r: { code: string }) => r.code)).toEqual(["ICON_128_MISSING"]);
+    expect(answer.value.reviewRisks[0].fix).toContain('save a plain placeholder PNG there as icons/icon-128.png, add "icons": { "128": "icons/icon-128.png" } to the manifest');
     expect(said).toHaveLength(1);
     expect(said[0]).toContain(`No STORE.md is in ${dir}. Before a store submission, write it there`);
     expect(said[0]).toContain("ask the owner");

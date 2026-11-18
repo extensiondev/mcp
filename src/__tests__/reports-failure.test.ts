@@ -969,6 +969,17 @@ describe("wave-2 swarm lies stay fixed", () => {
     );
 
     expect(result.value.warnings.join(" ")).toContain("128x128");
+    expect(result.value.warnings.find((w: string) => w.startsWith("No 128x128 icon declared"))).toContain(
+      'Until they supply it, save a plain placeholder PNG there as icons/icon-128.png, add "icons": { "128": "icons/icon-128.png" } to the manifest',
+    );
+
+    fs.writeFileSync(path.join(dir, "logo.png"), Buffer.concat([Buffer.from("89504e470d0a1a0a0000000d49484452", "hex"), Buffer.from([0, 0, 0, 128, 0, 0, 0, 128, 8, 6, 0, 0, 0])]));
+
+    const held = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["chrome"] }));
+
+    expect(held.value.warnings.find((w: string) => w.startsWith("No 128x128 icon declared"))).toContain(
+      'logo.png under the manifest\'s folder is 128x128: add "icons": { "128": "logo.png" } to the manifest',
+    );
   });
 
   it("manifest_validate includes edge in the default target matrix (F28)", async () => {

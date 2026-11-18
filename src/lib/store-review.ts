@@ -12,7 +12,7 @@ import path from "node:path";
 import { isGeckoFamily } from "./browser-family";
 import { isDevelopmentBuild } from "./build-type";
 import { ENTERPRISE_CHANNEL_SENTENCE, adminInstallOnlyOf } from "./firefox-enterprise";
-import { declaredIcon128 } from "./store-listing-media";
+import { declaredIcon128, readPngSize } from "./store-listing-media";
 import { STORE_SECTIONS, SUBSECTION_KEYS } from "./store-md-declarations";
 import { STORE_MD_FILENAME } from "./store-md";
 
@@ -105,6 +105,69 @@ function readText(distPath: string, rel: string): string | null {
   }
 }
 
+const ICON_SKIPPED_FOLDERS = new Set(["node_modules", "dist"]);
+const ICON_SEARCH_DEPTH = 5;
+const ICON_SEARCH_ENTRIES = 3000;
+const ICON_PLACEHOLDER = "icons/icon-128.png";
+
+function isPng128(file: string): boolean {
+  const head = Buffer.alloc(24);
+  let handle: number | null = null;
+
+  try {
+    handle = fs.openSync(file, "r");
+    fs.readSync(handle, head, 0, 24, 0);
+  } catch {
+    return false;
+  } finally {
+    if (handle !== null) fs.closeSync(handle);
+  }
+
+  const size = readPngSize(head);
+
+  return size?.width === 128 && size.height === 128;
+}
+
+function png128Under(dir: string): string | null {
+  let budget = ICON_SEARCH_ENTRIES;
+  const queue: Array<{ dir: string; depth: number }> = [{ dir, depth: 0 }];
+
+  for (let at = 0; at < queue.length; at++) {
+    const here = queue[at];
+    let entries: fs.Dirent[];
+
+    try {
+      entries = fs.readdirSync(here.dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (--budget < 0) return null;
+
+      const file = path.join(here.dir, entry.name);
+
+      if (entry.isDirectory()) {
+        if (here.depth < ICON_SEARCH_DEPTH && !entry.name.startsWith(".") && !ICON_SKIPPED_FOLDERS.has(entry.name)) queue.push({ dir: file, depth: here.depth + 1 });
+      } else if (entry.isFile() && /\.png$/i.test(entry.name) && isPng128(file)) {
+        return path.relative(dir, file).split(path.sep).join("/");
+      }
+    }
+  }
+
+  return null;
+}
+
+export function icon128Fix(sourceManifest: string | null | undefined, declared = ""): string {
+  if (!sourceManifest) return 'Add a 128x128 PNG to the project, declare it as "icons": { "128": "<path>" } in the manifest and build again.';
+
+  const held = png128Under(path.dirname(sourceManifest));
+
+  if (held) return `${held} under the manifest's folder is 128x128: add "icons": { "128": "${held}" } to the manifest and build again.`;
+
+  return `No 128x128 PNG is under the manifest's folder, and the artwork is the owner's. Until they supply it, save a plain placeholder PNG there as ${declared || ICON_PLACEHOLDER}, ${declared ? "" : `add "icons": { "128": "${ICON_PLACEHOLDER}" } to the manifest, `}build again and tell the owner it is a placeholder to replace before submitting.`;
+}
+
 export interface ReviewReport {
   risks: ReviewRisk[];
   unreadable: string[];
@@ -122,6 +185,7 @@ export function reviewRisksReport(input: {
   manifest: Record<string, unknown>;
   files: Array<{ path: string; type?: string }>;
   development?: boolean;
+  sourceManifest?: string | null;
 }): ReviewReport {
   const risks: ReviewRisk[] = [];
   const unreadable: string[] = [];
@@ -145,7 +209,7 @@ export function reviewRisksReport(input: {
     risks.push({
       code: "ICON_128_MISSING",
       message: `${icon ? `The manifest's icons["128"] names ${icon}, which is not in the build` : 'The manifest declares no 128x128 icon ("128" in icons)'}. The Chrome Web Store requires one for a listing, and Edge Add-ons expects it too.`,
-      fix: 'Add a 128x128 PNG to the project, declare it as "icons": { "128": "<path>" } in the manifest and build again.',
+      fix: icon128Fix(input.sourceManifest, icon),
     });
   }
 
@@ -326,7 +390,7 @@ function listFiles(dir: string, base = ""): Array<{ path: string }> {
   return out;
 }
 
-export function reviewDistReport(distPath: string, browser: string): ReviewReport {
+export function reviewDistReport(distPath: string, browser: string, sourceManifest?: string | null): ReviewReport {
   let manifest: Record<string, unknown>;
 
   try {
@@ -340,5 +404,5 @@ export function reviewDistReport(distPath: string, browser: string): ReviewRepor
     };
   }
 
-  return reviewRisksReport({ distPath, browser, manifest, files: listFiles(distPath) });
+  return reviewRisksReport({ distPath, browser, manifest, files: listFiles(distPath), sourceManifest });
 }

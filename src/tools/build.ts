@@ -22,6 +22,7 @@ import {
   readyContractPath,
   sessionPathHint,
   engineProjectRoot,
+  sourceManifestPath,
 } from "../lib/session-paths";
 import { type Envelope, envelope, isEnvelope } from "../lib/envelope";
 import { platformListed } from "../lib/tool-policy";
@@ -958,7 +959,7 @@ export async function handler(args: {
     const specialEntrypoints = specialFolderEntrypoints(specialRoots, distDir, specialFolderSettings(specialRoots, engineBrowserName(browser)));
     const entrypoints = [...manifestEntrypoints, ...specialEntrypoints];
     const specialFolderNote = specialFolderMissingNote(specialEntrypoints, distDir);
-    const review = reviewDistReport(distDir, browser);
+    const review = reviewDistReport(distDir, browser, sourceManifestPath(args.projectPath));
     const risks = review.risks;
     const declarationByRisk = risks.some((risk) => risk.code === "FIREFOX_DATA_COLLECTION_MISSING");
     const iconByRisk = risks.some((risk) => risk.code === "ICON_128_MISSING");

@@ -15,6 +15,7 @@ import { listTemplates } from "../lib/templates-cache";
 import { envelope, okOrRefusal } from "../lib/envelope";
 import { apiUsesIn, type ApiUse } from "../lib/guarded-api-uses";
 import { droppedRuntimePages } from "../lib/dropped-runtime-pages";
+import { icon128Fix } from "../lib/store-review";
 import { ADMIN_INSTALL_ONLY_KEY, ENTERPRISE_CHANNEL_SENTENCE, adminInstallOnlyOf, adminInstallOnlyTypeIssue } from "../lib/firefox-enterprise";
 
 const COMMAND = "extension_manifest_validate";
@@ -538,7 +539,7 @@ export async function handler(args: {
 
   if (!iconMap || typeof iconMap["128"] !== "string") {
     result.warnings.push(
-      'No 128x128 icon declared ("128" key in icons). The Chrome Web Store requires one for a store listing, and Edge Add-ons expects it too.',
+      `No 128x128 icon declared ("128" key in icons). The Chrome Web Store requires one for a store listing, and Edge Add-ons expects it too. ${icon128Fix(path.resolve(manifestPath))}`,
     );
   }
 

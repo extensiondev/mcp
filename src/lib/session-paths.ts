@@ -126,6 +126,10 @@ export function engineProjectRoot(projectPath: string): string {
   return start;
 }
 
+export function sourceManifestPath(projectPath: string): string | null {
+  return extensionManifestPath(engineProjectRoot(projectPath)) ?? extensionManifestPath(path.resolve(projectPath));
+}
+
 const rooted =
   <T extends unknown[], R>(fn: (projectPath: string, ...rest: T) => R) =>
   (projectPath: string, ...rest: T): R =>
