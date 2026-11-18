@@ -138,7 +138,7 @@ describe("a Firefox build says the missing data collection declaration once", ()
 
     expect(result.ok).toBe(true);
     expect(risk.fix).toContain("Ask the owner what the extension collects");
-    expect(risk.fix).toContain("do not fill it in for them");
+    expect(risk.fix).toContain("Do not fill it in for them");
     expect(result.warnings.filter((w: string) => w.includes("data_collection_permissions"))).toEqual([]);
     expect(text.split("data_collection_permissions")).toHaveLength(3);
     expect(result.value.buildWarningsTruncated).toBeUndefined();

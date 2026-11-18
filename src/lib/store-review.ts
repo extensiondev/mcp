@@ -214,7 +214,7 @@ export function reviewRisksReport(input: {
       risks.push({
         code: "FIREFOX_DATA_COLLECTION_MISSING",
         message: "The Firefox manifest has no browser_specific_settings.gecko.data_collection_permissions. AMO requires it for new add-ons and for updates of existing ones, and the platform's own Firefox preflight repeats the warning on every submission.",
-        fix: 'Ask the owner what the extension collects and write their answer as "browser_specific_settings": { "gecko": { "data_collection_permissions": ... } }; { "required": ["none"] } is the form only when they say it transmits no data. The declaration is theirs to make to Mozilla, so do not fill it in for them.',
+        fix: 'Ask the owner what the extension collects and write "browser_specific_settings": { "gecko": { "data_collection_permissions": ... } } with the categories they state (https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/). Do not fill it in for them.',
       });
     }
 

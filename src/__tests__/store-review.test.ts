@@ -69,8 +69,9 @@ describe("reviewDistReport risks", () => {
     const fix = reviewDistReport(dist, "firefox").risks.find((r) => r.code === "FIREFOX_DATA_COLLECTION_MISSING")?.fix ?? "";
 
     expect(fix).toContain("Ask the owner what the extension collects");
-    expect(fix).toContain('{ "required": ["none"] } is the form only when they say it transmits no data');
-    expect(fix).toContain("do not fill it in for them");
+    expect(fix).toContain("with the categories they state");
+    expect(fix).toContain("https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/");
+    expect(fix).toContain("Do not fill it in for them");
 
     manifest({
       browser_specific_settings: { gecko: { data_collection_permissions: { required: ["none"] } } },
@@ -117,6 +118,38 @@ describe("reviewDistReport risks", () => {
     expect(report.unreadable).toEqual([]);
     expect(report.notScanned).toEqual([]);
     expect(report.risks.map((r) => r.code)).toContain("UNUSED_PERMISSION");
+  });
+
+  it("920: no review risk message or fix suggests a value for the data collection declaration", () => {
+    write("icons/16.png", "png");
+    write("bg.js", "const run = (s) => eval(s);");
+    write(
+      "manifest.json",
+      JSON.stringify({
+        manifest_version: 3,
+        name: "x",
+        version: "1.0.0",
+        icons: { "16": "icons/16.png" },
+        permissions: ["tabs"],
+        host_permissions: ["<all_urls>"],
+        browser_specific_settings: { gecko: { id: "x@example.com", admin_install_only: true } },
+      }),
+    );
+
+    const risks = reviewDistReport(dist, "firefox").risks;
+
+    expect(risks.map((r) => r.code).sort()).toEqual([
+      "BROAD_HOST_ACCESS",
+      "FIREFOX_DATA_COLLECTION_MISSING",
+      "FIREFOX_ENTERPRISE_CHANNEL",
+      "ICON_128_MISSING",
+      "REMOTE_CODE",
+      "UNUSED_PERMISSION",
+    ]);
+
+    for (const risk of risks) {
+      expect(`${risk.message} ${risk.fix}`).not.toMatch(/\bnone\b|"required"|transmits no data|collects nothing|collects no /i);
+    }
   });
 
   it("names the enterprise channel of a Firefox package whose manifest sets admin_install_only true (ledger 511)", () => {

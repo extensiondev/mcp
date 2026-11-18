@@ -115,8 +115,10 @@ describe("the Firefox report names what Firefox itself would say", () => {
     expect(result.value.warnings.find((w: string) => w.includes("gecko.id"))).toBeUndefined();
     const declaration = result.value.warnings.find((w: string) => w.includes("data_collection_permissions"));
 
-    expect(declaration).toContain("ask the person and write their answer");
-    expect(declaration).toContain('{"required": ["none"]} is the form only when they say it transmits no data');
+    expect(declaration).toContain("ask the person and write the block");
+    expect(declaration).toContain("with the categories they state");
+    expect(declaration).toContain("https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/");
+    expect(declaration).not.toMatch(/\bnone\b|"required"|transmits no data/i);
     expect(declaration).toContain("Do not add it on their behalf");
     expect(declaration).not.toContain("the minimal form is");
 
