@@ -190,7 +190,11 @@ describe("916: a build answer says each review risk once and stays light", () =>
     const dir = riskyProject();
     summaryOverride = { addon_lint: { status: "missing" }, toolchain: TOOLCHAIN };
 
-    const text = (await build.handler({ projectPath: dir, browser: "firefox" })).split(dir).join("/work");
+    const text = (await build.handler({ projectPath: dir, browser: "firefox" }))
+      .split(JSON.stringify(dir).slice(1, -1))
+      .join("/work")
+      .split("\\\\")
+      .join("/");
     const result = JSON.parse(text);
 
     expect(result.ok).toBe(true);

@@ -409,7 +409,11 @@ describe("extension_create defaultsApplied", () => {
     const parent = tmpDir();
     scaffoldTarget = path.join(parent, "probe");
 
-    const text = (await create.handler({ projectName: "probe", parentDir: parent, template: "typescript", install: false })).split(parent).join("/work");
+    const text = (await create.handler({ projectName: "probe", parentDir: parent, template: "typescript", install: false }))
+      .split(JSON.stringify(parent).slice(1, -1))
+      .join("/work")
+      .split("\\\\")
+      .join("/");
     const result = JSON.parse(text);
     const steps: string[] = result.value.nextSteps;
 
