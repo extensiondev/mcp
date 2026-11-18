@@ -71,6 +71,53 @@ const RDP_ACTOR_NOTE =
   "actor is an RDP tab descriptor actor id, NOT a chrome.tabs id: do not pass it as `tab`. " +
   "Target a tab with `targetId` (its browserId, listed as targetId), `tabUrl` (URL substring) or `url`; if you need a numeric tab id, call extension_dom_snapshot with listTabs: true.";
 
+/* @invariant THE HTML A SNAPSHOT ANSWERS FITS THE CLIENT THAT ASKED. The cap
+ * was 262144 characters on every path, and on 2026-11-18 (ledger 938) an
+ * answer of 259,473 characters came back under it and the client refused the
+ * whole answer as too large, so the call bought nothing. The default cap is
+ * what a client reads in one answer, it is sent to the engine and applied
+ * again to whatever any path answered, and a cut answer says so three ways:
+ * value.htmlTruncated, the full size in value.summary.htmlLength, and a hint
+ * naming the arguments that read less or more.
+ */
+export const HTML_DEFAULT_MAX_BYTES = 32_768;
+
+function htmlCutHint(shown: number, full: number): string {
+  return `value.html is the first ${shown} ${full > shown ? `of ${full} ` : ""}characters of the page's markup (value.htmlTruncated). To read less, call extension_dom_snapshot with include: ["elements"] for the interactive elements with a selector each, then extension_element with action: "text" and one selector. To read more of the markup in one answer, pass maxBytes${full > shown ? `, up to ${full}` : ""}${full > HTML_DEFAULT_MAX_BYTES ? "; a client may refuse an answer that long" : ""}.`;
+}
+
+export function withHtmlCap(raw: string, maxBytes: number): string {
+  let frame: Record<string, any> | null;
+
+  try {
+    frame = JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+
+  const value = frame?.ok === true ? frame.value : null;
+  if (!frame || !value || typeof value !== "object" || typeof value.html !== "string") return raw;
+
+  const cap = Number.isFinite(maxBytes) && maxBytes > 0 ? Math.floor(maxBytes) : 0;
+  const over = cap > 0 && value.html.length > cap;
+  if (!over && value.htmlTruncated !== true) return raw;
+
+  const summary = value.summary && typeof value.summary === "object" ? value.summary : null;
+  const reported = Number(summary?.htmlLength);
+  const full = Math.max(value.html.length, Number.isFinite(reported) ? reported : 0);
+
+  if (over) value.html = value.html.slice(0, cap);
+
+  value.htmlTruncated = true;
+
+  if (summary) summary.htmlLength = full;
+
+  const hint = htmlCutHint(value.html.length, full);
+  frame.hint = typeof frame.hint === "string" && frame.hint ? `${hint} ${frame.hint}` : hint;
+
+  return actFrameJson(frame);
+}
+
 export const schema = {
   name: "extension_dom_snapshot",
   description:
@@ -112,7 +159,7 @@ export const schema = {
         default: ["summary"],
         description: "summary: counts. html: markup to maxBytes. elements: visible interactive elements with role, name, unique selector and state.",
       },
-      maxBytes: { type: "number", default: 262144, description: "Byte cap on the html." },
+      maxBytes: { type: "number", default: HTML_DEFAULT_MAX_BYTES, description: "Byte cap on the html." },
       withConsole: {
         type: ["number", "boolean"],
         description:
@@ -242,7 +289,7 @@ async function snapshotExtensionPageOverProtocol(
   try {
     const outcome = await rdpEvaluateInTab(resolved.port, {
       select: target.select,
-      expression: protocolSnapshotExpression(wantHtml, args.maxBytes ?? 262144, wantsElements(args.include)),
+      expression: protocolSnapshotExpression(wantHtml, args.maxBytes ?? HTML_DEFAULT_MAX_BYTES, wantsElements(args.include)),
       timeoutMs: args.timeout ?? 10_000,
     });
 
@@ -293,7 +340,7 @@ async function snapshotWithoutScripting(
   const read = await readGeckoTabWithoutScripting(
     args,
     browser,
-    protocolSnapshotExpression(args.include?.includes("html") === true, args.maxBytes ?? 262144, wantsElements(args.include)),
+    protocolSnapshotExpression(args.include?.includes("html") === true, args.maxBytes ?? HTML_DEFAULT_MAX_BYTES, wantsElements(args.include)),
     schema.name,
   );
   if ("error" in read) return read.error;
@@ -344,7 +391,7 @@ async function snapshotByTargetId(
   targetId: string,
   warnings: Array<string | null>,
 ): Promise<string> {
-  const expression = protocolSnapshotExpression(args.include?.includes("html") === true, args.maxBytes ?? 262144, wantsElements(args.include));
+  const expression = protocolSnapshotExpression(args.include?.includes("html") === true, args.maxBytes ?? HTML_DEFAULT_MAX_BYTES, wantsElements(args.include));
 
   if (isGeckoFamily(browser)) {
     const resolved = await resolveRdpPort(args.projectPath, browser);
@@ -438,7 +485,7 @@ async function cdpPortOrError(
 }
 
 export async function handler(args: Parameters<typeof snapshot>[0]): Promise<string> {
-  return readOpeningIfClosed(() => snapshot(args), surfaceOpening(schema.name, args));
+  return withHtmlCap(await readOpeningIfClosed(() => snapshot(args), surfaceOpening(schema.name, args)), args.maxBytes ?? HTML_DEFAULT_MAX_BYTES);
 }
 
 async function snapshot(
@@ -723,7 +770,7 @@ async function snapshot(
   if (engineInclude.length) cli.push("--include", engineInclude.join(","));
   else if (wantsElements(args.include)) cli.push("--include", "summary");
 
-  if (args.maxBytes != null) cli.push("--max-bytes", String(args.maxBytes));
+  if (args.maxBytes != null || engineInclude.includes("html")) cli.push("--max-bytes", String(args.maxBytes ?? HTML_DEFAULT_MAX_BYTES));
   if (withConsole != null) cli.push("--with-console", String(withConsole));
 
   cli.push("--browser", resolveSessionBrowser(args.projectPath, args.browser).browser);

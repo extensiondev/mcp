@@ -207,7 +207,7 @@ Take a shallow DOM snapshot of one open surface or targetId, or list what is ope
 | `listTabs` | boolean | no | `false` | List tabs with ids and return. |
 | `context` | "content" \| "page" \| "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" | no | `"content"` | A closed surface is opened first (as extension_open does); the answer then says opened: true. |
 | `include` | array of "summary" \| "html" \| "elements" | no | `["summary"]` | summary: counts. html: markup to maxBytes. elements: visible interactive elements with role, name, unique selector and state. |
-| `maxBytes` | number | no | `262144` | Byte cap on the html. |
+| `maxBytes` | number | no | `32768` | Byte cap on the html. |
 | `withConsole` | number \| boolean | no |  | Console lines: a count, or true for 50. |
 | `browser` | string | no |  | Session browser; required when several run. |
 | `timeout` | number | no |  | Timeout ms (default 30000; Firefox 10000; debug port 15000). |

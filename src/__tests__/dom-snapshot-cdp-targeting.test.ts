@@ -42,6 +42,7 @@ vi.mock("../lib/cdp", () => {
 
 const pageReads: Array<{ targetId: string; expression: string }> = [];
 const elementsAnswer = { elements: [{ role: "button", name: "Save", selector: "#save" }], elementCount: 1, elementsTruncated: false };
+let pageAnswer: Record<string, unknown> | null = null;
 vi.mock("../lib/cdp-extension-page", async (importOriginal) => {
   const actual = await importOriginal<typeof CdpExtensionPageModule>();
 
@@ -50,7 +51,7 @@ vi.mock("../lib/cdp-extension-page", async (importOriginal) => {
     evaluateOnExtensionPage: async (_port: number, targetId: string, expression: string) => {
       pageReads.push({ targetId, expression });
 
-      return { ok: true, value: elementsAnswer };
+      return { ok: true, value: pageAnswer ?? elementsAnswer };
     },
   };
 });
@@ -74,6 +75,7 @@ beforeEach(() => {
 afterEach(() => {
   calls.length = 0;
   pageReads.length = 0;
+  pageAnswer = null;
 });
 
 describe("dom_snapshot listTargets", () => {
@@ -403,5 +405,67 @@ describe("dom_snapshot include elements on the bridge path", () => {
     expect(result.value.summary).toEqual({ htmlLength: 10 });
     expect(result.warnings.join(" ")).toMatch(/could not be read over the debug port for https:\/\/example\.com\/: the session records no CDP port/);
     expect(result.warnings.join(" ")).toContain('extension_dom_snapshot {include: ["elements"]}');
+  });
+});
+
+describe("938: the html a snapshot answers is capped where a client can read it", () => {
+  const LONG_PAGE = `<html><body><ul>${"<li>calibrate sensor 7</li>".repeat(9_979)}</ul></body></html>`;
+  const summary = () => ({ htmlLength: LONG_PAGE.length, scriptCount: 2, styleCount: 3, extensionRootCount: 0, openShadowRoots: 0, bodyChildCount: 1 });
+
+  it("cuts a long page read by targetId at the default cap and says the size and how to read less", async () => {
+    pageAnswer = { context: "page", url: "https://example.com/", title: "Example Domain", summary: summary(), html: LONG_PAGE };
+
+    const raw = await domSnapshot.handler({ projectPath: "/p", browser: "chrome", targetId: "AAA1", include: ["html"] });
+    const result = JSON.parse(raw);
+
+    expect(LONG_PAGE.length).toBeGreaterThan(259_000);
+    expect(domSnapshot.schema.inputSchema.properties.maxBytes.default).toBe(32_768);
+    expect(pageReads[0]!.expression).toContain("var cap = 32768;");
+    expect(result.ok).toBe(true);
+    expect(result.value.html).toBe(LONG_PAGE.slice(0, 32_768));
+    expect(result.value.htmlTruncated).toBe(true);
+    expect(result.value.summary.htmlLength).toBe(LONG_PAGE.length);
+    expect(result.hint).toContain(`value.html is the first 32768 of ${LONG_PAGE.length} characters`);
+    expect(result.hint).toContain('include: ["elements"]');
+    expect(result.hint).toContain(`maxBytes, up to ${LONG_PAGE.length}`);
+    expect(raw.length).toBeLessThan(40_000);
+  });
+
+  it("sends the cap to the engine and cuts an engine answer that came back over it", async () => {
+    actResponder = () => JSON.stringify(actFrame("inspect", { context: "page", url: "https://example.com/", summary: summary(), html: LONG_PAGE }));
+
+    const result = JSON.parse(await domSnapshot.handler({ projectPath: "/p", browser: "chrome", url: "https://example.com/", context: "page", include: ["html"] }));
+    const cli = calls[calls.length - 1]!;
+
+    expect(cli[cli.indexOf("--max-bytes") + 1]).toBe("32768");
+    expect(result.value.html).toHaveLength(32_768);
+    expect(result.value.htmlTruncated).toBe(true);
+    expect(result.value.summary.htmlLength).toBe(LONG_PAGE.length);
+    expect(result.hint).toContain("value.htmlTruncated");
+  });
+
+  it("gives the hint to an answer the engine cut itself, and leaves a page under the cap as it was", async () => {
+    actResponder = () => JSON.stringify(actFrame("inspect", { context: "page", url: "https://example.com/", summary: summary(), html: LONG_PAGE.slice(0, 500), htmlTruncated: true }));
+
+    const cut = JSON.parse(await domSnapshot.handler({ projectPath: "/p", browser: "chrome", url: "https://example.com/", context: "page", include: ["html"], maxBytes: 500 }));
+
+    expect(calls[calls.length - 1]).toContain("500");
+    expect(cut.value.html).toHaveLength(500);
+    expect(cut.hint).toContain(`value.html is the first 500 of ${LONG_PAGE.length} characters`);
+
+    pageAnswer = { context: "page", url: "https://example.com/", title: "Example Domain", summary: { ...summary(), htmlLength: 26 }, html: "<html><body></body></html>" };
+
+    const whole = JSON.parse(await domSnapshot.handler({ projectPath: "/p", browser: "chrome", targetId: "AAA1", include: ["html"] }));
+
+    expect(whole.value.html).toBe("<html><body></body></html>");
+    expect(whole.value.htmlTruncated).toBeUndefined();
+    expect(whole.hint).toBeUndefined();
+
+    pageAnswer = { context: "page", url: "https://example.com/", title: "Example Domain", summary: summary(), html: LONG_PAGE };
+
+    const asked = JSON.parse(await domSnapshot.handler({ projectPath: "/p", browser: "chrome", targetId: "AAA1", include: ["html"], maxBytes: 300_000 }));
+
+    expect(asked.value.html).toHaveLength(LONG_PAGE.length);
+    expect(asked.value.htmlTruncated).toBeUndefined();
   });
 });
