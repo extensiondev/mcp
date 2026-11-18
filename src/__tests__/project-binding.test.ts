@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { clientDirs, setClientRoots } from "../lib/client-roots";
 import { resolveCredential } from "../lib/credential-source";
 import { credentialKey, credentialsPath, writeCredentials } from "../lib/credentials";
+import { okOrRefusal, reframed } from "../lib/envelope";
 import { loginForPath, pathIdentity } from "../lib/path-project";
 import { PLATFORM_KERNEL_HOOKS, installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
 import { forwardable } from "../lib/hosted-forwarder";
@@ -360,6 +361,12 @@ describe("ledger 252: with several logins stored, an unpinned platform call neve
     fs.mkdirSync(dir, { recursive: true });
 
     expect(kernel.createToolDispatcher).toBe(createToolDispatcher);
+    expect(kernel.reframed).toBe(reframed);
+    expect(kernel.okOrRefusal).toBe(okOrRefusal);
+
+    const parsed: kernel.ParsedFrame = { ok: false, command: "extension_release_status", status: "status-unavailable", error: null };
+
+    expect(JSON.parse(kernel.reframed(parsed)).error.code).toBe("E_UNSPECIFIED");
     expect([...kernel.registeredKernelHooks()].sort()).toEqual(Object.keys(PLATFORM_KERNEL_HOOKS).sort());
 
     kernel.registerKernelHooks({

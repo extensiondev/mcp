@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { tools as ALL_TOOLS } from "../index";
 import { ERROR_CODES, envelope, envelopeObject, hintedAnswer, reframed, type EnvelopeInit } from "../lib/envelope";
-import { ENGINE_CODE_HINT, REFUSAL_HINTS, defaultRefusalHint } from "../lib/refusal-hints";
+import { ENGINE_CODE_HINT, REFUSAL_HINTS, REFUSAL_MESSAGES, defaultRefusalHint } from "../lib/refusal-hints";
 import { validateAgainstSchema } from "./envelope-validate";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -201,6 +201,28 @@ describe("912: every refusal carries error.code and a non-empty error.hint that 
     }
 
     expect(defaultRefusalHint("E_BAD_REQUEST", "extension_open")).toBe("Nothing ran. Change the argument error.message names and call extension_open again.");
+  });
+
+  it("918: a failed submit preflight and an unavailable release status each have a code, a message and a hint of their own", () => {
+    const preflight = envelopeObject({ ok: false, command: "extension_submit", status: "preflight-failed", error: { code: "E_PREFLIGHT_FAILED", message: REFUSAL_MESSAGES.E_PREFLIGHT_FAILED } }).error;
+    const status = envelopeObject({ ok: false, command: "extension_release_status", status: "status-unavailable", error: { code: "E_STATUS_UNAVAILABLE", message: REFUSAL_MESSAGES.E_STATUS_UNAVAILABLE } }).error;
+
+    expect(ERROR_CODES).toEqual(expect.arrayContaining(["E_PREFLIGHT_FAILED", "E_STATUS_UNAVAILABLE"]));
+    expect(preflight).toEqual({
+      code: "E_PREFLIGHT_FAILED",
+      message: "The submit preflight failed, so nothing was sent to a store.",
+      retry: "no",
+      hint: "Nothing was sent. Fix each failing check this answer lists, then call extension_submit again.",
+    });
+
+    expect(status).toEqual({
+      code: "E_STATUS_UNAVAILABLE",
+      message: "The release status could not be read right now.",
+      retry: "safe",
+      hint: "Nothing changed and the release is as it was. Call extension_release_status again in about a minute with the same arguments.",
+    });
+
+    expect(defaultRefusalHint("E_PREFLIGHT_FAILED", "extension_submit_check")).toContain("call extension_submit_check again");
   });
 
   it("answers a code this server has never seen with the engine's line, which still names a tool", () => {

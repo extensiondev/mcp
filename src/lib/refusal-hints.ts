@@ -102,6 +102,7 @@ export const REFUSAL_HINTS: Record<ErrorCode, string> = {
   E_PAGE_PAUSED: "A debugger paused the page. Ask the person to press Resume in that DevTools or close it, then call {command} again.",
   E_PARSE: "The file or answer error.message names is not valid JSON. Fix it, then call {command} again.",
   E_PLATFORM: "The platform refused or failed the request, for the reason in error.message. Read the state this call changes before repeating it.",
+  E_PREFLIGHT_FAILED: "Nothing was sent. Fix each failing check this answer lists, then call {command} again.",
   E_PREVIEW_HOST_UNREACHABLE: "Start the host error.message names, or pass a host that is serving, then call {command} again.",
   E_PROFILE_LOCKED: "Another browser holds this profile. Call extension_stop with the same projectPath and browser, then extension_dev again.",
   E_PROJECT_AMBIGUOUS: 'Pass project as "<workspace>/<project>" to name the one you mean; extension_auth (action: "status") lists the logins.',
@@ -117,6 +118,7 @@ export const REFUSAL_HINTS: Record<ErrorCode, string> = {
   E_SESSION_EXITED: "The session's process exited. Fix the cause error.message or extension_logs names, then call extension_dev again.",
   E_SESSION_NOT_FOUND: "No dev session is recorded for this projectPath and browser. Start one with extension_dev, or pass the browser of the session that is running.",
   E_STALE_CONTRACT: "The session record belongs to a session that is gone. Call extension_stop to clear it, then extension_dev to start a new one.",
+  E_STATUS_UNAVAILABLE: "Nothing changed and the release is as it was. Call {command} again in about a minute with the same arguments.",
   E_STOP_INCOMPLETE: "Not everything was stopped. Call extension_stop again; extension_doctor with the same projectPath says what is still up.",
   E_SURFACE_DID_NOT_OPEN: "Call extension_open again with asTab: true, which renders the surface in a tab.",
   E_SURFACE_NOT_CAPTURABLE: 'Capture this surface on a Chromium or Firefox session, or a web page here with context: "page".',
@@ -135,6 +137,11 @@ export const REFUSAL_HINTS: Record<ErrorCode, string> = {
   E_WAIT_TIMEOUT: "The wait ended before the condition held. Call {command} again with a larger timeout, or read the current state first.",
   E_WEBDRIVER_SESSION_ENDED: 'Safari\'s automation window is gone. Call extension_dev with browser: "safari" and replace: true to open it again.',
 };
+
+export const REFUSAL_MESSAGES = {
+  E_PREFLIGHT_FAILED: "The submit preflight failed, so nothing was sent to a store.",
+  E_STATUS_UNAVAILABLE: "The release status could not be read right now.",
+} satisfies Partial<Record<ErrorCode, string>>;
 
 export const ENGINE_CODE_HINT =
   "This code comes from the project's Extension.js engine and error.message is its diagnosis. extension_doctor with the same projectPath checks the session leg by leg.";
