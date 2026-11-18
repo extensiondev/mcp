@@ -26,7 +26,7 @@ import { envelope, isEnvelope, type Envelope, reframed } from "../lib/envelope";
 import { buildIsolatedRun, isolatedEngineRefusal, isolatedSentence, openIsolatedRun, removeIsolatedRun, type IsolatedRun } from "../lib/isolated-run";
 import { productionLaunchEvidence, readFreshContract, readLoadOverDebugPort } from "../lib/production-launch";
 import { awaitStartLanding, engineExitAfterBoot, startAnswer } from "../lib/start-answer";
-import { controlledIdentity, resolveLoadedId, sessionIdentityWarnings } from "../lib/controlled-identity";
+import { controlledIdentity, resolveLoadedId, sessionIdentityWarnings, settledIdentity } from "../lib/controlled-identity";
 import { spawnExtensionCli, spawnFailedEnvelope } from "../lib/exec";
 import { geckoAddonId } from "../lib/gecko-addon";
 import {
@@ -430,7 +430,8 @@ export async function handler(
     });
   }
 
-  const loaded = resolveLoadedId(identity, freshContract);
+  const settled = settledIdentity(identity, { projectPath: args.projectPath, browser, outputPath, allowControl });
+  const loaded = resolveLoadedId(settled, freshContract);
   const evidence = productionLaunchEvidence(freshContract, allowControl, { projectPath: args.projectPath, browser });
   const launch = await readLoadOverDebugPort(freshContract, {
     ...evidence,
@@ -456,10 +457,10 @@ export async function handler(
       controlPort !== null && typeof freshContract?.distPath === "string"
         ? freshContract.distPath
         : `dist/extension-js/${browser}/controlled`,
-    identity: identity.copyId && isGeckoFamily(browser)
+    identity: settled.copyId && isGeckoFamily(browser)
       ? { addonId: geckoAddonId(args.projectPath, browser) }
-      : identity.copyId
-      ? { buildExtensionId: identity.plainId, controlledCopyId: loaded.extensionId ?? identity.copyId, extensionIdSource: loaded.source }
+      : settled.copyId
+      ? { buildExtensionId: settled.plainId, controlledCopyId: loaded.extensionId ?? settled.copyId, extensionIdSource: loaded.source }
       : {},
     launch,
     contract: freshContract,
@@ -468,9 +469,9 @@ export async function handler(
     engineExit,
     warnings: [
       profileReused && !args.noBrowser
-        ? `${reusedProfileNote(freshContract?.profilePath ?? carryover.profilePath)}${identity.copyId && !isGeckoFamily(browser) ? ` That carry-over does not reach this controlled copy: its id ${loaded.extensionId ?? identity.copyId} is its own, so its chrome.storage starts empty and it holds no grants from the plain build's runs.` : ""}`
+        ? `${reusedProfileNote(freshContract?.profilePath ?? carryover.profilePath)}${settled.copyId && !settled.keyId && !isGeckoFamily(browser) ? ` That carry-over does not reach this controlled copy: its id ${loaded.extensionId ?? settled.copyId} is its own, so its chrome.storage starts empty and it holds no grants from the plain build's runs.` : ""}`
         : null,
-      ...sessionIdentityWarnings(identity, loaded, args.projectPath, browser),
+      ...sessionIdentityWarnings(settled, loaded, args.projectPath, browser),
       ...boot.warnings,
       markerWarning,
       idleWarning,

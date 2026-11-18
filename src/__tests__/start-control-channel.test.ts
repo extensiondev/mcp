@@ -7,6 +7,8 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 
 import { controlledCopyPath, registeredExtensionId } from "../lib/controlled-identity";
 
+import { FIELD_NOTES_ID, FIELD_NOTES_KEY } from "./fixtures/keyed-manifest";
+
 import type { ChildProcess } from "node:child_process";
 import type * as ExecModule from "../lib/exec";
 import type { SpawnedCli } from "../lib/exec";
@@ -246,6 +248,42 @@ describe("extension_start opens the control channel on a production run", () => 
     expect(warnings).toContain(`this session's extension id is ${copyId}, not the ${plainId} that dist/<browser> gets`);
     expect(warnings).not.toContain(`is ${plainId}, not the ${plainId}`);
     expect(warnings).toContain(`still carried the plain build's id ${plainId}`);
+  });
+
+  it("names the one id a manifest key fixes for the build and its copy, with no folder warning (ledger 936)", async () => {
+    const project = tmpProject();
+    const plainDist = path.join(project, "dist", "chrome");
+    const copyPath = controlledCopyPath(project, "chrome");
+
+    for (const folder of [plainDist, copyPath]) {
+      fs.mkdirSync(folder, { recursive: true });
+      fs.writeFileSync(path.join(folder, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "Field Notes", version: "2.4.0", key: FIELD_NOTES_KEY }));
+    }
+
+    writeContract(project, {
+      command: "preview",
+      status: "ready",
+      controlPort: 61234,
+      instanceId: "inst-1",
+      distPath: copyPath,
+      extensionId: FIELD_NOTES_ID,
+      extensionIdSource: "browser",
+    });
+
+    const contractFile = path.join(project, "dist", "extension-js", "chrome", "ready.json");
+    const later = new Date(Date.now() + 60_000);
+    fs.utimesSync(contractFile, later, later);
+
+    const result = JSON.parse(await start.handler({ wait: false, projectPath: project, allowControl: true, build: false }));
+
+    expect(result.ok).toBe(true);
+    expect(result.value.buildExtensionId).toBe(FIELD_NOTES_ID);
+    expect(result.value.controlledCopyId).toBe(FIELD_NOTES_ID);
+    expect(result.value.extensionId).toBe(FIELD_NOTES_ID);
+    expect(result.value.extensionIdSource).toBe("browser");
+    expect(JSON.stringify(result.warnings)).not.toContain("comes from its folder");
+    expect(JSON.stringify(result.warnings)).not.toContain(registeredExtensionId(plainDist));
+    expect(JSON.stringify(result.warnings)).not.toContain(registeredExtensionId(copyPath));
   });
 
   it("says nothing about ids on a plain production run", async () => {

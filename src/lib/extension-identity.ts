@@ -10,6 +10,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 
 import { CARRIER_EXTENSION_ID } from "./carrier";
+import { manifestKeyExtensionId } from "./manifest-key";
 import { readyContractPath } from "./session-paths";
 
 const STATIC_COMPANION_IDS = new Set<string>([
@@ -35,6 +36,21 @@ export function unpackedExtensionId(distPath: string): string {
   }
 
   return id;
+}
+
+export function loadedExtensionIds(distPath: string): string[] {
+  const keyed = manifestKeyExtensionId(distPath);
+  if (keyed) return [keyed];
+
+  const ids = [unpackedExtensionId(distPath)];
+
+  try {
+    const real = fs.realpathSync(distPath);
+    if (real !== distPath) ids.push(unpackedExtensionId(real));
+  } catch {
+  }
+
+  return ids;
 }
 
 export interface GuestIdentity {
@@ -67,15 +83,7 @@ export function sessionGuestIdentity(projectPath: string, browser: string): Gues
   const distPath = typeof contract?.distPath === "string" ? contract.distPath : "";
 
   if (distPath) {
-    const ids = [unpackedExtensionId(distPath)];
-
-    try {
-      const real = fs.realpathSync(distPath);
-      if (real !== distPath) ids.push(unpackedExtensionId(real));
-    } catch {
-    }
-
-    return { expectedIds: ids, companionIds, source: "dist-path" };
+    return { expectedIds: loadedExtensionIds(distPath), companionIds, source: "dist-path" };
   }
 
   return { expectedIds: [], companionIds, source: "none" };

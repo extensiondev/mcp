@@ -12,6 +12,7 @@ import path from "node:path";
 import { isGeckoFamily } from "./browser-family";
 import { unpackedExtensionId } from "./extension-identity";
 import { geckoAddonId } from "./gecko-addon";
+import { manifestKeyExtensionId } from "./manifest-key";
 import { browserArtifactsDir } from "./session-paths";
 
 import type { ReadyContract } from "./types";
@@ -29,7 +30,12 @@ import type { ReadyContract } from "./types";
  * the copy is prepared; the warning named the plain id twice and the debug
  * port was searched for an id the browser never loaded. The copy's id now
  * comes from the engine's own folder, and a contract id the browser has not
- * answered that equals the plain build's id is replaced by the copy's.
+ * answered that equals the plain build's id is replaced by the copy's. On
+ * 2026-11-18 (ledger 936) a build whose manifest carries `key` was still
+ * given two folder IDs, though Chromium takes the ID from the key and the
+ * copy keeps the key, so the plain build and the copy are one extension ID.
+ * keyId is that ID, set when the copy's ID comes from the key: the answer
+ * then names one ID and prints no folder warning.
  */
 const ANSWERED_SOURCES = new Set(["browser", "packager"]);
 const ID_SHAPE = /^[a-p]{32}$/;
@@ -39,11 +45,12 @@ export type ControlledIdentity = {
   plainIds: string[];
   copyId: string | null;
   copyPath: string | null;
+  keyId: string | null;
   startingUrl?: string;
   rewroteStartingUrl: boolean;
 };
 
-export type LoadedIdSource = "browser" | "contract" | "copy-folder";
+export type LoadedIdSource = "browser" | "contract" | "copy-folder" | "manifest-key";
 
 export type LoadedId = {
   extensionId: string | undefined;
@@ -94,23 +101,32 @@ export function controlledIdentity(args: {
   const plainDist = args.outputPath
     ? path.resolve(args.projectPath, args.outputPath)
     : path.join(args.projectPath, "dist", args.browser);
-  const plainIds = idsOf(plainDist);
+  const plainKeyId = manifestKeyExtensionId(plainDist);
+  const plainIds = plainKeyId ? [plainKeyId] : idsOf(plainDist);
   const plainId = plainIds[0]!;
 
   if (!args.allowControl) {
-    return { plainId, plainIds, copyId: null, copyPath: null, startingUrl: args.startingUrl, rewroteStartingUrl: false };
+    return { plainId, plainIds, copyId: null, copyPath: null, keyId: null, startingUrl: args.startingUrl, rewroteStartingUrl: false };
   }
 
   const copyPath = controlledCopyPath(args.projectPath, args.browser);
-  const copyId = registeredExtensionId(copyPath);
+  const keyId = fs.existsSync(path.join(copyPath, "manifest.json")) ? manifestKeyExtensionId(copyPath) : plainKeyId;
+  const copyId = keyId ?? registeredExtensionId(copyPath);
   const startingUrl = args.startingUrl;
-  const named = startingUrl ? plainIds.find((id) => startingUrl.includes(id)) : undefined;
+  const named = startingUrl ? plainIds.find((id) => id !== copyId && startingUrl.includes(id)) : undefined;
 
   if (startingUrl && named) {
-    return { plainId, plainIds, copyId, copyPath, startingUrl: startingUrl.split(named).join(copyId), rewroteStartingUrl: true };
+    return { plainId, plainIds, copyId, copyPath, keyId, startingUrl: startingUrl.split(named).join(copyId), rewroteStartingUrl: true };
   }
 
-  return { plainId, plainIds, copyId, copyPath, startingUrl, rewroteStartingUrl: false };
+  return { plainId, plainIds, copyId, copyPath, keyId, startingUrl, rewroteStartingUrl: false };
+}
+
+export function settledIdentity(
+  before: ControlledIdentity,
+  args: { projectPath: string; browser: string; outputPath: string | null | undefined; allowControl: boolean },
+): ControlledIdentity {
+  return { ...controlledIdentity(args), startingUrl: before.startingUrl, rewroteStartingUrl: before.rewroteStartingUrl };
 }
 
 export function resolveLoadedId(
@@ -128,6 +144,10 @@ export function resolveLoadedId(
 
   if (valid && ANSWERED_SOURCES.has(source)) {
     return { extensionId: valid, source: "browser", replacedPlainId: false };
+  }
+
+  if (identity.keyId) {
+    return { extensionId: identity.keyId, source: "manifest-key", replacedPlainId: false };
   }
 
   if (valid && !identity.plainIds.includes(valid)) {
@@ -156,6 +176,7 @@ export function sessionIdentityWarnings(
 
 export function identityWarnings(identity: ControlledIdentity, loaded: LoadedId): Array<string | null> {
   if (!identity.copyId) return [];
+  if (identity.keyId && identity.keyId === identity.plainId && (loaded.extensionId ?? identity.keyId) === identity.keyId) return [];
 
   const actual = loaded.extensionId ?? identity.copyId;
   const predicted = actual === identity.copyId;

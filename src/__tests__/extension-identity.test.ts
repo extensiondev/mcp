@@ -13,7 +13,10 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { unpackedExtensionId } from "../lib/extension-identity";
+import { loadedExtensionIds, sessionGuestIdentity, unpackedExtensionId } from "../lib/extension-identity";
+import { keyExtensionId } from "../lib/manifest-key";
+
+import { FIELD_NOTES_ID, FIELD_NOTES_KEY } from "./fixtures/keyed-manifest";
 
 const realPlatform = Object.getOwnPropertyDescriptor(process, "platform")!;
 
@@ -124,4 +127,55 @@ describe("an unpacked extension's id is the one Chromium's GenerateIdForPath der
     },
     90_000,
   );
+});
+
+describe("a manifest key fixes the id, whatever folder holds the build (ledger 936)", () => {
+  function built(manifest: Record<string, unknown>): { project: string; dist: string } {
+    const project = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-keyed-id-"));
+    const dist = path.join(project, "dist", "chrome");
+    fs.mkdirSync(dist, { recursive: true });
+    fs.writeFileSync(path.join(dist, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "Field Notes", version: "2.4.0", ...manifest }));
+
+    return { project, dist };
+  }
+
+  it("spells the first 16 bytes of the SHA-256 of the decoded key in a to p, and reads PEM armor as Chromium does", () => {
+    expect(keyExtensionId(FIELD_NOTES_KEY)).toBe(FIELD_NOTES_ID);
+    expect(keyExtensionId(`-----BEGIN PUBLIC KEY-----\n${FIELD_NOTES_KEY.slice(0, 64)}\n${FIELD_NOTES_KEY.slice(64)}\n-----END PUBLIC KEY-----\n`)).toBe(FIELD_NOTES_ID);
+  });
+
+  it("answers no id for a key Chromium refuses, so the folder rule stands", () => {
+    expect(keyExtensionId(undefined)).toBeNull();
+    expect(keyExtensionId("")).toBeNull();
+    expect(keyExtensionId(FIELD_NOTES_KEY.slice(0, -1))).toBeNull();
+    expect(keyExtensionId("not base64!")).toBeNull();
+  });
+
+  it("derives the loaded id from the built manifest's key and from the folder only when no key is there", () => {
+    const keyed = built({ key: FIELD_NOTES_KEY });
+    const plain = built({});
+    const refused = built({ key: "not base64!" });
+
+    try {
+      expect(loadedExtensionIds(keyed.dist)).toEqual([FIELD_NOTES_ID]);
+      expect(loadedExtensionIds(plain.dist)).toContain(unpackedExtensionId(plain.dist));
+      expect(loadedExtensionIds(plain.dist)).not.toContain(FIELD_NOTES_ID);
+      expect(loadedExtensionIds(refused.dist)).toContain(unpackedExtensionId(refused.dist));
+    } finally {
+      for (const each of [keyed, plain, refused]) fs.rmSync(each.project, { recursive: true, force: true });
+    }
+  });
+
+  it("expects the key's id of a session whose contract carries no id yet", () => {
+    const keyed = built({ key: FIELD_NOTES_KEY });
+    const readyDir = path.join(keyed.project, "dist", "extension-js", "chrome");
+    fs.mkdirSync(readyDir, { recursive: true });
+    fs.writeFileSync(path.join(readyDir, "ready.json"), JSON.stringify({ command: "dev", status: "ready", distPath: keyed.dist }));
+
+    try {
+      expect(sessionGuestIdentity(keyed.project, "chrome")).toMatchObject({ expectedIds: [FIELD_NOTES_ID], source: "dist-path" });
+    } finally {
+      fs.rmSync(keyed.project, { recursive: true, force: true });
+    }
+  });
 });

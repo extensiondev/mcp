@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, it, expect, afterEach, vi } from "vitest";
 
 import { readyContract } from "./fixtures/engine-answers";
+import { FIELD_NOTES_ID, FIELD_NOTES_KEY } from "./fixtures/keyed-manifest";
 import { unpackedExtensionId } from "../lib/extension-identity";
 
 import type * as CdpPortModule from "../lib/cdp-port";
@@ -170,6 +171,28 @@ describe("open surface asTab", () => {
     expect(navigations).toEqual([`chrome-extension://${p.id}/popup.html`]);
     expect(result.value.renderedAsTab.extensionId).toBe(p.id);
     expect(result.hint).toContain("NOT hosted in a popup window");
+  });
+
+  it("opens the surface at the id the built manifest's key fixes, not the folder's (ledger 936)", async () => {
+    const p = project({
+      manifest_version: 3,
+      name: "F",
+      key: FIELD_NOTES_KEY,
+      action: { default_popup: "popup.html" },
+    });
+    fs.mkdirSync(p.distPath, { recursive: true });
+    fs.copyFileSync(path.join(p.dir, "src", "manifest.json"), path.join(p.distPath, "manifest.json"));
+    cdpTargets = [{ id: "t1", type: "page", url: "chrome://new-tab-page-third-party/" }];
+
+    const result = JSON.parse(
+      await open.handler({ projectPath: p.dir, surface: "popup", asTab: true }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(navigations).toEqual([`chrome-extension://${FIELD_NOTES_ID}/popup.html`]);
+    expect(result.value.renderedAsTab.extensionId).toBe(FIELD_NOTES_ID);
+    expect(await open.resolveExtensionId(p.dir, "chrome")).toBe(FIELD_NOTES_ID);
+    expect(p.id).not.toBe(FIELD_NOTES_ID);
   });
 
   it("picks the project's extension, not another loaded extension", async () => {

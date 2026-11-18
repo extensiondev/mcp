@@ -67,7 +67,7 @@ import { openDevToolsPanel } from "../lib/cdp-devtools";
 import { listPageTargets, matchTargetsByUrl } from "../lib/cdp-targets";
 import { observeAfterAct, observeAsked, OBSERVE_PROPERTY } from "../lib/observe-surface";
 import { SURFACE_CONTEXTS } from "../lib/element-list";
-import { sessionGuestIdentity, unpackedExtensionId } from "../lib/extension-identity";
+import { loadedExtensionIds, sessionGuestIdentity } from "../lib/extension-identity";
 import { clickGeckoToolbarButton, declaredToolbarButton } from "../lib/gecko-toolbar-click";
 import { geckoSidebarPanel, sidebarOpenedAnswer } from "../lib/gecko-sidebar";
 import { clickToolbarWithUserInput, declaresSidebarAction, noteReplayWithoutGesture } from "../lib/gecko-action-gesture";
@@ -599,17 +599,7 @@ export async function resolveExtensionId(
   browser: string,
 ): Promise<string | null> {
   const distPath = readDistPath(projectPath, browser);
-  const computedIds: string[] = [];
-
-  if (distPath) {
-    computedIds.push(unpackedExtensionId(distPath));
-
-    try {
-      const real = fs.realpathSync(distPath);
-      if (real !== distPath) computedIds.push(unpackedExtensionId(real));
-    } catch {
-    }
-  }
+  const computedIds: string[] = distPath ? loadedExtensionIds(distPath) : [];
 
   const resolved = await resolveCdpPort(projectPath, browser);
   if (!resolved) return computedIds[0] ?? null;

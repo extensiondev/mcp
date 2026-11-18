@@ -6,40 +6,17 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
 import { forgetCarrier } from "./carrier-registry";
+import { manifestKeyExtensionId } from "./manifest-key";
 
 export const CARRIER_DIR_NAME = "extension-dev-live-preview";
 
 export const CARRIER_EXTENSION_ID = "ibppeifnekhjjjmpjfiobccjlicbmgcb";
 
 const MARKER_FILE = "managed-by-extension-dev-mcp.json";
-
-function deriveCarrierId(source: string): string | null {
-  try {
-    const manifest = JSON.parse(
-      fs.readFileSync(path.join(source, "manifest.json"), "utf-8"),
-    ) as { key?: string };
-    if (!manifest.key) return null;
-
-    const hash = createHash("sha256")
-      .update(Buffer.from(manifest.key, "base64"))
-      .digest();
-
-    return [...hash.subarray(0, 16)]
-      .map(
-        (byte) =>
-          String.fromCharCode(97 + (byte >> 4)) +
-          String.fromCharCode(97 + (byte & 15)),
-      )
-      .join("");
-  } catch {
-    return null;
-  }
-}
 
 export function carrierPath(projectPath: string): string {
   return path.join(projectPath, "extensions", CARRIER_DIR_NAME);
@@ -54,7 +31,7 @@ function claimCarrier(target: string): CarrierClaim {
     return { ours: true, how: "marker" };
   }
 
-  if (deriveCarrierId(target) === CARRIER_EXTENSION_ID) {
+  if (manifestKeyExtensionId(target) === CARRIER_EXTENSION_ID) {
     return { ours: true, how: "payload" };
   }
 

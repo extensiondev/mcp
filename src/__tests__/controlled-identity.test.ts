@@ -14,6 +14,8 @@ import {
 } from "../lib/controlled-identity";
 import { unpackedExtensionId } from "../lib/extension-identity";
 
+import { FIELD_NOTES_ID, FIELD_NOTES_KEY } from "./fixtures/keyed-manifest";
+
 const tmpDirs: string[] = [];
 
 function tmpProject(): string {
@@ -187,5 +189,62 @@ describe("the identity warning names two different ids", () => {
     );
     expect(predicted).toHaveLength(2);
     expect(predicted[1]).toContain(`it was rewritten to ${identity.copyId} so it opens on this run`);
+  });
+});
+
+describe("a build whose manifest carries a key is one extension id, plain or copied (ledger 936)", () => {
+  function keyedProject(withCopy: boolean): string {
+    const project = tmpProject();
+    const folders = [path.join(project, "dist", "chrome"), ...(withCopy ? [controlledCopyPath(project, "chrome")] : [])];
+
+    for (const folder of folders) {
+      fs.mkdirSync(folder, { recursive: true });
+      fs.writeFileSync(path.join(folder, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "Field Notes", version: "2.4.0", key: FIELD_NOTES_KEY }));
+    }
+
+    return project;
+  }
+
+  it("names the key's id for the plain build and for the copy, before and after the engine writes the copy", () => {
+    for (const withCopy of [false, true]) {
+      const identity = controlledIdentity({ projectPath: keyedProject(withCopy), browser: "chrome", outputPath: null, allowControl: true });
+
+      expect(identity).toMatchObject({ plainId: FIELD_NOTES_ID, plainIds: [FIELD_NOTES_ID], copyId: FIELD_NOTES_ID, keyId: FIELD_NOTES_ID });
+    }
+  });
+
+  it("prints no folder warning, and answers the key's id over a derived contract id", () => {
+    const identity = controlledIdentity({ projectPath: keyedProject(true), browser: "chrome", outputPath: null, allowControl: true });
+
+    for (const contract of [null, { extensionId: registeredExtensionId(identity.copyPath!), extensionIdSource: "derived" }, { extensionId: FIELD_NOTES_ID, extensionIdSource: "derived" }]) {
+      const loaded = resolveLoadedId(identity, contract);
+
+      expect(loaded).toEqual({ extensionId: FIELD_NOTES_ID, source: "manifest-key", replacedPlainId: false });
+      expect(identityWarnings(identity, loaded)).toEqual([]);
+    }
+
+    const answered = resolveLoadedId(identity, { extensionId: FIELD_NOTES_ID, extensionIdSource: "browser" });
+
+    expect(answered).toEqual({ extensionId: FIELD_NOTES_ID, source: "browser", replacedPlainId: false });
+    expect(identityWarnings(identity, answered)).toEqual([]);
+  });
+
+  it("leaves a startingUrl that names the key's id as written", () => {
+    const startingUrl = `chrome-extension://${FIELD_NOTES_ID}/newtab.html`;
+    const identity = controlledIdentity({ projectPath: keyedProject(false), browser: "chrome", outputPath: null, allowControl: true, startingUrl });
+
+    expect(identity.startingUrl).toBe(startingUrl);
+    expect(identity.rewroteStartingUrl).toBe(false);
+  });
+
+  it("keeps the folder rule for the copy when the copy's manifest carries no key", () => {
+    const project = keyedProject(false);
+    const copy = controlledCopyPath(project, "chrome");
+    fs.mkdirSync(copy, { recursive: true });
+    fs.writeFileSync(path.join(copy, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "Field Notes", version: "2.4.0" }));
+
+    const identity = controlledIdentity({ projectPath: project, browser: "chrome", outputPath: null, allowControl: true });
+
+    expect(identity).toMatchObject({ plainId: FIELD_NOTES_ID, copyId: registeredExtensionId(copy), keyId: null });
   });
 });
