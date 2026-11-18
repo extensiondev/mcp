@@ -135,16 +135,20 @@ export function engineProjectRoot(projectPath: string): string {
  * was passed as the root there, so one build answer reported dist in src/
  * and looked for STORE.md in the folder above, and extension_analyze on the
  * same projectPath found no dist (ledger 925). engineProjectRoot is the
- * engine's root in every layout, every dist, session and STORE.md path is
- * read from it, and an answer whose root is not the folder it was passed
- * says so once and names the conventional layout without asking for it. */
+ * engine's root in every layout and every dist and session path is read
+ * from it; an answer whose root is not the folder it was passed says so
+ * once and names the conventional layout without asking for it. STORE.md
+ * is the exception that stays where the person's project is: when the root
+ * is the unowned manifest folder under the folder passed, STORE.md's home
+ * is the folder passed, where the skill and the platform read it, and a
+ * file already in the manifest's folder is read and named, never moved. */
 export function projectRootNote(projectPath: string): string | null {
   const start = path.resolve(projectPath);
   const root = engineProjectRoot(start);
   if (root === start) return null;
 
-  if (root === path.join(start, "src")) {
-    return `Project root: ${root}. src/manifest.json has no package.json that owns it, so the engine builds from the manifest's folder, and dist, zips and ${STORE_MD_FILENAME} live there. With a package.json beside src/ (the conventional layout) the root is the folder above.`;
+  if (path.dirname(root) === start) {
+    return `Project root: ${root}. src/manifest.json has no package.json that owns it, so the engine builds from the manifest's folder, and dist and zips live there, while ${STORE_MD_FILENAME} stays in the folder above. With a package.json beside src/ (the conventional layout) that folder is the root too.`;
   }
 
   return `Project root: ${root}, the folder of the package.json or deno.json that owns this manifest; dist, zips and ${STORE_MD_FILENAME} live there.`;
@@ -156,10 +160,28 @@ export function statedProjectRoot(projectPath: string): { root: string; note: st
   return note ? { root: engineProjectRoot(projectPath), note } : null;
 }
 
-export function storeMdPath(projectPath: string): string {
-  const passed = path.join(projectPath, STORE_MD_FILENAME);
+function storeMdCandidates(projectPath: string): { passed: string; atRoot: string; homeIsPassed: boolean } {
+  const start = path.resolve(projectPath);
+  const root = engineProjectRoot(start);
 
-  return isFile(passed) ? passed : path.join(engineProjectRoot(projectPath), STORE_MD_FILENAME);
+  return {
+    passed: path.join(start, STORE_MD_FILENAME),
+    atRoot: path.join(root, STORE_MD_FILENAME),
+    homeIsPassed: path.dirname(root) === start,
+  };
+}
+
+export function storeMdPath(projectPath: string): string {
+  const { passed, atRoot, homeIsPassed } = storeMdCandidates(projectPath);
+  if (isFile(passed)) return passed;
+
+  return homeIsPassed && !isFile(atRoot) ? passed : atRoot;
+}
+
+export function storeMdFoundNote(projectPath: string): string | null {
+  const { passed, atRoot, homeIsPassed } = storeMdCandidates(projectPath);
+
+  return homeIsPassed && !isFile(passed) && isFile(atRoot) ? `${STORE_MD_FILENAME} was read from ${atRoot}, in the manifest's folder.` : null;
 }
 
 export function sourceManifestPath(projectPath: string): string | null {

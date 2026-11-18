@@ -24,6 +24,7 @@ import {
   engineProjectRoot,
   sourceManifestPath,
   statedProjectRoot,
+  storeMdFoundNote,
   storeMdPath,
 } from "../lib/session-paths";
 import { type Envelope, envelope, isEnvelope } from "../lib/envelope";
@@ -1133,6 +1134,7 @@ export async function handler(args: {
         ...shownBuildWarnings,
         ...reviewRiskPointer(risks),
         mode === "development" ? null : storeMdLine(path.dirname(storeMdPath(args.projectPath)), risks),
+        mode === "development" ? null : storeMdFoundNote(args.projectPath),
         ...reviewCoverageNotes(review),
         ...zipNotes,
         ...duplicates.map(duplicateAssetSentence),

@@ -295,7 +295,8 @@ describe("925: one project root an answer, the folder the engine built from", ()
     expect(result.value.outputPath).toBe(path.join(root, "dist", "chrome"));
     expect(fs.existsSync(path.join(root, "dist", "chrome", "manifest.json"))).toBe(true);
     expect(fs.existsSync(path.join(dir, "dist"))).toBe(false);
-    expect(result.warnings.find((w: string) => w.includes("STORE.md is in"))).toContain(`No STORE.md is in ${root}.`);
+    expect(result.warnings.find((w: string) => w.includes("STORE.md is in"))).toContain(`No STORE.md is in ${dir}. Write it there now`);
+    expect(rootLines[0]).toContain("STORE.md stays in the folder above");
     expect(rootLines).toHaveLength(1);
     expect(rootLines[0]).toContain(root);
     expect(rootLines[0]).toContain("conventional layout");
@@ -314,7 +315,7 @@ describe("925: one project root an answer, the folder the engine built from", ()
     expect(analyzed.ok).toBe(true);
     expect(analyzed.value.projectRoot).toBe(root);
     expect(analyzed.warnings.filter((w: string) => w.startsWith("Project root:"))).toHaveLength(1);
-    expect(analyzed.warnings.find((w: string) => w.includes("STORE.md is in"))).toContain(`No STORE.md is in ${root}.`);
+    expect(analyzed.warnings.find((w: string) => w.includes("STORE.md is in"))).toContain(`No STORE.md is in ${dir}. Write it there now`);
   });
 
   it("reads a STORE.md already beside src and asks for no second one", async () => {
@@ -324,6 +325,22 @@ describe("925: one project root an answer, the folder the engine built from", ()
     const result = JSON.parse(await build.handler({ projectPath: dir, browser: "chrome" }));
 
     expect(result.warnings.filter((w: string) => w.includes("No STORE.md"))).toEqual([]);
+  });
+
+  it("finds a STORE.md someone put in src, says where it was read from and asks nobody to move it", async () => {
+    const dir = bareSrcProject();
+    const file = path.join(dir, "src", "STORE.md");
+    fs.writeFileSync(file, "## Chrome Web Store\n");
+
+    const result = JSON.parse(await build.handler({ projectPath: dir, browser: "chrome" }));
+    const found = result.warnings.filter((w: string) => w.startsWith("STORE.md was read from"));
+
+    expect(result.warnings.filter((w: string) => w.includes("No STORE.md"))).toEqual([]);
+    expect(found).toEqual([`STORE.md was read from ${file}, in the manifest's folder.`]);
+
+    const analyzed = JSON.parse(await analyze.handler({ projectPath: dir, browser: "chrome" }));
+
+    expect(analyzed.warnings.filter((w: string) => w.startsWith("STORE.md was read from"))).toEqual(found);
   });
 
   it("names no root and adds no line when a package.json sits beside src, the conventional layout", async () => {

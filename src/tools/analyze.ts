@@ -14,7 +14,7 @@ import { envelope } from "../lib/envelope";
 import { engineBrowserName } from "../lib/browser-family";
 import { readBuildType } from "../lib/build-type";
 import { reviewCoverageNotes, reviewRiskWarnings, reviewRisksReport, storeMdLine } from "../lib/store-review";
-import { engineProjectRoot, sourceManifestPath, statedProjectRoot, storeMdPath } from "../lib/session-paths";
+import { engineProjectRoot, sourceManifestPath, statedProjectRoot, storeMdFoundNote, storeMdPath } from "../lib/session-paths";
 import { specialFolderEntrypoints, specialFolderSettings } from "../lib/special-folder-entries";
 import { manifestByBrowser } from "../lib/manifest-by-browser";
 import { duplicateAssetSentence, duplicateOf, findDuplicateAssets } from "../lib/duplicate-assets";
@@ -372,6 +372,7 @@ export async function handler(args: {
       stated?.note,
       ...(risks ? reviewRiskWarnings(risks) : []),
       risks ? storeMdLine(path.dirname(storeMdPath(args.projectPath)), risks) : null,
+      risks ? storeMdFoundNote(args.projectPath) : null,
       ...(review ? reviewCoverageNotes(review) : []),
       ...sizeWarnings,
       ...duplicates.map(duplicateAssetSentence),

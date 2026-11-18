@@ -9,6 +9,8 @@ import {
   engineProjectRoot,
   ownsManifest,
   projectRootNote,
+  storeMdFoundNote,
+  storeMdPath,
   readyContractPath,
   logsPath,
   sessionArtifactsRootDir,
@@ -86,8 +88,16 @@ describe("a package root is adopted only when it owns the manifest, as the engin
     expect(engineProjectRoot(src)).toBe(src);
     expect(fs.realpathSync(engineProjectRoot(bare))).toBe(fs.realpathSync(bridge.resolveSessionProjectRoot(bare)));
     expect(readyContractPath(bare, "chrome")).toBe(bridge.readyContractPath(src, "chrome"));
+    expect(storeMdPath(bare)).toBe(path.join(bare, "STORE.md"));
+    expect(storeMdFoundNote(bare)).toBeNull();
+    fs.writeFileSync(path.join(src, "STORE.md"), "# Store\n");
+    expect(storeMdPath(bare)).toBe(path.join(src, "STORE.md"));
+    expect(storeMdFoundNote(bare)).toBe(`STORE.md was read from ${path.join(src, "STORE.md")}, in the manifest's folder.`);
+    fs.writeFileSync(path.join(bare, "STORE.md"), "# Store\n");
+    expect(storeMdPath(bare)).toBe(path.join(bare, "STORE.md"));
+    expect(storeMdFoundNote(bare)).toBeNull();
     expect(projectRootNote(bare)).toBe(
-      `Project root: ${src}. src/manifest.json has no package.json that owns it, so the engine builds from the manifest's folder, and dist, zips and STORE.md live there. With a package.json beside src/ (the conventional layout) the root is the folder above.`,
+      `Project root: ${src}. src/manifest.json has no package.json that owns it, so the engine builds from the manifest's folder, and dist and zips live there, while STORE.md stays in the folder above. With a package.json beside src/ (the conventional layout) that folder is the root too.`,
     );
   });
 
@@ -99,6 +109,8 @@ describe("a package root is adopted only when it owns the manifest, as the engin
     expect(projectRootNote(repo)).toBeNull();
     expect(projectRootNote(src)).toBe(`Project root: ${repo}, the folder of the package.json or deno.json that owns this manifest; dist, zips and STORE.md live there.`);
     expect(projectRootNote(manifestAt(tmp()))).toBeNull();
+    expect(storeMdPath(src)).toBe(path.join(repo, "STORE.md"));
+    expect(storeMdFoundNote(src)).toBeNull();
   });
 
   it("keeps the documented src layout on the package root whatever the package declares", () => {
