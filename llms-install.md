@@ -51,7 +51,7 @@ Call `extension_doctor({})` first. A working install answers with these fields, 
 }
 ```
 
-A `warn` leg is fine: the template cache fills on the first `extension_templates` call. A `fail` leg carries a `remediation` line; follow it and call `extension_doctor({})` again. The first call can take up to a minute while `npx` downloads the Extension.js engine.
+A `warn` leg is fine: the template cache fills on the first `extension_templates` call. A `fail` leg carries a `remediation` line; follow it and call `extension_doctor({})` again. The first call can take up to a minute while `npx` downloads the engine that builds and runs the extension.
 
 ## Platform tools (optional)
 
