@@ -46,12 +46,54 @@ function markerDir(): string {
   return sessionStateDir();
 }
 
+const MARKER_FILE = /^[0-9a-f]{16}\.json$/;
+
+function heldMarkerName(projectPath: string, browser: string, digest: string): string | null {
+  const dir = markerDir();
+  if (fs.existsSync(path.join(dir, `${digest}.json`))) return null;
+
+  let files: string[];
+
+  try {
+    files = fs.readdirSync(dir);
+  } catch {
+    return null;
+  }
+
+  const resolved = path.resolve(projectPath);
+
+  for (const file of files) {
+    if (!MARKER_FILE.test(file)) continue;
+
+    try {
+      const parsed = JSON.parse(fs.readFileSync(path.join(dir, file), "utf8"));
+
+      if (typeof parsed?.projectPath === "string" && path.resolve(parsed.projectPath) === resolved && parsed.browser === browser) return file.slice(0, 16);
+    } catch {
+    }
+  }
+
+  return null;
+}
+
+/* @invariant
+ * A SESSION KEEPS THE FILE NAME ITS MARKER ALREADY HAS.
+ *
+ * The name is the first 16 hex characters of a SHA-256 of the session key.
+ * Releases through 11.0.0 named it from a SHA-1, and a session outlives the
+ * server that started it, so a marker found on disk for the same project
+ * and browser under another name is the session's own: its name is reused
+ * for the marker and every sidecar until the session ends. The marker is
+ * matched by what it holds, never by recomputing the old digest.
+ */
 function markerDigest(projectPath: string, browser: string): string {
-  return crypto
-    .createHash("sha1")
+  const digest = crypto
+    .createHash("sha256")
     .update(sessionKey(projectPath, browser))
     .digest("hex")
     .slice(0, 16);
+
+  return heldMarkerName(projectPath, browser, digest) ?? digest;
 }
 
 function markerPath(projectPath: string, browser: string): string {
