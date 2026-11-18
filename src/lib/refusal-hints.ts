@@ -117,6 +117,7 @@ export const REFUSAL_HINTS: Record<ErrorCode, string> = {
   E_SESSION_EXISTS: "A session already runs for this project and browser. Use it, or call {command} again with replace: true to stop it first.",
   E_SESSION_EXITED: "The session's process exited. Fix the cause error.message or extension_logs names, then call extension_dev again.",
   E_SESSION_NOT_FOUND: "No dev session is recorded for this projectPath and browser. Start one with extension_dev, or pass the browser of the session that is running.",
+  E_SESSION_STARTING: "The dev session exists and is still starting. Call extension_wait, then call {command} again; do not start or replace the session.",
   E_STALE_CONTRACT: "The session record belongs to a session that is gone. Call extension_stop to clear it, then extension_dev to start a new one.",
   E_STATUS_UNAVAILABLE: "Nothing changed and the release is as it was. Call {command} again in about a minute with the same arguments.",
   E_STOP_INCOMPLETE: "Not everything was stopped. Call extension_stop again; extension_doctor with the same projectPath says what is still up.",

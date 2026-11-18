@@ -123,6 +123,23 @@ describe("envelope() and envelopeObject() are the only serializers allowed to pr
   });
 });
 
+describe("922: a session that is still starting has a refusal of its own", () => {
+  it("is declared, safe to repeat on a read and on an act, and its floor hint sends to extension_wait and never to a new session", () => {
+    const refused = (command: string) => envelopeObject({ ok: false, command, status: "starting", error: { code: "E_SESSION_STARTING", message: "x" } }).error;
+
+    expect(ERROR_CODES).toContain("E_SESSION_STARTING");
+    expect(refused("extension_dom_snapshot")).toEqual({
+      code: "E_SESSION_STARTING",
+      message: "x",
+      retry: "safe",
+      hint: "The dev session exists and is still starting. Call extension_wait, then call extension_dom_snapshot again; do not start or replace the session.",
+    });
+
+    expect(refused("extension_reload")?.retry).toBe("safe");
+    expect(REFUSAL_HINTS.E_SESSION_STARTING).not.toMatch(/extension_dev|replace: true/);
+  });
+});
+
 describe("513: every failed frame says in error.retry whether repeating the call is safe", () => {
   const failed = (command: string, error: { code: string; retry?: "safe" | "after-read" | "no"; platformCode?: string }) =>
     envelopeObject({ ok: false, command, status: "failed", error: { code: error.code, message: "x", ...(error.retry ? { retry: error.retry } : {}), ...(error.platformCode ? { platformCode: error.platformCode } : {}) } }).error as Record<string, unknown>;

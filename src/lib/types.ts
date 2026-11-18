@@ -132,6 +132,7 @@ export interface ProcessInfo {
   headless?: boolean;
   idleMinutes?: number | null;
   allowControl?: boolean;
+  allowEval?: boolean;
   enableExtension?: boolean;
   developmentTeam?: string;
   appName?: string;

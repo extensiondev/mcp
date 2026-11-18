@@ -9,7 +9,7 @@ import {
   knownSessionBrowsers,
   liveProjectSessions,
 } from "../lib/session-browser";
-import { toMcpSpeak } from "../lib/act";
+import { sessionNotFoundWords, toMcpSpeak } from "../lib/act";
 import { readyContract } from "./fixtures/engine-answers";
 import {
   registerSession,
@@ -226,5 +226,33 @@ describe("toMcpSpeak", () => {
   it("leaves ordinary prose untouched", () => {
     const msg = "Tab 12 not found in the running session.";
     expect(toMcpSpeak(msg)).toBe(msg);
+  });
+});
+
+describe("922: a control channel that was not found is worded by what sessions exist", () => {
+  const engine =
+    'No active control channel found for chrome. Looked at /p/dist/extension-js/chrome/ready.json. Run extension_dev with { browser: "chrome" } (its control channel is on unless allowControl: false) first.';
+
+  it("keeps the engine's words, start a session first, only when the project has none", () => {
+    expect(sessionNotFoundWords(engine, "extension_open", "chrome", [])).toEqual({ message: engine, hint: null });
+  });
+
+  it("names another browser's session without telling the agent to start one", () => {
+    const words = sessionNotFoundWords(engine, "extension_open", "chrome", ["firefox"]);
+
+    expect(words.message).toBe(
+      "No active control channel found for chrome. Looked at /p/dist/extension-js/chrome/ready.json. This project's session runs on firefox, not on chrome.",
+    );
+
+    expect(words.hint).toBe('Call extension_open again with browser: "firefox".');
+    expect(`${words.message} ${words.hint}`).not.toMatch(/Run extension_dev|first\.|replace: true/);
+  });
+
+  it("does not call a session on the browser asked for missing, and sends to extension_wait", () => {
+    const words = sessionNotFoundWords(engine, "extension_reload", "chrome", ["chrome"]);
+
+    expect(words.message).not.toMatch(/Run extension_dev|pass that as/);
+    expect(words.message).toContain("A chrome session is recorded for this project, so this is not a missing session");
+    expect(words.hint).toMatch(/^Call extension_wait with browser: "chrome", then call extension_reload again/);
   });
 });

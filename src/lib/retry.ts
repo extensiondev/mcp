@@ -41,6 +41,7 @@ function approvalRefunded(value: unknown): boolean {
 export function retryVerdict(error: { code?: unknown; retry?: unknown; platformCode?: unknown }, command: string, value?: unknown): RetryVerdict {
   if (RETRY_VERDICTS.includes(error.retry as RetryVerdict)) return error.retry as RetryVerdict;
   if (approvalRefunded(value)) return "safe";
+  if (error.code === "E_SESSION_STARTING") return "safe";
   if (!TRANSIENT_CODES.has(String(error.code))) return "no";
   if (error.code === "E_PLATFORM" && typeof error.platformCode === "string") return "no";
 

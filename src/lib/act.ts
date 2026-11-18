@@ -85,33 +85,83 @@ function legacyControlChannelScrape(message: string): boolean {
   );
 }
 
+const START_ONE_FIRST = / Run extension_dev with \{ browser: "[\w-]+" \} \(its control channel is on unless allowControl: false\) first\./;
+
+function namesNoSession(message: string, code: string | undefined): boolean {
+  return code ? code === "E_SESSION_NOT_FOUND" : /no active control channel/i.test(message);
+}
+
+/* @invariant "NO SESSION" NEVER SHARES A MESSAGE WITH "A SESSION RUNS".
+ * The engine's refusal says no control channel was found and to run
+ * extension_dev first, which is the whole truth only when the project has
+ * no session. On 2026-11-18 a session that was still starting got that
+ * sentence followed by "Active session browser(s) for this project:
+ * chrome, pass that as browser", for a call that had asked for chrome
+ * (ledger 922). When this server knows of a session, the sentence telling
+ * the agent to start one is taken out: a session on the browser asked for
+ * is told to wait on, and a session on another browser is named as the
+ * one to pass.
+ */
+export function sessionNotFoundWords(
+  message: string,
+  command: string,
+  asked: string | undefined,
+  running: string[],
+): { message: string; hint: string | null } {
+  if (running.length === 0) return { message, hint: null };
+
+  const told = message.replace(START_ONE_FIRST, "");
+
+  if (asked && running.includes(asked)) {
+    return {
+      message: `${told} A ${asked} session is recorded for this project, so this is not a missing session: its control channel is not reachable yet, or it was started with allowControl: false.`,
+      hint: `Call extension_wait with browser: "${asked}", then call ${command} again; extension_doctor names the leg that is down. Only a session started with allowControl: false needs extension_dev with replace: true.`,
+    };
+  }
+
+  const others = running.filter((name) => name !== asked);
+
+  return {
+    message: `${told} This project's session runs on ${others.join(", ")}${asked ? `, not on ${asked}` : ""}.`,
+    hint: `Call ${command} again with browser: "${others[0]}"${others.length > 1 ? ` (or one of: ${others.slice(1).join(", ")})` : ""}.`,
+  };
+}
+
 function withSessionContext(
   message: string,
   projectPath: string,
+  command: string,
   code?: string,
   browser?: string,
-): string {
+): { message: string; hint: string | null } {
   const isControlError = code
     ? CONTROL_CHANNEL_DOWN_CODES.has(code)
     : legacyControlChannelScrape(message);
 
-  if (!isControlError) return message;
+  if (!isControlError) return { message, hint: null };
 
   const production = productionSessionContext(projectPath, browser ?? resolveSessionBrowser(projectPath, undefined).browser);
-  if (production) return `${message}\n${production}`;
+  if (production) return { message: `${message}\n${production}`, hint: null };
 
   const dead = deadReadySession(projectPath, browser);
 
   if (dead) {
-    return `${message}\nLikely cause: the dev server has exited, ${dead.browser} ready.json still says ready but its pid ${dead.pid} is dead. Restart with extension_dev (this is not an allowControl problem); extension_doctor confirms.`;
+    return {
+      message: `${message}\nLikely cause: the dev server has exited, ${dead.browser} ready.json still says ready but its pid ${dead.pid} is dead. Restart with extension_dev (this is not an allowControl problem); extension_doctor confirms.`,
+      hint: null,
+    };
   }
 
   const running = knownSessionBrowsers(projectPath);
-  if (running.length === 0) return message;
+  if (running.length === 0) return { message, hint: null };
+  if (namesNoSession(message, code)) return sessionNotFoundWords(message, command, browser, running);
 
-  return `${message} Active session browser(s) for this project: ${running.join(
-    ", ",
-  )}, pass that as \`browser\`, or restart it via extension_dev without allowControl: false if the control channel is off.`;
+  return {
+    message: `${message} Active session browser(s) for this project: ${running.join(
+      ", ",
+    )}, pass that as \`browser\`, or restart it via extension_dev without allowControl: false if the control channel is off.`,
+    hint: null,
+  };
 }
 
 function browserFlag(args: string[]): string | undefined {
@@ -126,23 +176,30 @@ function flagValue(args: string[], flag: string): string | undefined {
   return at !== -1 && typeof args[at + 1] === "string" ? args[at + 1] : undefined;
 }
 
-function translateFrame(frame: any, projectPath: string, args: string[]): any {
+function translateFrame(frame: any, projectPath: string, args: string[], command: string): any {
   if (!frame || frame.ok !== false) return frame;
 
   const browser = browserFlag(args);
 
   nameRefusedInjection(frame, { browser, url: flagValue(args, "--url") });
 
+  let sessionHint: string | null = null;
+
   if (frame.error && typeof frame.error.message === "string") {
-    frame.error.message = withSessionContext(
+    const words = withSessionContext(
       toMcpSpeak(frame.error.message),
       projectPath,
+      command,
       typeof frame.error.code === "string" ? frame.error.code : undefined,
       browser,
     );
+    frame.error.message = words.message;
+    sessionHint = words.hint;
   }
 
-  if (typeof frame.error?.hint === "string") {
+  if (sessionHint) {
+    frame.error.hint = sessionHint;
+  } else if (typeof frame.error?.hint === "string") {
     frame.error.hint = toMcpSpeak(frame.error.hint);
   }
 
@@ -257,7 +314,7 @@ export async function runActVerb(
 
   if (out) {
     try {
-      let frame = translateFrame(JSON.parse(out), projectPath, args);
+      let frame = translateFrame(JSON.parse(out), projectPath, args, command);
       const browser = browserFlag(args);
 
       if (options.wake !== false && browser && safariExecutorUnavailable(frame, browser)) {
@@ -313,7 +370,13 @@ export async function runActVerb(
     });
   }
 
-  const message = stderr.trim() || `extension exited with code ${code}`;
+  const words = withSessionContext(
+    toMcpSpeak(stderr.trim() || `extension exited with code ${code}`),
+    projectPath,
+    command,
+    undefined,
+    browserFlag(args),
+  );
 
   return envelope({
     ok: false,
@@ -322,12 +385,8 @@ export async function runActVerb(
     error: {
       code: "E_CLI",
       name: "CliError",
-      message: withSessionContext(
-        toMcpSpeak(message),
-        projectPath,
-        undefined,
-        browserFlag(args),
-      ),
+      message: words.message,
+      ...(words.hint ? { hint: words.hint } : {}),
     },
   });
 }

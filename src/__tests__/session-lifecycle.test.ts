@@ -6,6 +6,7 @@ import { spawn } from "node:child_process";
 import { beforeEach, describe, it, expect, vi, afterEach } from "vitest";
 
 import { readyContract } from "./fixtures/engine-answers";
+import { envelope } from "../lib/envelope";
 import { armSessionIdle, idleClock, idleRecordPath, idledOutPath, readIdledOut, resolveIdleMinutes } from "../lib/session-idle";
 import { createToolDispatcher, type ToolModule } from "../lib/tool-dispatch";
 
@@ -52,40 +53,47 @@ vi.mock("../lib/exec", async (importOriginal) => {
   };
 });
 
-const waitCalls: Array<Record<string, unknown>> = [];
-const logsCalls: Array<Record<string, unknown>> = [];
+const waitCalls: object[] = [];
+const logsCalls: object[] = [];
 let waitAnswer = (): string =>
   JSON.stringify({ ok: true, status: "ready", value: { compiled: true, browserAttached: true, guestLoaded: true } });
 const readyAnswer = waitAnswer;
+const real: { wait?: typeof WaitModule.handler; logs?: typeof LogsModule.handler; budgetMs: number | null } = { budgetMs: null };
 
 vi.mock("../tools/wait", async (importOriginal) => {
   const actual = await importOriginal<typeof WaitModule>();
+  real.wait = actual.handler;
 
   return {
     ...actual,
-    handler: async (args: Record<string, unknown>) => {
+    handler: async (args: Parameters<typeof WaitModule.handler>[0]) => {
       waitCalls.push(args);
 
-      return waitAnswer();
+      return real.budgetMs === null ? waitAnswer() : actual.handler({ ...args, timeoutMs: real.budgetMs });
     },
   };
 });
 
 vi.mock("../tools/logs", async (importOriginal) => {
   const actual = await importOriginal<typeof LogsModule>();
+  real.logs = actual.handler;
 
   return {
     ...actual,
-    handler: async (args: Record<string, unknown>) => {
+    handler: async (args: Parameters<typeof LogsModule.handler>[0]) => {
       logsCalls.push(args);
 
-      return JSON.stringify({ ok: true, status: "ok", value: { count: 2, lines: ["[background] hello", "[newtab] hello"] } });
+      return real.budgetMs === null
+        ? JSON.stringify({ ok: true, status: "ok", value: { count: 2, lines: ["[background] hello", "[newtab] hello"] } })
+        : actual.handler(args);
     },
   };
 });
 
 const dev = await import("../tools/dev");
 const stop = await import("../tools/stop");
+const evalTool = await import("../tools/eval");
+const { TOOL_POLICY } = await import("../lib/tool-policy");
 const { registerSession, removeSession, removeSessionMarker, listSessionMarkers } = await import(
   "../lib/process-manager"
 );
@@ -159,6 +167,7 @@ function tmpProject(): string {
 
 afterEach(() => {
   waitAnswer = readyAnswer;
+  real.budgetMs = null;
 
   for (const child of spawned.splice(0)) {
     try {
@@ -569,4 +578,192 @@ describe("ledger 515: a session the agent owns ends itself after an idle time, a
     expect(answer.warnings.join(" ")).toContain("no tool call named it for 0.005 minutes");
     expect(fs.existsSync(idledOutPath(project, "chrome"))).toBe(false);
   }, 10_000);
+});
+
+describe("922: a dev session that exists and has not compiled yet is starting, for every tool", () => {
+  const INSTALLING = "process.stdout.write('Installing the project dependencies with npm\\n'); setTimeout(() => {}, 60000)";
+  const SESSION_TOOLS = Object.keys(TOOL_POLICY).filter((name) => TOOL_POLICY[name].liveSession);
+  const ran: string[] = [];
+
+  function standIn(name: string): ToolModule {
+    return {
+      schema: { name, description: "stand-in", inputSchema: { type: "object", properties: { projectPath: { type: "string" }, browser: { type: "string" } }, required: ["projectPath"] } },
+      handler: async () => {
+        ran.push(name);
+
+        return envelope({ ok: true, command: name, status: "ok", value: {} });
+      },
+    };
+  }
+
+  function stamp(project: string, contract: Record<string, unknown>): void {
+    const dir = path.join(project, "dist", "extension-js", "chrome");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "ready.json"), JSON.stringify(contract));
+  }
+
+  async function answerOf(dispatch: ReturnType<typeof createToolDispatcher>, name: string, args: Record<string, unknown>) {
+    const frame = await dispatch({ name, arguments: args });
+
+    return JSON.parse(frame.content[0]?.text ?? "{}");
+  }
+
+  async function installLineWritten(logPath: string): Promise<void> {
+    const deadline = Date.now() + 5_000;
+
+    while (!fs.readFileSync(logPath, "utf8").includes("Installing") && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+  }
+
+  beforeEach(() => {
+    ran.length = 0;
+  });
+
+  it("names every session tool, and none of the three an agent calls while it waits", () => {
+    expect(SESSION_TOOLS.sort()).toEqual([
+      "extension_assert",
+      "extension_dom_snapshot",
+      "extension_element",
+      "extension_eval",
+      "extension_inspect",
+      "extension_list_extensions",
+      "extension_network",
+      "extension_open",
+      "extension_reload",
+      "extension_screenshot",
+      "extension_storage",
+    ]);
+  });
+
+  it("extension_dev answers starting with what it waits on when its ready wait runs out on a live session", async () => {
+    const project = tmpProject();
+    const cli = fakeCli(INSTALLING);
+    nextChild = () => cli;
+    real.budgetMs = 1_000;
+
+    try {
+      await installLineWritten(cli.logPath);
+      const result = JSON.parse(await dev.handler({ projectPath: project, allowEval: true }));
+
+      expect(result.ok).toBe(true);
+      expect(result.status).toBe("starting");
+      expect(result.value.ready).toMatchObject({ status: "starting", waitingOn: "dependency-install", compiled: false, browserAttached: false, budgetMs: 1_000 });
+      expect(result.value.firstLogs).toEqual({ status: "starting" });
+      expect(result.value.capabilities.allowEval).toBe(true);
+      expect(result.hint).toMatch(/^The session is still starting \(ready\.status: starting, waiting on dependency-install\), not ready: call extension_wait until it answers ready/);
+      expect(result.hint).toContain("A first run installs dependencies and can take a couple of minutes.");
+    } finally {
+      nextChild = () => fakeCli("setTimeout(()=>{}, 60000)");
+    }
+  }, 15_000);
+
+  it("refuses every session tool with one code while the session starts, and runs them once it is ready", async () => {
+    const project = tmpProject();
+    const cli = fakeCli(INSTALLING);
+    registerSession({ pid: cli.child.pid!, browser: "chrome", projectPath: project, command: "dev", allowEval: true, logPath: cli.logPath });
+    await installLineWritten(cli.logPath);
+
+    const dispatch = createToolDispatcher({
+      tools: [...SESSION_TOOLS, "extension_wait", "extension_doctor", "extension_stop"].map(standIn),
+      options: { features: ["local", "extras"], noShip: false },
+    });
+
+    for (const name of SESSION_TOOLS) {
+      const answer = await answerOf(dispatch, name, { projectPath: project });
+
+      expect(answer, name).toMatchObject({
+        ok: false,
+        command: name,
+        status: "starting",
+        error: { code: "E_SESSION_STARTING", retry: "safe" },
+        value: { browser: "chrome", pid: cli.child.pid, waitingOn: "dependency-install" },
+      });
+
+      expect(answer.error.message, name).toContain("is still starting: it is installing the project's dependencies");
+      expect(answer.error.hint, name).toBe(
+        `Call extension_wait with this projectPath and browser: "chrome", then call ${name} again. A first run installs dependencies and can take a couple of minutes. The session exists: do not start or replace it.`,
+      );
+    }
+
+    expect(ran).toEqual([]);
+
+    for (const name of ["extension_wait", "extension_doctor", "extension_stop"]) {
+      expect((await answerOf(dispatch, name, { projectPath: project })).ok, name).toBe(true);
+    }
+
+    stamp(project, { status: "starting", command: "dev", browser: "chrome", pid: cli.child.pid });
+    expect((await answerOf(dispatch, "extension_open", { projectPath: project })).value.waitingOn).toBe("first-compile");
+
+    stamp(project, readyContract("dev", "chrome", { pid: cli.child.pid }));
+    ran.length = 0;
+
+    for (const name of SESSION_TOOLS) {
+      expect((await answerOf(dispatch, name, { projectPath: project })).ok, name).toBe(true);
+    }
+
+    expect(ran).toEqual(SESSION_TOOLS);
+  }, 15_000);
+
+  it("leaves a project with no session, a dead session and a production session to their own answers", async () => {
+    const dispatch = createToolDispatcher({ tools: [standIn("extension_open")], options: { features: ["local"], noShip: false } });
+    const none = tmpProject();
+    const dead = tmpProject();
+    const production = tmpProject();
+    registerSession({ pid: 2 ** 30, browser: "chrome", projectPath: dead, command: "dev" });
+    registerSession({ pid: spawnVictim(), browser: "chrome", projectPath: production, command: "start" });
+
+    for (const project of [none, dead, production]) {
+      const answer = await answerOf(dispatch, "extension_open", { projectPath: project });
+
+      expect(answer.ok, JSON.stringify(answer).slice(0, 600)).toBe(true);
+    }
+  });
+
+  it("extension_logs answers starting while no log file exists, and reads the file once there is one", async () => {
+    const project = tmpProject();
+    registerSession({ pid: spawnVictim(), browser: "chrome", projectPath: project, command: "dev" });
+
+    const starting = JSON.parse(await real.logs!({ projectPath: project }));
+
+    expect(starting.status).toBe("starting");
+    expect(starting.error.code).toBe("E_SESSION_STARTING");
+    expect(starting.error.hint).toContain("then call extension_logs again");
+    expect(starting.error.hint).not.toMatch(/Start a dev session/);
+
+    const logs = path.join(project, "dist", "extension-js", "chrome", "logs.ndjson");
+    fs.mkdirSync(path.dirname(logs), { recursive: true });
+    fs.writeFileSync(logs, "");
+
+    expect(JSON.parse(await real.logs!({ projectPath: project })).error?.code).not.toBe("E_SESSION_STARTING");
+  });
+
+  it("extension_eval reads allowEval from what the session was started with, and keeps E_EVAL_DISABLED for a session started without it", async () => {
+    const allowed = tmpProject();
+    const denied = tmpProject();
+    const pid = spawnVictim();
+    registerSession({ pid, browser: "chrome", projectPath: allowed, command: "dev", allowEval: true });
+    registerSession({ pid, browser: "chrome", projectPath: denied, command: "dev", allowEval: false });
+
+    const starting = JSON.parse(await evalTool.handler({ projectPath: allowed, targetId: "T1", expression: "1" }));
+
+    expect(starting.error.code).toBe("E_SESSION_STARTING");
+    expect(starting.error.hint).not.toContain("replace: true");
+
+    stamp(allowed, readyContract("dev", "chrome", { pid }));
+    stamp(denied, readyContract("dev", "chrome", { pid }));
+
+    const pending = JSON.parse(await evalTool.handler({ projectPath: allowed, targetId: "T1", expression: "1" }));
+
+    expect(pending.status).toBe("control-unavailable");
+    expect(pending.error).toMatchObject({ code: "E_CONTROL_UNAVAILABLE", retry: "safe" });
+    expect(pending.error.message).toContain("was started with allowEval: true");
+    expect(pending.error.hint).toMatch(/^Call extension_wait until the session is ready, then extension_eval again/);
+    expect(pending.error.hint).not.toContain("replace: true");
+
+    const disabled = JSON.parse(await evalTool.handler({ projectPath: denied, targetId: "T1", expression: "1" }));
+
+    expect(disabled.error.code).toBe("E_EVAL_DISABLED");
+    expect(disabled.error.hint).toContain("replace: true");
+  });
 });

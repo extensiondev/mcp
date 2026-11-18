@@ -41,6 +41,7 @@ import {
 } from "../lib/session-browser";
 import { guardSameBrowserSession } from "../lib/same-browser-session";
 import { IDLE_MINUTES_SCHEMA, armSessionIdle, idleSentence, resolveIdleMinutes } from "../lib/session-idle";
+import { FIRST_RUN_NOTE } from "../lib/session-starting";
 import { handler as waitHandler } from "./wait";
 import { handler as logsHandler } from "./logs";
 import {
@@ -212,6 +213,7 @@ export async function handler(
     profileReused,
     headless: visibility.headless,
     idleMinutes,
+    allowEval: Boolean(args.allowEval),
     logPath,
     ...safariRecord,
   });
@@ -375,6 +377,7 @@ export async function handler(
   const readiness =
     args.wait === false || args.noBrowser ? null : await awaitReadyAndFirstLogs(args.projectPath, browser);
   const sessionReady = readiness?.ready.status === "ready";
+  const stillStarting = readiness?.ready.status === "starting";
   const readyProfilePath: unknown = readiness
     ? (readiness.ready as Record<string, unknown>).profilePath
     : undefined;
@@ -414,6 +417,7 @@ export async function handler(
       profileReused,
       headless: visibility.headless,
       idleMinutes,
+      allowEval: Boolean(args.allowEval),
       logPath,
       ...safariRecord,
     });
@@ -490,6 +494,8 @@ export async function handler(
       : null;
   const nextStep = sessionReady
     ? "The session is ready (ready.status: ready) and the first log lines are in firstLogs, so no extension_wait is needed: extension_inspect reads the live state and extension_logs the console."
+    : stillStarting
+      ? `The session is still starting (ready.status: starting, waiting on ${String((readiness?.ready as Record<string, unknown>).waitingOn)}), not ready: call extension_wait until it answers ready, and call it again if it runs out. ${FIRST_RUN_NOTE} Until then the session tools answer E_SESSION_STARTING; do not start or replace the session.`
     : readiness
       ? `ready.status is ${readiness.ready.status}, not ready: ${
           readiness.ready.status === "compiled-not-attached" && isSafariTarget(browser)
@@ -505,7 +511,7 @@ export async function handler(
   return envelope({
     ok: true,
     command: schema.name,
-    status: "started",
+    status: stillStarting ? "starting" : "started",
     value: {
       pid,
       browser,

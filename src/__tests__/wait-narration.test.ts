@@ -38,7 +38,8 @@ describe("extension_wait budget disclosure", () => {
   });
 
   it("narrates a timeout: budget, elapsed, and what was observed", async () => {
-    registerSession({ pid: process.pid, browser: "chrome", projectPath: dir, command: "dev" });
+    const file = writeModernContract(dir, "chrome", { status: "starting", pid: process.pid });
+    fs.writeFileSync(file, "{ torn");
     let result;
 
     try {
@@ -58,8 +59,34 @@ describe("extension_wait budget disclosure", () => {
     expect(result.value.elapsedMs).toBeGreaterThanOrEqual(1200);
     expect(result.value.compiled).toBe(false);
     expect(result.value.browserAttached).toBe(false);
-    expect(result.error.message).toContain("no ready contract");
+    expect(result.error.message).toContain("could not be read");
     expect(result.hint).toContain("call extension_wait again");
+  }, 10_000);
+
+  it("922: running out on a live session with no contract yet is starting, not a timeout, and says to call it again", async () => {
+    registerSession({ pid: process.pid, browser: "chrome", projectPath: dir, command: "dev" });
+
+    const result = JSON.parse(await handler({ projectPath: dir, browser: "chrome", timeoutMs: 1200 }));
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("starting");
+    expect(result.error).toMatchObject({ code: "E_SESSION_STARTING", retry: "safe" });
+    expect(result.error.message).toContain("is still starting");
+    expect(result.error.message).toContain("not ready after 1200ms this call");
+    expect(result.value).toMatchObject({ compiled: false, browserAttached: false, waitingOn: "engine-start", pid: process.pid, budgetMs: 1200 });
+    expect(result.value.elapsedMs).toBeGreaterThanOrEqual(1200);
+    expect(result.error.hint).toMatch(/^Call extension_wait again: that is the correct next call/);
+    expect(result.error.hint).toContain("can take a couple of minutes");
+    expect(result.error.hint).not.toMatch(/extension_dev|replace: true/);
+  }, 10_000);
+
+  it("922: a session no longer alive is not starting, so running out on it stays a timeout", async () => {
+    registerSession({ pid: 2 ** 30, browser: "chrome", projectPath: dir, command: "dev" });
+
+    const result = JSON.parse(await handler({ projectPath: dir, browser: "chrome", timeoutMs: 1100 }));
+
+    expect(result.status).toBe("timeout");
+    expect(result.error.code).toBe("E_WAIT_TIMEOUT");
   }, 10_000);
 
   it("accepts the legacy timeout alias, with timeoutMs winning when both are given", async () => {
@@ -89,9 +116,11 @@ describe("extension_wait budget disclosure", () => {
       await handler({ projectPath: dir, browser: "chrome", timeoutMs: 1200 }),
     );
 
-    expect(result.status).toBe("timeout");
+    expect(result.status).toBe("starting");
+    expect(result.error.code).toBe("E_SESSION_STARTING");
     expect(result.value.compiled).toBe(false);
-    expect(result.error.message).toContain("starting");
+    expect(result.value.waitingOn).toBe("first-compile");
+    expect(result.error.message).toContain("compiling for the first time");
   }, 10_000);
 });
 
@@ -121,7 +150,7 @@ describe("extension_wait ignores contracts from a previous run", () => {
     );
 
     expect(result.status).not.toBe("contract-error");
-    expect(result.status).toBe("timeout");
+    expect(result.status).toBe("starting");
     expect(result.warnings.join(" ")).toContain("previous run");
   }, 10_000);
 
@@ -143,7 +172,7 @@ describe("extension_wait ignores contracts from a previous run", () => {
     );
 
     expect(result.error?.code).not.toBe("E_STALE_CONTRACT");
-    expect(result.status).toBe("timeout");
+    expect(result.status).toBe("starting");
   }, 10_000);
 
   it("does not trust an error stamp whose dev-server pid is dead when no session is known", async () => {

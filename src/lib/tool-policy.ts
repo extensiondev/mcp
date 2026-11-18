@@ -29,6 +29,7 @@ export interface ToolPolicy {
   ships?: "always" | ((args: Args) => boolean);
   untrusted?: true;
   onThisMachine?: true;
+  liveSession?: true;
   actsAs?: { tool: string; refuse: (args: Args) => string | null };
 }
 
@@ -85,6 +86,15 @@ export function toolTitle(name: string): string {
   return TOOL_TITLES[name] ?? name;
 }
 
+/* @invariant A TOOL THAT ACTS ON OR READS A LIVE SESSION SAYS SO HERE, ONCE.
+ * `liveSession` is what the dispatcher reads to answer E_SESSION_STARTING
+ * before the handler runs, while the dev session the call names exists and
+ * has not compiled yet (session-starting.ts, ledger 922). extension_logs is
+ * not marked: a log file that exists is read at any time, and the tool
+ * answers the same refusal itself when there is none yet. extension_wait,
+ * extension_doctor and extension_stop are what an agent calls in that
+ * window, so they are never refused for it.
+ */
 export const TOOL_POLICY: Record<string, ToolPolicy> = {
   extension_create: { group: "local", annotations: TOOL_ANNOTATIONS.extension_create },
   extension_templates: { group: "local", annotations: TOOL_ANNOTATIONS.extension_templates },
@@ -106,22 +116,26 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
     group: "local",
     annotations: TOOL_ANNOTATIONS.extension_assert,
     untrusted: true,
+    liveSession: true,
   },
   extension_inspect: {
     group: "local",
     annotations: TOOL_ANNOTATIONS.extension_inspect,
     untrusted: true,
+    liveSession: true,
   },
   extension_dom_snapshot: {
     group: "local",
     annotations: TOOL_ANNOTATIONS.extension_dom_snapshot,
     untrusted: true,
+    liveSession: true,
   },
-  extension_element: { group: "local", annotations: TOOL_ANNOTATIONS.extension_element, untrusted: true },
+  extension_element: { group: "local", annotations: TOOL_ANNOTATIONS.extension_element, untrusted: true, liveSession: true },
   extension_screenshot: {
     group: "local",
     annotations: TOOL_ANNOTATIONS.extension_screenshot,
     untrusted: true,
+    liveSession: true,
   },
   extension_try: {
     group: "platform",
@@ -133,6 +147,7 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
     group: "local",
     annotations: TOOL_ANNOTATIONS.extension_list_extensions,
     untrusted: true,
+    liveSession: true,
   },
   extension_logs: {
     group: "local",
@@ -148,26 +163,31 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
     group: "local",
     annotations: TOOL_ANNOTATIONS.extension_eval,
     untrusted: true,
+    liveSession: true,
   },
   extension_storage: {
     group: "local",
     annotations: TOOL_ANNOTATIONS.extension_storage,
     untrusted: true,
+    liveSession: true,
   },
   extension_reload: {
     group: "local",
     annotations: TOOL_ANNOTATIONS.extension_reload,
     untrusted: true,
+    liveSession: true,
   },
   extension_network: {
     group: "extras",
     annotations: TOOL_ANNOTATIONS.extension_network,
     untrusted: true,
+    liveSession: true,
   },
   extension_open: {
     group: "local",
     annotations: TOOL_ANNOTATIONS.extension_open,
     untrusted: true,
+    liveSession: true,
   },
   extension_browsers: {
     group: "local",

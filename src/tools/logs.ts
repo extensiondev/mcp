@@ -28,6 +28,7 @@ import { makeFilter, type LogsArgs } from "./logs-filter";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { WEBKIT_FAMILY } from "../lib/browser-family";
 import { contractPidState } from "../lib/contract-pids";
+import { sessionStartingEnvelope, startingSession } from "../lib/session-starting";
 import { safariSilentLogReason } from "../lib/safari-session-notes";
 import {
   ambiguousSessionRefusal,
@@ -619,6 +620,9 @@ export async function handler(args: LogsArgs): Promise<string> {
 
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
   const limit = args.limit && args.limit > 0 ? args.limit : DEFAULT_LIMIT;
+  const starting = fs.existsSync(logsPath(args.projectPath, browser)) ? null : startingSession(args.projectPath, browser);
+
+  if (starting) return sessionStartingEnvelope(TOOL, args.projectPath, starting);
 
   if (WEBKIT_FAMILY.has(browser) && !fs.existsSync(logsPath(args.projectPath, browser))) {
     return envelope({

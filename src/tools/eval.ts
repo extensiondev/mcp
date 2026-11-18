@@ -33,6 +33,8 @@ import { noSessionEnvelope } from "../lib/production-receipt";
 import { EVAL_UNTIL_PROPERTY, evalUntilTruthy, pollTimeoutWithin, type EvalUntil } from "../lib/eval-until";
 import { parseFrameObject } from "../lib/frame-json";
 import { findSessionInfo } from "../lib/process-manager";
+import { pidState } from "../lib/process-identity";
+import { sessionStartingEnvelope, startingSession } from "../lib/session-starting";
 import { awaitsAtTopLevel, isOneExpression, isSingleExpression, protocolExpression } from "../lib/one-expression";
 import {
   ambiguousSessionRefusal,
@@ -1415,6 +1417,39 @@ function evalDisabled(): string {
   });
 }
 
+/* @invariant WHETHER EVAL IS ALLOWED IS READ FROM WHAT THE SESSION WAS
+ * STARTED WITH, NOT FROM A CONTROL CHANNEL THAT IS NOT UP YET. The session
+ * token is written once the control channel opens, so a session started
+ * with allowEval: true has none while it installs or compiles, and on
+ * 2026-11-18 that window answered E_EVAL_DISABLED with a hint to restart
+ * with replace: true, which throws away the session about to be ready
+ * (ledger 922). A missing token on a session that is still starting is
+ * E_SESSION_STARTING; on a live session this server started with
+ * allowEval: true it is E_CONTROL_UNAVAILABLE, and both say to wait.
+ * E_EVAL_DISABLED is left for a session started without it.
+ */
+function evalNotAllowed(projectPath: string, browser: string): string {
+  const starting = startingSession(projectPath, browser);
+  if (starting) return sessionStartingEnvelope(schema.name, projectPath, starting);
+
+  const started = findSessionInfo(projectPath, browser);
+
+  if (started?.allowEval !== true || pidState(started.pid, started.processStartedAt) !== "alive") return evalDisabled();
+
+  return envelope({
+    ok: false,
+    command: schema.name,
+    status: "control-unavailable",
+    error: {
+      code: "E_CONTROL_UNAVAILABLE",
+      name: "EvalTokenPending",
+      message: `Nothing was evaluated: this ${browser} session was started with allowEval: true, but its control channel has not written the session token yet, so eval is allowed and not reachable right now.`,
+      retry: "safe",
+    },
+    hint: "Call extension_wait until the session is ready, then extension_eval again; extension_doctor names the leg that is down. The session allows eval: do not replace it.",
+  });
+}
+
 function noRdpPort(browser: string, miss: RdpPortRead): string {
   return envelope({
     ok: false,
@@ -1466,7 +1501,7 @@ async function evaluateByTargetId(
     });
   }
 
-  if (!evalTokenPresent(args.projectPath, browser)) return evalDisabled();
+  if (!evalTokenPresent(args.projectPath, browser)) return evalNotAllowed(args.projectPath, browser);
 
   if (isGeckoFamily(browser)) {
     if (!isOneExpression(args.expression)) return notOneExpression();
@@ -1640,7 +1675,7 @@ async function evaluateRouted(
   const tokenPresent = evalTokenPresent(args.projectPath, browser);
 
   if (wantsExtensionPageOverCdp(args.projectPath, browser, context, args.url) && (tokenPresent || context !== "content")) {
-    if (!tokenPresent) return evalDisabled();
+    if (!tokenPresent) return evalNotAllowed(args.projectPath, browser);
 
     const resolved = await resolveCdpPort(args.projectPath, browser, { timeoutMs: args.timeout });
 

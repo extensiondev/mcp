@@ -28,6 +28,7 @@ import {
 } from "../lib/compiled-not-attached";
 import { safariSigningFrame } from "../lib/safari-signing";
 import { UnattachedWatch } from "../lib/executor-recovery";
+import { CONTRACT_MTIME_GRANULARITY_SLACK_MS, FIRST_RUN_NOTE, startingSentence, startingSession } from "../lib/session-starting";
 import { recentErrorLogs } from "./doctor";
 
 import type { ReadyContract } from "../lib/types";
@@ -35,7 +36,6 @@ import type { ReadyContract } from "../lib/types";
 const SAFE_CEILING_MS = 50_000;
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MIN_TIMEOUT_MS = 1_000;
-const CONTRACT_MTIME_GRANULARITY_SLACK_MS = 2_000;
 
 export const schema = {
   name: "extension_wait",
@@ -425,6 +425,33 @@ export async function handler(args: {
       value: { compiled: false, browserAttached: false, readyPath, budgetMs, elapsedMs: Date.now() - start },
       warnings: [clampNote],
       hint: "Check projectPath and browser, or start a session with extension_dev, then call extension_wait.",
+    });
+  }
+
+  const starting = startingSession(args.projectPath, browser);
+
+  if (starting) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "starting",
+      error: {
+        code: "E_SESSION_STARTING",
+        name: "SessionStarting",
+        message: `${startingSentence(starting, args.projectPath)} It was not ready after ${budgetMs}ms this call.`,
+        retry: "safe",
+      },
+      value: {
+        compiled: false,
+        browserAttached: false,
+        waitingOn: starting.waitingOn,
+        pid: starting.pid,
+        readyPath,
+        budgetMs,
+        elapsedMs: Date.now() - start,
+      },
+      warnings: [clampNote, staleContractNote],
+      hint: `Call extension_wait again: that is the correct next call, and it resumes polling the same contract. ${FIRST_RUN_NOTE} The session exists: do not start or replace it. If it never readies, extension_doctor checks the dev process.`,
     });
   }
 

@@ -40,6 +40,7 @@ import { scrubRunAnswer } from "./run-privacy";
 import { inSessionOrder, sessionLaneKey } from "./session-order";
 import { secretArgumentRefusal } from "./secret-arguments";
 import { withSessionIdle } from "./session-idle";
+import { sessionStartingRefusal } from "./session-starting";
 import { createReloader, handoverState, type ActiveBuild, type BuildImporter, type ListedTool, type RebuiltCall, type ToolFrame } from "./server-reload";
 import { markListStale, reloadedWarning, serverStamp, staleEnvelope, type ServerStampReader } from "./server-stamp";
 import { markStaleLocal, noLocalCarryReason, predatedChecks, predatesCheckEnvelope, type HeldLocal } from "./stale-local";
@@ -388,7 +389,9 @@ export function createToolSurface(setup: ToolHandlerOptions): {
             if (!platform) {
               return annotate(
                 await withCallWaits(() =>
-                  inSessionOrder(sessionLaneKey(normalizedArgs), name, () => withSessionIdle(normalizedArgs, () => tool.handler(normalizedArgs))),
+                  inSessionOrder(sessionLaneKey(normalizedArgs), name, () =>
+                    withSessionIdle(normalizedArgs, async () => (TOOL_POLICY[name]?.liveSession ? sessionStartingRefusal(name, normalizedArgs) : null) ?? tool.handler(normalizedArgs)),
+                  ),
                 ),
                 { note: bound.note, warning: stubbedReadWarning(name, normalizedArgs) },
               );
