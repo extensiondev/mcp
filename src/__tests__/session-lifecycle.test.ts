@@ -198,7 +198,7 @@ describe("extension_dev fork guard", () => {
     stranger.unref();
     spawned.push(stranger);
     await new Promise((resolve) => setTimeout(resolve, 200));
-    registerSession({ pid: stranger.pid!, browser: "chrome", projectPath: project, command: "dev" });
+    registerSession({ pid: stranger.pid!, browser: "chrome", projectPath: project, command: "dev", processStartedAt: "2001-01-01T00:00:00.000Z" });
 
     const result = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
 

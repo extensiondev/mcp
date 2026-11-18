@@ -15,6 +15,19 @@ export type PidState = "alive" | "dead" | "foreign";
 export const PLAUSIBLE_SESSION_BINARY =
   /chrom|edge|brave|opera|vivaldi|yandex|firefox|waterfox|librewolf|zen|floorp|safari|node|electron|extension/i;
 
+/* @invariant A PID WHOSE START TIME MATCHES THE RECORD IS THE SESSION'S, WHATEVER
+ * IT CALLS ITSELF. A process chooses its own title: on Linux the engine's
+ * Node process read "MainThread", which is no browser and no "node", so on
+ * 2026-11-18 (ledger 937) extension_stop called the session's own PID
+ * foreign, signalled nothing and left the server up, though the start time
+ * matched the session record. The start time is the evidence against a reused
+ * PID: a recorded start time that can be read decides alone, alive when it
+ * matches and dead when it differs. The title is asked only when there is no
+ * start time to compare (none recorded, or the process table would not give
+ * one), and then the executable the kernel names counts beside the title,
+ * since a process cannot rename that.
+ */
+
 export interface WindowsProcessRow {
   pid: number;
   name: string;
@@ -170,6 +183,30 @@ export function sameProcessStart(recorded: string, current: string): boolean {
   return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= SAME_START_TOLERANCE_MS;
 }
 
+export function startedAsRecorded(pid: number, startedAt: string | null | undefined): boolean {
+  if (!startedAt) return false;
+
+  const current = processStartedAt(pid);
+
+  return current !== null && sameProcessStart(startedAt, current);
+}
+
+function processExecutable(pid: number): string {
+  if (process.platform !== "linux") return "";
+
+  try {
+    return path.basename(fs.readlinkSync(`/proc/${pid}/exe`).replace(/ \(deleted\)$/, ""));
+  } catch {
+    return "";
+  }
+}
+
+export function plausibleSessionProcess(pid: number): boolean {
+  const names = [processCommand(pid), processExecutable(pid)].filter(Boolean);
+
+  return names.length === 0 || names.some((name) => PLAUSIBLE_SESSION_BINARY.test(name));
+}
+
 export function pidRecycled(pid: number, startedAt: string | null | undefined): boolean {
   if (!startedAt) return false;
 
@@ -187,12 +224,10 @@ export function pidState(pid: number, startedAt?: string | null): PidState {
     return pidRecycled(pid, startedAt) ? "dead" : "foreign";
   }
 
-  if (pidRecycled(pid, startedAt)) return "dead";
+  const current = startedAt ? processStartedAt(pid) : null;
+  if (startedAt && current !== null) return sameProcessStart(startedAt, current) ? "alive" : "dead";
 
-  const command = processCommand(pid);
-  if (command && !PLAUSIBLE_SESSION_BINARY.test(command)) return "foreign";
-
-  return "alive";
+  return plausibleSessionProcess(pid) ? "alive" : "foreign";
 }
 
 export function describeRecycledPid(pid: number, startedAt: string | null | undefined): string | null {

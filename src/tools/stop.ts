@@ -19,6 +19,7 @@ import {
   pidState,
   processStartTimes,
   readWindowsProcessTable,
+  startedAsRecorded,
   type WindowsProcessRow,
   processCommand,
 } from "../lib/process-identity";
@@ -264,8 +265,8 @@ function sessionProcessPids(
   }
 
   return {
-    pids: [...pids].filter((pid) =>
-      PLAUSIBLE_SESSION_BINARY.test(processCommand(pid)),
+    pids: [...pids].filter(
+      (pid) => startedAsRecorded(pid, hints.startedAt?.[pid]) || PLAUSIBLE_SESSION_BINARY.test(processCommand(pid)),
     ),
     verified,
   };

@@ -14,7 +14,7 @@ import {
   listSessions,
 } from "../lib/process-manager";
 import { resolveExtensionInvocation } from "../lib/exec";
-import { pidState, processStartedAt } from "../lib/process-identity";
+import { pidState, processCommand, processStartedAt } from "../lib/process-identity";
 import { liveNetworkStubs, openNetworkStubs, stubLinks } from "../lib/network-stubs";
 import { readyContract } from "./fixtures/engine-answers";
 
@@ -381,7 +381,12 @@ describe("extension_stop never signals a pid that is no longer the session", () 
       const projectPath = tmpProject();
       const stranger = spawnHolder("sleep", ["300"]);
       await new Promise((resolve) => setTimeout(resolve, 200));
-      registerSession({ pid: stranger, browser: "chrome", projectPath, command: "dev" });
+      const readyDir = path.join(projectPath, "dist", "extension-js", "chrome");
+      fs.mkdirSync(readyDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(readyDir, "ready.json"),
+        JSON.stringify(readyContract("dev", "chrome", { pid: stranger, pidStartedAt: undefined, distPath: path.join(projectPath, "dist", "chrome") })),
+      );
 
       const result = JSON.parse(await stop.handler({ projectPath, browser: "chrome" }));
 
@@ -567,6 +572,43 @@ describe("extension_stop judges a session by its pid and its start time", () => 
       expect(await waitGone(pid)).toBe(true);
     },
     15_000,
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "937: ends a session process that names itself MainThread when its start time matches the record",
+    async () => {
+      const projectPath = tmpProject();
+      const renamed = path.join(projectPath, "MainThread");
+      fs.symlinkSync(process.execPath, renamed);
+      const child = spawn(renamed, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "ignore" });
+      child.unref();
+      const pid = child.pid!;
+
+      try {
+        const recorded = processStartedAt(pid);
+        expect(typeof recorded).toBe("string");
+        expect(path.basename(processCommand(pid))).toBe("MainThread");
+        expect(pidState(pid, recorded)).toBe("alive");
+        expect(pidState(pid, "2001-01-01T00:00:00.000Z")).toBe("dead");
+        if (process.platform === "linux") expect(pidState(pid)).toBe("alive");
+
+        registerSession({ pid, browser: "chrome", projectPath, command: "dev" });
+
+        const result = JSON.parse(await stop.handler({ projectPath, browser: "chrome" }));
+
+        expect(result.ok).toBe(true);
+        expect(result.value.stopped).toBe(true);
+        expect(result.value.detail).toContain("Terminated");
+        expect(result.value.detail).not.toContain("MainThread");
+        expect(await waitGone(pid)).toBe(true);
+      } finally {
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch {
+        }
+      }
+    },
+    20_000,
   );
 
   it("calls this process dead under a start time it never had and alive under its own", () => {
