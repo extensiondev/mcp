@@ -11,6 +11,7 @@ import {
   rdpStartExpression,
   readRdpEvalSlot,
 } from "../lib/rdp";
+import { askedEvaluateText } from "./fixtures/rdp-evaluate-text";
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -144,7 +145,7 @@ function firefox(options: {
             continue;
           }
 
-          const value = vm.runInContext(String(packet.text), context) as unknown;
+          const value = vm.runInContext(askedEvaluateText(packet.text), context) as unknown;
           setTimeout(() => {
             let result: unknown = value;
 
@@ -259,6 +260,19 @@ describe("rdpEvaluateInTab", () => {
     });
 
     expect(requests.filter((r) => r.type === "evaluateJSAsync")).toHaveLength(1);
+  });
+
+  it("897: the fake debugger runs only text a session of this process asked it to evaluate", async () => {
+    const { port, requests } = await firefox({ tabs: TABS, globals: { marker: "kept" } });
+
+    await rdpEvaluateInTab(port, { select: (tabs) => tabs[1], expression: "marker", timeoutMs: 2_000 });
+
+    const sent = requests.filter((r) => r.type === "evaluateJSAsync").map((r) => r.text);
+
+    expect(sent.length).toBeGreaterThan(0);
+    for (const text of sent) expect(askedEvaluateText(text)).toBe(text);
+    expect(() => askedEvaluateText("marker")).toThrow(/no RdpSession of this process asked/);
+    expect(() => askedEvaluateText(rdpPollExpression("never-sent"))).toThrow(/no RdpSession of this process asked/);
   });
 
   it("says no tab matches without opening a watcher", async () => {

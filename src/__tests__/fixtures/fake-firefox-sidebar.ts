@@ -11,6 +11,7 @@ import vm from "node:vm";
 
 import { encodeRdpPacket, RdpPacketDecoder } from "../../lib/rdp";
 import { solidPng } from "./png";
+import { askedEvaluateText } from "./rdp-evaluate-text";
 
 export const SIDEBAR_ADDON_ID = "sidebar@extension.js";
 export const SIDEBAR_URL = "moz-extension://abc/sidebar/index.html";
@@ -100,7 +101,7 @@ export async function fakeFirefoxSidebar(options: { open?: boolean; clickToggles
         } else if (packet.type === "evaluateJSAsync") {
           const resultID = `r${nextResult++}`;
           send({ from: "console0", resultID });
-          const result = vm.runInContext(String(packet.text), context) as unknown;
+          const result = vm.runInContext(askedEvaluateText(packet.text), context) as unknown;
           setTimeout(() => send({ from: "console0", type: "evaluationResult", resultID, result }), 0);
         }
       }

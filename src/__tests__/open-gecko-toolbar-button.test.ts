@@ -16,6 +16,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 
 import { encodeRdpPacket, RdpPacketDecoder } from "../lib/rdp";
 import { actFailure, actVerbAnswer } from "./fixtures/engine-answers";
+import { askedEvaluateText } from "./fixtures/rdp-evaluate-text";
 
 import type * as ActModule from "../lib/act";
 import type * as CdpPortModule from "../lib/cdp-port";
@@ -110,7 +111,7 @@ function firefoxParent(): Promise<{ port: number; clicks: Array<{ api: string; a
         } else if (packet.type === "evaluateJSAsync") {
           const resultID = `r${nextResult++}`;
           send({ from: "console0", resultID });
-          const result = vm.runInContext(String(packet.text), context) as unknown;
+          const result = vm.runInContext(askedEvaluateText(packet.text), context) as unknown;
           setTimeout(() => send({ from: "console0", type: "evaluationResult", resultID, result }), 0);
         }
       }
