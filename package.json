@@ -2,7 +2,7 @@
   "name": "@extension.dev/mcp",
   "type": "module",
   "version": "11.0.0",
-  "description": "MCP server that lets AI agents build, run, debug, test and ship browser extensions to the Chrome Web Store, Firefox Add-ons, Edge Add-ons and the App Store. Built on extension.dev and Extension.js.",
+  "description": "Build, run, debug, test and ship Chrome, Firefox, Edge and Safari extensions from your AI agent.",
   "mcpName": "io.github.extensiondev/mcp",
   "license": "Apache-2.0",
   "author": {

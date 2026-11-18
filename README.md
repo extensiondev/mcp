@@ -9,11 +9,9 @@
 
 > Build, run, debug, test and ship Chrome, Firefox, Edge and Safari extensions from your AI agent.
 
-<img alt="Logo" align="right" src="https://media.extension.land/brand/extension-dev/logo-dock.png" width="20.7%" />
+<img alt="Chrome, Edge, Firefox and Safari" align="right" src="https://raw.githubusercontent.com/extensiondev/mcp/main/docs/browsers.svg" width="34%" />
 
-Extension.js is the framework you run. extension.dev is where it ships. This server covers both: the local tools run Extension.js on your machine, and the platform lane takes the build the rest of the way to the stores.
-
-These tools build, run, inspect and ship one extension across Chrome, Edge, Firefox and Safari.
+extension.dev MCP is a Model Context Protocol (MCP) server for Claude Code, Cursor, VS Code, Codex and any MCP client. Your agent creates an extension, runs it, proves it works and ships it to four stores.
 
 [Docs](https://docs.extension.dev/tools/mcp) · [Tools](#tools) · [Skill](https://www.npmjs.com/package/@extension.dev/skill) · [Changelog](CHANGELOG.md) · [Troubleshooting](#troubleshooting) · [Discord](https://discord.gg/v9h2RgeTSN)
 
@@ -56,11 +54,17 @@ The local tools need no account; the platform tools, on with `--features=local,p
 
 ## Your first prompt
 
+**Build it and prove it works**
+
 > Create a Chrome and Firefox extension that highlights external links, run it, and prove the content script injected.
 
-The agent scaffolds from a template, starts the dev session, a browser opens with the extension loaded, and `extension_assert` answers with a verdict instead of a guess. Then:
+The agent scaffolds from a template, starts the dev session, a browser opens with the extension loaded, and `extension_assert` answers with a verdict instead of a guess.
+
+**Then ship it**
 
 > Submit this build to the Chrome Web Store and Firefox Add-ons as a dry run and tell me what is missing.
+
+`extension_submit` defaults to a dry run, so nothing goes into review until a workspace owner approves the real submit.
 
 ## Ship to four stores
 
@@ -82,7 +86,7 @@ Details under [Platform tools](https://docs.extension.dev/tools/mcp/platform).
 
 ## What it does
 
-Extensions fail silently: content scripts that never inject, panels that never open. These tools give the agent eyes on the live browser.
+Extensions fail silently, with content scripts that never inject and panels that never open, so these tools give the agent eyes on the live browser.
 
 - **Ship**: validate the manifest cross-browser, build, share a preview, promote, submit
 - **Scaffold** from 50+ [templates](https://templates.extension.dev), or add a popup, sidebar or content script
@@ -91,7 +95,7 @@ Extensions fail silently: content scripts that never inject, panels that never o
 - **Act**: evaluate code in any context, trigger the action button and commands, reload
 - **Test**: `extension_assert` answers `pass`, `fail` or `inconclusive`, the last naming the evidence that would settle it
 
-Built on [Extension.js](https://extension.js.org), the open source framework extension.dev sponsors. Every engine command runs the project's own `extension` when the project has one, else the version this server pins ([Engine pinning](https://docs.extension.dev/tools/mcp#engine-pinning-for-scaffolds)).
+Every engine command runs the project's own engine when it has one, else the version this server pins ([Engine pinning](https://docs.extension.dev/tools/mcp#engine-pinning-for-scaffolds)).
 
 ## Requirements
 
@@ -108,15 +112,29 @@ Built on [Extension.js](https://extension.js.org), the open source framework ext
 
 ## Security
 
-- **Local by default.** Every local tool runs Extension.js on your machine. The control channel (`extension_storage`, `extension_reload`, `extension_open`, `extension_dom_snapshot`) is same machine, same user, on unless `extension_dev` is called with `allowControl: false`.
-- **The eval gate.** `extension_eval` stays off until `extension_dev` is called with `allowEval: true`. `extension_element` clicks, fills, reads and waits for one element, and sends trusted mouse and keyboard input (move, press, release, type, key, scroll) that pages read as `isTrusted: true`, over the debug port with no gate, since it runs no caller code. A session never grows a gate on a second call: call `extension_dev` again with `replace: true`.
-- **What leaves the machine.** Nothing until you ask. The local tools send nothing to extension.dev. A platform tool is answered by extension.dev's hosted lane at `mcp.extension.dev`: this server exchanges the stored login at www.extension.dev for a credential that lasts ten minutes and sends the lane that credential, the tool's arguments and the project ref, never the login, a file path or the `api` override. A store check or a listing sync also sends what it read from the project (the text of `STORE.md`, the icon and screenshot sizes and digests, the git HEAD); a listing image is uploaded to www.extension.dev only when the listing write needs it. A shared preview uploads the build it just made, a project created from a folder uploads that folder, a capture sync uploads the capture files, and a login stores a project-scoped token locally. Signing in and out, a create and its device approval, a preview, a build download, a capture sync and a share create run on this machine. `--no-ship` refuses every call that puts something in front of other people.
+- **Local by default.** Every local tool runs on your machine. The control channel (`extension_storage`, `extension_reload`, `extension_open`, `extension_dom_snapshot`) is same machine, same user, on unless `extension_dev` is called with `allowControl: false`.
+- **The eval gate.** `extension_eval` stays off until `extension_dev` is called with `allowEval: true`. A session never grows a gate on a second call: call `extension_dev` again with `replace: true` ([Session gates](https://docs.extension.dev/tools/mcp#session-gates)).
+
+  <details><summary>Input that needs no gate</summary>
+
+  `extension_element` clicks, fills, reads and waits for one element, and sends trusted mouse and keyboard input (move, press, release, type, key, scroll) that pages read as `isTrusted: true`, over the debug port with no gate, since it runs no caller code.
+
+  </details>
+
+- **What leaves the machine.** Nothing until you ask. A platform tool is answered by extension.dev's hosted lane at `mcp.extension.dev`, which gets a credential that lasts ten minutes, never the login. `--no-ship` refuses every call that puts something in front of other people.
+
+  <details><summary>The full list</summary>
+
+  Nothing until you ask. The local tools send nothing to extension.dev. A platform tool is answered by extension.dev's hosted lane at `mcp.extension.dev`: this server exchanges the stored login at www.extension.dev for a credential that lasts ten minutes and sends the lane that credential, the tool's arguments and the project ref, never the login, a file path or the `api` override. A store check or a listing sync also sends what it read from the project (the text of `STORE.md`, the icon and screenshot sizes and digests, the git HEAD); a listing image is uploaded to www.extension.dev only when the listing write needs it. A shared preview uploads the build it just made, a project created from a folder uploads that folder, a capture sync uploads the capture files, and a login stores a project-scoped token locally. Signing in and out, a create and its device approval, a preview, a build download, a capture sync and a share create run on this machine. `--no-ship` refuses every call that puts something in front of other people.
+
+  </details>
+
 - **Approvals stay human.** A real submit, a channel promotion and a share revoke answer `approval-required`; a workspace owner approves the exact act on extension.dev, the call is repeated with the returned `approvalId`, and the server never approves anything itself. `extension_submit_check` carries the reads and the asks under `readOnlyHint: true`; `extension_submit` carries the act.
 - **Untrusted text** from pages comes back inside an `<untrusted-data-ID>` fence, and every tool carries MCP annotations.
 
 ## Telemetry
 
-`extension_create` sends one `draft_seeded` event to `us.i.posthog.com` after a scaffold (template slug, source and commit, a random per-process id, never a path or a name), and the platform tools send a per-install id header. `EXTENSION_DEV_NO_TELEMETRY=1` or `DO_NOT_TRACK=1` stops both ([payload](https://docs.extension.dev/tools/mcp/flags#telemetry)).
+`extension_create` sends one `draft_seeded` event to `us.i.posthog.com` after a scaffold (template slug, source and commit, a random per-process id, never a path or a name), and the platform tools send a per-install id header. `EXTENSION_DEV_NO_TELEMETRY=1` or `DO_NOT_TRACK=1` stops both ([payload](https://docs.extension.dev/tools/mcp/flags#how-it-works)).
 
 ## Hosted server
 
@@ -136,8 +154,8 @@ claude mcp add --transport http extension-dev https://mcp.extension.dev/mcp
 | none | `EXTENSION_DEV_TOKEN` | unset | An [access token](https://docs.extension.dev/tools/access-tokens) in place of the device login, for CI |
 | none | `EXTENSION_DEV_NO_AUTO_OPEN=1` | off | Never opens the approval page in the default browser |
 | none | `EXTENSION_DEV_NO_TELEMETRY=1` or `DO_NOT_TRACK=1` | off | Turns off the `draft_seeded` event and the per-install id header |
-| none | `EXTENSION_MCP_CLI_VERSION` | this release's pin | The Extension.js version run when the project has no engine of its own |
-| none | `EXTENSION_MCP_ENGINE_DIR` or `EXTENSION_MCP_ENGINE_BIN` | unset | Runs every engine command from a compiled Extension.js checkout or one bin file |
+| none | `EXTENSION_MCP_CLI_VERSION` | this release's pin | The engine version run when the project has none of its own |
+| none | `EXTENSION_MCP_ENGINE_DIR` or `EXTENSION_MCP_ENGINE_BIN` | unset | Runs every engine command from a compiled engine checkout or one bin file |
 
 `login`, `logout`, `whoami` and `release promote` run headless; see [Server flags](https://docs.extension.dev/tools/mcp/flags).
 
@@ -153,6 +171,20 @@ This server gives agents hands; [`@extension.dev/skill`](https://www.npmjs.com/p
 npx skills add extensiondev/skill
 ```
 
+## Questions
+
+**How do I publish a Chrome extension from Claude Code or Cursor?**
+
+Add the server with the line under [Install](#install), then ask the agent to submit the build. `extension_submit` defaults to a dry run, and a real submit waits for a workspace owner to approve it on extension.dev.
+
+**Can an AI agent submit to the App Store without a Mac?**
+
+Yes. The Safari lane signs with keys the platform holds encrypted at rest; only a local Safari session needs macOS with Xcode.
+
+**Does it need an account?**
+
+The local tools need none. The platform tools ask for an extension.dev login the first time they reach extension.dev.
+
 ## Troubleshooting
 
 Every refusal carries an error code and a hint (`error.hint`) naming what to change or the next call. The five most common:
@@ -167,7 +199,7 @@ Every refusal carries an error code and a hint (`error.hint`) naming what to cha
 
 ## Community
 
-Help and feedback on [Discord](https://discord.gg/v9h2RgeTSN); templates at [templates.extension.dev](https://templates.extension.dev); Extension.js framework issues at [extension-js/extension.js](https://github.com/extension-js/extension.js/issues).
+Help and feedback on [Discord](https://discord.gg/v9h2RgeTSN); templates at [templates.extension.dev](https://templates.extension.dev); issues at [extensiondev/mcp](https://github.com/extensiondev/mcp/issues).
 
 ## License
 
