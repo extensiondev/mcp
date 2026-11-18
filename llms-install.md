@@ -1,6 +1,6 @@
 # Install extension.dev MCP
 
-These steps are written for an AI agent to follow with no person in the loop. They install extension.dev MCP (`@extension.dev/mcp`), the MCP server that builds, runs, debugs, tests and ships Chrome, Firefox, Edge and Safari extensions.
+extension.dev MCP (`@extension.dev/mcp`) is the MCP server for building browser extensions: it builds, runs, debugs, tests and ships Chrome, Firefox, Edge and Safari extensions from an AI agent. These steps install it, and they are written for an AI agent to follow with no person in the loop.
 
 ## Requirements
 

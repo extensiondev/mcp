@@ -375,17 +375,18 @@ describe("the docs say what the code does", () => {
     expect(glama.maintainers.length).toBeGreaterThan(0);
     for (const login of glama.maintainers) expect(login).toMatch(/^[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}$/i);
     expect(glama.name).toBe(server.title);
-    expect(glama.description).toBe(server.description);
+    expect(glama.description.endsWith(server.description)).toBe(true);
     expect(glama.categories).toHaveLength(3);
     expect(new Set(glama.categories).size).toBe(3);
   });
 
-  it("carries one display name and one first line in every field a person reads, and leaves the identifiers alone (ledger 900)", async () => {
+  it("carries one display name and one first line in every field a person reads, and leaves the identifiers alone (ledger 900, 935)", async () => {
     const NAME = "extension.dev MCP";
     const LINE = "Build, run, debug, test and ship Chrome, Firefox, Edge and Safari extensions from your AI agent.";
+    const FIRST = `${NAME} is the MCP server for building browser extensions.`;
     const server = require("../../server.json") as { name: string; title: string; description: string };
     const glama = require("../../glama.json") as { name: string; description: string };
-    const pkg = require("../../package.json") as { name: string; mcpName: string };
+    const pkg = require("../../package.json") as { name: string; mcpName: string; description: string };
     const readme = read("README.md").split("\n");
     const heading = readme.findIndex((line) => line.startsWith("# "));
 
@@ -413,7 +414,10 @@ describe("the docs say what the code does", () => {
     });
 
     expect(server.description).toBe(LINE);
-    expect(glama.description).toBe(LINE);
+    expect(glama.description).toBe(`${FIRST} ${LINE}`);
+    expect(pkg.description).toBe(`${FIRST} ${LINE}`);
+    expect(readme.slice(heading + 1).filter((line) => line.trim().length > 0)[2].startsWith(FIRST.slice(0, -1))).toBe(true);
+    expect(read("llms-install.md").split("\n")[2]).toContain("is the MCP server for building browser extensions");
     expect(readme.slice(heading + 1).find((line) => line.trim().length > 0)).toBe(`> ${LINE}`);
 
     expect(info?.name).toBe("extension-dev");

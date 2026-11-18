@@ -11,7 +11,7 @@
 
 <img alt="Chrome, Edge, Firefox and Safari" align="right" src="https://raw.githubusercontent.com/extensiondev/mcp/main/docs/browsers.svg" width="34%" />
 
-extension.dev MCP is a Model Context Protocol (MCP) server for Claude Code, Cursor, VS Code, Codex and any MCP client. Your agent creates an extension, runs it, proves it works and ships it to four stores.
+extension.dev MCP is the MCP server for building browser extensions in Claude Code, Cursor, VS Code, Codex and any MCP client. Your agent creates an extension, runs it, proves it works and ships it to four stores.
 
 [Documentation](https://docs.extension.dev/tools/mcp) · [Tools](#tools) · [Skill](https://www.npmjs.com/package/@extension.dev/skill) · [Changelog](CHANGELOG.md) · [Troubleshooting](#troubleshooting) · [Discord](https://discord.gg/v9h2RgeTSN)
 

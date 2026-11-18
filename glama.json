@@ -4,7 +4,7 @@
     "cezaraugusto"
   ],
   "name": "extension.dev MCP",
-  "description": "Build, run, debug, test and ship Chrome, Firefox, Edge and Safari extensions from your AI agent.",
+  "description": "extension.dev MCP is the MCP server for building browser extensions. Build, run, debug, test and ship Chrome, Firefox, Edge and Safari extensions from your AI agent.",
   "categories": [
     "Developer Tools",
     "Browser Automation",
