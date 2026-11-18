@@ -91,7 +91,35 @@ export const FEATURE_TEMPLATE_MAP: Record<string, Record<string, string>> = {
   },
 };
 
-const MANIFEST_ADDITIONS: Record<string, Record<string, unknown>> = {
+function usesTypeScript(projectPath: string, srcDir: string): boolean {
+  if (fs.existsSync(path.join(projectPath, "tsconfig.json"))) return true;
+
+  const pending = [srcDir];
+
+  for (let dir = pending.pop(); dir; dir = pending.pop()) {
+    let entries: fs.Dirent[];
+
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
+
+      if (entry.isDirectory()) pending.push(path.join(dir, entry.name));
+      else if (/\.tsx?$/.test(entry.name) && !entry.name.endsWith(".d.ts")) return true;
+    }
+  }
+
+  return false;
+}
+
+const manifestAdditions = (
+  contentScript: string,
+  backgroundScript: string,
+): Record<string, Record<string, unknown>> => ({
   sidebar: {
     "chromium:side_panel": { default_path: "sidebar/index.html" },
     "firefox:sidebar_action": { default_panel: "sidebar/index.html" },
@@ -111,7 +139,7 @@ const MANIFEST_ADDITIONS: Record<string, Record<string, unknown>> = {
     content_scripts: [
       {
         matches: ["<all_urls>"],
-        js: ["content/scripts.ts"],
+        js: [contentScript],
         css: ["content/styles.css"],
       },
     ],
@@ -124,14 +152,14 @@ const MANIFEST_ADDITIONS: Record<string, Record<string, unknown>> = {
   },
   background: {
     background: {
-      "chromium:service_worker": "background.ts",
-      "firefox:scripts": ["background.ts"],
+      "chromium:service_worker": backgroundScript,
+      "firefox:scripts": [backgroundScript],
     },
   },
   devtools: {
     devtools_page: "devtools/index.html",
   },
-};
+});
 
 export async function handler(args: {
   projectPath: string;
@@ -169,14 +197,14 @@ export async function handler(args: {
   if (!templateSlug) {
     try {
       const carriers = await listTemplates({ surface: featureDir });
-      const exact = carriers.find((t) => (t.uiFramework ?? "vanilla") === framework);
+      const exact = carriers.find((t) => (t.uiFramework || "vanilla") === framework);
       const pick = exact ?? carriers[0];
 
       if (pick) {
         templateSlug = pick.slug;
 
         if (!exact) {
-          referenceNote = `No ${framework} template in the catalog ships a ${featureDir} surface; ${pick.slug} (${pick.uiFramework ?? "vanilla"}) is referenced for the surface wiring only.`;
+          referenceNote = `No ${framework} template in the catalog ships ${/^[aeiou]/.test(featureDir) ? "an" : "a"} ${featureDir} surface; ${pick.slug} (${pick.uiFramework || "vanilla"}) is referenced for the surface wiring only.`;
         }
       }
     } catch {
@@ -189,10 +217,13 @@ export async function handler(args: {
     : undefined;
   const referenceFiles = template?.keyFiles ?? template?.files ?? [];
 
+  const typed = usesTypeScript(projectPath, srcDir);
+  const plainExt = typed ? "ts" : "js";
+  const jsxExt = typed ? "tsx" : "jsx";
   const scriptExt =
-    framework === "react" || framework === "preact" ? "tsx" : "ts";
+    framework === "react" || framework === "preact" ? jsxExt : plainExt;
   const componentExt =
-    framework === "vue" ? "vue" : framework === "svelte" ? "svelte" : "tsx";
+    framework === "vue" ? "vue" : framework === "svelte" ? "svelte" : jsxExt;
   const COMPONENT_BASE: Record<string, string> = {
     content: "Content",
     sidebar: "Sidebar",
@@ -207,7 +238,9 @@ export async function handler(args: {
     featureDir.charAt(0).toUpperCase() + featureDir.slice(1);
 
   const filesToCreate: Array<{ path: string; hint: string }> = [];
-  const manifestUpdates: Record<string, unknown> = { ...(MANIFEST_ADDITIONS[args.feature] ?? {}) };
+  const manifestUpdates: Record<string, unknown> = {
+    ...(manifestAdditions(`content/scripts.${plainExt}`, `background.${plainExt}`)[args.feature] ?? {}),
+  };
 
   if (
     ["sidebar", "popup", "newtab", "options", "devtools"].includes(args.feature)
@@ -230,7 +263,7 @@ export async function handler(args: {
         hint: `Main ${framework} component`,
       });
 
-      if (framework === "vue") {
+      if (framework === "vue" && typed) {
         filesToCreate.push({
           path: `src/${featureDir}/shims-vue.d.ts`,
           hint: "Vue SFC type shim (lets TS import .vue components)",
@@ -242,7 +275,7 @@ export async function handler(args: {
   if (args.feature === "content-script") {
     filesToCreate.push(
       {
-        path: "src/content/scripts.ts",
+        path: `src/content/scripts.${plainExt}`,
         hint:
           framework === "vanilla"
             ? "Content script entry point"
@@ -257,7 +290,7 @@ export async function handler(args: {
         hint: `Main ${framework} component mounted by the content script`,
       });
 
-      if (framework === "vue") {
+      if (framework === "vue" && typed) {
         filesToCreate.push({
           path: "src/content/shims-vue.d.ts",
           hint: "Vue SFC type shim (lets TS import .vue components)",
@@ -268,7 +301,7 @@ export async function handler(args: {
 
   if (args.feature === "background") {
     filesToCreate.push({
-      path: "src/background.ts",
+      path: `src/background.${plainExt}`,
       hint: "Background service worker / script",
     });
   }
@@ -318,6 +351,22 @@ export async function handler(args: {
   const manifestConflictHint = `Warning: src/manifest.json already declares ${manifestConflicts.join(", ")}; the manifest additions above would replace ${manifestConflicts.length === 1 ? "it" : "them"}, so merge by hand instead of pasting.`;
   const manifestUnreadableHint = `src/manifest.json could not be parsed (${manifestUnreadable}), so which keys the additions would replace is unknown.`;
 
+  const steps: string[][] = [
+    [`Add these fields to your src/manifest.json:\n${JSON.stringify(manifestUpdates, null, 2)}`],
+    ["Create the following files in your project:", ...filesToCreate.map((f) => `   - ${f.path} (${f.hint})`)],
+    ...(args.feature === "sidebar"
+      ? [[`Add background.${plainExt} to handle sidebar open: chromium uses chrome.sidePanel.setPanelBehavior, firefox uses browser.sidebarAction.open()`]]
+      : []),
+    [
+      templateSlug
+        ? `Reference template source: ${EXAMPLES_TREE_BASE}/${templateSlug}/src`
+        : "No catalog template ships this surface yet: build from the manifest additions and file hints above",
+    ],
+    [
+      "Validate the manifest with extension_manifest_validate, then call extension_build for each target browser (browser: \"firefox\" for Firefox): the validator reads only the manifest, and the build is what compiles the scripts just written. Once it builds, ask the person \"Want me to open it in Chrome so you can try it?\" and, on yes, call extension_dev yourself with headless: false; do not hand them a shell command",
+    ],
+  ];
+
   return envelope({
     ok: true,
     command: COMMAND,
@@ -347,18 +396,7 @@ export async function handler(args: {
       manifestConflicts,
       manifestMerged: merged,
       manifestReadable: manifestKeys !== null,
-      instructions: [
-        `1. Add these fields to your src/manifest.json:\n${JSON.stringify(manifestUpdates, null, 2)}`,
-        `2. Create the following files in your project:`,
-        ...filesToCreate.map((f) => `   - ${f.path} (${f.hint})`),
-        args.feature === "sidebar"
-          ? "3. Add background.ts to handle sidebar open: chromium uses chrome.sidePanel.setPanelBehavior, firefox uses browser.sidebarAction.open()"
-          : "",
-        templateSlug
-          ? `4. Reference template source: ${EXAMPLES_TREE_BASE}/${templateSlug}/src`
-          : "4. No catalog template ships this surface yet: build from the manifest additions and file hints above",
-        "5. Validate the manifest with extension_manifest_validate, then ask the person \"Want me to open it in Chrome so you can try it?\" and, on yes, call extension_dev yourself with headless: false; do not hand them a shell command",
-      ].filter(Boolean),
+      instructions: steps.flatMap(([head, ...rest], i) => [`${i + 1}. ${head}`, ...rest]),
     },
     warnings: [
       ...(referenceNote ? [referenceNote] : []),
