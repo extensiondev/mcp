@@ -12,12 +12,16 @@ import path from "node:path";
 import { isGeckoFamily } from "./browser-family";
 import { isDevelopmentBuild } from "./build-type";
 import { ENTERPRISE_CHANNEL_SENTENCE, adminInstallOnlyOf } from "./firefox-enterprise";
+import { declaredIcon128 } from "./store-listing-media";
+import { STORE_SECTIONS, SUBSECTION_KEYS } from "./store-md-declarations";
+import { STORE_MD_FILENAME } from "./store-md";
 
 export type ReviewRiskCode =
   | "BROAD_HOST_ACCESS"
   | "REMOTE_CODE"
   | "FIREFOX_DATA_COLLECTION_MISSING"
   | "FIREFOX_ENTERPRISE_CHANNEL"
+  | "ICON_128_MISSING"
   | "UNUSED_PERMISSION";
 
 export interface ReviewRisk {
@@ -132,6 +136,16 @@ export function reviewRisksReport(input: {
       message: `The extension asks for access to every website (${broad.join(", ")}). Chrome Web Store and AMO reviewers ask why, and the review takes longer.`,
       fix: "List only the sites the extension works on, or use activeTab so access is granted per click; if every site is the point, say why in the listing.",
       permissions: broad,
+    });
+  }
+
+  const icon = declaredIcon128(input.manifest).replace(/^\.?\//, "");
+
+  if (!icon || !fs.existsSync(path.join(input.distPath, icon))) {
+    risks.push({
+      code: "ICON_128_MISSING",
+      message: `${icon ? `The manifest's icons["128"] names ${icon}, which is not in the build` : 'The manifest declares no 128x128 icon ("128" in icons)'}. The Chrome Web Store requires one for a listing, and Edge Add-ons expects it too.`,
+      fix: 'Add a 128x128 PNG to the project, declare it as "icons": { "128": "<path>" } in the manifest and build again.',
     });
   }
 
@@ -275,6 +289,20 @@ export function reviewRiskPointer(risks: ReviewRisk[]): string[] {
   return [
     `Store review: value.reviewRisks carries ${risks.length} risk${risks.length === 1 ? "" : "s"} to fix or justify before a store submission (${risks.map((risk) => risk.code).join(", ")}).`,
   ];
+}
+
+const JUSTIFICATION_HEADING = SUBSECTION_KEYS.find((key) => key.field === "permissionJustifications")!.heading;
+const JUSTIFICATION_BULLETS = `a "${JUSTIFICATION_HEADING}" bullet under "${STORE_SECTIONS.chrome}"`;
+const JUSTIFIED = "each permission, host permission and content script match the manifest declares";
+
+export function storeMdLine(root: string, risks: ReviewRisk[]): string | null {
+  if (!fs.existsSync(path.join(root, STORE_MD_FILENAME))) {
+    return `No ${STORE_MD_FILENAME} is in ${root}. Before a store submission, write it there, with ${JUSTIFICATION_BULLETS} for ${JUSTIFIED} (extension_docs_search with "${STORE_MD_FILENAME}" answers the rest); ask the owner for its data-use and privacy answers.`;
+  }
+
+  if (!risks.length) return null;
+
+  return `${STORE_MD_FILENAME}: check that ${JUSTIFICATION_BULLETS} covers ${JUSTIFIED}.`;
 }
 
 function listFiles(dir: string, base = ""): Array<{ path: string }> {

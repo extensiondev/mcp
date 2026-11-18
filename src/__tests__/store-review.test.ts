@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { reviewDistReport, reviewRisksReport } from "../lib/store-review";
+import { reviewDistReport, reviewRisksReport, storeMdLine } from "../lib/store-review";
 
 let dist: string;
 
@@ -15,7 +15,8 @@ function write(rel: string, content: string) {
 }
 
 function manifest(extra: Record<string, unknown>) {
-  write("manifest.json", JSON.stringify({ manifest_version: 3, name: "x", version: "1.0.0", ...extra }));
+  write("icons/128.png", "png");
+  write("manifest.json", JSON.stringify({ manifest_version: 3, name: "x", version: "1.0.0", icons: { "128": "icons/128.png" }, ...extra }));
 }
 
 const codes = (browser = "chrome") => reviewDistReport(dist, browser).risks.map((r) => r.code);
@@ -129,5 +130,48 @@ describe("reviewDistReport risks", () => {
 
     manifest({ browser_specific_settings: { gecko: { id: "x@example.com", data_collection_permissions: { required: ["none"] } } } });
     expect(codes("firefox")).not.toContain("FIREFOX_ENTERPRISE_CHANNEL");
+  });
+
+  it("919: names a 128 pixel icon the manifest does not declare, or whose file the build lacks, with the fix", () => {
+    manifest({ icons: { "16": "icons/16.png" } });
+
+    const undeclared = reviewDistReport(dist, "chrome").risks.find((r) => r.code === "ICON_128_MISSING")!;
+
+    expect(undeclared.message).toContain('no 128x128 icon ("128" in icons)');
+    expect(undeclared.message).toContain("Chrome Web Store requires one");
+    expect(undeclared.fix).toBe('Add a 128x128 PNG to the project, declare it as "icons": { "128": "<path>" } in the manifest and build again.');
+
+    manifest({ icons: { "128": "./images/gone.png" } });
+
+    const gone = reviewDistReport(dist, "firefox").risks.find((r) => r.code === "ICON_128_MISSING")!;
+
+    expect(gone.message).toContain('icons["128"] names images/gone.png, which is not in the build');
+    expect(gone.fix).toBe(undeclared.fix);
+
+    manifest({ icons: { "128": "/icons/128.png" } });
+    expect(codes()).not.toContain("ICON_128_MISSING");
+  });
+});
+
+describe("919: storeMdLine says where the permission justifications go", () => {
+  const risk = { code: "BROAD_HOST_ACCESS" as const, message: "m", fix: "f" };
+
+  it("says to write STORE.md at a root that has none, names the bullet for each declared permission, host permission and content script match, and leaves data use to the owner", () => {
+    const line = storeMdLine(dist, [])!;
+
+    expect(line).toBe(
+      `No STORE.md is in ${dist}. Before a store submission, write it there, with a "### Permissions justification" bullet under "## Chrome Web Store" for each permission, host permission and content script match the manifest declares (extension_docs_search with "STORE.md" answers the rest); ask the owner for its data-use and privacy answers.`,
+    );
+
+    expect(line).not.toMatch(/none|collects nothing|no data/i);
+  });
+
+  it("says to check the bullets of a STORE.md that is there when the build has review risks, and nothing when it has none", () => {
+    write("STORE.md", "# Store metadata\n");
+
+    expect(storeMdLine(dist, [])).toBeNull();
+    expect(storeMdLine(dist, [risk])).toBe(
+      'STORE.md: check that a "### Permissions justification" bullet under "## Chrome Web Store" covers each permission, host permission and content script match the manifest declares.',
+    );
   });
 });

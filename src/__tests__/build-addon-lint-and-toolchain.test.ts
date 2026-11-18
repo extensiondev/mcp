@@ -186,7 +186,7 @@ describe("916: a build answer says each review risk once and stays light", () =>
     }
   });
 
-  it("answers a Firefox build with two review risks, a missing lint and a toolchain in under 2,300 characters, with a hint under 300 and no output tail the fields already carry", async () => {
+  it("answers a Firefox build with two review risks, a missing lint, a toolchain and the STORE.md line of ledger 919 in under 2,550 characters, with a hint under 300 and no output tail the fields already carry", async () => {
     const dir = riskyProject();
     summaryOverride = { addon_lint: { status: "missing" }, toolchain: TOOLCHAIN };
 
@@ -198,11 +198,57 @@ describe("916: a build answer says each review risk once and stays light", () =>
     const result = JSON.parse(text);
 
     expect(result.ok).toBe(true);
-    expect(text.length, `${text.length} characters`).toBeLessThanOrEqual(2_300);
+    expect(text.length, `${text.length} characters`).toBeLessThanOrEqual(2_550);
     expect(result.hint.length, result.hint).toBeLessThanOrEqual(300);
     expect(result.hint).toMatch(/^The production build is in \/work\/dist\/firefox\. /);
     expect(result.hint).toContain('call extension_analyze with this projectPath and browser "firefox"');
     expect(result.value).not.toHaveProperty("output");
     expect(result.value.outputPath).toBe("/work/dist/firefox");
+  });
+
+  it("919: says once, in warnings, to write STORE.md with a justification for each declared permission, host permission and content script match, and names no data-use value", async () => {
+    const dir = riskyProject();
+
+    const missing = JSON.parse(await build.handler({ projectPath: dir, browser: "firefox" }));
+    const lines = missing.warnings.filter((w: string) => w.includes("STORE.md"));
+
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain(`No STORE.md is in ${dir}. Before a store submission, write it there`);
+    expect(lines[0]).toContain('with a "### Permissions justification" bullet under "## Chrome Web Store" for each permission, host permission and content script match the manifest declares');
+    expect(lines[0]).toContain('extension_docs_search with "STORE.md" answers the rest');
+    expect(lines[0]).toContain("ask the owner for its data-use and privacy answers");
+    expect(lines[0]).not.toMatch(/none|collects nothing|no data/i);
+    expect(missing.hint).not.toContain("STORE.md");
+
+    fs.writeFileSync(path.join(dir, "STORE.md"), "# Store metadata\n");
+
+    const present = JSON.parse(await build.handler({ projectPath: dir, browser: "firefox" }));
+    const checks = present.warnings.filter((w: string) => w.includes("STORE.md"));
+
+    expect(checks).toHaveLength(1);
+    expect(checks[0]).toMatch(/^STORE\.md: check that a "### Permissions justification" bullet /);
+
+    const clean = riskyProject();
+    fs.writeFileSync(path.join(clean, "src", "manifest.json"), JSON.stringify({ manifest_version: 3, name: "Fixture", version: "1.0.0", icons: { 128: "icon.png" } }));
+    fs.writeFileSync(path.join(clean, "STORE.md"), "# Store metadata\n");
+
+    const quiet = JSON.parse(await build.handler({ projectPath: clean }));
+
+    expect(quiet.value.reviewRisks).toBeUndefined();
+    expect(quiet.warnings.join(" ")).not.toContain("STORE.md");
+  });
+
+  it("919: a missing 128 pixel icon is a review risk with its fix, said by the risk alone", async () => {
+    const dir = project();
+    fs.writeFileSync(path.join(dir, "STORE.md"), "# Store metadata\n");
+
+    const text = await build.handler({ projectPath: dir });
+    const result = JSON.parse(text);
+    const risk = result.value.reviewRisks.find((r: { code: string }) => r.code === "ICON_128_MISSING");
+
+    expect(risk.fix).toContain('declare it as "icons": { "128": "<path>" }');
+    expect(result.warnings.find((w: string) => w.startsWith("Store review:"))).toContain("ICON_128_MISSING");
+    expect(result.warnings.filter((w: string) => w.includes("No 128x128 icon declared"))).toEqual([]);
+    expect(text.split("128x128")).toHaveLength(3);
   });
 });

@@ -13,7 +13,7 @@ import { PROJECT_PATH } from "../lib/common-schema";
 import { envelope } from "../lib/envelope";
 import { engineBrowserName } from "../lib/browser-family";
 import { readBuildType } from "../lib/build-type";
-import { reviewCoverageNotes, reviewRiskWarnings, reviewRisksReport } from "../lib/store-review";
+import { reviewCoverageNotes, reviewRiskWarnings, reviewRisksReport, storeMdLine } from "../lib/store-review";
 import { engineProjectRoot } from "../lib/session-paths";
 import { specialFolderEntrypoints, specialFolderSettings } from "../lib/special-folder-entries";
 import { manifestByBrowser } from "../lib/manifest-by-browser";
@@ -367,6 +367,7 @@ export async function handler(args: {
     ...(devSentence ? { hint: devSentence } : {}),
     warnings: [
       ...(risks ? reviewRiskWarnings(risks) : []),
+      risks ? storeMdLine(engineProjectRoot(args.projectPath), risks) : null,
       ...(review ? reviewCoverageNotes(review) : []),
       ...sizeWarnings,
       ...duplicates.map(duplicateAssetSentence),

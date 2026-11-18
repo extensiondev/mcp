@@ -42,8 +42,7 @@ import {
 } from "../lib/safari-build-options";
 import { safariSigningFrame } from "../lib/safari-signing";
 import { teamUnknownToXcodeRefusal } from "../lib/xcode-teams";
-import { reviewCoverageNotes, reviewDistReport, reviewRiskPointer } from "../lib/store-review";
-import { STORE_MD_FILENAME } from "../lib/store-md";
+import { reviewCoverageNotes, reviewDistReport, reviewRiskPointer, storeMdLine } from "../lib/store-review";
 import { dropTrailing } from "../lib/linear-text";
 
 const COMMAND = "extension_build";
@@ -196,7 +195,7 @@ export function addonLintFrame(summary: EngineBuildSummary | null, distRoot: str
 
   if (status === "missing") {
     warnings.push(
-      `The addons.mozilla.org lint did not run: addons-linter is not installed, so this answer carries no AMO findings. Install it (${ADDON_LINT_INSTALL}) and build again, or set commands.build.addonLint to false in extension.config.js to skip it on purpose.`,
+      `The addons.mozilla.org lint did not run: addons-linter is not installed. Install it (${ADDON_LINT_INSTALL}) and build again, or set commands.build.addonLint to false in extension.config.js to skip it.`,
     );
   }
 
@@ -906,11 +905,6 @@ export async function handler(args: {
     const dependenciesNote = dependenciesInstalled
       ? ` The engine installed the project's dependencies first (${path.dirname(modulesDir)} had no node_modules), which is most of this build's ${Math.round(duration / 1000)} s; the next build skips that.`
       : "";
-    const storeMdRoot = engineProjectRoot(args.projectPath);
-    const storeMdMissingNote =
-      args.zip && !fs.existsSync(path.join(storeMdRoot, STORE_MD_FILENAME))
-        ? ` No ${STORE_MD_FILENAME} is in ${storeMdRoot}: a store submission through extension.dev reads the listing copy, the permission justifications and each store's reviewer notes from that file, so write it before submitting (extension_docs_search with "${STORE_MD_FILENAME}" answers its format), and leave every data-use and privacy answer in it for the person.`
-        : "";
     const isValidatorDeclarationLine = (line: string): boolean =>
       line.includes("no browser_specific_settings.gecko.data_collection_permissions");
     const isEngineDeclarationLine = (line: string): boolean =>
@@ -967,6 +961,7 @@ export async function handler(args: {
     const review = reviewDistReport(distDir, browser);
     const risks = review.risks;
     const declarationByRisk = risks.some((risk) => risk.code === "FIREFOX_DATA_COLLECTION_MISSING");
+    const iconByRisk = risks.some((risk) => risk.code === "ICON_128_MISSING");
     const shownBuildWarnings =
       declarationByRisk || declarationByValidator
         ? buildWarnings.filter((line) => !isEngineDeclarationLine(line))
@@ -1122,11 +1117,15 @@ export async function handler(args: {
       warnings: [
         ...warnings,
         ...(preflight?.warnings ?? []).filter(
-          (line) => !isDroppedRuntimePageWarning(line) && !(declarationByRisk && isValidatorDeclarationLine(line)),
+          (line) =>
+            !isDroppedRuntimePageWarning(line) &&
+            !(declarationByRisk && isValidatorDeclarationLine(line)) &&
+            !(iconByRisk && line.startsWith("No 128x128 icon declared")),
         ),
         ...droppedPages.map((page) => page.say),
         ...shownBuildWarnings,
         ...reviewRiskPointer(risks),
+        mode === "development" ? null : storeMdLine(engineProjectRoot(args.projectPath), risks),
         ...reviewCoverageNotes(review),
         ...zipNotes,
         ...duplicates.map(duplicateAssetSentence),
@@ -1139,7 +1138,7 @@ export async function handler(args: {
         ...(signingFrame?.warnings ?? []),
         ...(signingFrame?.hints ?? []),
       ],
-      hint: `The ${mode === "none" ? "" : `${mode} `}build is in ${distDir}.${modeSentence(mode) ? ` ${modeSentence(mode)}` : ""} To read what is in it, call extension_analyze with this projectPath and browser "${browser}" (sizes, entry points, store checks and each built browser's emitted manifest in manifestByBrowser) instead of listing or grepping the folder.${zipPath ? ` The store zip is ${zipPath}.` : ""}${storeMdMissingNote}${dependenciesNote}${platformListed() ? " To send the extension to someone, extension_publish gives the project's build on extension.dev a page with a download and a run command for each browser (the platform builds the source it holds, not this folder: extension_builds_act action:\"rebuild\" starts that build with no push)." : ""}`,
+      hint: `The ${mode === "none" ? "" : `${mode} `}build is in ${distDir}.${modeSentence(mode) ? ` ${modeSentence(mode)}` : ""} To read what is in it, call extension_analyze with this projectPath and browser "${browser}" (sizes, entry points, store checks and each built browser's emitted manifest in manifestByBrowser) instead of listing or grepping the folder.${zipPath ? ` The store zip is ${zipPath}.` : ""}${dependenciesNote}${platformListed() ? " To send the extension to someone, extension_publish gives the project's build on extension.dev a page with a download and a run command for each browser (the platform builds the source it holds, not this folder: extension_builds_act action:\"rebuild\" starts that build with no push)." : ""}`,
     });
   }
 

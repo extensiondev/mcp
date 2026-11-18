@@ -104,9 +104,30 @@ describe("extension_analyze tells a development build from a production one", ()
     expect(answer.warnings.join("\n")).toMatch(/sourcemaps; they ship unless the build strips them/);
   });
 
+  it("919: names the missing 128 pixel icon as a review risk and says once where the permission justifications go, and neither for a development build", async () => {
+    const dir = project();
+    const out = dist(dir, "chrome", { ...MANIFEST, permissions: ["storage"], background: { service_worker: "bg.js" } });
+    write(out, "bg.js", "chrome.storage.local.get()");
+
+    const answer = JSON.parse(await analyze({ projectPath: dir }));
+    const said = answer.warnings.filter((w: string) => w.includes("STORE.md"));
+
+    expect(answer.value.reviewRisks.map((r: { code: string }) => r.code)).toEqual(["ICON_128_MISSING"]);
+    expect(said).toHaveLength(1);
+    expect(said[0]).toContain(`No STORE.md is in ${dir}. Before a store submission, write it there`);
+    expect(said[0]).toContain("ask the owner");
+
+    devDist(dir, "edge");
+
+    const dev = JSON.parse(await analyze({ projectPath: dir, browser: "edge" }));
+
+    expect(dev.warnings.join(" ")).not.toContain("STORE.md");
+  });
+
   it("reads production from a dist whose only oddity is its .map files", async () => {
     const dir = project();
-    const out = dist(dir, "chrome");
+    const out = dist(dir, "chrome", { ...MANIFEST, icons: { "128": "icon.png" } });
+    write(out, "icon.png", "png");
     write(out, "bg.js", "console.log(1)");
     write(out, "bg.js.map", "{}");
     write(out, "popup/index.js.map", "{}");
