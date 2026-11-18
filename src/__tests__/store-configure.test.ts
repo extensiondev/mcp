@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 import { actionFingerprint } from "../lib/approval-gate";
 import { approvalVerdict } from "../lib/approval-policy";
 import { STORE_SETTINGS_ACTION, modeToPatch, readStoreSettingsChange, storeSettingsDigest } from "../lib/store-settings";
+import { submitCheckRefused } from "../lib/submit-action-safety";
 import { TOOL_POLICY } from "../lib/tool-policy";
+import { validateToolInput } from "../lib/validate-input";
+import { schema as submitSchema } from "../tools/submit";
+import { schema as submitCheckSchema } from "../tools/submit-check";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 const CONFIG = `${PROJECT_ROUTE}/stores/config`;
@@ -92,6 +96,15 @@ describe("extension_submit configure-store changes a store's settings as a plain
 
     expect(readStoreSettingsChange("chrome", { publisherId: `https://chrome.google.com/u/0/webstore/devconsole/${PUBLISHER}` })).toMatchObject({ patch: { publisherId: PUBLISHER } });
     expect(readStoreSettingsChange("chrome", { publisherId: PUBLISHER, chromeItemId: ITEM })).toMatchObject({ patch: { storeId: ITEM, publisherId: PUBLISHER } });
+  });
+
+  it("918: keeps the enabled refusal, since the check tool's schema types storeSettings as a bare object and a mode that may leave a dry run goes to the lane", () => {
+    const asked = { action: "configure-store", store: "chrome", storeSettings: { enabled: "yes", submissionMode: "public" } };
+
+    expect(validateToolInput(submitSchema.inputSchema, asked).map((issue) => issue.path)).toEqual(["storeSettings.enabled"]);
+    expect(validateToolInput(submitCheckSchema.inputSchema, asked)).toEqual([]);
+    expect(submitCheckRefused(asked)).toBeNull();
+    expect(readStoreSettingsChange("chrome", asked.storeSettings)).toEqual({ problem: "storeSettings.enabled must be true or false." });
   });
 
   it("writes a mode id as every field the platform derives it from", () => {
