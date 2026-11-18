@@ -28,6 +28,8 @@ describe("the initialize result carries instructions, the one field a search-fir
     expect(SERVER_INSTRUCTIONS).toMatch(/search this server first/);
 
     for (const name of [
+      "extension_create",
+      "extension_manifest_validate",
       "extension_dev",
       "extension_wait",
       "extension_logs",
@@ -46,12 +48,30 @@ describe("the initialize result carries instructions, the one field a search-fir
   it("915: names creating, scaffolding and starting from a template first among the asks to search this server for, at no cost to either budget", () => {
     const sentence = SERVER_INSTRUCTIONS.split("\n").find((line) => line.includes("search this server first")) ?? "";
 
-    expect(sentence).toMatch(/^When the ask is to create, scaffold, start from a template, run, start, wait for, watch, inspect, drive, test, debug or build a browser extension, search this server first and use its tools: extension_dev /);
+    expect(sentence).toMatch(/^When the ask is to create, scaffold, start from a template, edit, check, run, start, watch, inspect, drive, test, debug or build a browser extension, however small, search this server first and use its tools: extension_create /);
     expect(tools.map((tool) => tool.schema.name)).toEqual(expect.arrayContaining(["extension_create", "extension_templates"]));
     expect(isToolListed("extension_create", DEFAULT_SERVER_OPTIONS) && isToolListed("extension_templates", DEFAULT_SERVER_OPTIONS)).toBe(true);
-    expect(sentence.length).toBeLessThanOrEqual(740);
+    expect(sentence.length).toBeLessThanOrEqual(770);
     expect(SERVER_INSTRUCTIONS.length).toBeLessThanOrEqual(3_150);
     expect(serverInstructions({ features: ["local", "platform"], noShip: false }).length).toBeLessThan(3 * 4_096);
+  });
+
+  it("917: says what the create, check and build tools stand in for, so a small job or an edit has a reason to reach for them", () => {
+    const sentence = SERVER_INSTRUCTIONS.split("\n").find((line) => line.includes("search this server first")) ?? "";
+
+    expect(sentence).toContain("extension_create starts every new extension, plain JavaScript too, never by hand;");
+    expect(sentence).toContain("extension_manifest_validate checks a manifest after any edit (each browser, permissions the code calls), not jq or a linter;");
+    expect(sentence).toContain("extension_build builds and answers the store review risks, not a package script or bundler;");
+    expect(sentence.indexOf("extension_create")).toBeLessThan(sentence.indexOf("extension_dev runs the dev session"));
+  });
+
+  it("917: names the skill only as something to load when the client lists it, inside the same budgets", () => {
+    for (const text of [SERVER_INSTRUCTIONS, serverInstructions({ features: ["local", "platform"], noShip: false })]) {
+      expect(text.split("\n")[0]).toMatch(/ When a browser-extension skill is listed, load it first: it holds the rules these tools assume\.$/);
+      expect(text).not.toMatch(/install (the|a) (browser-extension )?skill/i);
+    }
+
+    expect(SERVER_INSTRUCTIONS.length).toBeLessThanOrEqual(3_150);
   });
 
   it("513: the retry doctrine names error.retry and its three values once", () => {

@@ -584,7 +584,7 @@ function locateSourceZip(
 export const schema = {
   name: "extension_build",
   description:
-    "Build the extension on this machine into dist/<browser>/; never for sharing (extension_builds). Refuses a dist a dev session serves unless outDir.",
+    "Build an extension instead of a package script or bundler: one dist/<browser>/ a call, with store review risks. Not for sharing (extension_builds).",
   inputSchema: {
     type: "object" as const,
     properties: {

@@ -229,3 +229,29 @@ describe("the link tools speak of a build link and a channel link, so an agent c
     }
   });
 });
+
+describe("917: a description's first sentence says when to reach for the tool in place of the shell", () => {
+  const first = (name: string): string => {
+    const text = ALL_TOOLS.find((tool) => tool.schema.name === name)!.schema.description;
+
+    return text.slice(0, text.search(/[.;:] /) + 1);
+  };
+
+  it.each([
+    ["extension_build", "Build an extension instead of a package script or bundler:"],
+    ["extension_manifest_validate", "Validate manifest.json after any edit, in place of jq or a linter:"],
+    ["extension_create", "Create any new extension, plain JavaScript too, from a template (extension_templates), never by hand;"],
+    ["extension_templates", "Browse the template catalog or read a template's files."],
+  ])("%s opens with %s", (name, opening) => {
+    expect(first(name)).toBe(opening);
+  });
+
+  it("says what the build and the manifest check add over the shell, and names the plain JavaScript template", () => {
+    const text = (name: string): string => ALL_TOOLS.find((tool) => tool.schema.name === name)!.schema.description;
+
+    expect(text("extension_build")).toMatch(/one dist\/<browser>\/ a call, with store review risks/);
+    expect(text("extension_build")).toContain("Not for sharing (extension_builds)");
+    expect(text("extension_manifest_validate")).toMatch(/per-browser errors, permissions the code calls but lacks, and buildBlocking errors/);
+    expect(text("extension_templates")).toContain("'javascript' (plain)");
+  });
+});

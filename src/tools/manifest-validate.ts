@@ -63,7 +63,7 @@ const KNOWN_PERMISSIONS = new Set<string>([
 export const schema = {
   name: "extension_manifest_validate",
   description:
-    "Validate a manifest.json across browsers; buildBlocking lists the errors that make extension_build refuse.",
+    "Validate manifest.json after any edit, in place of jq or a linter: per-browser errors, permissions the code calls but lacks, and buildBlocking errors.",
   inputSchema: {
     type: "object" as const,
     properties: {

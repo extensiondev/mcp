@@ -13,7 +13,7 @@ import { envelope } from "../lib/envelope";
 export const schema = {
   name: "extension_templates",
   description:
-    "Browse the template catalog or read a template's files. TypeScript is slug 'typescript', shadcn 'sidebar-shadcn'; AI templates tag 'ai'.",
+    "Browse the template catalog or read a template's files. Slugs: 'javascript' (plain), 'typescript', shadcn 'sidebar-shadcn'; AI templates tag 'ai'.",
   inputSchema: {
     type: "object" as const,
     properties: {

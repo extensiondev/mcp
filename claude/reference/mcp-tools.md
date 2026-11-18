@@ -74,7 +74,7 @@ Find, install and remove browsers Extension.js launches. detect scans system and
 
 ## extension_build
 
-Build the extension on this machine into dist/<browser>/; never for sharing (extension_builds). Refuses a dist a dev session serves unless outDir.
+Build an extension instead of a package script or bundler: one dist/<browser>/ a call, with store review risks. Not for sharing (extension_builds).
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -133,7 +133,7 @@ Run a build act on the platform: rebuild, recheck, configure the build settings 
 
 ## extension_create
 
-Create a new project from a template (extension_templates); it may init git. To add to one: extension_add_feature. It is verified, so the next step is extension_dev, not a build; `scripts` name the outputs (`npm run build`: dist/chromium). Sends a draft_seeded event (off: readme Telemetry section).
+Create any new extension, plain JavaScript too, from a template (extension_templates), never by hand; it may init git. To add to one: extension_add_feature. It is verified, so the next step is extension_dev, not a build. Sends a draft_seeded event (off: readme Telemetry section).
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -299,7 +299,7 @@ Read a dev session's logs from every context in one timeline, or follow:true for
 
 ## extension_manifest_validate
 
-Validate a manifest.json across browsers; buildBlocking lists the errors that make extension_build refuse.
+Validate manifest.json after any edit, in place of jq or a linter: per-browser errors, permissions the code calls but lacks, and buildBlocking errors.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -606,7 +606,7 @@ Read a store's state or ask for an approval, with extension_submit's inputs: pre
 
 ## extension_templates
 
-Browse the template catalog or read a template's files. TypeScript is slug 'typescript', shadcn 'sidebar-shadcn'; AI templates tag 'ai'.
+Browse the template catalog or read a template's files. Slugs: 'javascript' (plain), 'typescript', shadcn 'sidebar-shadcn'; AI templates tag 'ai'.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |

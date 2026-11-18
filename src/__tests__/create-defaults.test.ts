@@ -200,7 +200,7 @@ describe("extension_create defaultsApplied", () => {
     expect(steps[1]).toMatch(/^Ask the person "Want me to open it in Chrome so you can try it\?" and, on yes, call extension_dev yourself \(projectPath: /);
     expect(steps[1]).toContain(scaffoldTarget);
     expect(steps.join(" ")).not.toMatch(/run build/);
-    expect(create.schema.description).toMatch(/verified, so the next step is extension_dev, not a build/);
+    expect(create.schema.description).toMatch(/verified, so the next step is extension_dev, not a build\./);
   });
 
   it("resolves a monorepo script's folder under the package the engine builds", async () => {
@@ -431,6 +431,6 @@ describe("extension_create defaultsApplied", () => {
     expect(props.projectName.description).toContain("Alias: name");
     expect(props.parentDir.description).toContain("MCP server process cwd");
     expect(create.schema.description).toContain("it may init git");
-    expect(create.schema.description).toMatch(/`scripts` .*dist\/chromium/);
+    expect(create.schema.description).not.toContain("`scripts`");
   });
 });
