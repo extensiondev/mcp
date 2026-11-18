@@ -266,7 +266,7 @@ Inspect a web page (or targetId) over the debugger protocol: HTML, DOM, console,
 | `probe` | array of string | no |  | CSS selectors to count and sample. |
 | `include` | array of "html" \| "summary" \| "meta" \| "dom_snapshot" \| "console" \| "extension_roots" | no | `["summary","meta","console"]` | What to include |
 | `browser` | string | no |  | Session browser; required when several run. |
-| `maxBytes` | number | no | `262144` | HTML byte cap (0 = none). |
+| `maxBytes` | number | no | `32768` | HTML byte cap (0 = none). |
 | `deepDom` | boolean | no | `false` | Pierce closed shadow roots; other open roots are not crossed. |
 
 ## extension_list_extensions

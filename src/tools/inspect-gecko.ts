@@ -33,6 +33,7 @@ import {
   surfaceForExtensionUrl,
 } from "../lib/extension-surfaces";
 import { scriptLiteral } from "../lib/script-literal";
+import { withinOneCap } from "../lib/html-cap";
 import { joinWildcards } from "../lib/wildcard-join";
 
 const TOOL = inspectSchema.name;
@@ -78,6 +79,7 @@ function buildBridgeInspectExpression(opts: {
         const html = ${PAGE_HTML_SCRIPT};
         const cap = ${scriptLiteral(opts.maxBytes)};
         out.htmlTruncated = cap > 0 && html.length > cap;
+        out.htmlLength = html.length;
         out.html = out.htmlTruncated ? html.slice(0, cap) : html;
       } catch (e) { (out.failedSections = out.failedSections || []).push({ section: "html", reason: String(e) }); }`,
     );
@@ -197,13 +199,16 @@ async function collectGeckoDeepDom(
   const frame = Array.isArray(value?.frames) ? value.frames[0] : null;
 
   if (frame && Array.isArray(frame.closed)) {
-    result.closedShadowRoots = frame.closed.map(
-      (c: { host?: string; html?: string; truncated?: boolean }) => ({
-        host: String(c.host ?? ""),
-        type: "closed",
-        html: String(c.html ?? ""),
-        ...(c.truncated ? { truncated: true } : {}),
-      }),
+    result.closedShadowRoots = withinOneCap(
+      frame.closed.map(
+        (c: { host?: string; html?: string; truncated?: boolean }) => ({
+          host: String(c.host ?? ""),
+          type: "closed",
+          html: String(c.html ?? ""),
+          ...(c.truncated ? { truncated: true } : {}),
+        }),
+      ),
+      cap,
     );
 
     result.deepDom = true;
@@ -496,7 +501,11 @@ export async function inspectViaBridge(
 
   if (include.has("html") && typeof value.html === "string") {
     result.html = value.html;
-    if (value.htmlTruncated) result.htmlTruncated = true;
+
+    if (value.htmlTruncated) {
+      result.htmlTruncated = true;
+      if (!result.summary && typeof value.htmlLength === "number") result.summary = { htmlLength: value.htmlLength };
+    }
   }
 
   if (include.has("dom_snapshot") && value.domSnapshot) {

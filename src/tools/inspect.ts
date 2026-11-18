@@ -20,13 +20,14 @@ import {
   ambiguousSessionRefusal,
   resolveSessionBrowser,
 } from "../lib/session-browser";
+import { HTML_DEFAULT_MAX_BYTES, withHtmlCap, withinOneCap } from "../lib/html-cap";
 import { inspectViaBridge } from "./inspect-gecko";
 import { identicalPickWarning, pickTarget, targetNotFound } from "../lib/target-pick";
 import { schema } from "./inspect-schema";
 
 export { schema };
 
-export async function handler(args: {
+type InspectArgs = {
   projectPath: string;
   url?: string;
   targetId?: string;
@@ -35,7 +36,15 @@ export async function handler(args: {
   browser?: string;
   maxBytes?: number;
   deepDom?: boolean;
-}): Promise<string> {
+};
+
+const READ_LESS = 'pass probe with the CSS selectors you look for, which counts and samples their elements, or include: ["dom_snapshot"] for the element tree without its text';
+
+export async function handler(args: InspectArgs): Promise<string> {
+  return withHtmlCap(await inspect(args), args.maxBytes ?? HTML_DEFAULT_MAX_BYTES, READ_LESS);
+}
+
+async function inspect(args: InspectArgs): Promise<string> {
   const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
   if (ambiguous) return ambiguous;
 
@@ -45,7 +54,7 @@ export async function handler(args: {
     "chrome",
   );
   const include = new Set(args.include ?? ["summary", "meta", "console"]);
-  const maxBytes = args.maxBytes ?? 262_144;
+  const maxBytes = args.maxBytes ?? HTML_DEFAULT_MAX_BYTES;
 
   if (!isChromiumFamily(browser)) {
     return inspectViaBridge(args.targetId ? { ...args, url: undefined } : args, browser, include, maxBytes);
@@ -250,10 +259,14 @@ export async function handler(args: {
       })),
     };
 
+    let fullHtmlLength: number | null = null;
+
     if (include.has("html")) {
       let html = await section("html", () => cdp.getPageHTML(sessionId));
 
       if (html !== null && maxBytes > 0 && html.length > maxBytes) {
+        fullHtmlLength = html.length;
+        result.summary = { htmlLength: fullHtmlLength };
         html = html.slice(0, maxBytes);
         result.htmlTruncated = true;
       }
@@ -278,7 +291,7 @@ export async function handler(args: {
           } catch { return {}; }
         })()`,
       ));
-      result.summary = summary;
+      result.summary = summary !== null && fullHtmlLength !== null && typeof summary === "object" ? { ...summary, htmlLength: fullHtmlLength } : summary;
     }
 
     if (include.has("meta")) {
@@ -327,11 +340,9 @@ export async function handler(args: {
     }
 
     if (args.deepDom) {
-      const closed = await section("closed_shadow_roots", () => cdp.getClosedShadowRoots(
-        sessionId,
-        maxBytes > 0 ? maxBytes : 65536,
-      ));
-      result.closedShadowRoots = closed;
+      const rootsCap = maxBytes > 0 ? maxBytes : 65536;
+      const closed = await section("closed_shadow_roots", () => cdp.getClosedShadowRoots(sessionId, rootsCap));
+      result.closedShadowRoots = closed === null ? null : withinOneCap(closed, rootsCap);
       result.deepDom = true;
     }
 

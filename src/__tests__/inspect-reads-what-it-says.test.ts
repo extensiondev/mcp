@@ -9,6 +9,9 @@ const cdp = vi.hoisted(() => ({
   landOn: null as string | null,
   metaThrows: null as string | null,
   domSnapshot: { nodes: [{ tag: "html", depth: 0 }], truncated: false, totalElements: 1 } as unknown,
+  html: "<html></html>",
+  closedRoots: [] as Array<{ host: string; type: string; html: string; truncated?: boolean }>,
+  closedRootsCap: 0,
 }));
 
 vi.mock("../lib/cdp", async (importOriginal) => {
@@ -50,7 +53,7 @@ vi.mock("../lib/cdp", async (importOriginal) => {
         return { total: 0 };
       }
       async getPageHTML() {
-        return "<html></html>";
+        return cdp.html;
       }
       async getDomSnapshot() {
         return cdp.domSnapshot;
@@ -61,8 +64,10 @@ vi.mock("../lib/cdp", async (importOriginal) => {
       async probeSelectors() {
         return [];
       }
-      async getClosedShadowRoots() {
-        return [];
+      async getClosedShadowRoots(_sessionId: string, maxBytes: number) {
+        cdp.closedRootsCap = maxBytes;
+
+        return cdp.closedRoots;
       }
       disconnect() {}
     },
@@ -74,7 +79,9 @@ vi.mock("../lib/cdp-port", () => ({
   CDP_PORT_MISSING_HINT: "",
 }));
 
-const { handler } = await import("../tools/inspect");
+const { handler, schema } = await import("../tools/inspect");
+const { schema: snapshotSchema } = await import("../tools/dom-snapshot");
+const { HTML_DEFAULT_MAX_BYTES } = await import("../lib/html-cap");
 const { normalizeDomSnapshot } = await import("../lib/cdp");
 const { CDPConnection } = await import("../lib/cdp-connection");
 const scripts = await import("../lib/cdp-page-scripts");
@@ -86,6 +93,9 @@ beforeEach(() => {
   cdp.landOn = null;
   cdp.metaThrows = null;
   cdp.domSnapshot = { nodes: [{ tag: "html", depth: 0 }], truncated: false, totalElements: 1 };
+  cdp.html = "<html></html>";
+  cdp.closedRoots = [];
+  cdp.closedRootsCap = 0;
 });
 
 describe("the envelope names the document that was read", () => {
@@ -171,6 +181,63 @@ describe("an uncaught exception is a console error", () => {
 });
 
 describe("every cap is said", () => {
+  const LONG_PAGE = `<html><body><ul>${"<li>calibrate sensor 7</li>".repeat(9_979)}</ul></body></html>`;
+
+  it("939: cuts the html at the default cap the snapshot tool uses and says the size and how to read less", async () => {
+    cdp.html = LONG_PAGE;
+
+    const raw = await handler({ projectPath: "/p", browser: "chrome", include: ["html"] });
+    const out = JSON.parse(raw);
+
+    expect(LONG_PAGE.length).toBeGreaterThan(259_000);
+    expect(schema.inputSchema.properties.maxBytes.default).toBe(HTML_DEFAULT_MAX_BYTES);
+    expect(snapshotSchema.inputSchema.properties.maxBytes.default).toBe(HTML_DEFAULT_MAX_BYTES);
+    expect(HTML_DEFAULT_MAX_BYTES).toBe(32_768);
+    expect(out.value.html).toBe(LONG_PAGE.slice(0, 32_768));
+    expect(out.value.htmlTruncated).toBe(true);
+    expect(out.value.summary).toEqual({ htmlLength: LONG_PAGE.length });
+    expect(out.hint).toContain(`value.html is the first 32768 of ${LONG_PAGE.length} characters`);
+    expect(out.hint).toContain("pass probe with the CSS selectors");
+    expect(out.hint).toContain('include: ["dom_snapshot"]');
+    expect(out.hint).toContain(`maxBytes, up to ${LONG_PAGE.length}`);
+    expect(raw.length).toBeLessThan(40_000);
+  });
+
+  it("939: leaves a page under the cap as it was, and honors maxBytes with 0 as no cap", async () => {
+    const small = JSON.parse(await handler({ projectPath: "/p", browser: "chrome", include: ["html"] }));
+
+    expect(small.value.html).toBe("<html></html>");
+    expect(small.value.htmlTruncated).toBeUndefined();
+    expect(small.value.summary).toBeUndefined();
+    expect(small.hint).toBeUndefined();
+
+    cdp.html = LONG_PAGE;
+
+    const whole = JSON.parse(await handler({ projectPath: "/p", browser: "chrome", include: ["html"], maxBytes: 0 }));
+    const cut = JSON.parse(await handler({ projectPath: "/p", browser: "chrome", include: ["html", "summary"], maxBytes: 500 }));
+
+    expect(whole.value.html).toHaveLength(LONG_PAGE.length);
+    expect(whole.value.htmlTruncated).toBeUndefined();
+    expect(cut.value.html).toHaveLength(500);
+    expect(cut.value.summary.htmlLength).toBe(LONG_PAGE.length);
+    expect(cut.hint).toContain(`value.html is the first 500 of ${LONG_PAGE.length} characters`);
+  });
+
+  it("939: closed shadow roots share one cap between them, each cut one marked truncated", async () => {
+    cdp.closedRoots = Array.from({ length: 40 }, (_, i) => ({ host: `x-card-${i}`, type: "closed", html: "<p>calibrate</p>".repeat(1_250) }));
+
+    const out = JSON.parse(await handler({ projectPath: "/p", browser: "chrome", include: [], deepDom: true }));
+    const roots = out.value.closedShadowRoots as Array<{ html: string; truncated?: boolean }>;
+
+    expect(cdp.closedRootsCap).toBe(32_768);
+    expect(roots).toHaveLength(40);
+    expect(roots.reduce((sum, root) => sum + root.html.length, 0)).toBe(32_768);
+    expect(roots[0]).toMatchObject({ html: "<p>calibrate</p>".repeat(1_250) });
+    expect(roots[0]!.truncated).toBeUndefined();
+    expect(roots[1]).toMatchObject({ truncated: true });
+    expect(roots[39]).toMatchObject({ html: "", truncated: true });
+  });
+
   it("marks a truncated dom snapshot with the counts", async () => {
     cdp.domSnapshot = { nodes: Array.from({ length: 500 }, () => ({ tag: "div" })), truncated: true, totalElements: 1234 };
     const out = JSON.parse(await handler({ projectPath: "/p", browser: "chrome", include: ["dom_snapshot"] }));

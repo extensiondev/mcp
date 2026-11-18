@@ -66,57 +66,13 @@ import { lacksScriptingOnMv3, readGeckoTabWithoutScripting } from "../lib/gecko-
 import { ELEMENT_LIST_CAP, ELEMENT_LIST_FUNCTION, ELEMENTS_INCLUDE_NOTE } from "../lib/element-list";
 import { readElementsOn, resolveObserveTarget, snapshotCallFor } from "../lib/observe-surface";
 import { cutAt } from "../lib/linear-text";
+import { HTML_DEFAULT_MAX_BYTES, withHtmlCap } from "../lib/html-cap";
 
 const RDP_ACTOR_NOTE =
   "actor is an RDP tab descriptor actor id, NOT a chrome.tabs id: do not pass it as `tab`. " +
   "Target a tab with `targetId` (its browserId, listed as targetId), `tabUrl` (URL substring) or `url`; if you need a numeric tab id, call extension_dom_snapshot with listTabs: true.";
 
-/* @invariant THE HTML A SNAPSHOT ANSWERS FITS THE CLIENT THAT ASKED. The cap
- * was 262144 characters on every path, and on 2026-11-18 (ledger 938) an
- * answer of 259,473 characters came back under it and the client refused the
- * whole answer as too large, so the call bought nothing. The default cap is
- * what a client reads in one answer, it is sent to the engine and applied
- * again to whatever any path answered, and a cut answer says so three ways:
- * value.htmlTruncated, the full size in value.summary.htmlLength, and a hint
- * naming the arguments that read less or more.
- */
-export const HTML_DEFAULT_MAX_BYTES = 32_768;
-
-function htmlCutHint(shown: number, full: number): string {
-  return `value.html is the first ${shown} ${full > shown ? `of ${full} ` : ""}characters of the page's markup (value.htmlTruncated). To read less, call extension_dom_snapshot with include: ["elements"] for the interactive elements with a selector each, then extension_element with action: "text" and one selector. To read more of the markup in one answer, pass maxBytes${full > shown ? `, up to ${full}` : ""}${full > HTML_DEFAULT_MAX_BYTES ? "; a client may refuse an answer that long" : ""}.`;
-}
-
-export function withHtmlCap(raw: string, maxBytes: number): string {
-  let frame: Record<string, any> | null;
-
-  try {
-    frame = JSON.parse(raw);
-  } catch {
-    return raw;
-  }
-
-  const value = frame?.ok === true ? frame.value : null;
-  if (!frame || !value || typeof value !== "object" || typeof value.html !== "string") return raw;
-
-  const cap = Number.isFinite(maxBytes) && maxBytes > 0 ? Math.floor(maxBytes) : 0;
-  const over = cap > 0 && value.html.length > cap;
-  if (!over && value.htmlTruncated !== true) return raw;
-
-  const summary = value.summary && typeof value.summary === "object" ? value.summary : null;
-  const reported = Number(summary?.htmlLength);
-  const full = Math.max(value.html.length, Number.isFinite(reported) ? reported : 0);
-
-  if (over) value.html = value.html.slice(0, cap);
-
-  value.htmlTruncated = true;
-
-  if (summary) summary.htmlLength = full;
-
-  const hint = htmlCutHint(value.html.length, full);
-  frame.hint = typeof frame.hint === "string" && frame.hint ? `${hint} ${frame.hint}` : hint;
-
-  return actFrameJson(frame);
-}
+const READ_LESS = 'call extension_dom_snapshot with include: ["elements"] for the interactive elements with a selector each, then extension_element with action: "text" and one selector';
 
 export const schema = {
   name: "extension_dom_snapshot",
@@ -485,7 +441,7 @@ async function cdpPortOrError(
 }
 
 export async function handler(args: Parameters<typeof snapshot>[0]): Promise<string> {
-  return withHtmlCap(await readOpeningIfClosed(() => snapshot(args), surfaceOpening(schema.name, args)), args.maxBytes ?? HTML_DEFAULT_MAX_BYTES);
+  return withHtmlCap(await readOpeningIfClosed(() => snapshot(args), surfaceOpening(schema.name, args)), args.maxBytes ?? HTML_DEFAULT_MAX_BYTES, READ_LESS);
 }
 
 async function snapshot(

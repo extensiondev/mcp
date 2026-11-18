@@ -10,6 +10,7 @@ import {
   SESSION_BROWSER,
   SESSION_PROJECT_PATH,
 } from "../lib/common-schema";
+import { HTML_DEFAULT_MAX_BYTES } from "../lib/html-cap";
 import { TARGET_ID_PROPERTY } from "../lib/target-pick";
 
 export const schema = {
@@ -51,7 +52,7 @@ export const schema = {
       browser: SESSION_BROWSER,
       maxBytes: {
         type: "number",
-        default: 262144,
+        default: HTML_DEFAULT_MAX_BYTES,
         description: "HTML byte cap (0 = none).",
       },
       deepDom: {
