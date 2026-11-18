@@ -132,7 +132,7 @@ afterEach(() => {
 });
 
 describe("extension_create defaultsApplied", () => {
-  it("echoes the resolved path and marks an explicit parentDir as explicit", async () => {
+  it("answers the project path once and marks an explicit parentDir as explicit", async () => {
     const parent = tmpDir();
     scaffoldTarget = path.join(parent, "probe");
 
@@ -140,7 +140,8 @@ describe("extension_create defaultsApplied", () => {
       await create.handler({ projectName: "probe", parentDir: parent }),
     );
 
-    expect(result.value.resolvedPath).toBe(scaffoldTarget);
+    expect(result.value.projectPath).toBe(scaffoldTarget);
+    expect(result.value.resolvedPath).toBeUndefined();
     expect(result.value.defaultsApplied.parentDir).toContain(parent);
     expect(result.value.defaultsApplied.parentDir).toContain("(explicit)");
     expect(result.value.defaultsApplied.gitInit).toBe(false);
@@ -166,24 +167,23 @@ describe("extension_create defaultsApplied", () => {
     expect(result.value.defaultsApplied.packageManager).toContain("auto-detected");
     expect(result.value.defaultsApplied.browser).toContain("chrome");
     expect(result.value.defaultsApplied.browser).toContain("default");
-    expect(result.value.scripts).toEqual([]);
+    expect(result.value.scripts).toEqual({});
   });
 
-  it("lists every engine script with the browser it targets and the folder it writes", async () => {
+  it("names the folder each engine script writes, once per script", async () => {
     withScripts = true;
     scaffoldTarget = path.join(tmpDir(), "probe");
 
     const result = JSON.parse(await create.handler({ projectName: "probe" }));
 
-    expect(result.value.scripts).toEqual([
-      { name: "dev", run: "bun run dev", command: "extension dev", browser: "chromium", writes: "dist/chromium" },
-      { name: "start", run: "bun run start", command: "extension start", browser: "chromium", writes: "dist/chromium" },
-      { name: "build", run: "bun run build", command: "extension build", browser: "chromium", writes: "dist/chromium" },
-      { name: "preview", run: "bun run preview", command: "extension preview", browser: "chromium", writes: null },
-      { name: "build:chrome", run: "bun run build:chrome", command: "extension build --browser chrome", browser: "chrome", writes: "dist/chrome" },
-      { name: "build:firefox", run: "bun run build:firefox", command: "extension build --browser firefox", browser: "firefox", writes: "dist/firefox" },
-      { name: "build:edge", run: "bun run build:edge", command: "extension build --browser edge", browser: "edge", writes: "dist/edge" },
-    ]);
+    expect(result.value.scripts).toEqual({
+      dev: "dist/chromium",
+      start: "dist/chromium",
+      build: "dist/chromium",
+      "build:chrome": "dist/chrome",
+      "build:firefox": "dist/firefox",
+      "build:edge": "dist/edge",
+    });
 
     expect(result.value.nextSteps.join(" ")).not.toContain("bun run dev");
     expect(result.value.manualAlternative).toContain("bun run dev");
@@ -195,9 +195,8 @@ describe("extension_create defaultsApplied", () => {
     const result = JSON.parse(await create.handler({ projectName: "probe" }));
     const steps: string[] = result.value.nextSteps;
 
-    expect(steps[0]).toMatch(/^The scaffold is complete and verified \(manifest read at /);
-    expect(steps[0]).toContain(result.value.manifestPath);
-    expect(steps[0]).toMatch(/needs no build to check, so do not run a build to verify it\.$/);
+    expect(steps[0]).toBe("The scaffold is complete and verified: it needs no build to check, so do not run a build to verify it.");
+    expect(result.value.manifestPath).toBe(path.join(scaffoldTarget, "manifest.json"));
     expect(steps[1]).toMatch(/^Ask the person "Want me to open it in Chrome so you can try it\?" and, on yes, call extension_dev yourself \(projectPath: /);
     expect(steps[1]).toContain(scaffoldTarget);
     expect(steps.join(" ")).not.toMatch(/run build/);
@@ -212,9 +211,8 @@ describe("extension_create defaultsApplied", () => {
       await create.handler({ projectName: "mono", template: "sidebar-monorepo-turborepo" }),
     );
 
-    const byName = Object.fromEntries(result.value.scripts.map((s: { name: string }) => [s.name, s]));
-    expect(byName.build).toMatchObject({ command: "extension build packages/extension", browser: "chromium", writes: "packages/extension/dist/chromium" });
-    expect(byName["build:chrome"]).toMatchObject({ browser: "chrome", writes: "packages/extension/dist/chrome" });
+    expect(result.value.scripts.build).toBe("packages/extension/dist/chromium");
+    expect(result.value.scripts["build:chrome"]).toBe("packages/extension/dist/chrome");
   });
 
   it("writes the Node, package manager and Extension.js versions it runs on and the scaffold's Firefox build script into the STORE.md reviewer note, with no replace-both instruction (ledger 506)", async () => {
@@ -300,10 +298,7 @@ describe("extension_create defaultsApplied", () => {
     const ship = steps[steps.length - 1]!;
 
     expect(result.value.deployUrl).toBeUndefined();
-    expect(result.value.ship.tool).toBe("extension_project_create");
-    expect(result.value.ship.needs.join(" ")).toMatch(/project: .*<workspace>\/<project>/);
-    expect(result.value.ship.needs.join(" ")).toContain(`projectPath: ${scaffoldTarget}`);
-    expect(result.value.ship.needs.join(" ")).toContain("no push");
+    expect(result.value.ship).toBeUndefined();
     expect(ship).toMatch(/^To ship: extension_create scaffolds and runs locally, it does not host\./);
     expect(ship).toContain(`extension_project_create (project: '<workspace>/probe', projectPath: '${scaffoldTarget}')`);
     expect(ship).toContain("no GitHub push needed");
@@ -323,7 +318,7 @@ describe("extension_create defaultsApplied", () => {
     expect(refSeen).toBe(PINNED_COMMIT);
     expect(process.env.EXTENSION_CREATE_TEMPLATE_REF).toBeUndefined();
     expect(result.value.sourceCommit).toBe(PINNED_COMMIT);
-    expect(result.value.nextSteps[0]).toContain(`template content-react from extension-js/examples at ${PINNED_COMMIT}`);
+    expect(result.value.template).toBe("content-react");
     expect(result.warnings.join(" ")).not.toContain("while extension_templates describes");
   });
 
@@ -405,6 +400,30 @@ describe("extension_create defaultsApplied", () => {
 
     expect(bare.ok).toBe(true);
     expect(vi.mocked(extensionCreate).mock.calls[0][0]).toBe("../probe");
+  });
+
+  it("916: a create answer says each fact once and stays under 2,500 characters before its warnings on a scaffold with scripts, a STORE.md and no install", async () => {
+    withScripts = true;
+    withStoreMd = true;
+    depsLeftOut = true;
+    const parent = tmpDir();
+    scaffoldTarget = path.join(parent, "probe");
+
+    const text = (await create.handler({ projectName: "probe", parentDir: parent, template: "typescript", install: false })).split(parent).join("/work");
+    const result = JSON.parse(text);
+    const steps: string[] = result.value.nextSteps;
+
+    expect(result.ok).toBe(true);
+    const weight = JSON.stringify({ ...result, warnings: [] }).length;
+
+    expect(weight, `${weight} characters`).toBeLessThanOrEqual(2_500);
+    expect(JSON.stringify(steps).length).toBeLessThanOrEqual(1_100);
+    expect(steps.filter((step) => step.includes("extension_project_create"))).toHaveLength(1);
+    expect(JSON.stringify(result.value).split("extension_project_create")).toHaveLength(2);
+    expect(JSON.stringify(steps)).not.toContain(PINNED_COMMIT);
+    expect(JSON.stringify(steps)).not.toContain("manifest.json");
+    expect(Object.values(result.value).filter((field) => field === "/work/probe")).toHaveLength(1);
+    expect(steps.join(" ")).toMatch(/call extension_manifest_validate, and build with extension_build .* not a package script/);
   });
 
   it("documents the name alias and the cwd default in the schema itself", () => {

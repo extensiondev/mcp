@@ -307,7 +307,9 @@ export async function handler(args: {
     (result as { packageManager?: string }).packageManager ||
     (result.depsInstalled ? detectPackageManager(result.projectPath) : "npm");
   const runDev = `${packageManager} run dev`;
-  const scripts = scaffoldScripts(result.projectPath, packageManager);
+  const scripts = Object.fromEntries(
+    scaffoldScripts(result.projectPath, packageManager).flatMap((script) => (script.writes ? [[script.name, script.writes]] : [])),
+  );
   const reviewerNoteToolchain = await writeScaffoldToolchainNote(result.projectPath, packageManager);
   const addDev = (spec: string): string =>
     packageManager === "npm"
@@ -344,14 +346,13 @@ export async function handler(args: {
   const overrideEnv = resolveEngineOverride()?.env ?? "EXTENSION_MCP_ENGINE_DIR";
   const openStep = refusal
     ? `Fix or unset ${overrideEnv} before extension_dev, extension_build or extension_start, which can only refuse until then: ${refusal} extension_doctor shows the paths it expects. Then ask the person "Want me to open it in Chrome so you can try it?" and, on yes, call extension_dev yourself (projectPath: ${result.projectPath}, headless: false).`
-    : `Ask the person "Want me to open it in Chrome so you can try it?" and, on yes, call extension_dev yourself (projectPath: ${result.projectPath}, headless: false so they can see the window); its answer says when the session is ready. Do not hand the person a shell command to run it.`;
+    : `Ask the person "Want me to open it in Chrome so you can try it?" and, on yes, call extension_dev yourself (projectPath: ${result.projectPath}, headless: false so they can see the window); never hand them a shell command to run it.`;
 
   return envelope({
     ok: true,
     command: COMMAND,
     status: "created",
     value: {
-      resolvedPath: result.projectPath,
       projectPath: result.projectPath,
       manifestPath,
       projectName: result.projectName,
@@ -360,13 +361,6 @@ export async function handler(args: {
       sourceCommit,
       depsInstalled: result.depsInstalled,
       packageManager: result.depsInstalled ? packageManager : null,
-      ship: {
-        tool: "extension_project_create",
-        needs: [
-          "project: the new '<workspace>/<project>' on extension.dev",
-          `projectPath: ${result.projectPath}; the folder is uploaded as it is, no push, and the platform builds the upload (repo: a GitHub '<owner>/<repo>' it is pushed to works instead)`,
-        ],
-      },
       defaultsApplied: {
         parentDir: args.parentDir
           ? `${resolvedParent} (explicit)`
@@ -377,9 +371,8 @@ export async function handler(args: {
                 "typescript (default; call extension_templates to pick another, e.g. javascript for plain JS)",
             }
           : {}),
-        packageManager: `${packageManager} (auto-detected by the scaffolder, not asked)`,
-        browser:
-          "chrome (default: extension_dev and extension_build target chrome and write dist/chrome unless you pass browser; the scaffolded scripts pass no --browser, so the engine runs them as chromium: scripts below names the folder each one writes)",
+        packageManager: `${packageManager} (auto-detected)`,
+        browser: "chrome (default: extension_dev and extension_build write dist/chrome unless you pass browser)",
         gitInit,
       },
       scripts,
@@ -388,13 +381,14 @@ export async function handler(args: {
       manualAlternative: `Outside an agent only: cd ${shellPath(result.projectPath)} && ${runDev}`,
       duration: Date.now() - start,
       nextSteps: [
-        `The scaffold is complete and verified (manifest read at ${manifestPath}${result.depsInstalled ? ", dependencies installed" : ""}; template ${result.template} from extension-js/examples at ${sourceCommit}): it needs no build to check, so do not run a build to verify it.`,
+        "The scaffold is complete and verified: it needs no build to check, so do not run a build to verify it.",
         ...(result.depsInstalled
           ? []
           : [`Dependencies were not installed: run \`${packageManager} install\` in ${result.projectPath} first.`]),
         openStep,
-        ...(storeMdWritten ? ["Say value.sayToPerson to the person as it is, once; the file's own header says the rest when they open it."] : []),
-        `To ship: extension_create scaffolds and runs locally, it does not host. When the person wants it on extension.dev, call extension_project_create (project: '<workspace>/${result.projectName}', projectPath: '${result.projectPath}') straight from this folder, no GitHub push needed; it answers an approval URL first, uploads the folder as it is and the platform builds the upload. A pushed GitHub repository works too (repo: '<owner>/<repo>' instead of projectPath). The www /new?template link makes an unrelated project from the pristine template, so never offer it as shipping this one.`,
+        "After an edit, call extension_manifest_validate, and build with extension_build (browser: \"firefox\" for Firefox), not a package script: value.scripts names the folder each script writes.",
+        ...(storeMdWritten ? ["Say value.sayToPerson to the person as it is, once."] : []),
+        `To ship: extension_create scaffolds and runs locally, it does not host. When the person wants it on extension.dev, call extension_project_create (project: '<workspace>/${result.projectName}', projectPath: '${result.projectPath}') straight from this folder, no GitHub push needed (or repo: '<owner>/<repo>' instead of projectPath for a pushed repository); it answers an approval URL first. Never offer the www /new?template link, which makes an unrelated project.`,
       ],
     },
     warnings: [
