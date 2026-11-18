@@ -8,6 +8,7 @@
 
 import { CDPClient } from "./cdp";
 import { evaluateOnExtensionPage } from "./cdp-extension-page";
+import { scriptLiteral } from "./script-literal";
 import { tabsWorker, windowOf } from "./tab-switch-worker";
 
 export const ANIMATION_SETTLE_MS = 2_000;
@@ -44,7 +45,7 @@ async function targetUrl(port: number, targetId: string): Promise<string | null>
 }
 
 function showScript(windowId: number, url: string): string {
-  return `(async () => { const [shown] = await chrome.tabs.query({ active: true, windowId: ${windowId} }); const matches = (await chrome.tabs.query({ windowId: ${windowId} })).filter((t) => t.url === ${JSON.stringify(url)}); if (matches.length !== 1) return { matched: matches.length, readable: matches.length > 0 || (shown ? typeof shown.url === "string" : true) }; await chrome.tabs.update(matches[0].id, { active: true }); return { matched: 1, shownId: shown ? shown.id : null }; })()`;
+  return `(async () => { const [shown] = await chrome.tabs.query({ active: true, windowId: ${scriptLiteral(windowId)} }); const matches = (await chrome.tabs.query({ windowId: ${scriptLiteral(windowId)} })).filter((t) => t.url === ${scriptLiteral(url)}); if (matches.length !== 1) return { matched: matches.length, readable: matches.length > 0 || (shown ? typeof shown.url === "string" : true) }; await chrome.tabs.update(matches[0].id, { active: true }); return { matched: 1, shownId: shown ? shown.id : null }; })()`;
 }
 
 function unmatched(found: { matched?: unknown; readable?: unknown }, url: string): string {

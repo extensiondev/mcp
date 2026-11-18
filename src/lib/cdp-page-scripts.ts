@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { scriptLiteral } from "./script-literal";
+
 export const PAGE_HTML_SCRIPT = `(() => {
         try {
           const doctype = document.doctype;
@@ -132,7 +134,7 @@ export const RENDER_EVIDENCE_SCRIPT = `(() => {
 
 export function probeSelectorsScript(selectors: string[]) {
   return `(() => {
-        const selectors = ${JSON.stringify(selectors)};
+        const selectors = ${scriptLiteral(selectors)};
         return selectors.map(selector => {
           try {
             const els = Array.from(document.querySelectorAll(selector));
@@ -158,7 +160,7 @@ export function probeSelectorsScript(selectors: string[]) {
 
 export function domSnapshotScript(maxNodes: number) {
   return `(() => {
-        const maxNodes = ${maxNodes};
+        const maxNodes = ${scriptLiteral(maxNodes)};
         const maxDepth = 20;
         const nodes = [];
         let truncated = false;

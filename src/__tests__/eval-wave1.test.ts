@@ -6,6 +6,9 @@ import { spawnSync } from "node:child_process";
 import { describe, it, expect, vi, afterEach } from "vitest";
 
 import { remoteValueNote } from "../lib/cdp-extension-page";
+import { domSnapshotScript, probeSelectorsScript } from "../lib/cdp-page-scripts";
+import { scriptLiteral } from "../lib/script-literal";
+import { activateTabScript } from "../lib/tab-foreground-by-id";
 import { matchPatternRegexSource, executeScriptExpression } from "../tools/inspect-gecko";
 import { CALL_TIMEOUT } from "../lib/common-schema";
 import { schema as evalSchema } from "../tools/eval";
@@ -86,6 +89,28 @@ describe("wave 1: extension_eval says where and what it ran", () => {
     expect(hostile.test("https://(a+)+b|evil.test/x")).toBe(true);
     expect(matchPatternRegexSource("*://*.exa[mp]le.com/*")).toContain("exa\\[mp\\]le\\.com");
     expect(new RegExp(matchPatternRegexSource("*://*.exa[mp]le.com/*")).test("https://a.exale.com/")).toBe(false);
+  });
+
+  it("897: a value written into a generated script is one literal that reads back unchanged", () => {
+    const hostile = "</script><script>alert(1)//\u2028\u2029 \"'\\ => x";
+    const unsafe = /[<>\u2028\u2029]/;
+
+    for (const value of [hostile, 42, null, true, [hostile, 7], { url: hostile }]) {
+      expect(scriptLiteral(value)).not.toMatch(unsafe);
+      expect(JSON.parse(scriptLiteral(value))).toEqual(value);
+    }
+
+    expect(scriptLiteral("https://plain.test/a?b=1&c=2")).toBe(JSON.stringify("https://plain.test/a?b=1&c=2"));
+    expect(scriptLiteral(12)).toBe("12");
+
+    for (const script of [executeScriptExpression(hostile, hostile), executeScriptExpression(`${hostile}*`, "1"), probeSelectorsScript([hostile])]) {
+      expect(script).not.toContain("</script>");
+      expect(script).not.toContain(hostile);
+    }
+
+    expect(executeScriptExpression(undefined, "1", 7)).toContain("t.id === 7;");
+    expect(activateTabScript(7)).toContain("chrome.tabs.update(7, { active: true })");
+    expect(domSnapshotScript(500)).toContain("const maxNodes = 500;");
   });
 
   it("the generated picker runs and picks the right tab", () => {

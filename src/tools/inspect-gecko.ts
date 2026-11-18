@@ -32,6 +32,7 @@ import {
   EXTENSION_ORIGIN,
   surfaceForExtensionUrl,
 } from "../lib/extension-surfaces";
+import { scriptLiteral } from "../lib/script-literal";
 import { joinWildcards } from "../lib/wildcard-join";
 
 const TOOL = inspectSchema.name;
@@ -75,7 +76,7 @@ function buildBridgeInspectExpression(opts: {
     parts.push(
       `try {
         const html = ${PAGE_HTML_SCRIPT};
-        const cap = ${JSON.stringify(opts.maxBytes)};
+        const cap = ${scriptLiteral(opts.maxBytes)};
         out.htmlTruncated = cap > 0 && html.length > cap;
         out.html = out.htmlTruncated ? html.slice(0, cap) : html;
       } catch (e) { (out.failedSections = out.failedSections || []).push({ section: "html", reason: String(e) }); }`,
@@ -111,7 +112,7 @@ function closedShadowWalkerCode(cap: number): string {
         if (!node || node.nodeType !== 1) return;
         var sr = null;
         try { sr = node.openOrClosedShadowRoot || null; } catch (e) {}
-        if (sr && sr.mode !== "open") { var full = String(sr.innerHTML); out.closed.push({ host: node.tagName.toLowerCase(), html: full.slice(0, ${cap}), truncated: full.length > ${cap} }); }
+        if (sr && sr.mode !== "open") { var full = String(sr.innerHTML); out.closed.push({ host: node.tagName.toLowerCase(), html: full.slice(0, ${scriptLiteral(cap)}), truncated: full.length > ${scriptLiteral(cap)} }); }
         var kids = node.children;
         for (var i = 0; i < kids.length; i++) walk(kids[i]);
         if (sr) { var sk = sr.children; for (var j = 0; j < sk.length; j++) walk(sk[j]); }
@@ -144,17 +145,17 @@ export function executeScriptExpression(
 ): string {
   const pick =
     typeof tabId === "number"
-      ? `tabs.find(function (t) { return t.id === ${tabId}; })`
+      ? `tabs.find(function (t) { return t.id === ${scriptLiteral(tabId)}; })`
       : urlFilter
         ? /\*|<all_urls>/.test(urlFilter)
-          ? `tabs.find(function (t) { return new RegExp(${JSON.stringify(matchPatternRegexSource(urlFilter))}).test(String(t.url || "")); })`
-          : `tabs.find(function (t) { return String(t.url || "").toLowerCase().indexOf(${JSON.stringify(urlFilter.toLowerCase())}) !== -1; })`
+          ? `tabs.find(function (t) { return new RegExp(${scriptLiteral(matchPatternRegexSource(urlFilter))}).test(String(t.url || "")); })`
+          : `tabs.find(function (t) { return String(t.url || "").toLowerCase().indexOf(${scriptLiteral(urlFilter.toLowerCase())}) !== -1; })`
         : `(tabs.find(function (t) { return t.active; }) || tabs[0])`;
 
   return `browser.tabs.query({}).then(function (tabs) {
     var tab = ${pick};
     if (!tab) return { error: "no matching tab" };
-    return browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }).then(
+    return browser.tabs.executeScript(tab.id, { code: ${scriptLiteral(code)} }).then(
       function (results) { return { frames: results }; },
       function (err) { return { error: String((err && err.message) || err) }; }
     );

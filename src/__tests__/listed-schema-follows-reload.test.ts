@@ -10,6 +10,7 @@ import { ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/typ
 import { createServer, tools } from "../index";
 import { writeCredentials } from "../lib/credentials";
 import { ENVELOPE_SCHEMA } from "../lib/envelope";
+import { scriptLiteral } from "../lib/script-literal";
 import { adoptHandover, listRebuilt, type BuildImporter } from "../lib/server-reload";
 import { createServerStamp, listStaleSentence, reloadedWarning } from "../lib/server-stamp";
 import { SUBMIT_ACTIONS } from "../tools/submit";
@@ -38,10 +39,10 @@ function fixtureBuild(withList: boolean, carriesLocal = true): string {
     "export function adoptHandover(state) { adopted = state; }",
     carriesLocal ? "export function handoverState() { return adopted; }" : "export function handoverState() { const { local, ...rest } = adopted; return rest; }",
     "export async function dispatchRebuilt(call) {",
-    `  const text = JSON.stringify({ schema: ${JSON.stringify(ENVELOPE_SCHEMA)}, ok: true, command: call.name, status: "read", value: {}, error: null, warnings: [] });`,
+    `  const text = JSON.stringify({ schema: ${scriptLiteral(ENVELOPE_SCHEMA)}, ok: true, command: call.name, status: "read", value: {}, error: null, warnings: [] });`,
     '  return { content: [{ type: "text", text }] };',
     "}",
-    withList ? `export function listRebuilt() { return ${JSON.stringify([REBUILT_SUBMIT, REBUILT_DEV, ADDED_TOOL])}; }` : "",
+    withList ? `export function listRebuilt() { return ${scriptLiteral([REBUILT_SUBMIT, REBUILT_DEV, ADDED_TOOL])}; }` : "",
     "",
   ].join("\n");
 }

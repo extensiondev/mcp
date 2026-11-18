@@ -12,6 +12,7 @@ import { forgetForwardCredentials } from "../lib/forward-credential";
 import { ENVELOPE_SCHEMA } from "../lib/envelope";
 import { RELOAD_CONTRACT, buildSpecifier, type BuildImporter } from "../lib/server-reload";
 import { registerSession } from "../lib/process-manager";
+import { scriptLiteral } from "../lib/script-literal";
 import { createServerStamp, reloadedWarning, staleLocalWarning, staleSentence, type ServerStampReader } from "../lib/server-stamp";
 import { noLocalCarryReason } from "../lib/stale-local";
 
@@ -55,13 +56,13 @@ function fixtureBuild(answeredBy: string, carriesLocal = true): string {
     "let adopted = null;",
     "export function adoptHandover(state) { adopted = state; }",
     carriesLocal
-      ? `export function handoverState() { return { ...adopted, trail: [...(adopted.trail ?? []), ${JSON.stringify(answeredBy)}] }; }`
-      : `export function handoverState() { const { local, ...rest } = adopted; return { ...rest, trail: [...(adopted.trail ?? []), ${JSON.stringify(answeredBy)}] }; }`,
-    `export function stampRebuilt() { return { version: "99.0.0+${answeredBy}", commit: ${JSON.stringify(answeredBy)}, builtAt: null, startedAt: "x", pid: 0 }; }`,
+      ? `export function handoverState() { return { ...adopted, trail: [...(adopted.trail ?? []), ${scriptLiteral(answeredBy)}] }; }`
+      : `export function handoverState() { const { local, ...rest } = adopted; return { ...rest, trail: [...(adopted.trail ?? []), ${scriptLiteral(answeredBy)}] }; }`,
+    `export function stampRebuilt() { return { version: ${scriptLiteral(`99.0.0+${answeredBy}`)}, commit: ${scriptLiteral(answeredBy)}, builtAt: null, startedAt: "x", pid: 0 }; }`,
     'export function assertChecksRebuilt() { return ["background-worker-booted", "page-world-clean", "page-world-sealed"]; }',
     "export async function dispatchRebuilt(call) {",
-    `  const value = { answeredBy: ${JSON.stringify(answeredBy)}, args: call.arguments, options: adopted.options, keptLogins: adopted.keptLogins, trail: adopted.trail ?? [], localSessions: adopted.local ? [...adopted.local.sessions.values()].map((s) => s.pid) : null };`,
-    `  const text = JSON.stringify({ schema: ${JSON.stringify(ENVELOPE_SCHEMA)}, ok: true, command: call.name, status: "listed", value, error: null, warnings: [] });`,
+    `  const value = { answeredBy: ${scriptLiteral(answeredBy)}, args: call.arguments, options: adopted.options, keptLogins: adopted.keptLogins, trail: adopted.trail ?? [], localSessions: adopted.local ? [...adopted.local.sessions.values()].map((s) => s.pid) : null };`,
+    `  const text = JSON.stringify({ schema: ${scriptLiteral(ENVELOPE_SCHEMA)}, ok: true, command: call.name, status: "listed", value, error: null, warnings: [] });`,
     '  return { content: [{ type: "text", text }] };',
     "}",
     "",

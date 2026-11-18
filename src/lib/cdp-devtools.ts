@@ -9,6 +9,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { CDPClient } from "./cdp";
+import { scriptLiteral } from "./script-literal";
 
 export type DevToolsPanelOutcome =
   | {
@@ -43,7 +44,7 @@ const PANEL_IDS_VIA_FRONTEND_MODULE_EXPRESSION =
   "import('./ui/legacy/legacy.js').then((m) => m.InspectorView.InspectorView.instance().tabbedPane.tabIds())";
 
 function showPanelExpression(panelId: string): string {
-  return `import('./ui/legacy/legacy.js').then((m) => m.InspectorView.InspectorView.instance().showPanel(${JSON.stringify(panelId)})).then(() => "shown")`;
+  return `import('./ui/legacy/legacy.js').then((m) => m.InspectorView.InspectorView.instance().showPanel(${scriptLiteral(panelId)})).then(() => "shown")`;
 }
 
 export function panelIdPrefix(extensionId: string): string {

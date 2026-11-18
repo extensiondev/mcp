@@ -10,12 +10,13 @@ import { actFrameJson, addWarning, patchValue } from "./act";
 import { evaluateOnExtensionPage } from "./cdp-extension-page";
 import { resolveCdpPort } from "./cdp-port";
 import { parseFrameObject } from "./frame-json";
+import { scriptLiteral } from "./script-literal";
 import { confirmWindowRaised, foregroundSentence, foregroundUnsupported, sessionBrowserPid, type Foreground } from "./tab-foreground";
 import { tabViewFields, tabViewSentence } from "./tab-view";
 import { tabsWorker } from "./tab-switch-worker";
 
 export function activateTabScript(tabId: number): string {
-  return `(async () => { const tab = await chrome.tabs.update(${tabId}, { active: true }); let windowRaised = false; let refused = null; try { await chrome.windows.update(tab.windowId, { focused: true }); windowRaised = true; } catch (e) { refused = String((e && e.message) || e); } return { active: tab.active === true, windowRaised, refused }; })()`;
+  return `(async () => { const tab = await chrome.tabs.update(${scriptLiteral(tabId)}, { active: true }); let windowRaised = false; let refused = null; try { await chrome.windows.update(tab.windowId, { focused: true }); windowRaised = true; } catch (e) { refused = String((e && e.message) || e); } return { active: tab.active === true, windowRaised, refused }; })()`;
 }
 
 export async function bringTabIdForward(
