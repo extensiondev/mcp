@@ -74,7 +74,8 @@ describe("reviewDistReport risks", () => {
     expect(fix).toContain("Ask the owner what the extension collects");
     expect(fix).toContain("with the categories they state");
     expect(fix).toContain("https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/");
-    expect(fix).toContain("Do not fill it in for them or suggest a value");
+    expect(fix).toContain("Do not fill it in for them or suggest a value. This rule is about the declaration alone.");
+    expect(fix).not.toMatch(/gecko\.id\b|add-on ID/);
 
     manifest({
       browser_specific_settings: { gecko: { data_collection_permissions: { required: ["none"] } } },

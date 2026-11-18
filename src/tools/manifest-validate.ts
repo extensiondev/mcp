@@ -16,6 +16,7 @@ import { envelope, okOrRefusal } from "../lib/envelope";
 import { apiUsesIn, type ApiUse } from "../lib/guarded-api-uses";
 import { droppedRuntimePages } from "../lib/dropped-runtime-pages";
 import { icon128Fix } from "../lib/store-review";
+import { geckoIdWarning, proposedGeckoId } from "../lib/firefox-addon-id";
 import { chromeThemeRefusalLines } from "../lib/theme-manifest-discards";
 import { toolListed } from "../lib/tool-policy";
 import { ADMIN_INSTALL_ONLY_KEY, ENTERPRISE_CHANNEL_SENTENCE, adminInstallOnlyOf, adminInstallOnlyTypeIssue } from "../lib/firefox-enterprise";
@@ -222,6 +223,7 @@ interface ValidationResult {
   warnings: string[];
   browserSupport: Record<string, { supported: boolean; issues: string[] }>;
   similarTemplates?: Array<{ slug: string; surfaces: string[] }>;
+  proposedGeckoId?: string;
 }
 
 const API_PERMISSION: Record<string, string> = {
@@ -765,12 +767,6 @@ export async function handler(args: {
         | undefined;
       const geckoId = (bss?.gecko as Record<string, unknown> | undefined)?.id;
 
-      if (typeof geckoId !== "string" || !geckoId) {
-        result.warnings.push(
-          'Firefox: no browser_specific_settings.gecko.id. A temporary add-on without one gets a new internal id on every launch, so storage and the moz-extension:// origin do not survive a relaunch, and a store upload needs the id. Set firefox:browser_specific_settings.gecko.id (any "name@domain" string).',
-        );
-      }
-
       const dataCollection = (bss?.gecko as Record<string, unknown> | undefined)
         ?.data_collection_permissions;
 
@@ -783,8 +779,17 @@ export async function handler(args: {
 
       if (!staticTheme && (!dataCollection || typeof dataCollection !== "object")) {
         result.warnings.push(
-          'Firefox: no browser_specific_settings.gecko.data_collection_permissions. AMO requires it for new add-ons and the Firefox build warns on every run. What the extension collects is the owner\'s declaration to Mozilla, so ask the person and write the block under firefox:browser_specific_settings.gecko.data_collection_permissions with the categories they state (https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/). Do not add it on their behalf, and do not propose a value for it either.',
+          'Firefox: no browser_specific_settings.gecko.data_collection_permissions. AMO requires it for new add-ons and the Firefox build warns on every run. What the extension collects is the owner\'s declaration to Mozilla, so ask the person and write the block under firefox:browser_specific_settings.gecko.data_collection_permissions with the categories they state (https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/). Do not add it on their behalf, and do not propose a value for it either. This rule is about the declaration alone.',
         );
+      }
+
+      if (typeof geckoId !== "string" || !geckoId) {
+        const proposed = proposedGeckoId(manifest, effective, manifestPath);
+        const line = geckoIdWarning(proposed);
+
+        result.proposedGeckoId = proposed.id;
+
+        if (!result.warnings.includes(line)) result.warnings.push(line);
       }
 
       const gecko = bss?.gecko as Record<string, unknown> | undefined;

@@ -95,7 +95,7 @@ describe("the Firefox report names what Firefox itself would say", () => {
     const warnings: string[] = result.value.warnings;
 
     expect(result.value.browserSupport.firefox.supported).toBe(true);
-    expect(warnings.find((w) => w.includes("gecko.id"))).toContain("new internal id on every launch");
+    expect(warnings.find((w) => w.includes("gecko.id"))).toContain("new internal ID on every launch");
     expect(warnings.find((w) => w.includes('"version_name"'))).toContain("Chromium-only");
     expect(warnings.find((w) => w.includes("extension_ids"))).toBeDefined();
     expect(warnings.find((w) => w.includes("chromium:side_panel is declared and no firefox:sidebar_action"))).toBeDefined();
@@ -119,7 +119,8 @@ describe("the Firefox report names what Firefox itself would say", () => {
     expect(declaration).toContain("with the categories they state");
     expect(declaration).toContain("https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/");
     expect(declaration).not.toMatch(/\bnone\b|"required"|transmits no data/i);
-    expect(declaration).toContain("Do not add it on their behalf, and do not propose a value for it either");
+    expect(declaration).toContain("Do not add it on their behalf, and do not propose a value for it either. This rule is about the declaration alone.");
+    expect(result.value.proposedGeckoId).toBeUndefined();
     expect(declaration).not.toContain("the minimal form is");
 
     const complete = project(
@@ -258,6 +259,75 @@ describe("template similarity counts every surface the manifest declares", () =>
     expect(result.value.warnings.length).toBeGreaterThan(0);
     expect(result.warnings).toEqual([]);
     expect(JSON.stringify(result).split(JSON.stringify(result.value.warnings[0]))).toHaveLength(2);
+  });
+});
+
+describe("928: a missing Firefox add-on ID is written now, with a value the answer proposes", () => {
+  const FIREFOX_ID = /^[a-z0-9._-]*@[a-z0-9._-]+$/;
+
+  async function answer(manifest: Record<string, unknown>, pkg?: Record<string, unknown>) {
+    const dir = project({ ...BASE, ...manifest }, ["public/images/icon-16.png"]);
+
+    if (pkg) fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify(pkg));
+
+    const result = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"] }));
+    const warnings: string[] = result.value.warnings;
+
+    return { result, warnings, line: warnings.find((w) => w.includes("no browser_specific_settings.gecko.id")) ?? "" };
+  }
+
+  it("says to write it now with the proposed value, that it is provisional and locks at the first submission, and to tell the owner", async () => {
+    const { result, warnings, line } = await answer({ name: "Clip Shelf Pro" });
+
+    expect(line).toBe(
+      'Firefox: no browser_specific_settings.gecko.id. A temporary add-on without one gets a new internal ID on every launch, so storage and the moz-extension:// origin do not survive a relaunch, and a store upload needs the ID. Write it now as firefox:browser_specific_settings.gecko.id with the value "clip-shelf-pro@example.com" (the manifest name, at example.com because the project shows no domain of the owner\'s). It is provisional and locks at the first Firefox submission, so tell the owner you wrote it and that they can change it before then.',
+    );
+
+    expect(result.value.proposedGeckoId).toBe("clip-shelf-pro@example.com");
+    expect(warnings.filter((w) => w.includes("no browser_specific_settings.gecko.id"))).toHaveLength(1);
+  });
+
+  it("the declaration rule comes first and names the declaration alone, so no sentence after the ID line takes its instruction back", async () => {
+    const { warnings, line } = await answer({ name: "Clip Shelf" });
+    const declaration = warnings.find((w) => w.includes("no browser_specific_settings.gecko.data_collection_permissions")) ?? "";
+
+    expect(declaration).toMatch(/Do not add it on their behalf, and do not propose a value for it either\. This rule is about the declaration alone\.$/);
+    expect(declaration).not.toMatch(/gecko\.id\b/);
+    expect(warnings.indexOf(declaration)).toBeLessThan(warnings.indexOf(line));
+    expect(line).not.toMatch(/do not (add|propose|write)|on their behalf|ask the/i);
+  });
+
+  it.each([
+    ["a name with spaces and accents", { name: "  Café  Tab_Tidy 2!  " }, undefined, "cafe-tab-tidy-2@example.com", "the manifest name, at example.com because the project shows no domain of the owner's"],
+    ["a __MSG_ name, read from the package name without its scope", { name: "__MSG_extName__", default_locale: undefined }, { name: "@acme/tab-tidy" }, "tab-tidy@example.com", "the package name, at example.com"],
+    ["a homepage_url host, without www", { name: "Clip Shelf", homepage_url: "https://www.clipshelf.app/docs" }, undefined, "clip-shelf@clipshelf.app", "the manifest name, at the host of the manifest's homepage_url"],
+    ["a package homepage on a shared code host, passed over for the author URL", { name: "Clip Shelf" }, { name: "clip", homepage: "https://github.com/acme/clip#readme", author: "Jane Roe <jane@example.org> (https://jane.dev/about)" }, "clip-shelf@jane.dev", "the manifest name, at the host of the package author URL"],
+    ["a package homepage of the owner's", { name: "Clip Shelf" }, { name: "clip", homepage: "https://clip.acme.io" }, "clip-shelf@clip.acme.io", "the manifest name, at the host of the package homepage"],
+    ["a homepage_url that is no web address", { name: "Clip Shelf", homepage_url: "ftp://files.clipshelf.app/clip" }, undefined, "clip-shelf@example.com", "the manifest name, at example.com"],
+  ])("builds the value from %s", async (_label, manifest, pkg, id, why) => {
+    const { result, line } = await answer(manifest as Record<string, unknown>, pkg);
+
+    expect(result.value.proposedGeckoId).toBe(id);
+    expect(line).toContain(`with the value "${id}" (${why}`);
+    expect(id).toMatch(FIREFOX_ID);
+  });
+
+  it("keeps an over-long name inside the 80 characters Firefox allows, without a dangling hyphen", async () => {
+    const { result } = await answer({ name: "A very long extension name that keeps going ".repeat(4), homepage_url: "https://tools.acme-widgets.example.org" });
+    const id: string = result.value.proposedGeckoId;
+
+    expect(id).toMatch(FIREFOX_ID);
+    expect(id.length).toBe(80);
+    expect(id.endsWith("@tools.acme-widgets.example.org")).toBe(true);
+    expect(id).not.toContain("-@");
+  });
+
+  it("names the unprefixed key when the manifest already holds an unprefixed block, and falls back to the folder name", async () => {
+    const { result, line } = await answer({ name: "日本語", browser_specific_settings: { gecko: { strict_min_version: "128.0" } } });
+
+    expect(line).toContain("Write it now as browser_specific_settings.gecko.id with the value");
+    expect(result.value.proposedGeckoId).toMatch(/^mcp-validate-gecko-[a-z0-9-]+@example\.com$/);
+    expect(line).toContain("(the project folder's name, at example.com");
   });
 });
 

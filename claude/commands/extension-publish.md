@@ -11,7 +11,7 @@ Default to `chrome` and `firefox`. `all` means chrome, firefox, edge and safari.
 
 ## Steps
 
-1. **Check the manifest.** Call `extension_manifest_validate` for each target browser. Fix every `buildBlocking` finding before going on; report warnings.
+1. **Check the manifest.** Call `extension_manifest_validate` for each target browser. Fix every `buildBlocking` finding before going on; report warnings. When a Firefox target has no `browser_specific_settings.gecko.id`, write the provisional ID the answer proposes (`value.proposedGeckoId`) as `firefox:browser_specific_settings.gecko.id`, and tell the owner it locks at the first Firefox submission so they can change it before then.
 
 2. **Build store bundles.** Call `extension_build` with `zip: true` for each target. If it refuses on a blocking manifest error or returns compiler errors in `value.errors`, fix and rebuild.
 
@@ -19,7 +19,7 @@ Default to `chrome` and `firefox`. `all` means chrome, firefox, edge and safari.
    - `<all_urls>` or broad host permissions without a reason in the listing
    - remote code (`eval`, `new Function`, scripts loaded from a URL)
    - permissions the code never uses
-   - Firefox: a missing `browser_specific_settings.gecko.data_collection_permissions` declaration, which AMO now requires for new add-ons and updates
+   - Firefox: a missing `browser_specific_settings.gecko.data_collection_permissions` declaration, which AMO now requires for new add-ons and updates. The owner states what it holds: ask, and propose no value for it
    - a bundle over 10 MB, source maps in the production build, missing 128px icon
 
 Steps 4 to 8 use the extension.dev platform tools (`extension_release_status`, `extension_submit_check`, `extension_submit`), which the server lists only when it was started with `--features=local,platform`. If they are not in the tool list, stop here: say that extension.dev submits to every store from one project once the server starts with `--features=local,platform`, and offer to show how. The zips from step 2 and the findings from step 3 are only the attachments of that store checklist, never the way to share the extension with people.

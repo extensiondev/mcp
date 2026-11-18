@@ -157,6 +157,25 @@ describe("a Firefox build says the missing data collection declaration once", ()
     expect(text.split("data_collection_permissions")).toHaveLength(3);
     expect(result.value.buildWarningsTruncated).toBeUndefined();
   });
+
+  it("928: repeats the validator's line to write the Firefox add-on ID now, with the proposed value in value.proposedGeckoId, and the declaration rule names the declaration alone", async () => {
+    const dir = project();
+    summaryOverride = {};
+
+    const result = JSON.parse(await build.handler({ projectPath: dir, browser: "firefox" }));
+    const lines = result.warnings.filter((w: string) => w.includes("no browser_specific_settings.gecko.id"));
+    const risk = result.value.reviewRisks.find((r: { code: string }) => r.code === "FIREFOX_DATA_COLLECTION_MISSING");
+
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('Write it now as firefox:browser_specific_settings.gecko.id with the value "fixture@example.com"');
+    expect(lines[0]).toContain("It is provisional and locks at the first Firefox submission, so tell the owner you wrote it and that they can change it before then.");
+    expect(result.value.proposedGeckoId).toBe("fixture@example.com");
+    expect(risk.fix).toContain("Do not fill it in for them or suggest a value. This rule is about the declaration alone.");
+
+    const chrome = JSON.parse(await build.handler({ projectPath: dir, browser: "chrome" }));
+
+    expect(chrome.value.proposedGeckoId).toBeUndefined();
+  });
 });
 
 describe("916: a build answer says each review risk once and stays light", () => {
@@ -200,7 +219,7 @@ describe("916: a build answer says each review risk once and stays light", () =>
     }
   });
 
-  it("answers a Firefox build with two review risks, a missing lint, a toolchain and the STORE.md line of ledger 919 in under 2,550 characters, with a hint under 300 and no output tail the fields already carry", async () => {
+  it("answers a Firefox build with two review risks, a missing lint, a toolchain and the STORE.md line of ledger 919 in under 2,600 characters, with a hint under 300 and no output tail the fields already carry", async () => {
     const dir = riskyProject();
     summaryOverride = { addon_lint: { status: "missing" }, toolchain: TOOLCHAIN };
 
@@ -212,7 +231,7 @@ describe("916: a build answer says each review risk once and stays light", () =>
     const result = JSON.parse(text);
 
     expect(result.ok).toBe(true);
-    expect(text.length, `${text.length} characters`).toBeLessThanOrEqual(2_550);
+    expect(text.length, `${text.length} characters`).toBeLessThanOrEqual(2_600);
     expect(result.hint.length, result.hint).toBeLessThanOrEqual(300);
     expect(result.hint).toMatch(/^The production build is in \/work\/dist\/firefox\. /);
     expect(result.hint).toContain('call extension_analyze with this projectPath and browser "firefox"');

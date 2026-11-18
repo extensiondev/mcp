@@ -709,6 +709,7 @@ interface ValidationPreflight {
   buildBlocking: boolean;
   errors: string[];
   warnings: string[];
+  proposedGeckoId?: string;
 }
 
 type PreflightOutcome =
@@ -744,6 +745,7 @@ async function validationPreflight(
         buildBlocking: Boolean(value.buildBlocking),
         errors: Array.isArray(value.errors) ? value.errors : [],
         warnings: Array.isArray(value.warnings) ? value.warnings : [],
+        ...(typeof value.proposedGeckoId === "string" ? { proposedGeckoId: value.proposedGeckoId } : {}),
       },
     };
   } catch (err) {
@@ -1092,6 +1094,7 @@ export async function handler(args: {
         ...(signingFrame ? { signing: signingFrame.signing } : {}),
         ...(stated ? { projectRoot: stated.root } : {}),
         outputPath: distDir,
+        ...(preflight?.proposedGeckoId ? { proposedGeckoId: preflight.proposedGeckoId } : {}),
         ...(typeof engineSummary?.total_bytes === "number"
           ? { totalBytes: engineSummary.total_bytes }
           : {}),
