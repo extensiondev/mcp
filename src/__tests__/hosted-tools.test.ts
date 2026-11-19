@@ -16,7 +16,9 @@ import { lanePageUrl, setApprovalOpener } from "../lib/approval-open";
 import { loginIdOf } from "../lib/credential-source";
 import { credentialsPath, writeCredentials } from "../lib/credentials";
 import { envelope as envelopeOf } from "../lib/envelope";
+import { forwardSession } from "../lib/forward-approval-state";
 import { forgetForwardCredentials } from "../lib/forward-credential";
+import { saveHeldBatch } from "../lib/held-batches";
 import { runAskingOnly } from "../lib/ask-only";
 import { forgetCarriedMemory } from "../lib/forward-lane-answer";
 import { forgetApprovalHolders, forwardCall } from "../lib/hosted-forwarder";
@@ -337,6 +339,28 @@ describe("the forwarder", () => {
     expect(out.hint).toContain('extension_auth (action: login, project: "acme/blog")');
     expect(out.value.trackUrl).toContain("/blog");
     expect(lane()).toEqual([]);
+  });
+
+  it("956: runs a create resume here, outside the forward session, when this machine holds its grant or ran its start, and never asks the lane", async () => {
+    const { seen } = stubLane([]);
+    const sessions: unknown[] = [];
+
+    const here = async (args: Record<string, unknown>) => {
+      sessions.push(forwardSession());
+
+      return envelopeOf({ ok: true, command: "extension_project_create", status: "authorization-pending", value: { deviceCode: String(args.deviceCode || "code-started-here") } });
+    };
+
+    const signedOut = { ...FORWARDING, resolveLogin: () => ({ token: "", ref: null }) };
+    const batch = { projects: [{ project: "acme/one", repo: "acme/templates", rootDirectory: "examples/one" }] };
+
+    saveHeldBatch(WWW, "code-held-here", { workspace: "acme", refs: ["acme/one"], grant: "grant", grantExpiresAt: Math.floor(Date.now() / 1000) + 600, rows: [] });
+    await forwardCall("extension_project_create", { ...batch, deviceCode: "code-held-here" }, here, FORWARDING);
+    await forwardCall("extension_project_create", { project: "acme/new", repo: "acme/new" }, here, signedOut);
+    await forwardCall("extension_project_create", { project: "acme/new", repo: "acme/new", deviceCode: "code-started-here" }, here, FORWARDING);
+
+    expect(sessions).toEqual([null, null, null]);
+    expect(seen).toEqual([]);
   });
 
   it("refuses a plaintext api URL before any login is exchanged or sent", async () => {

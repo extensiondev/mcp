@@ -18,6 +18,7 @@ import { envelope, isEnvelope, reframed } from "./envelope";
 import { forwardSession, withForwardSession, type ForwardSession } from "./forward-approval-state";
 import { approvalHeldByPerson, forgetApprovalHolders } from "./forwarded-approval";
 import { forgetForwardCredential, forwardCredential, forwardUrlFor, type ExchangedCredential } from "./forward-credential";
+import { loadHeldBatch } from "./held-batches";
 import { ACT_SETTLE_WINDOW_MS, FORWARD_TIMEOUT_MS, IN_FLIGHT_RECHECK_MS, LOCAL_TOOLS_STILL_WORK, MEMORY_KEY, carriedMemory, hostedWaitOf, lostAnswer, readLane, takeMemory, unreadableAnswer, withWholeWait, withoutHostedWait } from "./forward-lane-answer";
 import { CLOSED_STATUSES, readAnswer, readLanePreflight, withLanePreflight } from "./forward-lane-preflight";
 import { expiredLoginRefusal } from "./login-expired";
@@ -79,6 +80,7 @@ interface ForwardRule {
   sent?: (args: Args) => Args;
   answered?: (args: Args, body: unknown) => unknown;
   resumes?: (body: Args) => boolean;
+  resumesWhereStarted?: true;
 }
 
 function text(value: unknown): string {
@@ -145,8 +147,8 @@ export const FORWARDED_TOOLS: Readonly<Record<string, ForwardRule>> = Object.fre
     facts: (args) => (text(args.projectPath) ? { sharedPreviews: readSharedPreviews(text(args.projectPath)) } : null),
     signedOut: (args, login) => !login.expired && actionOf(args, "list") === "list" && text(args.projectPath) !== "",
   },
-  extension_workspace_create: { local: (args) => !text(args.deviceCode), signedOut: true },
-  extension_project_create: { local: (args) => !text(args.deviceCode), signedOut: true },
+  extension_workspace_create: { local: (args) => !text(args.deviceCode), signedOut: true, resumesWhereStarted: true },
+  extension_project_create: { local: (args) => !text(args.deviceCode), signedOut: true, resumesWhereStarted: true },
   extension_auth: { local: () => true },
   extension_builds: { reads: () => true, local: (args) => actionOf(args, "list") === "download" },
   extension_builds_act: {},
@@ -155,6 +157,34 @@ export const FORWARDED_TOOLS: Readonly<Record<string, ForwardRule>> = Object.fre
   extension_submit: { reads: submitReads, ...SUBMIT_RULE, resumes: (body) => laneStatus(body) === SUBMIT_DISPATCHED_STATUS },
   extension_submit_check: { reads: submitReads, ...SUBMIT_RULE },
 });
+
+/* @invariant A DEVICE FLOW RESUMES WHERE IT STARTED. A create started with
+ * no login runs in this process and keeps its grant, its rows and its batch
+ * in this machine's files and memory, so every call that carries its
+ * deviceCode runs here too, outside the forward session, even once the
+ * logins it minted are stored. Until 2026-11-19 the second resume of a
+ * batch was sent to the lane, which held none of it and refused the batch
+ * by an older copy's rules, so an approved grant created 3 of 7 (ledger 956).
+ */
+const startedHere = new Set<string>();
+
+function deviceKey(api: string, deviceCode: string): string {
+  return `${api}\n${deviceCode}`;
+}
+
+function heldHere(api: string, args: Args): boolean {
+  const deviceCode = text(args.deviceCode);
+
+  return Boolean(deviceCode) && (startedHere.has(deviceKey(api, deviceCode)) || loadHeldBatch(api, deviceCode) !== null);
+}
+
+function rememberStartedHere(api: string, answer: string): string {
+  const value = readAnswer(answer)?.value;
+  const deviceCode = value && typeof value === "object" ? text((value as Args).deviceCode) : "";
+  if (deviceCode) startedHere.add(deviceKey(api, deviceCode));
+
+  return answer;
+}
 
 function startsSignedOut(rule: ForwardRule, args: Args, login: StoredLogin): boolean {
   return typeof rule.signedOut === "function" ? rule.signedOut(args, login) : rule.signedOut === true;
@@ -477,10 +507,17 @@ export async function forwardCall(command: string, args: Args, local: (args: Arg
 
   if (!checked.ok) return here ? local(args) : refusal(command, "unavailable", "E_BAD_HOST_URL", checked.message, undefined, { hosted: true });
 
+  if (rule.resumesWhereStarted && heldHere(checked.base, args)) return local(args);
+
   const resource = forwardUrlFor(checked.base, deps.env);
   const login = (deps.resolveLogin ?? resolveCredential)({ project: text(args.project) || undefined, api: named });
 
-  if (!login.token) return here || startsSignedOut(rule, args, login) ? local(args) : signedOutRefusal(command, args, login, named);
+  if (!login.token) {
+    if (!here && !startsSignedOut(rule, args, login)) return signedOutRefusal(command, args, login, named);
+
+    return rule.resumesWhereStarted ? rememberStartedHere(checked.base, await local(args)) : local(args);
+  }
+
   if (!tool) return here ? local(args) : askOnlyRefusal(command);
 
   if (!resource) {

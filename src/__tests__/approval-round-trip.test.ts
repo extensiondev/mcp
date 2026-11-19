@@ -28,9 +28,17 @@ function listingProject(): string {
 }
 
 describe("on the forwarder path the approvals and held grants are the hosted lane's", () => {
+  const xdg = process.env.XDG_CONFIG_HOME;
+
+  beforeEach(() => {
+    process.env.XDG_CONFIG_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-round-trip-config-"));
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
     forgetForwardCredentials();
+    if (xdg === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = xdg;
   });
 
   it("holds a create grant a local step polled in www's hosted state, and keeps the files outside a forwarded call", async () => {
