@@ -307,6 +307,33 @@ describe("extension_project_create", () => {
     expect(out.warnings ?? []).toEqual([]);
   });
 
+  it("952: sends a repo's rootDirectory inside deployment, normalized, and refuses one outside the repository or beside an upload before any network call", async () => {
+    const { fn, calls } = createFetch({ token: [{ status: 200, body: grantBody }], create: CREATED });
+    vi.stubGlobal("fetch", fn);
+
+    const out = JSON.parse(await handler({ ...baseArgs, rootDirectory: "./examples/action-preact/", deviceCode: "dev-code" }));
+    const sent = JSON.parse(String(calls.find((call) => call.url.endsWith("/api/cli/projects/create"))?.init?.body));
+
+    expect(out.status).toBe("created");
+    expect(sent.deployment.rootDirectory).toBe("examples/action-preact");
+    expect(schema.inputSchema.properties.rootDirectory.description).toContain("With repo");
+
+    fn.mockClear();
+
+    for (const rootDirectory of ["../outside", "/etc", "\\share", "C:/src", "examples/../../x"]) {
+      const refused = JSON.parse(await handler({ ...baseArgs, rootDirectory }));
+
+      expect(refused.error.code, rootDirectory).toBe("E_BAD_REQUEST");
+      expect(refused.error.message, rootDirectory).toContain("rootDirectory must be a relative path inside the repository");
+    }
+
+    const beside = JSON.parse(await handler({ project: "acme/ghost-app", projectPath: extensionFolder("ext"), rootDirectory: "examples/x" }));
+
+    expect(beside.error.name).toBe("RootDirectoryWithUpload");
+    expect(beside.error.message).toContain("point projectPath at that folder instead");
+    expect(fn).not.toHaveBeenCalled();
+  });
+
   it("489: keeps the GitHub path's answer shape and names its source", async () => {
     const { fn } = createFetch({ token: [{ status: 200, body: grantBody }], create: CREATED });
     vi.stubGlobal("fetch", fn);

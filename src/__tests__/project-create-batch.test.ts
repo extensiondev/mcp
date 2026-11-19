@@ -240,6 +240,8 @@ describe("extension_project_create with projects: refusals before a device code 
     ["a bare name where an entry belongs", ["acme/alpha"], "must be an object"],
     ["an entry with no source", [{ project: "acme/alpha" }], "needs projectPath"],
     ["an entry with both sources", [{ project: "acme/alpha", repo: "octo/a", projectPath: "/tmp/alpha" }], "names both repo and projectPath"],
+    ["a root directory outside the repository", [{ project: "acme/alpha", repo: "octo/a", rootDirectory: "../up" }], "rootDirectory must be a relative path inside the repository"],
+    ["a root directory beside a folder upload", [{ project: "acme/alpha", projectPath: "/tmp/alpha", rootDirectory: "examples/a" }], "point projectPath at that folder instead"],
     ["an entry with an unknown key", [{ project: "acme/alpha", repo: "octo/a", branch: "main" }], "Unknown key 'branch'"],
     ["an entry with an unsupported browser", [{ project: "acme/alpha", repo: "octo/a", browsers: ["safari"] }], "browsers must be"],
     ["an entry whose build command is not a string", [{ project: "acme/alpha", repo: "octo/a", buildCommand: 3 }], "buildCommand must be a string"],
@@ -587,7 +589,9 @@ describe("952: extension_project_create with projects takes folders under one ap
   const folder = (name: string, manifest = true): string => {
     const dir = path.join(tmp, "src", name);
     fs.mkdirSync(dir, { recursive: true });
+
     if (manifest) fs.writeFileSync(path.join(dir, "manifest.json"), JSON.stringify({ manifest_version: 3, name, version: "1.0.0" }));
+
     fs.writeFileSync(path.join(dir, "background.js"), "self.x = 1;");
 
     return dir;
@@ -595,7 +599,7 @@ describe("952: extension_project_create with projects takes folders under one ap
 
   it("uploads each folder entry with the batch grant and creates it from its uploadId, beside a repo entry", async () => {
     const h = harness({ token: [grant(["alpha", "beta"])] });
-    const out = await run({ projects: [{ project: "acme/alpha", projectPath: folder("alpha") }, { project: "acme/beta", repo: "octo/beta-src" }], deviceCode: "dev-code" });
+    const out = await run({ projects: [{ project: "acme/alpha", projectPath: folder("alpha") }, { project: "acme/beta", repo: "octo/beta-src", rootDirectory: "examples/beta" }], deviceCode: "dev-code" });
 
     expect(out.ok).toBe(true);
     expect(out.status).toBe("created");
@@ -608,7 +612,9 @@ describe("952: extension_project_create with projects takes folders under one ap
     const [alpha, beta] = h.to("/api/cli/projects/create");
     expect(alpha?.body.source).toEqual({ uploadId: "upl_1" });
     expect(alpha?.body.github).toBeUndefined();
+    expect(alpha?.body.deployment.rootDirectory).toBeUndefined();
     expect(beta?.body.github).toMatchObject({ owner: "octo", repo: "beta-src" });
+    expect(beta?.body.deployment.rootDirectory).toBe("examples/beta");
   });
 
   it("asks one device code for a list of folders, and refuses a folder with no manifest before spending one", async () => {

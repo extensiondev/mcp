@@ -373,6 +373,7 @@ Create an extension.dev project from a folder (projectPath, uploaded, no push; a
 | `project` | string | no |  | New '<workspace>/<project>'. |
 | `projectPath` | string | no |  | Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). node_modules, dist, .git, .extension-dev, .zip, .crx, .xpi, .env*, key files and .gitignore entries stay out; 4 MB zipped at most. On an uploaded project with a login this re-seeds and rebuilds it after an approval; extension_builds_act rebuild rebuilds its stored tree without a new upload. |
 | `repo` | string | no |  | GitHub '<owner>/<repo>' the platform reads the source from, never writes to; instead of projectPath. |
+| `rootDirectory` | string | no |  | With repo: the folder inside it to build, e.g. 'examples/action'. |
 | `installationId` | string | no |  | Omit; the platform finds it or answers a connect link. |
 | `displayName` | string | no |  | Human name; rename later with extension_workspace configure-project. |
 | `description` | string | no |  | Short description. |
@@ -381,7 +382,7 @@ Create an extension.dev project from a folder (projectPath, uploaded, no push; a
 | `outputDirectory` | string | no | `"dist/chrome"` | Build output; `<browser>` substituted. |
 | `browsers` | array of "chrome" \| "edge" \| "firefox" | no | `["chrome"]` | Browsers to build. |
 | `outputDirectories` | object | no |  | Per-browser outputDirectory overrides. |
-| `projects` | array of object | no |  | Instead of project and its source: 1 to 10 (max 20) { project, repo or projectPath } of one workspace, one approval. |
+| `projects` | array of object | no |  | Instead of project and its source: 1 to 10 (max 20) { project, repo (and rootDirectory) or projectPath } of one workspace, one approval. |
 | `deviceCode` | string | no |  | Resume token; reuse re-reads the outcome. |
 | `waitSeconds` | number | no |  | With deviceCode, seconds the call blocks for approval (0 to 900). |
 | `login` | boolean | no | `true` | Store the minted login. |

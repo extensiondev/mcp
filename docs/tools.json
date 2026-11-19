@@ -1640,6 +1640,12 @@
           "description": "GitHub '<owner>/<repo>' the platform reads the source from, never writes to; instead of projectPath."
         },
         {
+          "name": "rootDirectory",
+          "type": "string",
+          "required": false,
+          "description": "With repo: the folder inside it to build, e.g. 'examples/action'."
+        },
+        {
           "name": "installationId",
           "type": "string",
           "required": false,
@@ -1695,7 +1701,7 @@
           "name": "projects",
           "type": "array of object",
           "required": false,
-          "description": "Instead of project and its source: 1 to 10 (max 20) { project, repo or projectPath } of one workspace, one approval."
+          "description": "Instead of project and its source: 1 to 10 (max 20) { project, repo (and rootDirectory) or projectPath } of one workspace, one approval."
         },
         {
           "name": "deviceCode",

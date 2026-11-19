@@ -24,7 +24,7 @@ import {
   parseProjectBatch,
   sameProjectSet,
 } from "./project-batch";
-import { buildCreateBody, type CreateBodySource } from "./project-create-body";
+import { buildCreateBody, readRootDirectory, ROOT_DIRECTORY_INVALID, ROOT_DIRECTORY_WITH_UPLOAD, type CreateBodySource } from "./project-create-body";
 import { projectCreateUrl, uploadProjectSource } from "./project-source-upload";
 import { consoleBase, consoleProjectUrl } from "./registry";
 import { bearerFetch } from "./platform-fetch";
@@ -38,6 +38,7 @@ const GRANT_EXPIRY_MARGIN_SECONDS = 5;
 const ENTRY_KEYS = [
   "project",
   "repo",
+  "rootDirectory",
   "projectPath",
   "displayName",
   "description",
@@ -58,7 +59,7 @@ const ENTRY_STRING_KEYS = [
 
 const BROWSERS = ["chrome", "edge", "firefox"];
 
-const SINGLE_ONLY_KEYS = ["project", "repo", "displayName", "description"];
+const SINGLE_ONLY_KEYS = ["project", "repo", "rootDirectory", "displayName", "description"];
 
 export interface BatchCreateLocal {
   requestDeviceCode(args: { apiBase: string; path: string; project?: string; projects?: string[]; intent?: DeviceIntent }): Promise<DeviceCodeStart>;
@@ -99,6 +100,7 @@ interface BatchEntry {
   owner: string;
   repoName: string;
   projectPath: string;
+  rootDirectory: string;
   upload?: BatchUpload;
   displayName?: string;
   description?: string;
@@ -270,6 +272,16 @@ export function parseBatchCreateArgs(
       };
     }
 
+    const root = readRootDirectory(raw.rootDirectory);
+
+    if (!root.ok) {
+      return { ok: false, message: `In the entry for '${ref}', ${ROOT_DIRECTORY_INVALID}: no leading slash or drive and no '..' segment, such as 'examples/action'.` };
+    }
+
+    if (root.rootDirectory && projectPath) {
+      return { ok: false, message: `In the entry for '${ref}', ${ROOT_DIRECTORY_WITH_UPLOAD}.` };
+    }
+
     if (!projectPath && !isProjectRef(repo)) {
       return {
         ok: false,
@@ -317,6 +329,7 @@ export function parseBatchCreateArgs(
       owner,
       repoName,
       projectPath,
+      rootDirectory: root.rootDirectory,
       displayName: raw.displayName as string | undefined,
       description: raw.description as string | undefined,
       installCommand: (raw.installCommand as string | undefined) ?? args.installCommand,
@@ -494,6 +507,7 @@ async function createOne(local: BatchCreateLocal, session: Session, entry: Batch
       workspace: entry.workspace,
       projectSlug: entry.slug,
       source: source.source,
+      rootDirectory: entry.rootDirectory,
       displayName: entry.displayName,
       description: entry.description,
       installCommand: entry.installCommand,

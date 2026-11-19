@@ -30,7 +30,7 @@ import {
   type HeldCreateGrant,
 } from "../lib/held-create-grant-words";
 import { createProjectBatch, type BatchCreateLocal } from "../lib/project-create-batch";
-import { buildCreateBody, type CreateBodySource } from "../lib/project-create-body";
+import { buildCreateBody, readRootDirectory, rootDirectoryOf, ROOT_DIRECTORY_INVALID, ROOT_DIRECTORY_WITH_UPLOAD, type CreateBodySource } from "../lib/project-create-body";
 import {
   projectCreateUrl,
   SOURCE_UPLOAD_CONSUMED_CODE,
@@ -131,6 +131,10 @@ export const schema = {
         type: "string",
         description: "GitHub '<owner>/<repo>' the platform reads the source from, never writes to; instead of projectPath.",
       },
+      rootDirectory: {
+        type: "string",
+        description: "With repo: the folder inside it to build, e.g. 'examples/action'.",
+      },
       installationId: {
         type: "string",
         description: "Omit; the platform finds it or answers a connect link.",
@@ -169,7 +173,7 @@ export const schema = {
       projects: {
         type: "array",
         items: { type: "object" },
-        description: `Instead of project and its source: 1 to ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} (max ${MAX_BATCH_PROJECTS}) { project, repo or projectPath } of one workspace, one approval.`,
+        description: `Instead of project and its source: 1 to ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} (max ${MAX_BATCH_PROJECTS}) { project, repo (and rootDirectory) or projectPath } of one workspace, one approval.`,
       },
       deviceCode: {
         type: "string",
@@ -362,6 +366,7 @@ async function pendingEnvelope(start: {
 export type ProjectCreateArgs = {
   project?: string;
   repo?: string;
+  rootDirectory?: string;
   projectPath?: string;
   projects?: unknown;
   installationId?: string;
@@ -442,6 +447,11 @@ export async function createProject(args: ProjectCreateArgs, local: ProjectCreat
       "E_BAD_REQUEST",
     );
   }
+
+  const root = readRootDirectory(args.rootDirectory);
+
+  if (!root.ok) return fail("RootDirectoryInvalid", `${ROOT_DIRECTORY_INVALID}: no leading slash or drive and no '..' segment, such as 'examples/action'.`, "bad-request", "E_BAD_REQUEST");
+  if (root.rootDirectory && !repo) return fail("RootDirectoryWithUpload", `${ROOT_DIRECTORY_WITH_UPLOAD}.`, "bad-request", "E_BAD_REQUEST");
 
   let source: CreateSource | null = repo ? { kind: "github", repo } : null;
 
@@ -594,6 +604,7 @@ async function finishFromPoll(
     project: string;
     args: {
       repo?: string;
+      rootDirectory?: string;
       installationId?: string;
       displayName?: string;
       description?: string;
@@ -805,6 +816,7 @@ function replaceGate(ctx: { project: string; args: CreateArgs; source: CreateSou
 
 type CreateArgs = {
   repo?: string;
+  rootDirectory?: string;
   installationId?: string;
   displayName?: string;
   description?: string;
@@ -924,6 +936,7 @@ async function sendCreate(
     workspace: wantWorkspace,
     projectSlug: wantProject,
     source: bodySource,
+    rootDirectory: rootDirectoryOf(ctx.args.rootDirectory),
     displayName: ctx.args.displayName,
     description: ctx.args.description,
     installCommand: ctx.args.installCommand,

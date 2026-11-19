@@ -10,10 +10,38 @@ export type CreateBodySource =
   | { kind: "github"; owner: string; repoName: string; installationId?: string }
   | { kind: "upload"; uploadId: string };
 
+export const ROOT_DIRECTORY_INVALID = "rootDirectory must be a relative path inside the repository";
+
+export const ROOT_DIRECTORY_WITH_UPLOAD =
+  "rootDirectory applies to a repo source only; an uploaded folder is built from its own root, so point projectPath at that folder instead";
+
+export function readRootDirectory(value: unknown): { ok: true; rootDirectory: string } | { ok: false } {
+  if (value === undefined || value === null) return { ok: true, rootDirectory: "" };
+  if (typeof value !== "string") return { ok: false };
+
+  const raw = value.trim();
+  if (/^[\\/]/.test(raw) || /^[A-Za-z]:/.test(raw)) return { ok: false };
+
+  let rootDirectory = raw.replace(/^(\.\/)+/, "");
+
+  while (rootDirectory.endsWith("/")) rootDirectory = rootDirectory.slice(0, -1);
+
+  if (rootDirectory.split(/[\\/]/).some((segment) => segment === "..")) return { ok: false };
+
+  return { ok: true, rootDirectory: rootDirectory === "." ? "" : rootDirectory };
+}
+
+export function rootDirectoryOf(value: unknown): string {
+  const read = readRootDirectory(value);
+
+  return read.ok ? read.rootDirectory : "";
+}
+
 export function buildCreateBody(args: {
   workspace: string;
   projectSlug: string;
   source: CreateBodySource;
+  rootDirectory?: string;
   displayName?: string;
   description?: string;
   installCommand?: string;
@@ -90,6 +118,7 @@ export function buildCreateBody(args: {
       nodeVersion: "",
       runWhatsNew: false,
       runExtensionExecutables: false,
+      ...(source.kind === "github" && args.rootDirectory ? { rootDirectory: args.rootDirectory } : {}),
     },
     ...origin,
     workspaceSlug: args.workspace,
