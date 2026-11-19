@@ -151,8 +151,9 @@ describe("extension_shares", () => {
     const out = JSON.parse(await forwarded({ projectPath: dir }));
 
     expect(out).toMatchObject({ ok: true, command: "extension_shares", status: "listed-local-only" });
-    expect(out.value.server).toMatchObject({ listed: false, errorName: "SharesAuthError" });
-    expect(out.value.server.loginHint).toContain("extension_auth");
+    expect(out.value.platform).toMatchObject({ listed: false, errorName: "SharesAuthError" });
+    expect(out.value.platform.loginHint).toContain("extension_auth");
+    expect(out.value.server).toBeUndefined();
     expect(out.value.shares).toEqual([]);
     expect(out.value.localOnly.map((row: { artifactId: string; sharedAt: string; revokeUrl: string }) => [row.artifactId, row.sharedAt, row.revokeUrl])).toEqual([
       [LOCAL_ID, reshared, `https://www.extension.dev/api/artifacts/${LOCAL_ID}`],

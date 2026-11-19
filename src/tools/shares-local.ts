@@ -53,7 +53,7 @@ export function listRecordedShares(args: { projectPath: string; project?: string
     status: "listed-local-only",
     value: {
       action: "list",
-      server: { listed: false, errorName: "SharesAuthError", reason, loginHint: LOGIN_STEPS },
+      platform: { listed: false, errorName: "SharesAuthError", reason, loginHint: LOGIN_STEPS },
       shares: [],
       localOnly: recorded.map((entry) => ({ ...entry, ...(entry.revokeUrl ? { revokeUrl: wwwRevokeUrl(entry.revokeUrl) } : {}) })),
       localRecord: {
