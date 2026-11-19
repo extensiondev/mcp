@@ -19,7 +19,7 @@ const DEFAULT_CATALOG_URL = `${PROD_ORIGINS.registry}/extension-dev/catalog/late
 
 const CATALOG_SCHEMA = "templates-catalog/v1";
 
-export const PINNED_COMMIT = "8e2336852b51c0fb71fd03abeca1f5e93a44700e";
+export const PINNED_COMMIT = "255e7b57c6be400bde4ed8744257bc64e27e4012";
 
 const CHANNEL_CACHE_TTL_MS = 5 * 60 * 1000;
 
