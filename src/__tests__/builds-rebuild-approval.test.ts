@@ -6,6 +6,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { handler as builds, schema } from "../tools/builds";
+import { schema as actSchema } from "../tools/builds-act";
 import { TOOL_POLICY } from "../lib/tool-policy";
 import { writeCredentials } from "../lib/credentials";
 
@@ -141,5 +142,14 @@ describe("extension_builds_act rebuild through the hosted connection asks an own
 
     expect(out.ok).toBe(false);
     expect(calls.some((call) => call.url.endsWith("/api/cli/approvals"))).toBe(false);
+  });
+});
+
+describe("962: extension_builds_act says which commit a rebuild builds", () => {
+  it("names buildId as the commit a rebuild builds, defaulting to the branch head", () => {
+    const buildId = actSchema.inputSchema.properties.buildId.description;
+
+    expect(buildId).toContain("rebuild: the commit to build (default the branch head)");
+    expect(buildId).toContain("required for recheck");
   });
 });

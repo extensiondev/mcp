@@ -23,7 +23,7 @@ export const schema = {
       },
       buildId: {
         type: "string",
-        description: "Commit sha, never the build number; required for recheck.",
+        description: "Commit sha, never the build number. rebuild: the commit to build (default the branch head); required for recheck.",
       },
       buildEnv: {
         type: "string",

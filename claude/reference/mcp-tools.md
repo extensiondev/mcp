@@ -117,7 +117,7 @@ Run a build act on the platform: rebuild, recheck, configure the build settings 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `action` | "rebuild" \| "recheck" \| "configure" \| "create-channel" \| "configure-channel" \| "delete-channel" | yes |  | rebuild; recheck: rerun integrity; configure: buildSettings; create-, configure-channel; delete-channel: console only. |
-| `buildId` | string | no |  | Commit sha, never the build number; required for recheck. |
+| `buildId` | string | no |  | Commit sha, never the build number. rebuild: the commit to build (default the branch head); required for recheck. |
 | `buildEnv` | "staging" \| "production" | no |  | rebuild: staging (default, Preview) or production (Stable, stores). |
 | `buildSettings` | object | no |  | configure: per-browser changes, e.g. { firefox: { buildCommand: 'pnpm build' } }. |
 | `approvalId` | string | no |  | Approved approval id. |
