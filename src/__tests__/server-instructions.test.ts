@@ -74,6 +74,22 @@ describe("the initialize result carries instructions, the one field a search-fir
     expect(SERVER_INSTRUCTIONS.length).toBeLessThanOrEqual(3_150);
   });
 
+  it("946: routes a package or zip ask to the validator and extension_build with zip: true while the platform tools are off, inside the same budgets", () => {
+    const lines = SERVER_INSTRUCTIONS.split("\n");
+    const platform = serverInstructions({ features: ["local", "platform"], noShip: false });
+
+    expect(lines[2]).toBe(
+      "To package or zip an extension for a store: extension_manifest_validate, then extension_build with zip: true, never a hand-made zip of the source folder.",
+    );
+
+    expect(lines[1]).toContain("search this server first");
+    expect(SERVER_INSTRUCTIONS.length).toBeLessThanOrEqual(3_150);
+    expect(SERVER_INSTRUCTIONS).not.toContain("Every platform act");
+    expect(platform).not.toContain("To package or zip");
+    expect(platform).toContain("extension_build is for the person's own machine only: never offer its output, a zip or a dist folder, as a way to share, send, test with someone or submit;");
+    expect(platform.split("\n").slice(-2)[0]).toMatch(/^Every platform act \(a real submit, /);
+  });
+
   it("513: the retry doctrine names error.retry and its three values once", () => {
     const text = serverInstructions({ features: ["local", "platform"], noShip: false });
     const doctrine = text.split("\n").find((line) => line.startsWith("Try again is idempotent")) ?? "";
