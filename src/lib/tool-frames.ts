@@ -29,13 +29,33 @@ function isEnvelopeText(result: string): boolean {
  * client reads it (ledger 912). A frame that already says its hint is
  * returned as the same string.
  */
+/* @invariant A REFUSAL THE SERVER COMPOSES ITSELF IS NEVER FENCED. The
+ * untrusted fence marks text a page, an extension or a remote answer wrote;
+ * a refusal over the caller's login, project or arguments holds none, and
+ * on 2026-11-19 an E_NO_LOGIN_FOR_PROJECT sat inside the fence, costing
+ * tokens and teaching the agent to distrust the server's own refusals
+ * (ledger 954). Only a refusal with one of these codes goes out bare.
+ */
+const COMPOSED_REFUSAL_CODES = new Set([
+  "E_NO_LOGIN_FOR_PROJECT",
+  "E_PROJECT_AMBIGUOUS",
+  "E_AUTH_REQUIRED",
+  "E_AUTH_EXPIRED",
+  "E_INPUT_VALIDATION",
+  "E_TOOL_DISABLED",
+  "E_UNKNOWN_TOOL",
+  "E_SERVER_STALE",
+]);
+
 export function toolResultFrame(answer: string, untrusted = false): ToolFrame {
   const result = hintedAnswer(answer);
   let refused: boolean;
+  let composed = false;
 
   try {
     const parsed: unknown = JSON.parse(result);
     refused = isEnvelope(parsed) && parsed.ok === false;
+    composed = refused && COMPOSED_REFUSAL_CODES.has(String((parsed as Envelope).error?.code ?? ""));
   } catch {
     refused = false;
   }
@@ -44,7 +64,7 @@ export function toolResultFrame(answer: string, untrusted = false): ToolFrame {
     content: [
       {
         type: "text" as const,
-        text: untrusted ? fenceUntrusted(result) : result,
+        text: untrusted && !composed ? fenceUntrusted(result) : result,
       },
     ],
     ...(refused || (untrusted && !isEnvelopeText(result)) ? { isError: true } : {}),
