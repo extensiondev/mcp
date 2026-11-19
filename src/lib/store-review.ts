@@ -9,7 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { isGeckoFamily } from "./browser-family";
+import { isGeckoFamily, WEBKIT_FAMILY } from "./browser-family";
 import { isDevelopmentBuild } from "./build-type";
 import { ENTERPRISE_CHANNEL_SENTENCE, adminInstallOnlyOf } from "./firefox-enterprise";
 import { declaredIcon128, readPngSize } from "./store-listing-media";
@@ -204,7 +204,7 @@ export function reviewRisksReport(input: {
   if (broad.length) {
     risks.push({
       code: "BROAD_HOST_ACCESS",
-      message: `The extension asks for access to every website (${broad.join(", ")}). Chrome Web Store and AMO reviewers ask why, and the review takes longer.`,
+      message: `The extension asks for access to every website (${broad.join(", ")}). ${WEBKIT_FAMILY.has(input.browser) ? "App Store" : "Chrome Web Store and AMO"} reviewers ask why, and the review takes longer.`,
       fix: "List only the sites the extension works on, or use activeTab so access is granted per click; if every site is the point, say why in the listing.",
       permissions: broad,
     });
@@ -413,13 +413,17 @@ export function reviewerNotesContent(root: string): string {
   return `Under ${REVIEWER_NOTES_HEADING} write ${line} and say that the source is attached or where it is: the engine bundles the package's scripts, and Firefox reviewers rebuild bundled, minified or generated code from source.`;
 }
 
-export function storeMdLine(root: string, risks: ReviewRisk[]): string | null {
+const SAFARI_JUSTIFIED = `"${REVIEWER_NOTES_HEADING}" under "${STORE_SECTIONS.safari}" says why the extension needs ${JUSTIFIED}`;
+
+export function storeMdLine(root: string, risks: ReviewRisk[], browser?: string): string | null {
   if (!fs.existsSync(path.join(root, STORE_MD_FILENAME))) {
     return `No ${STORE_MD_FILENAME} is in ${root}. Write it there now from the manifest and the code, one section per store: ${STORE_SECTIONS.chrome} with a ${JUSTIFICATION_HEADING} bullet per declared permission, host permission and content script match, ${STORE_SECTIONS.firefox} with ${REVIEWER_NOTES_HEADING}, ${STORE_SECTIONS.edge} (extension_docs_search "${STORE_MD_FILENAME}" has the rest). ${reviewerNotesContent(root)} Leave only its data-use and privacy rows unanswered for the owner, and show them what the code stores and sends.`;
   }
 
   const lines = [
-    risks.length ? `${STORE_MD_FILENAME}: check that ${JUSTIFICATION_BULLETS} covers ${JUSTIFIED}.` : null,
+    risks.length
+      ? `${STORE_MD_FILENAME}: check that ${browser && WEBKIT_FAMILY.has(browser) ? SAFARI_JUSTIFIED : `${JUSTIFICATION_BULLETS} covers ${JUSTIFIED}`}.`
+      : null,
     notesLackBuildLine(root) ? `${STORE_MD_FILENAME}: "${REVIEWER_NOTES_HEADING}" under "${STORE_SECTIONS.firefox}" has no build line. ${reviewerNotesContent(root)}` : null,
   ].filter((line): line is string => line !== null);
 

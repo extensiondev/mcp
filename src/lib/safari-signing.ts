@@ -203,6 +203,17 @@ export function identityChangedHint(previous: SigningIdentity, identity: Signing
   );
 }
 
+export function safariRunStep(appPath: string, identity: SigningIdentity): string | null {
+  if (identity === "unknown") return null;
+
+  const enable =
+    identity === "ad-hoc"
+      ? "turn on Safari > Settings > Developer > Allow unsigned extensions (an ad-hoc signed app needs it, and Safari turns it off at every quit), then turn the extension on in Safari > Settings > Extensions"
+      : "then turn it on in Safari > Settings > Extensions";
+
+  return `To try it in Safari: open ${appPath} once so Safari registers the extension, ${enable}. Tell the person these clicks.`;
+}
+
 export async function safariSigningFrame(
   projectPath: string,
   browser: string,

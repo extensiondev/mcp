@@ -45,7 +45,7 @@ import {
 import { type Envelope, envelope, isEnvelope } from "../lib/envelope";
 import { platformListed } from "../lib/tool-policy";
 import { manifestDivergence } from "../lib/manifest-by-browser";
-import { droppedRuntimePages, isDroppedRuntimePageWarning } from "../lib/dropped-runtime-pages";
+import { droppedRuntimePages, engineNamesDroppedPage, isDroppedRuntimePageWarning } from "../lib/dropped-runtime-pages";
 import { specialFolderEntrypoints, specialFolderMissingNote, specialFolderSettings } from "../lib/special-folder-entries";
 import { engineBrowserName } from "../lib/browser-family";
 import { BUNDLE_ID_PATTERN, isSafariTarget } from "../lib/safari-dev-options";
@@ -59,7 +59,7 @@ import {
   safariBuildTeam,
   type SafariBuildArgs,
 } from "../lib/safari-build-options";
-import { safariSigningFrame } from "../lib/safari-signing";
+import { safariRunStep, safariSigningFrame } from "../lib/safari-signing";
 import { teamUnknownToXcodeRefusal } from "../lib/xcode-teams";
 import { isWasmPolicyLine } from "../lib/wasm-policy";
 import { reviewCoverageNotes, reviewDistReport, reviewRiskPointer, storeMdLine, wasmGrantLine } from "../lib/store-review";
@@ -1153,6 +1153,7 @@ export async function handler(args: {
         })
       : null;
 
+    const runStep = signingFrame?.signing.appPath ? safariRunStep(signingFrame.signing.appPath, signingFrame.signing.identity) : null;
     const stated = statedProjectRoot(args.projectPath);
 
     const answerPointsAtOutput =
@@ -1192,11 +1193,12 @@ export async function handler(args: {
           ? { buildWarningsTruncated }
           : {}),
         ...(divergence.length ? { productionDivergence: divergence } : {}),
-        ...(droppedPages.length ? { droppedRuntimePages: droppedPages } : {}),
+        ...(droppedPages.length ? { droppedRuntimePages: droppedPages.map(({ say: _say, ...page }) => page) } : {}),
         zip: args.zip ?? false,
         ...(zipPath ? { zipPath } : {}),
         ...(zipSourcePath ? { zipSourcePath } : {}),
         duration,
+        ...(runStep ? { nextSteps: [runStep] } : {}),
         ...(args.silent || !answerPointsAtOutput ? {} : { output: lastLines(out, 12) }),
       },
       warnings: [
@@ -1210,9 +1212,9 @@ export async function handler(args: {
             !(policyByRisk && isWasmPolicyLine(line)),
         ),
         ...droppedPages.map((page) => page.say),
-        ...shownBuildWarnings,
+        ...shownBuildWarnings.filter((line) => !engineNamesDroppedPage(line, droppedPages)),
         ...reviewRiskPointer(risks),
-        mode === "development" ? null : storeMdLine(path.dirname(storeMdPath(args.projectPath)), risks),
+        mode === "development" ? null : storeMdLine(path.dirname(storeMdPath(args.projectPath)), risks, browser),
         mode === "development" ? null : storeMdFoundNote(args.projectPath),
         mode === "development" ? null : wasmGrantLine(review),
         ...reviewCoverageNotes(review),

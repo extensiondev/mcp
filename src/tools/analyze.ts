@@ -371,7 +371,7 @@ export async function handler(args: {
     warnings: [
       stated?.note,
       ...(risks ? reviewRiskWarnings(risks) : []),
-      risks ? storeMdLine(path.dirname(storeMdPath(args.projectPath)), risks) : null,
+      risks ? storeMdLine(path.dirname(storeMdPath(args.projectPath)), risks, browser) : null,
       risks ? storeMdFoundNote(args.projectPath) : null,
       review ? wasmGrantLine(review) : null,
       ...(review ? reviewCoverageNotes(review) : []),

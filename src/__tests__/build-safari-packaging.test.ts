@@ -9,6 +9,12 @@ import { browserFromCliArgs, buildNarration, writeEngineDist } from "./fixtures/
 
 import type * as ExecModule from "../lib/exec";
 
+let codesignSays: string | null = null;
+
+vi.mock("../lib/codesign", () => ({
+  describeCodeSignature: async () => codesignSays,
+}));
+
 interface CliResponse {
   code: number;
   stdout: string;
@@ -142,6 +148,7 @@ const run = async (args: Parameters<typeof build.handler>[0]) =>
   JSON.parse(await build.handler(args));
 
 afterEach(() => {
+  codesignSays = null;
   cliCalls.length = 0;
   cliResponder = null;
   cliResponse = { code: 0, stdout: "", stderr: "" };
@@ -225,6 +232,29 @@ describe("extension_build drives the Safari web-extension conversion", () => {
     });
 
     expect((result.warnings ?? []).join(" ")).not.toContain("locked out");
+  });
+
+  it("972: an ad-hoc signed app's next step says to open it once and turn on Allow unsigned extensions", async () => {
+    const dir = project();
+    distFor(dir, "safari");
+    const appPath = path.join(dir, "Reading List.app");
+    fs.mkdirSync(appPath, { recursive: true });
+    codesignSays = "Executable=x\nSignature=adhoc\nTeamIdentifier=not set";
+    cliResponse = summariesOf({ browser: "safari", safari: { appName: "Reading List", bundleId: "com.acme.readinglist", appPath } });
+
+    const result = await run({ projectPath: dir, browser: "safari" });
+
+    expect(result.value.signing.identity).toBe("ad-hoc");
+    expect(result.value.nextSteps).toEqual([
+      `To try it in Safari: open ${appPath} once so Safari registers the extension, turn on Safari > Settings > Developer > Allow unsigned extensions (an ad-hoc signed app needs it, and Safari turns it off at every quit), then turn the extension on in Safari > Settings > Extensions. Tell the person these clicks.`,
+    ]);
+
+    codesignSays = "Executable=x\nTeamIdentifier=ABCDE12345";
+    const signed = await run({ projectPath: dir, browser: "safari" });
+
+    expect(signed.value.nextSteps).toEqual([
+      `To try it in Safari: open ${appPath} once so Safari registers the extension, then turn it on in Safari > Settings > Extensions. Tell the person these clicks.`,
+    ]);
   });
 
   it("picks the summary for the browser that was asked for", async () => {

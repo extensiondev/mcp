@@ -8,6 +8,7 @@ import type * as ExecModule from "../lib/exec";
 import type * as TemplatesCacheModule from "../lib/templates-cache";
 
 let onDist: ((distDir: string, browser: string) => void) | null = null;
+let engineWarnings: string[] = [];
 vi.mock("../lib/exec", async (importOriginal) => {
   const actual = await importOriginal<typeof ExecModule>();
 
@@ -19,7 +20,12 @@ vi.mock("../lib/exec", async (importOriginal) => {
       writeEngineDist(args[1]!, browser);
       onDist?.(path.join(args[1]!, "dist", browser), browser);
 
-      return answer;
+      if (!engineWarnings.length) return answer;
+
+      const frame = JSON.parse(answer.stdout);
+      frame.value.summaries[0].warnings = engineWarnings;
+
+      return { ...answer, stdout: `${JSON.stringify(frame)}\n` };
     },
   };
 });
@@ -87,6 +93,7 @@ function engineDropsTheSidebar(distDir: string, browser: string): void {
 
 afterEach(() => {
   onDist = null;
+  engineWarnings = [];
   for (const dir of tmpDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -115,6 +122,22 @@ describe("449: a page the Safari build drops while the background opens it at ru
     expect(lines[0]).toContain("src/background.ts:1 names it at runtime");
     expect(lines[0]).toContain("move the page to pages/sidebar.html at the project root");
     expect(lines[0]).toContain("or declare it under a manifest key the safari build keeps");
+  });
+
+  it("969: the dropped page is stated once, with the engine's own line for it and the value's copy left out", async () => {
+    const dir = project(PREFIXED_SIDEBAR);
+    onDist = engineDropsTheSidebar;
+    engineWarnings = [
+      "⚠ background/service_worker.js opens 'sidebar/index.html' via chrome.runtime.getURL(), but the safari build emitted no such page: side_panel.default_path was the only manifest key naming it, and Safari drops that key (Safari has no side panel surface).\n  │ NOT EMITTED sidebar/index.html\n  │ Safari answers \"can't find the file\" when the extension opens it.",
+      "An unrelated engine line.",
+    ];
+
+    const result = JSON.parse(await build.handler({ projectPath: dir, browser: "safari" }));
+    const said = JSON.stringify(result).split("can't find the file").length - 1;
+
+    expect(said).toBe(1);
+    expect(result.value.droppedRuntimePages[0].say).toBeUndefined();
+    expect(result.warnings).toContain("An unrelated engine line.");
   });
 
   it("the same project built for chromium keeps the page and answers no such warning", async () => {

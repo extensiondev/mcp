@@ -267,6 +267,27 @@ describe("919: storeMdLine says where the permission justifications go", () => {
   });
 });
 
+describe("971: a Safari build names App Store review and the section Safari reads", () => {
+  it("words the broad host access risk for App Store review, keeping Chrome and AMO for the others", () => {
+    manifest({ host_permissions: ["<all_urls>"] });
+
+    const safari = reviewDistReport(dist, "safari").risks.find((r) => r.code === "BROAD_HOST_ACCESS")!;
+    const chrome = reviewDistReport(dist, "chrome").risks.find((r) => r.code === "BROAD_HOST_ACCESS")!;
+
+    expect(safari.message).toContain("App Store reviewers ask why");
+    expect(safari.message).not.toMatch(/Chrome Web Store|AMO/);
+    expect(chrome.message).toContain("Chrome Web Store and AMO reviewers ask why");
+  });
+
+  it("points a STORE.md check at the Safari section's reviewer notes", () => {
+    write("STORE.md", "# Store metadata\n");
+
+    expect(storeMdLine(dist, [{ code: "BROAD_HOST_ACCESS", message: "m", fix: "f" }], "safari")).toBe(
+      'STORE.md: check that "### Reviewer notes" under "## Safari" says why the extension needs each permission, host permission and content script match the manifest declares.',
+    );
+  });
+});
+
 describe("949: Firefox reviewer notes with no build line are named, with the line to write", () => {
   const NOTES_WITHOUT_A_LINE = "# Store metadata\n\n## Firefox Add-ons\n\n### Reviewer notes\n\nThe content script runs on all URLs to read the selection.\n";
   const chain = { node: "24.22.3", packageManager: { name: "pnpm", version: "10.19.0" }, extensionJs: "4.1.41" };

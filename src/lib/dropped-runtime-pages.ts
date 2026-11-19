@@ -197,6 +197,12 @@ export function droppedRuntimePages(
     }));
 }
 
+export function engineNamesDroppedPage(line: unknown, pages: DroppedRuntimePage[]): boolean {
+  if (typeof line !== "string") return false;
+
+  return pages.some((page) => line.includes(`NOT EMITTED ${page.file}`) || line.includes(`opens '${page.file}'`));
+}
+
 export function isDroppedRuntimePageWarning(line: unknown): boolean {
   return typeof line === "string" && / is declared only under .* which the \S+ build does not keep, so /.test(line);
 }
