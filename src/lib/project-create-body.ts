@@ -31,6 +31,19 @@ export function readRootDirectory(value: unknown): { ok: true; rootDirectory: st
   return { ok: true, rootDirectory: rootDirectory === "." ? "" : rootDirectory };
 }
 
+export const REF_INVALID = "ref must be a branch, tag or full commit sha, with no spaces";
+
+export const REF_WITH_UPLOAD = "ref applies to a repo source only; an uploaded folder is built as it is, so leave ref out or name repo instead";
+
+export function readRef(value: unknown): { ok: true; ref: string } | { ok: false } {
+  if (value === undefined || value === null) return { ok: true, ref: "" };
+  if (typeof value !== "string") return { ok: false };
+
+  const ref = value.trim();
+
+  return /\s/.test(ref) || ref.startsWith("-") ? { ok: false } : { ok: true, ref };
+}
+
 export function rootDirectoryOf(value: unknown): string {
   const read = readRootDirectory(value);
 
@@ -42,6 +55,7 @@ export function buildCreateBody(args: {
   projectSlug: string;
   source: CreateBodySource;
   rootDirectory?: string;
+  ref?: string;
   displayName?: string;
   description?: string;
   installCommand?: string;
@@ -114,7 +128,7 @@ export function buildCreateBody(args: {
       firefox: browser("firefox"),
     },
     deployment: {
-      branch: "",
+      branch: source.kind === "github" ? String(args.ref || "").trim() : "",
       nodeVersion: "",
       runWhatsNew: false,
       runExtensionExecutables: false,

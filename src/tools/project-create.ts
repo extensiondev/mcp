@@ -30,7 +30,7 @@ import {
   type HeldCreateGrant,
 } from "../lib/held-create-grant-words";
 import { createProjectBatch, keptBatchArgs, type BatchCreateArgs, type BatchCreateLocal } from "../lib/project-create-batch";
-import { buildCreateBody, readRootDirectory, rootDirectoryOf, ROOT_DIRECTORY_INVALID, ROOT_DIRECTORY_WITH_UPLOAD, type CreateBodySource } from "../lib/project-create-body";
+import { buildCreateBody, readRef, readRootDirectory, REF_INVALID, REF_WITH_UPLOAD, rootDirectoryOf, ROOT_DIRECTORY_INVALID, ROOT_DIRECTORY_WITH_UPLOAD, type CreateBodySource } from "../lib/project-create-body";
 import {
   projectCreateUrl,
   SOURCE_UPLOAD_CONSUMED_CODE,
@@ -135,6 +135,10 @@ export const schema = {
         type: "string",
         description: "With repo: the folder inside it to build, e.g. 'examples/action'.",
       },
+      ref: {
+        type: "string",
+        description: "With repo: the branch, tag or full commit sha to build; default the repo's default branch.",
+      },
       installationId: {
         type: "string",
         description: "Omit; the platform finds it or answers a connect link.",
@@ -173,7 +177,7 @@ export const schema = {
       projects: {
         type: "array",
         items: { type: "object" },
-        description: `Instead of project and its source: 1 to ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} (max ${MAX_BATCH_PROJECTS}) { project, repo (and rootDirectory) or projectPath } of one workspace, one approval.`,
+        description: `Instead of project and its source: 1 to ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} (max ${MAX_BATCH_PROJECTS}) { project, repo (and rootDirectory, ref) or projectPath } of one workspace, one approval.`,
       },
       deviceCode: {
         type: "string",
@@ -328,7 +332,7 @@ async function pendingEnvelope(start: {
   verificationUri: string;
   verificationUriComplete?: string;
   expiresIn: number;
-}, pendingFor: { apiBase: string; project: string }, waitSeconds: unknown): Promise<string> {
+}, pendingFor: { apiBase: string; project: string; ref?: string }, waitSeconds: unknown): Promise<string> {
   const complete = String(start.verificationUriComplete || "").trim();
   const hasCompleteLink =
     complete.length > 0 && complete !== start.verificationUri;
@@ -341,9 +345,11 @@ async function pendingEnvelope(start: {
     expiresAt,
   });
 
+  const built = pendingFor.ref ? ` It builds ${pendingFor.ref} of the repo, so tell the owner which ref before they approve.` : "";
   const message = hasCompleteLink
     ? `Open ${complete} and approve creating the project (code ${start.userCode} is pre-filled). If the page asks for a code, enter ${start.userCode} at ${start.verificationUri}. ${deadlineSentence(expiresAt)}`
     : `Open ${start.verificationUri}, enter code ${start.userCode} and approve creating the project. ${deadlineSentence(expiresAt)}`;
+  const said = `${message}${built}`;
   const asked = deviceWait({ waitSeconds, fallbackMs: 0 });
 
   return envelope({
@@ -357,8 +363,9 @@ async function pendingEnvelope(start: {
       deviceCode: start.deviceCode,
       expiresAt,
       expiresInSeconds: start.expiresIn,
+      ...(pendingFor.ref ? { ref: pendingFor.ref } : {}),
     },
-    hint: message,
+    hint: said,
     ...(asked.waiting ? { warnings: [firstCallWaitWarning("extension_project_create", asked.bound)] } : {}),
   });
 }
@@ -367,6 +374,7 @@ export type ProjectCreateArgs = {
   project?: string;
   repo?: string;
   rootDirectory?: string;
+  ref?: string;
   projectPath?: string;
   projects?: unknown;
   installationId?: string;
@@ -470,6 +478,11 @@ export async function createProject(args: ProjectCreateArgs, local: ProjectCreat
 
   if (!root.ok) return fail("RootDirectoryInvalid", `${ROOT_DIRECTORY_INVALID}: no leading slash or drive and no '..' segment, such as 'examples/action'.`, "bad-request", "E_BAD_REQUEST");
   if (root.rootDirectory && !repo) return fail("RootDirectoryWithUpload", `${ROOT_DIRECTORY_WITH_UPLOAD}.`, "bad-request", "E_BAD_REQUEST");
+
+  const ref = readRef(args.ref);
+
+  if (!ref.ok) return fail("RefInvalid", `${REF_INVALID}, such as 'main', 'v1.2.0' or a 40-character sha.`, "bad-request", "E_BAD_REQUEST");
+  if (ref.ref && !repo) return fail("RefWithUpload", `${REF_WITH_UPLOAD}.`, "bad-request", "E_BAD_REQUEST");
 
   let source: CreateSource | null = repo ? { kind: "github", repo } : null;
 
@@ -575,7 +588,7 @@ export async function createProject(args: ProjectCreateArgs, local: ProjectCreat
     });
 
     if (!early.ok && early.reason === "pending") {
-      return pendingEnvelope(start, { apiBase, project }, args.waitSeconds);
+      return pendingEnvelope(start, { apiBase, project, ref: ref.ref }, args.waitSeconds);
     }
 
     return finishFromPoll(early, {
@@ -623,6 +636,7 @@ async function finishFromPoll(
     args: {
       repo?: string;
       rootDirectory?: string;
+      ref?: string;
       installationId?: string;
       displayName?: string;
       description?: string;
@@ -835,6 +849,7 @@ function replaceGate(ctx: { project: string; args: CreateArgs; source: CreateSou
 type CreateArgs = {
   repo?: string;
   rootDirectory?: string;
+  ref?: string;
   installationId?: string;
   displayName?: string;
   description?: string;
@@ -955,6 +970,7 @@ async function sendCreate(
     projectSlug: wantProject,
     source: bodySource,
     rootDirectory: rootDirectoryOf(ctx.args.rootDirectory),
+    ref: ctx.args.ref,
     displayName: ctx.args.displayName,
     description: ctx.args.description,
     installCommand: ctx.args.installCommand,
@@ -1265,7 +1281,7 @@ async function sendCreate(
       consoleUrl,
       source: ctx.source.kind,
       ...(ctx.source.kind === "github"
-        ? { sourceRepo: ctx.source.repo }
+        ? { sourceRepo: ctx.source.repo, ...(data.ref && typeof data.ref === "object" ? { ref: data.ref } : {}) }
         : { projectPath: ctx.source.root, uploaded: uploaded ?? { bytes: ctx.source.bytes, files: ctx.source.files }, leftOut: ctx.source.leftOut }),
       ...(reseeded ? { reseeded: true, files: reseedFiles } : {}),
       outcome: recordedOutcome(reseeded ? "reseeded" : data.replayed === true ? "created-earlier" : "created"),

@@ -334,6 +334,33 @@ describe("extension_project_create", () => {
     expect(fn).not.toHaveBeenCalled();
   });
 
+  it("958: sends a repo's ref as deployment.branch, names it in the pending answer and the created one, and refuses one beside an upload", async () => {
+    const ref = { requested: "v1.2.0", branch: "v1.2.0", sha: "603fc8a6b1e2d3c4f5a6b7c8d9e0f1a2b3c4d5e6" };
+    const { fn, calls } = createFetch({ token: [{ status: 200, body: grantBody }], create: { status: 200, body: { ...CREATED.body, ref } } });
+    vi.stubGlobal("fetch", fn);
+
+    const out = JSON.parse(await handler({ ...baseArgs, ref: " v1.2.0 ", deviceCode: "dev-code" }));
+    const sent = JSON.parse(String(calls.find((call) => call.url.endsWith("/api/cli/projects/create"))?.init?.body));
+
+    expect(sent.deployment.branch).toBe("v1.2.0");
+    expect(out.value.ref).toEqual(ref);
+
+    const pending = createFetch({ token: [{ status: 400, body: { error: "authorization_pending" } }] });
+    vi.stubGlobal("fetch", pending.fn);
+    const asked = JSON.parse(await handler({ ...baseArgs, ref: "release/next" }));
+
+    expect(asked.status).toBe("authorization-pending");
+    expect(asked.value.ref).toBe("release/next");
+    expect(asked.hint).toContain("It builds release/next of the repo");
+
+    fn.mockClear();
+    const beside = JSON.parse(await handler({ project: "acme/ghost-app", projectPath: extensionFolder("ext"), ref: "main" }));
+    const spaced = JSON.parse(await handler({ ...baseArgs, ref: "two words" }));
+
+    expect([beside.error.name, spaced.error.name]).toEqual(["RefWithUpload", "RefInvalid"]);
+    expect(schema.inputSchema.properties.ref.description).toContain("With repo");
+  });
+
   it("489: keeps the GitHub path's answer shape and names its source", async () => {
     const { fn } = createFetch({ token: [{ status: 200, body: grantBody }], create: CREATED });
     vi.stubGlobal("fetch", fn);

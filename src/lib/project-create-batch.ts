@@ -25,7 +25,7 @@ import {
   parseProjectBatch,
   sameProjectSet,
 } from "./project-batch";
-import { buildCreateBody, readRootDirectory, ROOT_DIRECTORY_INVALID, ROOT_DIRECTORY_WITH_UPLOAD, type CreateBodySource } from "./project-create-body";
+import { buildCreateBody, readRef, readRootDirectory, REF_INVALID, REF_WITH_UPLOAD, ROOT_DIRECTORY_INVALID, ROOT_DIRECTORY_WITH_UPLOAD, type CreateBodySource } from "./project-create-body";
 import { projectCreateUrl, uploadProjectSource } from "./project-source-upload";
 import { consoleBase, consoleProjectUrl } from "./registry";
 import { bearerFetch } from "./platform-fetch";
@@ -40,6 +40,7 @@ const ENTRY_KEYS = [
   "project",
   "repo",
   "rootDirectory",
+  "ref",
   "projectPath",
   "displayName",
   "description",
@@ -60,7 +61,7 @@ const ENTRY_STRING_KEYS = [
 
 const BROWSERS = ["chrome", "edge", "firefox"];
 
-const SINGLE_ONLY_KEYS = ["project", "repo", "rootDirectory", "displayName", "description"];
+const SINGLE_ONLY_KEYS = ["project", "repo", "rootDirectory", "ref", "displayName", "description"];
 
 export interface BatchCreateLocal {
   requestDeviceCode(args: { apiBase: string; path: string; project?: string; projects?: string[]; intent?: DeviceIntent }): Promise<DeviceCodeStart>;
@@ -102,6 +103,7 @@ interface BatchEntry {
   repoName: string;
   projectPath: string;
   rootDirectory: string;
+  gitRef: string;
   upload?: BatchUpload;
   displayName?: string;
   description?: string;
@@ -121,6 +123,7 @@ type Row =
       consoleUrl: string;
       firstBuild: { dispatched: boolean | null; reason?: string };
       expiresAt?: string | null;
+      ref?: unknown;
       tokenCode?: string;
       hint?: string;
     }
@@ -322,6 +325,11 @@ export function parseBatchCreateArgs(
       return { ok: false, message: `In the entry for '${ref}', ${ROOT_DIRECTORY_WITH_UPLOAD}.` };
     }
 
+    const gitRef = readRef(raw.ref);
+
+    if (!gitRef.ok) return { ok: false, message: `In the entry for '${ref}', ${REF_INVALID}, such as 'main', 'v1.2.0' or a 40-character sha.` };
+    if (gitRef.ref && projectPath) return { ok: false, message: `In the entry for '${ref}', ${REF_WITH_UPLOAD}.` };
+
     if (!projectPath && !isProjectRef(repo)) {
       return {
         ok: false,
@@ -370,6 +378,7 @@ export function parseBatchCreateArgs(
       repoName,
       projectPath,
       rootDirectory: root.rootDirectory,
+      gitRef: gitRef.ok ? gitRef.ref : "",
       displayName: raw.displayName as string | undefined,
       description: raw.description as string | undefined,
       installCommand: (raw.installCommand as string | undefined) ?? args.installCommand,
@@ -393,6 +402,7 @@ function pendingEnvelope(args: {
   userCode?: string;
   verificationUriComplete?: string;
   expiresAt: string | null;
+  gitRefs: Record<string, string>;
 }): string {
   const complete = String(args.verificationUriComplete || "").trim();
   const hasCompleteLink =
@@ -400,11 +410,13 @@ function pendingEnvelope(args: {
   const left = secondsLeft(args.expiresAt);
   const again = `then call extension_project_create again with this deviceCode${args.expiresAt ? ` before ${args.expiresAt.slice(11, 16)} UTC, when the code expires` : ""}; the list is kept here, so the other arguments can be left out`;
   const page = `The page lists all ${args.refs.length} projects this one approval creates and says this device is also signed in to each for 7 days`;
-  const hint = !args.userCode
+  const named = Object.entries(args.gitRefs);
+  const built = named.length ? ` It builds ${named.map(([project, ref]) => `${project} at ${ref}`).join(", ")}, so tell the owner before they approve.` : "";
+  const hint = `${!args.userCode
     ? `Still waiting for approval at ${args.verificationUri}. Approve there, ${again}.`
     : hasCompleteLink
       ? `Open ${complete} and approve creating the projects (code ${args.userCode} is pre-filled). ${page}; ${again}. If the page asks for a code, enter ${args.userCode} at ${args.verificationUri}.`
-      : `Open ${args.verificationUri}, enter code ${args.userCode} and approve creating the projects. ${page}; ${again}.`;
+      : `Open ${args.verificationUri}, enter code ${args.userCode} and approve creating the projects. ${page}; ${again}.`}${built}`;
 
   return envelope({
     ok: true,
@@ -420,6 +432,7 @@ function pendingEnvelope(args: {
       projects: args.refs,
       ...(args.expiresAt ? { expiresAt: args.expiresAt } : {}),
       ...(left !== null ? { expiresInSeconds: left } : {}),
+      ...(named.length ? { refs: args.gitRefs } : {}),
     },
     hint,
   });
@@ -554,6 +567,7 @@ async function createOne(local: BatchCreateLocal, session: Session, entry: Batch
       projectSlug: entry.slug,
       source: source.source,
       rootDirectory: entry.rootDirectory,
+      ref: entry.gitRef,
       displayName: entry.displayName,
       description: entry.description,
       installCommand: entry.installCommand,
@@ -737,6 +751,7 @@ async function createOne(local: BatchCreateLocal, session: Session, entry: Batch
         consoleUrl,
         firstBuild,
         expiresAt: expiresAt ? new Date(expiresAt * 1000).toISOString() : null,
+        ...(data.ref && typeof data.ref === "object" ? { ref: data.ref } : {}),
       },
     };
   }
@@ -1198,6 +1213,7 @@ export async function createProjectBatch(args: BatchCreateArgs, local: BatchCrea
         userCode: start?.userCode,
         verificationUriComplete: start?.verificationUriComplete,
         expiresAt: keptLists().get(listKey(apiBase, deviceCode))?.expiresAt ?? null,
+        gitRefs: Object.fromEntries(parsed.entries.filter((entry) => entry.gitRef).map((entry) => [entry.ref, entry.gitRef])),
       });
     }
 

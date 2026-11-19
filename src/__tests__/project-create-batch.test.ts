@@ -588,6 +588,26 @@ describe("extension_project_create with projects: one approval", () => {
   });
 });
 
+describe("958: extension_project_create with projects builds a repo entry at its ref", () => {
+  it("sends each entry's ref as deployment.branch, names the refs in the pending answer, and refuses one beside a folder", async () => {
+    const LISTED = [{ ...THREE[0], ref: "v2" }, THREE[1], { ...THREE[2], ref: "release/next" }];
+    harness({ token: [{ status: 400, body: { error: "authorization_pending" } }] });
+    const asked = await run({ projects: LISTED });
+
+    expect(asked.value.refs).toEqual({ "acme/alpha": "v2", "acme/gamma": "release/next" });
+    expect(asked.hint).toContain("acme/alpha at v2, acme/gamma at release/next");
+
+    const h = harness({ token: [grant(SLUGS)] });
+    await run({ projects: LISTED, deviceCode: "dev-code" });
+
+    expect(h.to("/api/cli/projects/create").map((call) => call.body.deployment.branch)).toEqual(["v2", "", "release/next"]);
+
+    const beside = await run({ projects: [{ project: "acme/alpha", projectPath: "/tmp/x", ref: "main" }] });
+
+    expect(beside.error.message).toContain("ref applies to a repo source only");
+  });
+});
+
 describe("952: extension_project_create with projects takes folders under one approval", () => {
   const folder = (name: string, manifest = true): string => {
     const dir = path.join(tmp, "src", name);
