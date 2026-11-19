@@ -342,14 +342,14 @@ describe("the forwarder", () => {
     expect(lane()).toEqual([]);
   });
 
-  it("956: runs a create resume here, outside the forward session, when this machine holds its grant or ran its start, and never asks the lane", async () => {
+  it("956: runs a create resume as its start ran, outside the forward session or inside it, and never asks the lane", async () => {
     const { seen } = stubLane([]);
     const sessions: unknown[] = [];
 
     const here = async (args: Record<string, unknown>) => {
-      sessions.push(forwardSession());
+      sessions.push(forwardSession()?.login ?? null);
 
-      return envelopeOf({ ok: true, command: "extension_project_create", status: "authorization-pending", value: { deviceCode: String(args.deviceCode || "code-started-here") } });
+      return envelopeOf({ ok: true, command: "extension_project_create", status: "authorization-pending", value: { deviceCode: String(args.deviceCode || (forwardSession() ? "code-started-in-session" : "code-started-here")) } });
     };
 
     const signedOut = { ...FORWARDING, resolveLogin: () => ({ token: "", ref: null }) };
@@ -360,7 +360,10 @@ describe("the forwarder", () => {
     await forwardCall("extension_project_create", { project: "acme/new", repo: "acme/new" }, here, signedOut);
     await forwardCall("extension_project_create", { project: "acme/new", repo: "acme/new", deviceCode: "code-started-here" }, here, FORWARDING);
 
-    expect(sessions).toEqual([null, null, null]);
+    await forwardCall("extension_project_create", batch, here, FORWARDING);
+    await forwardCall("extension_project_create", { deviceCode: "code-started-in-session" }, here, FORWARDING);
+
+    expect(sessions).toEqual([null, null, null, "device-login", "device-login"]);
     expect(seen).toEqual([]);
   });
 

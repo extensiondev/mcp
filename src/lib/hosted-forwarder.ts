@@ -158,30 +158,35 @@ export const FORWARDED_TOOLS: Readonly<Record<string, ForwardRule>> = Object.fre
   extension_submit_check: { reads: submitReads, ...SUBMIT_RULE },
 });
 
-/* @invariant A DEVICE FLOW RESUMES WHERE IT STARTED. A create started with
- * no login runs in this process and keeps its grant, its rows and its batch
- * in this machine's files and memory, so every call that carries its
- * deviceCode runs here too, outside the forward session, even once the
- * logins it minted are stored. Until 2026-11-19 the second resume of a
- * batch was sent to the lane, which held none of it and refused the batch
- * by an older copy's rules, so an approved grant created 3 of 7 (ledger 956).
+/* @invariant A DEVICE FLOW RESUMES WHERE IT STARTED. Every create starts
+ * in this process: with no login its grant, rows and list stay in this
+ * machine's files and memory, and with a login they go to www's forward
+ * state. Every later call that carries its deviceCode runs here the same
+ * way, outside the forward session or inside it, and is never sent to the
+ * lane, which holds none of it. Until 2026-11-19 a batch started signed out
+ * sent its second resume to the lane once the logins it minted were stored,
+ * and the lane refused the list by an older copy's rules, so an approved
+ * grant created 3 of 7 (ledger 956).
  */
-const startedHere = new Set<string>();
+type StartedIn = "bare" | "session";
+
+const startedHere = new Map<string, StartedIn>();
 
 function deviceKey(api: string, deviceCode: string): string {
   return `${api}\n${deviceCode}`;
 }
 
-function heldHere(api: string, args: Args): boolean {
+function resumedIn(api: string, args: Args): StartedIn | null {
   const deviceCode = text(args.deviceCode);
+  if (!deviceCode) return null;
 
-  return Boolean(deviceCode) && (startedHere.has(deviceKey(api, deviceCode)) || loadHeldBatch(api, deviceCode) !== null);
+  return startedHere.get(deviceKey(api, deviceCode)) ?? (loadHeldBatch(api, deviceCode) ? "bare" : null);
 }
 
-function rememberStartedHere(api: string, answer: string): string {
+function rememberStart(api: string, args: Args, where: StartedIn, answer: string): string {
   const value = readAnswer(answer)?.value;
   const deviceCode = value && typeof value === "object" ? text((value as Args).deviceCode) : "";
-  if (deviceCode) startedHere.add(deviceKey(api, deviceCode));
+  if (deviceCode && !text(args.deviceCode)) startedHere.set(deviceKey(api, deviceCode), where);
 
   return answer;
 }
@@ -507,21 +512,23 @@ export async function forwardCall(command: string, args: Args, local: (args: Arg
 
   if (!checked.ok) return here ? local(args) : refusal(command, "unavailable", "E_BAD_HOST_URL", checked.message, undefined, { hosted: true });
 
-  if (rule.resumesWhereStarted && heldHere(checked.base, args)) return local(args);
+  const resumed = rule.resumesWhereStarted ? resumedIn(checked.base, args) : null;
+  if (resumed === "bare") return local(args);
 
+  const startsHere = here || resumed === "session";
   const resource = forwardUrlFor(checked.base, deps.env);
   const login = (deps.resolveLogin ?? resolveCredential)({ project: text(args.project) || undefined, api: named });
 
   if (!login.token) {
-    if (!here && !startsSignedOut(rule, args, login)) return signedOutRefusal(command, args, login, named);
+    if (!startsHere && !startsSignedOut(rule, args, login)) return signedOutRefusal(command, args, login, named);
 
-    return rule.resumesWhereStarted ? rememberStartedHere(checked.base, await local(args)) : local(args);
+    return rule.resumesWhereStarted ? rememberStart(checked.base, args, "bare", await local(args)) : local(args);
   }
 
-  if (!tool) return here ? local(args) : askOnlyRefusal(command);
+  if (!tool) return startsHere ? local(args) : askOnlyRefusal(command);
 
   if (!resource) {
-    if (here) return local(args);
+    if (startsHere) return local(args);
 
     return refusal(
       command,
@@ -534,7 +541,8 @@ export async function forwardCall(command: string, args: Args, local: (args: Arg
   }
 
   const session: ForwardSession = { api: checked.base, login: login.token, project: refOf(login.ref), resource, ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}) };
-  const answer = here ? await withForwardSession(session, () => local(args)) : await forwardedAnswer({ command, tool, rule, args, session }, local, deps);
+  const ranHere = startsHere ? await withForwardSession(session, () => local(args)) : null;
+  const answer = ranHere === null ? await forwardedAnswer({ command, tool, rule, args, session }, local, deps) : rule.resumesWhereStarted ? rememberStart(checked.base, args, "session", ranHere) : ranHere;
   const answered = readAnswer(answer);
   const closed = CLOSED_STATUSES.includes(text(answered?.status));
   if (!answered || (!closed && !(command === "extension_auth" && actionOf(args, "status") === "status"))) return answer;

@@ -52,6 +52,7 @@ export interface HeldBatch<Row> {
   rows: Row[];
   creatingSince?: number;
   server?: string;
+  list?: Record<string, unknown>;
 }
 
 export interface PendingCreate {

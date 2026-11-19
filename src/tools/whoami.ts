@@ -149,7 +149,7 @@ function notSignedIn(local: AuthLocal, project: string, target: string, now: num
     ok: true,
     command: "extension_auth",
     status: "not-signed-in",
-    value: { project, server: target, logins },
+    value: { project, api: target, logins },
     hint: `No stored login for ${project} on ${target}, so there is nothing to report or verify for it. Run extension_auth (action: login, project: "${project}") to sign in to it${onServer.length ? `; the logins this machine holds for ${target} are ${onServer.map((login) => login.project).join(", ")}, listed under logins` : ""}.`,
   });
 }
@@ -186,7 +186,7 @@ export async function readIdentityWith(local: AuthLocal, deps?: {
       ok: true,
       command: "extension_auth",
       status: "logged-out",
-      value: { server: target, logins: elsewhere.logins },
+      value: { api: target, logins: elsewhere.logins },
       hint: elsewhere.note,
     });
   }
@@ -330,7 +330,7 @@ export async function readIdentityWith(local: AuthLocal, deps?: {
         : null,
       expiresInSeconds: creds.expiresAt ? creds.expiresAt - now : null,
       expired,
-      server: server.value,
+      tokenCheck: server.value,
       ...(wanted ? {} : { logins }),
     },
     hint: message,

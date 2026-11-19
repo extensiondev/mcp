@@ -93,7 +93,7 @@ describe("extension_auth status asks the server who the token is", () => {
       }),
     );
 
-    expect(result.value.server.live).toBe(false);
+    expect(result.value.tokenCheck.live).toBe(false);
     expect(JSON.stringify(result)).not.toMatch(/is live there/);
     expect(JSON.stringify(result)).toMatch(/does not report it live/);
     expect(result.warnings.join("\n")).toMatch(/resolves this token to acme\/other-widget, not to the acme\/widget/);
@@ -117,7 +117,7 @@ describe("extension_auth status asks the server who the token is", () => {
     }
   });
 
-  it("reports the server's confirmation beside the local claim", async () => {
+  it("960: reports the server's confirmation beside the local claim, under its own key", async () => {
     if (process.platform === "win32") return;
 
     writeCredentials(sample());
@@ -129,12 +129,14 @@ describe("extension_auth status asks the server who the token is", () => {
     );
 
     expect(result.status).toBe("logged-in");
-    expect(result.value.server).toEqual({
+    expect(result.value.tokenCheck).toEqual({
       verdict: "confirmed",
       api: "https://www.extension.dev",
       login: "acme/widget",
       live: true,
     });
+
+    expect(result.value, "960: value.server is the build stamp on every tool, never the token verdict").not.toHaveProperty("server");
 
     expect(result.hint).toContain("confirms this token");
     expect(result.hint).toContain("acme/widget");
@@ -150,7 +152,7 @@ describe("extension_auth status asks the server who the token is", () => {
     );
 
     expect(result.status).toBe("refused-by-server");
-    expect(result.value.server.verdict).toBe("refused");
+    expect(result.value.tokenCheck.verdict).toBe("refused");
     expect(result.hint).toContain("refused this credential");
     expect(result.hint).toContain("only what the local file claims");
     expect(result.hint).toContain("action: login");
@@ -164,8 +166,8 @@ describe("extension_auth status asks the server who the token is", () => {
     const result = JSON.parse(await readIdentity({ fetchImpl: fetchFailing }));
 
     expect(result.status).toBe("logged-in");
-    expect(result.value.server.verdict).toBe("unavailable");
-    expect(result.value.server.detail).toContain("ENOTFOUND");
+    expect(result.value.tokenCheck.verdict).toBe("unavailable");
+    expect(result.value.tokenCheck.detail).toContain("ENOTFOUND");
     expect(result.hint).toContain("not server-confirmed");
     expect(
       result.warnings.some((w: string) => w.includes("not server-confirmed")),
@@ -182,8 +184,8 @@ describe("extension_auth status asks the server who the token is", () => {
     );
 
     expect(result.status).toBe("logged-in");
-    expect(result.value.server.verdict).toBe("unavailable");
-    expect(result.value.server.detail).toContain("404");
+    expect(result.value.tokenCheck.verdict).toBe("unavailable");
+    expect(result.value.tokenCheck.detail).toContain("404");
     expect(result.hint).toContain("not server-confirmed");
   });
 
@@ -205,7 +207,7 @@ describe("extension_auth status asks the server who the token is", () => {
     const production = JSON.parse(await readIdentity({ fetchImpl: fetchSpy }));
 
     expect(seen).toEqual(["http://localhost:3100/api/cli/whoami"]);
-    expect(local.value.server.api).toBe("http://localhost:3100");
+    expect(local.value.tokenCheck.api).toBe("http://localhost:3100");
     expect(production.status).toBe("logged-out");
   });
 
@@ -223,7 +225,7 @@ describe("extension_auth status asks the server who the token is", () => {
     );
 
     expect(result.status).toBe("expired");
-    expect(result.value.server.verdict).toBe("not-asked");
+    expect(result.value.tokenCheck.verdict).toBe("not-asked");
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
@@ -301,7 +303,7 @@ describe("askServerIdentity sends the bearer and reads only real verdicts", () =
       );
 
       expect(result.status).toBe("logged-in");
-      expect(result.value.server.verdict).toBe("confirmed");
+      expect(result.value.tokenCheck.verdict).toBe("confirmed");
       expect(result.value.logins).toEqual([expect.objectContaining({ project: "acme/widget", active: true })]);
     } finally {
       vi.restoreAllMocks();

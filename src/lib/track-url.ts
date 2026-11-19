@@ -445,7 +445,6 @@ export function attachTrack(command: string, args: Row, result: string): string 
 
   const hint = typeof frame.hint === "string" ? frame.hint.trim() : "";
   const deviceLink = String(frame.status) === "authorization-pending" && [text(value.verificationUriComplete), text(value.verificationUri)].includes(fields.trackUrl);
-  const shown: Partial<TrackFields> = deviceLink ? { ...(fields.checkUrl ? { checkUrl: fields.checkUrl } : {}) } : fields;
   const links = Array.isArray(value.links) && !fields.checkUrl && !value.links.some((row) => isRow(row) && row.url === fields.trackUrl)
     ? { links: [{ kind: "track", url: fields.trackUrl, audience: "workspace members", expiresAt: null, made: false }, ...value.links] }
     : {};
@@ -454,7 +453,7 @@ export function attachTrack(command: string, args: Row, result: string): string 
     ok: frame.ok,
     command: frame.command,
     status: frame.status,
-    value: { ...value, ...shown, ...links },
+    value: { ...value, ...fields, ...links },
     error: frame.error ?? undefined,
     warnings: frame.warnings,
     ...(frame.truncated !== undefined ? { truncated: frame.truncated } : {}),

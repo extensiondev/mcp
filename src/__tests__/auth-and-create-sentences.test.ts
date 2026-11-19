@@ -9,7 +9,7 @@ import { pollDeviceGrant } from "../lib/device-flow";
 
 describe("the auth and create tools describe what the platform does", () => {
   it("auth status names the statuses it emits, and create names who approves", () => {
-    expect(authSchema.description).toMatch(/value\.server\.verdict is confirmed, refused or unavailable/);
+    expect(authSchema.description).toMatch(/value\.tokenCheck\.verdict is confirmed, refused or unavailable/);
     expect(createSchema.description).toMatch(/a signed-in workspace member approves/);
   });
 

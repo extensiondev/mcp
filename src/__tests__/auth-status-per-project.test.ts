@@ -90,7 +90,7 @@ describe("extension_auth status honors project like every token-scoped tool", ()
     expect(out.value.projectId).toBe(LEON_ID);
     expect(out.value.apiRecordedAtLogin).toBe(API);
     expect(out.value.expiresAt).toBe(new Date(LEON_EXPIRES * 1000).toISOString());
-    expect(out.value.server).toEqual({ verdict: "confirmed", api: API, login: `${WORKSPACE}/leon`, live: true });
+    expect(out.value.tokenCheck).toEqual({ verdict: "confirmed", api: API, login: `${WORKSPACE}/leon`, live: true });
     expect(out.value.logins).toBeUndefined();
     expect(out.hint).toContain(`project: "${WORKSPACE}/leon"`);
     expect(out.warnings.join(" ")).not.toContain("signed in later");
@@ -111,7 +111,7 @@ describe("extension_auth status honors project like every token-scoped tool", ()
     expect(out.value.projectSlug).toBe("rebeccat");
     expect(out.value.projectId).toBe(REBECCAT_ID);
     expect(out.value.expiresAt).toBe(new Date(REBECCAT_EXPIRES * 1000).toISOString());
-    expect(out.value.server.login).toBe(`${WORKSPACE}/rebeccat`);
+    expect(out.value.tokenCheck.login).toBe(`${WORKSPACE}/rebeccat`);
     expect(platform.sent("GET", "/api/cli/whoami").map((call) => call.auth)).toEqual([`Bearer ${REBECCAT}`]);
     expect(out.value.logins.map((login: { project: string; server: string; active: boolean }) => [login.project, login.server, login.active])).toEqual([
       [`${WORKSPACE}/pii-shield`, "https://www.extension.dev", false],
@@ -149,7 +149,7 @@ describe("extension_auth status honors project like every token-scoped tool", ()
     expect(out.value.kind).toBe("member");
     expect(out.value.projectSlug).toBeNull();
     expect(out.value.projects).toEqual([`${WORKSPACE}/visionario`, `${WORKSPACE}/pii-shield`]);
-    expect(out.value.server).toEqual({ verdict: "confirmed", api: API, login: `${WORKSPACE}/visionario`, live: true });
+    expect(out.value.tokenCheck).toEqual({ verdict: "confirmed", api: API, login: `${WORKSPACE}/visionario`, live: true });
     expect(out.value.logins).toEqual([
       { project: `${WORKSPACE}/leon`, server: API, active: false, expiresAt: new Date(LEON_EXPIRES * 1000).toISOString(), expired: false },
       {
@@ -171,7 +171,7 @@ describe("extension_auth status honors project like every token-scoped tool", ()
     expect(named.status).toBe("logged-in");
     expect(named.value.projectSlug).toBe("pii-shield");
     expect(named.value.kind).toBe("member");
-    expect(named.value.server.login).toBe(`${WORKSPACE}/pii-shield`);
+    expect(named.value.tokenCheck.login).toBe(`${WORKSPACE}/pii-shield`);
     expect(platform.sent("GET", "/api/cli/whoami").map((call) => [call.auth, call.project])).toEqual([
       [`Bearer ${MEMBER}`, `${WORKSPACE}/visionario`],
       [`Bearer ${MEMBER}`, `${WORKSPACE}/pii-shield`],
@@ -192,7 +192,7 @@ describe("extension_auth status honors project like every token-scoped tool", ()
     expect(out.ok).toBe(true);
     expect(out.status).toBe("not-signed-in");
     expect(out.value.project).toBe(`${WORKSPACE}/nowhere`);
-    expect(out.value.server).toBe(API);
+    expect(out.value.api).toBe(API);
     expect(out.value.projectSlug).toBeUndefined();
     expect(out.value.logins.map((login: { project: string }) => login.project)).toEqual([`${WORKSPACE}/pii-shield`, `${WORKSPACE}/leon`, `${WORKSPACE}/rebeccat`]);
     expect(out.hint).toContain(`extension_auth (action: login, project: "${WORKSPACE}/nowhere")`);
@@ -212,7 +212,7 @@ describe("extension_auth status honors project like every token-scoped tool", ()
 
     expect(out.status).toBe("refused-by-server");
     expect(out.value.projectSlug).toBe("leon");
-    expect(out.value.server.verdict).toBe("refused");
+    expect(out.value.tokenCheck.verdict).toBe("refused");
     expect(platform.sent("GET", "/api/cli/whoami").map((call) => call.auth)).toEqual([`Bearer ${LEON}`]);
     carriesNoToken(out);
   });

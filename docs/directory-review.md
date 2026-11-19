@@ -184,7 +184,7 @@ account holds. The tests in `src/__tests__/docs-match-the-code.test.ts` pin the 
 - Prompt: "Which extension.dev account and project is this connection signed in as?"
 - Expected tools: `extension_auth` (`action: "status"`).
 - Expected answer: `ok: true`, `value.workspaceSlug` and `value.projectSlug` naming the reviewer's
-  workspace and project, `value.server.verdict: "confirmed"` from the platform's whoami read,
+  workspace and project, `value.tokenCheck.verdict: "confirmed"` from the platform's whoami read,
   `value.expiresAt` for the connection's token, and a warning that reads "This connection renews
   on its own. Revoke it under the project's Settings, Connected apps:
   https://console.extension.dev/<workspace>/<project>/settings/connected-apps". The answer never

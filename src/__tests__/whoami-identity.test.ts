@@ -118,7 +118,7 @@ describe("whoami reports the stored token identity, not the cwd", () => {
       const result = JSON.parse(await auth.handler({}));
 
       expect(result.status).toBe("logged-out");
-      expect(result.value.server).toBe("https://www.extension.dev");
+      expect(result.value.api).toBe("https://www.extension.dev");
       expect(result.value.logins).toEqual([
         { project: "acme/widget", server: "http://localhost:3100" },
       ]);

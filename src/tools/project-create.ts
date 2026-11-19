@@ -29,7 +29,7 @@ import {
   heldUntilSentence,
   type HeldCreateGrant,
 } from "../lib/held-create-grant-words";
-import { createProjectBatch, type BatchCreateLocal } from "../lib/project-create-batch";
+import { createProjectBatch, keptBatchArgs, type BatchCreateArgs, type BatchCreateLocal } from "../lib/project-create-batch";
 import { buildCreateBody, readRootDirectory, rootDirectoryOf, ROOT_DIRECTORY_INVALID, ROOT_DIRECTORY_WITH_UPLOAD, type CreateBodySource } from "../lib/project-create-body";
 import {
   projectCreateUrl,
@@ -157,7 +157,7 @@ export const schema = {
       },
       outputDirectory: {
         type: "string",
-        default: "dist/chrome",
+        default: "dist/<browser>",
         description: "Build output; `<browser>` substituted.",
       },
       browsers: {
@@ -384,13 +384,31 @@ export type ProjectCreateArgs = {
   api?: string;
 };
 
+async function resumedBatch(args: ProjectCreateArgs): Promise<BatchCreateArgs | string | null> {
+  const deviceCode = String(args.deviceCode || "").trim();
+  if (!deviceCode || String(args.project || "").trim()) return null;
+
+  return (
+    (await keptBatchArgs(args)) ??
+    fail(
+      "BadRequest",
+      "This server keeps no list for this deviceCode: it restarted before the approval, or the code was started elsewhere. Call again with this deviceCode and the arguments of the first call (projects, or project and its source).",
+      "bad-request",
+      "E_BAD_REQUEST",
+    )
+  );
+}
+
 export async function handler(args: ProjectCreateArgs): Promise<string> {
   return createProject(args, PROJECT_CREATE_LOCAL);
 }
 
 export async function createProject(args: ProjectCreateArgs, local: ProjectCreateLocal): Promise<string> {
-  if (args.projects !== undefined && args.projects !== null) {
-    return createProjectBatch(args, local, (projectPath) => {
+  const batchArgs = args.projects !== undefined && args.projects !== null ? args : await resumedBatch(args);
+  if (typeof batchArgs === "string") return batchArgs;
+
+  if (batchArgs) {
+    return createProjectBatch(batchArgs, local, (projectPath) => {
       const prepared = prepareUpload(local.uploadRoot(projectPath), false, local);
 
       return prepared.ok ? { ok: true, upload: prepared.source } : prepared;

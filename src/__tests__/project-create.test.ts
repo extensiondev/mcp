@@ -752,12 +752,14 @@ describe("extension_project_create", () => {
     expect(schema.inputSchema.properties.buildCommand).not.toHaveProperty("default");
   });
 
-  it("enables every named browser with its own Extension.js output", async () => {
+  it("960: enables every named browser with its own Extension.js output, the dist/<browser> its schema names", async () => {
     const body = await createBodyFor({
       browsers: ["chrome", "edge", "firefox"],
       installCommand: "pnpm install",
       buildCommand: "pnpm build",
     });
+
+    expect(schema.inputSchema.properties.outputDirectory.default).toBe("dist/<browser>");
 
     for (const name of ["chrome", "edge", "firefox"]) {
       expect(body.build[name]).toEqual({

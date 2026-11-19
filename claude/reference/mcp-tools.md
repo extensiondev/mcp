@@ -48,7 +48,7 @@ Run a test stage on an extension_dev or extension_start session: pass, fail, not
 
 ## extension_auth
 
-Sign in to an existing extension.dev project (a code for extension.dev/device, then deviceCode and waitSeconds), list stored logins, or clear them. Identity is the stored token, not the working directory; value.server.verdict is confirmed, refused or unavailable. Tokens live 7 days (CI: Access tokens).
+Sign in to an existing extension.dev project (a code for extension.dev/device, then deviceCode and waitSeconds), list stored logins, or clear them. Identity is the stored token, not the working directory; value.tokenCheck.verdict is confirmed, refused or unavailable. Tokens live 7 days (CI: Access tokens).
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -379,7 +379,7 @@ Create an extension.dev project from a folder (projectPath, uploaded, no push; a
 | `description` | string | no |  | Short description. |
 | `installCommand` | string | no |  | Install command; left out, the platform reads it from the project. |
 | `buildCommand` | string | no |  | Run as it is per browser (does not add --browser); `<browser>` substituted. Left out, the platform reads it from the project. |
-| `outputDirectory` | string | no | `"dist/chrome"` | Build output; `<browser>` substituted. |
+| `outputDirectory` | string | no | `"dist/<browser>"` | Build output; `<browser>` substituted. |
 | `browsers` | array of "chrome" \| "edge" \| "firefox" | no | `["chrome"]` | Browsers to build. |
 | `outputDirectories` | object | no |  | Per-browser outputDirectory overrides. |
 | `projects` | array of object | no |  | Instead of project and its source: 1 to 10 (max 20) { project, repo (and rootDirectory) or projectPath } of one workspace, one approval. |

@@ -104,7 +104,7 @@ describe("extension_auth login for a project the target server may not hold", ()
     expect(calls.some((href) => href.startsWith(`${PROD}/api/projects/resolve?workspace=cezaraugusto&projectSlug=pii-shield`))).toBe(true);
     expect(out.status).toBe("authorization-pending");
     expect(out.value.projectCheck).toEqual({
-      server: PROD,
+      api: PROD,
       publicProject: false,
       loginsForThisSlugElsewhere: [LOCAL],
     });
@@ -197,7 +197,7 @@ describe("extension_auth login for a project the target server may not hold", ()
 
     const out = JSON.parse(await loginToProject({ project: PROJECT, api: PROD }));
 
-    expect(out.value.projectCheck).toMatchObject({ server: PROD, publicProject: false });
+    expect(out.value.projectCheck).toMatchObject({ api: PROD, publicProject: false });
     expect(out.warnings[0]).toContain(`not a public project on ${PROD}`);
   });
 
@@ -231,7 +231,7 @@ describe("extension_auth login for a project the target server may not hold", ()
     expect(out.status).toBe("approval-refused");
     expect(out.error.code).toBe("E_AUTH_DENIED");
     expect(out.error.message).toContain("was not found");
-    expect(out.value).toMatchObject({ server: PROD, platformCode: "PROJECT_NOT_FOUND", reason: "project-not-found" });
+    expect(out.value).toMatchObject({ api: PROD, platformCode: "PROJECT_NOT_FOUND", reason: "project-not-found" });
     expect(out.hint).toContain(`extension_project_create with project: '${PROJECT}' and api: '${PROD}'`);
   });
 
@@ -251,7 +251,7 @@ describe("extension_auth login for a project the target server may not hold", ()
 
     expect(out.ok).toBe(false);
     expect(out.status).toBe("project-not-found");
-    expect(out.value.server).toBe(PROD);
+    expect(out.value.api).toBe(PROD);
   });
 
   it("keeps a plain denial as login-denied", async () => {

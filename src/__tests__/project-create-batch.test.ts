@@ -403,9 +403,12 @@ describe("extension_project_create with projects: one approval", () => {
       verificationUriComplete: "https://extension.dev/device?code=ABCD-1234",
       deviceCode: "dev-code",
       projects: ["acme/alpha", "acme/beta", "acme/gamma"],
+      expiresAt: new Date(clock + 900_000).toISOString(),
+      expiresInSeconds: 900,
     });
 
     expect(out.hint).toContain("lists all 3 projects");
+    expect(out.hint).toContain("the other arguments can be left out");
     expect(out.hint).toContain("7 days");
 
     const codes = h.to("/api/cli/device/code");
@@ -1371,6 +1374,30 @@ describe("extension_project_create with projects: the grant survives a server re
     expect(h.to("/api/cli/projects/create").every((call) => call.headers.authorization === `Bearer ${GRANT}`)).toBe(true);
 
     for (const out of [first, second, third]) expect(JSON.stringify(out)).not.toContain(GRANT);
+  });
+
+  it("960: resumes with the deviceCode alone, from this process and after a restart, and refuses one it keeps no list for", async () => {
+    const h = harness({ token: [{ status: 400, body: { error: "authorization_pending" } }, grant(SLUGS)], createTakesMs: 21_000 });
+    const asked = await run({ projects: THREE, buildCommand: "pnpm build" });
+    const first = await run({ deviceCode: asked.value.deviceCode });
+
+    await restart();
+    const second = await run({ deviceCode: "dev-code" });
+    await restart();
+    const third = await run({ deviceCode: "dev-code" });
+
+    expect([asked.status, first.status, second.status, third.status]).toEqual(["authorization-pending", "creating", "creating", "created"]);
+    expect(h.to("/api/cli/projects/create").map((call) => [call.body.project, call.body.build.chrome.buildCommand])).toEqual([
+      ["acme/alpha", "pnpm build"],
+      ["acme/beta", "pnpm build"],
+      ["acme/gamma", "pnpm build"],
+    ]);
+
+    await restart();
+    const unknown = await run({ deviceCode: "never-started-here" });
+
+    expect(unknown).toMatchObject({ ok: false, status: "bad-request", error: { code: "E_BAD_REQUEST" } });
+    expect(unknown.error.message).toContain("keeps no list for this deviceCode");
   });
 
   it("holds the grant 0600 beside the login store, keyed so the device code is not written, and deletes it when the list is done", async () => {

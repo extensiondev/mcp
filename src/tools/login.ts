@@ -190,7 +190,7 @@ function movedProjectRefusal(
     {
       value: {
         project: ctx.project,
-        server: ctx.apiBase,
+        api: ctx.apiBase,
         platformCode: "PROJECT_MOVED",
         projectId: String(body.projectId ?? "") || null,
         movedTo: now,
@@ -227,7 +227,7 @@ function missingProjectRefusal(
     {
       value: {
         project: ctx.project,
-        server: ctx.apiBase,
+        api: ctx.apiBase,
         platformCode: code,
         reason: "project-not-found",
         loginsForThisSlugElsewhere: elsewhere,
@@ -289,7 +289,7 @@ function presenceWarning(presence: ProjectPresence, ctx: { apiBase: string; proj
   const elsewhere = sameSlugElsewhere(ctx.apiBase, ctx.project);
 
   return {
-    value: { server: ctx.apiBase, publicProject: false, loginsForThisSlugElsewhere: elsewhere },
+    value: { api: ctx.apiBase, publicProject: false, loginsForThisSlugElsewhere: elsewhere },
     warning: `${ctx.project} is not a public project on ${ctx.apiBase}, and the platform does not say whether a private project exists before someone approves (ruling 2026-08-02), so this code may be for a project that is not there.${elsewhereSentence(ctx.project, elsewhere)} If the approval page says the project does not exist, press "Cancel this request" there and call again with this deviceCode: the answer will name the refusal. To create the project on ${ctx.apiBase}, run extension_project_create with api: '${ctx.apiBase}'.`,
   };
 }

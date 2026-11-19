@@ -92,8 +92,8 @@ describe("every platform act answers the console page that tracks it", () => {
         const context = JSON.stringify({ out, missed: world.missed }).slice(0, 3000);
 
         if (entry.approval && out.status === "authorization-pending") {
-          expect(out.value.trackUrl, context).toBeUndefined();
-          expect(onApprovalRoute(out.value.verificationUriComplete ?? out.value.verificationUri), context).toBe(true);
+          expect(out.value.trackUrl, context).toBe(out.value.verificationUriComplete ?? out.value.verificationUri);
+          expect(onApprovalRoute(out.value.trackUrl), context).toBe(true);
           expect(onConsoleRoute(out.value.checkUrl), context).toBe(true);
           expect(out.hint, context).toContain(out.value.checkUrl);
           expect(out.hint.includes("value.verificationUri") || out.hint.includes(out.value.verificationUriComplete ?? out.value.verificationUri), context).toBe(true);

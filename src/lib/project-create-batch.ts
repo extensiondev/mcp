@@ -13,6 +13,7 @@ import { firstBuildValue, readFirstBuild, withheldBecause } from "./first-build"
 import { answerDeadline, RESUME_POLL_MS, START_WORK_WITHIN_MS } from "./call-budget";
 import { scratchShelf } from "./call-memory";
 import { pollDeviceGrant, type DeviceCodeStart, type DeviceIntent } from "./device-flow";
+import { codeExpiryFromStart, secondsLeft } from "./device-wait";
 import { envelope, type ErrorCode, type RetryVerdict } from "./envelope";
 import { kernelHook } from "./kernel-hooks";
 import { fetchLoginConfig, resolveApiBase, safeApiBase } from "./login-flow";
@@ -161,6 +162,45 @@ interface Session {
 }
 
 const openSessions = (): Map<string, Session> => scratchShelf("create-sessions");
+
+const LIST_KEYS = ["projects", "installationId", "installCommand", "buildCommand", "outputDirectory", "browsers", "outputDirectories"] as const;
+
+interface KeptList {
+  list: Record<string, unknown>;
+  expiresAt: string | null;
+}
+
+const keptLists = (): Map<string, KeptList> => scratchShelf("create-lists");
+
+function listKey(apiBase: string, deviceCode: string): string {
+  return `${apiBase}\n${deviceCode}`;
+}
+
+function listOf(args: BatchCreateArgs): Record<string, unknown> {
+  return Object.fromEntries(LIST_KEYS.filter((key) => args[key] !== undefined && args[key] !== null).map((key) => [key, args[key]]));
+}
+
+function keepList(apiBase: string, deviceCode: string, args: BatchCreateArgs, expiresAt: string | null): void {
+  const known = keptLists().get(listKey(apiBase, deviceCode));
+  keptLists().set(listKey(apiBase, deviceCode), { list: listOf(args), expiresAt: expiresAt ?? known?.expiresAt ?? null });
+}
+
+/* @invariant A BATCH RESUME MAY CARRY THE deviceCode ALONE. The list a
+ * batch started with is kept in this process from its first call and, once
+ * the grant is held, beside the grant on disk, so a resume that names only
+ * the deviceCode runs the same list; a call that sends the list again is
+ * still checked against it. Until 2026-11-19 every resume resent about 900
+ * bytes the server already held (ledger 960).
+ */
+export async function keptBatchArgs(args: BatchCreateArgs): Promise<BatchCreateArgs | null> {
+  const deviceCode = String(args.deviceCode || "").trim();
+  const checked = safeApiBase(resolveApiBase(args.api), args.api);
+  if (!deviceCode || !checked.ok) return null;
+
+  const list = keptLists().get(listKey(checked.base, deviceCode))?.list ?? (await kernelHook("approvalState")().loadHeldBatch(checked.base, deviceCode))?.list;
+
+  return list && Array.isArray(list.projects) ? { ...list, ...args, projects: list.projects } : null;
+}
 
 const SESSION_KEEP_SECONDS = 3600;
 
@@ -352,12 +392,13 @@ function pendingEnvelope(args: {
   verificationUri: string;
   userCode?: string;
   verificationUriComplete?: string;
+  expiresAt: string | null;
 }): string {
   const complete = String(args.verificationUriComplete || "").trim();
   const hasCompleteLink =
     complete.length > 0 && complete !== args.verificationUri;
-  const again =
-    "then call extension_project_create again with this deviceCode and the same arguments";
+  const left = secondsLeft(args.expiresAt);
+  const again = `then call extension_project_create again with this deviceCode${args.expiresAt ? ` before ${args.expiresAt.slice(11, 16)} UTC, when the code expires` : ""}; the list is kept here, so the other arguments can be left out`;
   const page = `The page lists all ${args.refs.length} projects this one approval creates and says this device is also signed in to each for 7 days`;
   const hint = !args.userCode
     ? `Still waiting for approval at ${args.verificationUri}. Approve there, ${again}.`
@@ -377,6 +418,8 @@ function pendingEnvelope(args: {
         : {}),
       deviceCode: args.deviceCode,
       projects: args.refs,
+      ...(args.expiresAt ? { expiresAt: args.expiresAt } : {}),
+      ...(left !== null ? { expiresInSeconds: left } : {}),
     },
     hint,
   });
@@ -444,12 +487,15 @@ async function persist(session: Session, deviceCode: string, inFlight?: BatchEnt
     });
   }
 
+  const kept = keptLists().get(listKey(session.apiBase, deviceCode));
+
   session.persisted = await kernelHook("approvalState")().saveHeldBatch(session.apiBase, deviceCode, {
     workspace: session.workspace,
     refs: session.refs,
     grant: session.grant,
     grantExpiresAt: session.grantExpiresAt,
     rows,
+    ...(kept ? { list: kept.list } : {}),
   });
 }
 
@@ -893,7 +939,7 @@ async function runSlice(local: BatchCreateLocal, session: Session, deviceCode: s
         deviceCode,
         results: rowsInOrder(session),
       },
-      hint: "Another call with this deviceCode is creating projects right now. Wait for it to answer, then call again with the same deviceCode and arguments if projects are still pending.",
+      hint: "Another call with this deviceCode is creating projects right now. Wait for it to answer, then call again with the same deviceCode if projects are still pending.",
     });
   }
 
@@ -948,7 +994,7 @@ async function runSlice(local: BatchCreateLocal, session: Session, deviceCode: s
         results: rowsInOrder(session),
         remaining: remaining.map((entry) => entry.ref),
       },
-      hint: `${done} of ${session.entries.length} projects handled so far; ${remaining.length} still to create. This call answered early so the client does not time out. Call extension_project_create again with this same deviceCode and the same arguments to continue. No new approval is needed: the grant is held ${session.persisted ? "on this machine, readable only by this user, so a restarted server resumes it," : "in this server's memory, and is lost if the server restarts,"} until ${new Date(session.grantExpiresAt * 1000).toISOString()}.${
+      hint: `${done} of ${session.entries.length} projects handled so far; ${remaining.length} still to create. This call answered early so the client does not time out. Call extension_project_create again with this same deviceCode to continue; the list is kept here, so the other arguments can be left out. No new approval is needed: the grant is held ${session.persisted ? "on this machine, readable only by this user, so a restarted server resumes it," : "in this server's memory, and is lost if the server restarts,"} until ${new Date(session.grantExpiresAt * 1000).toISOString()}.${
         halted ? " The last request got no answer, so its project is marked unconfirmed and is not retried." : ""
       }`,
     });
@@ -1043,6 +1089,8 @@ export async function createProjectBatch(args: BatchCreateArgs, local: BatchCrea
       );
     }
 
+    keepList(apiBase, deviceCode, args, null);
+
     return runSlice(local, held, deviceCode, installationId || undefined, callStartedAt);
   }
 
@@ -1130,6 +1178,8 @@ export async function createProjectBatch(args: BatchCreateArgs, local: BatchCrea
     budgetMs = FIRST_CALL_BUDGET_MS;
   }
 
+  keepList(apiBase, deviceCode, args, start ? codeExpiryFromStart(start.expiresIn) : null);
+
   const poll = await pollDeviceGrant({
     apiBase,
     path: config.deviceTokenUrl,
@@ -1147,6 +1197,7 @@ export async function createProjectBatch(args: BatchCreateArgs, local: BatchCrea
         verificationUri: start?.verificationUri ?? config.verificationUri,
         userCode: start?.userCode,
         verificationUriComplete: start?.verificationUriComplete,
+        expiresAt: keptLists().get(listKey(apiBase, deviceCode))?.expiresAt ?? null,
       });
     }
 
