@@ -256,6 +256,87 @@ export function runExtensionCli(
   });
 }
 
+export interface PackageInstallResult {
+  code: number | null;
+  timedOut: boolean;
+  leftRunningPid?: number;
+  output: string;
+}
+
+export function runPackageInstall(command: string, args: string[], options: { cwd: string; timeoutMs: number }): Promise<PackageInstallResult> {
+  return new Promise((resolve) => {
+    let ioDir: string;
+    let fd: number;
+
+    try {
+      ioDir = fs.mkdtempSync(path.join(os.tmpdir(), "extension-mcp-install-"));
+      fd = fs.openSync(path.join(ioDir, "output"), "a");
+    } catch (err) {
+      resolve({ code: 1, timedOut: false, output: String(err) });
+
+      return;
+    }
+
+    const finish = (result: Omit<PackageInstallResult, "output">, fallback = ""): void => {
+      let output = fallback;
+
+      try {
+        output = fs.readFileSync(path.join(ioDir, "output"), "utf8") || fallback;
+      } catch {
+      }
+
+      try {
+        fs.closeSync(fd);
+      } catch {
+      }
+
+      fs.rmSync(ioDir, { recursive: true, force: true });
+      resolve({ ...result, output });
+    };
+
+    let child: ChildProcess;
+
+    try {
+      child = spawn(command, args, {
+        cwd: options.cwd,
+        stdio: ["ignore", fd, fd],
+        env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
+        shell: process.platform === "win32",
+        windowsHide: true,
+      });
+    } catch (err) {
+      finish({ code: 1, timedOut: false }, String(err));
+
+      return;
+    }
+
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled || !child.pid) return;
+
+      settled = true;
+      child.unref();
+      finish({ code: null, timedOut: true, leftRunningPid: child.pid });
+    }, options.timeoutMs);
+
+    child.on("close", (code) => {
+      if (settled) return;
+
+      settled = true;
+      clearTimeout(timer);
+      finish({ code, timedOut: false });
+    });
+
+    child.on("error", (err) => {
+      if (settled) return;
+
+      settled = true;
+      clearTimeout(timer);
+      finish({ code: 1, timedOut: false }, String(err));
+    });
+  });
+}
+
 /* @invariant A PROCESS THE OPERATING SYSTEM REFUSES TO START FOR ITS
  * ARGUMENTS IS THE CALLER'S INPUT, NEVER A TRANSIENT FAILURE. Node throws
  * these from spawn before any child exists: ENAMETOOLONG for a working

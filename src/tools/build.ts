@@ -13,11 +13,17 @@ import { LAUNCH_BROWSER, PROJECT_PATH } from "../lib/common-schema";
 import { type CliResult, runExtensionCli } from "../lib/exec";
 import {
   INSTALL_RUNNING_HINT,
+  INSTALL_STOPPED_HINT,
+  incompleteInstallHint,
+  incompleteInstallMessage,
   installLeftRunningMessage,
   installPidOf,
   installStillRunningMessage,
-  installTurn,
+  installStoppedMessage,
   installerUnder,
+  noteInstallStopped,
+  repairedInstallNote,
+  settleInstall,
   waitedForInstallNote,
 } from "../lib/project-install";
 import { compareVersions, outputJsonVerdict, refusedTheOutputFlag, resolvedEngineFacts } from "../lib/engine-version";
@@ -862,9 +868,9 @@ export async function handler(args: {
   if (safari) cliArgs.push(...safariBuildCliArgs(args, signingTeam.team));
   if (signingTeam.kept) warnings.push(keptTeamNote(signingTeam.team));
 
-  const install = await installTurn(args.projectPath);
+  const install = await settleInstall(args.projectPath);
 
-  if (install.running) {
+  if (install.state === "running") {
     return envelope({
       ok: false,
       command: COMMAND,
@@ -888,7 +894,9 @@ export async function handler(args: {
     });
   }
 
+  if (install.state === "incomplete") return incompleteInstallAnswer(browser, install.root, install.command, install.output, start, warnings);
   if (install.waitedOn) warnings.push(waitedForInstallNote(install.waitedOn, install.waitedMs));
+  if (install.repaired) warnings.push(repairedInstallNote(install.repaired));
 
   const modulesDir = path.join(engineProjectRoot(args.projectPath), "node_modules");
   const modulesBefore = fs.existsSync(modulesDir);
@@ -923,6 +931,14 @@ export async function handler(args: {
 
     throw err;
   }
+
+  const installWasCut =
+    install.turn !== null &&
+    attempt.timedOut === true &&
+    !attempt.leftRunningPid &&
+    INSTALL_NARRATION.test(`${attempt.stdout ?? ""}\n${attempt.stderr ?? ""}`);
+
+  if (installWasCut) noteInstallStopped(args.projectPath);
 
   if (attempt.leftRunningPid) install.turn?.handOver(attempt.leftRunningPid);
   else install.turn?.release();
@@ -1240,6 +1256,23 @@ export async function handler(args: {
     });
   }
 
+  if (attempt.timedOut && installWasCut) {
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "build-timeout",
+      error: {
+        code: "E_BUILD_TIMEOUT",
+        name: "BuildTimeout",
+        message: installStoppedMessage(spawn.timeoutMs, attempt.signal),
+        retry: "safe",
+      },
+      value: { browser, buildExitCode: null, duration, budgetMs: spawn.timeoutMs, installStopped: true, output: lastLines(out, 12) },
+      warnings,
+      hint: INSTALL_STOPPED_HINT,
+    });
+  }
+
   if (attempt.timedOut) {
     const words = buildTimeoutWords(browser, spawn.timeoutMs, attempt.signal);
 
@@ -1295,8 +1328,15 @@ export async function handler(args: {
     });
   }
 
-  const compileErrors = buildCompileErrors(args.projectPath, browser, start);
   const tail = [out, stderr.trim()].filter(Boolean).join("\n").trim();
+
+  if (ENGINE_BINARY_NOT_FOUND.test(tail) && fs.existsSync(modulesDir)) {
+    noteInstallStopped(args.projectPath);
+
+    return incompleteInstallAnswer(browser, path.dirname(modulesDir), null, withoutInstallNoise(tail).slice(-2000), start, warnings, true);
+  }
+
+  const compileErrors = buildCompileErrors(args.projectPath, browser, start);
 
   return envelope({
     ok: false,
@@ -1313,6 +1353,36 @@ export async function handler(args: {
     hint: compileErrors.length
       ? `Fix the ${compileErrors.length} compile error${compileErrors.length === 1 ? "" : "s"} in value.errors (file, loader and message as the bundler printed them) and build again. extension_manifest_validate covers the manifest; the engine installs dependencies only when none of the declared ones is present, so a missing one beside installed ones is yours to install`
       : "Read value.output for the bundler's own report. The manifest may live at the project root or under src; a failure here is usually a compile error, a manifest the engine refuses, or a Safari toolchain the host does not have.",
+  });
+}
+
+const INSTALL_NARRATION = /Installing (?:the )?(?:project )?dependencies/i;
+const ENGINE_BINARY_NOT_FOUND = /\bextension(?:\.cmd)?['"]?: (?:command )?not found|'extension(?:\.cmd)?' is not recognized/i;
+
+function incompleteInstallAnswer(
+  browser: string,
+  root: string,
+  ran: string | null,
+  output: string,
+  start: number,
+  warnings: string[],
+  nextCallRepairs = false,
+): string {
+  return envelope({
+    ok: false,
+    command: COMMAND,
+    status: "install-incomplete",
+    error: {
+      code: "E_BUILD_FAILED",
+      name: "InstallIncomplete",
+      message: nextCallRepairs
+        ? `Nothing was built: the engine binary was not found although ${root} has a node_modules, which is an install that did not finish, not a compile error.`
+        : incompleteInstallMessage(root, ran),
+      retry: "safe",
+    },
+    value: { browser, duration: Date.now() - start, installRoot: root, ...(ran ? { installCommand: ran } : {}), ...(output ? { output } : {}) },
+    warnings,
+    hint: nextCallRepairs ? INSTALL_STOPPED_HINT : incompleteInstallHint(COMMAND, root, ran),
   });
 }
 

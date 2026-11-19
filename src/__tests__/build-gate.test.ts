@@ -12,12 +12,23 @@ let cliResultOverride: { code: number; stdout: string; stderr: string } | null =
   null;
 let onCli: ((args: string[]) => void) | null = null;
 let whileCliRuns: ((args: string[]) => Promise<void>) | null = null;
+const installCalls: Array<{ command: string; args: string[]; cwd: string }> = [];
+let installResult: { code: number | null; timedOut: boolean; leftRunningPid?: number; output: string } | null = null;
 let skipDist = false;
 vi.mock("../lib/exec", async (importOriginal) => {
   const actual = await importOriginal<typeof ExecModule>();
 
   return {
     ...actual,
+    runPackageInstall: async (command: string, args: string[], options: { cwd: string }) => {
+      installCalls.push({ command, args, cwd: options.cwd });
+      if (installResult) return installResult;
+
+      fs.mkdirSync(path.join(options.cwd, "node_modules", ".bin"), { recursive: true });
+      fs.writeFileSync(path.join(options.cwd, "node_modules", ".bin", process.platform === "win32" ? "extension.cmd" : "extension"), "");
+
+      return { code: 0, timedOut: false, output: "added 1 package" };
+    },
     runExtensionCli: async (args: string[]) => {
       cliCalls.push(args);
       onCli?.(args);
@@ -33,7 +44,7 @@ vi.mock("../lib/exec", async (importOriginal) => {
 
 const build = await import("../tools/build");
 const { buildSummaryPath } = await import("../lib/session-paths");
-const { installRecordPath, isInstallCommand, runningInstall, takeInstallTurn } = await import("../lib/project-install");
+const { installRecordPath, installStoppedPath, isInstallCommand, runningInstall, takeInstallTurn } = await import("../lib/project-install");
 const { processStartedAt } = await import("../lib/process-identity");
 const { buildCliAnswer, buildSummary, zipArtifacts, browserFromCliArgs, writeEngineDist } = await import("./fixtures/engine-answers");
 
@@ -63,6 +74,8 @@ afterEach(() => {
   cliResultOverride = null;
   onCli = null;
   whileCliRuns = null;
+  installCalls.length = 0;
+  installResult = null;
   skipDist = false;
 
   for (const dir of tmpDirs.splice(0)) {
@@ -711,6 +724,7 @@ describe("941: one dependency install runs on a project at a time, and a build s
 
     expect(result.status).toBe("built");
     expect(cliCalls).toHaveLength(1);
+    expect(installCalls).toHaveLength(1);
     expect(result.warnings.join(" ")).toContain(`for the engine an earlier extension_build call left running (pid ${pid}) to finish installing`);
     expect(fs.existsSync(installRecordPath(dir))).toBe(false);
   }, 20_000);
@@ -743,5 +757,121 @@ describe("941: one dependency install runs on a project at a time, and a build s
     expect(isInstallCommand("bun install")).toBe(true);
     expect(isInstallCommand("npm exec extension@4.1.41 build /work --browser chrome")).toBe(false);
     expect(isInstallCommand("node /home/me/.npm/_npx/1a2b/node_modules/.bin/extension build /work/install --browser chrome")).toBe(false);
+  });
+});
+
+describe("948: a folder an install left incomplete is repaired under the record, never answered as a compile error", () => {
+  const AGAIN = "Call extension_build again with the same arguments: it reinstalls the dependencies first, then builds.";
+
+  function halfInstalled(lockfile?: string): string {
+    const dir = project({ manifest_version: 3, name: "Half", version: "1.0.0" });
+    fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: "half", devDependencies: { extension: "latest" } }));
+    fs.mkdirSync(path.join(dir, "node_modules", "extension"), { recursive: true });
+    if (lockfile) fs.writeFileSync(path.join(dir, lockfile), "");
+
+    return dir;
+  }
+
+  it("reruns the install when the extension package has no binary linked, then builds and says so", async () => {
+    const dir = halfInstalled();
+
+    const result = JSON.parse(await build.handler({ projectPath: dir }));
+
+    expect(installCalls).toEqual([{ command: "npm", args: ["install", "--ignore-scripts"], cwd: dir }]);
+    expect(result.status).toBe("built");
+    const note = result.warnings.find((line: string) => line.includes("was left incomplete")) as string;
+
+    expect(note.replace(/\([0-9.]+ m?s\)/, "(T)")).toBe(
+      `node_modules under ${dir} was left incomplete by an install that did not finish (the extension package was there with no binary linked, or this server had stopped an engine in the middle of installing), so this call ran npm install --ignore-scripts there first (T) before building.`,
+    );
+
+    expect(fs.existsSync(installRecordPath(dir))).toBe(false);
+
+    await build.handler({ projectPath: dir });
+
+    expect(installCalls).toHaveLength(1);
+  });
+
+  it("answers install-incomplete with retry safe and the package manager's output when the repair fails", async () => {
+    const dir = halfInstalled();
+    installResult = { code: 1, timedOut: false, output: "npm error network request failed" };
+
+    const result = JSON.parse(await build.handler({ projectPath: dir }));
+
+    expect(cliCalls).toEqual([]);
+    expect(result).toMatchObject({ ok: false, status: "install-incomplete" });
+    expect(result.error).toMatchObject({ code: "E_BUILD_FAILED", name: "InstallIncomplete", retry: "safe" });
+    expect(result.error.message).toBe(
+      `Nothing was built: node_modules under ${dir} is incomplete (an install did not finish), and npm install --ignore-scripts, which this call ran there to repair it, did not complete it.`,
+    );
+
+    expect(result.hint).toBe(
+      "Read value.output for the package manager's own report and fix what it names (the network, the registry or a dependency version), then call extension_build again: it reruns the install first. This is not a compile error.",
+    );
+
+    expect(result.value).toMatchObject({ installRoot: dir, installCommand: "npm install --ignore-scripts", output: "npm error network request failed" });
+  });
+
+  it("names the install to run when the lockfile belongs to a package manager this server does not rerun", async () => {
+    const dir = halfInstalled("yarn.lock");
+
+    const result = JSON.parse(await build.handler({ projectPath: dir }));
+
+    expect(installCalls).toEqual([]);
+    expect(result.status).toBe("install-incomplete");
+    expect(result.error.retry).toBe("safe");
+    expect(result.error.message).toBe(
+      `Nothing was built: node_modules under ${dir} is incomplete (an install did not finish), and this server does not rerun this project's package manager itself.`,
+    );
+
+    expect(result.hint).toBe(`Run the project's own install in ${dir} (yarn install or deno install, by the lockfile there), then call extension_build again. This is not a compile error.`);
+  });
+
+  it("reads the engine binary not found as an incomplete install, and the next call reinstalls", async () => {
+    const dir = project({ manifest_version: 3, name: "Stray", version: "1.0.0" });
+    fs.mkdirSync(path.join(dir, "node_modules"));
+    cliResultOverride = { code: 127, stdout: "", stderr: "sh: 1: extension: not found" };
+
+    const result = JSON.parse(await build.handler({ projectPath: dir }));
+
+    expect(result).toMatchObject({ ok: false, status: "install-incomplete", hint: AGAIN });
+    expect(result.error).toMatchObject({ code: "E_BUILD_FAILED", retry: "safe" });
+    expect(result.error.message).toBe(
+      `Nothing was built: the engine binary was not found although ${dir} has a node_modules, which is an install that did not finish, not a compile error.`,
+    );
+
+    expect(result.hint).not.toMatch(/compile error, a manifest/);
+
+    cliResultOverride = null;
+
+    const next = JSON.parse(await build.handler({ projectPath: dir }));
+
+    expect(installCalls).toEqual([{ command: "npm", args: ["install", "--ignore-scripts"], cwd: dir }]);
+    expect(next.status).toBe("built");
+    expect(fs.existsSync(installStoppedPath(dir))).toBe(false);
+  });
+
+  it("says the install was stopped when the engine is stopped at its budget inside it, and the next call reinstalls", async () => {
+    const dir = project({ manifest_version: 3, name: "Cut", version: "1.0.0" });
+    fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: "cut", devDependencies: { extension: "latest" } }));
+    cliResultOverride = { code: null, signal: "SIGTERM", timedOut: true, stdout: "Installing the project dependencies with npm", stderr: "" } as never;
+
+    const result = JSON.parse(await build.handler({ projectPath: dir }));
+
+    expect(result).toMatchObject({ ok: false, status: "build-timeout", hint: AGAIN });
+    expect(result.error).toMatchObject({ code: "E_BUILD_TIMEOUT", retry: "safe" });
+    expect(result.error.message).toBe(
+      "This server stopped the build after 180000 ms (SIGTERM) while the engine was installing the project's dependencies, so that install was stopped with it and node_modules may be incomplete.",
+    );
+
+    expect(result.value.installStopped).toBe(true);
+
+    fs.mkdirSync(path.join(dir, "node_modules"));
+    cliResultOverride = null;
+
+    const next = JSON.parse(await build.handler({ projectPath: dir }));
+
+    expect(installCalls).toHaveLength(1);
+    expect(next.status).toBe("built");
   });
 });

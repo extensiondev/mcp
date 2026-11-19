@@ -12,11 +12,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
-import { descendantPids } from "./exec";
+import { noteCallWait } from "./call-waits";
+import { envelope } from "./envelope";
+import { descendantPids, runPackageInstall } from "./exec";
 import { pidState, processStartedAt } from "./process-identity";
 import { sessionStateDir } from "./process-manager";
 import { liveProjectSessions } from "./session-browser";
-import { engineProjectRoot } from "./session-paths";
+import { engineProjectRoot, readyContractPath } from "./session-paths";
 import { modulesMissing, startingSession } from "./session-starting";
 
 /* @invariant ONE DEPENDENCY INSTALL PER PROJECT AT A TIME, AND EVERY BUILD
@@ -35,17 +37,33 @@ import { modulesMissing, startingSession } from "./session-starting";
  * budget and leaves that engine running. A record whose holders are all gone
  * is stale and is removed by whoever reads it. A dev session that is still
  * installing counts as a running install too, read from the session itself.
+ *
+ * EVERY TOOL THAT RUNS THE ENGINE SETTLES THE INSTALL FIRST, AND A FOLDER AN
+ * INSTALL LEFT INCOMPLETE IS REPAIRED, NOT REPORTED AS A COMPILE ERROR
+ * (ledger 948). extension_dev and extension_start wait on the same record
+ * and, on a project with no node_modules, hand it to the session they
+ * spawn, which holds it until that engine stamps its ready.json or, where
+ * the process tree can be read, until node_modules is there and no package
+ * manager runs under the engine. A folder
+ * is incomplete when the extension package sits in node_modules with no
+ * binary linked beside it, the state npx answers "extension: not found"
+ * for, or when this server stopped an engine at its budget in the middle of
+ * an install and left a note saying so. The server then reruns the install
+ * itself under the record, with lifecycle scripts off as the engine runs
+ * it, and an install that outlasts the call is left running, never killed.
  */
 
 export interface InstallHolder {
   pid: number;
   startedAt: string | null;
-  role: "server" | "engine";
+  role: "server" | "engine" | "installer" | "session";
+  browser?: string;
+  readyPath?: string;
 }
 
 export interface RunningInstall {
   pid: number;
-  owner: "build-call" | "build-engine" | "session";
+  owner: "build-call" | "build-engine" | "installer" | "session";
   browser?: string;
 }
 
@@ -57,12 +75,15 @@ interface InstallRecord {
 
 export interface InstallTurn {
   release: () => void;
-  handOver: (enginePid: number) => void;
+  handOver: (pid: number, as?: { role: "engine" | "installer" } | { role: "session"; browser: string; readyPath: string }) => void;
 }
 
 export const INSTALL_WAIT_MS = 135_000;
+export const SESSION_INSTALL_WAIT_MS = 30_000;
+export const REPAIR_BUDGET_MS = 180_000;
 export const INSTALL_POLL_MS = 1_000;
 
+const CONTRACT_MTIME_SLACK_MS = 2_000;
 const callsInFlight = new Set<string>();
 let ownStartedAt: string | null | undefined;
 
@@ -76,10 +97,26 @@ function projectKey(projectPath: string): string {
   }
 }
 
-export function installRecordPath(projectPath: string): string {
+function recordStem(projectPath: string): string {
   const digest = crypto.createHash("sha256").update(projectKey(projectPath)).digest("hex").slice(0, 16);
 
-  return path.join(sessionStateDir(), "installs", `${digest}.json`);
+  return path.join(sessionStateDir(), "installs", digest);
+}
+
+export function installRecordPath(projectPath: string): string {
+  return `${recordStem(projectPath)}.json`;
+}
+
+export function installStoppedPath(projectPath: string): string {
+  return `${recordStem(projectPath)}.stopped`;
+}
+
+export function noteInstallStopped(projectPath: string): void {
+  try {
+    fs.mkdirSync(path.dirname(installStoppedPath(projectPath)), { recursive: true });
+    fs.writeFileSync(installStoppedPath(projectPath), new Date().toISOString());
+  } catch {
+  }
 }
 
 function readText(file: string): string | null {
@@ -100,16 +137,37 @@ function parseRecord(text: string): InstallRecord | null {
   }
 }
 
-function holds(holder: InstallHolder, key: string): boolean {
+function stampedSince(readyPath: string | undefined, since: string): boolean {
+  if (!readyPath) return false;
+
+  try {
+    return fs.statSync(readyPath).mtimeMs >= Date.parse(since) - CONTRACT_MTIME_SLACK_MS;
+  } catch {
+    return false;
+  }
+}
+
+function holds(holder: InstallHolder, key: string, since: string): boolean {
   if (typeof holder?.pid !== "number") return false;
   if (holder.role === "server" && holder.pid === process.pid) return callsInFlight.has(key);
+  if (pidState(holder.pid, holder.startedAt) !== "alive") return false;
 
-  return pidState(holder.pid, holder.startedAt) === "alive";
+  if (holder.role !== "session") return true;
+  if (stampedSince(holder.readyPath, since)) return false;
+
+  return process.platform === "win32" || !fs.existsSync(path.join(key, "node_modules")) || installerUnder(holder.pid) !== null;
 }
 
 function removeIfUnchanged(file: string, text: string): void {
   if (readText(file) === text) fs.rmSync(file, { force: true });
 }
+
+const OWNER_OF_ROLE: Record<InstallHolder["role"], RunningInstall["owner"]> = {
+  server: "build-call",
+  engine: "build-engine",
+  installer: "installer",
+  session: "session",
+};
 
 function recordedInstall(projectPath: string): RunningInstall | null {
   const file = installRecordPath(projectPath);
@@ -117,7 +175,8 @@ function recordedInstall(projectPath: string): RunningInstall | null {
   if (text === null) return null;
 
   const key = projectKey(projectPath);
-  const holder = parseRecord(text)?.holders.find((entry) => holds(entry, key));
+  const record = parseRecord(text);
+  const holder = record?.holders.find((entry) => holds(entry, key, record.since));
 
   if (!holder) {
     removeIfUnchanged(file, text);
@@ -125,7 +184,7 @@ function recordedInstall(projectPath: string): RunningInstall | null {
     return null;
   }
 
-  return { pid: holder.pid, owner: holder.role === "engine" ? "build-engine" : "build-call" };
+  return { pid: holder.pid, owner: OWNER_OF_ROLE[holder.role] ?? "build-call", ...(holder.browser ? { browser: holder.browser } : {}) };
 }
 
 function sessionInstall(projectPath: string): RunningInstall | null {
@@ -187,13 +246,13 @@ export function takeInstallTurn(projectPath: string): InstallTurn | "taken" | "u
       callsInFlight.delete(key);
       fs.rmSync(file, { force: true });
     },
-    handOver: (enginePid) => {
+    handOver: (pid, as = { role: "engine" }) => {
       if (!held) return;
 
       held = false;
 
       try {
-        writeWhole(file, record([{ pid: enginePid, startedAt: processStartedAt(enginePid), role: "engine" }]), false);
+        writeWhole(file, record([{ pid, startedAt: processStartedAt(pid), ...as }]), false);
       } catch {
         fs.rmSync(file, { force: true });
       }
@@ -237,6 +296,54 @@ export function installerUnder(pid: number): number | null {
   return descendantPids(pid).find((child) => isInstallCommand(commandLine(child))) ?? null;
 }
 
+export interface IncompleteInstall {
+  root: string;
+  reason: "binary-missing" | "stopped";
+}
+
+const ENGINE_PACKAGE = "extension";
+const ENGINE_BINARY = process.platform === "win32" ? "extension.cmd" : "extension";
+
+function declaresEngine(root: string): boolean {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")) as Record<string, Record<string, unknown> | undefined>;
+
+    return ENGINE_PACKAGE in (parsed.dependencies ?? {}) || ENGINE_PACKAGE in (parsed.devDependencies ?? {});
+  } catch {
+    return false;
+  }
+}
+
+export function incompleteInstall(projectPath: string): IncompleteInstall | null {
+  const root = engineProjectRoot(projectPath);
+
+  if (fs.existsSync(installStoppedPath(projectPath))) return { root, reason: "stopped" };
+  if (!declaresEngine(root)) return null;
+
+  for (let dir = root; ; dir = path.dirname(dir)) {
+    const modules = path.join(dir, "node_modules");
+
+    if (fs.existsSync(path.join(modules, ENGINE_PACKAGE))) {
+      return fs.existsSync(path.join(modules, ".bin", ENGINE_BINARY)) ? null : { root: dir, reason: "binary-missing" };
+    }
+
+    if (path.dirname(dir) === dir) return null;
+  }
+}
+
+const REPAIR_COMMANDS: Array<{ lockfiles: string[]; command: string }> = [
+  { lockfiles: ["pnpm-lock.yaml"], command: "pnpm" },
+  { lockfiles: ["bun.lock", "bun.lockb"], command: "bun" },
+  { lockfiles: ["yarn.lock", "deno.lock"], command: "" },
+];
+
+export function repairCommand(root: string): { command: string; args: string[] } | null {
+  const chosen = REPAIR_COMMANDS.find((entry) => entry.lockfiles.some((name) => fs.existsSync(path.join(root, name))));
+  const command = chosen ? chosen.command : "npm";
+
+  return command ? { command, args: ["install", "--ignore-scripts"] } : null;
+}
+
 export interface InstallTurnOutcome {
   turn: InstallTurn | null;
   waitedMs: number;
@@ -258,7 +365,7 @@ export async function installTurn(projectPath: string, waitBudgetMs: number = IN
     const running = runningInstall(projectPath);
 
     if (!running) {
-      if (!modulesMissing(projectPath)) return outcome(null, waitedOn, null);
+      if (!modulesMissing(projectPath) && !incompleteInstall(projectPath)) return outcome(null, waitedOn, null);
 
       const turn = takeInstallTurn(projectPath);
       if (turn === "unavailable") return outcome(null, waitedOn, null);
@@ -273,13 +380,90 @@ export async function installTurn(projectPath: string, waitBudgetMs: number = IN
   }
 }
 
+export interface InstallRepair {
+  root: string;
+  command: string;
+  tookMs: number;
+}
+
+export type SettledInstall =
+  | { state: "clear"; turn: InstallTurn | null; waitedMs: number; waitedOn: RunningInstall | null; repaired: InstallRepair | null }
+  | { state: "running"; running: RunningInstall; waitedMs: number }
+  | { state: "incomplete"; root: string; command: string | null; output: string };
+
+export async function settleInstall(
+  projectPath: string,
+  budgets: { waitMs: number; repairMs: number } = { waitMs: INSTALL_WAIT_MS, repairMs: REPAIR_BUDGET_MS },
+): Promise<SettledInstall> {
+  const outcome = await installTurn(projectPath, budgets.waitMs);
+
+  if (outcome.running) return { state: "running", running: outcome.running, waitedMs: outcome.waitedMs };
+
+  const incomplete = incompleteInstall(projectPath);
+  const clear = (turn: InstallTurn | null, repaired: InstallRepair | null): SettledInstall => ({
+    state: "clear",
+    turn,
+    waitedMs: outcome.waitedMs,
+    waitedOn: outcome.waitedOn,
+    repaired,
+  });
+
+  if (!incomplete || !outcome.turn) return clear(outcome.turn, null);
+
+  const { turn } = outcome;
+  const repair = repairCommand(incomplete.root);
+
+  if (!repair) {
+    fs.rmSync(installStoppedPath(projectPath), { force: true });
+    turn.release();
+
+    return { state: "incomplete", root: incomplete.root, command: null, output: "" };
+  }
+
+  const began = Date.now();
+  const said = `${repair.command} ${repair.args.join(" ")}`;
+  let result: Awaited<ReturnType<typeof runPackageInstall>>;
+
+  try {
+    result = await runPackageInstall(repair.command, repair.args, { cwd: incomplete.root, timeoutMs: budgets.repairMs });
+  } catch (err) {
+    turn.release();
+
+    throw err;
+  }
+
+  if (result.leftRunningPid) {
+    fs.rmSync(installStoppedPath(projectPath), { force: true });
+    turn.handOver(result.leftRunningPid, { role: "installer" });
+
+    return { state: "running", running: { pid: result.leftRunningPid, owner: "installer" }, waitedMs: Date.now() - began };
+  }
+
+  if (result.code === 0) fs.rmSync(installStoppedPath(projectPath), { force: true });
+
+  if (result.code !== 0 || incompleteInstall(projectPath)) {
+    turn.release();
+
+    return { state: "incomplete", root: incomplete.root, command: said, output: result.output.trim().slice(-2000) };
+  }
+
+  const repaired = { root: incomplete.root, command: said, tookMs: Date.now() - began };
+
+  if (modulesMissing(projectPath)) return clear(turn, repaired);
+
+  turn.release();
+
+  return clear(null, repaired);
+}
+
 function seconds(ms: number): string {
   return ms < 1_000 ? `${ms} ms` : `${(ms / 1_000).toFixed(1)} s`;
 }
 
 function installOwnerWords(install: RunningInstall): string {
-  if (install.owner === "session") return `the dev session on ${install.browser ?? "another browser"} (pid ${install.pid})`;
+  if (install.owner === "session") return `the ${install.browser ?? "other"} session (pid ${install.pid})`;
   if (install.owner === "build-engine") return `the engine an earlier extension_build call left running (pid ${install.pid})`;
+  if (install.owner === "installer") return `the install an earlier call left running (pid ${install.pid})`;
 
   return `another extension_build call on this project (server pid ${install.pid})`;
 }
@@ -288,17 +472,106 @@ export function installPidOf(install: RunningInstall): { installPid?: number } {
   return install.owner === "build-call" ? {} : { installPid: install.pid };
 }
 
-export const INSTALL_RUNNING_HINT =
-  "Call extension_build again with the same arguments: it waits for this install to end, then builds. Do not start an install by hand and do not poll the process table; the next call does the waiting.";
+export function installRunningHint(command: string, then: string): string {
+  return `Call ${command} again with the same arguments: it waits for this install to end, then ${then}. Do not start an install by hand and do not poll the process table; the next call does the waiting.`;
+}
+
+export const INSTALL_RUNNING_HINT = installRunningHint("extension_build", "builds");
 
 export function installLeftRunningMessage(browser: string, budgetMs: number, enginePid: number): string {
   return `The build did not finish in ${budgetMs} ms because the engine is still installing the project's dependencies (pid ${enginePid}). Nothing was stopped: the install keeps running, and the ${browser} build follows it in the same process.`;
 }
 
-export function installStillRunningMessage(install: RunningInstall, waitedMs: number): string {
-  return `Nothing was built: ${installOwnerWords(install)} is still installing this project's dependencies, and this call waited ${seconds(waitedMs)} for it to end.`;
+export function installStillRunningMessage(install: RunningInstall, waitedMs: number, nothing = "Nothing was built"): string {
+  return `${nothing}: ${installOwnerWords(install)} is still installing this project's dependencies, and this call waited ${seconds(waitedMs)} for it to end.`;
 }
 
-export function waitedForInstallNote(install: RunningInstall, waitedMs: number): string {
-  return `This call waited ${seconds(waitedMs)} for ${installOwnerWords(install)} to finish installing this project's dependencies before it built; one install runs on a project at a time.`;
+export function waitedForInstallNote(install: RunningInstall, waitedMs: number, did = "built"): string {
+  return `This call waited ${seconds(waitedMs)} for ${installOwnerWords(install)} to finish installing this project's dependencies before it ${did}; one install runs on a project at a time.`;
+}
+
+export function repairedInstallNote(repair: InstallRepair, did = "building"): string {
+  return `node_modules under ${repair.root} was left incomplete by an install that did not finish (the extension package was there with no binary linked, or this server had stopped an engine in the middle of installing), so this call ran ${repair.command} there first (${seconds(repair.tookMs)}) before ${did}.`;
+}
+
+export function incompleteInstallMessage(root: string, command: string | null, nothing = "Nothing was built"): string {
+  return command
+    ? `${nothing}: node_modules under ${root} is incomplete (an install did not finish), and ${command}, which this call ran there to repair it, did not complete it.`
+    : `${nothing}: node_modules under ${root} is incomplete (an install did not finish), and this server does not rerun this project's package manager itself.`;
+}
+
+export function incompleteInstallHint(command: string, root: string, ran: string | null): string {
+  return ran
+    ? `Read value.output for the package manager's own report and fix what it names (the network, the registry or a dependency version), then call ${command} again: it reruns the install first. This is not a compile error.`
+    : `Run the project's own install in ${root} (yarn install or deno install, by the lockfile there), then call ${command} again. This is not a compile error.`;
+}
+
+export const INSTALL_STOPPED_HINT =
+  "Call extension_build again with the same arguments: it reinstalls the dependencies first, then builds.";
+
+export function installStoppedMessage(budgetMs: number, signal: string | null | undefined): string {
+  return `This server stopped the build after ${budgetMs} ms (${signal ?? "a signal"}) while the engine was installing the project's dependencies, so that install was stopped with it and node_modules may be incomplete.`;
+}
+
+export interface SessionInstallGate {
+  refusal?: string;
+  spentMs: number;
+  spawned: (pid: number | undefined, browser: string) => void;
+}
+
+export async function sessionInstallGate(command: string, projectPath: string): Promise<SessionInstallGate> {
+  const began = Date.now();
+  const install = await settleInstall(projectPath, { waitMs: SESSION_INSTALL_WAIT_MS, repairMs: SESSION_INSTALL_WAIT_MS });
+  const idle = { spentMs: Date.now() - began, spawned: () => undefined };
+
+  if (install.state === "running") {
+    return {
+      ...idle,
+      refusal: envelope({
+        ok: true,
+        command,
+        status: "installing",
+        value: {
+          started: false,
+          waitingOn: "dependency-install",
+          ...installPidOf(install.running),
+          waitedMs: install.waitedMs,
+          retry: "safe",
+        },
+        hint: `${installStillRunningMessage(install.running, install.waitedMs, "No session was started")} ${installRunningHint(command, "starts the session")}`,
+      }),
+    };
+  }
+
+  if (install.state === "incomplete") {
+    return {
+      ...idle,
+      refusal: envelope({
+        ok: false,
+        command,
+        status: "install-incomplete",
+        error: {
+          code: "E_CLI",
+          name: "InstallIncomplete",
+          message: incompleteInstallMessage(install.root, install.command, "No session was started"),
+          retry: "safe",
+        },
+        value: { started: false, installRoot: install.root, ...(install.command ? { installCommand: install.command } : {}), ...(install.output ? { output: install.output } : {}) },
+        hint: incompleteInstallHint(command, install.root, install.command),
+      }),
+    };
+  }
+
+  if (install.waitedOn) noteCallWait(waitedForInstallNote(install.waitedOn, install.waitedMs, "started the session"));
+  if (install.repaired) noteCallWait(repairedInstallNote(install.repaired, "starting the session"));
+
+  const { turn } = install;
+
+  return {
+    spentMs: install.waitedOn || install.repaired ? Date.now() - began : 0,
+    spawned: (pid, browser) => {
+      if (pid === undefined) turn?.release();
+      else turn?.handOver(pid, { role: "session", browser, readyPath: readyContractPath(projectPath, browser) });
+    },
+  };
 }

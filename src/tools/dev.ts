@@ -42,6 +42,7 @@ import {
 import { guardSameBrowserSession } from "../lib/same-browser-session";
 import { IDLE_MINUTES_SCHEMA, armSessionIdle, idleSentence, resolveIdleMinutes } from "../lib/session-idle";
 import { FIRST_RUN_NOTE } from "../lib/session-starting";
+import { sessionInstallGate } from "../lib/project-install";
 import { handler as waitHandler } from "./wait";
 import { handler as logsHandler } from "./logs";
 import {
@@ -181,6 +182,9 @@ export async function handler(
   if (allowControl) cliArgs.push("--allow-control");
   if (args.allowEval) cliArgs.push("--allow-eval");
 
+  const installGate = await sessionInstallGate(schema.name, args.projectPath);
+  if (installGate.refusal) return installGate.refusal;
+
   const visibility = headlessLaunch(args);
   const spawnedAt = Date.now();
   const spawned = spawnExtensionCli(cliArgs, {
@@ -188,6 +192,8 @@ export async function handler(
     ...(visibility.env ? { env: visibility.env } : {}),
   });
   const { child, logPath } = spawned;
+
+  installGate.spawned(child.pid, browser);
 
   if (child.pid === undefined) {
     return spawnFailedEnvelope(schema.name, spawned);
@@ -375,7 +381,9 @@ export async function handler(
   }
 
   const readiness =
-    args.wait === false || args.noBrowser ? null : await awaitReadyAndFirstLogs(args.projectPath, browser);
+    args.wait === false || args.noBrowser
+      ? null
+      : await awaitReadyAndFirstLogs(args.projectPath, browser, Math.max(15_000, 45_000 - installGate.spentMs));
   const sessionReady = readiness?.ready.status === "ready";
   const stillStarting = readiness?.ready.status === "starting";
   const readyProfilePath: unknown = readiness
@@ -565,8 +573,8 @@ function readyDistPath(ready: Record<string, unknown> | undefined): string | nul
   return typeof ready?.distPath === "string" ? ready.distPath : null;
 }
 
-async function awaitReadyAndFirstLogs(projectPath: string, browser: string) {
-  const ready = JSON.parse(await waitHandler({ projectPath, browser, timeoutMs: 45_000 })) as {
+async function awaitReadyAndFirstLogs(projectPath: string, browser: string, budgetMs: number) {
+  const ready = JSON.parse(await waitHandler({ projectPath, browser, timeoutMs: budgetMs })) as {
     status: string;
     value?: Record<string, unknown>;
   };

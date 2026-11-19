@@ -43,13 +43,26 @@ function fakeCli(script: string): SpawnedCli {
 }
 
 let nextChild: () => SpawnedCli = () => fakeCli("setTimeout(()=>{}, 60000)");
+let spawnCount = 0;
+const installRuns: string[] = [];
 
 vi.mock("../lib/exec", async (importOriginal) => {
   const actual = await importOriginal<typeof ExecModule>();
 
   return {
     ...actual,
-    spawnExtensionCli: () => nextChild(),
+    spawnExtensionCli: () => {
+      spawnCount += 1;
+
+      return nextChild();
+    },
+    runPackageInstall: async (_command: string, _args: string[], options: { cwd: string }) => {
+      installRuns.push(options.cwd);
+      fs.mkdirSync(path.join(options.cwd, "node_modules", ".bin"), { recursive: true });
+      fs.writeFileSync(path.join(options.cwd, "node_modules", ".bin", process.platform === "win32" ? "extension.cmd" : "extension"), "");
+
+      return { code: 0, timedOut: false, output: "" };
+    },
   };
 });
 
@@ -93,6 +106,9 @@ vi.mock("../tools/logs", async (importOriginal) => {
 const dev = await import("../tools/dev");
 const stop = await import("../tools/stop");
 const evalTool = await import("../tools/eval");
+const start = await import("../tools/start");
+const { installRecordPath, runningInstall } = await import("../lib/project-install");
+const { processStartedAt } = await import("../lib/process-identity");
 const { TOOL_POLICY } = await import("../lib/tool-policy");
 const { registerSession, removeSession, removeSessionMarker, listSessionMarkers } = await import(
   "../lib/process-manager"
@@ -802,4 +818,78 @@ describe("922: a dev session that exists and has not compiled yet is starting, f
       expect(answer.error.hint).not.toContain("replace: true");
     },
   );
+});
+
+describe("948: extension_dev and extension_start settle the install before they run the engine", () => {
+  const COLD = JSON.stringify({ name: "cold", devDependencies: { extension: "latest" } });
+
+  function holdInstall(project: string, pid: number): void {
+    const file = installRecordPath(project);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ projectRoot: project, since: new Date().toISOString(), holders: [{ pid, startedAt: processStartedAt(pid), role: "engine" }] }));
+  }
+
+  beforeEach(() => {
+    spawnCount = 0;
+    installRuns.length = 0;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([
+    ["extension_dev", () => dev.handler, "extension_dev"],
+    ["extension_start", () => start.handler, "extension_start"],
+  ] as const)("%s starts no session while an install runs, and answers installing as progress with the call to repeat", async (_label, tool, command) => {
+    const project = tmpProject();
+    const pid = spawnVictim();
+    fs.writeFileSync(path.join(project, "package.json"), COLD);
+    holdInstall(project, pid);
+    vi.useFakeTimers({ toFake: ["Date"] });
+
+    const clock = setInterval(() => vi.setSystemTime(Date.now() + 31_000), 100);
+    const result = JSON.parse(await tool()({ wait: false, projectPath: project }).finally(() => clearInterval(clock)));
+
+    expect(spawnCount).toBe(0);
+    expect(result).toMatchObject({ ok: true, command, status: "installing", error: null });
+    expect(result.value).toMatchObject({ started: false, waitingOn: "dependency-install", installPid: pid, retry: "safe" });
+    expect(result.hint).toMatch(
+      new RegExp(
+        `^No session was started: the engine an earlier extension_build call left running \\(pid ${pid}\\) is still installing this project's dependencies, and this call waited [0-9.]+ s for it to end\\. Call ${command} again with the same arguments: it waits for this install to end, then starts the session\\. Do not start an install by hand and do not poll the process table; the next call does the waiting\\.$`,
+      ),
+    );
+  }, 20_000);
+
+  it("extension_start on a project with no node_modules hands the record to its session until the engine stamps ready.json", async () => {
+    const project = tmpProject();
+    fs.writeFileSync(path.join(project, "package.json"), COLD);
+
+    const answer = start.handler({ wait: false, projectPath: project });
+
+    await vi.waitFor(() => expect(spawnCount).toBe(1));
+
+    const pid = spawned[spawned.length - 1].pid as number;
+
+    await vi.waitFor(() => expect(runningInstall(project)).toEqual({ pid, owner: "session", browser: "chrome" }));
+
+    const ready = path.join(project, "dist", "extension-js", "chrome", "ready.json");
+    fs.mkdirSync(path.dirname(ready), { recursive: true });
+    fs.writeFileSync(ready, JSON.stringify(readyContract("start", "chrome", { pid })));
+
+    expect(runningInstall(project)).toBeNull();
+    expect(JSON.parse(await answer).ok).toBe(true);
+  }, 20_000);
+
+  it("extension_dev reruns an install left without the engine binary before it starts the session", async () => {
+    const project = tmpProject();
+    fs.writeFileSync(path.join(project, "package.json"), COLD);
+    fs.mkdirSync(path.join(project, "node_modules", "extension"), { recursive: true });
+
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
+
+    expect(installRuns).toEqual([project]);
+    expect(result.status).toBe("started");
+    expect(spawnCount).toBe(1);
+  });
 });

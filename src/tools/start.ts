@@ -28,6 +28,7 @@ import { productionLaunchEvidence, readFreshContract, readLoadOverDebugPort } fr
 import { awaitStartLanding, engineExitAfterBoot, startAnswer } from "../lib/start-answer";
 import { controlledIdentity, resolveLoadedId, sessionIdentityWarnings, settledIdentity } from "../lib/controlled-identity";
 import { spawnExtensionCli, spawnFailedEnvelope } from "../lib/exec";
+import { sessionInstallGate } from "../lib/project-install";
 import { geckoAddonId } from "../lib/gecko-addon";
 import {
   registerSession,
@@ -228,6 +229,9 @@ export async function handler(
     browser,
     args.profile,
   );
+  const installGate = await sessionInstallGate(schema.name, args.projectPath);
+  if (installGate.refusal) return installGate.refusal;
+
   const spawnedAt = Date.now();
   const visibility = headlessLaunch(args);
   const spawned = spawnExtensionCli(cliArgs, {
@@ -235,6 +239,8 @@ export async function handler(
     ...(visibility.env ? { env: visibility.env } : {}),
   });
   const { child } = spawned;
+
+  installGate.spawned(child.pid, browser);
 
   if (child.pid === undefined) {
     return spawnFailedEnvelope(schema.name, spawned);
