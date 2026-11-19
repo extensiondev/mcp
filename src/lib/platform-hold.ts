@@ -233,7 +233,7 @@ export interface CreatePrefill {
 }
 
 export interface LaneClosedFacts {
-  server: string;
+  api: string;
   publicHold: boolean;
   allowlistNamed: false;
   consoleUrl?: string;
@@ -266,7 +266,7 @@ export function laneClosedFacts(options: { api?: string; message?: string; prefi
   const publicHold = String(options.message ?? "").includes(HOLD_MARKER_TEXT);
 
   return {
-    server: effectiveApiBase(options.api) || origins.www,
+    api: effectiveApiBase(options.api) || origins.www,
     publicHold,
     allowlistNamed: false,
     ...(publicHold ? {} : { consoleUrl: origins.console }),
@@ -292,7 +292,7 @@ export function laneClosedHint(options: { api?: string; message?: string; subjec
   const noun = options.subject === "workspace" ? "workspace" : "project";
 
   if (facts.publicHold) {
-    return `This is the platform's public hold on ${facts.server}: headless ${noun} creation there is open only to workspaces on the platform's allowlist, and it refused this one. Its answer names no allowlisted workspace and no opening date, so nothing on this machine opens it, and the console answers its gate page during the hold, so creating it there is no route either. Building, running and packaging still work with no account: extension_create, extension_dev and extension_build.`;
+    return `This is the platform's public hold on ${facts.api}: headless ${noun} creation there is open only to workspaces on the platform's allowlist, and it refused this one. Its answer names no allowlisted workspace and no opening date, so nothing on this machine opens it, and the console answers its gate page during the hold, so creating it there is no route either. Building, running and packaging still work with no account: extension_create, extension_dev and extension_build.`;
   }
 
   const target =
@@ -302,5 +302,5 @@ export function laneClosedHint(options: { api?: string; message?: string; subjec
         ? prefilledFormSentence(facts, options.prefill)
         : `Create the ${options.subject === "projects" ? "projects" : "project"} in the console at ${facts.consoleUrl} (workspace page, New project), then run extension_auth (action: login) against ${options.subject === "projects" ? "them" : "it"}.`;
 
-  return `The platform at ${facts.server} closed headless ${noun} creation for this call; its own message above says why. ${target}`;
+  return `The platform at ${facts.api} closed headless ${noun} creation for this call; its own message above says why. ${target}`;
 }

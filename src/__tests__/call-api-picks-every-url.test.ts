@@ -82,7 +82,8 @@ describe("a call's api picks the console in a lane-closed answer", () => {
     expect(out.status).toBe("lane-closed");
     expect(out.hint).toContain("https://www.extension.dev/import?repository=cezaraugusto%2Fpii-shield");
     expect(out.hint).not.toContain("localhost");
-    expect(out.value.server).toBe(PROD);
+    expect(out.value.api).toBe(PROD);
+    expect(out.value.server).toBeUndefined();
     expect(out.value.consoleUrl).toBe("https://console.extension.dev");
     expect(out.value.createUrl).toBe("https://www.extension.dev/import?repository=cezaraugusto%2Fpii-shield&name=pii-shield&workspace=cezaraugusto");
   });
@@ -104,7 +105,7 @@ describe("a call's api picks the console in a lane-closed answer", () => {
 
     expect(out.hint).toContain(`${LOCAL}/import?repository=`);
     expect(out.value.consoleUrl).toBe("http://console.extension.localhost");
-    expect(out.value.server).toBe(LOCAL);
+    expect(out.value.api).toBe(LOCAL);
   });
 
   it("states the public hold plainly and suggests no console route the hold blocks", async () => {
