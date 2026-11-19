@@ -1215,6 +1215,32 @@ describe("extension_project_create with projects: a first build is counted, neve
     expect(out.hint).toContain("2 of 3 first builds were dispatched");
     expect(out.warnings.join(" ")).toContain("acme/gamma (the platform did not say)");
   });
+
+  it("963: points the next step at reading the dispatched builds, never at extension_publish", async () => {
+    const SHA = "255e7b57c6be400bde4ed8744257bc64e27e4012";
+    harness({
+      token: [grant(SLUGS)],
+      create: (_ref, slug) =>
+        slug === "gamma"
+          ? created(slug, { initialBuild: { dispatched: false, reason: "allowance_exhausted" } })
+          : created(slug, { ref: { requested: SHA, branch: "main", sha: SHA } }),
+    });
+
+    const out = await run({ projects: THREE, deviceCode: "dev-code" });
+
+    expect(out.value.nextSteps).toEqual([
+      `extension_builds (action: get, buildId: '${SHA}') for each of ['acme/alpha', 'acme/beta'] until it reads green`,
+    ]);
+
+    expect(JSON.stringify(out.value.nextSteps)).not.toContain("extension_publish");
+
+    harness({ token: [grant(SLUGS)] });
+    const plain = await run({ projects: THREE, deviceCode: "dev-code" });
+
+    expect(plain.value.nextSteps).toEqual([
+      "extension_builds (action: list) for each of ['acme/alpha', 'acme/beta', 'acme/gamma'] until its first build reads green",
+    ]);
+  });
 });
 
 describe("extension_project_create with projects: an answer that proves nothing creates nothing", () => {

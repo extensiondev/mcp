@@ -786,6 +786,29 @@ function quoteList(refs: string[]): string {
   return `[${refs.map((ref) => `'${ref}'`).join(", ")}]`;
 }
 
+function dispatchedSha(row: Row): string {
+  if (row.status !== "created" || !row.ref || typeof row.ref !== "object") return "";
+
+  const sha = (row.ref as { sha?: unknown }).sha;
+
+  return typeof sha === "string" ? sha.trim() : "";
+}
+
+function firstBuildReads(built: Row[]): string[] {
+  const bySha = new Map<string, string[]>();
+
+  for (const row of built) {
+    const sha = dispatchedSha(row);
+    bySha.set(sha, [...(bySha.get(sha) ?? []), row.project]);
+  }
+
+  return [...bySha].map(([sha, projects]) =>
+    sha
+      ? `extension_builds (action: get, buildId: '${sha}') for each of ${quoteList(projects)} until it reads green`
+      : `extension_builds (action: list) for each of ${quoteList(projects)} until its first build reads green`,
+  );
+}
+
 function finalEnvelope(session: Session): string {
   const stop = session.stop;
 
@@ -868,7 +891,7 @@ function finalEnvelope(session: Session): string {
     ...(unconfirmed.length
       ? [`check ${quoteList(unconfirmed)} in the console at ${consoleBase(session.apiBase)} before creating them again`]
       : []),
-    ...(loggedIn.length ? ["extension_publish (project: one of the logged-in projects)"] : []),
+    ...firstBuildReads(built),
   ];
   const value = {
     workspaceSlug: session.workspace,
