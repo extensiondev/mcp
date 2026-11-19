@@ -9,9 +9,12 @@ type Body = Record<string, unknown>;
 export function writeEngineDist(projectPath: string, browser: string): string {
   const distDir = path.join(engineProjectRoot(projectPath), "dist", browser);
   const manifest = path.join(distDir, "manifest.json");
-  if (fs.existsSync(manifest)) {
+  const stampNow = (): void => {
     const now = new Date();
     fs.utimesSync(manifest, now, now);
+  };
+  if (fs.existsSync(manifest)) {
+    stampNow();
     return distDir;
   }
   const src = fs.existsSync(path.join(projectPath, "src", "manifest.json"))
@@ -22,6 +25,7 @@ export function writeEngineDist(projectPath: string, browser: string): string {
     if (entry.name === "dist" || entry.name === "node_modules") continue;
     fs.cpSync(path.join(src, entry.name), path.join(distDir, entry.name), { recursive: true });
   }
+  if (fs.existsSync(manifest)) stampNow();
   return distDir;
 }
 
