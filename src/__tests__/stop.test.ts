@@ -14,7 +14,7 @@ import {
   listSessions,
 } from "../lib/process-manager";
 import { resolveExtensionInvocation } from "../lib/exec";
-import { PLAUSIBLE_SESSION_BINARY, commandLineNames, pidState, processCommand, processStartedAt } from "../lib/process-identity";
+import { PLAUSIBLE_SESSION_BINARY, commandLineNames, linuxStartFromStat, pidState, processCommand, processStartedAt } from "../lib/process-identity";
 import { liveNetworkStubs, openNetworkStubs, stubLinks } from "../lib/network-stubs";
 import { readyContract } from "./fixtures/engine-answers";
 
@@ -512,7 +512,7 @@ describe("extension_stop never signals a pid that is no longer the session", () 
 
 describe("extension_stop says when it could not look for survivors", () => {
   posixOnly(
-    "reports survivors as unverified, not absent, when pgrep cannot run",
+    "949: reads the survivors from /proc on Linux when pgrep cannot run, and elsewhere reports them as unverified, not absent",
     async () => {
       const projectPath = tmpProject();
       const pid = spawnVictim();
@@ -527,6 +527,16 @@ describe("extension_stop says when it could not look for survivors", () => {
       } finally {
         process.env.PATH = previousPath;
         fs.rmSync(emptyBin, { recursive: true, force: true });
+      }
+
+      if (process.platform === "linux") {
+        expect(result.ok).toBe(true);
+        expect(result.status).toBe("stopped");
+        expect(result.value.stopped).toBe(true);
+        expect(result.value.survivorsUnverified).toBeUndefined();
+        expect(await waitGone(pid)).toBe(true);
+
+        return;
       }
 
       expect(result.ok).toBe(false);
@@ -754,6 +764,34 @@ describe("extension_stop judges a session by its pid and its start time", () => 
     },
     20_000,
   );
+
+  it("949: reads a start time from the kernel's stat line, whatever the process calls itself, and on Linux with no ps on the PATH", () => {
+    const boot = Date.parse("2026-11-18T00:00:00.000Z");
+
+    expect(linuxStartFromStat("57 (npm exec extens) S 1 57 57 0 -1 4194304 900 0 0 0 12 3 0 0 20 0 11 0 360000 1 2 3", boot)).toBe("2026-11-18T01:00:00.000Z");
+    expect(linuxStartFromStat("58 (Web Content) (x) R 1 58 58 0 -1 0 0 0 0 0 0 0 0 0 20 0 1 0 150 1 2 3", boot)).toBe("2026-11-18T00:00:01.500Z");
+    expect(linuxStartFromStat("59 (node) S 1 59", boot)).toBeNull();
+
+    if (process.platform !== "linux") return;
+
+    const withPs = processStartedAt(process.pid);
+    const emptyBin = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-no-ps-"));
+    const previousPath = process.env.PATH;
+    process.env.PATH = emptyBin;
+
+    try {
+      const fromProc = processStartedAt(process.pid);
+
+      expect(typeof fromProc).toBe("string");
+      if (withPs) expect(Math.abs(Date.parse(fromProc!) - Date.parse(withPs))).toBeLessThanOrEqual(2_000);
+
+      expect(pidState(process.pid, fromProc)).toBe("alive");
+      expect(pidState(process.pid, "2001-01-01T00:00:00.000Z")).toBe("dead");
+    } finally {
+      process.env.PATH = previousPath;
+      fs.rmSync(emptyBin, { recursive: true, force: true });
+    }
+  });
 
   it("calls this process dead under a start time it never had and alive under its own", () => {
     expect(pidState(process.pid, "2001-01-01T00:00:00.000Z")).toBe("dead");

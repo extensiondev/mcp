@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { STORE_SECTIONS, SUBSECTION_KEYS } from "../lib/store-md-declarations";
 import { buildSummaryPath } from "../lib/session-paths";
 import { reviewDistReport, reviewRisksReport, storeMdLine, wasmGrantLine } from "../lib/store-review";
-import { reviewerNoteBuildLine } from "../lib/store-md-toolchain";
+import { reviewerNoteBuildLine, reviewerNoteToolchainCheck } from "../lib/store-md-toolchain";
 
 let dist: string;
 
@@ -264,6 +264,61 @@ describe("919: storeMdLine says where the permission justifications go", () => {
     expect(storeMdLine(dist, [risk])).toBe(
       'STORE.md: check that a "### Permissions justification" bullet under "## Chrome Web Store" covers each permission, host permission and content script match the manifest declares.',
     );
+  });
+});
+
+describe("949: Firefox reviewer notes with no build line are named, with the line to write", () => {
+  const NOTES_WITHOUT_A_LINE = "# Store metadata\n\n## Firefox Add-ons\n\n### Reviewer notes\n\nThe content script runs on all URLs to read the selection.\n";
+  const chain = { node: "24.22.3", packageManager: { name: "pnpm", version: "10.19.0" }, extensionJs: "4.1.41" };
+  const toolchain = { localBuild: { chain, from: "the local firefox build (extension_build)" }, packageManager: "pnpm", firefoxBuildScript: "build:firefox" };
+  const sentence = "Build from source with Node 24.22.3, pnpm 10.19.0 and Extension.js 4.1.41: run pnpm install, then pnpm run build:firefox.";
+
+  it("answers the check as an advisory warning that carries the line to write, filled from the last build", () => {
+    const check = reviewerNoteToolchainCheck({ projectPath: dist, storeMd: NOTES_WITHOUT_A_LINE, toolchain })!;
+
+    expect(check).toMatchObject({
+      id: "firefox.reviewer_note_toolchain",
+      status: "warn",
+      severity: "advisory",
+      stage: "review",
+      expected: sentence,
+      actual: "no build line",
+      message: `The Firefox reviewer note in STORE.md has no build line, and AMO's reviewers rebuild a bundled add-on from that line. Write under \`### Reviewer notes\` in \`## Firefox Add-ons\` of STORE.md: ${sentence}`,
+      write: { file: "STORE.md", section: "## Firefox Add-ons", heading: "### Reviewer notes", with: sentence },
+    });
+
+    expect(check.write).not.toHaveProperty("replace");
+  });
+
+  it("says to build once when no build is on record, and names the same line for a Firefox section with no reviewer notes at all", () => {
+    const unbuilt = reviewerNoteToolchainCheck({ projectPath: dist, storeMd: NOTES_WITHOUT_A_LINE, toolchain: { ...toolchain, localBuild: null } })!;
+    const bare = reviewerNoteToolchainCheck({ projectPath: dist, storeMd: "## Firefox Add-ons\n\n- Category: Productivity\n", toolchain })!;
+
+    expect(unbuilt.message).toBe(
+      'The Firefox reviewer note in STORE.md has no build line, and AMO\'s reviewers rebuild a bundled add-on from that line. No build toolchain was read to fill it: run extension_build with browser "firefox" once, and this check names the line to write.',
+    );
+
+    expect(unbuilt.write).toEqual({ file: "STORE.md", section: "## Firefox Add-ons", heading: "### Reviewer notes" });
+    expect(bare.write).toMatchObject({ with: sentence });
+  });
+
+  it("stays silent with no STORE.md, with no Firefox section, and when the notes carry the line the build ran", () => {
+    expect(reviewerNoteToolchainCheck({ projectPath: dist, storeMd: null, toolchain })).toBeNull();
+    expect(reviewerNoteToolchainCheck({ projectPath: dist, storeMd: "# Store metadata\n\n## Chrome Web Store\n\n### Permissions justification\n\n- storage: saves the list.\n", toolchain })).toBeNull();
+    expect(reviewerNoteToolchainCheck({ projectPath: dist, storeMd: `## Firefox Add-ons\n\n### Reviewer notes\n\n${sentence}\n`, toolchain })).toBeNull();
+    expect(reviewerNoteToolchainCheck({ projectPath: "", storeMd: NOTES_WITHOUT_A_LINE, toolchain })).toBeNull();
+  });
+
+  it("says the same in the build's STORE.md line for a file that is there, and nothing without a Firefox section", () => {
+    write("STORE.md", NOTES_WITHOUT_A_LINE);
+
+    expect(storeMdLine(dist, [])).toBe(
+      'STORE.md: "### Reviewer notes" under "## Firefox Add-ons" has no build line. Under ### Reviewer notes write "Build from source with Node <version>, <package manager> <version> and Extension.js <version>: run <install command>, then <build command>." with the versions extension_build answers in value.toolchain and say that the source is attached or where it is: the engine bundles the package\'s scripts, and Firefox reviewers rebuild bundled, minified or generated code from source.',
+    );
+
+    write("STORE.md", `## Firefox Add-ons\n\n### Reviewer notes\n\n${sentence}\n`);
+
+    expect(storeMdLine(dist, [])).toBeNull();
   });
 });
 

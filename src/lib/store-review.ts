@@ -15,7 +15,7 @@ import { ENTERPRISE_CHANNEL_SENTENCE, adminInstallOnlyOf } from "./firefox-enter
 import { declaredIcon128, readPngSize } from "./store-listing-media";
 import { STORE_SECTIONS, SUBSECTION_KEYS } from "./store-md-declarations";
 import { STORE_MD_FILENAME } from "./store-md";
-import { REVIEWER_NOTE_BUILD_SHAPE, reviewerNoteBuildSentence } from "./store-md-toolchain";
+import { REVIEWER_NOTE_BUILD_SHAPE, firefoxNotesLackBuildLine, reviewerNoteBuildSentence } from "./store-md-toolchain";
 import { CONTENT_SCRIPT_SENTENCE, WASM_GRANT, WASM_POLICY_BLOCK, WASM_POLICY_KEY, needsWasmGrant, remoteWasmIn, wasmPolicyOf } from "./wasm-policy";
 
 export type ReviewRiskCode =
@@ -418,9 +418,20 @@ export function storeMdLine(root: string, risks: ReviewRisk[]): string | null {
     return `No ${STORE_MD_FILENAME} is in ${root}. Write it there now from the manifest and the code, one section per store: ${STORE_SECTIONS.chrome} with a ${JUSTIFICATION_HEADING} bullet per declared permission, host permission and content script match, ${STORE_SECTIONS.firefox} with ${REVIEWER_NOTES_HEADING}, ${STORE_SECTIONS.edge} (extension_docs_search "${STORE_MD_FILENAME}" has the rest). ${reviewerNotesContent(root)} Leave only its data-use and privacy rows unanswered for the owner, and show them what the code stores and sends.`;
   }
 
-  if (!risks.length) return null;
+  const lines = [
+    risks.length ? `${STORE_MD_FILENAME}: check that ${JUSTIFICATION_BULLETS} covers ${JUSTIFIED}.` : null,
+    notesLackBuildLine(root) ? `${STORE_MD_FILENAME}: "${REVIEWER_NOTES_HEADING}" under "${STORE_SECTIONS.firefox}" has no build line. ${reviewerNotesContent(root)}` : null,
+  ].filter((line): line is string => line !== null);
 
-  return `${STORE_MD_FILENAME}: check that ${JUSTIFICATION_BULLETS} covers ${JUSTIFIED}.`;
+  return lines.length ? lines.join(" ") : null;
+}
+
+function notesLackBuildLine(root: string): boolean {
+  try {
+    return firefoxNotesLackBuildLine(fs.readFileSync(path.join(root, STORE_MD_FILENAME), "utf8"));
+  } catch {
+    return false;
+  }
 }
 
 function listFiles(dir: string, base = ""): Array<{ path: string }> {

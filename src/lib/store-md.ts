@@ -73,6 +73,10 @@ function fieldText(storeBody: string, fieldName: string): string | undefined {
   return undefined;
 }
 
+export function storeMdNamesStore(content: string, store: StoreKeyInMd): boolean {
+  return splitSections(stripComments(content), 2).some((section) => classifyStoreHeading(section.heading) === store);
+}
+
 export function parseStoreMd(content: string): StoreMdData {
   const data: StoreMdData = {};
 

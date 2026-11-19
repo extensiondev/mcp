@@ -171,6 +171,47 @@ function windowsProcessStartTimes(pids: number[]): Map<number, string> {
   return found;
 }
 
+/* @invariant ON LINUX THE KERNEL ANSWERS WHAT ps AND pgrep WOULD. A slim
+ * container image ships neither command, so no start time was ever recorded
+ * for a session there and the search for surviving browser processes could
+ * not run: extension_stop ended the session and still answered
+ * E_STOP_INCOMPLETE, on every call (ledger 949). A PID that ps gives no
+ * start time for is read from /proc/<pid>/stat (field 22, clock ticks since
+ * boot, at the 100 a second Linux reports to user space) and the btime line
+ * of /proc/stat, the sum ps itself prints, and extension_stop reads the
+ * command lines under /proc when pgrep cannot run.
+ */
+const LINUX_CLOCK_TICKS_PER_SECOND = 100;
+
+function linuxBootTimeMs(): number | null {
+  try {
+    const seconds = /^btime\s+(\d+)$/m.exec(fs.readFileSync("/proc/stat", "utf8"))?.[1];
+
+    return seconds ? Number(seconds) * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+export function linuxStartFromStat(stat: string, bootTimeMs: number): string | null {
+  const fields = stat.slice(stat.lastIndexOf(")") + 1).trim().split(" ");
+  const ticks = Number(fields[19]);
+  if (fields.length < 20 || !Number.isFinite(ticks) || ticks < 0) return null;
+
+  return new Date(bootTimeMs + Math.round((ticks * 1000) / LINUX_CLOCK_TICKS_PER_SECOND)).toISOString();
+}
+
+function linuxProcessStartedAt(pid: number): string | null {
+  const boot = linuxBootTimeMs();
+  if (boot === null) return null;
+
+  try {
+    return linuxStartFromStat(fs.readFileSync(`/proc/${pid}/stat`, "utf8"), boot);
+  } catch {
+    return null;
+  }
+}
+
 function posixProcessStartTimes(pids: number[]): Map<number, string> {
   const found = new Map<number, string>();
   let out = "";
@@ -194,6 +235,13 @@ function posixProcessStartTimes(pids: number[]): Map<number, string> {
     const iso = isoStart(match[2].trimEnd());
 
     if (Number.isInteger(pid) && pid > 0 && iso) found.set(pid, iso);
+  }
+
+  if (process.platform === "linux") {
+    for (const pid of pids) {
+      const iso = found.has(pid) ? null : linuxProcessStartedAt(pid);
+      if (iso) found.set(pid, iso);
+    }
   }
 
   return found;

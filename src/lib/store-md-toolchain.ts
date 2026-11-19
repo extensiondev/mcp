@@ -14,7 +14,7 @@ import { exactVersion } from "./exec";
 import { scaffoldScripts } from "./scaffold-scripts";
 import { buildSummaryPath } from "./session-paths";
 import { isRow, text } from "./row";
-import { STORE_MD_FILENAME, parseStoreMd } from "./store-md";
+import { STORE_MD_FILENAME, parseStoreMd, storeMdNamesStore } from "./store-md";
 
 import type { ProjectFacts } from "./submit-facts";
 
@@ -299,6 +299,30 @@ export function firefoxReviewerNotesOf(content: string | null): string | null {
   }
 }
 
+/* @invariant REVIEWER NOTES WITH NO BUILD LINE ARE A FINDING, NOT A PASS. The
+ * check compared a build line that was there and answered nothing when the
+ * notes held none, so the notes 6 of 10 agent runs wrote on 2026-11-18, with
+ * no rebuild step, passed it (ledger 949). A STORE.md with a Firefox section
+ * and no "Build from source with Node ..." line under its reviewer notes now
+ * gets the same advisory warning a wrong line gets, with the line to write
+ * filled from the last local build. A project with no STORE.md, or with no
+ * Firefox section in it, is not asked: the missing-file line speaks for the
+ * first and the second names no Firefox target.
+ */
+export function firefoxNotesLackBuildLine(content: string | null): boolean {
+  if (content === null) return false;
+
+  try {
+    if (!storeMdNamesStore(content, "firefox")) return false;
+  } catch {
+    return false;
+  }
+
+  const notes = firefoxReviewerNotesOf(content);
+
+  return !notes || reviewerNoteBuildLine(notes) === null;
+}
+
 const NO_BUILD_READ = 'No build toolchain was read to fill it: run extension_build with browser "firefox" once, and this check names the line to write.';
 
 export function reviewerNoteToolchainCheck(project: ToolchainProject): Row | null {
@@ -308,13 +332,36 @@ export function reviewerNoteToolchainCheck(project: ToolchainProject): Row | nul
 
   const notes = firefoxReviewerNotesOf(project.storeMd);
   const line = notes ? reviewerNoteBuildLine(notes) : null;
-  if (!line) return null;
+  if (!line && !firefoxNotesLackBuildLine(project.storeMd)) return null;
 
-  const differences = built ? toolchainDifferences(line, built.chain) : [];
-  if (!line.sample && !differences.length) return null;
+  const differences = line && built ? toolchainDifferences(line, built.chain) : [];
+  if (line && !line.sample && !differences.length) return null;
 
-  const packageManager = built?.chain.packageManager?.name || line.packageManager?.name || (project.toolchain?.packageManager ?? "npm");
+  const packageManager = built?.chain.packageManager?.name || line?.packageManager?.name || (project.toolchain?.packageManager ?? "npm");
   const replacement = built ? toolchainSentence(built.chain, { install: `${packageManager} install`, build: firefoxBuildCommandOf(project.toolchain?.firefoxBuildScript ?? null, packageManager) }) : null;
+
+  if (!line) {
+    const place = `\`${REVIEWER_NOTE_HEADING}\` in \`${REVIEWER_NOTE_SECTION}\` of ${STORE_MD_FILENAME}`;
+
+    return {
+      id: REVIEWER_NOTE_TOOLCHAIN_CHECK,
+      label: "The Firefox reviewer note names the toolchain that built the upload",
+      status: "warn",
+      severity: "advisory",
+      stage: "review",
+      expected: replacement ?? "the Node, package manager and Extension.js versions of the build that is uploaded",
+      actual: "no build line",
+      message: `The Firefox reviewer note in ${STORE_MD_FILENAME} has no build line, and AMO's reviewers rebuild a bundled add-on from that line. ${replacement ? `Write under ${place}: ${replacement}` : NO_BUILD_READ}`,
+      ...(built ? { built: { from: built.from, ...built.chain } } : {}),
+      write: {
+        file: STORE_MD_FILENAME,
+        section: REVIEWER_NOTE_SECTION,
+        heading: REVIEWER_NOTE_HEADING,
+        ...(replacement ? { with: replacement } : {}),
+      },
+    };
+  }
+
   const said = toolchainWords(line) || "no versions";
   const ran = built ? `${built.from} ran ${toolchainWords(built.chain)}` : "";
   const where = `the sentence under \`${REVIEWER_NOTE_HEADING}\` in \`${REVIEWER_NOTE_SECTION}\` of ${STORE_MD_FILENAME}`;

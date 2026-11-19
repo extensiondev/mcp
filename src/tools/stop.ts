@@ -138,9 +138,35 @@ function pgrepPids(
       .filter((n) => Number.isInteger(n) && n > 0 && n !== process.pid);
   } catch (err) {
     const status = (err as { status?: unknown })?.status;
+    if (status === 1) return [];
 
-    return status === 1 ? [] : null;
+    return process.platform === "linux" ? procCommandLinePids(pattern) : null;
   }
+}
+
+function procCommandLinePids(pattern: string): number[] | null {
+  let entries: string[];
+
+  try {
+    entries = fs.readdirSync("/proc");
+  } catch {
+    return null;
+  }
+
+  const matcher = new RegExp(pattern);
+  const pids: number[] = [];
+
+  for (const entry of entries) {
+    const pid = Number(entry);
+    if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) continue;
+
+    try {
+      if (matcher.test(fs.readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0").join(" "))) pids.push(pid);
+    } catch {
+    }
+  }
+
+  return pids;
 }
 
 function escapeRegex(text: string): string {
