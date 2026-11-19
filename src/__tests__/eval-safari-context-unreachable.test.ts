@@ -92,7 +92,25 @@ describe("extension_eval on Safari names the contexts it cannot reach", () => {
     expect(result.hint).toContain("extension_screenshot");
     expect(result.hint).toContain("regular Safari window is outside the session");
     expect(JSON.stringify(result)).not.toContain("On a Chromium MV3 session");
-    expect(calls).toHaveLength(1);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("973: refuses a background eval at once, with no session and no engine call, naming page as the context Safari reaches", async () => {
+    const dir = project("safari");
+
+    respond = () => {
+      throw new Error("the engine must not be asked");
+    };
+
+    const result = JSON.parse(
+      await evalTool.handler({ projectPath: dir, browser: "safari", context: "background", expression: "1" }),
+    );
+
+    expect(result.status).toBe("safari-context-unreachable");
+    expect(result.error.message).toContain("reaches only page contexts");
+    expect(JSON.stringify(result)).not.toMatch(/No active control channel|E_SESSION_NOT_FOUND|Start one with extension_dev/);
+    expect(calls).toHaveLength(0);
+    expect(fs.existsSync(path.join(dir, "dist", "extension-js"))).toBe(false);
   });
 
   it("treats a Safari eval with no context as the background", async () => {
@@ -133,7 +151,7 @@ describe("extension_eval on Safari names the contexts it cannot reach", () => {
     );
 
     expect(result.status).toBe("safari-context-unreachable");
-    expect(calls).toHaveLength(1);
+    expect(calls).toHaveLength(0);
   });
 
   it("leaves the same CSP refusal on Firefox to the engine-aware CSP hint", async () => {
@@ -162,7 +180,7 @@ describe("extension_eval on Safari names the contexts it cannot reach", () => {
       );
 
     const result = JSON.parse(
-      await evalTool.handler({ projectPath: dir, browser: "safari", context: "background", expression: "nope" }),
+      await evalTool.handler({ projectPath: dir, browser: "safari", context: "page", expression: "nope" }),
     );
 
     expect(result.status).not.toBe("safari-context-unreachable");

@@ -29,7 +29,7 @@ import {
   type ActArgs,
 } from "../lib/act";
 import { envelope } from "../lib/envelope";
-import { noSessionEnvelope } from "../lib/production-receipt";
+import { noSessionEnvelope, readSessionReceipt } from "../lib/production-receipt";
 import { EVAL_UNTIL_PROPERTY, evalUntilTruthy, pollTimeoutWithin, type EvalUntil } from "../lib/eval-until";
 import { parseFrameObject } from "../lib/frame-json";
 import { findSessionInfo } from "../lib/process-manager";
@@ -121,7 +121,7 @@ import {
   noScriptingReason,
   overProtocolNote,
 } from "../lib/gecko-no-scripting";
-import { safariContextRefusal } from "../lib/safari-eval";
+import { safariContextAskedOutOfReach, safariContextRefusal } from "../lib/safari-eval";
 import { readOpeningIfClosed, surfaceOpening } from "../lib/open-if-closed";
 import { cutAt } from "../lib/linear-text";
 
@@ -1627,6 +1627,16 @@ async function evaluateByTargetId(
 type EvalArgs = ActArgs & { expression: string; until?: EvalUntil; targetId?: string; observe?: boolean | string };
 
 export async function handler(args: EvalArgs): Promise<string> {
+  const outOfReach = args.targetId
+    ? null
+    : safariContextAskedOutOfReach(
+        schema.name,
+        args.browser,
+        args.context,
+        (browser) => readSessionReceipt(args.projectPath, browser).kind !== "dev" || readWebDriverSession(args.projectPath, browser) !== null,
+      );
+  if (outOfReach) return outOfReach;
+
   const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
   if (ambiguous) return ambiguous;
 

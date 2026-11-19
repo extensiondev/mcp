@@ -2,6 +2,7 @@
 
 ## 11.1.0
 
+- Ledger 973. `extension_eval` on Safari refuses a context it cannot reach before it looks for a session. A background, popup, options or sidebar eval with no session answered the no-session refusal, so an agent opened a Safari window only to be told the context is out of reach; it now answers `E_SAFARI_CONTEXT_UNREACHABLE` at once, naming page as the context Safari reaches.
 - Ledger 972. A Safari build says how to run the app it made. `value.nextSteps` says to open the `.app` once and, for an ad-hoc signed app, to turn on Safari > Settings > Developer > Allow unsigned extensions before turning the extension on in Safari > Settings > Extensions.
 - Ledger 971. A Safari build and `extension_analyze` on `dist/safari` name App Store review. `BROAD_HOST_ACCESS` said "Chrome Web Store and AMO reviewers ask why", and the `STORE.md` check pointed at "## Chrome Web Store"; on Safari they name App Store reviewers and "### Reviewer notes" under "## Safari".
 - Ledger 970. `extension_create` names no tool the server does not list. With the platform tools off (the default `--features=local`), its ship step told the agent to call `extension_project_create`; it now says to add platform to `--features` (or `EXTENSION_DEV_FEATURES`) instead.

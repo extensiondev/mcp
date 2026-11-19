@@ -37,8 +37,22 @@ export function safariContextRefusal(
   const parsed = parseFrameObject(raw);
   if (!parsed || !refusedByCsp(parsed)) return null;
 
-  const where = context ?? "background";
+  return safariContextUnreachable(command, browser, context ?? "background", hasWindow);
+}
 
+export function safariContextAskedOutOfReach(
+  command: string,
+  browser: string | undefined,
+  context: string | undefined,
+  hasWindow: (browser: string) => boolean,
+): string | null {
+  if (!browser || !WEBKIT_FAMILY.has(browser)) return null;
+  if (!context || context === "page" || context === "content") return null;
+
+  return safariContextUnreachable(command, browser, context, hasWindow(browser));
+}
+
+function safariContextUnreachable(command: string, browser: string, where: string, hasWindow: boolean): string {
   return envelope({
     ok: false,
     command,

@@ -729,23 +729,16 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
     expect(parsed.error.code).toBe("E_SESSION_EXITED");
   });
 
-  it("sends content and background eval down the bridge, not the window", async () => {
+  it("sends content eval down the bridge, not the window, and refuses background eval before either", async () => {
     withWindow();
     act.calls.length = 0;
 
-    for (const context of ["content", "background"]) {
-      const parsed = JSON.parse(
-        await evalTool.handler({
-          projectPath: project,
-          browser: BROWSER,
-          expression: "1",
-          context,
-        }),
-      );
-      expect(parsed.value.via).toBe("bridge");
-    }
+    const content = JSON.parse(await evalTool.handler({ projectPath: project, browser: BROWSER, expression: "1", context: "content" }));
+    const background = JSON.parse(await evalTool.handler({ projectPath: project, browser: BROWSER, expression: "1", context: "background" }));
 
-    expect(act.calls).toHaveLength(2);
+    expect(content.value.via).toBe("bridge");
+    expect(background.status).toBe("safari-context-unreachable");
+    expect(act.calls).toHaveLength(1);
     expect(safari.calls).toHaveLength(0);
   });
 
