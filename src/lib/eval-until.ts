@@ -53,7 +53,7 @@ const TERMINAL_EVAL_STATUSES = new Set([
   "browser-required",
 ]);
 
-const SESSION_NOT_FOUND = "E_SESSION_NOT_FOUND";
+const NO_SESSION_CODES = new Set(["E_SESSION_NOT_FOUND", "E_NO_SESSION"]);
 
 function errorCode(error: unknown): string | null {
   const code = (error as { code?: unknown } | null | undefined)?.code;
@@ -143,7 +143,7 @@ export async function evalUntilTruthy(
     } else {
       lastError = frame.error ?? null;
 
-      if (TERMINAL_EVAL_STATUSES.has(frame.status) || (errorCode(frame.error) === SESSION_NOT_FOUND && !sessionKnown())) {
+      if (TERMINAL_EVAL_STATUSES.has(frame.status) || (NO_SESSION_CODES.has(errorCode(frame.error) ?? "") && !sessionKnown())) {
         return envelope({
           ok: false,
           command,

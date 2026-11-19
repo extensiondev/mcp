@@ -38,6 +38,7 @@ import { sessionStartingEnvelope, startingSession } from "../lib/session-startin
 import { awaitsAtTopLevel, isOneExpression, isSingleExpression, protocolExpression } from "../lib/one-expression";
 import {
   ambiguousSessionRefusal,
+  knownSessionBrowsers,
   resolveSessionBrowser,
 } from "../lib/session-browser";
 import { evalTokenPresent } from "../lib/session-paths";
@@ -1427,14 +1428,42 @@ function evalDisabled(): string {
  * E_SESSION_STARTING; on a live session this server started with
  * allowEval: true it is E_CONTROL_UNAVAILABLE, and both say to wait.
  * E_EVAL_DISABLED is left for a session started without it.
+ *
+ * "STARTED WITHOUT allowEval" IS SAID ONLY OF A SESSION THAT EXISTS AND
+ * WHOSE RECORD LACKS THE GRANT (ledger 945). The sentence was also the
+ * answer when no token was found for any other reason: a session started
+ * with allowEval: true whose process title could not be told from a
+ * stranger's (npm rewrites it, and a starting URL in it read as the binary
+ * name), a session that had ended, and a project with no session at all.
+ * A record that carries the grant is believed unless its process is gone:
+ * a process that cannot be identified is told to wait, a session that
+ * ended and a project with none answer E_NO_SESSION, and none of the three
+ * is told to replace a session.
  */
 function evalNotAllowed(projectPath: string, browser: string): string {
   const starting = startingSession(projectPath, browser);
   if (starting) return sessionStartingEnvelope(schema.name, projectPath, starting);
 
   const started = findSessionInfo(projectPath, browser);
+  const ended = started !== undefined && pidState(started.pid, started.processStartedAt) === "dead";
 
-  if (started?.allowEval !== true || pidState(started.pid, started.processStartedAt) !== "alive") return evalDisabled();
+  if (ended || (!started && !knownSessionBrowsers(projectPath).includes(browser))) {
+    return noSessionEnvelope({
+      command: schema.name,
+      projectPath,
+      browser,
+      name: "NoSession",
+      need: "so there is nothing to evaluate in",
+      dev: {
+        message: ended
+          ? `The ${browser} session this server recorded for this project has ended (pid ${started.pid} is gone), so there is nothing to evaluate in.`
+          : `No ${browser} session is known for this project, so there is nothing to evaluate in.`,
+        hint: "Call extension_dev with allowEval: true, then extension_wait until it is ready, then extension_eval again.",
+      },
+    });
+  }
+
+  if (started?.allowEval !== true) return evalDisabled();
 
   return envelope({
     ok: false,
@@ -1643,7 +1672,11 @@ async function evaluateAsAsked(args: EvalArgs): Promise<string> {
     browser,
     args.context,
     until,
-    () => findSessionInfo(args.projectPath, browser) !== undefined,
+    () => {
+      const known = findSessionInfo(args.projectPath, browser);
+
+      return known !== undefined && pidState(known.pid, known.processStartedAt) !== "dead";
+    },
   );
 }
 

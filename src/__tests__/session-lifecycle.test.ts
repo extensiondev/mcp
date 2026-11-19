@@ -766,4 +766,40 @@ describe("922: a dev session that exists and has not compiled yet is starting, f
     expect(disabled.error.code).toBe("E_EVAL_DISABLED");
     expect(disabled.error.hint).toContain("replace: true");
   });
+
+  it("945: never says a session was started without allowEval when it was started with it, or when there is no session", async () => {
+    const none = tmpProject();
+    const ended = tmpProject();
+    registerSession({ pid: 2 ** 30, browser: "chrome", projectPath: ended, command: "dev", allowEval: true });
+    stamp(ended, readyContract("dev", "chrome", { pid: 2 ** 30 }));
+
+    const absent = JSON.parse(await evalTool.handler({ projectPath: none, targetId: "T1", expression: "1" }));
+
+    expect(absent.status).toBe("no-session");
+    expect(absent.error.code).toBe("E_NO_SESSION");
+    expect(absent.error.message).toBe("No chrome session is known for this project, so there is nothing to evaluate in.");
+    expect(absent.error.hint).toBe("Call extension_dev with allowEval: true, then extension_wait until it is ready, then extension_eval again.");
+
+    const gone = JSON.parse(await evalTool.handler({ projectPath: ended, targetId: "T1", expression: "1" }));
+
+    expect(gone.status).toBe("no-session");
+    expect(gone.error.code).toBe("E_NO_SESSION");
+    expect(gone.error.message).toBe(`The chrome session this server recorded for this project has ended (pid ${2 ** 30} is gone), so there is nothing to evaluate in.`);
+    expect(gone.error.message).not.toContain("without allowEval");
+  });
+
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "945: a session started with allowEval whose process cannot be told from a stranger's is told to wait, not to restart",
+    async () => {
+      const project = tmpProject();
+      registerSession({ pid: 1, browser: "chrome", projectPath: project, command: "dev", allowEval: true });
+
+      const answer = JSON.parse(await evalTool.handler({ projectPath: project, context: "page", url: "http://127.0.0.1:4173/docs/start.html?ref=nav", expression: "1" }));
+
+      expect(answer.error.code).not.toBe("E_EVAL_DISABLED");
+      expect(answer.error).toMatchObject({ code: "E_CONTROL_UNAVAILABLE", retry: "safe" });
+      expect(answer.error.message).toContain("was started with allowEval: true");
+      expect(answer.error.hint).not.toContain("replace: true");
+    },
+  );
 });

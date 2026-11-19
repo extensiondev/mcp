@@ -184,8 +184,30 @@ describe("extension_eval until", () => {
     );
 
     expect(result.ok).toBe(false);
-    expect(result.status).toBe("eval-disabled");
+    expect(result.status).toBe("no-session");
+    expect(result.error.code).toBe("E_NO_SESSION");
     expect(result.value.polls).toBe(1);
+    expect(result.hint).toMatch(/polling cannot change/);
+
+    registerSession({ pid: process.pid, browser: "chrome", projectPath: dir, command: "start", allowEval: false });
+
+    try {
+      const disabled = JSON.parse(
+        await handler({
+          projectPath: dir,
+          browser: "chrome",
+          context: "background",
+          expression: "1",
+          until: { timeoutMs: 3000, intervalMs: 100 },
+        }),
+      );
+
+      expect(disabled.status).toBe("eval-disabled");
+      expect(disabled.value.polls).toBe(1);
+    } finally {
+      removeSession(dir, "chrome", process.pid);
+      removeSessionMarker(dir, "chrome", process.pid);
+    }
   });
 });
 
