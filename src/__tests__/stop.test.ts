@@ -448,7 +448,7 @@ describe("extension_stop never signals a pid that is no longer the session", () 
     "943: ends a recorded PID under a name it does not know when the command line names this session",
     async () => {
       const projectPath = tmpProject();
-      const pid = spawnHolder("sh", ["-c", "while :; do sleep 1; done", "extension@latest", "dev", projectPath, "--browser=chrome"]);
+      const pid = spawnHolder("perl", ["-e", "sleep 300", "extension@latest", "dev", projectPath, "--browser=chrome"]);
       await new Promise((resolve) => setTimeout(resolve, 200));
       const readyDir = path.join(projectPath, "dist", "extension-js", "chrome");
       fs.mkdirSync(readyDir, { recursive: true });
@@ -484,7 +484,7 @@ describe("extension_stop never signals a pid that is no longer the session", () 
     "943: leaves a stranger alone when its command line names another browser's session of the project",
     async () => {
       const projectPath = tmpProject();
-      const pid = spawnHolder("sh", ["-c", "while :; do sleep 1; done", "extension@latest", "dev", projectPath, "--browser=firefox"]);
+      const pid = spawnHolder("perl", ["-e", "sleep 300", "extension@latest", "dev", projectPath, "--browser=firefox"]);
       await new Promise((resolve) => setTimeout(resolve, 200));
       const readyDir = path.join(projectPath, "dist", "extension-js", "chrome");
       fs.mkdirSync(readyDir, { recursive: true });
@@ -498,7 +498,7 @@ describe("extension_stop never signals a pid that is no longer the session", () 
 
         expect(isAlive(pid)).toBe(true);
         expect(result.value.detail).toContain("Nothing was signalled");
-        expect(result.value.detail).toContain('"sh"');
+        expect(result.value.detail).toContain('"perl"');
       } finally {
         try {
           process.kill(-pid, "SIGKILL");
