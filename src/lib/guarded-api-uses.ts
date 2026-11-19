@@ -635,7 +635,184 @@ function inComment(source: string, offset: number): boolean {
   return lead.startsWith("//") || lead.startsWith("*") || lead.startsWith("/*");
 }
 
-export function apiUsesIn(file: string, source: string, api: string): ApiUse[] {
+/* @invariant A SIMPLE ALIAS OF THE NAMESPACE IS THE NAMESPACE, AND ONLY A NAME
+ * BOUND ONCE IN THE FILE IS AN ALIAS. The use pattern below reads chrome.
+ * and browser. member calls alone, so on 2026-11-18 (ledger 944) const api =
+ * globalThis.browser ?? chrome; api.contextMenus.create(...) validated as
+ * valid for a Firefox build granted "menus" alone, where Firefox gives
+ * browser.contextMenus only under "contextMenus". Before the scan, a name
+ * declared with const, let or var from chrome or browser (bare or through
+ * globalThis, self or window, joined by ?? or ||, or chosen by a typeof or
+ * presence conditional) is rewritten to chrome wherever a member is read
+ * through it, and a name destructured from the namespace or from such an
+ * alias (const { contextMenus } = chrome, const { contextMenus: menu } =
+ * api) to the member it stands for. This is text, not scope analysis, and a
+ * TypeScript file never reaches the parser, so the rule errs to silence: a
+ * name that the file binds anywhere else (a second declaration, a parameter,
+ * a catch binding, an import, a destructuring or an object or array literal
+ * that lists it) or assigns again is no alias at all, and neither is an
+ * initializer that reads on past the namespace (chrome.runtime, chrome as
+ * any). Lines are kept, so a use is reported on the line the source has it,
+ * under the name the source writes (api.contextMenus).
+ */
+const IDENTIFIER = "[A-Za-z_$][\\w$]*";
+const ROOT = "(?:(?:globalThis|self|window)\\s*\\.\\s*)?(?:chrome|browser)(?![\\w$])";
+const ROOT_TEST = `(?:typeof\\s+${ROOT}\\s*[!=]==?\\s*(?:"undefined"|'undefined')|${ROOT})`;
+const ROOT_EXPRESSION = `(?:${ROOT_TEST}\\s*\\?\\s*${ROOT}\\s*:\\s*${ROOT}|${ROOT}(?:\\s*(?:\\?\\?|\\|\\|)\\s*${ROOT})*)`;
+const ROOT_INITIALIZER = `(?:\\(\\s*${ROOT_EXPRESSION}\\s*\\)|${ROOT_EXPRESSION})`;
+const TYPE_ANNOTATION = "(?::[^=;\\n]+)?";
+const ROOT_ALIAS = new RegExp(`(?<![\\w$.])(?:const|let|var)\\s+(${IDENTIFIER})\\s*${TYPE_ANNOTATION}=\\s*${ROOT_INITIALIZER}`, "g");
+const DESTRUCTURED = new RegExp(
+  `(?<![\\w$.])(?:const|let|var)\\s*\\{([^{}=]*)\\}\\s*${TYPE_ANNOTATION}=\\s*(?:(${ROOT_INITIALIZER})|(${IDENTIFIER}))`,
+  "g",
+);
+const ALIAS_HINT = /\b(?:const|let|var)\b[^=;\n]*=\s*\(?\s*(?:typeof\s+)?(?:(?:globalThis|self|window)\s*\.\s*)?(?:chrome|browser)\b|\b(?:const|let|var)\s*\{/;
+
+interface AliasDeclaration extends Range {
+  name: string;
+  root: string;
+  member?: string;
+}
+
+export interface ResolvedAliases {
+  source: string;
+  written: Map<number, string>;
+}
+
+function escapeForPattern(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function endsDeclaration(source: string, at: number): boolean {
+  const rest = source.slice(at, at + 400);
+  const sameLine = /^[ \t]*([^ \t\r\n])/.exec(rest)?.[1];
+
+  if (sameLine !== undefined) return sameLine === ";" || sameLine === "," || /^[ \t]*\/[/*]/.test(rest);
+
+  const next = /^\s*(\S)/.exec(rest)?.[1];
+  if (next === undefined || next === ";") return true;
+  if (/^\s*\/[/*]/.test(rest)) return true;
+
+  return !/[.?([|&=+\-*/<>!:%^,`]/.test(next);
+}
+
+function rootWrittenIn(initializer: string): string {
+  return /\bchrome\b/.test(initializer) ? "chrome" : "browser";
+}
+
+function takenAsParameter(text: string, name: string): boolean {
+  const lists = /\(([^()]*)\)\s*(=>|\{|:)/g;
+  const parameter = new RegExp(`(?:^|,)\\s*(?:\\.\\.\\.\\s*)?${escapeForPattern(name)}\\s*(?:[:=?][^,]*)?(?:,|$)`);
+
+  for (let match = lists.exec(text); match !== null; match = lists.exec(text)) {
+    if (!parameter.test(match[1])) continue;
+    if (match[2] === "=>") return true;
+    if (!/(?:^|[^\w$.])(?:if|while|for|switch|with)\s*$/.test(text.slice(Math.max(0, match.index - 16), match.index))) return true;
+  }
+
+  return false;
+}
+
+function boundOnce(source: string, name: string, declared: Range): boolean {
+  const text = `${source.slice(0, declared.start)}${" ".repeat(declared.end - declared.start)}${source.slice(declared.end)}`;
+  const escaped = escapeForPattern(name);
+  const word = `(?<![\\w$.])${escaped}(?![\\w$])`;
+  const boundOrAssigned = [
+    `(?<![\\w$.])(?:const|let|var|function(?:\\s+|\\s*\\*\\s*)|class|import|type|interface|enum|namespace|as)\\s*${word}`,
+    `${word}\\s*(?:=(?![=>])|\\+\\+|--|[-+*/%&|^]=|\\?\\?=|\\|\\|=|&&=|<<=|>>=|\\*\\*=)`,
+    `(?:\\+\\+|--)\\s*${word}`,
+    `${word}\\s*=>`,
+    `[{,[]\\s*(?:\\.\\.\\.\\s*)?(?:${IDENTIFIER}\\s*:\\s*)?${word}\\s*(?:=[^,}\\]]*)?[,}\\]]`,
+    `catch\\s*\\(\\s*${escaped}\\s*\\)`,
+  ];
+
+  return !boundOrAssigned.some((pattern) => new RegExp(pattern).test(text)) && !takenAsParameter(text, name);
+}
+
+function aliasDeclarations(source: string): AliasDeclaration[] {
+  const found: AliasDeclaration[] = [];
+  const roots = new Map<string, string>();
+
+  ROOT_ALIAS.lastIndex = 0;
+
+  for (let match = ROOT_ALIAS.exec(source); match !== null; match = ROOT_ALIAS.exec(source)) {
+    const name = match[1];
+    const declared = { start: match.index, end: match.index + match[0].length };
+    if (EXTENSION_ROOTS.has(name) || !endsDeclaration(source, declared.end) || !boundOnce(source, name, declared)) continue;
+
+    roots.set(name, name);
+    found.push({ ...declared, name, root: name });
+  }
+
+  DESTRUCTURED.lastIndex = 0;
+
+  for (let match = DESTRUCTURED.exec(source); match !== null; match = DESTRUCTURED.exec(source)) {
+    const declared = { start: match.index, end: match.index + match[0].length };
+    const root = match[2] ? rootWrittenIn(match[2]) : roots.has(match[3]) ? "chrome" : undefined;
+    if (!root || !endsDeclaration(source, declared.end)) continue;
+
+    for (const part of match[1].split(",")) {
+      const property = new RegExp(`^\\s*(${IDENTIFIER})(?:\\s*:\\s*(${IDENTIFIER}))?\\s*$`).exec(part);
+      if (!property) continue;
+
+      const name = property[2] ?? property[1];
+      if (EXTENSION_ROOTS.has(name) || roots.has(name) || !boundOnce(source, name, declared)) continue;
+
+      found.push({ ...declared, name, root, member: property[1] });
+    }
+  }
+
+  return found;
+}
+
+export function resolveNamespaceAliases(source: string): ResolvedAliases {
+  const written = new Map<number, string>();
+  if (source.length > MAX_PARSE_BYTES || !ALIAS_HINT.test(source)) return { source, written };
+
+  const declarations = aliasDeclarations(source);
+  if (!declarations.length) return { source, written };
+
+  const edits: Array<Range & { text: string; alias?: string }> = [];
+
+  for (const declaration of declarations) {
+    const escaped = escapeForPattern(declaration.name);
+    const reads = declaration.member
+      ? new RegExp(`(?<![\\w$.'"\`])${escaped}(?![\\w$'"\`])(?!\\s*:)`, "g")
+      : new RegExp(`(?<![\\w$.'"\`])${escaped}(?=\\s*(?:\\?\\.|\\.)\\s*[A-Za-z_$])|(?<=['"\`]\\s+in\\s+)${escaped}(?![\\w$])`, "g");
+
+    for (let match = reads.exec(source); match !== null; match = reads.exec(source)) {
+      if (covers(declarations, match.index)) continue;
+
+      edits.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        text: declaration.member ? `${declaration.root}.${declaration.member}` : "chrome",
+        ...(declaration.member ? {} : { alias: declaration.name }),
+      });
+    }
+  }
+
+  if (!edits.length) return { source, written };
+
+  edits.sort((a, b) => a.start - b.start);
+  let out = "";
+  let at = 0;
+
+  for (const edit of edits) {
+    if (edit.start < at) continue;
+
+    out += source.slice(at, edit.start);
+    if (edit.alias) written.set(out.length, edit.alias);
+
+    out += edit.text;
+    at = edit.end;
+  }
+
+  return { source: out + source.slice(at), written };
+}
+
+export function apiUsesIn(file: string, original: string, api: string): ApiUse[] {
+  const { source, written } = resolveNamespaceAliases(original);
   const re = new RegExp(`\\b(chrome|browser)\\s*\\.\\s*${api}(?![\\w$])\\s*(\\?\\.|\\.\\s*[A-Za-z_$])?`, "g");
   const inCheck = new RegExp(`['"\`]${api}['"\`]\\s+in\\s+(?:chrome|browser)\\b`);
   const uses: ApiUse[] = [];
@@ -643,7 +820,7 @@ export function apiUsesIn(file: string, source: string, api: string): ApiUse[] {
   let checked = inCheck.test(source);
 
   for (let match = re.exec(source); match !== null; match = re.exec(source)) {
-    const namespace = match[1];
+    const namespace = written.get(match.index) ?? match[1];
     const tail = match[2];
 
     if (!tail) {

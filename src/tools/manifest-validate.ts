@@ -13,7 +13,7 @@ import { engineManifestView } from "../lib/engine-manifest-view";
 import { CHROMIUM_FAMILY, GECKO_FAMILY, WEBKIT_FAMILY, isChromiumFamily, isGeckoFamily } from "../lib/browser-family";
 import { listTemplates } from "../lib/templates-cache";
 import { envelope, okOrRefusal } from "../lib/envelope";
-import { apiUsesIn, type ApiUse } from "../lib/guarded-api-uses";
+import { apiUsesIn, resolveNamespaceAliases, type ApiUse } from "../lib/guarded-api-uses";
 import { droppedRuntimePages } from "../lib/dropped-runtime-pages";
 import { icon128Fix } from "../lib/store-review";
 import { geckoIdWarning, proposedGeckoId } from "../lib/firefox-addon-id";
@@ -367,9 +367,10 @@ function scanApiUsage(
       if (sign) wasm.references.push({ file: full, sign });
 
       const re = /\b(?:chrome|browser)\.(\w+)/g;
+      const read = resolveNamespaceAliases(src).source;
       let m: RegExpExecArray | null;
 
-      while ((m = re.exec(src))) {
+      while ((m = re.exec(read))) {
         if (!API_PERMISSION[m[1]]) continue;
 
         used.add(m[1]);
@@ -932,30 +933,34 @@ export async function handler(args: {
       const unguarded = uses.filter((use) => !use.guarded && !use.checked);
       const gap = `the ${browser} build's permissions do not include ${grantPhrase(api)} (${permissionGapReason(manifest, browser, api)})`;
       const gapSentence = `${gap[0].toUpperCase()}${gap.slice(1)}`;
+      const menusNote =
+        isFirefox && api === "contextMenus" && effectivePerms.has("menus")
+          ? ` In Firefox "menus" grants browser.menus alone, and browser.contextMenus needs "contextMenus".`
+          : "";
 
       if (!uses.length) {
         result.warnings.push(
-          `${browser}: the source names ${ns}.${api} but never reads a member through it (only presence checks or bare references), and ${gap}. Grant ${grantPhrase(api)} to this target if that code should use it there.`,
+          `${browser}: the source names ${ns}.${api} but never reads a member through it (only presence checks or bare references), and ${gap}. Grant ${grantPhrase(api)} to this target if that code should use it there.${menusNote}`,
         );
       }
 
       if (guarded.length) {
         result.warnings.push(
-          `${browser}: ${named(guarded)} at ${where(guarded)} is guarded: runs only where ${named(guarded)} exists. ${gapSentence}, so on ${browser} that code is skipped; grant ${grantPhrase(api)} to this target if it should run there.`,
+          `${browser}: ${named(guarded)} at ${where(guarded)} is guarded: runs only where ${named(guarded)} exists. ${gapSentence}, so on ${browser} that code is skipped; grant ${grantPhrase(api)} to this target if it should run there.${menusNote}`,
         );
       }
 
       if (unproven.length) {
         const root = unproven[0].namespace;
         result.warnings.push(
-          `${browser}: ${named(unproven)} at ${where(unproven)} may run unguarded: the file checks for ${root}.${api} elsewhere, but that check could not be tied to this call. ${gapSentence}, so the call crashes on ${browser} if it runs there. Keep it behind the check (if (${root}.${api}) { ... } or ${root}.${api}?.method(...)), or grant ${grantPhrase(api)} to this target too.`,
+          `${browser}: ${named(unproven)} at ${where(unproven)} may run unguarded: the file checks for ${root}.${api} elsewhere, but that check could not be tied to this call. ${gapSentence}, so the call crashes on ${browser} if it runs there. Keep it behind the check (if (${root}.${api}) { ... } or ${root}.${api}?.method(...)), or grant ${grantPhrase(api)} to this target too.${menusNote}`,
         );
       }
 
       if (unguarded.length) {
         const root = unguarded[0].namespace;
         issues.push(
-          `Code calls ${named(unguarded)} at ${where(unguarded)} but ${gap}. An unguarded call crashes this target at runtime. Guard it (${root}.${api}?.method(...), if (${root}.${api}), typeof ${root}.${api} !== "undefined", or '${api}' in ${root}), or grant ${grantPhrase(api)} to this target too.`,
+          `Code calls ${named(unguarded)} at ${where(unguarded)} but ${gap}. An unguarded call crashes this target at runtime. Guard it (${root}.${api}?.method(...), if (${root}.${api}), typeof ${root}.${api} !== "undefined", or '${api}' in ${root}), or grant ${grantPhrase(api)} to this target too.${menusNote}`,
         );
       }
     }
