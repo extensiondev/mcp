@@ -128,6 +128,9 @@ function mtimeOf(file: string): string | null {
  * Since ledger 503 the stamp is not repeated on the answers that follow (a
  * session of 45 calls paid for it 45 times), so `extension_doctor` always
  * carries it and `brand` leaves a stamp a rebuilt build already wrote alone.
+ * Since ledger 953 every refusal carries it again, as the instructions say:
+ * a refusal is where an agent asks which build answered, and refusals are
+ * few enough that the stamp costs little there.
  */
 export function createServerStamp(entry: string): {
   entry: string;
@@ -142,8 +145,15 @@ export function createServerStamp(entry: string): {
 
   const stamp = (): ServerStamp => ({ version: serverVersion(), commit: serverCommit(), builtAt: loadedAt, startedAt, pid: process.pid });
 
-  const stampDue = (command: string): boolean => {
+  const stampDue = (command: string, ok: unknown): boolean => {
     if (command === "extension_doctor") return true;
+
+    if (ok === false) {
+      introduced = true;
+
+      return true;
+    }
+
     if (introduced) return false;
 
     introduced = true;
@@ -170,7 +180,7 @@ export function createServerStamp(entry: string): {
 
     const value: Row = parsed.value && typeof parsed.value === "object" && !Array.isArray(parsed.value) ? { ...(parsed.value as Row) } : {};
     const rebuilt = rebuiltSince();
-    const due = value.server === undefined && stampDue(parsed.command);
+    const due = value.server === undefined && stampDue(parsed.command, parsed.ok);
     if (!rebuilt && !due) return result;
 
     const warnings = [...(Array.isArray(parsed.warnings) ? parsed.warnings : []), ...(rebuilt ? [rebuiltWarning(rebuilt)] : [])];
@@ -193,7 +203,7 @@ export function createServerStamp(entry: string): {
     if (Array.isArray(parsed.value) || (parsed.value !== null && typeof parsed.value !== "object")) return result;
 
     const value: Row = parsed.value ? (parsed.value as Row) : {};
-    if (value.server !== undefined || !stampDue(parsed.command)) return result;
+    if (value.server !== undefined || !stampDue(parsed.command, parsed.ok)) return result;
 
     return reframed({
       ok: parsed.ok,

@@ -55,6 +55,15 @@ describe("every platform answer says which server answered", () => {
     expect(fresh.brand(answer("extension_assert"))).toBe(answer("extension_assert"));
   });
 
+  it("953: says which server answered on every refusal, after the first answer too", () => {
+    const stamp = createServerStamp(entryFile());
+    const refusal = envelope({ ok: false, command: "extension_project_create", status: "bad-request", error: { code: "E_BAD_REQUEST", message: "no" } });
+
+    expect(JSON.parse(stamp.apply(envelope({ ok: true, command: "extension_auth", status: "logged-in", value: {} }))).value.server).toBeDefined();
+    expect(JSON.parse(stamp.brand(refusal)).value.server).toMatchObject({ version, pid: process.pid });
+    expect(JSON.parse(stamp.apply(refusal)).value.server).toMatchObject({ version, pid: process.pid });
+  });
+
   it("warns to reconnect once when the file on disk is newer than the one running", () => {
     const file = entryFile();
     const stamp = createServerStamp(file);

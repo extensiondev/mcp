@@ -230,11 +230,20 @@ function releaseStatusPlan(call: TrackCall): TrackPlan {
   return { track: { page: "releases" } };
 }
 
+function batchWorkspace(entries: unknown[]): string {
+  const workspaces = new Set(entries.map((entry) => (isRow(entry) ? text(entry.project).split("/")[0]?.toLowerCase() ?? "" : "")));
+  const [only] = [...workspaces];
+
+  return workspaces.size === 1 && only ? only : "";
+}
+
 export const TRACK_ACTS: Record<string, (call: TrackCall) => TrackPlan | null> = {
   extension_project_create: (call) => {
     if (!Array.isArray(call.args.projects)) return call.status === "lane-closed" ? null : { track: { page: "project" } };
 
-    return { track: { page: "workspace" } };
+    const workspace = batchWorkspace(call.args.projects);
+
+    return { track: workspace ? { page: "workspace", target: { workspace } } : { page: "console" } };
   },
   extension_workspace_create: (call) => (call.status === "lane-closed" ? null : { track: { page: "workspace" } }),
   extension_builds: (call) => {

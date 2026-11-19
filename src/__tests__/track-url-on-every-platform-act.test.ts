@@ -185,6 +185,24 @@ describe("every platform act answers the console page that tracks it", () => {
     expect(attachTrack("extension_workspace_create", { workspace: "globex", api: WORLD_API }, workspace)).toBe(workspace);
   });
 
+  it("953: a batch refusal links the workspace its entries name, not the stored login's, and says which server answered", async () => {
+    if (process.platform === "win32") return;
+
+    world.login();
+    await world.call("extension_auth", { action: "status", api: WORLD_API });
+    const out = await world.call("extension_project_create", { projects: [{ project: "globex/one", repo: "octo/one", branch: "main" }], api: WORLD_API });
+
+    expect(out.status).toBe("bad-request");
+    expect(out.value.trackUrl).toBe(`${CONSOLE}/globex`);
+    expect(out.hint).toContain(`${CONSOLE}/globex`);
+    expect(out.hint).not.toContain(`${CONSOLE}/acme`);
+    expect(out.value.server).toMatchObject({ version: expect.any(String), pid: process.pid });
+
+    const mixed = trackFields("extension_project_create", { args: { projects: [{ project: "globex/one" }, { project: "initech/two" }], api: WORLD_API }, status: "bad-request", value: {} });
+
+    expect(mixed?.trackUrl).toBe(CONSOLE);
+  });
+
   it("tracks a channel change on the channel's releases and a channel delete on the Channels settings, never the builds list", () => {
     const configured = envelope({ ok: true, command: "extension_builds_act", status: "channel-configured", value: { project: "acme/widget", channel: { name: "beta" } } });
     const asked = envelope({ ok: false, command: "extension_builds_act", status: "approval-required", value: { project: "acme/widget", approvalUrl: `${WORLD_API}/device/approve/apr_1` }, error: { code: "E_APPROVAL_REQUIRED", message: "ask" } });
