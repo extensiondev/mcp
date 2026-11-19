@@ -80,6 +80,34 @@ describe("a build that is not a release carries the short sha as semver build me
     expect(readBuildId(bare)).toBe("");
   });
 
+  it("964: never names a commit the built source differs from, and names HEAD again once that source is committed", () => {
+    const root = repo("1.2.3");
+    fs.mkdirSync(path.join(root, "src"));
+    fs.writeFileSync(path.join(root, "src", "tool.ts"), "export const a = 1;\n");
+    git(root, ["add", "."]);
+    git(root, ["commit", "-q", "-m", "Add a tool"]);
+    const before = git(root, ["rev-parse", "--short", "HEAD"]);
+
+    fs.writeFileSync(path.join(root, "src", "tool.ts"), "export const a = 2;\n");
+    expect(readBuildId(root)).toBe(`${before}.dirty`);
+
+    fs.mkdirSync(path.join(root, "src", "__tests__"));
+    git(root, ["add", "."]);
+    git(root, ["commit", "-q", "-m", "Change the tool"]);
+    const after = git(root, ["rev-parse", "--short", "HEAD"]);
+
+    expect(readBuildId(root)).toBe(after);
+
+    fs.writeFileSync(path.join(root, "src", "added.ts"), "export const b = 1;\n");
+    expect(readBuildId(root)).toBe(`${after}.dirty`);
+    fs.rmSync(path.join(root, "src", "added.ts"));
+
+    fs.writeFileSync(path.join(root, "src", "__tests__", "tool.test.ts"), "x\n");
+    fs.writeFileSync(path.join(root, "notes.md"), "x\n");
+    expect(readBuildId(root)).toBe(after);
+    expect(buildIdFor({ ...facts, dirty: true })).toBe("48f1eba.dirty");
+  });
+
   it("stamps the producer version as <version>+<sha>, and bare without a build id", () => {
     expect(producerVersion("10.18.1", "48f1eba")).toBe("10.18.1+48f1eba");
     expect(producerVersion("10.18.1", "")).toBe("10.18.1");

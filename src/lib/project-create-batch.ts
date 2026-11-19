@@ -395,6 +395,20 @@ export function parseBatchCreateArgs(
   return { ok: true, workspace: parsed.batch.workspace, entries };
 }
 
+function shortRef(ref: string): string {
+  return /^[0-9a-f]{40}$/i.test(ref) ? ref.slice(0, 7) : ref;
+}
+
+function refGroups(named: [string, string][], listed: number): string {
+  const byRef = new Map<string, string[]>();
+
+  for (const [project, ref] of named) byRef.set(ref, [...(byRef.get(ref) ?? []), project]);
+
+  return [...byRef]
+    .map(([ref, projects]) => `${projects.length === listed && listed > 1 ? `all ${listed}` : projects.join(", ")} at ${shortRef(ref)}`)
+    .join(", ");
+}
+
 function pendingEnvelope(args: {
   deviceCode: string;
   refs: string[];
@@ -411,7 +425,7 @@ function pendingEnvelope(args: {
   const again = `then call extension_project_create again with this deviceCode${args.expiresAt ? ` before ${args.expiresAt.slice(11, 16)} UTC, when the code expires` : ""}; the list is kept here, so the other arguments can be left out`;
   const page = `The page lists all ${args.refs.length} projects this one approval creates and says this device is also signed in to each for 7 days`;
   const named = Object.entries(args.gitRefs);
-  const built = named.length ? ` It builds ${named.map(([project, ref]) => `${project} at ${ref}`).join(", ")}, so tell the owner before they approve.` : "";
+  const built = named.length ? ` It builds ${refGroups(named, args.refs.length)}, so tell the owner before they approve.` : "";
   const hint = `${!args.userCode
     ? `Still waiting for approval at ${args.verificationUri}. Approve there, ${again}.`
     : hasCompleteLink

@@ -16,6 +16,7 @@ export interface BuildFacts {
   tagsAtHead: string[];
   headSubject: string;
   committedVersion: string | null;
+  dirty?: boolean;
 }
 
 export function buildIdFor(facts: BuildFacts): string {
@@ -26,7 +27,7 @@ export function buildIdFor(facts: BuildFacts): string {
   if (facts.tagsAtHead.includes(`v${version}`)) return "";
   if (facts.headSubject.trim() === `Release v${version}`) return "";
 
-  return headSha;
+  return facts.dirty ? `${headSha}.dirty` : headSha;
 }
 
 function git(root: string, args: string[]): string {
@@ -43,6 +44,19 @@ function committedVersionOf(root: string): string | null {
   }
 }
 
+/* @invariant THE STAMP NEVER NAMES A COMMIT THE BUILT SOURCE DIFFERS FROM.
+ * The 930 run of 2026-11-19 drove a build stamped a31d20be whose source was
+ * the next commit, 00a2196c, still uncommitted when the bundle was built, so
+ * the stamp named a tree that was never run. A build whose bundled source
+ * differs from HEAD carries <sha>.dirty; committing that source and building
+ * again stamps the new HEAD.
+ */
+const BUNDLED_SOURCE = ["src", "module.ts", "rslib.config.ts", ":(exclude)src/__tests__"];
+
+function sourceDiffersFromHead(root: string): boolean {
+  return git(root, ["status", "--porcelain", "--untracked-files=all", "--", ...BUNDLED_SOURCE]) !== "";
+}
+
 export function readBuildId(root: string): string {
   try {
     const manifest = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")) as { version?: unknown };
@@ -55,6 +69,7 @@ export function readBuildId(root: string): string {
       tagsAtHead: git(root, ["tag", "--points-at", "HEAD"]).split("\n").map((tag) => tag.trim()).filter(Boolean),
       headSubject: git(root, ["log", "-1", "--format=%s", "HEAD"]),
       committedVersion: committedVersionOf(root),
+      dirty: sourceDiffersFromHead(root),
     });
   } catch {
     return "";

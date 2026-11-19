@@ -606,6 +606,20 @@ describe("958: extension_project_create with projects builds a repo entry at its
 
     expect(beside.error.message).toContain("ref applies to a repo source only");
   });
+
+  it("964: names a ref the whole list shares once, short, and leaves the full shas to value.refs", async () => {
+    const SHA = "255e7b57c6be400bde4ed8744257bc64e27e4012";
+    harness({ token: [{ status: 400, body: { error: "authorization_pending" } }] });
+    const shared = await run({ projects: THREE.map((entry) => ({ ...entry, ref: SHA })) });
+
+    expect(Object.values(shared.value.refs)).toEqual([SHA, SHA, SHA]);
+    expect(shared.hint).toContain("It builds all 3 at 255e7b5, so tell the owner");
+    expect(shared.hint).not.toContain(SHA);
+
+    const split = await run({ projects: [{ ...THREE[0], ref: SHA }, { ...THREE[1], ref: SHA }, { ...THREE[2], ref: "v2" }] });
+
+    expect(split.hint).toContain("It builds acme/alpha, acme/beta at 255e7b5, acme/gamma at v2, so tell the owner");
+  });
 });
 
 describe("952: extension_project_create with projects takes folders under one approval", () => {
