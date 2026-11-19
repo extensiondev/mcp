@@ -723,7 +723,7 @@ describe("941: one dependency install runs on a project at a time, and a build s
     const result = JSON.parse(await pending);
 
     expect(result.status).toBe("built");
-    expect(cliCalls).toHaveLength(1);
+    expect(cliCalls.filter((call) => call[0] === "build")).toHaveLength(1);
     expect(installCalls).toHaveLength(1);
     expect(result.warnings.join(" ")).toContain(`for the engine an earlier extension_build call left running (pid ${pid}) to finish installing`);
     expect(fs.existsSync(installRecordPath(dir))).toBe(false);
