@@ -19,7 +19,7 @@ import { forwardSession, withForwardSession, type ForwardSession } from "./forwa
 import { approvalHeldByPerson, forgetApprovalHolders } from "./forwarded-approval";
 import { forgetForwardCredential, forwardCredential, forwardUrlFor, type ExchangedCredential } from "./forward-credential";
 import { loadHeldBatch } from "./held-batches";
-import { ACT_SETTLE_WINDOW_MS, FORWARD_TIMEOUT_MS, IN_FLIGHT_RECHECK_MS, LOCAL_TOOLS_STILL_WORK, MEMORY_KEY, carriedMemory, hostedWaitOf, lostAnswer, readLane, takeMemory, unreadableAnswer, withWholeWait, withoutHostedWait } from "./forward-lane-answer";
+import { ACT_SETTLE_WINDOW_MS, FORWARD_TIMEOUT_MS, IN_FLIGHT_RECHECK_MS, LOCAL_TOOLS_STILL_WORK, MEMORY_KEY, carriedMemory, hostedWaitOf, lostAnswer, readLane, takeMemory, unreadableAnswer, withOneNotice, withWholeWait, withoutHostedWait } from "./forward-lane-answer";
 import { CLOSED_STATUSES, readAnswer, readLanePreflight, withLanePreflight } from "./forward-lane-preflight";
 import { expiredLoginRefusal } from "./login-expired";
 import { resolveApiBase, safeApiBase } from "./login-flow";
@@ -658,6 +658,8 @@ async function forwardedAnswer(asked: { command: string; tool: string; rule: For
   }
 
   if (legs > 1) body = withWholeWait(body, Math.round((outcomeClock.now() - startedAt) / 1000));
+
+  body = withOneNotice(body);
 
   const shown = (rule.answered ? rule.answered(args, body) : body) as Args;
   const opening = openLanePages(shown, deps);

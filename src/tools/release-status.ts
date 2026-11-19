@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { API_BASE } from "../lib/common-schema";
+import { API_BASE, HOSTED_ACT_WAIT_SECONDS } from "../lib/common-schema";
 import { hostedOnly } from "../lib/hosted-only";
 
 export const schema = {
@@ -38,7 +38,7 @@ export const schema = {
       },
       waitSeconds: {
         type: "number",
-        description: "refresh: wait 0 to 600 s for the check.",
+        description: `refresh: seconds to wait for the check; the hosted lane waits at most ${HOSTED_ACT_WAIT_SECONDS}.`,
       },
       submissionId: {
         type: "string",

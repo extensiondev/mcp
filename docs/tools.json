@@ -529,7 +529,7 @@
           "name": "waitSeconds",
           "type": "number",
           "required": false,
-          "description": "Seconds to wait for the result (with approvalId, the approval), 0 to 600 (default 180)."
+          "description": "Seconds to wait for the result (with approvalId, the approval); the hosted lane waits at most 45 and says so in value.hostedWait."
         },
         {
           "name": "api",
@@ -1808,7 +1808,7 @@
           "name": "waitSeconds",
           "type": "number",
           "required": false,
-          "description": "Seconds to wait for the result (with approvalId, the approval), 0 to 600 (default 180)."
+          "description": "Seconds to wait for the result (with approvalId, the approval); the hosted lane waits at most 45 and says so in value.hostedWait."
         },
         {
           "name": "api",
@@ -1896,7 +1896,7 @@
           "name": "waitSeconds",
           "type": "number",
           "required": false,
-          "description": "Seconds to wait for the result (with approvalId, the approval), 0 to 600 (default 180)."
+          "description": "Seconds to wait for the result (with approvalId, the approval); the hosted lane waits at most 45 and says so in value.hostedWait."
         },
         {
           "name": "api",
@@ -1945,7 +1945,7 @@
           "name": "waitSeconds",
           "type": "number",
           "required": false,
-          "description": "refresh: wait 0 to 600 s for the check."
+          "description": "refresh: seconds to wait for the check; the hosted lane waits at most 45."
         },
         {
           "name": "submissionId",

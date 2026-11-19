@@ -178,6 +178,25 @@ export function withoutHostedWait(body: Args): Args {
   return { ...body, value, ...(warnings !== undefined ? { warnings } : {}) };
 }
 
+/* @invariant A CUT WAIT IS SAID ONCE. The lane writes its notice into
+ * value.hostedWait, into warnings and at times into the hint, about 450
+ * bytes each time. The agent reads it once, in warnings; value.hostedWait
+ * keeps the seconds asked and granted (ledger 959).
+ */
+export function withOneNotice(body: Args): Args {
+  const wait = hostedWaitOf(body);
+  if (!wait || !isRow(body.value)) return body;
+
+  const { notice: _said, ...seconds } = body.value[HOSTED_WAIT_KEY] as Args;
+  const value = { ...body.value, [HOSTED_WAIT_KEY]: seconds };
+  if (!wait.notice) return { ...body, value };
+
+  const hint = typeof body.hint === "string" && body.hint.includes(wait.notice) ? body.hint.replace(wait.notice, "").replace(/ {2,}/g, " ").trim() : body.hint;
+  const warnings = [...(Array.isArray(body.warnings) ? body.warnings.filter((line) => line !== wait.notice) : []), wait.notice];
+
+  return { ...body, value, warnings, ...(hint !== undefined ? { hint } : {}) };
+}
+
 /* @invariant A WAIT THAT TOOK SEVERAL LANE CALLS IS REPORTED WHOLE. The
  * lane cuts a long wait at its function's limit and the forwarder asks
  * again with the seconds still owed, so the last answer knows only its own

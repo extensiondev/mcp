@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { lanePageUrl, setApprovalOpener } from "../lib/approval-open";
 import { loginIdOf } from "../lib/credential-source";
+import { HOSTED_ACT_WAIT_SECONDS } from "../lib/common-schema";
 import { credentialsPath, writeCredentials } from "../lib/credentials";
 import { envelope as envelopeOf } from "../lib/envelope";
 import { forwardSession } from "../lib/forward-approval-state";
@@ -766,13 +767,22 @@ describe("the forwarder gives the person the wait they asked for and keeps what 
     expect(new Set(lane().map((hit) => hit.headers["idempotency-key"])).size).toBe(1);
   });
 
-  it("never sends an act again to finish its wait, and hands the agent the lane's notice", async () => {
-    const dispatched = { ok: true, command: "extension_release_promote", status: "promote-dispatched", value: { hostedWait: { askedSeconds: 180, grantedSeconds: 40, notice: "The hosted lane cut this wait." } }, warnings: ["The hosted lane cut this wait."] };
+  it("959: never sends an act again to finish its wait, hands the agent the lane's notice once, and its schema names the hosted cap", async () => {
+    const notice = "The hosted lane cut this wait.";
+    const dispatched = { ok: true, command: "extension_release_promote", status: "promote-dispatched", value: { hostedWait: { askedSeconds: 180, grantedSeconds: 40, notice } }, warnings: [notice], hint: `Promoted. ${notice} Read the record next.` };
     const { lane } = stubLane([dispatched]);
     const out = await forwarded("extension_release_promote", PROMOTE);
 
     expect(lane()).toHaveLength(1);
-    expect(out).toMatchObject({ status: "promote-dispatched", value: { hostedWait: { askedSeconds: 180, grantedSeconds: 40 } }, warnings: ["The hosted lane cut this wait."] });
+    expect(out).toMatchObject({ status: "promote-dispatched", value: { hostedWait: { askedSeconds: 180, grantedSeconds: 40 } }, warnings: [notice], hint: "Promoted. Read the record next." });
+    expect(JSON.stringify(out).split(notice)).toHaveLength(2);
+
+    for (const name of ["extension_builds_act", "extension_release_promote", "extension_publish", "extension_release_status"]) {
+      const properties = tools.find((tool) => tool.schema.name === name)?.schema.inputSchema.properties as Record<string, { description: string }>;
+      const wait = properties.waitSeconds as { description: string };
+
+      expect(wait.description, name).toContain(`the hosted lane waits at most ${HOSTED_ACT_WAIT_SECONDS}`);
+    }
   });
 
   it("884: finishes a cut submit wait with resume legs under new keys that carry the lane's memory, and keeps the dispatched answer when the lane has nothing to resume", async () => {

@@ -128,7 +128,7 @@ Run a build act on the platform: rebuild, recheck, configure the build settings 
 | `browser` | string | no |  | recheck: chrome, edge, firefox or safari (default all). |
 | `projectPath` | string | no |  | Project directory; picks its login. |
 | `project` | string | no |  | Stored login '<workspace>/<project>' when several exist. |
-| `waitSeconds` | number | no |  | Seconds to wait for the result (with approvalId, the approval), 0 to 600 (default 180). |
+| `waitSeconds` | number | no |  | Seconds to wait for the result (with approvalId, the approval); the hosted lane waits at most 45 and says so in value.hostedWait. |
 | `api` | string | no |  | Platform URL; default from env. |
 
 ## extension_create
@@ -404,7 +404,7 @@ Publish a build on extension.dev: the link for testers, with a download and a ru
 | `buildSha` | string | no |  | Build sha, 7 to 40 hex (an unreadable index echoes the sha back unverified); not with channel. |
 | `channel` | string | no |  | Link a channel's newest build instead. |
 | `force` | boolean | no |  | Publish despite failed checks. |
-| `waitSeconds` | number | no |  | Seconds to wait for the result (with approvalId, the approval), 0 to 600 (default 180). |
+| `waitSeconds` | number | no |  | Seconds to wait for the result (with approvalId, the approval); the hosted lane waits at most 45 and says so in value.hostedWait. |
 | `api` | string | no |  | Platform URL; default from env. |
 
 ## extension_release_promote
@@ -423,7 +423,7 @@ Release a build to a channel on extension.dev. A release needs a workspace owner
 | `version` | string | no |  | Version label; cut: the exact version. |
 | `releaseNotes` | string | no |  | Release notes, markdown. |
 | `approvalId` | string | no |  | Approved approval id; every release needs a workspace owner's approval. |
-| `waitSeconds` | number | no |  | Seconds to wait for the result (with approvalId, the approval), 0 to 600 (default 180). |
+| `waitSeconds` | number | no |  | Seconds to wait for the result (with approvalId, the approval); the hosted lane waits at most 45 and says so in value.hostedWait. |
 | `api` | string | no |  | Platform URL; default from env. |
 
 ## extension_release_status
@@ -435,7 +435,7 @@ Read where a project stands on extension.dev: channels, builds, store submission
 | `include` | array of "releases" \| "stores" \| "history" \| "runs" \| "rollout" \| "cut" \| "listing" | no | `["releases","stores"]` | releases: channels, builds; stores: submissions, reviews; history, runs: owner only; rollout: Chrome; cut: would a release PR build; listing: listings, gaps. |
 | `since` | string | no |  | runs: earliest ISO date, within 30 days. |
 | `refresh` | array of "chrome" \| "edge" \| "firefox" \| "safari" | no |  | stores: re-read these stores now (once per two minutes). |
-| `waitSeconds` | number | no |  | refresh: wait 0 to 600 s for the check. |
+| `waitSeconds` | number | no |  | refresh: seconds to wait for the check; the hosted lane waits at most 45. |
 | `submissionId` | string | no |  | stores: one submission by id or 8-character prefix. |
 | `store` | "chrome" \| "firefox" \| "edge" \| "safari" | no |  | Only this store. |
 | `releaseId` | string | no |  | One release, e.g. chrome-stable. |

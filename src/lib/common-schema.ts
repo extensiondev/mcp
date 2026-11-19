@@ -65,6 +65,13 @@ export const CALL_TIMEOUT = {
   description: "Timeout ms (default 30000; Firefox 10000; debug port 15000).",
 } as const;
 
+export const HOSTED_ACT_WAIT_SECONDS = 45;
+
+export const ACT_WAIT_SECONDS = {
+  type: "number",
+  description: `Seconds to wait for the result (with approvalId, the approval); the hosted lane waits at most ${HOSTED_ACT_WAIT_SECONDS} and says so in value.hostedWait.`,
+} as const;
+
 export const API_BASE = {
   type: "string",
   description:
