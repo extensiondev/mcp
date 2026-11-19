@@ -235,7 +235,7 @@ describe("916: a build answer says each review risk once and stays light", () =>
     expect(result.warnings.join("\n")).not.toMatch(/^WebAssembly:/m);
   });
 
-  it("answers a Firefox build with two review risks, a missing lint, a toolchain and the STORE.md line of ledger 919 in under 2,600 characters, with a hint under 300 and no output tail the fields already carry", async () => {
+  it("answers a Firefox build with two review risks, a missing lint, a toolchain and the STORE.md line of ledgers 919 and 947 in under 3,000 characters, with a hint under 300 and no output tail the fields already carry", async () => {
     const dir = riskyProject();
     summaryOverride = { addon_lint: { status: "missing" }, toolchain: TOOLCHAIN };
 
@@ -247,7 +247,7 @@ describe("916: a build answer says each review risk once and stays light", () =>
     const result = JSON.parse(text);
 
     expect(result.ok).toBe(true);
-    expect(text.length, `${text.length} characters`).toBeLessThanOrEqual(2_600);
+    expect(text.length, `${text.length} characters`).toBeLessThanOrEqual(3_000);
     expect(result.hint.length, result.hint).toBeLessThanOrEqual(300);
     expect(result.hint).toMatch(/^The production build is in \/work\/dist\/firefox\. /);
     expect(result.hint).toContain('call extension_analyze with this projectPath and browser "firefox"');
@@ -337,7 +337,7 @@ describe("925: one project root an answer, the folder the engine built from", ()
     expect(rootLines[0]).toContain("conventional layout");
     expect(rootLines[0]).not.toMatch(/\b(add|create|move)\b/i);
     expect(result.hint).toContain(`The production build is in ${path.join(root, "dist", "chrome")}.`);
-    expect(text.split(JSON.stringify(dir).slice(1, -1)).join("/work").length).toBeLessThanOrEqual(2_300);
+    expect(text.split(JSON.stringify(dir).slice(1, -1)).join("/work").length).toBeLessThanOrEqual(2_450);
   });
 
   it("lets extension_analyze read that build from the projectPath the build was given, with the same root line and STORE.md folder", async () => {

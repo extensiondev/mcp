@@ -5,7 +5,9 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { STORE_SECTIONS, SUBSECTION_KEYS } from "../lib/store-md-declarations";
+import { buildSummaryPath } from "../lib/session-paths";
 import { reviewDistReport, reviewRisksReport, storeMdLine, wasmGrantLine } from "../lib/store-review";
+import { reviewerNoteBuildLine } from "../lib/store-md-toolchain";
 
 let dist: string;
 
@@ -227,7 +229,7 @@ describe("919: storeMdLine says where the permission justifications go", () => {
     const line = storeMdLine(dist, [])!;
 
     expect(line).toBe(
-      `No STORE.md is in ${dist}. Write it there now from the manifest and the code, one section per store: ## Chrome Web Store with a ### Permissions justification bullet per declared permission, host permission and content script match, ## Firefox Add-ons with ### Reviewer notes, ## Edge Add-ons (extension_docs_search "STORE.md" has the rest). Leave only its data-use and privacy rows unanswered for the owner, and show them what the code stores and sends.`,
+      `No STORE.md is in ${dist}. Write it there now from the manifest and the code, one section per store: ## Chrome Web Store with a ### Permissions justification bullet per declared permission, host permission and content script match, ## Firefox Add-ons with ### Reviewer notes, ## Edge Add-ons (extension_docs_search "STORE.md" has the rest). Under ### Reviewer notes write "Build from source with Node <version>, <package manager> <version> and Extension.js <version>: run <install command>, then <build command>." with the versions extension_build answers in value.toolchain and say that the source is attached or where it is: the engine bundles the package's scripts, and Firefox reviewers rebuild bundled, minified or generated code from source. Leave only its data-use and privacy rows unanswered for the owner, and show them what the code stores and sends.`,
     );
 
     expect(line).not.toMatch(/before a store submission|ask the owner for/i);
@@ -237,6 +239,22 @@ describe("919: storeMdLine says where the permission justifications go", () => {
     expect(line).toContain(`${STORE_SECTIONS.firefox} with ${SUBSECTION_KEYS.find((key) => key.field === "reviewerNotes")!.heading}`);
 
     expect(line).not.toMatch(/none|collects nothing|no data/i);
+  });
+
+  it("947: says what the Firefox reviewer notes hold for a bundled package, with the build line written out from the toolchain the build recorded", () => {
+    const summary = buildSummaryPath(dist, "firefox");
+    fs.mkdirSync(path.dirname(summary), { recursive: true });
+    fs.writeFileSync(summary, JSON.stringify({ toolchain: { node: "v24.22.3", extension_js: "4.1.41", package_manager: { name: "pnpm", version: "10.19.0" } } }));
+    write("package.json", JSON.stringify({ scripts: { "build:firefox": "extension build --browser firefox" } }));
+
+    const line = storeMdLine(dist, [])!;
+
+    expect(line).toContain(
+      `## Firefox Add-ons with ### Reviewer notes, ## Edge Add-ons (extension_docs_search "STORE.md" has the rest). Under ### Reviewer notes write "Build from source with Node 24.22.3, pnpm 10.19.0 and Extension.js 4.1.41: run pnpm install, then pnpm run build:firefox." and say that the source is attached or where it is: the engine bundles the package's scripts, and Firefox reviewers rebuild bundled, minified or generated code from source. Leave only its data-use and privacy rows unanswered for the owner`,
+    );
+
+    expect(line).not.toContain("<version>");
+    expect(reviewerNoteBuildLine(/"(Build from source[^"]+)"/.exec(line)![1])).toMatchObject({ node: "24.22.3", packageManager: { name: "pnpm", version: "10.19.0" }, extensionJs: "4.1.41", sample: false });
   });
 
   it("says to check the bullets of a STORE.md that is there when the build has review risks, and nothing when it has none", () => {

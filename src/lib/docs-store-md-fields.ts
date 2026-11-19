@@ -10,6 +10,7 @@ import { tableCell as cell } from "./docs-tools";
 import { PER_STORE_CATEGORY_RULE } from "./store-categories";
 import { storeMdFieldRows, type StoreMdFieldRow } from "./store-md-fields";
 import { LISTING_SECTION, LISTING_STORES, PRIVACY_SECTION, STORE_SECTIONS, type ListingStore } from "./store-md-listing";
+import { REVIEWER_NOTE_BUILD_SHAPE, REVIEWER_NOTE_HEADING, REVIEWER_NOTE_SECTION } from "./store-md-toolchain";
 import { dropTrailing } from "./linear-text";
 
 const STORE_TITLES: Record<ListingStore, string> = {
@@ -28,6 +29,7 @@ const RULES = [
   "A single-value line is read up to a trailing parenthetical that names a store. `- Category: Productivity (Chrome: Productivity, Safari: Utilities)` reads `Productivity` for every store and the named store's own value where the note gives one, with a colon; the same `(Store: value)` note works on the name, subtitle, summary, license, support email, homepage and review contact lines. A `- Category:` line of several categories reads a plain `(Chrome Web Store)` note as the stores that category is for. A parenthetical that names no store is a remark: kept out of the license, support email and homepage, left in the prose lines.",
   PER_STORE_CATEGORY_RULE,
   "A line that is present but over its limit or not in the shape the reader takes is left out of the sync and named, with its reason, in `skipped`; the preflight's `storeMd` block names the same line with the shape it wants.",
+  `\`${REVIEWER_NOTE_HEADING}\` under \`${REVIEWER_NOTE_SECTION}\` says how to rebuild a package whose code is bundled, minified or generated, as the scripts of every engine build are: the line "${REVIEWER_NOTE_BUILD_SHAPE}" with the versions that built the upload, which the preflight compares with that build, and that the source is attached to the submission or where it is. Firefox's source code submission policy asks for both (https://extensionworkshop.com/documentation/publish/source-code-submission/).`,
   "Screenshots and the icon are never read from STORE.md. The icon comes from the build the store receives, and screenshots reach the per-store listing record only through the `screenshots` input of `sync-listing` (PNG paths inside the project, written by `extension_screenshot` with `forStore`); a `- Screenshots:` line is never uploaded from; `skipped` names how many image files it lists and that `sync-listing` takes them as its `screenshots` input, in the same words for every store, and drops that entry when the call passed `screenshots`.",
 ];
 

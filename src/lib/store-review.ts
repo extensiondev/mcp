@@ -15,6 +15,7 @@ import { ENTERPRISE_CHANNEL_SENTENCE, adminInstallOnlyOf } from "./firefox-enter
 import { declaredIcon128, readPngSize } from "./store-listing-media";
 import { STORE_SECTIONS, SUBSECTION_KEYS } from "./store-md-declarations";
 import { STORE_MD_FILENAME } from "./store-md";
+import { REVIEWER_NOTE_BUILD_SHAPE, reviewerNoteBuildSentence } from "./store-md-toolchain";
 import { CONTENT_SCRIPT_SENTENCE, WASM_GRANT, WASM_POLICY_BLOCK, WASM_POLICY_KEY, needsWasmGrant, remoteWasmIn, wasmPolicyOf } from "./wasm-policy";
 
 export type ReviewRiskCode =
@@ -405,9 +406,16 @@ export function wasmGrantLine(report: ReviewReport): string | null {
   return `${STORE_MD_FILENAME}: the manifest grants ${WASM_GRANT}, the narrow grant for WebAssembly, and reviewers ask what compiles under it. Say which module does and that its binary ships in the package, in "${REVIEWER_NOTES_HEADING}" under "${STORE_SECTIONS.firefox}" and "${CERTIFICATION_NOTES_HEADING}" under "${STORE_SECTIONS.edge}".`;
 }
 
+export function reviewerNotesContent(root: string): string {
+  const built = reviewerNoteBuildSentence(root);
+  const line = built ? `"${built}"` : `"${REVIEWER_NOTE_BUILD_SHAPE}" with the versions extension_build answers in value.toolchain`;
+
+  return `Under ${REVIEWER_NOTES_HEADING} write ${line} and say that the source is attached or where it is: the engine bundles the package's scripts, and Firefox reviewers rebuild bundled, minified or generated code from source.`;
+}
+
 export function storeMdLine(root: string, risks: ReviewRisk[]): string | null {
   if (!fs.existsSync(path.join(root, STORE_MD_FILENAME))) {
-    return `No ${STORE_MD_FILENAME} is in ${root}. Write it there now from the manifest and the code, one section per store: ${STORE_SECTIONS.chrome} with a ${JUSTIFICATION_HEADING} bullet per declared permission, host permission and content script match, ${STORE_SECTIONS.firefox} with ${REVIEWER_NOTES_HEADING}, ${STORE_SECTIONS.edge} (extension_docs_search "${STORE_MD_FILENAME}" has the rest). Leave only its data-use and privacy rows unanswered for the owner, and show them what the code stores and sends.`;
+    return `No ${STORE_MD_FILENAME} is in ${root}. Write it there now from the manifest and the code, one section per store: ${STORE_SECTIONS.chrome} with a ${JUSTIFICATION_HEADING} bullet per declared permission, host permission and content script match, ${STORE_SECTIONS.firefox} with ${REVIEWER_NOTES_HEADING}, ${STORE_SECTIONS.edge} (extension_docs_search "${STORE_MD_FILENAME}" has the rest). ${reviewerNotesContent(root)} Leave only its data-use and privacy rows unanswered for the owner, and show them what the code stores and sends.`;
   }
 
   if (!risks.length) return null;
