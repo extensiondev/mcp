@@ -509,7 +509,8 @@ describe("extension_project_create", () => {
     expect(out.value.prefilled).toEqual(["name", "workspace"]);
     expect(out.value.askedOnTheForm).toEqual(["repository", "browsers"]);
     expect(out.hint).toContain(out.value.createUrl);
-    expect(out.hint).toContain("GitHub repository the source is pushed to");
+    expect(out.hint).toContain("GitHub repository the platform reads the source from, never writes to");
+    expect(out.hint).not.toContain("pushed to");
   });
 
   it("carries a prefilled create form link when the lane is closed", async () => {
