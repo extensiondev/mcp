@@ -1637,7 +1637,7 @@
           "name": "repo",
           "type": "string",
           "required": false,
-          "description": "GitHub '<owner>/<repo>' the source is pushed to; instead of projectPath."
+          "description": "GitHub '<owner>/<repo>' the platform reads the source from, never writes to; instead of projectPath."
         },
         {
           "name": "installationId",
@@ -1695,7 +1695,7 @@
           "name": "projects",
           "type": "array of object",
           "required": false,
-          "description": "Instead of project and repo: 1 to 10 (max 20) { project, repo } of one workspace."
+          "description": "Instead of project and its source: 1 to 10 (max 20) { project, repo or projectPath } of one workspace, one approval."
         },
         {
           "name": "deviceCode",

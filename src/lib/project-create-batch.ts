@@ -24,8 +24,8 @@ import {
   parseProjectBatch,
   sameProjectSet,
 } from "./project-batch";
-import { buildCreateBody } from "./project-create-body";
-import { projectCreateUrl } from "./project-source-upload";
+import { buildCreateBody, type CreateBodySource } from "./project-create-body";
+import { projectCreateUrl, uploadProjectSource } from "./project-source-upload";
 import { consoleBase, consoleProjectUrl } from "./registry";
 import { bearerFetch } from "./platform-fetch";
 
@@ -38,6 +38,7 @@ const GRANT_EXPIRY_MARGIN_SECONDS = 5;
 const ENTRY_KEYS = [
   "project",
   "repo",
+  "projectPath",
   "displayName",
   "description",
   "installCommand",
@@ -65,6 +66,15 @@ export interface BatchCreateLocal {
   writeCredentialBatch(batch: StoredCredentials[]): string | null;
 }
 
+export interface BatchUpload {
+  root: string;
+  zip: Buffer;
+  bytes: number;
+  files: number;
+}
+
+export type PrepareBatchUpload = (projectPath: string) => { ok: true; upload: BatchUpload } | { ok: false; answer: string };
+
 export interface BatchCreateArgs {
   projects?: unknown;
   project?: unknown;
@@ -88,6 +98,8 @@ interface BatchEntry {
   repo: string;
   owner: string;
   repoName: string;
+  projectPath: string;
+  upload?: BatchUpload;
   displayName?: string;
   description?: string;
   installCommand?: string;
@@ -215,7 +227,7 @@ export function parseBatchCreateArgs(
     if (!isRecord(entry)) {
       return {
         ok: false,
-        message: `Every entry in projects must be an object shaped { project, repo }; got ${JSON.stringify(entry)}. Each new project needs its own source repository, so a bare name is not enough.`,
+        message: `Every entry in projects must be an object shaped { project, repo } or { project, projectPath }; got ${JSON.stringify(entry)}. Each new project needs its own source, so a bare name is not enough.`,
       };
     }
 
@@ -242,11 +254,26 @@ export function parseBatchCreateArgs(
     const ref = parsed.batch.refs[index] as string;
     const slug = parsed.batch.slugs[index] as string;
     const repo = typeof raw.repo === "string" ? raw.repo.trim() : "";
+    const projectPath = typeof raw.projectPath === "string" ? raw.projectPath.trim() : "";
 
-    if (!isProjectRef(repo)) {
+    if (raw.projectPath !== undefined && !projectPath) {
       return {
         ok: false,
-        message: `The entry for '${ref}' needs repo as '<owner>/<repo>', the GitHub repository that project's source is pushed to.`,
+        message: `In the entry for '${ref}', projectPath must be the folder holding that extension's manifest.json.`,
+      };
+    }
+
+    if (repo && projectPath) {
+      return {
+        ok: false,
+        message: `The entry for '${ref}' names both repo and projectPath. Pass one: projectPath uploads the folder as it is, repo names a GitHub repository the platform reads instead.`,
+      };
+    }
+
+    if (!projectPath && !isProjectRef(repo)) {
+      return {
+        ok: false,
+        message: `The entry for '${ref}' needs projectPath, the folder holding that extension's manifest.json, or repo as '<owner>/<repo>', a GitHub repository the platform reads its source from.`,
       };
     }
 
@@ -289,6 +316,7 @@ export function parseBatchCreateArgs(
       repo,
       owner,
       repoName,
+      projectPath,
       displayName: raw.displayName as string | undefined,
       description: raw.description as string | undefined,
       installCommand: (raw.installCommand as string | undefined) ?? args.installCommand,
@@ -412,13 +440,60 @@ async function persist(session: Session, deviceCode: string, inFlight?: BatchEnt
   });
 }
 
+type SourceOutcome = { ok: true; source: CreateBodySource } | { ok: false; outcome: CreateOutcome };
+
+async function sourceOf(local: BatchCreateLocal, session: Session, entry: BatchEntry, installationId: string | undefined, callStartedAt: number): Promise<SourceOutcome> {
+  if (!entry.upload) return { ok: true, source: { kind: "github", owner: entry.owner, repoName: entry.repoName, installationId } };
+
+  const deadline = answerDeadline(callStartedAt);
+  const upload = await uploadProjectSource({
+    apiBase: session.apiBase,
+    token: session.grant,
+    zip: entry.upload.zip,
+    identity: local.identityHeaders(COMMAND),
+    signal: deadline.signal,
+  }).finally(() => deadline.release());
+
+  if (upload.ok) return { ok: true, source: { kind: "upload", uploadId: upload.receipt.uploadId } };
+
+  if (upload.kind !== "refused") {
+    return {
+      ok: false,
+      outcome: {
+        row: {
+          project: entry.ref,
+          status: "refused",
+          httpStatus: upload.kind === "unreadable" ? upload.status : 0,
+          code: "SOURCE_UPLOAD_FAILED",
+          message: `The upload of ${entry.upload.root} did not complete (${upload.message}), so no create was sent for ${entry.ref}.`,
+        },
+      },
+    };
+  }
+
+  const held = sawPlatformHold(upload.res, upload.body);
+  const code = held ? "PLATFORM_NOT_OPEN" : upload.code || `HTTP_${upload.status}`;
+  const row: Row = {
+    project: entry.ref,
+    status: "refused",
+    httpStatus: upload.status,
+    code,
+    message: `The platform refused the source upload of ${entry.upload.root}: ${upload.message}`.slice(0, 500),
+  };
+
+  return { ok: false, outcome: GRANT_LEVEL_STOP_CODES.has(code) ? { row, stop: { code, message: upload.message, body: upload.body, held } } : { row } };
+}
+
 async function createOne(local: BatchCreateLocal, session: Session, entry: BatchEntry, installationId: string | undefined, callStartedAt: number): Promise<CreateOutcome> {
+  const source = await sourceOf(local, session, entry, installationId, callStartedAt);
+  if (!source.ok) return source.outcome;
+
   const url = projectCreateUrl(session.apiBase);
   const body = {
     ...buildCreateBody({
       workspace: entry.workspace,
       projectSlug: entry.slug,
-      source: { kind: "github", owner: entry.owner, repoName: entry.repoName, installationId },
+      source: source.source,
       displayName: entry.displayName,
       description: entry.description,
       installCommand: entry.installCommand,
@@ -899,13 +974,23 @@ async function restoreSession(
   return session;
 }
 
-export async function createProjectBatch(args: BatchCreateArgs, local: BatchCreateLocal): Promise<string> {
+export async function createProjectBatch(args: BatchCreateArgs, local: BatchCreateLocal, prepareUpload?: PrepareBatchUpload): Promise<string> {
   const parsed = parseBatchCreateArgs(args);
 
   if (!parsed.ok) {
     return fail("BadRequest", parsed.message, "bad-request", "E_BAD_REQUEST", {
       hint: parsed.hint,
     });
+  }
+
+  for (const entry of parsed.entries) {
+    if (!entry.projectPath) continue;
+    if (!prepareUpload) return fail("BadRequest", `This caller cannot upload ${entry.projectPath}; name repo for '${entry.ref}' instead.`, "bad-request", "E_BAD_REQUEST");
+
+    const prepared = prepareUpload(entry.projectPath);
+    if (!prepared.ok) return prepared.answer;
+
+    entry.upload = prepared.upload;
   }
 
   const installationId = String(args.installationId || "").trim();

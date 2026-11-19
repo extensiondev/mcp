@@ -37,13 +37,15 @@ function harness(options: {
   create?: (project: string, slug: string, call: number) => CreateRoute;
   createTakesMs?: number;
   tokenTakesMs?: number;
+  upload?: (call: number) => Route;
 }) {
   const calls: Array<{ url: string; body: any; headers: Record<string, string>; at: number }> = [];
   let tokenCalls = 0;
   let createCalls = 0;
+  let uploadCalls = 0;
   const fn = vi.fn(async (url: any, init?: RequestInit) => {
     const href = String(url);
-    const body = init?.body ? JSON.parse(String(init.body)) : null;
+    const body = typeof init?.body === "string" ? JSON.parse(init.body) : null;
     calls.push({
       url: href,
       body,
@@ -96,6 +98,13 @@ function harness(options: {
       clock += options.tokenTakesMs ?? 0;
 
       return jsonResponse(next.body, next.status);
+    }
+
+    if (href.endsWith("/api/cli/projects/source")) {
+      uploadCalls += 1;
+      const route = options.upload?.(uploadCalls) ?? { status: 200, body: { uploadId: `upl_${uploadCalls}`, bytes: 120, files: 2, manifest: { name: "Folder", version: "1.0.0" }, expiresAt: "2027-01-01T00:00:00.000Z" } };
+
+      return jsonResponse(route.body, route.status);
     }
 
     if (href.endsWith("/api/cli/projects/create")) {
@@ -229,7 +238,8 @@ describe("extension_project_create with projects: refusals before a device code 
     ["a slug over 48 characters", [{ project: `acme/${"p".repeat(49)}`, repo: "octo/app" }], "exact slug"],
     ["an empty list", [], "between 1 and 20"],
     ["a bare name where an entry belongs", ["acme/alpha"], "must be an object"],
-    ["an entry with no repo", [{ project: "acme/alpha" }], "needs repo"],
+    ["an entry with no source", [{ project: "acme/alpha" }], "needs projectPath"],
+    ["an entry with both sources", [{ project: "acme/alpha", repo: "octo/a", projectPath: "/tmp/alpha" }], "names both repo and projectPath"],
     ["an entry with an unknown key", [{ project: "acme/alpha", repo: "octo/a", branch: "main" }], "Unknown key 'branch'"],
     ["an entry with an unsupported browser", [{ project: "acme/alpha", repo: "octo/a", browsers: ["safari"] }], "browsers must be"],
     ["an entry whose build command is not a string", [{ project: "acme/alpha", repo: "octo/a", buildCommand: 3 }], "buildCommand must be a string"],
@@ -570,6 +580,66 @@ describe("extension_project_create with projects: one approval", () => {
 
     expect(beta.build.chrome.enabled).toBe(false);
     expect(beta.info.displayName).toBe("Beta Tool");
+  });
+});
+
+describe("952: extension_project_create with projects takes folders under one approval", () => {
+  const folder = (name: string, manifest = true): string => {
+    const dir = path.join(tmp, "src", name);
+    fs.mkdirSync(dir, { recursive: true });
+    if (manifest) fs.writeFileSync(path.join(dir, "manifest.json"), JSON.stringify({ manifest_version: 3, name, version: "1.0.0" }));
+    fs.writeFileSync(path.join(dir, "background.js"), "self.x = 1;");
+
+    return dir;
+  };
+
+  it("uploads each folder entry with the batch grant and creates it from its uploadId, beside a repo entry", async () => {
+    const h = harness({ token: [grant(["alpha", "beta"])] });
+    const out = await run({ projects: [{ project: "acme/alpha", projectPath: folder("alpha") }, { project: "acme/beta", repo: "octo/beta-src" }], deviceCode: "dev-code" });
+
+    expect(out.ok).toBe(true);
+    expect(out.status).toBe("created");
+    expect(h.to("/api/cli/device/token")).toHaveLength(1);
+
+    const uploads = h.to("/api/cli/projects/source");
+    expect(uploads).toHaveLength(1);
+    expect(uploads[0]?.headers.authorization).toBe(`Bearer ${GRANT}`);
+
+    const [alpha, beta] = h.to("/api/cli/projects/create");
+    expect(alpha?.body.source).toEqual({ uploadId: "upl_1" });
+    expect(alpha?.body.github).toBeUndefined();
+    expect(beta?.body.github).toMatchObject({ owner: "octo", repo: "beta-src" });
+  });
+
+  it("asks one device code for a list of folders, and refuses a folder with no manifest before spending one", async () => {
+    const pending = harness({ token: [{ status: 400, body: { error: "authorization_pending" } }] });
+    const asked = await run({ projects: [{ project: "acme/alpha", projectPath: folder("alpha") }, { project: "acme/beta", projectPath: folder("beta") }] });
+
+    expect(asked.status).toBe("authorization-pending");
+    expect(pending.to("/api/cli/device/code")).toHaveLength(1);
+    expect(pending.to("/api/cli/projects/source")).toHaveLength(0);
+
+    const { fn } = harness({});
+    const refusedOut = await run({ projects: [{ project: "acme/alpha", projectPath: folder("alpha") }, { project: "acme/beta", projectPath: folder("bare", false) }] });
+
+    expect(refusedOut.status).toBe("bad-request");
+    expect(refusedOut.error.message).toContain("holds no manifest.json");
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("keeps a refused upload as that project's row, sends no create for it and goes on", async () => {
+    const h = harness({ token: [grant(["alpha", "beta"])], upload: (call) => (call === 1 ? { status: 400, body: { code: "SOURCE_REFUSED", message: "a symlink points outside the folder" } } : { status: 200, body: { uploadId: "upl_2", bytes: 1, files: 1, manifest: {}, expiresAt: "" } }) });
+    const out = await run({ projects: [{ project: "acme/alpha", projectPath: folder("alpha") }, { project: "acme/beta", projectPath: folder("beta") }], deviceCode: "dev-code" });
+
+    expect(out.status).toBe("batch-incomplete");
+    expect(out.value.results[0]).toMatchObject({ project: "acme/alpha", status: "refused", httpStatus: 400, code: "SOURCE_REFUSED" });
+    expect(out.value.results[1]).toMatchObject({ project: "acme/beta", status: "created" });
+    expect(h.to("/api/cli/projects/create").map((call) => call.body.project)).toEqual(["acme/beta"]);
+  });
+
+  it("says the platform reads a repo and never writes to it", () => {
+    expect(schema.inputSchema.properties.repo.description).toContain("never writes to");
+    expect(schema.inputSchema.properties.projects.description).toContain("projectPath");
   });
 });
 

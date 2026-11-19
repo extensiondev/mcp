@@ -129,7 +129,7 @@ export const schema = {
       },
       repo: {
         type: "string",
-        description: "GitHub '<owner>/<repo>' the source is pushed to; instead of projectPath.",
+        description: "GitHub '<owner>/<repo>' the platform reads the source from, never writes to; instead of projectPath.",
       },
       installationId: {
         type: "string",
@@ -169,7 +169,7 @@ export const schema = {
       projects: {
         type: "array",
         items: { type: "object" },
-        description: `Instead of project and repo: 1 to ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} (max ${MAX_BATCH_PROJECTS}) { project, repo } of one workspace.`,
+        description: `Instead of project and its source: 1 to ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} (max ${MAX_BATCH_PROJECTS}) { project, repo or projectPath } of one workspace, one approval.`,
       },
       deviceCode: {
         type: "string",
@@ -240,14 +240,14 @@ function sourceRequired(apiBase: string, local: ProjectCreateLocal): string {
     error: {
       code: "E_BAD_REQUEST",
       name: "BadRequest",
-      message: `Name the source: projectPath, the folder holding the extension's manifest.json (uploaded as it is, no push needed), or repo '<owner>/<repo>', a GitHub repository the source is pushed to. Neither was given and the server's cwd (${cwd}) holds no manifest.json or extension.config.*.`,
+      message: `Name the source: projectPath, the folder holding the extension's manifest.json (uploaded as it is, no push needed), or repo '<owner>/<repo>', a GitHub repository the platform reads the source from. Neither was given and the server's cwd (${cwd}) holds no manifest.json or extension.config.*.`,
     },
     value: { needs: "source", createUrl: `${mcpOrigins(apiBase).www}${wwwImportPath()}` },
     hint: `Call extension_project_create again with projectPath, the folder extension_create answered as projectPath (absolute, or relative to ${cwd}); the platform builds the upload on its own lane and nothing has to be pushed. A GitHub repository the approving account can read works too, with repo '<owner>/<repo>'; the console's create form at ${mcpOrigins(apiBase).www}${wwwImportPath()} takes a repository only.`,
   });
 }
 
-function prepareUpload(root: string, defaulted: boolean, local: ProjectCreateLocal): { ok: true; source: CreateSource } | { ok: false; answer: string } {
+function prepareUpload(root: string, defaulted: boolean, local: ProjectCreateLocal): { ok: true; source: Extract<CreateSource, { kind: "upload" }> } | { ok: false; answer: string } {
   const read = local.readUploadSource(root);
 
   if (read.kind === "not-folder") {
@@ -385,7 +385,11 @@ export async function handler(args: ProjectCreateArgs): Promise<string> {
 
 export async function createProject(args: ProjectCreateArgs, local: ProjectCreateLocal): Promise<string> {
   if (args.projects !== undefined && args.projects !== null) {
-    return createProjectBatch(args, local);
+    return createProjectBatch(args, local, (projectPath) => {
+      const prepared = prepareUpload(local.uploadRoot(projectPath), false, local);
+
+      return prepared.ok ? { ok: true, upload: prepared.source } : prepared;
+    });
   }
 
   const callStartedAt = Date.now();
@@ -433,7 +437,7 @@ export async function createProject(args: ProjectCreateArgs, local: ProjectCreat
   if (repo && !isProjectRef(repo)) {
     return fail(
       "BadRequest",
-      "repo must be in the form '<owner>/<repo>', a GitHub repository the extension's source is pushed to; or pass projectPath to upload the folder instead.",
+      "repo must be in the form '<owner>/<repo>', a GitHub repository the platform reads the extension's source from; or pass projectPath to upload the folder instead.",
       "bad-request",
       "E_BAD_REQUEST",
     );
