@@ -16,7 +16,7 @@ import {
 import { CDPClient } from "../lib/cdp";
 import { envelope } from "../lib/envelope";
 import { noSessionEnvelope } from "../lib/production-receipt";
-import { isChromiumFamily, isGeckoFamily } from "../lib/browser-family";
+import { isChromiumFamily, isGeckoFamily, WEBKIT_FAMILY } from "../lib/browser-family";
 import {
   resolveCdpPort,
   resolveRdpPort,
@@ -215,7 +215,7 @@ export async function handler(args: {
         code: "E_UNSUPPORTED_BROWSER",
         message: `Listing extensions for ${browser} is not supported: no debugging-protocol pairing exists for this browser family.`,
       },
-      hint: "Target a Chromium-family (CDP) or Firefox-family (RDP) dev session.",
+      hint: WEBKIT_FAMILY.has(browser) ? "On Safari, the installed extensions are listed in Safari > Settings > Extensions, where the person reads and toggles them; Apple's safaridriver --mcp server (extension_browsers detect reports it as automation.mcp) drives Safari from an agent. A Chromium or Firefox session lists them here." : "Target a Chromium-family (CDP) or Firefox-family (RDP) dev session.",
     });
   }
 

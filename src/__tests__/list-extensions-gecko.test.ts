@@ -203,3 +203,18 @@ describe("extension_list_extensions on Gecko (RDP root listAddons)", () => {
     expect(listAddonsCalls.length).toBe(1);
   });
 });
+
+describe("968: extension_list_extensions on Safari says what works there", () => {
+  it("points at Safari's Extensions settings and safaridriver --mcp, not only at Chromium or Firefox", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-list-safari-"));
+    tmpDirs.push(dir);
+
+    const result = JSON.parse(await listExtensions.handler({ projectPath: dir, browser: "safari" }));
+
+    expect(result.status).toBe("unsupported-browser");
+    expect(result.hint).toContain("Safari > Settings > Extensions");
+    expect(result.hint).toContain("safaridriver --mcp");
+    expect(result.hint).toContain("extension_browsers");
+    expect(result.hint).not.toMatch(/^Target a Chromium-family/);
+  });
+});
