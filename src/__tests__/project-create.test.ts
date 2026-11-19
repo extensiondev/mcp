@@ -475,6 +475,7 @@ describe("extension_project_create", () => {
     const out = JSON.parse(await handler(baseArgs));
 
     expect(out.status).toBe("lane-closed");
+    expect(out.error.retry).toBe("no");
     expect(out.value.createUrl).toBe(`${API}/import?repository=acme%2Fghost-app-src&name=ghost-app&workspace=acme`);
     expect(out.value.prefilled).toEqual(["repository", "name", "workspace"]);
     expect(out.value.askedOnTheForm).toEqual(["browsers"]);

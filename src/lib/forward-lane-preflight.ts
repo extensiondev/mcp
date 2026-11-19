@@ -17,10 +17,13 @@ export const CLOSED_STATUSES: readonly string[] = ["lane-closed", "hosted-off"];
 
 const PREFLIGHT_STATUSES = ["lane-ready", "lane-closed", "preflight-partial"] as const;
 const CLOSED_MAX = 12;
+const TOOLS_MAX = 8;
+const TOOL_NAME = /^extension_[a-z_]{1,48}$/;
 
 export interface ClosedSwitch {
   switch: string;
   closes: string;
+  tools?: string[];
 }
 
 export interface LanePreflight {
@@ -34,6 +37,12 @@ function isRow(value: unknown): value is Args {
 
 function line(value: unknown, max: number): string {
   return typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "";
+}
+
+function toolsOf(value: unknown): { tools?: string[] } {
+  const tools = Array.isArray(value) ? value.filter((name): name is string => typeof name === "string" && TOOL_NAME.test(name)).slice(0, TOOLS_MAX) : [];
+
+  return tools.length ? { tools } : {};
 }
 
 /* @invariant ONE QUESTION WITH NO CREDENTIAL SAYS WHICH SWITCH KEEPS THE
@@ -62,7 +71,7 @@ export async function readLanePreflight(resource: string, forwarderVersion: stri
 
     const closed = value.closed
       .filter(isRow)
-      .map((entry) => ({ switch: line(entry.switch, 64), closes: line(entry.closes, 200) }))
+      .map((entry) => ({ switch: line(entry.switch, 64), closes: line(entry.closes, 200), ...toolsOf(entry.tools) }))
       .filter((entry) => /^[A-Z][A-Z0-9_]*$/.test(entry.switch))
       .slice(0, CLOSED_MAX);
 

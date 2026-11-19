@@ -13,7 +13,7 @@ import { firstBuildValue, readFirstBuild, withheldBecause } from "./first-build"
 import { answerDeadline, RESUME_POLL_MS, START_WORK_WITHIN_MS } from "./call-budget";
 import { scratchShelf } from "./call-memory";
 import { pollDeviceGrant, type DeviceCodeStart, type DeviceIntent } from "./device-flow";
-import { envelope, type ErrorCode } from "./envelope";
+import { envelope, type ErrorCode, type RetryVerdict } from "./envelope";
 import { kernelHook } from "./kernel-hooks";
 import { fetchLoginConfig, resolveApiBase, safeApiBase } from "./login-flow";
 import { laneClosedFacts, laneClosedHint, platformHoldEnvelope, sawPlatformHold } from "./platform-hold";
@@ -168,13 +168,13 @@ function fail(
   message: string,
   status: string,
   code: ErrorCode,
-  extra?: { hint?: string; value?: Record<string, unknown> },
+  extra?: { hint?: string; value?: Record<string, unknown>; retry?: RetryVerdict },
 ): string {
   return envelope({
     ok: false,
     command: COMMAND,
     status,
-    error: { code, name, message },
+    error: { code, name, message, ...(extra?.retry ? { retry: extra.retry } : {}) },
     ...(extra?.value ? { value: extra.value } : {}),
     ...(extra?.hint ? { hint: extra.hint } : {}),
   });
@@ -700,6 +700,7 @@ function finalEnvelope(session: Session): string {
 
   if (created.length === 0 && stop?.code === "CLI_PROJECT_CREATE_DISABLED") {
     return fail("CreateClosed", stop.message, "lane-closed", "E_PLATFORM", {
+      retry: "no",
       hint: laneClosedHint({ api: session.apiBase, message: stop.message, subject: "projects" }),
       value: { workspaceSlug: session.workspace, results: rows, ...laneClosedFacts({ api: session.apiBase, message: stop.message }) },
     });
@@ -1010,7 +1011,7 @@ export async function createProjectBatch(args: BatchCreateArgs, local: BatchCrea
           serverMessage || "Headless project creation is not open on this host yet.",
           "lane-closed",
           "E_PLATFORM",
-          { hint: laneClosedHint({ api: apiBase, message: serverMessage, subject: "projects" }), value: { ...laneClosedFacts({ api: apiBase, message: serverMessage }) } },
+          { retry: "no", hint: laneClosedHint({ api: apiBase, message: serverMessage, subject: "projects" }), value: { ...laneClosedFacts({ api: apiBase, message: serverMessage }) } },
         );
       }
 
@@ -1058,7 +1059,7 @@ export async function createProjectBatch(args: BatchCreateArgs, local: BatchCrea
         poll.message || "Headless project creation is not open yet.",
         "lane-closed",
         "E_PLATFORM",
-        { hint: laneClosedHint({ api: apiBase, message: poll.message, subject: "projects" }), value: { ...laneClosedFacts({ api: apiBase, message: poll.message }) } },
+        { retry: "no", hint: laneClosedHint({ api: apiBase, message: poll.message, subject: "projects" }), value: { ...laneClosedFacts({ api: apiBase, message: poll.message }) } },
       );
     }
 

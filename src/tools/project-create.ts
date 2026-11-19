@@ -220,7 +220,7 @@ function closedLane(name: string, message: string, api: string, prefill: CreateP
     ok: false,
     command: COMMAND,
     status: "lane-closed",
-    error: { code: "E_PLATFORM", name, message },
+    error: { code: "E_PLATFORM", name, message, retry: "no" },
     value: { workspace, ...facts },
     hint: laneClosedHint({ api, message, subject: "project", prefill }),
   });

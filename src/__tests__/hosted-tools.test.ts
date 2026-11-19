@@ -686,6 +686,12 @@ describe("the forwarder reads a lane answer by its status, and never reports an 
 
     expect(status).toMatchObject({ status: "logged-in", hint: "Signed in.", value: { workspaceSlug: "acme", hostedLane: { lane: LANE, status: "lane-ready", closed: [] } } });
 
+    const createShut = { switch: "WWW_CLI_PROJECT_CREATE_HELD", closes: "headless project and workspace creation", tools: ["extension_project_create", "extension_workspace_create", "not a tool"] };
+    stubLane([{ ...preflight([]), value: { switches: {}, closed: [createShut], www: "read" }, status: "lane-ready" }]);
+    const shut = JSON.parse(await forwardCall("extension_auth", { action: "status" }, async () => envelopeOf({ ok: true, command: "extension_auth", status: "logged-in", value: { workspaceSlug: "acme" }, hint: "Signed in." }), FORWARDING));
+
+    expect(shut.value.hostedLane.closed).toEqual([{ ...createShut, tools: ["extension_project_create", "extension_workspace_create"] }]);
+
     expect(closed).toMatchObject({ ok: false, status: "hosted-off", error: { code: "E_PLATFORM" }, value: { lane: LANE, httpStatus: 503, retryAfterSeconds: 300 } });
     expect(closed.error.message).toContain(`${LANE} answered 503: Platform tools are switched off for now.`);
     expect(off.lane()).toHaveLength(2);

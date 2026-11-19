@@ -92,7 +92,7 @@ function closedLane(name: string, message: string, api: string, workspace: strin
     ok: false,
     command: COMMAND,
     status: "lane-closed",
-    error: { code: "E_PLATFORM", name, message },
+    error: { code: "E_PLATFORM", name, message, retry: "no" },
     value: { workspace, ...laneClosedFacts({ api, message }) },
     hint: laneClosedHint({ api, message, subject: "workspace" }),
   });

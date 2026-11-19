@@ -764,6 +764,7 @@ describe("extension_project_create with projects: every project keeps its own an
     const out = await run({ projects: THREE, deviceCode: "dev-code" });
 
     expect(out.status).toBe("lane-closed");
+    expect(out.error.retry).toBe("no");
     expect(out.hint).toContain("console");
     expect(out.value.results).toHaveLength(3);
   });
@@ -975,6 +976,7 @@ describe("extension_project_create with projects: the grant and the list", () =>
 
     const closed = await run({ projects: THREE, deviceCode: "dev-code" });
     expect(closed.status).toBe("lane-closed");
+    expect(closed.error.retry).toBe("no");
   });
 
   it("answers lane-closed when the device code is refused for a closed lane", async () => {
@@ -986,6 +988,7 @@ describe("extension_project_create with projects: the grant and the list", () =>
 
     expect(out.status).toBe("lane-closed");
     expect(out.error.message).toBe("not open");
+    expect(out.error.retry).toBe("no");
   });
 
   it("says a platform that refuses the list form may predate it", async () => {

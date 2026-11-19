@@ -189,3 +189,9 @@ describe("924: theme work is routed to extension_theme_verify where it is listed
     expect(withExtras.indexOf("action:'preflight'")).toBeLessThan(4096);
   });
 });
+
+describe("951: a closed headless create routes to the console import", () => {
+  it("says to create at the console import when the status lists the create tool as closed", () => {
+    expect(serverInstructions(PLATFORM_ON)).toContain("call extension_project_create, then extension_auth, or use the console import when extension_auth status lists it in hostedLane.closed.");
+  });
+});

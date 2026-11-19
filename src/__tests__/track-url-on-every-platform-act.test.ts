@@ -177,6 +177,14 @@ describe("every platform act answers the console page that tracks it", () => {
     expect(attachTrack("extension_release_promote", { buildId: "abc1234", channel: "stable", api: WORLD_API }, held)).toBe(held);
   });
 
+  it("951: links no console page for a project or workspace a closed create lane never made, and keeps the console import", () => {
+    const project = envelope({ ok: false, command: "extension_project_create", status: "lane-closed", value: { workspace: "acme", createUrl: `${WORLD_API}/import?name=ghost&workspace=acme` }, error: { code: "E_PLATFORM", message: "closed", retry: "no" }, hint: "Create it in the console." });
+    const workspace = envelope({ ok: false, command: "extension_workspace_create", status: "lane-closed", value: { workspace: "globex" }, error: { code: "E_PLATFORM", message: "closed", retry: "no" }, hint: "Create it in the console." });
+
+    expect(attachTrack("extension_project_create", { project: "acme/ghost", projectPath: "/tmp/ghost", api: WORLD_API }, project)).toBe(project);
+    expect(attachTrack("extension_workspace_create", { workspace: "globex", api: WORLD_API }, workspace)).toBe(workspace);
+  });
+
   it("tracks a channel change on the channel's releases and a channel delete on the Channels settings, never the builds list", () => {
     const configured = envelope({ ok: true, command: "extension_builds_act", status: "channel-configured", value: { project: "acme/widget", channel: { name: "beta" } } });
     const asked = envelope({ ok: false, command: "extension_builds_act", status: "approval-required", value: { project: "acme/widget", approvalUrl: `${WORLD_API}/device/approve/apr_1` }, error: { code: "E_APPROVAL_REQUIRED", message: "ask" } });

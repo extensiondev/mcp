@@ -231,8 +231,12 @@ function releaseStatusPlan(call: TrackCall): TrackPlan {
 }
 
 export const TRACK_ACTS: Record<string, (call: TrackCall) => TrackPlan | null> = {
-  extension_project_create: (call) => ({ track: { page: Array.isArray(call.args.projects) ? "workspace" : "project" } }),
-  extension_workspace_create: () => ({ track: { page: "workspace" } }),
+  extension_project_create: (call) => {
+    if (!Array.isArray(call.args.projects)) return call.status === "lane-closed" ? null : { track: { page: "project" } };
+
+    return { track: { page: "workspace" } };
+  },
+  extension_workspace_create: (call) => (call.status === "lane-closed" ? null : { track: { page: "workspace" } }),
   extension_builds: (call) => {
     const action = text(call.args.action) || "list";
     const buildId = buildOf(call);
