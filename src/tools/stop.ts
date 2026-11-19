@@ -13,15 +13,15 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import { PROJECT_PATH } from "../lib/common-schema";
 import {
-  PLAUSIBLE_SESSION_BINARY,
   describeForeignPid,
   describeRecycledPid,
+  namedLikeSessionProcess,
   pidState,
   processStartTimes,
   readWindowsProcessTable,
   startedAsRecorded,
+  type PidState,
   type WindowsProcessRow,
-  processCommand,
 } from "../lib/process-identity";
 import {
   findSessionInfo,
@@ -201,7 +201,12 @@ function commandLineOf(
   }
 
   try {
-    return execFileSync("ps", ["-o", "args=", "-p", String(pid)], { encoding: "utf8" }).trim();
+    return execFileSync("ps", ["-o", "args=", "-p", String(pid)], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch {
+  }
+
+  try {
+    return fs.readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0").join(" ").trim() || null;
   } catch {
     return null;
   }
@@ -266,10 +271,63 @@ function sessionProcessPids(
 
   return {
     pids: [...pids].filter(
-      (pid) => startedAsRecorded(pid, hints.startedAt?.[pid]) || PLAUSIBLE_SESSION_BINARY.test(processCommand(pid)),
+      (pid) => startedAsRecorded(pid, hints.startedAt?.[pid]) || namedLikeSessionProcess(pid),
     ),
     verified,
   };
+}
+
+/* @invariant THE RECORDS OF A SESSION LEAVE ONLY WITH THE SESSION. A recorded
+ * PID that reads as a stranger's is never signalled, but that reading is not
+ * proof the session is gone: on 2026-11-18 (ledger 943) a session started
+ * through npm exec read as foreign by its title, extension_stop removed its
+ * records, answered E_NO_SESSION and left the dev server and the browser up
+ * with nothing on record to stop them by. Two rules follow. A PID with no
+ * start time to compare whose own command line names this project's session
+ * (the engine's dev, start or preview on this folder for this browser, or
+ * the managed profile) is the session's and is ended. And when the PID is a
+ * stranger's, the session's browser processes are still ended, and the
+ * records are removed only when the recorded browser is gone, no survivor
+ * is found and the search for survivors could run; otherwise the records
+ * stay and the answer is E_STOP_INCOMPLETE, saying they were kept.
+ */
+const ENGINE_VERB_BEFORE_A_PATH = /extension[^ ]* (?:dev|start|preview) ["']?$/;
+
+function engineRunsOn(commandLine: string, folder: string): boolean {
+  const insensitive = process.platform === "win32";
+  const haystack = insensitive ? commandLine.toLowerCase() : commandLine;
+  const needle = insensitive ? folder.toLowerCase() : folder;
+
+  for (let at = haystack.indexOf(needle); at !== -1; at = haystack.indexOf(needle, at + 1)) {
+    const after = haystack.charAt(at + needle.length);
+    const closed = after === "" || after === '"' || after === "'" || after.trim() === "";
+
+    if (closed && ENGINE_VERB_BEFORE_A_PATH.test(haystack.slice(Math.max(0, at - 96), at))) return true;
+  }
+
+  return false;
+}
+
+function commandLineNamesSession(
+  pid: number,
+  projectPath: string,
+  browser: string,
+  hints: ContractProcessHints,
+): boolean {
+  let table: WindowsProcessRow[] | null | undefined;
+  const commandLine = commandLineOf(pid, () => {
+    if (table === undefined) table = readWindowsProcessTable();
+
+    return table;
+  });
+  if (!commandLine) return false;
+  if (hints.profilePath && commandLine.includes(hints.profilePath)) return true;
+
+  return projectPathForms(projectPath).some(
+    (form) =>
+      commandLine.includes(`${browserProfileRootDir(form, browser)}${path.sep}`) ||
+      (engineRunsOn(commandLine, form) && !namesAnotherBrowser(commandLine, browser)),
+  );
 }
 
 async function reapSessionProcesses(
@@ -414,29 +472,51 @@ export async function stopOne(
   }
 
   let detail: string;
-  const state = pidState(pid, startedAt);
+
+  const readState = (): PidState => {
+    const read = pidState(pid, startedAt);
+
+    return read === "foreign" && commandLineNamesSession(pid, projectPath, browser, hints) ? "alive" : read;
+  };
+
+  const state = readState();
 
   if (state === "foreign") {
-    removeSession(projectPath, browser);
-    removeSessionMarker(projectPath, browser);
+    const stranger = describeForeignPid(pid);
+    const { reaped } = await reapSessionProcesses(projectPath, browser, hints);
+    const { pids: survivors, verified } = sessionProcessPids(projectPath, browser, hints);
+    const ended = endedProcesses(null, browserPid, browserStartedAt);
+    const provenGone = verified && survivors.length === 0 && ended.browserGone !== false;
 
-    try {
-      fs.rmSync(readyContractPath(projectPath, browser), { force: true });
-    } catch {
+    if (provenGone) {
+      removeSession(projectPath, browser);
+      removeSessionMarker(projectPath, browser);
+
+      try {
+        fs.rmSync(readyContractPath(projectPath, browser), { force: true });
+      } catch {
+      }
     }
 
-    const ended = endedProcesses(null, browserPid, browserStartedAt);
+    const kept = !verified
+      ? "the search for surviving browser processes could not run (pgrep is missing or failed), so survivors were NOT verified"
+      : survivors.length
+        ? `${survivors.length} browser process(es) still alive after reap (pids ${survivors.join(", ")})`
+        : "the browser the launcher recorded is still alive";
 
     return {
       projectPath,
       browser,
       pid,
       ...ended,
-      stopped: false,
-      reaped: [],
-      staleRecord: true,
-      ...cleanCarrier(projectPath),
-      detail: `Nothing was signalled: ${describeForeignPid(pid)}. The session that recorded it is already gone; its stale records were removed. ${describeEnded(ended, null, noBrowser)}`,
+      stopped: provenGone && reaped.length > 0,
+      reaped,
+      ...(provenGone && reaped.length === 0 ? { staleRecord: true } : {}),
+      ...(verified ? {} : { survivorsUnverified: true }),
+      ...(provenGone ? cleanCarrier(projectPath) : {}),
+      detail: provenGone
+        ? `Nothing was signalled: ${stranger}. The session that recorded it is already gone; its stale records were removed.${reaped.length ? ` Reaped ${reaped.length} browser process(es).` : ""} ${describeEnded(ended, null, noBrowser)}`
+        : `Nothing was signalled: ${stranger}. The session's records were kept, because the session is not proven gone: ${kept}. ${describeEnded(ended, null, noBrowser)}`,
     };
   }
 
@@ -448,12 +528,12 @@ export async function stopOne(
   } else {
     signal(pid, "SIGTERM");
     await sleep(1500);
-    let after = pidState(pid, startedAt);
+    let after = readState();
 
     if (after === "alive") {
       signal(pid, "SIGKILL");
       await sleep(250);
-      after = pidState(pid, startedAt);
+      after = readState();
     }
 
     detail =
@@ -467,7 +547,7 @@ export async function stopOne(
   const { reaped } = await reapSessionProcesses(projectPath, browser, hints);
 
   const { pids: survivors, verified } = sessionProcessPids(projectPath, browser, hints);
-  const dead = pidState(pid, startedAt) === "dead";
+  const dead = readState() === "dead";
   const ended = endedProcesses(dead, browserPid, browserStartedAt);
   const stopped = dead && verified && survivors.length === 0 && ended.browserGone !== false;
 

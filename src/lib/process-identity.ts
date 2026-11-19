@@ -13,7 +13,7 @@ import path from "node:path";
 export type PidState = "alive" | "dead" | "foreign";
 
 export const PLAUSIBLE_SESSION_BINARY =
-  /chrom|edge|brave|opera|vivaldi|yandex|firefox|waterfox|librewolf|zen|floorp|safari|node|electron|extension/i;
+  /chrom|edge|brave|opera|vivaldi|yandex|firefox|waterfox|librewolf|zen|floorp|safari|node|electron|extension|\bnp[mx]\b/i;
 
 /* @invariant A PID WHOSE START TIME MATCHES THE RECORD IS THE SESSION'S, WHATEVER
  * IT CALLS ITSELF. A process chooses its own title: on Linux the engine's
@@ -26,6 +26,18 @@ export const PLAUSIBLE_SESSION_BINARY =
  * start time to compare (none recorded, or the process table would not give
  * one), and then the executable the kernel names counts beside the title,
  * since a process cannot rename that.
+ */
+
+/* @invariant A TITLE npm exec WROTE IS READ BY ITS FIRST WORD. npm sets its
+ * process title to its whole command ("npm exec extension@latest dev ..."),
+ * and Linux then serves that as one argument with no NUL between the words,
+ * so the base name of "argv0" was whatever followed the last slash of a URL
+ * or a path in it: on 2026-11-18 (ledger 943) a session started through npm
+ * exec read as "start.html?ref=nav --allow-control --allow-eval" and, cut to
+ * the kernel's 15 characters, as "npm exec extens", both foreign. A command
+ * line with no NUL separator and a space in it is split on whitespace and
+ * named by its first word, with the old base name kept beside it for a lone
+ * path that has a space, and npm and npx count as session binaries.
  */
 
 export interface WindowsProcessRow {
@@ -78,24 +90,48 @@ function windowsImageName(pid: number): string {
   }
 }
 
+export function commandLineNames(cmdline: string): string[] {
+  let end = cmdline.length;
+
+  while (end > 0 && cmdline.charCodeAt(end - 1) === 0) end -= 1;
+
+  const args = cmdline.slice(0, end).split("\0");
+  const argv0 = args[0] ?? "";
+  if (!argv0.trim()) return [];
+  if (args.length > 1 || !/\s/.test(argv0.trim())) return [path.basename(argv0)];
+
+  const firstWord = argv0.trim().split(/\s+/)[0];
+
+  return [...new Set([path.basename(firstWord), path.basename(argv0)])].filter(Boolean);
+}
+
+function processNames(pid: number): string[] {
+  if (process.platform === "win32") return [windowsImageName(pid)].filter(Boolean);
+
+  try {
+    const names = commandLineNames(fs.readFileSync(`/proc/${pid}/cmdline`, "utf8"));
+    if (names.length > 0) return names;
+  } catch {
+  }
+
+  try {
+    return [
+      execFileSync("ps", ["-o", "comm=", "-p", String(pid)], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim(),
+    ].filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 export function processCommand(pid: number): string {
-  if (process.platform === "win32") return windowsImageName(pid);
+  return processNames(pid)[0] ?? "";
+}
 
-  try {
-    const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, "utf8");
-    const argv0 = cmdline.split("\0")[0];
-    if (argv0) return path.basename(argv0);
-  } catch {
-  }
-
-  try {
-    return execFileSync("ps", ["-o", "comm=", "-p", String(pid)], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-  } catch {
-    return "";
-  }
+export function namedLikeSessionProcess(pid: number): boolean {
+  return processNames(pid).some((name) => PLAUSIBLE_SESSION_BINARY.test(name));
 }
 
 const SAME_START_TOLERANCE_MS = 2_000;
@@ -202,7 +238,7 @@ function processExecutable(pid: number): string {
 }
 
 export function plausibleSessionProcess(pid: number): boolean {
-  const names = [processCommand(pid), processExecutable(pid)].filter(Boolean);
+  const names = [...processNames(pid), processExecutable(pid)].filter(Boolean);
 
   return names.length === 0 || names.some((name) => PLAUSIBLE_SESSION_BINARY.test(name));
 }

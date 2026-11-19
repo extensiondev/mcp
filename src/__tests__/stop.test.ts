@@ -14,7 +14,7 @@ import {
   listSessions,
 } from "../lib/process-manager";
 import { resolveExtensionInvocation } from "../lib/exec";
-import { pidState, processCommand, processStartedAt } from "../lib/process-identity";
+import { PLAUSIBLE_SESSION_BINARY, commandLineNames, pidState, processCommand, processStartedAt } from "../lib/process-identity";
 import { liveNetworkStubs, openNetworkStubs, stubLinks } from "../lib/network-stubs";
 import { readyContract } from "./fixtures/engine-answers";
 
@@ -385,7 +385,7 @@ describe("extension_stop never signals a pid that is no longer the session", () 
       fs.mkdirSync(readyDir, { recursive: true });
       fs.writeFileSync(
         path.join(readyDir, "ready.json"),
-        JSON.stringify(readyContract("dev", "chrome", { pid: stranger, pidStartedAt: undefined, distPath: path.join(projectPath, "dist", "chrome") })),
+        JSON.stringify(readyContract("dev", "chrome", { pid: stranger, pidStartedAt: undefined, browserPid: null, launcherPid: null, distPath: path.join(projectPath, "dist", "chrome") })),
       );
 
       const result = JSON.parse(await stop.handler({ projectPath, browser: "chrome" }));
@@ -395,10 +395,115 @@ describe("extension_stop never signals a pid that is no longer the session", () 
       expect(result.value.detail).toContain("Nothing was signalled");
       expect(result.value.detail).toContain('"sleep"');
       expect(result.value.staleRecord).toBe(true);
+      expect(result.error.code).toBe("E_NO_SESSION");
+      expect(fs.existsSync(path.join(readyDir, "ready.json"))).toBe(false);
 
       try {
         process.kill(stranger, "SIGKILL");
       } catch {
+      }
+    },
+    15_000,
+  );
+
+  posixOnly(
+    "943: keeps the records of a session whose recorded browser is still alive beside a stranger PID",
+    async () => {
+      const projectPath = tmpProject();
+      const stranger = spawnHolder("sleep", ["300"]);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const readyDir = path.join(projectPath, "dist", "extension-js", "chrome");
+      fs.mkdirSync(readyDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(readyDir, "ready.json"),
+        JSON.stringify(readyContract("dev", "chrome", { pid: stranger, pidStartedAt: undefined, browserPid: process.pid, launcherPid: null, distPath: path.join(projectPath, "dist", "chrome") })),
+      );
+
+      try {
+        const result = JSON.parse(await stop.handler({ projectPath, browser: "chrome" }));
+
+        expect(isAlive(stranger)).toBe(true);
+        expect(result.ok).toBe(false);
+        expect(result.status).toBe("still-alive");
+        expect(result.error.code).toBe("E_STOP_INCOMPLETE");
+        expect(result.value.stopped).toBe(false);
+        expect(result.value.browserGone).toBe(false);
+        expect(result.value.staleRecord).toBeUndefined();
+        expect(result.value.detail).toContain("Nothing was signalled");
+        expect(result.value.detail).toContain("The session's records were kept");
+        expect(result.value.detail).toContain(`the browser the launcher recorded (pid ${process.pid}) is still alive`);
+        expect(result.value.detail).not.toContain("stale records were removed");
+        expect(fs.existsSync(path.join(readyDir, "ready.json"))).toBe(true);
+      } finally {
+        try {
+          process.kill(stranger, "SIGKILL");
+        } catch {
+        }
+      }
+    },
+    15_000,
+  );
+
+  posixOnly(
+    "943: ends a recorded PID under a name it does not know when the command line names this session",
+    async () => {
+      const projectPath = tmpProject();
+      const pid = spawnHolder("sh", ["-c", "while :; do sleep 1; done", "extension@latest", "dev", projectPath, "--browser=chrome"]);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const readyDir = path.join(projectPath, "dist", "extension-js", "chrome");
+      fs.mkdirSync(readyDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(readyDir, "ready.json"),
+        JSON.stringify(readyContract("dev", "chrome", { pid, pidStartedAt: undefined, browserPid: null, launcherPid: null, distPath: path.join(projectPath, "dist", "chrome") })),
+      );
+
+      try {
+        expect(pidState(pid)).toBe("foreign");
+
+        const result = JSON.parse(await stop.handler({ projectPath, browser: "chrome" }));
+
+        expect(result.ok).toBe(true);
+        expect(result.status).toBe("stopped");
+        expect(result.value.stopped).toBe(true);
+        expect(result.value.serverGone).toBe(true);
+        expect(result.value.detail).toContain("Terminated");
+        expect(result.value.detail).not.toContain("Nothing was signalled");
+        expect(await waitGone(pid)).toBe(true);
+        expect(fs.existsSync(path.join(readyDir, "ready.json"))).toBe(false);
+      } finally {
+        try {
+          process.kill(-pid, "SIGKILL");
+        } catch {
+        }
+      }
+    },
+    15_000,
+  );
+
+  posixOnly(
+    "943: leaves a stranger alone when its command line names another browser's session of the project",
+    async () => {
+      const projectPath = tmpProject();
+      const pid = spawnHolder("sh", ["-c", "while :; do sleep 1; done", "extension@latest", "dev", projectPath, "--browser=firefox"]);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const readyDir = path.join(projectPath, "dist", "extension-js", "chrome");
+      fs.mkdirSync(readyDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(readyDir, "ready.json"),
+        JSON.stringify(readyContract("dev", "chrome", { pid, pidStartedAt: undefined, browserPid: null, launcherPid: null, distPath: path.join(projectPath, "dist", "chrome") })),
+      );
+
+      try {
+        const result = JSON.parse(await stop.handler({ projectPath, browser: "chrome" }));
+
+        expect(isAlive(pid)).toBe(true);
+        expect(result.value.detail).toContain("Nothing was signalled");
+        expect(result.value.detail).toContain('"sh"');
+      } finally {
+        try {
+          process.kill(-pid, "SIGKILL");
+        } catch {
+        }
       }
     },
     15_000,
@@ -601,6 +706,45 @@ describe("extension_stop judges a session by its pid and its start time", () => 
         expect(result.value.detail).toContain("Terminated");
         expect(result.value.detail).not.toContain("MainThread");
         expect(await waitGone(pid)).toBe(true);
+      } finally {
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch {
+        }
+      }
+    },
+    20_000,
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "943: reads a process npm exec retitled as a session process, with a recorded start time and without one",
+    async () => {
+      const title = "npm exec extension@latest dev /work --starting-url=http://127.0.0.1:4173/docs/start.html?ref=nav --allow-control --allow-eval";
+      const child = spawn(
+        process.execPath,
+        ["-e", `process.title = ${JSON.stringify(title)}; setInterval(() => {}, 1000)`, "x".repeat(240)],
+        { detached: true, stdio: "ignore" },
+      );
+      child.unref();
+      const pid = child.pid!;
+
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        const recorded = processStartedAt(pid);
+        expect(typeof recorded).toBe("string");
+        expect(pidState(pid, recorded)).toBe("alive");
+        expect(pidState(pid, "2001-01-01T00:00:00.000Z")).toBe("dead");
+        expect(pidState(pid)).toBe("alive");
+        if (process.platform === "linux") expect(processCommand(pid)).toBe("npm");
+
+        expect(commandLineNames(`${title}\0\0\0`)).toEqual(["npm", "start.html?ref=nav --allow-control --allow-eval"]);
+        expect(commandLineNames("/opt/google/chrome/chrome\0--type=renderer\0--lang=en US\0")).toEqual(["chrome"]);
+        expect(commandLineNames("/opt/My Browser/chrome\0")).toEqual(["My", "chrome"]);
+        expect(commandLineNames("\0")).toEqual([]);
+        expect(PLAUSIBLE_SESSION_BINARY.test("npm exec extens")).toBe(true);
+        expect(PLAUSIBLE_SESSION_BINARY.test("npx")).toBe(true);
+        expect(PLAUSIBLE_SESSION_BINARY.test("sleep")).toBe(false);
+        expect(PLAUSIBLE_SESSION_BINARY.test("pnpm-lock-watcher")).toBe(false);
       } finally {
         try {
           process.kill(pid, "SIGKILL");
