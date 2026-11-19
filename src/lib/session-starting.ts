@@ -143,6 +143,8 @@ export function startingSentence(starting: StartingSession, projectPath: string)
 }
 
 export const FIRST_RUN_NOTE = "A first run installs dependencies and can take a couple of minutes.";
+export const SOURCE_NOT_LOADABLE_NOTE =
+  "Do not load the source folder into a browser yourself: it cannot run unbuilt, because the build is what resolves the imports in its content scripts.";
 
 export function sessionStartingEnvelope(command: string, projectPath: string, starting: StartingSession): string {
   return envelope({

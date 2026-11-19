@@ -28,11 +28,32 @@ import {
 } from "../lib/compiled-not-attached";
 import { safariSigningFrame } from "../lib/safari-signing";
 import { UnattachedWatch } from "../lib/executor-recovery";
-import { CONTRACT_MTIME_GRANULARITY_SLACK_MS, FIRST_RUN_NOTE, startingSentence, startingSession } from "../lib/session-starting";
+import {
+  CONTRACT_MTIME_GRANULARITY_SLACK_MS,
+  FIRST_RUN_NOTE,
+  SOURCE_NOT_LOADABLE_NOTE,
+  startingSentence,
+  startingSession,
+} from "../lib/session-starting";
 import { recentErrorLogs } from "./doctor";
 
 import type { ReadyContract } from "../lib/types";
 
+/* @invariant WAITING ON A SESSION THAT IS STILL STARTING IS NOT AN ERROR.
+ * The budget of one call stays under the request timeout most MCP clients
+ * apply (60 s), and a first run installs dependencies for longer than that,
+ * so a wait that runs out on a live session that has not compiled yet is
+ * the expected answer, not a failure. Until 2026-11-18 (ledger 942) it was
+ * `ok: false` with E_SESSION_STARTING, which a client shows as a failed
+ * tool call: in 10 agent runs it came back 22 times, four agents gave up on
+ * the session and drove a browser by hand, and one loaded the unbuilt
+ * source folder. The answer is `ok: true` with status "starting", the shape
+ * extension_dev already gives the same state, with what the session is
+ * waiting on, `retry: "safe"` in value and the next call in hint. A session
+ * that is gone, a compile error and a wait with no session keep their
+ * refusals, and the other session tools still answer E_SESSION_STARTING,
+ * since nothing they were asked for ran.
+ */
 const SAFE_CEILING_MS = 50_000;
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MIN_TIMEOUT_MS = 1_000;
@@ -432,15 +453,9 @@ export async function handler(args: {
 
   if (starting) {
     return envelope({
-      ok: false,
+      ok: true,
       command: schema.name,
       status: "starting",
-      error: {
-        code: "E_SESSION_STARTING",
-        name: "SessionStarting",
-        message: `${startingSentence(starting, args.projectPath)} It was not ready after ${budgetMs}ms this call.`,
-        retry: "safe",
-      },
       value: {
         compiled: false,
         browserAttached: false,
@@ -449,9 +464,10 @@ export async function handler(args: {
         readyPath,
         budgetMs,
         elapsedMs: Date.now() - start,
+        retry: "safe",
       },
       warnings: [clampNote, staleContractNote],
-      hint: `Call extension_wait again: that is the correct next call, and it resumes polling the same contract. ${FIRST_RUN_NOTE} The session exists: do not start or replace it. If it never readies, extension_doctor checks the dev process.`,
+      hint: `Call extension_wait again: that is the correct next call, and it resumes polling the same contract. ${startingSentence(starting, args.projectPath)} It was not ready after ${budgetMs}ms this call, which is progress and not a failure. ${FIRST_RUN_NOTE} The session exists: do not start or replace it. ${SOURCE_NOT_LOADABLE_NOTE} If it never readies, extension_doctor checks the dev process.`,
     });
   }
 

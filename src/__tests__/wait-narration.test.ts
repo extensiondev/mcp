@@ -63,21 +63,22 @@ describe("extension_wait budget disclosure", () => {
     expect(result.hint).toContain("call extension_wait again");
   }, 10_000);
 
-  it("922: running out on a live session with no contract yet is starting, not a timeout, and says to call it again", async () => {
+  it("942: running out on a live session with no contract yet is a starting answer, not an error, and says what the session is doing", async () => {
+    fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: "cold", devDependencies: { extension: "latest" } }));
     registerSession({ pid: process.pid, browser: "chrome", projectPath: dir, command: "dev" });
 
     const result = JSON.parse(await handler({ projectPath: dir, browser: "chrome", timeoutMs: 1200 }));
 
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
     expect(result.status).toBe("starting");
-    expect(result.error).toMatchObject({ code: "E_SESSION_STARTING", retry: "safe" });
-    expect(result.error.message).toContain("is still starting");
-    expect(result.error.message).toContain("not ready after 1200ms this call");
-    expect(result.value).toMatchObject({ compiled: false, browserAttached: false, waitingOn: "engine-start", pid: process.pid, budgetMs: 1200 });
+    expect(result.error).toBeNull();
+    expect(result.value).toMatchObject({ compiled: false, browserAttached: false, waitingOn: "dependency-install", pid: process.pid, budgetMs: 1200, retry: "safe" });
     expect(result.value.elapsedMs).toBeGreaterThanOrEqual(1200);
-    expect(result.error.hint).toMatch(/^Call extension_wait again: that is the correct next call/);
-    expect(result.error.hint).toContain("can take a couple of minutes");
-    expect(result.error.hint).not.toMatch(/extension_dev|replace: true/);
+    expect(result.hint).toBe(
+      `Call extension_wait again: that is the correct next call, and it resumes polling the same contract. The dev session for ${dir} on chrome (pid ${process.pid}) is still starting: it is installing the project's dependencies, which a first run does before it compiles. It was not ready after 1200ms this call, which is progress and not a failure. A first run installs dependencies and can take a couple of minutes. The session exists: do not start or replace it. Do not load the source folder into a browser yourself: it cannot run unbuilt, because the build is what resolves the imports in its content scripts. If it never readies, extension_doctor checks the dev process.`,
+    );
+
+    expect(result.hint).not.toMatch(/extension_dev|replace: true/);
   }, 10_000);
 
   it("922: a session no longer alive is not starting, so running out on it stays a timeout", async () => {
@@ -116,11 +117,12 @@ describe("extension_wait budget disclosure", () => {
       await handler({ projectPath: dir, browser: "chrome", timeoutMs: 1200 }),
     );
 
+    expect(result.ok).toBe(true);
     expect(result.status).toBe("starting");
-    expect(result.error.code).toBe("E_SESSION_STARTING");
+    expect(result.error).toBeNull();
     expect(result.value.compiled).toBe(false);
     expect(result.value.waitingOn).toBe("first-compile");
-    expect(result.error.message).toContain("compiling for the first time");
+    expect(result.hint).toContain("compiling for the first time");
   }, 10_000);
 });
 

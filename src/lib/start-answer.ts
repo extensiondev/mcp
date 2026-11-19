@@ -38,8 +38,8 @@ export async function awaitStartLanding(projectPath: string, browser: string): P
     await waitHandler({ projectPath, browser, timeoutMs: START_WAIT_BUDGET_MS }),
   ) as WaitFrame;
 
-  if (frame.ok === true) return { kind: "landed", frame };
-  if (frame.status === "timeout" || frame.status === "no-session") return { kind: "timeout", frame };
+  if (frame.ok === true && frame.status !== "starting") return { kind: "landed", frame };
+  if (frame.status === "timeout" || frame.status === "no-session" || frame.status === "starting") return { kind: "timeout", frame };
 
   return { kind: "failed", frame };
 }
