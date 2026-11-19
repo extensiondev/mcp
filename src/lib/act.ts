@@ -13,7 +13,7 @@ import {
   refusedTheOutputFlag,
 } from "./engine-version";
 import { knownSessionBrowsers, deadReadySession, resolveSessionBrowser } from "./session-browser";
-import { productionSessionContext } from "./production-receipt";
+import { productionSessionContext, readSessionReceipt } from "./production-receipt";
 import {
   answerAfterSafariWake,
   SAFARI_WAKE_WAIT_MS,
@@ -33,11 +33,15 @@ export function toMcpSpeak(text: string): string {
   return (
     text
       .replace(
+        /`?extension dev(?: [^\s`]*)? --browser[= ]([\w-]+) --allow-eval`?/g,
+        'extension_dev with { browser: "$1", allowEval: true }',
+      )
+      .replace(
         /`?extension dev(?: [^\s`]*)? --browser[= ]([\w-]+) --allow-control`?/g,
         'extension_dev with { browser: "$1" } (its control channel is on unless allowControl: false)',
       )
       .replace(/--allow-control/g, "allowControl (on by default on extension_dev, off only with allowControl: false)")
-      .replace(/--allow-eval/g, "allowEval: true (extension_dev)")
+      .replace(/--allow-eval/g, "allowEval: true on extension_dev")
       .replace(
         /Use --context page --tab <id>/g,
         'Use context: "page" (targets the active tab; pass url or tab to pick another)',
@@ -85,7 +89,15 @@ function legacyControlChannelScrape(message: string): boolean {
   );
 }
 
-const START_ONE_FIRST = / Run extension_dev with \{ browser: "[\w-]+" \} \(its control channel is on unless allowControl: false\) first\./;
+const START_ONE_FIRST = / Run extension_dev with \{ browser: "[\w-]+"(?:, allowEval: true \}| \} \(its control channel is on unless allowControl: false\)) first\./;
+
+const NO_CHANNEL_FOUND = /^No active control channel found for [\w-]+\. Looked at .+?ready\.json\./;
+
+function buildReceiptWords(message: string, browser: string, receipt: string): string {
+  const said = `No dev session for ${browser}: ${receipt} is the receipt of a finished extension_build, not a session.`;
+
+  return NO_CHANNEL_FOUND.test(message) ? message.replace(NO_CHANNEL_FOUND, said) : `${said} ${message}`;
+}
 
 function namesNoSession(message: string, code: string | undefined): boolean {
   return code ? code === "E_SESSION_NOT_FOUND" : /no active control channel/i.test(message);
@@ -127,7 +139,7 @@ export function sessionNotFoundWords(
   };
 }
 
-function withSessionContext(
+export function withSessionContext(
   message: string,
   projectPath: string,
   command: string,
@@ -140,8 +152,15 @@ function withSessionContext(
 
   if (!isControlError) return { message, hint: null };
 
-  const production = productionSessionContext(projectPath, browser ?? resolveSessionBrowser(projectPath, undefined).browser);
+  const asked = browser ?? resolveSessionBrowser(projectPath, undefined).browser;
+  const production = productionSessionContext(projectPath, asked);
   if (production) return { message: `${message}\n${production}`, hint: null };
+
+  const receipt = readSessionReceipt(projectPath, asked);
+
+  if (receipt.kind === "build" && knownSessionBrowsers(projectPath).length === 0) {
+    return { message: buildReceiptWords(message, asked, receipt.path), hint: null };
+  }
 
   const dead = deadReadySession(projectPath, browser);
 

@@ -48,7 +48,7 @@ function contractSightings(projectPath: string): ContractSighting[] {
     try {
       const stat = fs.statSync(readyPath);
       const contract = JSON.parse(fs.readFileSync(readyPath, "utf8"));
-      if (contract?.status !== "ready") continue;
+      if (contract?.status !== "ready" || contract.command === "build") continue;
 
       sightings.push({
         browser: dir,

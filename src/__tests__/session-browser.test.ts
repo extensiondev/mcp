@@ -5,11 +5,12 @@ import path from "node:path";
 import { describe, it, expect, afterEach } from "vitest";
 
 import {
+  deadReadySession,
   resolveSessionBrowser,
   knownSessionBrowsers,
   liveProjectSessions,
 } from "../lib/session-browser";
-import { sessionNotFoundWords, toMcpSpeak } from "../lib/act";
+import { sessionNotFoundWords, toMcpSpeak, withSessionContext } from "../lib/act";
 import { readyContract } from "./fixtures/engine-answers";
 import {
   registerSession,
@@ -30,12 +31,13 @@ function writeContract(
   projectPath: string,
   browser: string,
   contract: Record<string, unknown> = {},
+  command: "dev" | "build" = "dev",
 ): void {
   const dir = path.join(projectPath, "dist", "extension-js", browser);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(
     path.join(dir, "ready.json"),
-    JSON.stringify(readyContract("dev", browser, { distPath: path.join(projectPath, "dist", browser), ...contract })),
+    JSON.stringify(readyContract(command, browser, { distPath: path.join(projectPath, "dist", browser), ...contract })),
   );
 }
 
@@ -209,7 +211,7 @@ describe("toMcpSpeak", () => {
     );
 
     expect(toMcpSpeak("eval requires --allow-eval")).toBe(
-      "eval requires allowEval: true (extension_dev)",
+      "eval requires allowEval: true on extension_dev",
     );
   });
 
@@ -254,5 +256,34 @@ describe("922: a control channel that was not found is worded by what sessions e
     expect(words.message).not.toMatch(/Run extension_dev|pass that as/);
     expect(words.message).toContain("A chrome session is recorded for this project, so this is not a missing session");
     expect(words.hint).toMatch(/^Call extension_wait with browser: "chrome", then call extension_reload again/);
+  });
+});
+
+describe("974: a build receipt is never read as a dead dev session", () => {
+  const engine =
+    "No active control channel found for safari. Looked at /p/dist/extension-js/safari/ready.json. Run `extension dev --browser=safari --allow-eval` first.";
+
+  it("quotes the eval start call well formed", () => {
+    expect(toMcpSpeak(engine)).toBe(
+      'No active control channel found for safari. Looked at /p/dist/extension-js/safari/ready.json. Run extension_dev with { browser: "safari", allowEval: true } first.',
+    );
+
+    expect(toMcpSpeak("Start a dev session first: extension dev --browser=chrome --allow-control (add --allow-eval for the eval verb)")).not.toMatch(/\(extension_dev\)/);
+  });
+
+  it("says no dev session exists and names the file as a build receipt", () => {
+    const project = tmpProject();
+    writeContract(project, "safari", { status: "ready", pid: 2 ** 30 }, "build");
+    const receipt = path.join(project, "dist", "extension-js", "safari", "ready.json");
+
+    const words = withSessionContext(toMcpSpeak(engine.replace("/p/dist/extension-js/safari/ready.json", receipt)), project, "extension_eval", "E_SESSION_NOT_FOUND", "safari");
+
+    expect(words.message).toBe(
+      `No dev session for safari: ${receipt} is the receipt of a finished extension_build, not a session. Run extension_dev with { browser: "safari", allowEval: true } first.`,
+    );
+
+    expect(words.message).not.toMatch(/Likely cause|dead|has exited/);
+    expect(deadReadySession(project, "safari")).toBeNull();
+    expect(knownSessionBrowsers(project)).toEqual([]);
   });
 });
