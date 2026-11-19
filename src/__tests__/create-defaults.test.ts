@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, it, expect, vi, afterEach } from "vitest";
 
 import { ENGINE_BIN_ENV, ENGINE_DIR_ENV } from "../lib/engine-override";
+import { DEFAULT_SERVER_OPTIONS, setServerOptions } from "../lib/tool-policy";
 import { PINNED_COMMIT } from "../lib/template-artifact-source";
 import { parseStoreMd } from "../lib/store-md";
 import { reviewerNoteBuildLine } from "../lib/store-md-toolchain";
@@ -109,6 +110,7 @@ const savedEnv = {
 };
 
 afterEach(() => {
+  setServerOptions(DEFAULT_SERVER_OPTIONS);
   withGit = false;
   withScripts = false;
   recordRef = null;
@@ -293,7 +295,20 @@ describe("extension_create defaultsApplied", () => {
     expect(failed.warnings.join("\n")).toContain("probe is ready.");
   });
 
+  it("970: with the platform tools off, the ship step names no platform tool and says how to turn them on", async () => {
+    scaffoldTarget = path.join(tmpDir(), "probe");
+
+    const result = JSON.parse(await create.handler({ projectName: "probe" }));
+    const steps: string[] = result.value.nextSteps;
+    const ship = steps[steps.length - 1]!;
+
+    expect(JSON.stringify(steps)).not.toMatch(/extension_project_create|extension_publish/);
+    expect(ship).toMatch(/^To ship: extension_create scaffolds and runs locally, it does not host\./);
+    expect(ship).toContain("add platform to --features (or EXTENSION_DEV_FEATURES)");
+  });
+
   it("490 and 489: the ship step names extension_project_create straight from the scaffolded folder, no push, never the /new?template deploy link", async () => {
+    setServerOptions({ features: ["local", "platform"], noShip: false });
     scaffoldTarget = path.join(tmpDir(), "probe");
 
     const result = JSON.parse(await create.handler({ projectName: "probe", template: "content-react" }));
@@ -406,6 +421,7 @@ describe("extension_create defaultsApplied", () => {
   });
 
   it("916: a create answer says each fact once and stays under 2,500 characters before its warnings on a scaffold with scripts, a STORE.md and no install", async () => {
+    setServerOptions({ features: ["local", "platform"], noShip: false });
     withScripts = true;
     withStoreMd = true;
     depsLeftOut = true;

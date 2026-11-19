@@ -22,6 +22,7 @@ import { scaffoldScripts } from "../lib/scaffold-scripts";
 import { STORE_MD_FILENAME } from "../lib/store-md";
 import { STORE_MD_DRAFT_SENTENCE } from "../lib/store-md-words";
 import { detectPackageManager, writeScaffoldToolchainNote } from "../lib/store-md-toolchain";
+import { FEATURES_ENV, toolListed } from "../lib/tool-policy";
 
 const COMMAND = "extension_create";
 
@@ -388,7 +389,9 @@ export async function handler(args: {
         openStep,
         "After an edit, call extension_manifest_validate, and build with extension_build (browser: \"firefox\" for Firefox), not a package script: value.scripts names the folder each script writes.",
         ...(storeMdWritten ? ["Say value.sayToPerson to the person as it is, once."] : []),
-        `To ship: extension_create scaffolds and runs locally, it does not host. When the person wants it on extension.dev, call extension_project_create (project: '<workspace>/${result.projectName}', projectPath: '${result.projectPath}') straight from this folder, no GitHub push needed (or repo: '<owner>/<repo>' instead of projectPath for a pushed repository); it answers an approval URL first. Never offer the www /new?template link, which makes an unrelated project.`,
+        toolListed("extension_project_create")
+          ? `To ship: extension_create scaffolds and runs locally, it does not host. When the person wants it on extension.dev, call extension_project_create (project: '<workspace>/${result.projectName}', projectPath: '${result.projectPath}') straight from this folder, no GitHub push needed (or repo: '<owner>/<repo>' instead of projectPath for a pushed repository); it answers an approval URL first. Never offer the www /new?template link, which makes an unrelated project.`
+          : `To ship: extension_create scaffolds and runs locally, it does not host. Hosting on extension.dev needs this server's platform tools, which it was started without: add platform to --features (or ${FEATURES_ENV}) in its MCP config, or ask the person to.`,
       ],
     },
     warnings: [
