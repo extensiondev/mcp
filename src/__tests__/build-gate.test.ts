@@ -1,3 +1,4 @@
+import { type ChildProcess, spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -10,6 +11,7 @@ const cliCalls: string[][] = [];
 let cliResultOverride: { code: number; stdout: string; stderr: string } | null =
   null;
 let onCli: ((args: string[]) => void) | null = null;
+let whileCliRuns: ((args: string[]) => Promise<void>) | null = null;
 let skipDist = false;
 vi.mock("../lib/exec", async (importOriginal) => {
   const actual = await importOriginal<typeof ExecModule>();
@@ -19,6 +21,7 @@ vi.mock("../lib/exec", async (importOriginal) => {
     runExtensionCli: async (args: string[]) => {
       cliCalls.push(args);
       onCli?.(args);
+      await whileCliRuns?.(args);
       const browser = browserFromCliArgs(args);
       const answer = cliResultOverride ?? buildCliAnswer(args[1]!, browser);
       if (answer.code === 0 && !skipDist) writeEngineDist(args[1]!, browser);
@@ -30,6 +33,8 @@ vi.mock("../lib/exec", async (importOriginal) => {
 
 const build = await import("../tools/build");
 const { buildSummaryPath } = await import("../lib/session-paths");
+const { installRecordPath, isInstallCommand, runningInstall, takeInstallTurn } = await import("../lib/project-install");
+const { processStartedAt } = await import("../lib/process-identity");
 const { buildCliAnswer, buildSummary, zipArtifacts, browserFromCliArgs, writeEngineDist } = await import("./fixtures/engine-answers");
 
 const tmpDirs: string[] = [];
@@ -57,6 +62,7 @@ afterEach(() => {
   cliCalls.length = 0;
   cliResultOverride = null;
   onCli = null;
+  whileCliRuns = null;
   skipDist = false;
 
   for (const dir of tmpDirs.splice(0)) {
@@ -590,5 +596,152 @@ describe("extension_build names a run this server stopped", () => {
     expect(result.error.code).toBe("E_BUILD_TIMEOUT");
     expect(result.error.message).toContain("stopped the build after 180000 ms");
     expect(result.error.message).not.toContain("exited with code null");
+  });
+});
+
+describe("941: one dependency install runs on a project at a time, and a build says when it waits on one", () => {
+  const victims: ChildProcess[] = [];
+  const INSTALL_HINT =
+    "Call extension_build again with the same arguments: it waits for this install to end, then builds. Do not start an install by hand and do not poll the process table; the next call does the waiting.";
+
+  function coldProject(): string {
+    const dir = project({ manifest_version: 3, name: "Cold", version: "1.0.0" });
+    fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: "cold", devDependencies: { extension: "latest" } }));
+
+    return dir;
+  }
+
+  function installerStandIn(): number {
+    const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+    victims.push(child);
+
+    return child.pid!;
+  }
+
+  function end(pid: number): Promise<void> {
+    const child = victims.find((victim) => victim.pid === pid)!;
+
+    return new Promise((resolve) => {
+      child.once("exit", () => resolve());
+      child.kill("SIGKILL");
+    });
+  }
+
+  function holdInstall(dir: string, pid: number): void {
+    const file = installRecordPath(dir);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ projectRoot: dir, since: new Date().toISOString(), holders: [{ pid, startedAt: processStartedAt(pid), role: "engine" }] }));
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+
+    for (const victim of victims.splice(0)) victim.kill("SIGKILL");
+  });
+
+  it("runs two first builds sent together one after the other, and the second says what it waited for", async () => {
+    const dir = coldProject();
+    let running = 0;
+    let most = 0;
+
+    whileCliRuns = async () => {
+      running += 1;
+      most = Math.max(most, running);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      fs.mkdirSync(path.join(dir, "node_modules", ".bin"), { recursive: true });
+      running -= 1;
+    };
+
+    const answers = (
+      await Promise.all([build.handler({ projectPath: dir, browser: "firefox" }), build.handler({ projectPath: dir, browser: "chrome" })])
+    ).map((text) => JSON.parse(text));
+    const first = answers.find((answer) => answer.value.dependenciesInstalled === true);
+    const second = answers.find((answer) => answer !== first);
+
+    expect(most).toBe(1);
+    expect(answers.map((answer) => answer.status)).toEqual(["built", "built"]);
+    expect(second.value.dependenciesInstalled).toBeUndefined();
+    expect(second.warnings.join(" ")).toMatch(
+      new RegExp(`^This call waited [0-9.]+ s for another extension_build call on this project \\(server pid ${process.pid}\\) to finish installing this project's dependencies before it built; one install runs on a project at a time\\.`),
+    );
+
+    expect(first.warnings.join(" ")).not.toContain("This call waited");
+    expect(fs.existsSync(installRecordPath(dir))).toBe(false);
+  }, 20_000);
+
+  it("answers E_BUILD_TIMEOUT with retry safe, and runs no engine, when the install outlasts its wait", async () => {
+    const dir = coldProject();
+    const pid = installerStandIn();
+    fs.mkdirSync(path.join(dir, "node_modules", "extension"), { recursive: true });
+    holdInstall(dir, pid);
+    cliResultOverride = { code: 127, stdout: "", stderr: "sh: 1: extension: not found" };
+    vi.useFakeTimers({ toFake: ["Date"] });
+
+    const clock = setInterval(() => vi.setSystemTime(Date.now() + 136_000), 100);
+    const result = JSON.parse(await build.handler({ projectPath: dir, browser: "chrome" }).finally(() => clearInterval(clock)));
+
+    expect(cliCalls).toEqual([]);
+    expect(result).toMatchObject({ ok: false, status: "build-timeout", hint: INSTALL_HINT });
+    expect(result.error).toMatchObject({ code: "E_BUILD_TIMEOUT", name: "BuildTimeout", retry: "safe" });
+    expect(result.error.message).toMatch(
+      new RegExp(`^Nothing was built: the engine an earlier extension_build call left running \\(pid ${pid}\\) is still installing this project's dependencies, and this call waited [0-9.]+ s for it to end\\.$`),
+    );
+
+    expect(result.value).toMatchObject({ browser: "chrome", buildExitCode: null, waitingOn: "dependency-install", installPid: pid });
+    expect(result.value.waitedMs).toBeGreaterThanOrEqual(135_000);
+  }, 20_000);
+
+  it("builds once the install it waited on has ended, and clears a record nobody holds", async () => {
+    const dir = coldProject();
+    const pid = installerStandIn();
+    fs.mkdirSync(path.join(dir, "node_modules", "extension"), { recursive: true });
+    holdInstall(dir, pid);
+
+    expect(runningInstall(dir)).toEqual({ pid, owner: "build-engine" });
+    expect(takeInstallTurn(dir)).toBe("taken");
+
+    const pending = build.handler({ projectPath: dir, browser: "chrome" });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    expect(cliCalls).toEqual([]);
+
+    await end(pid);
+
+    const result = JSON.parse(await pending);
+
+    expect(result.status).toBe("built");
+    expect(cliCalls).toHaveLength(1);
+    expect(result.warnings.join(" ")).toContain(`for the engine an earlier extension_build call left running (pid ${pid}) to finish installing`);
+    expect(fs.existsSync(installRecordPath(dir))).toBe(false);
+  }, 20_000);
+
+  it("says the install was left running when the budget ends inside it, and hands the record to that engine", async () => {
+    const dir = coldProject();
+    const pid = installerStandIn();
+    cliResultOverride = { code: null, signal: null, timedOut: true, leftRunningPid: pid, stdout: "Installing the project dependencies with npm", stderr: "" } as never;
+
+    const result = JSON.parse(await build.handler({ projectPath: dir, browser: "firefox" }));
+
+    expect(result).toMatchObject({ ok: false, status: "build-timeout", hint: INSTALL_HINT });
+    expect(result.error).toMatchObject({ code: "E_BUILD_TIMEOUT", retry: "safe" });
+    expect(result.error.message).toBe(
+      `The build did not finish in 180000 ms because the engine is still installing the project's dependencies (pid ${pid}). Nothing was stopped: the install keeps running, and the firefox build follows it in the same process.`,
+    );
+
+    expect(result.value).toMatchObject({ browser: "firefox", buildExitCode: null, budgetMs: 180000, waitingOn: "dependency-install", installPid: pid });
+    expect(runningInstall(dir)).toEqual({ pid, owner: "build-engine" });
+
+    await end(pid);
+
+    expect(runningInstall(dir)).toBeNull();
+  }, 20_000);
+
+  it("reads an install from the command line a package manager runs under, not from a path that holds its name", () => {
+    expect(isInstallCommand("npm install --ignore-scripts")).toBe(true);
+    expect(isInstallCommand("node /usr/lib/node_modules/npm/bin/npm-cli.js install --no-audit")).toBe(true);
+    expect(isInstallCommand("node /opt/pnpm/bin/pnpm.cjs install")).toBe(true);
+    expect(isInstallCommand("bun install")).toBe(true);
+    expect(isInstallCommand("npm exec extension@4.1.41 build /work --browser chrome")).toBe(false);
+    expect(isInstallCommand("node /home/me/.npm/_npx/1a2b/node_modules/.bin/extension build /work/install --browser chrome")).toBe(false);
   });
 });

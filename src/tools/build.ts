@@ -10,7 +10,16 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { LAUNCH_BROWSER, PROJECT_PATH } from "../lib/common-schema";
-import { runExtensionCli } from "../lib/exec";
+import { type CliResult, runExtensionCli } from "../lib/exec";
+import {
+  INSTALL_RUNNING_HINT,
+  installLeftRunningMessage,
+  installPidOf,
+  installStillRunningMessage,
+  installTurn,
+  installerUnder,
+  waitedForInstallNote,
+} from "../lib/project-install";
 import { compareVersions, outputJsonVerdict, refusedTheOutputFlag, resolvedEngineFacts } from "../lib/engine-version";
 import { liveProjectSessions } from "../lib/session-browser";
 import { channelAwareBuildWarnings } from "../lib/amo-update-url";
@@ -853,22 +862,70 @@ export async function handler(args: {
   if (safari) cliArgs.push(...safariBuildCliArgs(args, signingTeam.team));
   if (signingTeam.kept) warnings.push(keptTeamNote(signingTeam.team));
 
+  const install = await installTurn(args.projectPath);
+
+  if (install.running) {
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "build-timeout",
+      error: {
+        code: "E_BUILD_TIMEOUT",
+        name: "BuildTimeout",
+        message: installStillRunningMessage(install.running, install.waitedMs),
+        retry: "safe",
+      },
+      value: {
+        browser,
+        buildExitCode: null,
+        duration: Date.now() - start,
+        waitingOn: "dependency-install",
+        ...installPidOf(install.running),
+        waitedMs: install.waitedMs,
+      },
+      warnings,
+      hint: INSTALL_RUNNING_HINT,
+    });
+  }
+
+  if (install.waitedOn) warnings.push(waitedForInstallNote(install.waitedOn, install.waitedMs));
+
   const modulesDir = path.join(engineProjectRoot(args.projectPath), "node_modules");
   const modulesBefore = fs.existsSync(modulesDir);
-  const spawn = { cwd: args.projectPath, timeoutMs: buildBudgetMs(browser) };
-  const verdict = await outputJsonVerdict("build", args.projectPath);
-  const engineKnownTooOld = verdict.supported === false;
-  let attempt = engineKnownTooOld
-    ? await runExtensionCli(cliArgs, spawn)
-    : await runExtensionCli([...cliArgs, "--output", "json"], spawn);
-  const engineRefusedJsonOutput =
-    !engineKnownTooOld &&
-    attempt.code !== 0 &&
-    refusedTheOutputFlag(attempt.stderr ?? "");
+  const spawn = {
+    cwd: args.projectPath,
+    timeoutMs: buildBudgetMs(browser),
+    leaveRunning: (pid: number) => install.turn !== null && installerUnder(pid) !== null,
+  };
+  let verdict: Awaited<ReturnType<typeof outputJsonVerdict>>;
+  let engineKnownTooOld: boolean;
+  let attempt: CliResult;
+  let engineRefusedJsonOutput: boolean;
 
-  if (engineRefusedJsonOutput) {
-    attempt = await runExtensionCli(cliArgs, spawn);
+  try {
+    verdict = await outputJsonVerdict("build", args.projectPath);
+    engineKnownTooOld = verdict.supported === false;
+    attempt = engineKnownTooOld
+      ? await runExtensionCli(cliArgs, spawn)
+      : await runExtensionCli([...cliArgs, "--output", "json"], spawn);
+
+    engineRefusedJsonOutput =
+      !engineKnownTooOld &&
+      attempt.code !== 0 &&
+      !attempt.timedOut &&
+      refusedTheOutputFlag(attempt.stderr ?? "");
+
+    if (engineRefusedJsonOutput) {
+      attempt = await runExtensionCli(cliArgs, spawn);
+    }
+  } catch (err) {
+    install.turn?.release();
+
+    throw err;
   }
+
+  if (attempt.leftRunningPid) install.turn?.handOver(attempt.leftRunningPid);
+  else install.turn?.release();
 
   const { code, stdout, stderr } = attempt;
 
@@ -1155,6 +1212,31 @@ export async function handler(args: {
         ...(signingFrame?.hints ?? []),
       ],
       hint: `The ${mode === "none" ? "" : `${mode} `}build is in ${distDir}.${modeSentence(mode) ? ` ${modeSentence(mode)}` : ""} To read what is in it, call extension_analyze with this projectPath and browser "${browser}" (sizes, entry points, store checks and each built browser's emitted manifest in manifestByBrowser) instead of listing or grepping the folder.${zipPath ? ` The store zip is ${zipPath}.` : ""}${dependenciesNote}${platformListed() ? " To send the extension to someone, extension_publish gives the project's build on extension.dev a page with a download and a run command for each browser (the platform builds the source it holds, not this folder: extension_builds_act action:\"rebuild\" starts that build with no push)." : ""}`,
+    });
+  }
+
+  if (attempt.timedOut && attempt.leftRunningPid) {
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "build-timeout",
+      error: {
+        code: "E_BUILD_TIMEOUT",
+        name: "BuildTimeout",
+        message: installLeftRunningMessage(browser, spawn.timeoutMs, attempt.leftRunningPid),
+        retry: "safe",
+      },
+      value: {
+        browser,
+        buildExitCode: null,
+        duration,
+        budgetMs: spawn.timeoutMs,
+        waitingOn: "dependency-install",
+        installPid: attempt.leftRunningPid,
+        output: lastLines(out, 12),
+      },
+      warnings,
+      hint: INSTALL_RUNNING_HINT,
     });
   }
 

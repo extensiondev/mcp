@@ -24,7 +24,7 @@ import { envelope } from "./envelope";
 import { dependencies } from "../../package.json";
 
 
-function descendantPids(pid: number): number[] {
+export function descendantPids(pid: number): number[] {
   try {
     const out = execFileSync("pgrep", ["-P", String(pid)], { encoding: "utf8" });
     const direct = out
@@ -69,6 +69,7 @@ export interface CliResult {
   code: number | null;
   signal?: NodeJS.Signals | null;
   timedOut?: boolean;
+  leftRunningPid?: number;
   stdout: string;
   stderr: string;
 }
@@ -140,9 +141,19 @@ export function engineRefusal(): string | null {
   return resolveExtensionInvocation().refusal ?? null;
 }
 
+/* @invariant A RUN THAT OUTLASTS ITS BUDGET WHILE IT INSTALLS DEPENDENCIES IS
+ * LEFT RUNNING, NEVER KILLED HALFWAY. On 2026-11-18 (ledger 941) the kill
+ * timer fired on a first build that was 180 s into npm install: the engine
+ * died, the install either died with a half-written node_modules or lived on
+ * as an orphan, and the next build ran against that folder and answered
+ * "sh: 1: extension: not found". `leaveRunning` is asked once, when the
+ * budget ends; when it answers true nothing is signalled, the call resolves
+ * with timedOut and leftRunningPid, and the process finishes on its own with
+ * its output still going to files it holds open.
+ */
 export function runExtensionCli(
   args: string[],
-  options?: { cwd?: string; timeoutMs?: number },
+  options?: { cwd?: string; timeoutMs?: number; leaveRunning?: (pid: number) => boolean },
 ): Promise<CliResult> {
   const { command, prefixArgs, refusal } = resolveExtensionInvocation(options?.cwd);
 
@@ -206,12 +217,27 @@ export function runExtensionCli(
     }
 
     let timedOut = false;
+    let left = false;
     const timer = setTimeout(() => {
       timedOut = true;
+
+      if (child.pid && options?.leaveRunning?.(child.pid)) {
+        left = true;
+        const stdout = readAll("stdout");
+        const stderr = readAll("stderr");
+        cleanup();
+        child.unref();
+        resolve({ code: null, signal: null, timedOut, leftRunningPid: child.pid, stdout, stderr });
+
+        return;
+      }
+
       killTree(child.pid, "SIGTERM");
       setTimeout(() => killTree(child.pid, "SIGKILL"), KILL_HEADROOM_PAST_ENGINE_TIMEOUT_MS);
     }, budgetMs);
     child.on("close", (code, signal) => {
+      if (left) return;
+
       clearTimeout(timer);
       const stdout = readAll("stdout");
       const stderr = readAll("stderr");
@@ -220,6 +246,8 @@ export function runExtensionCli(
     });
 
     child.on("error", (err) => {
+      if (left) return;
+
       const stdout = readAll("stdout");
       const stderr = readAll("stderr");
       cleanup();

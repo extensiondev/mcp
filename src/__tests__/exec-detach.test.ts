@@ -112,6 +112,43 @@ describe("runExtensionCli outer kill timer", () => {
   );
 
   posixOnly(
+    "941: leaves the run alive past its budget when leaveRunning says so, and names its pid",
+    async () => {
+      const project = fakeProject('echo "Installing the project dependencies with npm"; sleep 60');
+      const asked: number[] = [];
+
+      const result = await runExtensionCli(["build", project], {
+        cwd: project,
+        timeoutMs: 200,
+        leaveRunning: (pid) => {
+          asked.push(pid);
+
+          return true;
+        },
+      });
+      const pid = result.leftRunningPid!;
+
+      cleanups.push(() => {
+        try {
+          execFileSync("pkill", ["-P", String(pid)]);
+        } catch {
+        }
+
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch {
+        }
+      });
+
+      expect(result).toMatchObject({ code: null, timedOut: true, signal: null });
+      expect(asked).toEqual([pid]);
+      expect(result.stdout).toContain("Installing the project dependencies");
+      expect(() => process.kill(pid, 0)).not.toThrow();
+    },
+    20_000,
+  );
+
+  posixOnly(
     "gives the engine's own --timeout envelope headroom to land before the SIGTERM",
     async () => {
       const project = fakeProject('sleep 1.5; echo "engine timeout frame"');

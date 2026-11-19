@@ -67,7 +67,7 @@ function declaresDependencies(packageJsonPath: string): boolean {
   }
 }
 
-function modulesMissing(projectPath: string): boolean {
+export function modulesMissing(projectPath: string): boolean {
   const root = engineProjectRoot(projectPath);
 
   return declaresDependencies(path.join(root, "package.json")) && !fs.existsSync(path.join(root, "node_modules"));
