@@ -92,8 +92,28 @@ function appOf(appexPath: string): string {
   return app ? app[1]! : path.basename(appexPath);
 }
 
+function onDisk(file: string): string {
+  if (!path.isAbsolute(file)) return file;
+
+  const tail: string[] = [];
+
+  for (let head = file; ; ) {
+    try {
+      return path.join(fs.realpathSync.native(head), ...tail);
+    } catch {
+      const parent = path.dirname(head);
+      if (parent === head) return file;
+
+      tail.unshift(path.basename(head));
+      head = parent;
+    }
+  }
+}
+
 function canonical(file: string): string {
-  return posixPath(file).replace(/^\/private(?=\/(?:tmp|var|etc)\/)/, "");
+  return posixPath(onDisk(file))
+    .replace(/^\/private(?=\/(?:tmp|var|etc)\/)/, "")
+    .toLowerCase();
 }
 
 function registeredUnder(entry: PluginkitEntry, root: string | null): boolean {

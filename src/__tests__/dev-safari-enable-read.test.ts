@@ -194,6 +194,38 @@ describe("extension_dev / extension_wait on a Safari session the engine could no
     expect(safariEnableFrame(dir, "safari", true)?.safari.enabled).toBe(true);
   }, 10_000);
 
+  it("credits a build with its own registration when its app is reached through a symlink or another casing", () => {
+    if (process.platform === "win32") return;
+
+    const link = `${dir}-link`;
+    fs.symlinkSync(dir, link);
+
+    try {
+      const registered = path.join(fs.realpathSync(appPath), "Contents", "PlugIns", "Visionario Extension.appex");
+      safariEnableProbes.pluginkitList = () => `+    ${NEW_ID}(1.0)\t3E3BBEFD-8E88-414A-B1B4-4BA28401048E\t2026-11-06 18:15:33 +0000\t${registered}\n (1 plug-ins)\n`;
+      safariEnableProbes.extensionsPlist = () => ({ xml: extensionsPlistXml([{ id: NEW_ID, identity: TEAM, enabled: true }]), reason: "" });
+
+      const real = appPath;
+      const recased = path.join(path.dirname(real).toUpperCase(), path.basename(real));
+      const spellings = [path.join(link, path.relative(dir, real)), ...(fs.existsSync(recased) ? [recased] : [])];
+
+      for (const spelling of spellings) {
+        appPath = spelling;
+        session(BUILT);
+
+        const frame = safariEnableFrame(dir, "safari", true);
+
+        expect(frame?.safari).toMatchObject({ enabled: true, blocker: null, appPath: spelling, registeredPath: registered });
+        expect(frame?.hint).not.toContain("pluginkit -r");
+
+        removeSession(dir, "safari");
+        removeSessionMarker(dir, "safari");
+      }
+    } finally {
+      fs.unlinkSync(link);
+    }
+  });
+
   it("says the earlier enable does not carry over when the bundle id changed, and names the Settings window read as what failed", async () => {
     session(BUILT + SETTINGS_DID_NOT_OPEN);
     safariEnableProbes.pluginkitList = () => listing([{ mark: "+", id: OLD_ID, app: "Hands-free.app" }, { mark: " ", id: NEW_ID, app: "Visionario.app" }]);
