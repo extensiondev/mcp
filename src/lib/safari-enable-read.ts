@@ -262,6 +262,68 @@ export interface SafariEnableFrameOptions {
   identity?: SigningIdentity;
 }
 
+function builtApp(projectPath: string, browser: string): { contract: Record<string, unknown>; log: string; appName: string; appPath: string } {
+  const session = findSessionInfo(projectPath, browser);
+  const contract = readContract(projectPath, browser);
+  const log = readLog(session?.logPath);
+  const appName =
+    session?.appName ?? (typeof contract.extensionName === "string" && contract.extensionName.trim() ? contract.extensionName : path.basename(projectPath));
+  const appPath =
+    typeof contract.binary === "string" && contract.binary.endsWith(".app")
+      ? contract.binary
+      : safariAppPath(projectPath, browser, { appName: session?.appName, sessionOutput: log });
+
+  return { contract, log, appName, appPath };
+}
+
+export interface SafariListedExtension {
+  id: string;
+  name: string;
+  version: string | null;
+  ownExtension?: true;
+  enabled: boolean | "unknown";
+  registered: boolean | null;
+  identities: Array<{ identity: string; enabled: boolean }>;
+  path: string;
+  contexts: [];
+  source: "pluginkit";
+}
+
+export type SafariExtensionList =
+  | { read: true; extensions: SafariListedExtension[]; plistReason: string | null }
+  | { read: false; why: "not-macos" | "pluginkit-silent" };
+
+export function listSafariExtensions(projectPath: string, browser: string, probes: SafariEnableProbes = safariEnableProbes): SafariExtensionList {
+  if (probes.platform() !== "darwin") return { read: false, why: "not-macos" };
+
+  const listing = probes.pluginkitList();
+  if (listing === null) return { read: false, why: "pluginkit-silent" };
+
+  const { appPath } = builtApp(projectPath, browser);
+  const plist = probes.extensionsPlist();
+  const rows = plist.xml === null ? null : parseSafariExtensionsPlist(plist.xml);
+  const extensions = parsePluginkitList(listing)
+    .map((entry): SafariListedExtension => {
+      const held = rows?.filter((row) => row.bundleId === entry.bundleId && !row.removed) ?? [];
+
+      return {
+        id: entry.bundleId,
+        name: appOf(entry.path).replace(/\.app$/, ""),
+        version: entry.version,
+        ...(registeredUnder(entry, appPath) ? { ownExtension: true as const } : {}),
+        enabled: rows === null ? "unknown" : held.some((row) => row.enabled),
+        registered: entry.enabled,
+        identities: held.map((row) => ({ identity: row.identity, enabled: row.enabled })),
+        path: posixPath(entry.path),
+        contexts: [],
+        source: "pluginkit",
+      };
+    })
+    .sort((a, b) => Number(b.ownExtension ?? false) - Number(a.ownExtension ?? false) || a.name.localeCompare(b.name));
+
+  return { read: true, extensions, plistReason: rows === null ? plist.reason || "Safari's Extensions.plist could not be read" : null };
+}
+
 export function safariEnableFrame(
   projectPath: string,
   browser: string,
@@ -272,15 +334,7 @@ export function safariEnableFrame(
   if (!isSafariTarget(browser) || probes.platform() !== "darwin") return null;
   if (safariAppBuilding(projectPath, browser)) return null;
 
-  const session = findSessionInfo(projectPath, browser);
-  const contract = readContract(projectPath, browser);
-  const log = readLog(session?.logPath);
-  const appName =
-    session?.appName ?? (typeof contract.extensionName === "string" && contract.extensionName.trim() ? contract.extensionName : path.basename(projectPath));
-  const appPath =
-    typeof contract.binary === "string" && contract.binary.endsWith(".app")
-      ? contract.binary
-      : safariAppPath(projectPath, browser, { appName: session?.appName, sessionOutput: log });
+  const { contract, log, appName, appPath } = builtApp(projectPath, browser);
   const appExists = fs.existsSync(appPath);
   const extensionId = typeof contract.extensionId === "string" ? contract.extensionId : null;
   const listing = probes.pluginkitList();

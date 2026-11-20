@@ -4,7 +4,10 @@ import path from "node:path";
 
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 
+import { safariEnableProbes } from "../lib/safari-enable-probes";
 import { readyContract } from "./fixtures/engine-answers";
+import { writeCompiledUnattachedContract } from "./fixtures/ready-contract";
+import { extensionsPlistXml, TEAM } from "./fixtures/safari-extensions-plist";
 
 import type { RdpAddon } from "../lib/rdp";
 import type * as RdpModule from "../lib/rdp";
@@ -204,17 +207,78 @@ describe("extension_list_extensions on Gecko (RDP root listAddons)", () => {
   });
 });
 
-describe("968: extension_list_extensions on Safari says what works there", () => {
-  it("points at Safari's Extensions settings and safaridriver --mcp, not only at Chromium or Firefox", async () => {
+describe("extension_list_extensions on Safari reads the Mac's own registrations", () => {
+  const saved = { ...safariEnableProbes };
+  const row = (mark: string, id: string, appex: string) => `${mark}    ${id}(1.2)\t3E3BBEFD-8E88-414A-B1B4-4BA28401048E\t2026-11-06 18:15:33 +0000\t${appex}`;
+
+  afterEach(() => {
+    Object.assign(safariEnableProbes, saved);
+  });
+
+  it("lists every registered Safari web extension with Safari's own switch, marks the project's build, and needs no session", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-list-safari-"));
     tmpDirs.push(dir);
+    const appPath = path.join(dir, "dist", "safari-xcode", ".derived", "Build", "Products", "Release", "Leon.app");
+    fs.mkdirSync(appPath, { recursive: true });
+    writeCompiledUnattachedContract(dir, "safari", { extensionId: "com.acme.leon.Extension", extensionName: "Leon", binary: appPath });
+
+    const own = path.join(appPath, "Contents", "PlugIns", "Leon Extension.appex");
+    const notes = "/Applications/Notes Clipper.app/Contents/PlugIns/Notes Clipper Extension.appex";
+
+    safariEnableProbes.platform = () => "darwin";
+    safariEnableProbes.pluginkitList = () => `${row("+", "com.acme.notes.Extension", notes)}\n${row(" ", "com.acme.leon.Extension", own)}\n (2 plug-ins)\n`;
+    safariEnableProbes.extensionsPlist = () => ({
+      xml: extensionsPlistXml([
+        { id: "com.acme.notes.Extension", identity: TEAM, enabled: true },
+        { id: "com.acme.leon.Extension", identity: "UNSIGNED", enabled: false },
+      ]),
+      reason: "",
+    });
 
     const result = JSON.parse(await listExtensions.handler({ projectPath: dir, browser: "safari" }));
 
-    expect(result.status).toBe("unsupported-browser");
-    expect(result.hint).toContain("Safari > Settings > Extensions");
-    expect(result.hint).toContain("safaridriver --mcp");
-    expect(result.hint).toContain("extension_browsers");
-    expect(result.hint).not.toMatch(/^Target a Chromium-family/);
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe("listed");
+    expect(result.value.count).toBe(2);
+    expect(result.value.ownExtensionId).toBe("com.acme.leon.Extension");
+    expect(result.value.extensions).toEqual([
+      expect.objectContaining({ id: "com.acme.leon.Extension", name: "Leon", version: "1.2", ownExtension: true, enabled: false, path: own.replace(/\\/g, "/") }),
+      expect.objectContaining({ id: "com.acme.notes.Extension", name: "Notes Clipper", version: "1.2", enabled: true, path: notes }),
+    ]);
+
+    expect(result.value.extensions[1].ownExtension).toBeUndefined();
+
+    safariEnableProbes.extensionsPlist = () => ({ xml: null, reason: "Extensions.plist could not be read: Operation not permitted" });
+    const unread = JSON.parse(await listExtensions.handler({ projectPath: dir, browser: "safari" }));
+
+    expect(unread.status).toBe("listed");
+    expect(unread.value.extensions.map((entry: { enabled: unknown }) => entry.enabled)).toEqual(["unknown", "unknown"]);
+    expect(unread.warnings.join(" ")).toContain("Operation not permitted");
+  });
+
+  it("refuses off macOS and when pluginkit does not answer, without pointing at safaridriver", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-list-safari-"));
+    tmpDirs.push(dir);
+
+    safariEnableProbes.platform = () => "linux";
+
+    safariEnableProbes.pluginkitList = () => {
+      throw new Error("pluginkit must not run off macOS");
+    };
+
+    const offMac = JSON.parse(await listExtensions.handler({ projectPath: dir, browser: "safari" }));
+
+    safariEnableProbes.platform = () => "darwin";
+    safariEnableProbes.pluginkitList = () => null;
+    const silent = JSON.parse(await listExtensions.handler({ projectPath: dir, browser: "safari" }));
+
+    for (const result of [offMac, silent]) {
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe("unsupported-browser");
+      expect(result.hint).not.toContain("safaridriver");
+      expect(result.hint).not.toMatch(/^Target a Chromium-family/);
+    }
+
+    expect(offMac.error.message).not.toBe(silent.error.message);
   });
 });

@@ -30,6 +30,7 @@ import {
 } from "../lib/session-browser";
 import { sessionGuestIdentity } from "../lib/extension-identity";
 import { readyContractPath } from "../lib/session-paths";
+import { listSafariExtensions } from "../lib/safari-enable-read";
 
 export const schema = {
   name: "extension_list_extensions",
@@ -206,6 +207,10 @@ export async function handler(args: {
     return listGeckoExtensions(args.projectPath, browser);
   }
 
+  if (WEBKIT_FAMILY.has(browser)) {
+    return listWebkitExtensions(args.projectPath, browser);
+  }
+
   if (!isChromiumFamily(browser)) {
     return envelope({
       ok: false,
@@ -215,7 +220,7 @@ export async function handler(args: {
         code: "E_UNSUPPORTED_BROWSER",
         message: `Listing extensions for ${browser} is not supported: no debugging-protocol pairing exists for this browser family.`,
       },
-      hint: WEBKIT_FAMILY.has(browser) ? "On Safari, the installed extensions are listed in Safari > Settings > Extensions, where the person reads and toggles them; Apple's safaridriver --mcp server (extension_browsers detect reports it as automation.mcp) drives Safari from an agent. A Chromium or Firefox session lists them here." : "Target a Chromium-family (CDP) or Firefox-family (RDP) dev session.",
+      hint: "Target a Chromium-family (CDP) or Firefox-family (RDP) dev session.",
     });
   }
 
@@ -374,6 +379,53 @@ export async function handler(args: {
   } finally {
     cdp.disconnect();
   }
+}
+
+function listWebkitExtensions(projectPath: string, browser: string): string {
+  const list = listSafariExtensions(projectPath, browser);
+
+  if (!list.read) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "unsupported-browser",
+      error: {
+        code: "E_UNSUPPORTED_BROWSER",
+        message:
+          list.why === "not-macos"
+            ? `Listing extensions for ${browser} works only on the Mac that runs Safari, where the list is read from pluginkit and Safari's Extensions.plist; this server is not running on macOS.`
+            : `Listing extensions for ${browser} reads pluginkit, and pluginkit -m -v -p com.apple.Safari.web-extension did not answer on this Mac.`,
+      },
+      hint:
+        list.why === "not-macos"
+          ? "Call extension_list_extensions from a server on that Mac, or target a Chromium or Firefox session here."
+          : "Run pluginkit -m -v -p com.apple.Safari.web-extension in a terminal to see why it fails, then call extension_list_extensions again.",
+    });
+  }
+
+  const own = list.extensions.find((entry) => entry.ownExtension);
+  const on = list.extensions.filter((entry) => entry.enabled === true).length;
+  const count = `${list.extensions.length} Safari web extension${list.extensions.length === 1 ? "" : "s"}`;
+  const switches = list.plistReason ? "." : `; enabled is Safari's own switch from Extensions.plist, on for ${on}.`;
+  const ownership = own ? `This project's build is ${own.id}.` : "None of them is registered from this project's Safari build.";
+
+  return envelope({
+    ok: true,
+    command: schema.name,
+    status: "listed",
+    value: {
+      browser,
+      count: list.extensions.length,
+      ownExtensionId: own?.id ?? null,
+      extensions: list.extensions,
+    },
+    warnings: [
+      list.plistReason
+        ? `enabled is "unknown" on every row: ${list.plistReason}. registered is pluginkit's own mark, not Safari's switch.`
+        : null,
+    ],
+    hint: `Read ${count} from pluginkit (what is registered on this Mac, with or without a dev session)${switches} ${ownership}`,
+  });
 }
 
 async function listGeckoExtensions(
