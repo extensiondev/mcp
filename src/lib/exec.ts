@@ -280,8 +280,11 @@ export interface PackageInstallResult {
   code: number | null;
   timedOut: boolean;
   leftRunningPid?: number;
+  notFound?: boolean;
   output: string;
 }
+
+const WINDOWS_COMMAND_NOT_FOUND = /is not recognized as an internal or external command/;
 
 export function runPackageInstall(
   command: string,
@@ -315,7 +318,7 @@ export function runPackageInstall(
       }
 
       fs.rmSync(ioDir, { recursive: true, force: true });
-      resolve({ ...result, output });
+      resolve({ ...result, ...(result.code !== 0 && WINDOWS_COMMAND_NOT_FOUND.test(output) ? { notFound: true } : {}), output });
     };
 
     let child: ChildProcess;
@@ -358,7 +361,7 @@ export function runPackageInstall(
 
       settled = true;
       clearTimeout(timer);
-      finish({ code: 1, timedOut: false }, String(err));
+      finish({ code: 1, timedOut: false, ...((err as NodeJS.ErrnoException).code === "ENOENT" ? { notFound: true } : {}) }, String(err));
     });
   });
 }

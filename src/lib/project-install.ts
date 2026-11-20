@@ -20,6 +20,7 @@ import { sessionStateDir } from "./process-manager";
 import { liveProjectSessions } from "./session-browser";
 import { engineProjectRoot, readyContractPath } from "./session-paths";
 import { modulesMissing, startingSession } from "./session-starting";
+import { findWorkspaceMember, lockfileManager, pinnedManager } from "./workspace-member";
 
 /* @invariant ONE DEPENDENCY INSTALL PER PROJECT AT A TIME, AND EVERY BUILD
  * KNOWS WHEN ONE IS RUNNING. The engine installs a project's dependencies
@@ -417,17 +418,50 @@ export function incompleteInstall(projectPath: string): IncompleteInstall | null
   }
 }
 
-const REPAIR_COMMANDS: Array<{ lockfiles: string[]; command: string }> = [
-  { lockfiles: ["pnpm-lock.yaml"], command: "pnpm" },
-  { lockfiles: ["bun.lock", "bun.lockb"], command: "bun" },
-  { lockfiles: ["yarn.lock", "deno.lock"], command: "" },
-];
+/* @invariant THE REPAIR RUNS THE INSTALL THE ENGINE WOULD RUN, WHERE THE
+ * ENGINE WOULD RUN IT, OR NAMES IT AND RUNS NOTHING. A workspace member is
+ * installed from its workspace root with the root's package manager, pnpm
+ * filtered to the member, and a project outside any workspace by its own
+ * lockfile, then its packageManager field, then npm, with pnpm confined to
+ * the project (extension.js programs/develop/lib/package-manager.ts). The
+ * first version read the lockfile of the one folder it was given and fell
+ * back to npm: in a pnpm workspace member that is npm install, which fails
+ * on "workspace:" or writes a package-lock.json and a nested tree into the
+ * member, on every call. Yarn and Deno are named for the person to run, as
+ * is a package manager that is not on the PATH this server runs with.
+ */
+export interface RepairPlan {
+  cwd: string;
+  manager: string;
+  args: string[] | null;
+}
 
-export function repairCommand(root: string): { command: string; args: string[] } | null {
-  const chosen = REPAIR_COMMANDS.find((entry) => entry.lockfiles.some((name) => fs.existsSync(path.join(root, name))));
-  const command = chosen ? chosen.command : "npm";
+function installsWithDeno(root: string): boolean {
+  const has = (name: string): boolean => fs.existsSync(path.join(root, name));
 
-  return command ? { command, args: ["install", "--ignore-scripts"] } : null;
+  return has("deno.lock") || ((has("deno.json") || has("deno.jsonc")) && !has("package.json"));
+}
+
+function namesWorkspaceProtocol(root: string): boolean {
+  try {
+    return /"workspace:/.test(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+  } catch {
+    return false;
+  }
+}
+
+export function repairPlan(projectRoot: string): RepairPlan {
+  const member = findWorkspaceMember(projectRoot);
+  const manager = member?.manager ?? lockfileManager(projectRoot) ?? pinnedManager(projectRoot) ?? (installsWithDeno(projectRoot) ? "deno" : "npm");
+  const cwd = member?.root ?? projectRoot;
+
+  if (manager === "yarn" || manager === "deno") return { cwd, manager, args: null };
+  if (manager !== "pnpm") return { cwd, manager, args: ["install", "--ignore-scripts"] };
+  if (member) return { cwd, manager, args: ["install", "--ignore-scripts", "--filter", `{${member.relativeDir}}...`] };
+
+  const ownWorkspace = fs.existsSync(path.join(projectRoot, "pnpm-workspace.yaml")) || namesWorkspaceProtocol(projectRoot);
+
+  return { cwd, manager, args: ["install", "--ignore-scripts", ...(ownWorkspace ? [] : ["--ignore-workspace"])] };
 }
 
 export interface InstallTurnOutcome {
@@ -468,14 +502,24 @@ export async function installTurn(projectPath: string, waitBudgetMs: number = IN
 
 export interface InstallRepair {
   root: string;
+  ranIn: string;
   command: string;
   tookMs: number;
+}
+
+export interface InstallRefusal {
+  root: string;
+  installRoot: string;
+  byHand: string;
+  command: string | null;
+  output: string;
+  reason: "failed" | "not-rerun" | "manager-missing";
 }
 
 export type SettledInstall =
   | { state: "clear"; turn: InstallTurn | null; waitedMs: number; waitedOn: RunningInstall | null; repaired: InstallRepair | null }
   | { state: "running"; running: RunningInstall; waitedMs: number }
-  | { state: "incomplete"; root: string; command: string | null; output: string };
+  | ({ state: "incomplete" } & InstallRefusal);
 
 export async function settleInstall(
   projectPath: string,
@@ -497,22 +541,27 @@ export async function settleInstall(
   if (!incomplete || !outcome.turn) return clear(outcome.turn, null);
 
   const { turn } = outcome;
-  const repair = repairCommand(incomplete.root);
+  const plan = repairPlan(engineProjectRoot(projectPath));
 
-  if (!repair) {
-    fs.rmSync(installStoppedPath(projectPath), { force: true });
+  const refusal = (reason: InstallRefusal["reason"], command: string | null, output: string): SettledInstall => {
     turn.release();
 
-    return { state: "incomplete", root: incomplete.root, command: null, output: "" };
+    return { state: "incomplete", root: incomplete.root, installRoot: plan.cwd, byHand: `${plan.manager} install`, command, output, reason };
+  };
+
+  if (!plan.args) {
+    fs.rmSync(installStoppedPath(projectPath), { force: true });
+
+    return refusal("not-rerun", null, "");
   }
 
   const began = Date.now();
-  const said = `${repair.command} ${repair.args.join(" ")}`;
+  const said = `${plan.manager} ${plan.args.join(" ")}`;
   let result: Awaited<ReturnType<typeof runPackageInstall>>;
 
   try {
-    result = await runPackageInstall(repair.command, repair.args, {
-      cwd: incomplete.root,
+    result = await runPackageInstall(plan.manager, plan.args, {
+      cwd: plan.cwd,
       timeoutMs: budgets.repairMs,
       onSpawn: (pid) => turn.join(pid, "installer"),
     });
@@ -520,6 +569,12 @@ export async function settleInstall(
     turn.release();
 
     throw err;
+  }
+
+  if (result.notFound) {
+    fs.rmSync(installStoppedPath(projectPath), { force: true });
+
+    return refusal("manager-missing", null, "");
   }
 
   if (result.leftRunningPid) {
@@ -530,14 +585,9 @@ export async function settleInstall(
   }
 
   if (result.code === 0) fs.rmSync(installStoppedPath(projectPath), { force: true });
+  if (result.code !== 0 || incompleteInstall(projectPath)) return refusal("failed", said, result.output.trim().slice(-2000));
 
-  if (result.code !== 0 || incompleteInstall(projectPath)) {
-    turn.release();
-
-    return { state: "incomplete", root: incomplete.root, command: said, output: result.output.trim().slice(-2000) };
-  }
-
-  const repaired = { root: incomplete.root, command: said, tookMs: Date.now() - began };
+  const repaired = { root: incomplete.root, ranIn: plan.cwd, command: said, tookMs: Date.now() - began };
 
   if (modulesMissing(projectPath)) return clear(turn, repaired);
 
@@ -580,20 +630,27 @@ export function waitedForInstallNote(install: RunningInstall, waitedMs: number, 
   return `This call waited ${seconds(waitedMs)} for ${installOwnerWords(install)} to finish installing this project's dependencies before it ${did}; one install runs on a project at a time.`;
 }
 
+function ranWhere(root: string, ranIn: string): string {
+  return ranIn === root ? "there" : `in ${ranIn}`;
+}
+
 export function repairedInstallNote(repair: InstallRepair, did = "building"): string {
-  return `node_modules under ${repair.root} was left incomplete by an install that did not finish (the extension package was there with no binary linked, or this server had stopped an engine in the middle of installing), so this call ran ${repair.command} there first (${seconds(repair.tookMs)}) before ${did}.`;
+  return `node_modules under ${repair.root} was left incomplete by an install that did not finish (the extension package was there with no binary linked, or this server had stopped an engine in the middle of installing), so this call ran ${repair.command} ${ranWhere(repair.root, repair.ranIn)} first (${seconds(repair.tookMs)}) before ${did}.`;
 }
 
-export function incompleteInstallMessage(root: string, command: string | null, nothing = "Nothing was built"): string {
-  return command
-    ? `${nothing}: node_modules under ${root} is incomplete (an install did not finish), and ${command}, which this call ran there to repair it, did not complete it.`
-    : `${nothing}: node_modules under ${root} is incomplete (an install did not finish), and this server does not rerun this project's package manager itself.`;
+export function incompleteInstallMessage(refusal: InstallRefusal, nothing = "Nothing was built"): string {
+  const found = `${nothing}: node_modules under ${refusal.root} is incomplete (an install did not finish)`;
+
+  if (refusal.reason === "manager-missing") return `${found}, and ${refusal.byHand.split(" ")[0]}, which installs this project, is not on the PATH this server runs with.`;
+  if (refusal.reason === "not-rerun") return `${found}, and this server does not rerun this project's package manager itself.`;
+
+  return `${found}, and ${refusal.command}, which this call ran ${ranWhere(refusal.root, refusal.installRoot)} to repair it, did not complete it.`;
 }
 
-export function incompleteInstallHint(command: string, root: string, ran: string | null): string {
-  return ran
+export function incompleteInstallHint(command: string, refusal: InstallRefusal): string {
+  return refusal.reason === "failed"
     ? `Read value.output for the package manager's own report and fix what it names (the network, the registry or a dependency version), then call ${command} again: it reruns the install first. This is not a compile error.`
-    : `Run the project's own install in ${root} (yarn install or deno install, by the lockfile there), then call ${command} again. This is not a compile error.`;
+    : `Run ${refusal.byHand} in ${refusal.installRoot}, then call ${command} again. This is not a compile error.`;
 }
 
 export const INSTALL_STOPPED_HINT =
@@ -643,11 +700,11 @@ export async function sessionInstallGate(command: string, projectPath: string): 
         error: {
           code: "E_CLI",
           name: "InstallIncomplete",
-          message: incompleteInstallMessage(install.root, install.command, "No session was started"),
+          message: incompleteInstallMessage(install, "No session was started"),
           retry: "safe",
         },
-        value: { started: false, installRoot: install.root, ...(install.command ? { installCommand: install.command } : {}), ...(install.output ? { output: install.output } : {}) },
-        hint: incompleteInstallHint(command, install.root, install.command),
+        value: { started: false, installRoot: install.installRoot, ...(install.command ? { installCommand: install.command } : {}), ...(install.output ? { output: install.output } : {}) },
+        hint: incompleteInstallHint(command, install),
       }),
     };
   }

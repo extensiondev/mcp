@@ -15,7 +15,8 @@ let cliResultOverride: { code: number; stdout: string; stderr: string } | null =
 let onCli: ((args: string[]) => void) | null = null;
 let whileCliRuns: ((args: string[]) => Promise<void>) | null = null;
 const installCalls: Array<{ command: string; args: string[]; cwd: string }> = [];
-let installResult: { code: number | null; timedOut: boolean; leftRunningPid?: number; output: string } | null = null;
+let installResult: { code: number | null; timedOut: boolean; leftRunningPid?: number; notFound?: boolean; output: string } | null = null;
+let installLinks: ((cwd: string) => string | null) | null = null;
 let skipDist = false;
 let spawnRefusal: NodeJS.ErrnoException | null = null;
 vi.mock("../lib/exec", async (importOriginal) => {
@@ -32,8 +33,12 @@ vi.mock("../lib/exec", async (importOriginal) => {
       installCalls.push({ command, args, cwd: options.cwd });
       if (installResult) return installResult;
 
-      fs.mkdirSync(path.join(options.cwd, "node_modules", ".bin"), { recursive: true });
-      fs.writeFileSync(path.join(options.cwd, "node_modules", ".bin", process.platform === "win32" ? "extension.cmd" : "extension"), "");
+      const linked = installLinks ? installLinks(options.cwd) : path.join(options.cwd, "node_modules", ".bin");
+
+      if (linked) {
+        fs.mkdirSync(linked, { recursive: true });
+        fs.writeFileSync(path.join(linked, process.platform === "win32" ? "extension.cmd" : "extension"), "");
+      }
 
       return { code: 0, timedOut: false, output: "added 1 package" };
     },
@@ -123,6 +128,7 @@ afterEach(() => {
   whileCliRuns = null;
   installCalls.length = 0;
   installResult = null;
+  installLinks = null;
   skipDist = false;
   spawnRefusal = null;
 
@@ -1112,7 +1118,87 @@ describe("948: a folder an install left incomplete is repaired under the record,
       `Nothing was built: node_modules under ${dir} is incomplete (an install did not finish), and this server does not rerun this project's package manager itself.`,
     );
 
-    expect(result.hint).toBe(`Run the project's own install in ${dir} (yarn install or deno install, by the lockfile there), then call extension_build again. This is not a compile error.`);
+    expect(result.hint).toBe(`Run yarn install in ${dir}, then call extension_build again. This is not a compile error.`);
+  });
+
+  function workspace(files: Record<string, string>): { root: string; member: string } {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-workspace-"));
+    const member = path.join(root, "packages", "ext");
+
+    tmpDirs.push(root);
+    fs.mkdirSync(path.join(member, "src"), { recursive: true });
+    fs.mkdirSync(path.join(member, "node_modules", "extension"), { recursive: true });
+    fs.writeFileSync(path.join(member, "package.json"), JSON.stringify({ name: "ext", devDependencies: { extension: "latest", lib: "workspace:*" } }));
+    fs.writeFileSync(path.join(member, "src", "manifest.json"), JSON.stringify({ manifest_version: 3, name: "Member", version: "1.0.0" }));
+
+    for (const [name, text] of Object.entries(files)) fs.writeFileSync(path.join(root, name), text);
+
+    return { root, member };
+  }
+
+  it.each([
+    [
+      "a pnpm workspace member from its workspace root, filtered to the member",
+      (): { dir: string; call: object } => {
+        const { root, member } = workspace({ "pnpm-workspace.yaml": "packages:\n  - packages/*\n", "pnpm-lock.yaml": "" });
+
+        return { dir: member, call: { command: "pnpm", args: ["install", "--ignore-scripts", "--filter", "{packages/ext}..."], cwd: root } };
+      },
+    ],
+    [
+      "an npm workspace member from its workspace root",
+      (): { dir: string; call: object } => {
+        const { root, member } = workspace({ "package.json": JSON.stringify({ name: "root", workspaces: ["packages/*"] }), "package-lock.json": "{}" });
+
+        return { dir: member, call: { command: "npm", args: ["install", "--ignore-scripts"], cwd: root } };
+      },
+    ],
+    [
+      "a project that names pnpm in packageManager and has no lockfile yet, confined to the project",
+      (): { dir: string; call: object } => {
+        const dir = halfInstalled();
+        fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: "half", packageManager: "pnpm@10.19.0", devDependencies: { extension: "latest" } }));
+
+        return { dir, call: { command: "pnpm", args: ["install", "--ignore-scripts", "--ignore-workspace"], cwd: dir } };
+      },
+    ],
+  ])("repairs %s", async (_layout, make) => {
+    const { dir, call } = make();
+    installLinks = () => path.join(dir, "node_modules", ".bin");
+
+    const result = JSON.parse(await build.handler({ projectPath: dir }));
+
+    expect(installCalls).toEqual([call]);
+    expect(result.status).toBe("built");
+  });
+
+  it("runs no npm inside a yarn workspace member, and names the install to run at the workspace root", async () => {
+    const { root, member } = workspace({ "package.json": JSON.stringify({ name: "root", workspaces: { packages: ["packages/*"] } }), "yarn.lock": "" });
+
+    const result = JSON.parse(await build.handler({ projectPath: member }));
+
+    expect(installCalls).toEqual([]);
+    expect(result).toMatchObject({ ok: false, status: "install-incomplete" });
+    expect(result.value.installRoot).toBe(root);
+    expect(result.hint).toBe(`Run yarn install in ${root}, then call extension_build again. This is not a compile error.`);
+  });
+
+  it.skipIf(process.platform === "win32")("names the install to run by hand when the project's package manager is not on the PATH", async () => {
+    const dir = halfInstalled("pnpm-lock.yaml");
+    const real = await vi.importActual<typeof ExecModule>("../lib/exec");
+
+    installResult = await real.runPackageInstall("a-package-manager-nobody-installed", ["install"], { cwd: dir, timeoutMs: 5_000 });
+
+    expect(installResult).toMatchObject({ code: 1, notFound: true });
+
+    const result = JSON.parse(await build.handler({ projectPath: dir }));
+
+    expect(result.status).toBe("install-incomplete");
+    expect(result.error.message).toBe(
+      `Nothing was built: node_modules under ${dir} is incomplete (an install did not finish), and pnpm, which installs this project, is not on the PATH this server runs with.`,
+    );
+
+    expect(result.hint).toBe(`Run pnpm install in ${dir}, then call extension_build again. This is not a compile error.`);
   });
 
   it("reads the engine binary not found as an incomplete install, and the next call reinstalls", async () => {

@@ -894,7 +894,13 @@ export async function handler(args: {
     });
   }
 
-  if (install.state === "incomplete") return incompleteInstallAnswer(browser, install.root, install.command, install.output, start, warnings);
+  if (install.state === "incomplete") {
+    return incompleteInstallAnswer(browser, install.installRoot, install.command, install.output, start, warnings, {
+      message: incompleteInstallMessage(install),
+      hint: incompleteInstallHint(COMMAND, install),
+    });
+  }
+
   if (install.waitedOn) warnings.push(waitedForInstallNote(install.waitedOn, install.waitedMs));
   if (install.repaired) warnings.push(repairedInstallNote(install.repaired));
 
@@ -1342,7 +1348,10 @@ export async function handler(args: {
   if (ENGINE_BINARY_NOT_FOUND.test(tail) && fs.existsSync(modulesDir)) {
     noteInstallStopped(args.projectPath);
 
-    return incompleteInstallAnswer(browser, path.dirname(modulesDir), null, withoutInstallNoise(tail).slice(-2000), start, warnings, true);
+    return incompleteInstallAnswer(browser, path.dirname(modulesDir), null, withoutInstallNoise(tail).slice(-2000), start, warnings, {
+      message: `Nothing was built: the engine binary was not found although ${path.dirname(modulesDir)} has a node_modules, which is an install that did not finish, not a compile error.`,
+      hint: INSTALL_STOPPED_HINT,
+    });
   }
 
   const compileErrors = buildCompileErrors(args.projectPath, browser, start);
@@ -1375,7 +1384,7 @@ function incompleteInstallAnswer(
   output: string,
   start: number,
   warnings: string[],
-  nextCallRepairs = false,
+  said: { message: string; hint: string },
 ): string {
   return envelope({
     ok: false,
@@ -1384,14 +1393,12 @@ function incompleteInstallAnswer(
     error: {
       code: "E_BUILD_FAILED",
       name: "InstallIncomplete",
-      message: nextCallRepairs
-        ? `Nothing was built: the engine binary was not found although ${root} has a node_modules, which is an install that did not finish, not a compile error.`
-        : incompleteInstallMessage(root, ran),
+      message: said.message,
       retry: "safe",
     },
     value: { browser, duration: Date.now() - start, installRoot: root, ...(ran ? { installCommand: ran } : {}), ...(output ? { output } : {}) },
     warnings,
-    hint: nextCallRepairs ? INSTALL_STOPPED_HINT : incompleteInstallHint(COMMAND, root, ran),
+    hint: said.hint,
   });
 }
 
