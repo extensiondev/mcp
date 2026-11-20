@@ -199,7 +199,7 @@ describe("extension_dev for Safari says how the built app was signed", () => {
     expect(result.hint).not.toMatch(/storage\.local|resets? the extension/);
   }, 15_000);
 
-  it("carries the identity on a compiled-not-attached answer beside the not-enabled hint, and strips wait's own copy", async () => {
+  it("carries the identity and the Safari enable read on a compiled-not-attached answer beside the not-enabled hint, and strips wait's own copies", async () => {
     const project = tmpProject();
     codesignAnswer = () => TEAM_SIGNED;
     waitAnswer = () =>
@@ -219,6 +219,7 @@ describe("extension_dev for Safari says how the built app was signed", () => {
     expect(result.value.ready.status).toBe("compiled-not-attached");
     expect(result.value.ready.signing).toBeUndefined();
     expect(result.value.ready.safari).toBeUndefined();
+    expect(result.value.safari).toEqual({ bundleId: "dev.extensionjs.Leon.Extension", enabled: false, manualSteps: ["Safari > Settings > Extensions > turn on Leon"] });
     expect(result.value.signing).toEqual({ requested: "JU3XAJJQ2G", identity: "team:JU3XAJJQ2G", status: "team-signed", appPath: expect.stringMatching(/Leon\.app$/) });
     expect(result.warnings.some((line: string) => line.startsWith("developmentTeam"))).toBe(false);
     expect(result.hint).toContain("The extension is not enabled in Safari yet");
