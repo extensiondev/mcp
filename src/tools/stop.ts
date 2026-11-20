@@ -104,6 +104,7 @@ interface StopOutcome {
   carrierNote?: string;
   staleRecord?: boolean;
   survivorsUnverified?: boolean;
+  pidIsStranger?: boolean;
 }
 
 function cleanCarrier(projectPath: string): { carrierRemoved?: string; carrierNote?: string } {
@@ -454,7 +455,11 @@ function startedAfterContract(pid: number, projectPath: string, browser: string)
  * is still up, which `ok: true` would hide. Before ledger 912 the answer
  * was `ok: false` with `error: null`. No session on record, or a record
  * whose process is already gone, is E_NO_SESSION; a process that was
- * signalled and still reports alive is E_STOP_INCOMPLETE.
+ * signalled and still reports alive is E_STOP_INCOMPLETE. A PID this server
+ * read as a stranger's is never offered for ending: its hint says to leave
+ * it alone and names the one call that moves on. And a hint never says a
+ * process still reports alive when the only open question is a survivor
+ * search that could not run.
  */
 function notStoppedRefusal(outcome: StopOutcome): EnvelopeError {
   if (outcome.staleRecord) {
@@ -470,6 +475,26 @@ function notStoppedRefusal(outcome: StopOutcome): EnvelopeError {
       code: "E_NO_SESSION",
       message: outcome.detail,
       hint: "Nothing was stopped. If the session runs from another folder or browser, pass that projectPath and browser; all: true sweeps every session recorded on this machine.",
+    };
+  }
+
+  if (outcome.pidIsStranger) {
+    const leaveAlone = `Pid ${outcome.pid} is not this session's process: leave it running, and never hand it to the person to end.`;
+
+    return {
+      code: "E_STOP_INCOMPLETE",
+      message: outcome.detail,
+      hint: outcome.survivorsUnverified && outcome.browserGone !== false
+        ? `${leaveAlone} The session's records clear on a later extension_stop once that pid has exited or the search for surviving browser processes can run. Until then, call extension_dev with this projectPath and browser: it does not count these records as a live session and starts a fresh one over them.`
+        : `${leaveAlone} The session's own browser is what is still up, and its records were kept so it can be stopped: call extension_stop with the same projectPath and browser again.`,
+    };
+  }
+
+  if (outcome.survivorsUnverified && outcome.serverGone === true) {
+    return {
+      code: "E_STOP_INCOMPLETE",
+      message: outcome.detail,
+      hint: "The session's server is gone and its records were removed; no process is known to be alive. What is missing is the search for surviving browser processes, which could not run, so a browser window may still be open. Ask the person whether the session's browser window is still open and to close it if so.",
     };
   }
 
@@ -554,7 +579,7 @@ export async function stopOne(
     }
 
     const kept = !verified
-      ? "the search for surviving browser processes could not run (pgrep is missing or failed), so survivors were NOT verified"
+      ? "the search for surviving browser processes could not run (the process list could not be read), so survivors were NOT verified"
       : survivors.length
         ? `${survivors.length} browser process(es) still alive after reap (pids ${survivors.join(", ")})`
         : "the browser the launcher recorded is still alive";
@@ -568,10 +593,11 @@ export async function stopOne(
       reaped,
       ...(provenGone && reaped.length === 0 ? { staleRecord: true } : {}),
       ...(verified ? {} : { survivorsUnverified: true }),
+      ...(provenGone ? {} : { pidIsStranger: true }),
       ...(provenGone ? cleanCarrier(projectPath) : {}),
       detail: provenGone
         ? `Nothing was signalled: ${stranger}. The session that recorded it is already gone; its stale records were removed.${reaped.length ? ` Reaped ${reaped.length} browser process(es).` : ""} ${describeEnded(ended, null, noBrowser)}`
-        : `Nothing was signalled: ${stranger}. The session's records were kept, because the session is not proven gone: ${kept}. ${describeEnded(ended, null, noBrowser)}`,
+        : `Nothing was signalled: ${stranger}. The session's records were kept, because the session is not proven gone: ${kept}. Pid ${pid} is to be left running. ${describeEnded(ended, null, noBrowser)}`,
     };
   }
 
@@ -598,26 +624,28 @@ export async function stopOne(
       after === "alive"
         ? "Sent SIGTERM and SIGKILL but the process still reports alive; it may be exiting."
         : after === "foreign"
-          ? `Sent SIGTERM; ${describeForeignPid(pid)}, so it was not signalled again.`
+          ? `Sent SIGTERM; ${describeForeignPid(pid)}, so it was not signalled again and is to be left running.`
           : "Terminated.";
   }
 
   const { reaped } = await reapSessionProcesses(projectPath, browser, hints);
 
   const { pids: survivors, verified } = sessionProcessPids(projectPath, browser, hints);
-  const dead = readState() === "dead";
-  const ended = endedProcesses(dead, browserPid, browserStartedAt);
+  const settled = readState();
+  const dead = settled === "dead";
+  const strangerNow = settled === "foreign";
+  const ended = endedProcesses(strangerNow ? null : dead, browserPid, browserStartedAt);
   const stopped = dead && verified && survivors.length === 0 && ended.browserGone !== false;
 
   if (!verified) {
-    detail += " Warning: the search for surviving browser processes could not run (pgrep is missing or failed), so survivors were NOT verified; the browser may still be up.";
+    detail += " Warning: the search for surviving browser processes could not run (the process list could not be read), so survivors were NOT verified; the browser may still be up.";
   } else if (survivors.length) {
     detail += ` Warning: ${survivors.length} browser process(es) still alive after reap (pids ${survivors.join(", ")}).`;
   } else if (reaped.length) {
     detail += ` Reaped ${reaped.length} browser process(es).`;
   }
 
-  detail += ` ${describeEnded(ended, pid, noBrowser)}`;
+  detail += ` ${describeEnded(ended, strangerNow ? null : pid, noBrowser)}`;
 
   if (dead) {
     removeSession(projectPath, browser);
@@ -638,6 +666,7 @@ export async function stopOne(
     reaped,
     detail,
     ...(verified ? {} : { survivorsUnverified: true }),
+    ...(strangerNow ? { pidIsStranger: true } : {}),
     ...cleanCarrier(projectPath),
   };
 }

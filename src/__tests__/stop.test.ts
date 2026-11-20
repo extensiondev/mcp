@@ -16,6 +16,7 @@ import {
 import { resolveExtensionInvocation } from "../lib/exec";
 import { PLAUSIBLE_SESSION_BINARY, commandLineNames, linuxStartFromStat, pidState, processCommand, processStartedAt } from "../lib/process-identity";
 import { liveNetworkStubs, openNetworkStubs, stubLinks } from "../lib/network-stubs";
+import { liveProjectSessions } from "../lib/session-browser";
 import { readyContract } from "./fixtures/engine-answers";
 
 const inMemorySession = (projectPath: string, browser: string) =>
@@ -469,6 +470,9 @@ describe("extension_stop never signals a pid that is no longer the session", () 
         expect(result.value.detail).toContain("The session's records were kept");
         expect(result.value.detail).toContain(`the browser the launcher recorded (pid ${process.pid}) is still alive`);
         expect(result.value.detail).not.toContain("stale records were removed");
+        expect(result.error.hint).toContain(`Pid ${stranger} is not this session's process`);
+        expect(result.error.hint).not.toMatch(/ask the person to end it|still reports alive/);
+        expect(result.error.hint).toMatch(/call extension_stop with the same projectPath and browser again\.$/);
         expect(fs.existsSync(path.join(readyDir, "ready.json"))).toBe(true);
       } finally {
         try {
@@ -478,6 +482,70 @@ describe("extension_stop never signals a pid that is no longer the session", () 
       }
     },
     15_000,
+  );
+
+  posixOnly(
+    "never offers a stranger PID for ending when the survivor search cannot run, and clears the records once that PID exits",
+    async () => {
+      const projectPath = tmpProject();
+      const stranger = spawnHolder("sleep", ["300"]);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const readyDir = path.join(projectPath, "dist", "extension-js", "chrome");
+      const readyPath = path.join(readyDir, "ready.json");
+      fs.mkdirSync(readyDir, { recursive: true });
+      fs.writeFileSync(
+        readyPath,
+        JSON.stringify(readyContract("dev", "chrome", { pid: stranger, pidStartedAt: undefined, browserPid: null, launcherPid: null, distPath: path.join(projectPath, "dist", "chrome") })),
+      );
+
+      const psOnlyBin = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-ps-only-"));
+      const previousPath = process.env.PATH;
+      fs.symlinkSync(fs.existsSync("/bin/ps") ? "/bin/ps" : "/usr/bin/ps", path.join(psOnlyBin, "ps"));
+      process.env.PATH = psOnlyBin;
+
+      try {
+        const first = JSON.parse(await stop.handler({ projectPath, browser: "chrome" }));
+
+        if (process.platform === "linux") {
+          expect(first.value.survivorsUnverified).toBeUndefined();
+          expect(first.error.code).toBe("E_NO_SESSION");
+
+          return;
+        }
+
+        const second = JSON.parse(await stop.handler({ projectPath, browser: "chrome" }));
+
+        for (const result of [first, second]) {
+          expect(result.error.code).toBe("E_STOP_INCOMPLETE");
+          expect(result.value.pid).toBe(stranger);
+          expect(result.value.survivorsUnverified).toBe(true);
+          expect(result.error.hint).toContain(`Pid ${stranger} is not this session's process`);
+          expect(result.error.hint).not.toMatch(/ask the person to end it|still reports alive|extension_stop with the same projectPath and browser again/);
+          expect(result.error.hint).toMatch(/call extension_dev with this projectPath and browser/);
+        }
+
+        expect(isAlive(stranger)).toBe(true);
+        expect(fs.existsSync(readyPath)).toBe(true);
+        expect(liveProjectSessions(projectPath)).toEqual([]);
+
+        process.kill(stranger, "SIGKILL");
+        expect(await waitGone(stranger)).toBe(true);
+
+        const after = JSON.parse(await stop.handler({ projectPath, browser: "chrome" }));
+
+        expect(after.value.detail).toContain("Process was already gone");
+        expect(fs.existsSync(readyPath)).toBe(false);
+      } finally {
+        process.env.PATH = previousPath;
+        fs.rmSync(psOnlyBin, { recursive: true, force: true });
+
+        try {
+          process.kill(stranger, "SIGKILL");
+        } catch {
+        }
+      }
+    },
+    20_000,
   );
 
   posixOnly(
@@ -625,6 +693,9 @@ describe("extension_stop says when it could not look for survivors", () => {
       expect(result.ok).toBe(false);
       expect(result.value.survivorsUnverified).toBe(true);
       expect(result.value.detail).toContain("NOT verified");
+      expect(result.value.serverGone).toBe(true);
+      expect(result.error.hint).not.toMatch(/still reports alive|ask the person to end it/);
+      expect(result.error.hint).toMatch(/Ask the person whether the session's browser window is still open/);
     },
     15_000,
   );
