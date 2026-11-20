@@ -172,7 +172,7 @@ describe("extension_dev / extension_wait on a Safari session the engine could no
 
   it("976: never answers enabled when the bundle id is registered from another checkout's app, and names that copy and the fix", async () => {
     session(BUILT);
-    const other = path.join(os.tmpdir(), "other-checkout", "dist", "safari-xcode", ".derived", "Build", "Products", "Release", "Visionario.app", "Contents", "PlugIns", "Visionario Extension.appex");
+    const other = path.posix.join("/Users/pat/other-checkout", "dist", "safari-xcode", ".derived", "Build", "Products", "Release", "Visionario.app", "Contents", "PlugIns", "Visionario Extension.appex");
     safariEnableProbes.pluginkitList = () => `+    ${NEW_ID}(1.0)\t3E3BBEFD-8E88-414A-B1B4-4BA28401048E\t2026-11-06 18:15:33 +0000\t${other}\n (1 plug-ins)\n`;
     safariEnableProbes.extensionsPlist = () => ({ xml: extensionsPlistXml([{ id: NEW_ID, identity: TEAM, enabled: true }]), reason: "" });
 
@@ -185,6 +185,8 @@ describe("extension_dev / extension_wait on a Safari session the engine could no
     expect(result.hint).toContain("distinct bundleId");
     expect(result.hint).not.toMatch(/is enabled in Safari|nothing in Safari Settings is left to do/);
     expect(result.value.safari.retry.say).not.toContain("Nothing to redo");
+
+    if (process.platform === "win32") return;
 
     const own = path.join(appPath, "Contents", "PlugIns", "Visionario Extension.appex");
     safariEnableProbes.pluginkitList = () => `+    ${NEW_ID}(1.0)\t3E3BBEFD-8E88-414A-B1B4-4BA28401048E\t2026-11-06 18:15:33 +0000\t/private${own}\n (1 plug-ins)\n`;
