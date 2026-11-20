@@ -872,25 +872,20 @@ export async function handler(args: {
 
   if (install.state === "running") {
     return envelope({
-      ok: false,
+      ok: true,
       command: COMMAND,
-      status: "build-timeout",
-      error: {
-        code: "E_BUILD_TIMEOUT",
-        name: "BuildTimeout",
-        message: installStillRunningMessage(install.running, install.waitedMs),
-        retry: "safe",
-      },
+      status: "installing",
       value: {
         browser,
-        buildExitCode: null,
-        duration: Date.now() - start,
+        built: false,
         waitingOn: "dependency-install",
         ...installPidOf(install.running),
         waitedMs: install.waitedMs,
+        duration: Date.now() - start,
+        retry: "safe",
       },
       warnings,
-      hint: INSTALL_RUNNING_HINT,
+      hint: `${installStillRunningMessage(install.running, install.waitedMs)} ${INSTALL_RUNNING_HINT}`,
     });
   }
 
