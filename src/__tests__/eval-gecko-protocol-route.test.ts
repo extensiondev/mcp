@@ -54,6 +54,7 @@ vi.mock("../lib/rdp", async (importOriginal) => {
 
   return {
     ...actual,
+    rdpListTabs: async () => openTabs,
     rdpEvaluateInTab: async (
       port: number,
       options: { select: (tabs: RdpTab[]) => RdpTab | null | undefined; expression: string },
@@ -451,6 +452,72 @@ describe("a web page whose own policy forbids eval, on a Gecko build with no tab
     expect(result.value).toBe("520K");
     expect(contextOf(calls[1].cli)).toBe("background");
     expect(calls[1].expression).toContain("executeScript");
+    expect(rdpCalls).toHaveLength(0);
+  });
+});
+
+const refusedHostAccess = () =>
+  envelope({
+    ok: false,
+    command: "extension_eval",
+    status: "page-not-scriptable",
+    error: {
+      code: "E_PAGE_NOT_SCRIPTABLE",
+      cliCode: "E_COMMAND_UNSUPPORTED_FOR_TARGET",
+      name: "InjectionRefused",
+      message: "Missing host permission for the tab",
+      engine: "firefox",
+    },
+    hint: "The tab is open, but firefox refused to script it, so nothing ran there.",
+  });
+
+describe("985: a web page the extension holds no host access to", () => {
+  it("is evaluated over the debugger protocol in the tab the url names, as Chromium reads it over CDP", async () => {
+    const dir = project({ ...MV3, permissions: ["activeTab"] });
+    respond = () => refusedHostAccess();
+    openTabs = [
+      { actor: "tab1", url: "about:addons", title: "Add-ons", selected: true },
+      { actor: "tab2", url: "http://127.0.0.1:4173/note.html", title: "Note" },
+    ];
+
+    const result = JSON.parse(
+      await evalTool.handler({ projectPath: dir, browser: "firefox", context: "page", url: "http://127.0.0.1:4173/note.html", expression: "document.title" }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.value).toBe("over-protocol");
+    expect(rdpCalls).toHaveLength(1);
+    expect(rdpCalls[0].picked?.actor).toBe("tab2");
+    expect(rdpCalls[0].expression).toBe("document.title");
+    expect(result.warnings.join("\n")).toMatch(/no host access to http:\/\/127\.0\.0\.1:4173\/note\.html/);
+  });
+
+  it("keeps the refusal for a privileged about: page, which no route may script", async () => {
+    const dir = project(MV3);
+    respond = () => refusedHostAccess();
+    openTabs = [{ actor: "tab1", url: "about:addons", title: "Add-ons", selected: true }];
+
+    for (const url of ["about:addons", undefined]) {
+      const result = JSON.parse(
+        await evalTool.handler({ projectPath: dir, browser: "firefox", context: "page", url, expression: "document.title" }),
+      );
+
+      expect(result.error.code, String(url)).toBe("E_PAGE_NOT_SCRIPTABLE");
+    }
+
+    expect(rdpCalls.every((call) => call.picked === undefined)).toBe(true);
+  });
+
+  it("keeps the refusal when the session publishes no debugger port, and the hint never asks to widen the manifest", async () => {
+    const dir = project(MV3);
+    rdpPort = null;
+    respond = () => refusedHostAccess();
+
+    const result = JSON.parse(
+      await evalTool.handler({ projectPath: dir, browser: "firefox", context: "page", url: "http://127.0.0.1:4173/note.html", expression: "document.title" }),
+    );
+
+    expect(result.error.code).toBe("E_PAGE_NOT_SCRIPTABLE");
     expect(rdpCalls).toHaveLength(0);
   });
 });

@@ -1202,6 +1202,52 @@ async function evaluatePagePastSiteCsp(
   );
 }
 
+const HOST_ACCESS_REFUSAL = /missing host permission/i;
+
+const WEB_DOCUMENT = /^(?:https?|file):/i;
+
+const NAMES_OTHER_SCHEME = /^(?!(?:https?|file|\*):)[a-z][a-z0-9+.-]*:/i;
+
+async function evaluatePagePastHostAccess(
+  args: ActArgs & { expression: string },
+  browser: string,
+  context: string | undefined,
+  raw: string,
+): Promise<string | null> {
+  if (context !== "page" || !isGeckoFamily(browser)) return null;
+  if (!args.url && args.tab != null) return null;
+  if (args.url && NAMES_OTHER_SCHEME.test(args.url.trim())) return null;
+
+  const refused = parseFrameObject(raw);
+  if (!refused || refused.ok !== false || refused.error?.code !== "E_PAGE_NOT_SCRIPTABLE") return null;
+  if (!HOST_ACCESS_REFUSAL.test(String(refused.error?.message ?? ""))) return null;
+
+  const resolved = await resolveRdpPort(args.projectPath, browser, { waitMs: 1_000, graceMs: 500 });
+  if (!resolved?.port) return null;
+
+  const url = args.url;
+  const seen: TabsSeen = { matched: 0 };
+  const webTabs = (tabs: RdpTab[]) => tabs.filter((tab) => WEB_DOCUMENT.test(String(tab.url ?? "")));
+  const select = url
+    ? (tabs: RdpTab[]) => tabByUrl(webTabs(tabs), url, seen)
+    : (tabs: RdpTab[]) => webTabs(tabs).find((tab) => tab.selected === true);
+
+  if (!isOneExpression(args.expression)) {
+    return notOneExpression(`The extension holds no host access to this page, so ${browser} evaluates it over the debugger protocol`, args.expression);
+  }
+
+  const answer = await evaluateInGeckoTab(args, browser, select, url ? `No open tab matches url: ${url}` : "No web page is selected in the dev browser.", seen);
+  const parsed = answer === null ? null : parseFrameObject(answer);
+  if (!parsed || parsed.status === "no-matching-target") return null;
+
+  addWarning(
+    parsed,
+    `The extension holds no host access to ${url ?? "the selected tab"}, so ${browser} refused to inject; this read went over the debugger protocol instead, as Chromium reads it over CDP, and the manifest needs no change for it.`,
+  );
+
+  return actFrameJson(parsed);
+}
+
 const INJECTION_REFUSED = /missing host permission|cannot access|cannot be scripted/i;
 
 const MOZ_EXTENSION_TAB = /^moz-extension:\/\/[^/]+\//;
@@ -1831,6 +1877,9 @@ async function evaluateRouted(
 
     const pastSiteCsp = await evaluatePagePastSiteCsp(args, browser, context, raw);
     if (pastSiteCsp !== null) return pastSiteCsp;
+
+    const pastHostAccess = await evaluatePagePastHostAccess(args, browser, context, raw);
+    if (pastHostAccess !== null) return pastHostAccess;
 
     if (backgroundRouteRefusedStatements(args, browser, context, raw)) {
       return notOneExpression(undefined, args.expression);

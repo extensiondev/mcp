@@ -106,7 +106,8 @@ describe("a tab the browser refuses to script is named as such, never as a missi
       expect(answer.ok).toBe(false);
       expect(answer.error.code).toBe("E_PAGE_NOT_SCRIPTABLE");
       expect(answer.error.message).toContain("Missing host permission");
-      expect(answer.hint).toMatch(/host_permissions/);
+      expect(answer.hint).toMatch(/debugger protocol/);
+      expect(answer.hint).not.toMatch(/add the origin to host_permissions/);
     },
   );
 

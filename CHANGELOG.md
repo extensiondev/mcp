@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Ledger 985. A Firefox page eval by `url` reads a page the extension holds no host access to. `extension_eval { context: "page", url }` answered `E_PAGE_NOT_SCRIPTABLE` ("Missing host permission for the tab") where Chromium evaluates the same page over CDP; it now evaluates the web tab over the debugger protocol when the session records a debugger port, with a warning that says so, and a privileged `about:` page keeps its refusal. The `E_PAGE_NOT_SCRIPTABLE` hint no longer says to add the origin to `host_permissions`; it says a debug read needs no manifest change.
 - Ledger 986. A ship act's hints read the refusal body. `runShipAct` now hands the platform's refusal body to the act's `hints`, so the hosted `extension_submit` mint-signing names what a `SAFARI_TEAM_PAIR_REQUIRED` refusal lacks from `details.missing` (`appleTeam`, `sealedPair` or `liveCertificates`). This server's own answers do not change.
 
 ## 11.1.0
