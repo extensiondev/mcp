@@ -25,9 +25,10 @@ const ROOT_DIRECTORY_UNSAFE = /[\p{Cc}"]/u;
  * STORES. readRootDirectory follows www's parseRootDirectoryInput: backslashes
  * and repeated slashes become one slash, a leading './' and a trailing slash
  * are dropped, and an absolute path, a '.' or '..' segment, a double quote, a
- * control character or more than 512 characters is refused. readRef follows
- * git check-ref-format, which is what www's create door takes (ledger 1007,
- * 1010).
+ * control character or more than 512 characters is refused. readRef takes the
+ * names www's create door takes: what git check-ref-format allows, less the
+ * characters a build step's shell or JSON would read as its own (ledger
+ * 1007, 1010).
  */
 export function readRootDirectory(value: unknown): { ok: true; rootDirectory: string } | { ok: false } {
   if (value === undefined || value === null) return { ok: true, rootDirectory: "" };
@@ -49,11 +50,12 @@ export function readRootDirectory(value: unknown): { ok: true; rootDirectory: st
   return { ok: true, rootDirectory: segments.join("/") };
 }
 
-export const REF_INVALID = `ref must be a branch, tag or full commit sha that git takes as a ref name: at most ${REF_MAX_LENGTH} characters with no spaces, '..', '//' or any of ~ ^ : ? * [ \\`;
+export const REF_INVALID = `ref must be a branch, tag or full commit sha: at most ${REF_MAX_LENGTH} characters of letters, digits and . _ / + @ # -, with no '..' or '//'`;
 
 export const REF_WITH_UPLOAD = "ref applies to a repo source only; an uploaded folder is built as it is, so leave ref out or name repo instead";
 
-const REF_UNSAFE = /[\p{Cc}\s~^:?*[\\]|\.\.|\/\/|@\{/u;
+const REF_NAME = /^[\p{L}\p{N}\p{M}._/+@#-]+$/u;
+const REF_UNSAFE = /\.\.|\/\/|@\{/u;
 
 export function readRef(value: unknown): { ok: true; ref: string } | { ok: false } {
   if (value === undefined || value === null) return { ok: true, ref: "" };
@@ -66,6 +68,7 @@ export function readRef(value: unknown): { ok: true; ref: string } | { ok: false
     ref.length > REF_MAX_LENGTH ||
     ref === "@" ||
     /^[-/]|[/.]$/.test(ref) ||
+    !REF_NAME.test(ref) ||
     REF_UNSAFE.test(ref) ||
     ref.split("/").some((part) => part.startsWith(".") || part.endsWith(".lock"));
 

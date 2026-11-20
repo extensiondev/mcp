@@ -371,7 +371,7 @@ describe("extension_project_create", () => {
       expect(refused.error?.name, JSON.stringify(rootDirectory.slice(0, 24))).toBe("RootDirectoryInvalid");
     }
 
-    for (const ref of ["a..b", "main~1", "main^", "a:b", "a?b", "a*b", "a[b", "a\\b", "a//b", "a/", "a.", "/a", ".a", "a/.b", "a.lock", "@", "@{-1}", "a\u0000b", "a\u007fb", "x".repeat(251)]) {
+    for (const ref of ["a..b", "main~1", "main^", "a:b", "a?b", "a*b", "a[b", "a\\b", "a//b", "a/", "a.", "/a", ".a", "a/.b", "a.lock", "@", "@{-1}", "a\u0000b", "a\u007fb", 'a"b', "a$b", "a`b", "main;id", "a&b", "a(b)", "x".repeat(251)]) {
       const refused = JSON.parse(await handler({ ...baseArgs, ref }));
 
       expect(refused.error?.name, JSON.stringify(ref.slice(0, 24))).toBe("RefInvalid");
