@@ -161,6 +161,19 @@ function said(hint: unknown): string | null {
   return typeof hint === "string" && hint.trim() ? hint : null;
 }
 
-export function withRefusalHint<T extends { code?: unknown; hint?: unknown }>(error: T, command: string, frameHint?: unknown): T & { hint: string } {
-  return { ...error, hint: said(error.hint) ?? said(frameHint) ?? defaultRefusalHint(error.code, command) };
+const WEBKIT_HINTS: Partial<Record<ErrorCode, string>> = {
+  E_TARGET_NOT_FOUND: "extension_dom_snapshot with listTabs: true lists the open tabs; extension_open url opens the page first. A restricted page or one outside host_permissions is not readable.",
+};
+
+function engineHint(error: { code?: unknown; engine?: unknown }): string | null {
+  return error.engine === "webkit" && typeof error.code === "string" && known(error.code) ? (WEBKIT_HINTS[error.code] ?? null) : null;
+}
+
+export function withRefusalHint<T extends { code?: unknown; hint?: unknown; engine?: unknown }>(error: T, command: string, frameHint?: unknown): T & { hint: string } {
+  const webkit = engineHint(error);
+  const carried = said(error.hint) ?? said(frameHint);
+
+  if (webkit && (!carried || carried.includes("listTargets"))) return { ...error, hint: webkit };
+
+  return { ...error, hint: carried ?? defaultRefusalHint(error.code, command) };
 }

@@ -2,6 +2,7 @@
 
 ## 11.1.0
 
+- Ledger 979. A Safari target that was not found points at a step Safari can follow. The hint said to call `extension_dom_snapshot` with `listTargets: true`, which Safari refuses; on a WebKit answer it now names `listTabs: true` and `extension_open url`.
 - Ledger 982. The Safari refusal of a background, popup, options or sidebar eval says `retry: "no"`. It said `retry: "after-read"`, inviting a retry that can never succeed, since Safari never reaches those contexts.
 - Ledger 974. A build receipt is never read as a dead dev session. After `extension_build browser: "safari"`, `extension_eval`, `extension_inspect`, `extension_storage` and `extension_dom_snapshot` answered "the dev server has exited, safari ready.json still says ready but its pid is dead" for a session that never ran, and quoted their own start call as `` `extension_dev browser: "safari" allowEval: true (extension_dev)` ``. They now say "No dev session for safari", name the file as the receipt of a finished `extension_build`, and quote `extension_dev with { browser: "safari", allowEval: true }`.
 - Ledger 973. `extension_eval` on Safari refuses a context it cannot reach before it looks for a session. A background, popup, options or sidebar eval with no session answered the no-session refusal, so an agent opened a Safari window only to be told the context is out of reach; it now answers `E_SAFARI_CONTEXT_UNREACHABLE` at once, naming page as the context Safari reaches.

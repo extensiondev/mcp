@@ -242,6 +242,27 @@ describe("912: every refusal carries error.code and a non-empty error.hint that 
     expect(defaultRefusalHint("E_PREFLIGHT_FAILED", "extension_submit_check")).toContain("call extension_submit_check again");
   });
 
+  it("979: a Safari target not found points at a step Safari can follow, never at listTargets", () => {
+    const recorded = {
+      ok: false,
+      command: "extension_inspect",
+      status: "not-found",
+      error: {
+        name: "TargetNotFound",
+        message: "the expression never executed in tab 354: no injectable frame returned a result (restricted page, or outside host_permissions)",
+        engine: "webkit",
+        code: "E_TARGET_NOT_FOUND",
+      },
+    } as const;
+    const safari = envelopeObject(recorded).error;
+    const chromium = envelopeObject({ ...recorded, error: { ...recorded.error, engine: "chromium" } }).error;
+
+    expect(safari?.hint).not.toContain("listTargets");
+    expect(safari?.hint).toContain("listTabs: true");
+    expect(safari?.hint).toContain("extension_open url");
+    expect(chromium?.hint).toBe(REFUSAL_HINTS.E_TARGET_NOT_FOUND);
+  });
+
   it("answers a code this server has never seen with the engine's line, which still names a tool", () => {
     const error = envelopeObject({ ok: false, command: "extension_dev", status: "failed", error: { code: "E_FROM_A_NEWER_ENGINE", message: "x" } }).error;
 
