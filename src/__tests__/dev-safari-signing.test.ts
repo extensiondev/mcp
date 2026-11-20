@@ -165,6 +165,25 @@ describe("extension_dev for Safari says how the built app was signed", () => {
     expect(marker?.logPath).toBe(result.value.logPath);
   }, 15_000);
 
+  it("gives a Safari session no headless idle limit when the server's environment asks for headless, while a Chromium session keeps it", async () => {
+    const before = process.env.EXTENSION_HEADLESS;
+    process.env.EXTENSION_HEADLESS = "1";
+
+    try {
+      const safariProject = tmpProject();
+      const safari = JSON.parse(await dev.handler({ wait: false, projectPath: safariProject, browser: "safari" }));
+      const chrome = JSON.parse(await dev.handler({ wait: false, projectPath: tmpProject() }));
+
+      expect(chrome.value.idleMinutes).toBe(30);
+      expect(safari.value.idleMinutes).toBeNull();
+      expect(findSessionInfo(safariProject, "safari")?.idleMinutes).toBeNull();
+      expect(safari.hint).not.toMatch(/idle/i);
+    } finally {
+      if (before === undefined) delete process.env.EXTENSION_HEADLESS;
+      else process.env.EXTENSION_HEADLESS = before;
+    }
+  }, 15_000);
+
   it("says Safari treats the newly signed app as a new extension when the identity differs from the previous run", async () => {
     const project = tmpProject();
     recordSigningIdentity(project, "safari", "team:JU3XAJJQ2G", 4242);

@@ -219,7 +219,7 @@ export async function handler(
     ...(args.appName ? { appName: args.appName } : {}),
   };
 
-  const idleMinutes = resolveIdleMinutes(args.idleMinutes, visibility.headless && !args.noBrowser);
+  const idleMinutes = resolveIdleMinutes(args.idleMinutes, visibility.headless && !args.noBrowser && !isSafariTarget(browser));
 
   let markerWarning = registerSession({
     pid,
