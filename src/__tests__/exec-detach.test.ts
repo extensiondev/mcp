@@ -3,9 +3,9 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 
-import { runExtensionCli, spawnExtensionCli, type SpawnedCli } from "../lib/exec";
+import { runExtensionCli, runPackageInstall, spawnExtensionCli, type SpawnedCli } from "../lib/exec";
 
 
 const cleanups: Array<() => void> = [];
@@ -36,6 +36,8 @@ afterEach(() => {
   }
 
   live = undefined;
+  vi.useRealTimers();
+  vi.restoreAllMocks();
   for (const fn of cleanups.splice(0)) fn();
 });
 
@@ -110,6 +112,41 @@ describe("runExtensionCli outer kill timer", () => {
     },
     20_000,
   );
+
+  posixOnly(
+    "signals nothing once the run it stopped has closed",
+    async () => {
+      const project = fakeProject("sleep 30");
+      let pid = 0;
+
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+      const pending = runExtensionCli(["build", project], { cwd: project, timeoutMs: 200, onSpawn: (spawned) => (pid = spawned) });
+
+      vi.advanceTimersByTime(5_200);
+
+      expect((await pending).signal).toBe("SIGTERM");
+
+      const signalled = vi.spyOn(process, "kill");
+
+      vi.advanceTimersByTime(60_000);
+
+      expect(signalled.mock.calls.filter(([target]) => target === pid)).toEqual([]);
+    },
+    20_000,
+  );
+
+  posixOnly("returns the end of a package manager's output, never the whole of a long one", async () => {
+    const dir = fakeProject("exit 0");
+    const manager = path.join(dir, "prints-a-lot");
+    fs.writeFileSync(manager, "#!/bin/sh\nhead -c 300000 /dev/zero | tr '\\0' x\necho\necho npm error the registry refused\nexit 1\n", { mode: 0o755 });
+
+    const result = await runPackageInstall(manager, ["install"], { cwd: dir, timeoutMs: 10_000 });
+
+    expect(result.code).toBe(1);
+    expect(result.output.length).toBeLessThanOrEqual(64 * 1024);
+    expect(result.output.endsWith("npm error the registry refused\n")).toBe(true);
+  });
 
   posixOnly(
     "941: leaves the run alive past its budget when leaveRunning says so, and names its pid",

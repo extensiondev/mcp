@@ -142,6 +142,8 @@ function isoStart(text: string): string | null {
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
 }
 
+const WINDOWS_START_TIME_READ_MS = 10_000;
+
 function windowsProcessStartTimes(pids: number[]): Map<number, string> {
   const found = new Map<number, string>();
   const filter = pids.map((pid) => `ProcessId = ${pid}`).join(" OR ");
@@ -155,7 +157,7 @@ function windowsProcessStartTimes(pids: number[]): Map<number, string> {
         "-Command",
         `Get-CimInstance Win32_Process -Filter "${filter}" | ForEach-Object { "$($_.ProcessId)\`t$($_.CreationDate.ToUniversalTime().ToString('o'))" }`,
       ],
-      { encoding: "utf8", windowsHide: true },
+      { encoding: "utf8", windowsHide: true, timeout: WINDOWS_START_TIME_READ_MS },
     );
 
     for (const line of out.split(/\r?\n/)) {

@@ -925,6 +925,9 @@ describe("941: one dependency install runs on a project at a time, and a build s
       const installer = Number(runs()[0].split(" ")[1]);
 
       await vi.waitFor(() => expect(recordText(dir)).toContain(`"pid":${installer}`), { timeout: 5_000, interval: 20 });
+
+      expect(installerUnder(first.pid!)).toBe(installer);
+
       await end(first.pid!);
 
       const result = JSON.parse(await build.handler({ projectPath: dir }));

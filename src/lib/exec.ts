@@ -83,6 +83,37 @@ function killTree(pid: number | undefined, signal: NodeJS.Signals): void {
   }
 }
 
+/* @invariant A CHILD'S OUTPUT IS READ FROM ITS END, UP TO A CAP. The output
+ * goes to a file the child holds open, and the whole file was read into one
+ * string when the child closed: a package manager or an engine that printed
+ * without end cost the server that much memory, and past the string limit
+ * the read threw and the answer carried no output at all. What an answer
+ * uses is the end, the package manager's last lines or the engine's result
+ * frame, so the read keeps the last bytes and drops the rest.
+ */
+const ENGINE_OUTPUT_CAP_BYTES = 32 * 1024 * 1024;
+const INSTALL_OUTPUT_CAP_BYTES = 64 * 1024;
+
+function readTail(file: string, capBytes: number): string {
+  let fd: number | null = null;
+
+  try {
+    fd = fs.openSync(file, "r");
+
+    const size = fs.fstatSync(fd).size;
+    const length = Math.min(size, capBytes);
+    const buffer = Buffer.alloc(length);
+
+    fs.readSync(fd, buffer, 0, length, size - length);
+
+    return buffer.toString("utf8");
+  } catch {
+    return "";
+  } finally {
+    if (fd !== null) fs.closeSync(fd);
+  }
+}
+
 export interface CliResult {
   code: number | null;
   signal?: NodeJS.Signals | null;
@@ -167,7 +198,10 @@ export function engineRefusal(): string | null {
  * "sh: 1: extension: not found". `leaveRunning` is asked once, when the
  * budget ends; when it answers true nothing is signalled, the call resolves
  * with timedOut and leftRunningPid, and the process finishes on its own with
- * its output still going to files it holds open.
+ * its output still going to files it holds open. A run that is stopped gets
+ * SIGTERM and, if it has not closed 5 s later, SIGKILL; once it has closed
+ * that second signal is canceled, because its PID may by then belong to
+ * another process.
  */
 export function runExtensionCli(
   args: string[],
@@ -196,13 +230,7 @@ export function runExtensionCli(
       return;
     }
 
-    const readAll = (name: string): string => {
-      try {
-        return fs.readFileSync(path.join(ioDir, name), "utf8");
-      } catch {
-        return "";
-      }
-    };
+    const readAll = (name: string): string => readTail(path.join(ioDir, name), ENGINE_OUTPUT_CAP_BYTES);
 
     const cleanup = () => {
       for (const fd of [outFd, errFd]) {
@@ -238,6 +266,7 @@ export function runExtensionCli(
 
     let timedOut = false;
     let left = false;
+    let killAgain: NodeJS.Timeout | undefined;
     const timer = setTimeout(() => {
       timedOut = true;
 
@@ -253,12 +282,13 @@ export function runExtensionCli(
       }
 
       killTree(child.pid, "SIGTERM");
-      setTimeout(() => killTree(child.pid, "SIGKILL"), KILL_HEADROOM_PAST_ENGINE_TIMEOUT_MS);
+      killAgain = setTimeout(() => killTree(child.pid, "SIGKILL"), KILL_HEADROOM_PAST_ENGINE_TIMEOUT_MS);
     }, budgetMs);
     child.on("close", (code, signal) => {
       if (left) return;
 
       clearTimeout(timer);
+      clearTimeout(killAgain);
       const stdout = readAll("stdout");
       const stderr = readAll("stderr");
       cleanup();
@@ -305,12 +335,7 @@ export function runPackageInstall(
     }
 
     const finish = (result: Omit<PackageInstallResult, "output">, fallback = ""): void => {
-      let output = fallback;
-
-      try {
-        output = fs.readFileSync(path.join(ioDir, "output"), "utf8") || fallback;
-      } catch {
-      }
+      const output = readTail(path.join(ioDir, "output"), INSTALL_OUTPUT_CAP_BYTES) || fallback;
 
       try {
         fs.closeSync(fd);
