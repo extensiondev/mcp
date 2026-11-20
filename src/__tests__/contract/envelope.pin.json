@@ -1,10 +1,10 @@
 {
   "//": "The CLI release these fixtures were copied from, and the sha256 of every byte copied. MCP CI rewrites package.json's engine pin before it runs the suite (`pnpm add extension-develop@<matrix>`), so the contract test cannot read package.json and reads this file instead. Nothing in CI writes here.",
   "cliPackage": "extension-develop",
-  "cliVersion": "4.1.32",
+  "cliVersion": "4.2.0",
   "upstreamPath": "programs/extension/__spec__/contract",
   "shippedPath": "dist/contract",
   "files": {
-    "envelope.schema.json": "4008f0d14ca5743b0551620e427feb4840ca8d829640ed42c35cdd4d2744ed99"
+    "envelope.schema.json": "7cdfb366517a4384e99dd463646318ed80889e32ec89d4bb4d4f8f9a40859a9e"
   }
 }

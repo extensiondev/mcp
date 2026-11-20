@@ -39,7 +39,6 @@ import {
   engineProjectRoot,
   sourceManifestPath,
   statedProjectRoot,
-  storeMdFoundNote,
   storeMdPath,
 } from "../lib/session-paths";
 import { type Envelope, envelope, isEnvelope } from "../lib/envelope";
@@ -1215,7 +1214,6 @@ export async function handler(args: {
         ...shownBuildWarnings.filter((line) => !engineNamesDroppedPage(line, droppedPages)),
         ...reviewRiskPointer(risks),
         mode === "development" ? null : storeMdLine(path.dirname(storeMdPath(args.projectPath)), risks, browser),
-        mode === "development" ? null : storeMdFoundNote(args.projectPath),
         mode === "development" ? null : wasmGrantLine(review),
         ...reviewCoverageNotes(review),
         ...zipNotes,

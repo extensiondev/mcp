@@ -125,31 +125,19 @@ export function engineProjectRoot(projectPath: string): string {
   const deno = nearestAbove(manifestDir, DENO_MANIFESTS);
   if (deno && ownsManifest(deno, manifest)) return path.dirname(deno);
 
-  return manifestDir;
+  return start;
 }
 
-/* @invariant ONE PROJECT ROOT AN ANSWER, THE ENGINE'S. With no package.json
- * or deno.json that owns the manifest the engine builds from the manifest's
- * own folder, so a project that is src/manifest.json alone gets src/dist,
- * its zips and its session state under src/. This server took the folder it
- * was passed as the root there, so one build answer reported dist in src/
- * and looked for STORE.md in the folder above, and extension_analyze on the
- * same projectPath found no dist (ledger 925). engineProjectRoot is the
- * engine's root in every layout and every dist and session path is read
- * from it; an answer whose root is not the folder it was passed says so
- * once and names the conventional layout without asking for it. STORE.md
- * is the exception that stays where the person's project is: when the root
- * is the unowned manifest folder under the folder passed, STORE.md's home
- * is the folder passed, where the skill and the platform read it, and a
- * file already in the manifest's folder is read and named, never moved. */
+/* @invariant ONE PROJECT ROOT AN ANSWER, THE ENGINE'S. From Extension.js
+ * 4.2.0 a manifest found under the folder passed, with no package.json or
+ * deno.json that owns it, is built from the folder passed, so src/dist is
+ * never written (ledger 925). engineProjectRoot is the engine's root in
+ * every layout and every dist and session path is read from it; an answer
+ * whose root is not the folder it was passed says so once. */
 export function projectRootNote(projectPath: string): string | null {
   const start = path.resolve(projectPath);
   const root = engineProjectRoot(start);
   if (root === start) return null;
-
-  if (path.dirname(root) === start) {
-    return `Project root: ${root}. src/manifest.json has no package.json that owns it, so the engine builds from the manifest's folder, and dist and zips live there, while ${STORE_MD_FILENAME} stays in the folder above. With a package.json beside src/ (the conventional layout) that folder is the root too.`;
-  }
 
   return `Project root: ${root}, the folder of the package.json or deno.json that owns this manifest; dist, zips and ${STORE_MD_FILENAME} live there.`;
 }
@@ -160,28 +148,10 @@ export function statedProjectRoot(projectPath: string): { root: string; note: st
   return note ? { root: engineProjectRoot(projectPath), note } : null;
 }
 
-function storeMdCandidates(projectPath: string): { passed: string; atRoot: string; homeIsPassed: boolean } {
-  const start = path.resolve(projectPath);
-  const root = engineProjectRoot(start);
-
-  return {
-    passed: path.join(start, STORE_MD_FILENAME),
-    atRoot: path.join(root, STORE_MD_FILENAME),
-    homeIsPassed: path.dirname(root) === start,
-  };
-}
-
 export function storeMdPath(projectPath: string): string {
-  const { passed, atRoot, homeIsPassed } = storeMdCandidates(projectPath);
-  if (isFile(passed)) return passed;
+  const passed = path.join(path.resolve(projectPath), STORE_MD_FILENAME);
 
-  return homeIsPassed && !isFile(atRoot) ? passed : atRoot;
-}
-
-export function storeMdFoundNote(projectPath: string): string | null {
-  const { passed, atRoot, homeIsPassed } = storeMdCandidates(projectPath);
-
-  return homeIsPassed && !isFile(passed) && isFile(atRoot) ? `${STORE_MD_FILENAME} was read from ${atRoot}, in the manifest's folder.` : null;
+  return isFile(passed) ? passed : path.join(engineProjectRoot(projectPath), STORE_MD_FILENAME);
 }
 
 export function sourceManifestPath(projectPath: string): string | null {

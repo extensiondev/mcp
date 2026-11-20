@@ -9,7 +9,6 @@ import {
   engineProjectRoot,
   ownsManifest,
   projectRootNote,
-  storeMdFoundNote,
   storeMdPath,
   readyContractPath,
   logsPath,
@@ -80,25 +79,19 @@ describe("a package root is adopted only when it owns the manifest, as the engin
     expect(ownsManifest(path.join(stranger, "package.json"), path.join(inner, "manifest.json"))).toBe(false);
   });
 
-  it("925: makes the manifest's folder the root of a src layout with no package.json, where the engine writes dist", () => {
+  it("925: keeps the folder passed as the root of a src layout with no package.json, where the engine writes dist from 4.2.0", () => {
     const bare = tmp();
     const src = manifestAt(bare, "src");
 
-    expect(engineProjectRoot(bare)).toBe(src);
-    expect(engineProjectRoot(src)).toBe(src);
+    expect(engineProjectRoot(bare)).toBe(path.resolve(bare));
+    expect(engineProjectRoot(src)).toBe(path.resolve(src));
     expect(fs.realpathSync(engineProjectRoot(bare))).toBe(fs.realpathSync(bridge.resolveSessionProjectRoot(bare)));
-    expect(readyContractPath(bare, "chrome")).toBe(bridge.readyContractPath(src, "chrome"));
+    expect(fs.realpathSync(engineProjectRoot(src))).toBe(fs.realpathSync(bridge.resolveSessionProjectRoot(src)));
+    expect(readyContractPath(bare, "chrome")).toBe(bridge.readyContractPath(bare, "chrome"));
+    expect(projectRootNote(bare)).toBeNull();
     expect(storeMdPath(bare)).toBe(path.join(bare, "STORE.md"));
-    expect(storeMdFoundNote(bare)).toBeNull();
     fs.writeFileSync(path.join(src, "STORE.md"), "# Store\n");
-    expect(storeMdPath(bare)).toBe(path.join(src, "STORE.md"));
-    expect(storeMdFoundNote(bare)).toBe(`STORE.md was read from ${path.join(src, "STORE.md")}, in the manifest's folder.`);
-    fs.writeFileSync(path.join(bare, "STORE.md"), "# Store\n");
     expect(storeMdPath(bare)).toBe(path.join(bare, "STORE.md"));
-    expect(storeMdFoundNote(bare)).toBeNull();
-    expect(projectRootNote(bare)).toBe(
-      `Project root: ${src}. src/manifest.json has no package.json that owns it, so the engine builds from the manifest's folder, and dist and zips live there, while STORE.md stays in the folder above. With a package.json beside src/ (the conventional layout) that folder is the root too.`,
-    );
   });
 
   it("925: says nothing about the root when it is the folder passed, and names a package root above it in a short line", () => {
@@ -110,7 +103,6 @@ describe("a package root is adopted only when it owns the manifest, as the engin
     expect(projectRootNote(src)).toBe(`Project root: ${repo}, the folder of the package.json or deno.json that owns this manifest; dist, zips and STORE.md live there.`);
     expect(projectRootNote(manifestAt(tmp()))).toBeNull();
     expect(storeMdPath(src)).toBe(path.join(repo, "STORE.md"));
-    expect(storeMdFoundNote(src)).toBeNull();
   });
 
   it("keeps the documented src layout on the package root whatever the package declares", () => {

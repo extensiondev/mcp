@@ -117,25 +117,25 @@ describe("the forwarder", () => {
     fs.mkdirSync(path.join(bare, "src"), { recursive: true });
     fs.mkdirSync(path.join(repo, "src"), { recursive: true });
     fs.writeFileSync(path.join(bare, "src", "manifest.json"), JSON.stringify({ manifest_version: 3, name: "x", version: "1.0.0" }));
-    fs.writeFileSync(path.join(bare, "src", "STORE.md"), "# Store\n\n## Listing\n\n- Summary: hello\n");
+    fs.writeFileSync(path.join(bare, "STORE.md"), "# Store\n\n## Listing\n\n- Summary: hello\n");
     fs.writeFileSync(path.join(repo, "package.json"), JSON.stringify({ name: "plain" }));
     fs.writeFileSync(path.join(repo, "src", "manifest.json"), JSON.stringify({ manifest_version: 3, name: "x", version: "1.0.0" }));
     fs.writeFileSync(path.join(repo, "STORE.md"), "# Store\n\n## Listing\n\n- Summary: hello\n");
     const answer = (file: string) => JSON.parse(envelopeOf({ ok: true, command: "extension_submit_check", status: "preflight-read", value: { file }, hint: `Read ${file}. Then go on.` }));
-    const { lane } = stubLane([answer("{projectPath}/src/STORE.md"), answer("{projectPath}/../STORE.md"), answer("{projectPath}/STORE.md")]);
+    const { lane } = stubLane([answer("{projectPath}/STORE.md"), answer("{projectPath}/../STORE.md"), answer("{projectPath}/STORE.md")]);
     const ask = async (projectPath: string) => JSON.parse(await forwardCall("extension_submit_check", { action: "preflight", browsers: ["chrome"], projectPath }, async () => "local", FORWARDING));
-    const inSrc = await ask(bare);
+    const bareRoot = await ask(bare);
     const above = await ask(path.join(repo, "src"));
     const beside = await ask(repo);
     const sent = lane().map((hit) => hit.body.args.local.facts.project);
 
     expect(sent.map((project) => [project.projectPath, project.storeMdFile, project.storeMd === null])).toEqual([
-      ["{projectPath}", "src/STORE.md", false],
+      ["{projectPath}", "STORE.md", false],
       ["{projectPath}", "../STORE.md", false],
       ["{projectPath}", "STORE.md", false],
     ]);
 
-    expect(inSrc).toMatchObject({ value: { file: path.join(bare, "src", "STORE.md") }, hint: `Read ${path.join(bare, "src", "STORE.md")}. Then go on.` });
+    expect(bareRoot).toMatchObject({ value: { file: path.join(bare, "STORE.md") }, hint: `Read ${path.join(bare, "STORE.md")}. Then go on.` });
     expect(above).toMatchObject({ value: { file: path.join(repo, "STORE.md") }, hint: `Read ${path.join(repo, "STORE.md")}. Then go on.` });
     expect(beside).toMatchObject({ value: { file: path.join(repo, "STORE.md") } });
     expect(JSON.stringify(lane().map((hit) => hit.body))).not.toContain(tmp);
