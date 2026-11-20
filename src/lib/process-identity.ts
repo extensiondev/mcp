@@ -193,6 +193,10 @@ function linuxBootTimeMs(): number | null {
   }
 }
 
+export function linuxStateFromStat(stat: string): string | null {
+  return stat.slice(stat.lastIndexOf(")") + 1).trim().split(" ")[0] || null;
+}
+
 export function linuxStartFromStat(stat: string, bootTimeMs: number): string | null {
   const fields = stat.slice(stat.lastIndexOf(")") + 1).trim().split(" ");
   const ticks = Number(fields[19]);
@@ -212,12 +216,26 @@ function linuxProcessStartedAt(pid: number): string | null {
   }
 }
 
-function posixProcessStartTimes(pids: number[]): Map<number, string> {
-  const found = new Map<number, string>();
+/* @invariant A PROCESS THAT EXITED AND WAS NEVER REAPED IS DEAD. A zombie
+ * keeps its PID and its start time, and answers signal 0, until its parent
+ * waits for it; in a container whose PID 1 does not reap, that is forever.
+ * Read as alive, an engine or package manager that had been handed the
+ * install record held it after it exited, so every build answered "still
+ * installing" with no end, and extension_stop counted the same process as a
+ * survivor. The state is read where the start time is: the stat column of
+ * the same ps call, and the third field of /proc/<pid>/stat on Linux.
+ */
+interface ProcessRow {
+  state: string;
+  startedAt: string | null;
+}
+
+function posixProcessRows(pids: number[]): Map<number, ProcessRow> {
+  const found = new Map<number, ProcessRow>();
   let out = "";
 
   try {
-    out = execFileSync("ps", ["-o", "pid=,lstart=", "-p", pids.join(",")], {
+    out = execFileSync("ps", ["-o", "pid=,stat=,lstart=", "-p", pids.join(",")], {
       encoding: "utf8",
       env: { ...process.env, LC_ALL: "C" },
       stdio: ["ignore", "pipe", "ignore"],
@@ -228,13 +246,22 @@ function posixProcessStartTimes(pids: number[]): Map<number, string> {
   }
 
   for (const line of out.split("\n")) {
-    const match = /^\s*(\d+)\s+(.+)$/.exec(line);
+    const match = /^\s*(\d+)\s+(\S+)\s+(.+)$/.exec(line);
     if (!match) continue;
 
     const pid = Number.parseInt(match[1], 10);
-    const iso = isoStart(match[2].trimEnd());
 
-    if (Number.isInteger(pid) && pid > 0 && iso) found.set(pid, iso);
+    if (Number.isInteger(pid) && pid > 0) found.set(pid, { state: match[2], startedAt: isoStart(match[3].trimEnd()) });
+  }
+
+  return found;
+}
+
+function posixProcessStartTimes(pids: number[]): Map<number, string> {
+  const found = new Map<number, string>();
+
+  for (const [pid, row] of posixProcessRows(pids)) {
+    if (row.startedAt) found.set(pid, row.startedAt);
   }
 
   if (process.platform === "linux") {
@@ -291,6 +318,16 @@ export function plausibleSessionProcess(pid: number): boolean {
   return names.length === 0 || names.some((name) => PLAUSIBLE_SESSION_BINARY.test(name));
 }
 
+function linuxZombie(pid: number): boolean {
+  if (process.platform !== "linux") return false;
+
+  try {
+    return linuxStateFromStat(fs.readFileSync(`/proc/${pid}/stat`, "utf8")) === "Z";
+  } catch {
+    return false;
+  }
+}
+
 export function pidRecycled(pid: number, startedAt: string | null | undefined): boolean {
   if (!startedAt) return false;
 
@@ -308,7 +345,11 @@ export function pidState(pid: number, startedAt?: string | null): PidState {
     return pidRecycled(pid, startedAt) ? "dead" : "foreign";
   }
 
-  const current = startedAt ? processStartedAt(pid) : null;
+  const row = process.platform === "win32" || process.platform === "linux" ? undefined : posixProcessRows([pid]).get(pid);
+
+  if (row ? row.state.startsWith("Z") : linuxZombie(pid)) return "dead";
+
+  const current = startedAt ? (row?.startedAt ?? processStartedAt(pid)) : null;
   if (startedAt && current !== null) return sameProcessStart(startedAt, current) ? "alive" : "dead";
 
   return plausibleSessionProcess(pid) ? "alive" : "foreign";

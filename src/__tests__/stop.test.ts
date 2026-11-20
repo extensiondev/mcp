@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { describe, it, expect, afterEach, afterAll } from "vitest";
+import { describe, it, expect, afterEach, afterAll, vi } from "vitest";
 
 import * as stop from "../tools/stop";
 import {
@@ -14,7 +14,7 @@ import {
   listSessions,
 } from "../lib/process-manager";
 import { resolveExtensionInvocation } from "../lib/exec";
-import { PLAUSIBLE_SESSION_BINARY, commandLineNames, linuxStartFromStat, pidState, processCommand, processStartedAt } from "../lib/process-identity";
+import { PLAUSIBLE_SESSION_BINARY, commandLineNames, linuxStartFromStat, linuxStateFromStat, pidState, processCommand, processStartedAt } from "../lib/process-identity";
 import { liveNetworkStubs, openNetworkStubs, stubLinks } from "../lib/network-stubs";
 import { liveProjectSessions } from "../lib/session-browser";
 import { readyContract } from "./fixtures/engine-answers";
@@ -946,6 +946,30 @@ describe("extension_stop judges a session by its pid and its start time", () => 
       fs.rmSync(emptyBin, { recursive: true, force: true });
     }
   });
+
+  it.skipIf(process.platform === "win32")(
+    "reads a process that exited and was never reaped as dead, though its PID still answers a signal",
+    async () => {
+      const parent = spawn("/bin/sh", ["-c", "sleep 0 & echo $!; exec sleep 20"], { stdio: ["ignore", "pipe", "ignore"] });
+
+      try {
+        const pid = await new Promise<number>((resolve) => parent.stdout.once("data", (chunk) => resolve(Number(String(chunk).trim()))));
+        const recorded = processStartedAt(pid);
+
+        await vi.waitFor(() => expect(pidState(pid, recorded)).toBe("dead"), { timeout: 5_000, interval: 50 });
+
+        expect(pidState(pid)).toBe("dead");
+        expect(() => process.kill(pid, 0)).not.toThrow();
+      } finally {
+        parent.kill("SIGKILL");
+      }
+
+      expect(linuxStateFromStat("57 (npm exec extens) Z 1 57 57 0 -1 4194304 900 0 0 0 12 3 0 0 20 0 11 0 360000 1 2 3")).toBe("Z");
+      expect(linuxStateFromStat("58 (Web Content) (x) R 1 58 58 0 -1 0")).toBe("R");
+      expect(linuxStateFromStat("")).toBeNull();
+    },
+    15_000,
+  );
 
   it("calls this process dead under a start time it never had and alive under its own", () => {
     expect(pidState(process.pid, "2001-01-01T00:00:00.000Z")).toBe("dead");
