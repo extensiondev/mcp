@@ -174,6 +174,11 @@ function escapeRegex(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+const PATH_OPENS = "(^|[ =\"'])";
+const PATH_CLOSES = "([\"' ]|$)";
+const PATH_CLOSES_OR_DESCENDS = "([/\\\\\"' ]|$)";
+const OPTIONAL_TRAILING_SEPARATOR = "[/\\\\]?";
+
 function projectPathForms(projectPath: string): string[] {
   const forms = new Set([projectPath, path.resolve(projectPath)]);
 
@@ -277,7 +282,7 @@ function sessionProcessPids(
   };
 
   if (hints.profilePath) {
-    for (const pid of found(escapeRegex(hints.profilePath))) pids.add(pid);
+    for (const pid of found(`${PATH_OPENS}${escapeRegex(hints.profilePath)}${PATH_CLOSES_OR_DESCENDS}`)) pids.add(pid);
   }
 
   for (const pid of hints.pids) {
@@ -286,8 +291,8 @@ function sessionProcessPids(
 
   for (const form of projectPathForms(projectPath)) {
     const escaped = escapeRegex(form);
-    const cliCommandLine = `extension[^ ]* (dev|start|preview) ${escaped}`;
-    const browserArgvNamingTheManagedProfile = `${escapeRegex(browserProfileRootDir(form, browser))}${escapeRegex(path.sep)}`;
+    const cliCommandLine = `extension[^ ]* (dev|start|preview) ["']?${escaped}${OPTIONAL_TRAILING_SEPARATOR}${PATH_CLOSES}`;
+    const browserArgvNamingTheManagedProfile = `${PATH_OPENS}${escapeRegex(browserProfileRootDir(form, browser))}${escapeRegex(path.sep)}`;
 
     for (const pid of found(cliCommandLine)) {
       if (!namesAnotherBrowser(commandLineOf(pid, windowsTable), browser)) pids.add(pid);
@@ -499,9 +504,9 @@ export async function stopOne(
     let detail: string;
 
     if (unconfirmed.length) {
-      detail = `No dev pid on record. Killed orphaned browser process(es) from the profile dir, but ${unconfirmed.length} still report alive 250 ms later (pids ${unconfirmed.join(", ")})${reaped.length ? `; ${reaped.length} confirmed gone` : ""}.`;
+      detail = `No dev pid on record. Killed orphaned session process(es), found by a command line that names this project's engine or its managed profile, but ${unconfirmed.length} still report alive 250 ms later (pids ${unconfirmed.join(", ")})${reaped.length ? `; ${reaped.length} confirmed gone` : ""}.`;
     } else if (reaped.length) {
-      detail = `No dev pid on record, but reaped ${reaped.length} orphaned browser process(es) from the profile dir, each confirmed gone.`;
+      detail = `No dev pid on record, but reaped ${reaped.length} orphaned session process(es), found by a command line that names this project's engine or its managed profile, each confirmed gone.`;
     } else {
       detail = "No known session for this project/browser (nothing registered in this server and no ready.json contract found).";
     }

@@ -350,6 +350,42 @@ describe("extension_stop orphan reaping", () => {
     },
     15_000,
   );
+
+  it.each([
+    {
+      neighbor: "an engine on a sibling folder whose path starts with this project's",
+      argv: (projectPath: string) => ["extension", "dev", `${projectPath}-2`, "--browser", "chrome"],
+    },
+    {
+      neighbor: "a profile holder under a folder whose path ends with this project's",
+      argv: (projectPath: string) => [profileDirAsTheLauncherWritesIt(path.join(tmpProject(), projectPath), "chrome", "tidy-amber-otter")],
+    },
+  ])(
+    "leaves $neighbor running",
+    async ({ argv }) => {
+      const projectPath = path.join(tmpProject(), "app");
+      fs.mkdirSync(projectPath, { recursive: true });
+      const pid = spawnHolder(process.execPath, ["-e", "setInterval(() => {}, 1000)", ...argv(projectPath)]);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      expect(isAlive(pid)).toBe(true);
+
+      try {
+        const result = JSON.parse(await stop.handler({ projectPath, browser: "chrome" }));
+        await new Promise((resolve) => setTimeout(resolve, 300));
+
+        expect(isAlive(pid)).toBe(true);
+        expect(result.value.reaped).toEqual([]);
+        expect(result.error.code).toBe("E_NO_SESSION");
+      } finally {
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch {
+        }
+      }
+    },
+    15_000,
+  );
 });
 
 describe("resolveExtensionInvocation", () => {
