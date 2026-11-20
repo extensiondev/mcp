@@ -104,7 +104,7 @@ Every engine command runs the project's own engine when it has one, else the ver
 | <img src="https://raw.githubusercontent.com/extensiondev/mcp/main/docs/logos/claude.svg" width="24" height="24" alt=""> | **Claude Code** | `claude mcp add` or the `extension-dev` plugin, [Install](#install) |
 | <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/extensiondev/mcp/main/docs/logos/cursor-dark.svg"><img src="https://raw.githubusercontent.com/extensiondev/mcp/main/docs/logos/cursor-light.svg" width="24" height="24" alt=""></picture> | **Cursor** | One-click link, [Install](#install) |
 | <img src="https://raw.githubusercontent.com/extensiondev/mcp/main/docs/logos/vscode.svg" width="24" height="24" alt=""> | **VS Code** | One-click link for Copilot agent mode, [Install](#install) |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/extensiondev/mcp/main/docs/logos/openai-dark.svg"><img src="https://raw.githubusercontent.com/extensiondev/mcp/main/docs/logos/openai-light.svg" width="24" height="24" alt=""></picture> | **Codex** | `.mcp.json` block, [Install in your client](https://docs.extension.dev/tools/mcp/clients) |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/extensiondev/mcp/main/docs/logos/openai-dark.svg"><img src="https://raw.githubusercontent.com/extensiondev/mcp/main/docs/logos/openai-light.svg" width="24" height="24" alt=""></picture> | **Codex** | `codex mcp add` or `~/.codex/config.toml`, [Install in your client](https://docs.extension.dev/tools/mcp/clients) |
 
 Any other MCP client takes the same `.mcp.json` block.
 
@@ -116,8 +116,8 @@ Any other MCP client takes the same `.mcp.json` block.
 | <img src="https://raw.githubusercontent.com/extensiondev/mcp/main/docs/logos/preact.svg" width="24" height="24" alt=""> | **Preact** (6 templates) | "Build a Preact new tab page with a router and test it in Firefox" |
 | <img src="https://raw.githubusercontent.com/extensiondev/mcp/main/docs/logos/vue.svg" width="24" height="24" alt=""> | **Vue** (6 templates) | "Make a Vue popup that saves notes to chrome.storage" |
 | <img src="https://raw.githubusercontent.com/extensiondev/mcp/main/docs/logos/svelte.svg" width="24" height="24" alt=""> | **Svelte** (6 templates) | "Scaffold a Svelte content script that highlights links" |
-| <img src="https://raw.githubusercontent.com/extensiondev/mcp/main/docs/logos/typescript.svg" width="24" height="24" alt=""> | **TypeScript** (5 templates) | "Start a TypeScript DevTools panel that stores data in SQLite" |
-| <img src="https://raw.githubusercontent.com/extensiondev/mcp/main/docs/logos/javascript.svg" width="24" height="24" alt=""> | **JavaScript** (32 templates) | "Add a popup to my plain JavaScript extension and ship it to Edge" |
+| <img src="https://raw.githubusercontent.com/extensiondev/mcp/main/docs/logos/typescript.svg" width="24" height="24" alt=""> | **TypeScript** (11 templates) | "Start a TypeScript DevTools panel that stores data in SQLite" |
+| <img src="https://raw.githubusercontent.com/extensiondev/mcp/main/docs/logos/javascript.svg" width="24" height="24" alt=""> | **JavaScript** (26 templates) | "Add a popup to my plain JavaScript extension and ship it to Edge" |
 
 Every template builds for Chrome, Edge and Firefox, and the same project ships to Safari through the [App Store lane](https://docs.extension.dev/tools/mcp/safari).
 
