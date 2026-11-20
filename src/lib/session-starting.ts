@@ -15,6 +15,7 @@ import { findSessionInfo, sessionSinceMs } from "./process-manager";
 import { pidState } from "./process-identity";
 import { liveProjectSessions, resolveSessionBrowser } from "./session-browser";
 import { engineProjectRoot, readyContractPath } from "./session-paths";
+import { declaredDependencyNames, findWorkspaceMember } from "./workspace-member";
 
 import type { ReadyContract } from "./types";
 
@@ -53,24 +54,32 @@ function logTail(logPath: string | undefined): string {
   }
 }
 
-function declaresDependencies(packageJsonPath: string): boolean {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as Record<string, unknown>;
-
-    return ["dependencies", "devDependencies"].some((field) => {
-      const listed = parsed[field];
-
-      return !!listed && typeof listed === "object" && Object.keys(listed).length > 0;
-    });
-  } catch {
-    return false;
-  }
-}
+/* @invariant A PROJECT NEEDS AN INSTALL EXACTLY WHEN THE ENGINE WOULD RUN
+ * ONE. The engine installs when the project declares a dependency and none
+ * of them is in its node_modules, unless that folder is a pnpm or Deno
+ * store, and for a workspace member also when none is hoisted to the
+ * workspace root (extension.js programs/develop/lib/paths.ts needsInstall).
+ * The first version asked only whether node_modules existed: a folder that
+ * held nothing but .cache read as installed, so two builds installed at
+ * once with no record between them, and a hoisted member, which never has a
+ * node_modules of its own, took the record on every build and read as
+ * "installing dependencies" for as long as its session started.
+ */
+const INSTALLED_STORE_MARKS = [".pnpm", ".modules.yaml", ".deno"];
 
 export function modulesMissing(projectPath: string): boolean {
   const root = engineProjectRoot(projectPath);
+  const declared = declaredDependencyNames(root);
+  if (declared.length === 0) return false;
 
-  return declaresDependencies(path.join(root, "package.json")) && !fs.existsSync(path.join(root, "node_modules"));
+  const modules = path.join(root, "node_modules");
+  const holds = (dir: string, names: string[]): boolean => names.some((name) => fs.existsSync(path.join(dir, name)));
+
+  if (holds(modules, INSTALLED_STORE_MARKS) || holds(modules, declared)) return false;
+
+  const member = findWorkspaceMember(root);
+
+  return !member || !holds(path.join(member.root, "node_modules"), declared);
 }
 
 function beforeTheContract(projectPath: string, logPath: string | undefined): StartingWaitingOn {

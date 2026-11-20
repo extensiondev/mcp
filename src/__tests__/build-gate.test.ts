@@ -738,6 +738,76 @@ describe("941: one dependency install runs on a project at a time, and a build s
     expect(fs.existsSync(installRecordPath(dir))).toBe(false);
   }, 20_000);
 
+  it.each([
+    [
+      "a node_modules that holds none of the packages the project declares",
+      (): string => {
+        const dir = coldProject();
+        fs.mkdirSync(path.join(dir, "node_modules", ".cache"), { recursive: true });
+
+        return dir;
+      },
+    ],
+    [
+      "a Deno project that imports npm packages",
+      (): string => {
+        const dir = project({ manifest_version: 3, name: "Deno", version: "1.0.0" });
+        fs.writeFileSync(path.join(dir, "deno.jsonc"), '{\n  // the bundler needs this one\n  "imports": { "react": "npm:react@18", },\n}\n');
+
+        return dir;
+      },
+    ],
+  ])("takes the record wherever the engine would install: %s", async (_layout, make) => {
+    const dir = make();
+    let running = 0;
+    let most = 0;
+
+    whileCliRuns = async () => {
+      running += 1;
+      most = Math.max(most, running);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      for (const name of ["extension", "react", ".bin"]) fs.mkdirSync(path.join(dir, "node_modules", name), { recursive: true });
+
+      fs.writeFileSync(path.join(dir, "node_modules", ".bin", "extension"), "");
+      running -= 1;
+    };
+
+    const answers = (
+      await Promise.all([build.handler({ projectPath: dir, browser: "firefox" }), build.handler({ projectPath: dir, browser: "chrome" })])
+    ).map((text) => JSON.parse(text));
+
+    expect(most).toBe(1);
+    expect(answers.map((answer) => answer.status)).toEqual(["built", "built"]);
+    expect(answers.filter((answer) => answer.warnings.join(" ").includes("This call waited"))).toHaveLength(1);
+  }, 20_000);
+
+  it("takes no record for a workspace member whose packages are hoisted to the workspace root", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-workspace-"));
+    const dir = path.join(root, "packages", "ext");
+    let during: unknown = "never ran";
+
+    tmpDirs.push(root);
+    fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+    fs.mkdirSync(path.join(root, "node_modules", "extension"), { recursive: true });
+    fs.mkdirSync(path.join(root, "node_modules", ".bin"));
+    fs.writeFileSync(path.join(root, "node_modules", ".bin", "extension"), "");
+    fs.writeFileSync(path.join(root, "pnpm-workspace.yaml"), "packages:\n  - 'packages/*'\n");
+    fs.writeFileSync(path.join(root, "pnpm-lock.yaml"), "");
+    fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: "ext", devDependencies: { extension: "latest" } }));
+    fs.writeFileSync(path.join(dir, "src", "manifest.json"), JSON.stringify({ manifest_version: 3, name: "Member", version: "1.0.0" }));
+
+    onCli = () => {
+      during = runningInstall(dir);
+    };
+
+    const result = JSON.parse(await build.handler({ projectPath: dir }));
+
+    expect(result.status).toBe("built");
+    expect(during).toBeNull();
+    expect(installCalls).toEqual([]);
+  });
+
   it("answers E_BUILD_TIMEOUT with retry safe, and runs no engine, when the install outlasts its wait", async () => {
     const dir = coldProject();
     const pid = installerStandIn();
