@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { API_BASE } from "../lib/common-schema";
+import { API_BASE, waitSecondsInput } from "../lib/common-schema";
 import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
 import { movedActHint } from "../lib/builds-split";
 import { hostedOnly } from "../lib/hosted-only";
@@ -48,10 +48,7 @@ export const schema = {
         description: "list: 1 to 50 (default 10).",
       },
       project: PROJECT_TOKEN_INPUT,
-      waitSeconds: {
-        type: "number",
-        description: "get: seconds to wait for a build's verdict (a rebuild or a push), 0 to 600 (default 180).",
-      },
+      waitSeconds: waitSecondsInput("get: seconds to wait for a build's verdict (a rebuild or a push)", "0"),
       api: API_BASE,
     },
     required: [],

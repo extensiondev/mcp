@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { API_BASE } from "../lib/common-schema";
+import { API_BASE, SUBMIT_WAIT_SECONDS } from "../lib/common-schema";
 import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
 import { hostedOnly } from "../lib/hosted-only";
 
@@ -173,10 +173,7 @@ export const schema = {
         type: "boolean",
         description: "connect: true replaces a working key; only when asked.",
       },
-      waitSeconds: {
-        type: "number",
-        description: "Seconds to wait for the result (with approvalId, the approval), 0 to 600 (default 180).",
-      },
+      waitSeconds: SUBMIT_WAIT_SECONDS,
     },
     required: [],
   },

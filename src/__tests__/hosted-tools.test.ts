@@ -780,12 +780,25 @@ describe("the forwarder gives the person the wait they asked for and keeps what 
     expect(out).toMatchObject({ status: "promote-dispatched", value: { hostedWait: { askedSeconds: 180, grantedSeconds: 40 } }, warnings: [notice], hint: "Promoted. Read the record next." });
     expect(JSON.stringify(out).split(notice)).toHaveLength(2);
 
-    for (const name of ["extension_builds_act", "extension_release_promote", "extension_publish", "extension_release_status"]) {
-      const properties = tools.find((tool) => tool.schema.name === name)?.schema.inputSchema.properties as Record<string, { description: string }>;
-      const wait = properties.waitSeconds as { description: string };
+    const waiting = tools.flatMap((tool) => {
+      const wait = (tool.schema.inputSchema.properties as Record<string, { description?: string; maximum?: number }>).waitSeconds;
 
-      expect(wait.description, name).toContain(`the hosted lane waits at most ${HOSTED_ACT_WAIT_SECONDS}`);
+      return wait && wait.maximum === undefined ? [{ name: tool.schema.name, said: String(wait.description) }] : [];
+    });
+    const deferred = waiting.filter((tool) => tool.said === "As in extension_submit.");
+    const stated = waiting.filter((tool) => !deferred.includes(tool));
+
+    expect(waiting.map((tool) => tool.name).sort()).toEqual(["extension_builds", "extension_builds_act", "extension_publish", "extension_release_promote", "extension_release_status", "extension_submit", "extension_submit_check"]);
+
+    expect(deferred.map((tool) => tool.name)).toEqual(["extension_submit_check"]);
+
+    for (const tool of stated) {
+      expect(tool.said, tool.name).toContain(`the hosted lane waits at most ${HOSTED_ACT_WAIT_SECONDS} and names a cut in warnings`);
+      expect(tool.said, tool.name).not.toContain("value.hostedWait");
+      expect(tool.said, tool.name).toMatch(/, 0 to 600 \(omitted: (0|180)\b/);
     }
+
+    expect(waiting.find((tool) => tool.name === "extension_builds")?.said).toContain("(omitted: 0)");
   });
 
   it("884: finishes a cut submit wait with resume legs under new keys that carry the lane's memory, and keeps the dispatched answer when the lane has nothing to resume", async () => {
