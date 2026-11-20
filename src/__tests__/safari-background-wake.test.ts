@@ -200,6 +200,21 @@ describe("a Safari call that finds the background unloaded wakes it once before 
     expect(driver.calls).toContain("POST /session/S-1/url");
   });
 
+  it("980: says a background that never attached has not attached yet, with the wait step, never that it unloaded", async () => {
+    writeContract("safari", safariDevContract({ port: driver.port, sessionId: "S-1" }, { runtime: "detached" }));
+    cli.replies.push(noExecutor("inspect"));
+
+    const parsed = JSON.parse(await runActVerb(["eval", "1", project, "--context", "page", "--browser", "safari"], project, undefined, "extension_inspect"));
+
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.message).toContain("has not attached yet");
+    expect(parsed.error.message).not.toMatch(/unload/);
+    expect(parsed.error.message).toContain("woke: false");
+    expect(parsed.hint).toContain("extension_wait");
+    expect(parsed.hint).not.toMatch(/unload|again on its own|executorAttachedAt again/);
+    expect(parsed.error.hint).toBe(parsed.hint);
+  });
+
   it("says it had no window to send an event through when ready.json records no safaridriver session", async () => {
     writeContract("safari", safariDevContract({ unavailableReason: "the WebDriver session request failed: timed out" }, DETACHED));
     cli.replies.push(noExecutor("storage"));

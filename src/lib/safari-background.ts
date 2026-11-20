@@ -92,6 +92,10 @@ function executorAttached(contract: ReadyContract | null): boolean {
   return typeof contract.executorDetachedAt !== "string" || contract.executorAttachedAt > contract.executorDetachedAt;
 }
 
+function everAttached(contract: ReadyContract | null): boolean {
+  return contract?.runtime === "attached" || typeof contract?.executorAttachedAt === "string";
+}
+
 function contentScriptPatterns(projectPath: string, browser: string): string[] {
   const built = readBuiltManifest(projectPath, browser);
 
@@ -139,7 +143,9 @@ export async function wakeSafariBackground(
   waitMs: number,
   sessionWaitMs: number = SAFARI_SESSION_REQUEST_WAIT_MS,
 ): Promise<SafariWakeOutcome> {
-  if (executorAttached(readContract(projectPath, browser))) {
+  const before = readContract(projectPath, browser);
+
+  if (executorAttached(before)) {
     return { woke: true, attempted: false, how: "the executor attached again on its own before this server sent an event", waitedMs: 0 };
   }
 
@@ -189,7 +195,7 @@ export async function wakeSafariBackground(
   return {
     woke: false,
     attempted: true,
-    how: `${did}, and the executor had not attached again ${waitMs} ms later`,
+    how: `${did}, and the executor had not attached${everAttached(before) ? " again" : ""} ${waitMs} ms later`,
     waitedMs: Date.now() - started,
   };
 }
@@ -204,12 +210,15 @@ export function safariBackgroundUnavailableMessage(
   contract: ReadyContract | null,
   wake: SafariWakeOutcome,
 ): string {
-  const detachedAt = typeof contract?.executorDetachedAt === "string" ? contract.executorDetachedAt : null;
-  const ago = detachedAt ? secondsSince(detachedAt) : null;
-  const when = detachedAt ? ` (its executor detached at ${detachedAt}${ago !== null ? `, ${ago} s ago` : ""})` : "";
   const tried = wake.attempted
     ? `This call tried once to wake it: it ${wake.how}, so it answers unavailable (woke: ${wake.woke}).`
     : `This call could not wake it: ${wake.how} (woke: false).`;
+
+  if (!everAttached(contract)) return `No executor connected: the extension's background has not attached yet in this session. ${tried}`;
+
+  const detachedAt = typeof contract?.executorDetachedAt === "string" ? contract.executorDetachedAt : null;
+  const ago = detachedAt ? secondsSince(detachedAt) : null;
+  const when = detachedAt ? ` (its executor detached at ${detachedAt}${ago !== null ? `, ${ago} s ago` : ""})` : "";
 
   return `No executor connected: the extension's background page is unloaded${when}. ${SAFARI_BACKGROUND_UNLOAD}. ${tried}`;
 }
@@ -221,6 +230,9 @@ export function safariNoWindowWakeHint(reason: string | null): string {
 
   return `${why}, so no tool can send the automation window anywhere: extension_open url and extension_eval context "page" drive that same window and refuse the same way. Wake the extension by hand and read within 30 s of it: click its toolbar button, or open a page its content script matches in Safari yourself; extension_wait answers ready once it connects. Restart with extension_dev and replace: true to get a WebDriver window back, since the session asks for one only at launch.`;
 }
+
+export const SAFARI_NEVER_ATTACHED_HINT =
+  'Call extension_wait until it answers ready, then call this tool again; if it stays unattached, the extension_wait answer names what blocks it. extension_eval context "page" with a url needs no background on Safari.';
 
 export function safariBackgroundWakeHint(): string {
   return 'Wake the extension with an event it listens to and read within 30 s of it: extension_open url with a page its content script matches (the automation window navigates there and the content script\'s first message brings the background back), a page you open in Safari yourself, or a click on its toolbar button. When it connects, ready.json stamps executorAttachedAt again and extension_wait answers ready. extension_eval context "page" with a url needs no background on Safari: it runs over the automation window\'s WebDriver session.';
@@ -260,11 +272,15 @@ export async function answerAfterSafariWake(
 
   const value = answer.value && typeof answer.value === "object" && !Array.isArray(answer.value) ? answer.value : {};
 
-  answer.error = { ...answer.error, message: safariBackgroundUnavailableMessage(readContract(projectPath, browser), wake) };
+  const contract = readContract(projectPath, browser);
+
+  answer.error = { ...answer.error, message: safariBackgroundUnavailableMessage(contract, wake) };
   answer.value = { ...value, browser, woke: wake.woke, wake: wake.how };
-  answer.hint = readWebDriverSession(projectPath, browser)
-    ? safariBackgroundWakeHint()
-    : safariNoWindowWakeHint(readWebDriverUnavailableReason(projectPath, browser));
+  answer.hint = !readWebDriverSession(projectPath, browser)
+    ? safariNoWindowWakeHint(readWebDriverUnavailableReason(projectPath, browser))
+    : everAttached(contract)
+      ? safariBackgroundWakeHint()
+      : SAFARI_NEVER_ATTACHED_HINT;
 
   return answer;
 }
