@@ -508,6 +508,53 @@ describe("extension_stop never signals a pid that is no longer the session", () 
     },
     15_000,
   );
+
+  it.each([
+    {
+      evidence: "the start time the engine stamped is not this process's",
+      stamp: "2026-11-01T10:00:00.000Z",
+      says: "not the session process started at 2026-11-01T10:00:00.000Z",
+    },
+    {
+      evidence: "the contract carries no start time and was written before this process began",
+      stamp: undefined,
+      says: "after the ready contract that names it was last written",
+    },
+  ])(
+    "leaves a session-named process alone when a contract with no session record names its PID and $evidence",
+    async ({ stamp, says }) => {
+      const projectPath = tmpProject();
+      const stranger = spawnHolder(process.execPath, ["-e", "setInterval(() => {}, 1000)"]);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const readyDir = path.join(projectPath, "dist", "extension-js", "chrome");
+      const readyPath = path.join(readyDir, "ready.json");
+      fs.mkdirSync(readyDir, { recursive: true });
+      fs.writeFileSync(
+        readyPath,
+        JSON.stringify(readyContract("dev", "chrome", { pid: stranger, pidStartedAt: stamp, browserPid: null, launcherPid: null, distPath: path.join(projectPath, "dist", "chrome") })),
+      );
+
+      const lastBoot = new Date(Date.now() - 19 * 24 * 60 * 60 * 1000);
+      fs.utimesSync(readyPath, lastBoot, lastBoot);
+
+      try {
+        const result = JSON.parse(await stop.handler({ projectPath, browser: "chrome" }));
+        await new Promise((resolve) => setTimeout(resolve, 300));
+
+        expect(isAlive(stranger)).toBe(true);
+        expect(result.value.detail).toContain("nothing was signalled");
+        expect(result.value.detail).toContain(says);
+        expect(result.value.detail).not.toContain("Terminated");
+        expect(fs.existsSync(readyPath)).toBe(false);
+      } finally {
+        try {
+          process.kill(stranger, "SIGKILL");
+        } catch {
+        }
+      }
+    },
+    15_000,
+  );
 });
 
 describe("extension_stop says when it could not look for survivors", () => {

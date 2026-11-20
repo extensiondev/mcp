@@ -18,6 +18,7 @@ import {
   namedLikeSessionProcess,
   pidState,
   processStartTimes,
+  processStartedAt,
   readWindowsProcessTable,
   startedAsRecorded,
   type PidState,
@@ -36,7 +37,7 @@ import {
 } from "../lib/session-browser";
 import { browserProfileRootDir, readyContractPath } from "../lib/session-paths";
 import { removeCarrier } from "../lib/carrier";
-import { contractPidStartedAt } from "../lib/contract-pids";
+import { contractPid, contractPidStartedAt } from "../lib/contract-pids";
 import { contractBrowserPid, describeEnded, endedProcesses, readReadyContract } from "../lib/stop-ended";
 import { sweepCarriers, type CarrierSweepEntry } from "../lib/carrier-exit";
 import { readRememberedCarriers } from "../lib/carrier-registry";
@@ -423,6 +424,23 @@ function pidFromReadyContract(
   }
 }
 
+const CONTRACT_WRITE_TOLERANCE_MS = 2_000;
+
+function startedAfterContract(pid: number, projectPath: string, browser: string): string | null {
+  let writtenMs: number;
+
+  try {
+    writtenMs = fs.statSync(readyContractPath(projectPath, browser)).mtimeMs;
+  } catch {
+    return null;
+  }
+
+  const current = processStartedAt(pid);
+  if (current === null) return null;
+
+  return Date.parse(current) - writtenMs > CONTRACT_WRITE_TOLERANCE_MS ? current : null;
+}
+
 /* @invariant A STOP THAT ENDED NOTHING IS A REFUSAL WITH A CODE AND A NEXT
  * STEP. It stays `ok: false` with the status it had ("not-found",
  * "still-alive"): value.stopped is false, the sibling call with no
@@ -463,11 +481,15 @@ export async function stopOne(
 ): Promise<StopOutcome> {
   dropNetworkStubs(projectPath, browser);
   const session = findSessionInfo(projectPath, browser);
+  const contract = readReadyContract(projectPath, browser);
   const pid = session?.pid ?? pidFromReadyContract(projectPath, browser);
-  const startedAt = session?.processStartedAt ?? null;
+  const startedAt =
+    session?.processStartedAt ??
+    (pid !== null && contractPid(contract, "engine") === pid ? contractPidStartedAt(projectPath, browser, contract, "engine") : null);
+  const reusedSince = pid !== null && !session && !startedAt ? startedAfterContract(pid, projectPath, browser) : null;
   const hints = contractProcessHints(projectPath, browser);
   const browserPid = contractBrowserPid(projectPath, browser);
-  const browserStartedAt = contractPidStartedAt(projectPath, browser, readReadyContract(projectPath, browser), "browser");
+  const browserStartedAt = contractPidStartedAt(projectPath, browser, contract, "browser");
   const noBrowser = session?.noBrowser === true;
 
   if (pid == null) {
@@ -500,6 +522,8 @@ export async function stopOne(
   let detail: string;
 
   const readState = (): PidState => {
+    if (reusedSince !== null) return "dead";
+
     const read = pidState(pid, startedAt);
 
     return read === "foreign" && commandLineNamesSession(pid, projectPath, browser, hints) ? "alive" : read;
@@ -547,7 +571,10 @@ export async function stopOne(
   }
 
   if (state === "dead") {
-    const recycled = describeRecycledPid(pid, startedAt);
+    const recycled =
+      reusedSince !== null
+        ? `pid ${pid} now belongs to a process started at ${reusedSince}, after the ready contract that names it was last written`
+        : describeRecycledPid(pid, startedAt);
     detail = recycled
       ? `Process was already gone: ${recycled}, so nothing was signalled; cleaned up session records.`
       : "Process was already gone; cleaned up session records.";
