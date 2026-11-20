@@ -193,34 +193,40 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
     group: "local",
     annotations: TOOL_ANNOTATIONS.extension_browsers,
   },
-  extension_auth: { group: "platform", annotations: TOOL_ANNOTATIONS.extension_auth },
+  extension_auth: { group: "platform", annotations: TOOL_ANNOTATIONS.extension_auth, untrusted: true },
   extension_workspace_create: {
     group: "platform",
     annotations: TOOL_ANNOTATIONS.extension_workspace_create,
+    untrusted: true,
   },
   extension_project_create: {
     group: "platform",
     annotations: TOOL_ANNOTATIONS.extension_project_create,
+    untrusted: true,
   },
   extension_preview_web: {
     group: "platform",
     annotations: TOOL_ANNOTATIONS.extension_preview_web,
+    untrusted: true,
     ships: (args) => args.share === true,
   },
   extension_shares: {
     group: "platform",
     annotations: TOOL_ANNOTATIONS.extension_shares,
+    untrusted: true,
     ships: (args) => args.action === "revoke" || args.action === "create",
   },
   extension_publish: {
     group: "platform",
     annotations: TOOL_ANNOTATIONS.extension_publish,
+    untrusted: true,
     ships: "always",
   },
-  extension_release_status: { group: "platform", annotations: TOOL_ANNOTATIONS.extension_release_status },
+  extension_release_status: { group: "platform", annotations: TOOL_ANNOTATIONS.extension_release_status, untrusted: true },
   extension_approvals: {
     group: "platform",
     annotations: TOOL_ANNOTATIONS.extension_approvals,
+    untrusted: true,
   },
   extension_builds: {
     group: "platform",
@@ -240,16 +246,19 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
   extension_release_promote: {
     group: "platform",
     annotations: TOOL_ANNOTATIONS.extension_release_promote,
+    untrusted: true,
     ships: "always",
   },
   extension_submit: {
     group: "platform",
     annotations: TOOL_ANNOTATIONS.extension_submit,
+    untrusted: true,
     ships: submitShips,
   },
   extension_submit_check: {
     group: "platform",
     annotations: TOOL_ANNOTATIONS.extension_submit_check,
+    untrusted: true,
     actsAs: { tool: "extension_submit", refuse: submitCheckRefused },
   },
 };

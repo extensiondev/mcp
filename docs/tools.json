@@ -83,7 +83,7 @@
       "destructive": true,
       "idempotent": false,
       "openWorld": true,
-      "untrusted": false,
+      "untrusted": true,
       "inputs": [
         {
           "name": "action",
@@ -161,7 +161,7 @@
       "destructive": true,
       "idempotent": false,
       "openWorld": true,
-      "untrusted": false,
+      "untrusted": true,
       "inputs": [
         {
           "name": "action",
@@ -1538,7 +1538,7 @@
       "destructive": false,
       "idempotent": false,
       "openWorld": true,
-      "untrusted": false,
+      "untrusted": true,
       "inputs": [
         {
           "name": "projectPath",
@@ -1618,7 +1618,7 @@
       "destructive": false,
       "idempotent": false,
       "openWorld": true,
-      "untrusted": false,
+      "untrusted": true,
       "inputs": [
         {
           "name": "project",
@@ -1752,7 +1752,7 @@
       "destructive": false,
       "idempotent": false,
       "openWorld": true,
-      "untrusted": false,
+      "untrusted": true,
       "inputs": [
         {
           "name": "action",
@@ -1834,7 +1834,7 @@
       "destructive": true,
       "idempotent": false,
       "openWorld": true,
-      "untrusted": false,
+      "untrusted": true,
       "inputs": [
         {
           "name": "action",
@@ -1922,7 +1922,7 @@
       "destructive": false,
       "idempotent": true,
       "openWorld": true,
-      "untrusted": false,
+      "untrusted": true,
       "inputs": [
         {
           "name": "include",
@@ -2148,7 +2148,7 @@
       "destructive": true,
       "idempotent": false,
       "openWorld": true,
-      "untrusted": false,
+      "untrusted": true,
       "inputs": [
         {
           "name": "project",
@@ -2513,7 +2513,7 @@
       "destructive": true,
       "idempotent": false,
       "openWorld": true,
-      "untrusted": false,
+      "untrusted": true,
       "inputs": [
         {
           "name": "action",
@@ -2650,7 +2650,7 @@
       "destructive": false,
       "idempotent": true,
       "openWorld": true,
-      "untrusted": false,
+      "untrusted": true,
       "inputs": [
         {
           "name": "action",
@@ -3067,7 +3067,7 @@
       "destructive": false,
       "idempotent": false,
       "openWorld": true,
-      "untrusted": false,
+      "untrusted": true,
       "inputs": [
         {
           "name": "workspace",

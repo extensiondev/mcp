@@ -56,10 +56,10 @@ vi.mock("../tools/build", async (importOriginal) => {
 
 const { createServer } = await import("../index");
 
-async function callRaw(name: string, args: Record<string, unknown>) {
+async function callRaw(name: string, args: Record<string, unknown>, options?: Parameters<typeof createServer>[0]) {
   const [clientTransport, serverTransport] =
     InMemoryTransport.createLinkedPair();
-  await createServer().connect(serverTransport);
+  await createServer(options).connect(serverTransport);
   const client = new Client({ name: "fence-probe", version: "0.0.0" });
   await client.connect(clientTransport);
   const result = await client.callTool({ name, arguments: args });
@@ -218,6 +218,16 @@ describe("the server fences tools that read a page or an extension", () => {
     expect(text.indexOf(INJECTION)).toBeGreaterThan(text.indexOf(`"begin":"${parsed.untrusted.begin}"`));
   });
 
+  it("keeps the server's own no-login refusal bare on a platform tool the fence now covers", async () => {
+    const { isError, text } = await callRaw("extension_shares", { action: "list", project: "acme/tabs" }, { features: ["local", "platform"], noShip: false });
+    const parsed = JSON.parse(text);
+
+    expect(isError).toBe(true);
+    expect(parsed.error.code).toBe("E_AUTH_REQUIRED");
+    expect(parsed.untrusted).toBeUndefined();
+    expect(text).not.toContain("untrusted-data");
+  });
+
   it("leaves a project-source tool unfenced", async () => {
     const { text } = await callRaw("extension_build", {
       projectPath: os.tmpdir(),
@@ -226,15 +236,18 @@ describe("the server fences tools that read a page or an extension", () => {
     expect(JSON.parse(text).untrusted).toBeUndefined();
   });
 
-  it("fences exactly the tools that read runtime page or extension text, or CI output a build wrote", () => {
+  it("fences exactly the tools that read runtime page or extension text, and every platform tool, whose answers relay text the platform or its lane wrote", () => {
+    const platform = Object.entries(TOOL_POLICY).filter(([, policy]) => policy.group === "platform");
+
+    expect(platform.length).toBeGreaterThan(10);
+    expect(platform.filter(([, policy]) => !policy.untrusted).map(([name]) => name)).toEqual([]);
+
     const fenced = Object.entries(TOOL_POLICY)
-      .filter(([, policy]) => policy.untrusted)
+      .filter(([, policy]) => policy.untrusted && policy.group !== "platform")
       .map(([name]) => name)
       .sort();
     expect(fenced).toEqual([
       "extension_assert",
-      "extension_builds",
-      "extension_builds_act",
       "extension_doctor",
       "extension_dom_snapshot",
       "extension_element",
@@ -247,9 +260,7 @@ describe("the server fences tools that read a page or an extension", () => {
       "extension_reload",
       "extension_screenshot",
       "extension_storage",
-      "extension_try",
       "extension_wait",
-      "extension_workspace",
     ]);
   });
 });
