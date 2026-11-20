@@ -904,6 +904,7 @@ export async function handler(args: {
     cwd: args.projectPath,
     timeoutMs: buildBudgetMs(browser),
     leaveRunning: (pid: number) => install.turn !== null && installerUnder(pid) !== null,
+    onSpawn: (pid: number) => install.turn?.join(pid, "engine"),
   };
   let verdict: Awaited<ReturnType<typeof outputJsonVerdict>>;
   let engineKnownTooOld: boolean;

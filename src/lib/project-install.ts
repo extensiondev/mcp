@@ -33,10 +33,18 @@ import { modulesMissing, startingSession } from "./session-starting";
  * with the exclusive flag under the session state folder, so a second call
  * in this process and a second server process on the same project both see
  * it. The record names the processes that hold the install: the server
- * while its call runs, then the engine process when the call ends at its
- * budget and leaves that engine running. A record whose holders are all gone
- * is stale and is removed by whoever reads it. A dev session that is still
- * installing counts as a running install too, read from the session itself.
+ * while its call runs, beside it the engine or package manager that call
+ * started, from the moment that child has a PID, then the engine process
+ * alone when the call ends at its budget and leaves that engine running. The
+ * child is named at once under the moment it was spawned, which reads as its
+ * start time within the tolerance, and again under the start time the
+ * process table gives, so no read of that table stands between a spawn and
+ * its record. A server killed in the middle of an install therefore leaves a
+ * record its child still holds, and the next server waits for that install
+ * instead of starting a second one in the same folder. A record whose
+ * holders are all gone is stale and is removed by whoever reads it. A dev
+ * session that is still installing counts as a running install too, read
+ * from the session itself.
  *
  * EVERY TOOL THAT RUNS THE ENGINE SETTLES THE INSTALL FIRST, AND A FOLDER AN
  * INSTALL LEFT INCOMPLETE IS REPAIRED, NOT REPORTED AS A COMPILE ERROR
@@ -75,6 +83,7 @@ interface InstallRecord {
 
 export interface InstallTurn {
   release: () => void;
+  join: (pid: number, role: "engine" | "installer") => void;
   handOver: (pid: number, as?: { role: "engine" | "installer" } | { role: "session"; browser: string; readyPath: string }) => void;
 }
 
@@ -226,10 +235,12 @@ export function takeInstallTurn(projectPath: string): InstallTurn | "taken" | "u
   const since = new Date().toISOString();
   const record = (holders: InstallHolder[]): InstallRecord => ({ projectRoot: key, since, holders });
 
+  const own: InstallHolder = { pid: process.pid, startedAt: ownStartedAt, role: "server" };
+
   callsInFlight.add(key);
 
   try {
-    writeWhole(file, record([{ pid: process.pid, startedAt: ownStartedAt, role: "server" }]), true);
+    writeWhole(file, record([own]), true);
   } catch (err) {
     callsInFlight.delete(key);
 
@@ -245,6 +256,19 @@ export function takeInstallTurn(projectPath: string): InstallTurn | "taken" | "u
       held = false;
       callsInFlight.delete(key);
       fs.rmSync(file, { force: true });
+    },
+    join: (pid, role) => {
+      const name = (startedAt: string | null): void => {
+        if (!held || startedAt === null) return;
+
+        try {
+          writeWhole(file, record([own, { pid, startedAt, role }]), false);
+        } catch {
+        }
+      };
+
+      name(new Date().toISOString());
+      name(processStartedAt(pid));
     },
     handOver: (pid, as = { role: "engine" }) => {
       if (!held) return;
@@ -425,7 +449,11 @@ export async function settleInstall(
   let result: Awaited<ReturnType<typeof runPackageInstall>>;
 
   try {
-    result = await runPackageInstall(repair.command, repair.args, { cwd: incomplete.root, timeoutMs: budgets.repairMs });
+    result = await runPackageInstall(repair.command, repair.args, {
+      cwd: incomplete.root,
+      timeoutMs: budgets.repairMs,
+      onSpawn: (pid) => turn.join(pid, "installer"),
+    });
   } catch (err) {
     turn.release();
 

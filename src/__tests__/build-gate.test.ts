@@ -2,6 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { describe, it, expect, afterEach, vi } from "vitest";
 
@@ -75,6 +76,42 @@ function project(manifest: Record<string, unknown>, files: string[] = []): strin
   }
 
   return dir;
+}
+
+const SOURCE_HOOKS = `
+import fs from "node:fs";
+import { registerHooks } from "node:module";
+import { fileURLToPath } from "node:url";
+
+const ours = (url) => typeof url === "string" && url.startsWith("file:") && !url.includes("/node_modules/");
+
+registerHooks({
+  resolve(specifier, context, next) {
+    const bare = /^\\.\\.?\\//.test(specifier) && !/\\.(ts|mjs|js|json)$/.test(specifier);
+
+    return next(bare && ours(context.parentURL) ? specifier + ".ts" : specifier, context);
+  },
+  load(url, context, next) {
+    if (!ours(url) || !url.endsWith(".json")) return next(url, context);
+
+    const text = fs.readFileSync(fileURLToPath(url), "utf8");
+
+    return { format: "module", shortCircuit: true, source: "const json = " + text + "; export default json; export const dependencies = json.dependencies;" };
+  },
+});
+`;
+const INSTALL_SOURCE = pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "lib", "project-install.ts")).href;
+
+function serverProcess(body: string, args: string[], env: Record<string, string> = {}): ChildProcess {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-server-process-"));
+  tmpDirs.push(dir);
+  fs.writeFileSync(path.join(dir, "hooks.mjs"), SOURCE_HOOKS);
+  fs.writeFileSync(path.join(dir, "main.mjs"), `const install = await import(${JSON.stringify(INSTALL_SOURCE)});\n${body}\n`);
+
+  return spawn(process.execPath, ["--import", pathToFileURL(path.join(dir, "hooks.mjs")).href, path.join(dir, "main.mjs"), ...args], {
+    stdio: ["pipe", "pipe", "inherit"],
+    env: { ...process.env, ...env },
+  });
 }
 
 afterEach(() => {
@@ -655,6 +692,14 @@ describe("941: one dependency install runs on a project at a time, and a build s
     fs.writeFileSync(file, JSON.stringify({ projectRoot: dir, since: new Date().toISOString(), holders: [{ pid, startedAt: processStartedAt(pid), role: "engine" }] }));
   }
 
+  function recordText(dir: string): string {
+    try {
+      return fs.readFileSync(installRecordPath(dir), "utf8");
+    } catch {
+      return "";
+    }
+  }
+
   afterEach(() => {
     vi.useRealTimers();
 
@@ -776,6 +821,44 @@ describe("941: one dependency install runs on a project at a time, and a build s
     expect(next).toBe("spawn E2BIG");
     expect(runningInstall(dir)).toBeNull();
   }, 20_000);
+
+  it.skipIf(process.platform === "win32")(
+    "waits for the install a killed server left running instead of starting a second one in the same folder",
+    async () => {
+      const dir = coldProject();
+      const bin = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-slow-npm-"));
+      const log = path.join(bin, "runs.log");
+      tmpDirs.push(bin);
+      fs.mkdirSync(path.join(dir, "node_modules", "extension"), { recursive: true });
+      fs.writeFileSync(
+        path.join(bin, "npm"),
+        `#!/bin/sh\necho "start $$" >> "${log}"\nsleep 1.3\nmkdir -p node_modules/.bin\n: > node_modules/.bin/extension\necho end >> "${log}"\n`,
+        { mode: 0o755 },
+      );
+
+      const runs = (): string[] => (fs.existsSync(log) ? fs.readFileSync(log, "utf8").trim().split("\n") : []);
+      const first = serverProcess("await install.settleInstall(process.argv[2], { waitMs: 20000, repairMs: 30000 });", [dir], {
+        PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+      });
+      victims.push(first);
+
+      await vi.waitFor(() => expect(runs()).toHaveLength(1), { timeout: 10_000, interval: 50 });
+
+      const installer = Number(runs()[0].split(" ")[1]);
+
+      await vi.waitFor(() => expect(recordText(dir)).toContain(`"pid":${installer}`), { timeout: 5_000, interval: 20 });
+      await end(first.pid!);
+
+      const result = JSON.parse(await build.handler({ projectPath: dir }));
+
+      expect(installCalls).toEqual([]);
+      expect(runs()).toEqual([`start ${installer}`, "end"]);
+      expect(result.status).toBe("built");
+      expect(result.warnings.join(" ")).toContain(`for the install an earlier call left running (pid ${installer}) to finish installing`);
+      expect(runningInstall(dir)).toBeNull();
+    },
+    30_000,
+  );
 
   it("reads an install from the command line a package manager runs under, not from a path that holds its name", () => {
     expect(isInstallCommand("npm install --ignore-scripts")).toBe(true);

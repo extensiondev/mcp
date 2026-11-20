@@ -153,7 +153,7 @@ export function engineRefusal(): string | null {
  */
 export function runExtensionCli(
   args: string[],
-  options?: { cwd?: string; timeoutMs?: number; leaveRunning?: (pid: number) => boolean },
+  options?: { cwd?: string; timeoutMs?: number; leaveRunning?: (pid: number) => boolean; onSpawn?: (pid: number) => void },
 ): Promise<CliResult> {
   const { command, prefixArgs, refusal } = resolveExtensionInvocation(options?.cwd);
 
@@ -216,6 +216,8 @@ export function runExtensionCli(
       return;
     }
 
+    if (child.pid) options?.onSpawn?.(child.pid);
+
     let timedOut = false;
     let left = false;
     const timer = setTimeout(() => {
@@ -263,7 +265,11 @@ export interface PackageInstallResult {
   output: string;
 }
 
-export function runPackageInstall(command: string, args: string[], options: { cwd: string; timeoutMs: number }): Promise<PackageInstallResult> {
+export function runPackageInstall(
+  command: string,
+  args: string[],
+  options: { cwd: string; timeoutMs: number; onSpawn?: (pid: number) => void },
+): Promise<PackageInstallResult> {
   return new Promise((resolve) => {
     let ioDir: string;
     let fd: number;
@@ -309,6 +315,8 @@ export function runPackageInstall(command: string, args: string[], options: { cw
 
       return;
     }
+
+    if (child.pid) options.onSpawn?.(child.pid);
 
     let settled = false;
     const timer = setTimeout(() => {
