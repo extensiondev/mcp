@@ -58,7 +58,7 @@ import {
   safariBuildTeam,
   type SafariBuildArgs,
 } from "../lib/safari-build-options";
-import { otherSafariRegistrations } from "../lib/safari-enable-read";
+import { otherSafariRegistrations, safariHostAccess } from "../lib/safari-enable-read";
 import { safariRunStep, safariSigningFrame } from "../lib/safari-signing";
 import { teamUnknownToXcodeRefusal } from "../lib/xcode-teams";
 import { isWasmPolicyLine } from "../lib/wasm-policy";
@@ -1154,7 +1154,12 @@ export async function handler(args: {
       : null;
 
     const runStep = signingFrame?.signing.appPath
-      ? safariRunStep(signingFrame.signing.appPath, signingFrame.signing.identity, otherSafariRegistrations(signingFrame.signing.appPath, safariIdentity?.bundleId ?? null))
+      ? safariRunStep(
+          signingFrame.signing.appPath,
+          signingFrame.signing.identity,
+          otherSafariRegistrations(signingFrame.signing.appPath, safariIdentity?.bundleId ?? null),
+          safariHostAccess(args.projectPath, browser),
+        )
       : null;
     const stated = statedProjectRoot(args.projectPath);
 

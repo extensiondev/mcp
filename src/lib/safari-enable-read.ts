@@ -12,8 +12,10 @@ import path from "node:path";
 import { findSessionInfo } from "./process-manager";
 import { safariAppBuilding } from "./safari-app-stage";
 import { isSafariTarget } from "./safari-dev-options";
+import { readBuiltManifest } from "./project-manifest";
 import {
   blockerFor,
+  declaresHostAccess,
   manualSteps,
   otherCopyBlocker,
   otherRegistrationBlocker,
@@ -84,6 +86,7 @@ export interface SafariEnableInput extends SafariBlockerInput {
   plistReason: string | null;
   identity: SigningIdentity;
   personSteps: SafariPersonStep[];
+  hostAccess?: boolean | null;
 }
 
 function appOf(appexPath: string): string {
@@ -135,6 +138,12 @@ export function otherSafariRegistrations(appPath: string, bundleId: string | nul
     .map((entry) => ({ bundleId: entry.bundleId, path: posixPath(entry.path) }));
 }
 
+export function safariHostAccess(projectPath: string, browser: string): boolean | null {
+  const built = readBuiltManifest(projectPath, browser);
+
+  return built ? declaresHostAccess(built.manifest) : null;
+}
+
 const NOT_CONNECTED = "The background has not connected yet: call extension_wait again; if it stays unattached, open a page the extension matches with extension_open url.";
 
 export function readSafariEnable(input: SafariEnableInput): { safari: SafariEnableValue; hint: string } {
@@ -161,7 +170,7 @@ export function readSafariEnable(input: SafariEnableInput): { safari: SafariEnab
     rows,
     earlierBundleIds: earlier.map((entry) => entry.bundleId),
     personSteps: input.personSteps,
-    manualSteps: manualSteps(input.appName),
+    manualSteps: manualSteps(input.appName, input.hostAccess ?? null),
   };
 
   if (current && input.appPath && !registeredUnder(current, input.appPath)) {
@@ -189,7 +198,7 @@ export function readSafariEnable(input: SafariEnableInput): { safari: SafariEnab
 
   if (freshRow?.enabled) {
     const say =
-      `${input.appName} is enabled in Safari: Extensions.plist holds ${bundleId} (${freshRow.identity}) on, the ${describeIdentity(freshRow.identity)} app this build produced, so the enable holds across the rebuild and nothing in Safari Settings is left to do. ` +
+      `${input.appName} is enabled in Safari: Extensions.plist holds ${bundleId} (${freshRow.identity}) on, the ${describeIdentity(freshRow.identity)} app this build produced, so the switch is on and the enable holds across the rebuild.${input.hostAccess === false ? "" : " Only the switch was read, not the extension's Websites setting."} ` +
       `${NOT_CONNECTED}${personSay}`;
 
     return {
@@ -298,6 +307,7 @@ export function safariEnableFrame(
     plistReason: plist.xml === null ? plist.reason : null,
     identity,
     personSteps: safariPersonSteps(projectPath, browser, typeof contract.distPath === "string" ? contract.distPath : null),
+    hostAccess: safariHostAccess(projectPath, browser),
     automation: settled || !enableExtension ? null : probes.automation(),
     safariRunning: settled || !enableExtension ? null : probes.safariRunning(),
     hostApp: settled ? "" : probes.hostApp(),

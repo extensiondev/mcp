@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { UNSIGNED_TOGGLE_FACTS } from "./safari-dev-options";
 import { describeIdentity, UNSIGNED_IDENTITY, type SafariExtensionRow } from "./safari-extensions-plist";
 
 import type { AutomationProbe } from "./safari-enable-probes";
@@ -55,11 +56,29 @@ export interface SafariRetry {
 export const RETRY_SAY =
   "Call extension_dev again with the same arguments: the build is current, so the engine skips the Xcode build and redoes the enable; `npx extension safari enable <projectPath>` in the project redoes only the enable on the running session.";
 
-export function manualSteps(appName: string): string[] {
+function patterns(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
+}
+
+export function declaresHostAccess(manifest: Record<string, unknown>): boolean {
+  const scripts = Array.isArray(manifest.content_scripts) ? manifest.content_scripts : [];
+
   return [
-    "Safari > Settings > Developer > Allow unsigned extensions (an ad-hoc signed app only; Safari turns it off at every quit)",
+    ...patterns(manifest.host_permissions),
+    ...patterns(manifest.optional_host_permissions),
+    ...patterns(manifest.permissions),
+    ...patterns(manifest.optional_permissions),
+    ...scripts.flatMap((script) => patterns((script as { matches?: unknown } | null)?.matches)),
+  ].some((entry) => entry === "<all_urls>" || entry.includes("://"));
+}
+
+export function manualSteps(appName: string, hostAccess: boolean | null = null): string[] {
+  const websites = `Safari > Settings > Websites > ${appName} > For other websites > Allow`;
+
+  return [
+    `Safari > Settings > Developer > Allow unsigned extensions (an ad-hoc signed app only; ${UNSIGNED_TOGGLE_FACTS}; Safari turns it off at every quit)`,
     `Safari > Settings > Extensions > turn on ${appName}`,
-    `Safari > Settings > Websites > ${appName} > For other websites > Allow`,
+    ...(hostAccess === true ? [websites] : hostAccess === null ? [`${websites} (the entry exists only when the extension asks for website access)`] : []),
   ];
 }
 

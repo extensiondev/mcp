@@ -87,4 +87,12 @@ describe("extension_wait names the Safari enable step when a Safari session neve
     expect(notAttachedHint("firefox", true)).toBe(notAttachedHint("chrome", false));
     expect(notAttachedHint("safari", true)).not.toBe(notAttachedHint("safari", false));
   });
+
+  it("tells the by-hand setup where the Developer tab comes from, what Safari asks, and that Websites is only for an extension with website access", () => {
+    for (const hint of [notAttachedHint("safari", false), notAttachedHint("safari", true)]) {
+      expect(hint).toContain('Safari > Settings > Advanced > "Show features for web developers"');
+      expect(hint).toMatch(/Touch ID or the password/);
+      expect(hint).toMatch(/when the extension asks for website access, Safari > Settings > Websites/);
+    }
+  });
 });

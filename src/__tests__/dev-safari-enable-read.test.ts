@@ -170,6 +170,43 @@ describe("extension_dev / extension_wait on a Safari session the engine could no
     expect(automationCalls).toBe(0);
   }, 10_000);
 
+  it("lists the Websites step only for a build that declares host access, and an enabled answer claims no more than the switch it read", () => {
+    session(BUILT);
+    safariEnableProbes.pluginkitList = () => listing([{ mark: "+", id: NEW_ID, app: "Visionario.app" }]);
+    safariEnableProbes.extensionsPlist = () => ({ xml: extensionsPlistXml([{ id: NEW_ID, identity: TEAM, enabled: true }]), reason: "" });
+
+    const websites = (frame: ReturnType<typeof safariEnableFrame>) => frame!.safari.manualSteps.filter((step) => step.includes("Websites"));
+
+    const built = (manifest: Record<string, unknown>) => {
+      fs.mkdirSync(path.join(dir, "dist", "safari"), { recursive: true });
+      fs.writeFileSync(path.join(dir, "dist", "safari", "manifest.json"), JSON.stringify({ manifest_version: 3, name: "Visionario", version: "1.0", ...manifest }));
+
+      return safariEnableFrame(dir, "safari", true);
+    };
+
+    const unread = safariEnableFrame(dir, "safari", true);
+
+    expect(unread?.safari.enabled).toBe(true);
+    expect(unread?.hint).not.toMatch(/nothing in Safari Settings is left/);
+    expect(websites(unread)).toHaveLength(1);
+    expect(websites(unread)[0]).toContain("only when the extension asks for website access");
+
+    const none = built({ permissions: ["storage"] });
+
+    expect(websites(none)).toEqual([]);
+    expect(none?.hint).not.toContain("Websites");
+
+    for (const manifest of [{ host_permissions: ["https://example.com/*"] }, { content_scripts: [{ matches: ["<all_urls>"], js: ["a.js"] }] }, { optional_host_permissions: ["*://*/*"] }]) {
+      const asks = built(manifest);
+
+      expect(websites(asks)).toEqual(["Safari > Settings > Websites > Visionario > For other websites > Allow"]);
+      expect(asks?.hint).toContain("Websites");
+    }
+
+    expect(none?.safari.manualSteps[0]).toContain("Show features for web developers");
+    expect(none?.safari.manualSteps[0]).toMatch(/Touch ID or the password/);
+  });
+
   it("976: never answers enabled when the bundle id is registered from another checkout's app, and names that copy and the fix", async () => {
     session(BUILT);
     const other = path.posix.join("/Users/pat/other-checkout", "dist", "safari-xcode", ".derived", "Build", "Products", "Release", "Visionario.app", "Contents", "PlugIns", "Visionario Extension.appex");

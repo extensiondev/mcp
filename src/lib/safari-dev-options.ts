@@ -129,8 +129,10 @@ export function safariDevOptionRefusal(
   return null;
 }
 
-const MANUAL_STEPS =
-  "the one-time setup in a regular Safari window (a trip to Settings from the automation window ends the WebDriver session): Safari > Settings > Developer > Allow unsigned extensions when the app is ad-hoc signed, Safari > Settings > Extensions > turn the extension on, Safari > Settings > Websites > the extension > For other websites > Allow";
+export const UNSIGNED_TOGGLE_FACTS =
+  'the Developer tab appears only after Safari > Settings > Advanced > "Show features for web developers" is on, and Safari asks for Touch ID or the password before it turns the box on';
+
+const MANUAL_STEPS = `the one-time setup in a regular Safari window (a trip to Settings from the automation window ends the WebDriver session): Safari > Settings > Developer > Allow unsigned extensions when the app is ad-hoc signed (${UNSIGNED_TOGGLE_FACTS}), Safari > Settings > Extensions > turn the extension on, and, when the extension asks for website access, Safari > Settings > Websites > the extension > For other websites > Allow`;
 
 export function notAttachedHint(
   browser: string,

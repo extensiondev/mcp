@@ -11,7 +11,7 @@ import path from "node:path";
 
 import { describeCodeSignature } from "./codesign";
 import { findSessionInfo, sessionSidecarPath } from "./process-manager";
-import { isSafariTarget } from "./safari-dev-options";
+import { isSafariTarget, UNSIGNED_TOGGLE_FACTS } from "./safari-dev-options";
 import { engineProjectRoot, readyContractPath } from "./session-paths";
 import { dropTrailing } from "./linear-text";
 
@@ -208,19 +208,21 @@ export interface SafariOtherCopy {
   path: string;
 }
 
-export function safariRunStep(appPath: string, identity: SigningIdentity, otherCopies: SafariOtherCopy[] = []): string | null {
+export function safariRunStep(appPath: string, identity: SigningIdentity, otherCopies: SafariOtherCopy[] = [], hostAccess: boolean | null = null): string | null {
   if (identity === "unknown") return null;
 
   const enable =
     identity === "ad-hoc"
-      ? "turn on Safari > Settings > Developer > Allow unsigned extensions (an ad-hoc signed app needs it, and Safari turns it off at every quit), then turn the extension on in Safari > Settings > Extensions"
+      ? `turn on Safari > Settings > Developer > Allow unsigned extensions (an ad-hoc signed app needs it; ${UNSIGNED_TOGGLE_FACTS}; Safari turns it off at every quit), then turn the extension on in Safari > Settings > Extensions`
       : "then turn it on in Safari > Settings > Extensions";
+  const websites =
+    hostAccess === false ? "" : `, and ${hostAccess === null ? "if the extension asks for website access " : ""}set Safari > Settings > Websites > the extension > For other websites to Allow`;
   const first =
     otherCopies.length > 0
       ? `pluginkit also registers ${[...new Set(otherCopies.map((copy) => copy.bundleId))].join(", ")} from outside this build, at ${otherCopies.map((copy) => copy.path).join(" and ")}, so two apps are registered under one bundle ID. Before the clicks, unregister ${otherCopies.length > 1 ? "each" : "it"} with ${otherCopies.map((copy) => `pluginkit -r "${copy.path}"`).join(" and ")} (or delete that app). `
       : "";
 
-  return `${first}To try it in Safari: open ${appPath} once so Safari registers the extension, ${enable} and set its Websites to Allow. Tell the person these clicks.`;
+  return `${first}To try it in Safari: open ${appPath} once so Safari registers the extension, ${enable}${websites}. Tell the person these clicks.`;
 }
 
 export async function safariSigningFrame(

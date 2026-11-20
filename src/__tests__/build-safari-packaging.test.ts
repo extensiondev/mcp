@@ -269,6 +269,33 @@ describe("extension_build drives the Safari web-extension conversion", () => {
     expect(signed.value.nextSteps[0]).not.toContain("Allow unsigned extensions");
   });
 
+  it("an ad-hoc run step says where the Developer tab comes from and what Safari asks, and Websites only for a build with host access", async () => {
+    const dir = project();
+    distFor(dir, "safari");
+    const appPath = path.join(dir, "Reading List.app");
+    fs.mkdirSync(appPath, { recursive: true });
+    codesignSays = "Executable=x\nSignature=adhoc\nTeamIdentifier=not set";
+    cliResponse = summariesOf({ browser: "safari", safari: { appName: "Reading List", bundleId: "com.acme.readinglist", appPath } });
+
+    const [plain] = (await run({ projectPath: dir, browser: "safari" })).value.nextSteps as string[];
+
+    expect(plain).toContain('Safari > Settings > Advanced > "Show features for web developers"');
+    expect(plain).toMatch(/Touch ID or the password/);
+    expect(plain).not.toContain("Websites");
+
+    fs.writeFileSync(path.join(dir, "dist", "safari", "manifest.json"), JSON.stringify({ ...MANIFEST, host_permissions: ["https://example.com/*"] }));
+    const [hosts] = (await run({ projectPath: dir, browser: "safari" })).value.nextSteps as string[];
+
+    expect(hosts).toContain("Safari > Settings > Websites");
+    expect(hosts).toContain("For other websites");
+
+    codesignSays = "Executable=x\nTeamIdentifier=ABCDE12345";
+    const [signed] = (await run({ projectPath: dir, browser: "safari" })).value.nextSteps as string[];
+
+    expect(signed).not.toContain("Show features for web developers");
+    expect(signed).not.toContain("Touch ID");
+  });
+
   it("names another registered copy of the bundle id, with its path and the unregister command, only when pluginkit lists one", async () => {
     const dir = project();
     distFor(dir, "safari");
