@@ -916,6 +916,22 @@ describe("941: one dependency install runs on a project at a time, and a build s
     20_000,
   );
 
+  it.skipIf(!fs.existsSync(os.tmpdir().toUpperCase()))("keeps one record for a folder reached by two spellings on a disk that ignores case", () => {
+    const dir = coldProject();
+    const shouted = path.join(path.dirname(dir), path.basename(dir).toUpperCase());
+    const turn = takeInstallTurn(dir);
+
+    try {
+      expect(fs.statSync(shouted).ino).toBe(fs.statSync(dir).ino);
+      expect(takeInstallTurn(shouted)).toBe("taken");
+      expect(runningInstall(shouted)).toEqual({ pid: process.pid, owner: "build-call" });
+    } finally {
+      if (typeof turn !== "string") turn.release();
+    }
+
+    expect(runningInstall(shouted)).toBeNull();
+  });
+
   it("reads an install from the command line a package manager runs under, not from a path that holds its name", () => {
     expect(isInstallCommand("npm install --ignore-scripts")).toBe(true);
     expect(isInstallCommand("node /usr/lib/node_modules/npm/bin/npm-cli.js install --no-audit")).toBe(true);

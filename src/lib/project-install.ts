@@ -46,6 +46,12 @@ import { modulesMissing, startingSession } from "./session-starting";
  * session that is still installing counts as a running install too, read
  * from the session itself.
  *
+ * ONE FOLDER HAS ONE RECORD, HOWEVER ITS PATH IS SPELLED. The record is
+ * keyed by the path the operating system gives back for the folder, which
+ * resolves a symlink and, on a disk that ignores case, the case the caller
+ * typed; Windows paths are lowercased as well. Keyed by the path as typed,
+ * /Users/x/App and /users/x/app held two records for one node_modules.
+ *
  * NO STEP OF TAKING THE RECORD READS AND THEN ACTS. The record is taken by
  * renaming a folder that already holds its file onto the record's path,
  * which the file system refuses while a file is in the folder there. Each
@@ -109,11 +115,15 @@ let ownStartedAt: string | null | undefined;
 function projectKey(projectPath: string): string {
   const root = engineProjectRoot(projectPath);
 
+  let key: string;
+
   try {
-    return fs.realpathSync(root);
+    key = fs.realpathSync.native(root);
   } catch {
-    return path.resolve(root);
+    key = path.resolve(root);
   }
+
+  return process.platform === "win32" ? key.toLowerCase() : key;
 }
 
 function recordStem(projectPath: string): string {
