@@ -417,7 +417,10 @@ const SAFARI_JUSTIFIED = `"${REVIEWER_NOTES_HEADING}" under "${STORE_SECTIONS.sa
 
 export function storeMdLine(root: string, risks: ReviewRisk[], browser?: string): string | null {
   if (!fs.existsSync(path.join(root, STORE_MD_FILENAME))) {
-    return `No ${STORE_MD_FILENAME} is in ${root}. Write it there now from the manifest and the code, one section per store: ${STORE_SECTIONS.chrome} with a ${JUSTIFICATION_HEADING} bullet per declared permission, host permission and content script match, ${STORE_SECTIONS.firefox} with ${REVIEWER_NOTES_HEADING}, ${STORE_SECTIONS.edge} (extension_docs_search "${STORE_MD_FILENAME}" has the rest). ${reviewerNotesContent(root)} Leave only its data-use and privacy rows unanswered for the owner, and show them what the code stores and sends.`;
+    const safariSection =
+      browser && WEBKIT_FAMILY.has(browser) ? `, ${STORE_SECTIONS.safari} with ${REVIEWER_NOTES_HEADING} that say why the extension needs ${JUSTIFIED}` : "";
+
+    return `No ${STORE_MD_FILENAME} is in ${root}. Write it there now from the manifest and the code, one section per store: ${STORE_SECTIONS.chrome} with a ${JUSTIFICATION_HEADING} bullet per declared permission, host permission and content script match, ${STORE_SECTIONS.firefox} with ${REVIEWER_NOTES_HEADING}, ${STORE_SECTIONS.edge}${safariSection} (extension_docs_search "${STORE_MD_FILENAME}" has the rest). ${reviewerNotesContent(root)} Leave only its data-use and privacy rows unanswered for the owner, and show them what the code stores and sends.`;
   }
 
   const lines = [

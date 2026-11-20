@@ -286,6 +286,22 @@ describe("971: a Safari build names App Store review and the section Safari read
       'STORE.md: check that "### Reviewer notes" under "## Safari" says why the extension needs each permission, host permission and content script match the manifest declares.',
     );
   });
+
+  it("asks a Safari build with no STORE.md for the Safari section its own follow-up check reads, and no other build for it", () => {
+    const first = storeMdLine(dist, [], "safari")!;
+
+    write("STORE.md", "# Store metadata\n");
+    const followUp = storeMdLine(dist, [{ code: "BROAD_HOST_ACCESS", message: "m", fix: "f" }], "safari")!;
+    const [, heading, section] = followUp.match(/"(### [^"]+)" under "(## [^"]+)"/)!;
+
+    expect(first.indexOf(section!)).toBeGreaterThan(-1);
+    expect(first.slice(first.indexOf(section!))).toContain(heading!.replace(/^### /, ""));
+
+    fs.rmSync(path.join(dist, "STORE.md"));
+
+    expect(storeMdLine(dist, [], "chrome")).not.toContain(section!);
+    expect(storeMdLine(dist, [], "firefox")).toBe(storeMdLine(dist, []));
+  });
 });
 
 describe("949: Firefox reviewer notes with no build line are named, with the line to write", () => {
