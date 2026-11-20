@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Ledger 1002. With the platform tools off, a zip for a store is an accepted route and the instructions no longer contradict themselves. The share rule still leads with extension.dev and adds that a zip the person asks for is built by `extension_manifest_validate` then `extension_build` with `zip: true`, with extension.dev named after it.
 - Ledger 1006. A refusal relayed from the hosted lane stays inside the untrusted fence. A lane answer that carried a code this server also composes was shown bare, so relayed text could read as the server's own words; an answer goes bare only when this server registered the refusal in the same call and no lane answer was relayed.
 - Ledger 1012, 1013. `extension_stop` ends only the session's own processes. A recorded PID that now belongs to another process is left running, and a sibling folder whose path starts with the project's path is no longer matched as part of the session.
 - Ledger 999. `extension_stop` never asks a person to end a PID it calls a stranger. The hint says to leave that PID running and names one next step, `value.pidIsStranger: true` marks the case, and "pgrep is missing or failed" reads "the process list could not be read".

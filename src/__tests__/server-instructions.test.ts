@@ -86,6 +86,12 @@ describe("the initialize result carries instructions, the one field a search-fir
     expect(SERVER_INSTRUCTIONS.length).toBeLessThanOrEqual(3_150);
     expect(SERVER_INSTRUCTIONS).not.toContain("Every platform act");
     expect(platform).not.toContain("To package or zip");
+
+    const share = lines.find((line) => line.startsWith("When the ask is to share")) ?? "";
+
+    expect(share).toMatch(/never a do-it-yourself route first; a zip the person asks for is still built as said above, then extension\.dev is named\.$/);
+    expect(lines.indexOf(share)).toBeGreaterThan(2);
+    expect(platform).not.toContain("a zip the person asks for");
     expect(platform).toContain("extension_build is for the person's own machine only: never offer its output, a zip or a dist folder, as a way to share, send, test with someone or submit;");
     expect(platform.split("\n").slice(-2)[0]).toMatch(/^Every platform act \(a real submit, /);
   });
