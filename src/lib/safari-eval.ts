@@ -15,6 +15,10 @@ const CSP_EVAL_REFUSAL = /blocked by CSP|call to eval|unsafe-eval|Content Securi
 export const SAFARI_EVAL_LIMIT =
   "On Safari this tool reaches only page contexts, through the automation window's WebDriver session: the background and the extension surfaces are out of reach (extension_logs reads the background).";
 
+export type SafariPageRoute = "window" | "no-window" | "no-session";
+
+const NEVER_REACHED = new Set(["popup", "options", "sidebar"]);
+
 function refusedByCsp(parsed: Record<string, any>): boolean {
   if (parsed.ok !== false) return false;
 
@@ -29,7 +33,7 @@ export function safariContextRefusal(
   raw: string,
   browser: string,
   context: string | undefined,
-  hasWindow = true,
+  route: SafariPageRoute = "window",
 ): string | null {
   if (!WEBKIT_FAMILY.has(browser)) return null;
   if (context === "page" || context === "content") return null;
@@ -37,22 +41,35 @@ export function safariContextRefusal(
   const parsed = parseFrameObject(raw);
   if (!parsed || !refusedByCsp(parsed)) return null;
 
-  return safariContextUnreachable(command, browser, context ?? "background", hasWindow);
+  return safariContextUnreachable(command, browser, context ?? "background", route, true);
 }
 
 export function safariContextAskedOutOfReach(
   command: string,
   browser: string | undefined,
   context: string | undefined,
-  hasWindow: (browser: string) => boolean,
+  routeOf: (browser: string) => SafariPageRoute,
 ): string | null {
   if (!browser || !WEBKIT_FAMILY.has(browser)) return null;
-  if (!context || context === "page" || context === "content") return null;
+  if (!context || !NEVER_REACHED.has(context)) return null;
 
-  return safariContextUnreachable(command, browser, context, hasWindow(browser));
+  return safariContextUnreachable(command, browser, context, routeOf(browser), false);
 }
 
-function safariContextUnreachable(command: string, browser: string, where: string, hasWindow: boolean): string {
+const PAGE_ROUTE: Record<SafariPageRoute, string> = {
+  window:
+    'To drive a web page, call extension_open url (the automation window navigates there), then extension_eval context: "page" with that url, which evaluates in the page\'s main world; extension_screenshot captures that window.',
+  "no-window":
+    'This run has no WebDriver window, so extension_open url, extension_eval context: "page" and extension_screenshot cannot drive a page either; extension_dev with replace: true opens a new one.',
+  "no-session":
+    'No Safari dev session runs for this project, so start one first: call extension_dev with browser: "safari" and allowEval: true. Its automation window is what extension_open url, extension_eval context: "page" and extension_screenshot drive.',
+};
+
+function safariContextUnreachable(command: string, browser: string, where: string, route: SafariPageRoute, engineRefused: boolean): string {
+  const why = engineRefused
+    ? "the engine tried it and the extension's content_security_policy refused eval there, and Safari offers no inspector path around that policy"
+    : "that connection drives web pages only, and Safari offers no inspector path into an extension's own documents";
+
   return envelope({
     ok: false,
     command,
@@ -60,11 +77,11 @@ function safariContextUnreachable(command: string, browser: string, where: strin
     error: {
       code: "E_SAFARI_CONTEXT_UNREACHABLE",
       name: "SafariContextUnreachable",
-      message: `On Safari, extension_eval reaches only page contexts, through the dev session's WebDriver (safaridriver) connection to its automation window. The ${where} context is out of reach: the extension's content_security_policy (the MV3 default) forbids eval inside the extension's own documents, and Safari offers no inspector path around it, unlike CDP on Chromium and the debugger protocol on Firefox. Engine: webkit.`,
+      message: `On Safari, extension_eval reaches only page contexts, through the dev session's WebDriver (safaridriver) connection to its automation window. The ${where} context is out of reach: ${why}, unlike CDP on Chromium and the debugger protocol on Firefox. Engine: webkit.`,
       engine: "webkit",
       retry: "no",
     },
     value: { browser, context: where },
-    hint: `${where === "background" ? "For storage, call extension_storage (action get or set), which reads and writes the extension's storage on Safari through code the bridge ships, with no eval. " : ""}Read the ${where} with extension_logs, which reads what the extension writes through the bridge. ${hasWindow ? 'To drive a web page, call extension_open url (the automation window navigates there), then extension_eval context: "page" with that url, which evaluates in the page\'s main world; extension_screenshot captures that window.' : 'This run has no WebDriver window, so extension_open url, extension_eval context: "page" and extension_screenshot cannot drive a page either; extension_dev with replace: true opens a new one.'} A page opened in a regular Safari window is outside the session and cannot be read from here. The popup, options and sidebar documents are not reachable on Safari: run the same project on chrome or firefox to evaluate in them.`,
+    hint: `${where === "background" ? "For storage, call extension_storage (action get or set), which reads and writes the extension's storage on Safari through code the bridge ships, with no eval. " : ""}Read the ${where} with extension_logs, which reads what the extension writes through the bridge. ${PAGE_ROUTE[route]} A page opened in a regular Safari window is outside the session and cannot be read from here. The popup, options and sidebar documents are not reachable on Safari: run the same project on chrome or firefox to evaluate in them.`,
   });
 }

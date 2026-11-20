@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { envelope } from "../lib/envelope";
 import { webdriverSessionEndedHint } from "../lib/webdriver";
 import { actVerbAnswer, evalRefusal } from "./fixtures/engine-answers";
+import { writeCompiledUnattachedContract } from "./fixtures/ready-contract";
 
 import type * as ActModule from "../lib/act";
 
@@ -92,26 +93,82 @@ describe("extension_eval on Safari names the contexts it cannot reach", () => {
     expect(result.hint).toContain("extension_screenshot");
     expect(result.hint).toContain("regular Safari window is outside the session");
     expect(JSON.stringify(result)).not.toContain("On a Chromium MV3 session");
-    expect(calls).toHaveLength(0);
+    expect(result.error.message).toContain("content_security_policy");
+    expect(calls).toHaveLength(1);
   });
 
-  it("973: refuses a background eval at once, with no session and no engine call, naming page as the context Safari reaches", async () => {
+  it("refuses the popup, options and sidebar at once with no engine call and no claim about a CSP nobody read", async () => {
     const dir = project("safari");
 
     respond = () => {
       throw new Error("the engine must not be asked");
     };
 
+    for (const context of ["popup", "options", "sidebar"]) {
+      const result = JSON.parse(await evalTool.handler({ projectPath: dir, browser: "safari", context, expression: "1" }));
+
+      expect(result.status).toBe("safari-context-unreachable");
+      expect(result.error.retry).toBe("no");
+      expect(result.value.context).toBe(context);
+      expect(result.error.message).not.toMatch(/content_security_policy|CSP/);
+    }
+
+    expect(calls).toHaveLength(0);
+    expect(fs.existsSync(path.join(dir, "dist", "extension-js"))).toBe(false);
+  });
+
+  it("lets a background eval reach the engine and returns what the engine answered", async () => {
+    const dir = project("safari");
+
     const result = JSON.parse(
       await evalTool.handler({ projectPath: dir, browser: "safari", context: "background", expression: "1" }),
     );
 
-    expect(result.status).toBe("safari-context-unreachable");
-    expect(result.error.message).toContain("reaches only page contexts");
-    expect(result.error.retry).toBe("no");
-    expect(JSON.stringify(result)).not.toMatch(/No active control channel|E_SESSION_NOT_FOUND|Start one with extension_dev/);
-    expect(calls).toHaveLength(0);
-    expect(fs.existsSync(path.join(dir, "dist", "extension-js"))).toBe(false);
+    expect(calls).toHaveLength(1);
+    expect(result.ok).toBe(true);
+    expect(result.value).toBe(1);
+  });
+
+  it("answers the same whether browser is passed or read from the project's one Safari session", async () => {
+    const dir = project("safari");
+    writeCompiledUnattachedContract(dir, "safari", { pid: process.pid });
+
+    respond = () => {
+      throw new Error("the engine must not be asked");
+    };
+
+    const passed = JSON.parse(await evalTool.handler({ projectPath: dir, browser: "safari", context: "popup", expression: "1" }));
+    const omitted = JSON.parse(await evalTool.handler({ projectPath: dir, context: "popup", expression: "1" }));
+
+    expect(passed.status).toBe("safari-context-unreachable");
+    expect(omitted).toEqual(passed);
+
+    respond = webkitCspRefusal;
+
+    const background = JSON.parse(await evalTool.handler({ projectPath: dir, browser: "safari", context: "background", expression: "1" }));
+    const backgroundOmitted = JSON.parse(await evalTool.handler({ projectPath: dir, context: "background", expression: "1" }));
+
+    expect(calls).toHaveLength(2);
+    expect(backgroundOmitted).toEqual(background);
+  });
+
+  it("names starting a Safari session before any page step when none runs, and not when one does", async () => {
+    const dir = project("safari");
+
+    const none = JSON.parse(await evalTool.handler({ projectPath: dir, browser: "safari", context: "popup", expression: "1" }));
+    const start = none.hint.indexOf("extension_dev");
+
+    expect(start).toBeGreaterThan(-1);
+    expect(none.hint.slice(start)).toMatch(/browser: "safari" and allowEval: true/);
+    expect(start).toBeLessThan(none.hint.indexOf("extension_open url"));
+    expect(none.hint).not.toContain("replace: true");
+
+    writeCompiledUnattachedContract(dir, "safari", { pid: process.pid });
+
+    const running = JSON.parse(await evalTool.handler({ projectPath: dir, browser: "safari", context: "popup", expression: "1" }));
+
+    expect(running.hint).not.toContain("start one first");
+    expect(running.hint).toContain("replace: true");
   });
 
   it("treats a Safari eval with no context as the background", async () => {
@@ -152,7 +209,7 @@ describe("extension_eval on Safari names the contexts it cannot reach", () => {
     );
 
     expect(result.status).toBe("safari-context-unreachable");
-    expect(calls).toHaveLength(0);
+    expect(calls).toHaveLength(1);
   });
 
   it("leaves the same CSP refusal on Firefox to the engine-aware CSP hint", async () => {

@@ -121,7 +121,7 @@ import {
   noScriptingReason,
   overProtocolNote,
 } from "../lib/gecko-no-scripting";
-import { safariContextAskedOutOfReach, safariContextRefusal } from "../lib/safari-eval";
+import { safariContextAskedOutOfReach, safariContextRefusal, type SafariPageRoute } from "../lib/safari-eval";
 import { readOpeningIfClosed, surfaceOpening } from "../lib/open-if-closed";
 import { cutAt } from "../lib/linear-text";
 
@@ -1670,21 +1670,26 @@ async function evaluateByTargetId(
   });
 }
 
+function safariPageRoute(projectPath: string, browser: string): SafariPageRoute {
+  if (readWebDriverSession(projectPath, browser) !== null) return "window";
+
+  const kind = readSessionReceipt(projectPath, browser).kind;
+
+  return kind === "none" || kind === "build" ? "no-session" : kind === "dev" ? "no-window" : "window";
+}
+
 type EvalArgs = ActArgs & { expression: string; until?: EvalUntil; targetId?: string; observe?: boolean | string };
 
 export async function handler(args: EvalArgs): Promise<string> {
-  const outOfReach = args.targetId
-    ? null
-    : safariContextAskedOutOfReach(
-        schema.name,
-        args.browser,
-        args.context,
-        (browser) => readSessionReceipt(args.projectPath, browser).kind !== "dev" || readWebDriverSession(args.projectPath, browser) !== null,
-      );
-  if (outOfReach) return outOfReach;
-
   const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
   if (ambiguous) return ambiguous;
+
+  const outOfReach = args.targetId
+    ? null
+    : safariContextAskedOutOfReach(schema.name, resolveSessionBrowser(args.projectPath, args.browser).browser, args.context, (browser) =>
+        safariPageRoute(args.projectPath, browser),
+      );
+  if (outOfReach) return outOfReach;
 
   const raw = await evaluateAsAsked(args);
   const ask = observeAsked(args.observe);
@@ -1742,7 +1747,7 @@ async function evaluateOnce(
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
   const raw = await readOpeningIfClosed(() => evaluateRouted(args, browser), surfaceOpening(schema.name, { ...args, browser }));
 
-  return safariContextRefusal(schema.name, raw, browser, args.context, readWebDriverSession(args.projectPath, browser) !== null) ?? raw;
+  return safariContextRefusal(schema.name, raw, browser, args.context, safariPageRoute(args.projectPath, browser)) ?? raw;
 }
 
 async function evaluateRouted(
