@@ -2,12 +2,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import * as bridge from "extension-develop/bridge";
 
 import {
   engineProjectRoot,
-  ownsManifest,
   projectRootNote,
   storeMdPath,
   readyContractPath,
@@ -29,16 +28,18 @@ afterEach(() => {
 });
 
 describe("session artifacts resolve from the engine's project root, the nearest package.json above the manifest", () => {
-  it("walks up from a manifest subfolder to the package root", () => {
+  it("keeps a folder with no manifest in it as its own root, as the engine does, whatever package.json sits above", () => {
     const repo = tmp();
     fs.writeFileSync(path.join(repo, "package.json"), "{}");
     const sub = path.join(repo, "Extensions", "combined");
     fs.mkdirSync(sub, { recursive: true });
 
-    expect(engineProjectRoot(sub)).toBe(repo);
-    expect(readyContractPath(sub, "chrome")).toBe(bridge.readyContractPath(repo, "chrome"));
-    expect(logsPath(sub, "firefox")).toBe(bridge.logsPath(repo, "firefox"));
-    expect(sessionArtifactsRootDir(sub)).toBe(bridge.sessionArtifactsRootDir(repo));
+    expect(engineProjectRoot(sub)).toBe(sub);
+    expect(engineProjectRoot(sub)).toBe(bridge.resolveSessionProjectRoot(sub));
+    expect(engineProjectRoot(repo)).toBe(repo);
+    expect(readyContractPath(sub, "chrome")).toBe(bridge.readyContractPath(sub, "chrome"));
+    expect(logsPath(sub, "firefox")).toBe(bridge.logsPath(sub, "firefox"));
+    expect(sessionArtifactsRootDir(sub)).toBe(bridge.sessionArtifactsRootDir(sub));
   });
 
   it("stops at the nearest manifest, so a nested package keeps its own dist", () => {
@@ -76,7 +77,6 @@ describe("a package root is adopted only when it owns the manifest, as the engin
 
     expect(engineProjectRoot(inner)).toBe(inner);
     expect(readyContractPath(inner, "chrome")).toBe(bridge.readyContractPath(inner, "chrome"));
-    expect(ownsManifest(path.join(stranger, "package.json"), path.join(inner, "manifest.json"))).toBe(false);
   });
 
   it("925: keeps the folder passed as the root of a src layout with no package.json, where the engine writes dist from 4.2.0", () => {
@@ -145,5 +145,85 @@ describe("a package root is adopted only when it owns the manifest, as the engin
     const nested = manifestAt(repo, "ext");
 
     expect(engineProjectRoot(nested)).toBe(repo);
+  });
+
+  it("adopts a root that names Extension.js only as an optional or a peer dependency", () => {
+    for (const field of ["optionalDependencies", "peerDependencies"]) {
+      const repo = tmp();
+      fs.writeFileSync(path.join(repo, "package.json"), JSON.stringify({ name: "mono", [field]: { extension: "4.2.0" } }));
+      const nested = manifestAt(repo, "ext");
+
+      expect(engineProjectRoot(nested), field).toBe(repo);
+      expect(readyContractPath(nested, "chrome"), field).toBe(bridge.readyContractPath(repo, "chrome"));
+      expect(projectRootNote(nested), field).toContain(`Project root: ${repo},`);
+    }
+  });
+
+  it("keeps the folder passed when the manifest is deeper than src and only a stranger's package.json sits above", () => {
+    const stranger = tmp();
+    fs.writeFileSync(path.join(stranger, "package.json"), JSON.stringify({ name: "stranger" }));
+    const project = path.join(stranger, "proj");
+    manifestAt(project, "app");
+
+    expect(engineProjectRoot(project)).toBe(project);
+    expect(readyContractPath(project, "chrome")).toBe(bridge.readyContractPath(project, "chrome"));
+    expect(projectRootNote(project)).toBeNull();
+  });
+
+  it("follows a manifest deeper than src to the package.json beside it, below the folder passed", () => {
+    const project = tmp();
+    const app = manifestAt(project, "app");
+    fs.writeFileSync(path.join(app, "package.json"), JSON.stringify({ name: "inner" }));
+
+    expect(engineProjectRoot(project)).toBe(app);
+    expect(readyContractPath(project, "chrome")).toBe(bridge.readyContractPath(app, "chrome"));
+    expect(projectRootNote(project)).toContain(`Project root: ${app},`);
+    expect(storeMdPath(project)).toBe(path.join(app, "STORE.md"));
+  });
+
+  it("answers the bundled engine's root in every layout the engine was asked about", () => {
+    const M = { manifest_version: 3, name: "x", version: "1.0.0" };
+    const EXT = { extension: "4.2.0" };
+    const layouts: Array<[Record<string, unknown>, string]> = [
+      [{ "src/manifest.json": M }, "."],
+      [{ "src/manifest.json": M }, "src"],
+      [{ "manifest.json": M }, "."],
+      [{ "package.json": { name: "a" }, "src/manifest.json": M }, "."],
+      [{ "package.json": { name: "stranger" }, "ext/src/manifest.json": M }, "ext"],
+      [{ "package.json": { name: "stranger" }, "ext/manifest.json": M }, "ext"],
+      [{ "package.json": { name: "mono", devDependencies: EXT }, "ext/manifest.json": M }, "ext"],
+      [{ "app/manifest.json": M }, "."],
+      [{ "package.json": { name: "stranger" }, "proj/app/manifest.json": M }, "proj"],
+      [{ "package.json": { name: "p" }, "app/manifest.json": M }, "."],
+      [{ "app/package.json": { name: "inner" }, "app/manifest.json": M }, "."],
+      [{ "package.json": { name: "mono", optionalDependencies: EXT }, "ext/manifest.json": M }, "ext"],
+      [{ "package.json": { name: "mono", peerDependencies: EXT }, "ext/manifest.json": M }, "ext"],
+      [{ "package.json": { name: "mono" }, "extension.config.js": "export default {}", "ext/manifest.json": M }, "ext"],
+      [{ "deno.json": { imports: { extension: "npm:extension@4.2.0" } }, "src/manifest.json": M }, "."],
+      [{ "package.json": "{ not json", "src/manifest.json": M }, "."],
+      [{ "package.json": '{ // c\n "name":"mono", "devDependencies": {"extension":"4.2.0"} }', "ext/manifest.json": M }, "ext"],
+      [{ "package.json": { name: "p" } }, "."],
+      [{ "package.json": { name: "mono" }, "packages/one/package.json": { name: "one" }, "packages/one/src/manifest.json": M }, "."],
+      [{ "a/manifest.json": M, "b/manifest.json": M }, "."],
+    ];
+
+    for (const [files, ask] of layouts) {
+      const base = tmp();
+
+      for (const [rel, body] of Object.entries(files)) {
+        fs.mkdirSync(path.dirname(path.join(base, rel)), { recursive: true });
+        fs.writeFileSync(path.join(base, rel), typeof body === "string" ? body : JSON.stringify(body));
+      }
+
+      const asked = path.join(base, ask);
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const engine = bridge.resolveSessionProjectRoot(asked);
+      warn.mockRestore();
+      const said = vi.spyOn(console, "warn");
+
+      expect(path.relative(base, engineProjectRoot(asked)), JSON.stringify(Object.keys(files))).toBe(path.relative(base, engine));
+      expect(said, "the read prints nothing").not.toHaveBeenCalled();
+      said.mockRestore();
+    }
   });
 });

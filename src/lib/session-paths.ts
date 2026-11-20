@@ -13,10 +13,6 @@ import * as bridge from "extension-develop/bridge";
 
 import { STORE_MD_FILENAME } from "./store-md";
 
-const PROJECT_MANIFEST_FILENAMES = ["package.json", "deno.jsonc", "deno.json"];
-const PACKAGE_MANIFEST = "package.json";
-const DENO_MANIFESTS = ["deno.jsonc", "deno.json"];
-const EXTENSION_DEPENDENCY_NAMES = ["extension", "extension-develop", "extension-create"];
 export const EXTENSION_CONFIG_FILENAMES = [
   "extension.config.js",
   "extension.config.mjs",
@@ -35,21 +31,6 @@ function isFile(file: string): boolean {
   }
 }
 
-function nearestAbove(startDir: string, names: string[]): string | null {
-  let current = startDir;
-
-  for (;;) {
-    for (const name of names) {
-      if (isFile(path.join(current, name))) return path.join(current, name);
-    }
-
-    const parent = path.dirname(current);
-    if (parent === current) return null;
-
-    current = parent;
-  }
-}
-
 function extensionManifestPath(projectPath: string): string | null {
   const src = path.join(projectPath, "src", "manifest.json");
   if (isFile(src)) return src;
@@ -59,81 +40,29 @@ function extensionManifestPath(projectPath: string): string | null {
   return isFile(root) ? root : null;
 }
 
-function declaresExtension(projectManifestPath: string): boolean {
-  let parsed: unknown;
+function bundledEngineRoot(start: string): string {
+  const warn = console.warn;
+
+  console.warn = () => {};
 
   try {
-    parsed = JSON.parse(fs.readFileSync(projectManifestPath, "utf8"));
-  } catch {
-    return false;
+    return bridge.resolveSessionProjectRoot(start);
+  } finally {
+    console.warn = warn;
   }
-
-  if (!parsed || typeof parsed !== "object") return false;
-
-  const record = parsed as Record<string, unknown>;
-  const named: string[] = [];
-
-  for (const field of ["dependencies", "devDependencies"]) {
-    const deps = record[field];
-    if (deps && typeof deps === "object") named.push(...Object.keys(deps));
-  }
-
-  const imports = record.imports;
-
-  if (imports && typeof imports === "object") {
-    for (const [key, value] of Object.entries(imports)) {
-      named.push(key);
-      if (typeof value === "string") named.push(value);
-    }
-  }
-
-  return named.some((entry) =>
-    EXTENSION_DEPENDENCY_NAMES.some(
-      (name) => entry === name || entry.includes(`${name}@`) || entry === `npm:${name}`,
-    ),
-  );
 }
 
-export function ownsManifest(projectManifestPath: string, manifestPath: string): boolean {
-  const projectDir = path.resolve(path.dirname(projectManifestPath));
-  const manifestDir = path.resolve(path.dirname(manifestPath));
-  if (projectDir === manifestDir) return true;
-
-  if (path.basename(manifestDir) === "src" && path.dirname(manifestDir) === projectDir) {
-    return true;
-  }
-
-  if (declaresExtension(projectManifestPath)) return true;
-
-  return EXTENSION_CONFIG_FILENAMES.some((name) => isFile(path.join(projectDir, name)));
-}
-
+/* @invariant ONE PROJECT ROOT AN ANSWER, THE ENGINE'S, ASKED AND NEVER
+ * COPIED. The root is what the bundled engine's resolveSessionProjectRoot
+ * answers: the MCP kept its own copy of that walk until 2026-11-20 and the
+ * copy disagreed in four layouts (ledger 1025), so a good build was read as
+ * no dist and a live session as no session. Every dist and session path is
+ * read from this root; an answer whose root is not the folder it was passed
+ * says so once. */
 export function engineProjectRoot(projectPath: string): string {
-  const start = path.resolve(projectPath);
-  const manifest = extensionManifestPath(start);
-
-  if (!manifest) {
-    const nearest = nearestAbove(start, PROJECT_MANIFEST_FILENAMES);
-
-    return nearest ? path.dirname(nearest) : start;
-  }
-
-  const manifestDir = path.dirname(manifest);
-  const packageJson = nearestAbove(manifestDir, [PACKAGE_MANIFEST]);
-  if (packageJson && ownsManifest(packageJson, manifest)) return path.dirname(packageJson);
-
-  const deno = nearestAbove(manifestDir, DENO_MANIFESTS);
-  if (deno && ownsManifest(deno, manifest)) return path.dirname(deno);
-
-  return start;
+  return bundledEngineRoot(path.resolve(projectPath));
 }
 
-/* @invariant ONE PROJECT ROOT AN ANSWER, THE ENGINE'S. From Extension.js
- * 4.2.0 a manifest found under the folder passed, with no package.json or
- * deno.json that owns it, is built from the folder passed, so src/dist is
- * never written (ledger 925). engineProjectRoot is the engine's root in
- * every layout and every dist and session path is read from it; an answer
- * whose root is not the folder it was passed says so once. */
 export function projectRootNote(projectPath: string): string | null {
   const start = path.resolve(projectPath);
   const root = engineProjectRoot(start);
