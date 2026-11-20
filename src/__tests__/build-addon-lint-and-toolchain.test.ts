@@ -178,6 +178,31 @@ describe("a Firefox build says the missing data collection declaration once", ()
   });
 });
 
+describe("a Firefox build says the missing add-on ID once", () => {
+  const ENGINE_ID_LINE =
+    "⚠ ⏵⏵⏵ The manifest sets no browser_specific_settings.gecko.id, so Firefox has no add-on ID for this extension.\nWithout one, Firefox gives the add-on a new ID on each launch, so its storage does not survive a relaunch, and addons.mozilla.org assigns one on the first upload that every later upload must carry.\nSet firefox:browser_specific_settings.gecko.id in manifest.json to an email-like string such as my-extension@example.com.";
+  const namesTheId = (line: string): boolean => line.includes("browser_specific_settings.gecko.id");
+
+  it("drops the engine's line and its example value when the manifest check states the ID to write", async () => {
+    summaryOverride = { warnings_count: 1, warnings: [ENGINE_ID_LINE] };
+
+    const text = await build.handler({ projectPath: project(), browser: "firefox" });
+    const lines = (JSON.parse(text).warnings as string[]).filter(namesTheId);
+
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('with the value "fixture@example.com"');
+    expect(text).not.toContain("my-extension@example.com");
+  });
+
+  it("keeps the engine's line when validation was skipped and nothing else states the ID", async () => {
+    summaryOverride = { warnings_count: 1, warnings: [ENGINE_ID_LINE] };
+
+    const result = JSON.parse(await build.handler({ projectPath: project(), browser: "firefox", skipValidation: true }));
+
+    expect((result.warnings as string[]).filter(namesTheId)).toEqual([expect.stringContaining("my-extension@example.com")]);
+  });
+});
+
 describe("916: a build answer says each review risk once and stays light", () => {
   function riskyProject(): string {
     const dir = project();

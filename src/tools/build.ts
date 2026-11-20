@@ -992,6 +992,9 @@ export async function handler(args: {
     const isEngineDeclarationLine = (line: string): boolean =>
       line.includes("data_collection_permissions for new add-ons");
     const declarationByValidator = (preflight?.warnings ?? []).some(isValidatorDeclarationLine);
+    const isEngineAddonIdLine = (line: string): boolean =>
+      line.includes("browser_specific_settings.gecko.id") && line.includes("so Firefox has no add-on ID");
+    const addonIdByValidator = (preflight?.warnings ?? []).some((line) => line.includes("no browser_specific_settings.gecko.id"));
     const buildWarningsTruncated =
       buildWarnings.length &&
       typeof engineSummary?.warnings_count === "number" &&
@@ -1045,10 +1048,11 @@ export async function handler(args: {
     const declarationByRisk = risks.some((risk) => risk.code === "FIREFOX_DATA_COLLECTION_MISSING");
     const iconByRisk = risks.some((risk) => risk.code === "ICON_128_MISSING");
     const policyByRisk = risks.some((risk) => risk.code === "WASM_GRANT_MISSING" || risk.code === "CSP_UNSAFE_EVAL");
-    const shownBuildWarnings =
-      declarationByRisk || declarationByValidator
-        ? buildWarnings.filter((line) => !isEngineDeclarationLine(line))
-        : buildWarnings;
+    const shownBuildWarnings = buildWarnings.filter(
+      (line) =>
+        !((declarationByRisk || declarationByValidator) && isEngineDeclarationLine(line)) &&
+        !(addonIdByValidator && isEngineAddonIdLine(line)),
+    );
     const contamination = carrierContamination(path.dirname(distDir));
     const uncheckedNote = contamination.unchecked.length
       ? `Could not read the entry table of ${contamination.unchecked.join(", ")}, so those archives were not checked for the live-preview carrier. Unpack and check them yourself before submitting.`
