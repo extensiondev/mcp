@@ -108,6 +108,7 @@ describe("extension_eval on Safari names the contexts it cannot reach", () => {
 
     expect(result.status).toBe("safari-context-unreachable");
     expect(result.error.message).toContain("reaches only page contexts");
+    expect(result.error.retry).toBe("no");
     expect(JSON.stringify(result)).not.toMatch(/No active control channel|E_SESSION_NOT_FOUND|Start one with extension_dev/);
     expect(calls).toHaveLength(0);
     expect(fs.existsSync(path.join(dir, "dist", "extension-js"))).toBe(false);
