@@ -28,6 +28,7 @@ import { envelope } from "../lib/envelope";
 import {
   describeExtensionInvocation,
   spawnExtensionCli,
+  type SpawnedCli,
   spawnFailedEnvelope,
 } from "../lib/exec";
 import {
@@ -183,16 +184,25 @@ export async function handler(
   if (allowControl) cliArgs.push("--allow-control");
   if (args.allowEval) cliArgs.push("--allow-eval");
 
+  const visibility = headlessLaunch(args);
+  const launchEnv = { ...visibility.env, ...geckoLaunchEnv(browser) };
   const installGate = await sessionInstallGate(schema.name, args.projectPath);
   if (installGate.refusal) return installGate.refusal;
 
-  const visibility = headlessLaunch(args);
   const spawnedAt = Date.now();
-  const launchEnv = { ...visibility.env, ...geckoLaunchEnv(browser) };
-  const spawned = spawnExtensionCli(cliArgs, {
-    projectDir: args.projectPath,
-    ...(Object.keys(launchEnv).length > 0 ? { env: launchEnv } : {}),
-  });
+  let spawned: SpawnedCli;
+
+  try {
+    spawned = spawnExtensionCli(cliArgs, {
+      projectDir: args.projectPath,
+      ...(Object.keys(launchEnv).length > 0 ? { env: launchEnv } : {}),
+    });
+  } catch (err) {
+    installGate.spawned(undefined, browser);
+
+    throw err;
+  }
+
   const { child, logPath } = spawned;
 
   installGate.spawned(child.pid, browser);

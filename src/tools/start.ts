@@ -27,7 +27,7 @@ import { buildIsolatedRun, isolatedEngineRefusal, isolatedSentence, openIsolated
 import { productionLaunchEvidence, readFreshContract, readLoadOverDebugPort } from "../lib/production-launch";
 import { awaitStartLanding, engineExitAfterBoot, startAnswer } from "../lib/start-answer";
 import { controlledIdentity, resolveLoadedId, sessionIdentityWarnings, settledIdentity } from "../lib/controlled-identity";
-import { spawnExtensionCli, spawnFailedEnvelope } from "../lib/exec";
+import { spawnExtensionCli, spawnFailedEnvelope, type SpawnedCli } from "../lib/exec";
 import { sessionInstallGate } from "../lib/project-install";
 import { geckoAddonId } from "../lib/gecko-addon";
 import {
@@ -230,16 +230,25 @@ export async function handler(
     browser,
     args.profile,
   );
+  const visibility = headlessLaunch(args);
+  const launchEnv = { ...visibility.env, ...geckoLaunchEnv(browser) };
   const installGate = await sessionInstallGate(schema.name, args.projectPath);
   if (installGate.refusal) return installGate.refusal;
 
   const spawnedAt = Date.now();
-  const visibility = headlessLaunch(args);
-  const launchEnv = { ...visibility.env, ...geckoLaunchEnv(browser) };
-  const spawned = spawnExtensionCli(cliArgs, {
-    projectDir: args.projectPath,
-    ...(Object.keys(launchEnv).length > 0 ? { env: launchEnv } : {}),
-  });
+  let spawned: SpawnedCli;
+
+  try {
+    spawned = spawnExtensionCli(cliArgs, {
+      projectDir: args.projectPath,
+      ...(Object.keys(launchEnv).length > 0 ? { env: launchEnv } : {}),
+    });
+  } catch (err) {
+    installGate.spawned(undefined, browser);
+
+    throw err;
+  }
+
   const { child } = spawned;
 
   installGate.spawned(child.pid, browser);

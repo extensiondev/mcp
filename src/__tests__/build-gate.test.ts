@@ -15,11 +15,17 @@ let whileCliRuns: ((args: string[]) => Promise<void>) | null = null;
 const installCalls: Array<{ command: string; args: string[]; cwd: string }> = [];
 let installResult: { code: number | null; timedOut: boolean; leftRunningPid?: number; output: string } | null = null;
 let skipDist = false;
+let spawnRefusal: NodeJS.ErrnoException | null = null;
 vi.mock("../lib/exec", async (importOriginal) => {
   const actual = await importOriginal<typeof ExecModule>();
 
   return {
     ...actual,
+    spawnExtensionCli: (...call: Parameters<typeof actual.spawnExtensionCli>) => {
+      if (spawnRefusal) throw spawnRefusal;
+
+      return actual.spawnExtensionCli(...call);
+    },
     runPackageInstall: async (command: string, args: string[], options: { cwd: string }) => {
       installCalls.push({ command, args, cwd: options.cwd });
       if (installResult) return installResult;
@@ -43,6 +49,8 @@ vi.mock("../lib/exec", async (importOriginal) => {
 });
 
 const build = await import("../tools/build");
+const dev = await import("../tools/dev");
+const start = await import("../tools/start");
 const { buildSummaryPath } = await import("../lib/session-paths");
 const { installRecordPath, installStoppedPath, isInstallCommand, runningInstall, takeInstallTurn } = await import("../lib/project-install");
 const { processStartedAt } = await import("../lib/process-identity");
@@ -77,6 +85,7 @@ afterEach(() => {
   installCalls.length = 0;
   installResult = null;
   skipDist = false;
+  spawnRefusal = null;
 
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -747,6 +756,24 @@ describe("941: one dependency install runs on a project at a time, and a build s
 
     await end(pid);
 
+    expect(runningInstall(dir)).toBeNull();
+  }, 20_000);
+
+  it.each([
+    { tool: "extension_dev", call: (projectPath: string) => dev.handler({ projectPath, browser: "chrome", noBrowser: true }) },
+    { tool: "extension_start", call: (projectPath: string) => start.handler({ projectPath, browser: "chrome", noBrowser: true }) },
+  ])("gives the install turn back when the operating system refuses to spawn the engine for $tool", async ({ call }) => {
+    const dir = coldProject();
+    spawnRefusal = Object.assign(new Error("spawn E2BIG"), { code: "E2BIG" });
+
+    await expect(call(dir)).rejects.toThrow("spawn E2BIG");
+
+    vi.useFakeTimers({ toFake: ["Date"] });
+
+    const clock = setInterval(() => vi.setSystemTime(Date.now() + 31_000), 100);
+    const next = await call(dir).catch((err: Error) => err.message).finally(() => clearInterval(clock));
+
+    expect(next).toBe("spawn E2BIG");
     expect(runningInstall(dir)).toBeNull();
   }, 20_000);
 
