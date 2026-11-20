@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { envelope } from "./envelope";
+import { composedRefusal } from "./composed-refusal";
 
 /* @invariant A PLATFORM TOOL WITH NO STEP ON THIS MACHINE ANSWERS ONLY FROM
  * THE HOSTED LANE. This package lists the tool and forwards the call; the
@@ -16,7 +16,7 @@ import { envelope } from "./envelope";
  */
 export function hostedOnly(command: string): (args: Record<string, unknown>) => Promise<string> {
   return async () =>
-    envelope({
+    composedRefusal({
       ok: false,
       command,
       status: "hosted-only",

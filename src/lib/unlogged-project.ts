@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { createdOnServer } from "./created-projects";
+import { devicePageOn, plainUserCode } from "./device-flow";
 import { heldBatchForRef } from "./held-batches";
 import { resolveApiBase } from "./login-flow";
 import { pathIdentity } from "./path-project";
@@ -44,12 +45,21 @@ export function nextStepForUnloggedProject(ref: string, projectPath: string, api
   const apiBase = resolveApiBase(api);
   const pending = pendingCreate(apiBase, ref);
 
-  if (pending) {
-    const approveAt = pending.verificationUriComplete || pending.verificationUri;
+  const approveAt = pending ? devicePageOn(apiBase, pending.verificationUriComplete || pending.verificationUri) : null;
+  const userCode = pending ? plainUserCode(pending.userCode) : null;
+  const expiresAt = pending && Number.isFinite(Date.parse(pending.expiresAt)) ? new Date(pending.expiresAt).toISOString() : null;
 
+  if (approveAt && userCode && expiresAt) {
     return {
-      hint: `A create of ${ref} is waiting for approval on this machine: approve it at ${approveAt} (code ${pending.userCode}; it expires at ${clockOf(pending.expiresAt)}), then call extension_project_create again with the deviceCode its first call answered and the same arguments. Once it answers created, sign in with ${loginStep(ref)} and call this again.`,
-      value: { pendingCreate: { project: ref, userCode: pending.userCode, verificationUri: approveAt, expiresAt: pending.expiresAt } },
+      hint: `A create of ${ref} is waiting for approval on this machine: approve it at ${approveAt} (code ${userCode}; it expires at ${clockOf(expiresAt)}), then call extension_project_create again with the deviceCode its first call answered and the same arguments. Once it answers created, sign in with ${loginStep(ref)} and call this again.`,
+      value: { pendingCreate: { project: ref, userCode, verificationUri: approveAt, expiresAt } },
+    };
+  }
+
+  if (pending) {
+    return {
+      hint: `A create of ${ref} is waiting for approval on this machine: call extension_project_create again with the deviceCode its first call answered and the same arguments, and approve on the page that answer names. Once it answers created, sign in with ${loginStep(ref)} and call this again.`,
+      value: { pendingCreate: { project: ref } },
     };
   }
 

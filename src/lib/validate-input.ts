@@ -9,7 +9,7 @@
 import { statSync } from "node:fs";
 import { resolve as resolveFolder } from "node:path";
 
-import { envelope } from "./envelope";
+import { composedRefusal } from "./composed-refusal";
 
 export interface InputIssue {
   path: string;
@@ -412,7 +412,7 @@ export function inputValidationError(
   inputSchema?: Record<string, unknown>,
   hint?: string,
 ): string {
-  return envelope({
+  return composedRefusal({
     ok: false,
     command: toolName,
     status: "invalid-arguments",

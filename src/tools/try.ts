@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { isProjectRef } from "../lib/credentials";
+import { composedRefusal } from "../lib/composed-refusal";
 import { compareVersions, resolvedEngineFacts } from "../lib/engine-version";
 import { envelope, okOrRefusal } from "../lib/envelope";
 import { packageAddress } from "../lib/package-address";
@@ -109,15 +110,21 @@ function closeCall(project: string): string {
   return `extension_try {project: "${project}", action: "close"}`;
 }
 
-function refusalEnvelope(refusal: TryRefusal, project: string, what: string, value: Record<string, unknown>): string {
+function refusalEnvelope(refusal: TryRefusal, project: string, part: string, value: Record<string, unknown>, buildId?: string): string {
+  const what = buildId ? `${part} of build ${buildId}` : part;
+
   if (refusal.kind === "not-public") {
-    return refuse(
-      "not-public",
-      "E_AUTH_REQUIRED",
-      `${project} is not open to everyone on extension.dev (its ${what} answered ${refusal.httpStatus}), so there is nothing to run without signing in. Nothing was downloaded.`,
-      "Tell the person this project is private or its builds are not public yet. A member of its workspace reaches it once this server holds a login for it; a public project needs nothing.",
-      value,
-    );
+    return composedRefusal({
+      ok: false,
+      command: COMMAND,
+      status: "not-public",
+      error: {
+        code: "E_AUTH_REQUIRED",
+        message: `${project} is not open to everyone on extension.dev (its ${part} answered ${Number(refusal.httpStatus) || "a refusal"}), so there is nothing to run without signing in. Nothing was downloaded.`,
+      },
+      value: { project: value.project, browser: value.browser },
+      hint: "Tell the person this project is private or its builds are not public yet. A member of its workspace reaches it once this server holds a login for it; a public project needs nothing.",
+    });
   }
 
   if (refusal.kind === "held") {
@@ -262,7 +269,7 @@ export async function handler(args: Args): Promise<string> {
   if (!download.ok) {
     if (download.tooLarge) return refuse("too-large", "E_BAD_REQUEST", `The ${browser} package of build ${buildId} is larger than this tool downloads. Nothing was kept.`, "Install it from its page instead.", value);
 
-    return refusalEnvelope(download.refusal, project, `${browser} package of build ${buildId}`, value);
+    return refusalEnvelope(download.refusal, project, `${browser} package`, value, buildId);
   }
 
   const packageFacts = { packageBytes: download.bytes.length, sha256: download.integrity.sha256, integrity: download.integrity.verdict };

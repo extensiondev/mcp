@@ -13,6 +13,7 @@ import { askingOnly } from "./ask-only";
 import { PACKAGE_HOLD_FACT } from "./build-inputs";
 import { localPackageHolds } from "./build-inputs-local";
 import { resolveCredential, type CredentialRef } from "./credential-source";
+import { composedRefusal, relayedAnswer } from "./composed-refusal";
 import { LOGIN_STEPS, NO_TOKEN_MESSAGE, noStoredLoginHint } from "./credentials";
 import { envelope, isEnvelope, reframed } from "./envelope";
 import { forwardSession, withForwardSession, type ForwardSession } from "./forward-approval-state";
@@ -215,6 +216,12 @@ function refusal(command: string, status: string, code: string, message: string,
   return envelope({ ok: false, command, status, error: { code, message }, ...(hint ? { hint } : {}), ...(value ? { value } : {}) });
 }
 
+function ownRefusal(command: string, status: string, code: string, message: string, hint: string, value: Args): string {
+  return composedRefusal({ ok: false, command, status, error: { code, message }, hint, value });
+}
+
+const ASKED_VERSION = /\b\d{1,4}\.\d{1,4}\.\d{1,4}\b/;
+
 function exchangeRefusal(command: string, api: string, project: string | null, refused: Extract<ExchangedCredential, { ok: false }>): string {
   const said = refused.message ? ` (${refused.message})` : "";
 
@@ -258,16 +265,19 @@ function laneEnvelope(command: string, answered: Args, deps: ForwarderDeps): str
 
   if (text(body.status) === "forwarder-stale") {
     const error = (body.error && typeof body.error === "object" ? body.error : {}) as Args;
+    const asked = ASKED_VERSION.exec(text(error.message))?.[0];
 
-    return refusal(
+    return ownRefusal(
       command,
       "forwarder-stale",
       "E_SERVER_STALE",
-      text(error.message) || "This version of @extension.dev/mcp is too old for the hosted contract.",
+      `This version of @extension.dev/mcp is too old for the hosted contract${asked ? `, which asks for ${asked} or newer` : ""}.`,
       `Update the package first: start @extension.dev/mcp@latest in the client's MCP configuration (npx -y @extension.dev/mcp@latest), then reconnect the server (/mcp, pick extension-dev) so the new version runs. Reconnecting alone starts version ${deps.version ?? packageVersion} again. ${LOCAL_TOOLS_STILL_WORK}`,
       { hosted: true, forwarderVersion: deps.version ?? packageVersion },
     );
   }
+
+  relayedAnswer();
 
   if (isEnvelope(body)) return JSON.stringify(body);
 
@@ -530,7 +540,7 @@ export async function forwardCall(command: string, args: Args, local: (args: Arg
   if (!resource) {
     if (startsHere) return local(args);
 
-    return refusal(
+    return ownRefusal(
       command,
       "hosted-unpaired",
       "E_TOOL_DISABLED",
@@ -549,7 +559,11 @@ export async function forwardCall(command: string, args: Args, local: (args: Arg
 
   const read = await readLanePreflight(resource, deps.version ?? packageVersion, deps.fetchImpl);
 
-  return read ? JSON.stringify(withLanePreflight(answered, resource, read, closed || read.closed.length > 0)) : answer;
+  if (!read) return answer;
+
+  relayedAnswer();
+
+  return JSON.stringify(withLanePreflight(answered, resource, read, closed || read.closed.length > 0));
 }
 
 /* @invariant A PERSON WHO IS NOT SIGNED IN IS TOLD SO BY THIS PROCESS, AND
@@ -566,7 +580,7 @@ async function signedOutRefusal(command: string, args: Args, login: StoredLogin,
 
   const project = text(args.project);
 
-  return envelope({
+  return composedRefusal({
     ok: false,
     command,
     status: "auth-required",
@@ -577,7 +591,7 @@ async function signedOutRefusal(command: string, args: Args, login: StoredLogin,
 }
 
 function askOnlyRefusal(command: string): string {
-  return refusal(command, "ask-only", "E_TOOL_DISABLED", `${command} was called while only asking, and it has no ask-only form on the hosted lane, so nothing was sent.`, `Call ${command} itself to run it.`, { hosted: true });
+  return ownRefusal(command, "ask-only", "E_TOOL_DISABLED", `${command} was called while only asking, and it has no ask-only form on the hosted lane, so nothing was sent.`, `Call ${command} itself to run it.`, { hosted: true });
 }
 
 /* @invariant A CALL MADE UNDER THE SLUG A PROJECT LEFT IS FORWARDED UNDER ITS

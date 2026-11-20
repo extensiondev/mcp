@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { composedInThisCall } from "./composed-refusal";
 import { hintedAnswer, isEnvelope, type Envelope, reframed } from "./envelope";
 import { fenceUntrusted } from "./untrusted-fence";
 
@@ -29,12 +30,18 @@ function isEnvelopeText(result: string): boolean {
  * client reads it (ledger 912). A frame that already says its hint is
  * returned as the same string.
  */
-/* @invariant A REFUSAL THE SERVER COMPOSES ITSELF IS NEVER FENCED. The
- * untrusted fence marks text a page, an extension or a remote answer wrote;
- * a refusal over the caller's login, project or arguments holds none, and
- * on 2026-11-19 an E_NO_LOGIN_FOR_PROJECT sat inside the fence, costing
- * tokens and teaching the agent to distrust the server's own refusals
- * (ledger 954). Only a refusal with one of these codes goes out bare.
+/* @invariant A REFUSAL THE SERVER COMPOSES ITSELF IS NEVER FENCED, AND THE
+ * SITE THAT BUILDS IT SAYS SO. The untrusted fence marks text a page, an
+ * extension or a remote answer wrote; a refusal over the caller's login,
+ * project or arguments holds none, and on 2026-11-19 an
+ * E_NO_LOGIN_FOR_PROJECT sat inside the fence, costing tokens and teaching
+ * the agent to distrust the server's own refusals (ledger 954). The code
+ * alone never decides it: a platform body, the hosted lane and a published
+ * build index can each put their text under any of these codes (ledger
+ * 1006). A refusal goes out bare only when its builder registered it with
+ * composedRefusal in this same call (composed-refusal.ts), no answer of the
+ * call was relayed from the lane, and its code is one of these. Every other
+ * refusal of an untrusted tool is fenced.
  */
 const COMPOSED_REFUSAL_CODES = new Set([
   "E_NO_LOGIN_FOR_PROJECT",
@@ -55,7 +62,7 @@ export function toolResultFrame(answer: string, untrusted = false): ToolFrame {
   try {
     const parsed: unknown = JSON.parse(result);
     refused = isEnvelope(parsed) && parsed.ok === false;
-    composed = refused && COMPOSED_REFUSAL_CODES.has(String((parsed as Envelope).error?.code ?? ""));
+    composed = refused && COMPOSED_REFUSAL_CODES.has(String((parsed as Envelope).error?.code ?? "")) && composedInThisCall(parsed as Envelope);
   } catch {
     refused = false;
   }

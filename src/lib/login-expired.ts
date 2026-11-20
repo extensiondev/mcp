@@ -13,9 +13,9 @@ import { consoleProjectUrl } from "./console-urls";
 import { envToken, requestCredential } from "./credential-scope";
 import { claimsCover, readTokenClaims, splitRef } from "./credential-source";
 import { expiredStoredLogin, memberLoginFor, memberProjects, noStoredLoginHint, workspaceLogins, type ExpiredLogin } from "./credentials";
-import { requestDeviceCode } from "./device-flow";
+import { composedRefusal } from "./composed-refusal";
+import { devicePageOn, plainDeviceCode, plainUserCode, requestDeviceCode } from "./device-flow";
 import { codeExpiryFromStart, rememberCodeExpiry } from "./device-wait";
-import { envelope } from "./envelope";
 import { fetchLoginConfig, resolveApiBase, safeApiBase } from "./login-flow";
 
 import type { NextStep } from "./store-connection";
@@ -90,14 +90,19 @@ export async function startLoginRenewal(expired: ExpiredLogin, api?: string): Pr
     const start = await requestDeviceCode({ apiBase: apiCheck.base, path: config.deviceCodeUrl, project: expired.project, fetchImpl: boundedFetch });
     const expiresAt = codeExpiryFromStart(start.expiresIn);
     const complete = String(start.verificationUriComplete || "").trim();
+    const verificationUrl = devicePageOn(apiCheck.base, complete || start.verificationUri);
+    const userCode = plainUserCode(start.userCode);
+    const deviceCode = plainDeviceCode(start.deviceCode);
+    if (!verificationUrl || !userCode || !deviceCode) return null;
+
     const renewal: DeviceRenewal = {
-      verificationUrl: complete || start.verificationUri,
-      userCode: start.userCode,
+      verificationUrl,
+      userCode,
       expiresAt,
-      then: renewCall(expired.project, start.deviceCode),
+      then: renewCall(expired.project, deviceCode),
     };
 
-    rememberCodeExpiry(start.deviceCode, expiresAt);
+    rememberCodeExpiry(deviceCode, expiresAt);
     renewals.set(key, renewal);
 
     return renewal;
@@ -180,7 +185,7 @@ export function loginExpiredRefusal(args: LoginExpiredRefusal): string {
     url: device?.verificationUrl ?? args.trackUrl,
   };
 
-  return envelope({
+  return composedRefusal({
     ok: false,
     command: args.command,
     status: LOGIN_EXPIRED_STATUS,

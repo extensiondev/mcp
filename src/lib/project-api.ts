@@ -9,6 +9,7 @@
 import { createHash } from "node:crypto";
 
 import { ASK_ONLY_CODE, askOnlyBlocks } from "./ask-only";
+import { composedRefusal } from "./composed-refusal";
 import { resolveCredential, type CredentialRef } from "./credential-source";
 import { envelope, type ErrorCode } from "./envelope";
 import { resolveApiBase, safeApiBase } from "./login-flow";
@@ -407,7 +408,7 @@ export function projectApiOpenFailure(
   const auth = open.reason === "no-login" || open.reason === "refused" || open.reason === "other-project";
   const code: ErrorCode = auth ? "E_AUTH_REQUIRED" : open.reason === "bad-api" ? "E_BAD_HOST_URL" : "E_NETWORK";
 
-  return envelope({
+  return (auth ? composedRefusal : envelope)({
     ok: false,
     command,
     status: auth ? "auth-required" : "unavailable",
@@ -460,7 +461,7 @@ export function projectApiReadFailure(
   const known = tokenRefusal(read.code, options.context);
 
   if (known) {
-    return envelope({
+    return composedRefusal({
       ok: false,
       command,
       status: known.status,
@@ -469,7 +470,7 @@ export function projectApiReadFailure(
         code: known.code,
         name: known.name,
         platformCode: read.code,
-        message: read.message,
+        message: `The platform refused this login with ${read.code}${read.status ? ` (HTTP ${read.status})` : ""}.`,
       },
       hint: known.hint,
     });

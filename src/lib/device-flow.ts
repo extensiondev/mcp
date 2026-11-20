@@ -34,6 +34,33 @@ function originOf(url: string): string | null {
   }
 }
 
+const DEVICE_PAGE_PATH = /^\/[A-Za-z0-9/_-]{0,64}(\?code=[A-Za-z0-9-]{1,40})?$/;
+const USER_CODE = /^[A-Za-z0-9]{1,20}(-[A-Za-z0-9]{1,20}){0,3}$/;
+const DEVICE_CODE = /^[A-Za-z0-9_-]{1,128}$/;
+
+export function devicePageOn(apiBase: string, url: string): string | null {
+  const api = originOf(apiBase);
+  let page: URL;
+
+  try {
+    page = new URL(url);
+  } catch {
+    return null;
+  }
+
+  if (!api || page.origin !== api || page.username || page.password || page.hash) return null;
+
+  return DEVICE_PAGE_PATH.test(`${page.pathname}${page.search}`) ? page.href : null;
+}
+
+export function plainUserCode(code: string): string | null {
+  return USER_CODE.test(code) ? code : null;
+}
+
+export function plainDeviceCode(code: string): string | null {
+  return DEVICE_CODE.test(code) ? code : null;
+}
+
 /* @invariant A DEVICE START MADE FOR A CALLER NAMES THAT CALLER. The hosted
  * server starts and polls approvals for every connected app from one
  * address, and the platform counts device starts per address when nobody is

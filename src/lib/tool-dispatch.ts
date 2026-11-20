@@ -45,6 +45,7 @@ import { createReloader, handoverState, type ActiveBuild, type BuildImporter, ty
 import { markListStale, reloadedWarning, serverStamp, staleEnvelope, type ServerStampReader } from "./server-stamp";
 import { markStaleLocal, noLocalCarryReason, predatedChecks, predatesCheckEnvelope, type HeldLocal } from "./stale-local";
 import { answeredAs } from "./submit-action-safety";
+import { withComposedRefusals } from "./composed-refusal";
 import { annotate, frameText, refusedFrame, toolResultFrame } from "./tool-frames";
 import { attachTrack } from "./track-url";
 import {
@@ -257,7 +258,9 @@ export function createToolSurface(setup: ToolHandlerOptions): {
       ? { rebuilt, reason: active.reloadError, version: null, assertChecks: null }
       : { rebuilt, reason: failure ?? noLocalCarryReason(rebuilt), version: active.version, assertChecks: active.assertChecks };
 
-  const dispatch = async ({ name, arguments: args }: RebuiltCall): Promise<ToolFrame> => {
+  const dispatch = (call: RebuiltCall): Promise<ToolFrame> => withComposedRefusals(() => dispatched(call));
+
+  const dispatched = async ({ name, arguments: args }: RebuiltCall): Promise<ToolFrame> => {
     const tool = toolMap.get(name);
     const rebuilt = stamp.rebuiltSince();
 
