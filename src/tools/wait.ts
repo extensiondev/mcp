@@ -351,8 +351,11 @@ export async function handler(args: {
           value: {
             compiled: true,
             browserAttached: true,
-            guestLoaded: guestCheck.checked ? guestCheck.loaded : null,
-            ...(guestCheck.checked ? { guestIds: guestCheck.guestIds } : WEBKIT_FAMILY.has(browser) ? {} : { guestLoadNote: guestCheck.reason }),
+            ...(guestCheck.checked
+              ? { guestLoaded: guestCheck.loaded, guestIds: guestCheck.guestIds }
+              : WEBKIT_FAMILY.has(browser)
+                ? {}
+                : { guestLoaded: null, guestLoadNote: guestCheck.reason }),
             ...sessionCommandSinceEnvelopeOwnsCommand(contract),
             browser: contract.browser,
             ...sessionPorts(contract),

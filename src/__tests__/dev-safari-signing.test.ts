@@ -72,7 +72,7 @@ vi.mock("../lib/codesign", async (importOriginal) => {
 });
 
 let waitAnswer = (): string =>
-  JSON.stringify({ ok: true, status: "ready", value: { compiled: true, browserAttached: true, guestLoaded: null } });
+  JSON.stringify({ ok: true, status: "ready", value: { compiled: true, browserAttached: true } });
 
 vi.mock("../tools/wait", async (importOriginal) => {
   const actual = await importOriginal<typeof WaitModule>();
@@ -94,7 +94,8 @@ vi.mock("../tools/logs", async (importOriginal) => {
 
 const dev = await import("../tools/dev");
 const { findSessionInfo, removeSession, removeSessionMarker } = await import("../lib/process-manager");
-const { recordSigningIdentity } = await import("../lib/safari-signing");
+const { identityChangedHint, recordSigningIdentity } = await import("../lib/safari-signing");
+const { safariEnableProbes } = await import("../lib/safari-enable-probes");
 
 const tmpDirs: string[] = [];
 
@@ -113,7 +114,7 @@ afterEach(() => {
   plantedOutput = "";
   codesignAnswer = () => null;
   waitAnswer = () =>
-    JSON.stringify({ ok: true, status: "ready", value: { compiled: true, browserAttached: true, guestLoaded: null } });
+    JSON.stringify({ ok: true, status: "ready", value: { compiled: true, browserAttached: true } });
 
   for (const child of spawned.splice(0)) {
     try {
@@ -221,6 +222,51 @@ describe("extension_dev for Safari says how the built app was signed", () => {
     expect(result.value.signing).toEqual({ requested: "JU3XAJJQ2G", identity: "team:JU3XAJJQ2G", status: "team-signed", appPath: expect.stringMatching(/Leon\.app$/) });
     expect(result.warnings.some((line: string) => line.startsWith("developmentTeam"))).toBe(false);
     expect(result.hint).toContain("The extension is not enabled in Safari yet");
+  }, 15_000);
+
+  it("says the enable read the wait already made instead of probing Safari a second time, with each signing hint said once", async () => {
+    const project = tmpProject();
+    recordSigningIdentity(project, "safari", "ad-hoc", 4242);
+    codesignAnswer = () => TEAM_SIGNED;
+    const changed = identityChangedHint("ad-hoc", "team:JU3XAJJQ2G");
+    const waitSaid = "Leon is not enabled in Safari (Safari holds dev.extensionjs.Leon.Extension (team:JU3XAJJQ2G) off). What blocks it: the wait read this.";
+    waitAnswer = () =>
+      JSON.stringify({
+        ok: false,
+        status: "compiled-not-attached",
+        value: { compiled: true, browserAttached: false, safari: { bundleId: "dev.extensionjs.Leon.Extension", enabled: false, source: "extensions-plist" } },
+        hint: `${waitSaid} ${changed}`,
+      });
+
+    const saved = { ...safariEnableProbes };
+    let probes = 0;
+
+    const counted = <T,>(answer: T) => (): T => {
+      probes += 1;
+
+      return answer;
+    };
+
+    Object.assign(safariEnableProbes, {
+      platform: () => "darwin",
+      pluginkitList: counted(""),
+      extensionsPlist: counted({ xml: null, reason: "not read in this case" }),
+      codesign: counted(null),
+      automation: counted({ ok: true, detail: "" }),
+      safariRunning: counted(null),
+      hostApp: counted("iTerm"),
+    });
+
+    try {
+      const result = JSON.parse(await dev.handler({ projectPath: project, browser: "safari", appName: "Leon" }));
+
+      expect(probes).toBe(0);
+      expect(result.hint).toContain(`ready.status is compiled-not-attached, not ready: ${waitSaid} ${changed}`);
+      expect(result.hint.split(changed)).toHaveLength(2);
+      expect(result.hint).not.toMatch(/ {2}/);
+    } finally {
+      Object.assign(safariEnableProbes, saved);
+    }
   }, 15_000);
 
   it("answers unknown and no claim when the app cannot be read, and nothing at all for another browser or an unawaited start", async () => {

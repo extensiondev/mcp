@@ -65,7 +65,7 @@ import {
 } from "../lib/safari-dev-options";
 import { safariSigningFrame } from "../lib/safari-signing";
 import { safariNotAttachedHint } from "../lib/safari-app-stage";
-import { safariEnableFrame } from "../lib/safari-enable-read";
+import { safariEnableFrame, type SafariEnableValue } from "../lib/safari-enable-read";
 import { droppedRuntimePages } from "../lib/dropped-runtime-pages";
 import { teamUnknownToXcodeRefusal } from "../lib/xcode-teams";
 import { safariStartingUrlWarning } from "../lib/safari-session-notes";
@@ -392,10 +392,11 @@ export async function handler(
     });
   }
 
-  const readiness =
+  const awaited =
     args.wait === false || args.noBrowser
       ? null
       : await awaitReadyAndFirstLogs(args.projectPath, browser, Math.max(15_000, 45_000 - installGate.spentMs));
+  const readiness = awaited?.readiness ?? null;
 
   if (readiness?.readyError) {
     const { readyError, ...exitedReadiness } = readiness;
@@ -543,7 +544,9 @@ export async function handler(
 
   const safariEnable =
     !sessionReady && readiness?.ready.status === "compiled-not-attached" && isSafariTarget(browser)
-      ? safariEnableFrame(args.projectPath, browser, Boolean(args.enableExtension), { identity: signingFrame?.signing.identity })
+      ? awaited?.safariEnableRead
+        ? enableReadTheWaitMade(awaited.safariEnableRead, signingFrame?.hints ?? [])
+        : safariEnableFrame(args.projectPath, browser, Boolean(args.enableExtension), { identity: signingFrame?.signing.identity })
       : null;
   const nextStep = sessionReady
     ? "The session is ready (ready.status: ready) and the first log lines are in firstLogs, so no extension_wait is needed: extension_inspect reads the live state and extension_logs the console."
@@ -552,7 +555,7 @@ export async function handler(
     : readiness
       ? `ready.status is ${readiness.ready.status}, not ready: ${
           readiness.ready.status === "compiled-not-attached" && isSafariTarget(browser)
-            ? (safariEnable?.hint ?? safariNotAttachedHint(args.projectPath, browser, Boolean(args.enableExtension)))
+            ? (safariEnable?.hint || safariNotAttachedHint(args.projectPath, browser, Boolean(args.enableExtension)))
             : readiness.ready.status === "compiled-not-attached"
               ? typeof (readiness.ready as Record<string, unknown>).failedLegSays === "string"
                 ? `${String((readiness.ready as Record<string, unknown>).failedLegSays)} Call extension_wait to keep waiting on the same contract; ${NO_ATTACH_DIAGNOSIS_NOTE}, so this server read the legs itself.`
@@ -618,9 +621,31 @@ function readyDistPath(ready: Record<string, unknown> | undefined): string | nul
   return typeof ready?.distPath === "string" ? ready.distPath : null;
 }
 
+/* @invariant ONE SAFARI ENABLE READ PER ANSWER. The wait this tool runs
+ * already read pluginkit, Extensions.plist and the automation grant for the
+ * compiled-not-attached answer it gave, a moment before this answer is
+ * composed and with no act by this server in between. That read is carried
+ * out of the wait's answer and stated once, under value.safari, instead of
+ * probing again (up to 3 s a probe). The wait's hint is its enable sentence
+ * followed by its signing hints, which this answer states itself, so they
+ * are taken off the sentence. A wait answer with no read (another platform,
+ * the app still building) leaves the read to this tool.
+ */
+interface SafariEnableRead {
+  safari: SafariEnableValue;
+  hint: string;
+}
+
+function enableReadTheWaitMade(read: SafariEnableRead, signingHints: string[]): SafariEnableRead {
+  const hint = signingHints.reduce((said, signingHint) => said.split(signingHint).join(""), read.hint);
+
+  return { safari: read.safari, hint: hint.replace(/ {2,}/g, " ").trim() };
+}
+
 async function awaitReadyAndFirstLogs(projectPath: string, browser: string, budgetMs: number) {
   const ready = JSON.parse(await waitHandler({ projectPath, browser, timeoutMs: budgetMs })) as {
     status: string;
+    hint?: string;
     error?: { code?: string; message?: string };
     value?: Record<string, unknown>;
   };
@@ -631,15 +656,22 @@ async function awaitReadyAndFirstLogs(projectPath: string, browser: string, budg
   };
 
   const readyValue: Record<string, unknown> = { ...(ready.value ?? {}) };
+  const safariRead = readyValue.safari;
   delete readyValue.signing;
   delete readyValue.safari;
 
   const firstLogsNote = firstLogsRecoveryNote(readyValue);
 
   return {
-    ready: { status: ready.status, ...readyValue },
-    ...(ready.status === "contract-error" && ready.error ? { readyError: ready.error } : {}),
-    firstLogs: logs.ok ? (logs.value ?? {}) : { status: logs.status },
-    ...(firstLogsNote ? { firstLogsNote } : {}),
+    readiness: {
+      ready: { status: ready.status, ...readyValue },
+      ...(ready.status === "contract-error" && ready.error ? { readyError: ready.error } : {}),
+      firstLogs: logs.ok ? (logs.value ?? {}) : { status: logs.status },
+      ...(firstLogsNote ? { firstLogsNote } : {}),
+    },
+    safariEnableRead:
+      safariRead && typeof safariRead === "object"
+        ? ({ safari: safariRead as SafariEnableValue, hint: typeof ready.hint === "string" ? ready.hint : "" } satisfies SafariEnableRead)
+        : null,
   };
 }

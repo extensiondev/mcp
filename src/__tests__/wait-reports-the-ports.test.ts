@@ -63,6 +63,7 @@ describe("extension_wait names every port the session bound, so 'tell me the por
     expect(out.status).toBe("ready");
     expect(out.value.debugPortNote).toBeUndefined();
     expect(out.value.guestLoadNote).toBeUndefined();
+    expect(out.value).not.toHaveProperty("guestLoaded");
     expect(JSON.stringify(out)).not.toMatch(/\bCDP\b|\bRDP\b|Chromium|[Gg]ecko|Firefox/);
   }, 10_000);
 
@@ -73,7 +74,8 @@ describe("extension_wait names every port the session bound, so 'tell me the por
     const out = JSON.parse(await wait({ projectPath: dir, browser: "firefox", timeoutMs: 1500 }));
 
     expect(out.status).toBe("ready");
-    expect(out.value).toMatchObject({ cdpPort: null, rdpPort: 6000 });
+    expect(out.value).toMatchObject({ cdpPort: null, rdpPort: 6000, guestLoaded: null });
+    expect(out.value.guestLoadNote).toEqual(expect.any(String));
     expect(out.value.debugPortNote).toBeUndefined();
   }, 10_000);
 

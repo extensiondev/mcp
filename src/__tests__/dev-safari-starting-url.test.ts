@@ -48,7 +48,7 @@ vi.mock("../tools/wait", async (importOriginal) => {
   return {
     ...actual,
     handler: async () =>
-      JSON.stringify({ ok: true, status: "ready", value: { compiled: true, browserAttached: true, guestLoaded: null } }),
+      JSON.stringify({ ok: true, status: "ready", value: { compiled: true, browserAttached: true } }),
   };
 });
 

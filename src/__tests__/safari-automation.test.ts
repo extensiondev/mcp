@@ -78,5 +78,9 @@ describe("safariAutomationHint", () => {
     });
     expect(hint).toContain("Safari 27");
     expect(hint).not.toContain("claude mcp add");
+    expect(hint).not.toMatch(/enable only/);
+    expect(hint).toMatch(/WebDriver automation window/);
+    expect(hint).toContain('extension_eval context: "page"');
+    expect(hint).toMatch(/background and the extension's own surfaces .* out of reach/);
   });
 });

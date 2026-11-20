@@ -136,7 +136,7 @@ export function safariAutomationHint(automation: SafariAutomation): string {
   if (automation.safaridriver) {
     return (
       `This safaridriver (${automation.safaridriver}) has no --mcp flag: Apple's Safari MCP server needs Safari 27 or Safari Technology Preview 247+. ` +
-      "Until then a Safari session is build, open and enable only: this server's inspect and DOM readers do not reach it, while extension_logs still reads what the extension itself logs through the bridge."
+      "Until then this server reaches a Safari dev session at page level only, through the session's own WebDriver automation window: extension_open url navigates it, extension_eval context: \"page\" evaluates in that page and extension_screenshot captures it. The background and the extension's own surfaces (popup, options, sidebar) stay out of reach, while extension_logs still reads what the extension itself logs through the bridge."
     );
   }
 
