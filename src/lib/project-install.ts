@@ -20,7 +20,7 @@ import { sessionStateDir } from "./process-manager";
 import { liveProjectSessions } from "./session-browser";
 import { engineProjectRoot, readyContractPath } from "./session-paths";
 import { modulesMissing, startingSession } from "./session-starting";
-import { findWorkspaceMember, lockfileManager, pinnedManager } from "./workspace-member";
+import { findWorkspaceMember, isWorkspaceOrRepositoryRoot, lockfileManager, pinnedManager } from "./workspace-member";
 
 /* @invariant ONE DEPENDENCY INSTALL PER PROJECT AT A TIME, AND EVERY BUILD
  * KNOWS WHEN ONE IS RUNNING. The engine installs a project's dependencies
@@ -149,12 +149,20 @@ export function installStoppedPath(projectPath: string): string {
   return `${recordStem(projectPath)}.stopped`;
 }
 
-export function noteInstallStopped(projectPath: string): void {
+function installUnlinkedPath(projectPath: string): string {
+  return `${recordStem(projectPath)}.unlinked`;
+}
+
+function note(file: string): void {
   try {
-    fs.mkdirSync(path.dirname(installStoppedPath(projectPath)), { recursive: true });
-    fs.writeFileSync(installStoppedPath(projectPath), new Date().toISOString());
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, new Date().toISOString());
   } catch {
   }
+}
+
+export function noteInstallStopped(projectPath: string): void {
+  note(installStoppedPath(projectPath));
 }
 
 function readText(file: string): string | null {
@@ -388,8 +396,30 @@ export interface IncompleteInstall {
   reason: "binary-missing" | "stopped";
 }
 
+/* @invariant A TREE IS REPAIRED AT MOST ONCE FOR A MISSING BINARY, AND ONLY
+ * INSIDE THE PROJECT'S OWN WORKSPACE OR REPOSITORY. The engine counts as
+ * linked under any name a package manager gives its entry in .bin
+ * (extension, extension.cmd, and the extension.exe and extension.bunx Bun
+ * writes on Windows), never under the name of another package such as
+ * extension-create. The search for the extension package walks up no
+ * further than the workspace root or the folder that holds .git, so a stray
+ * node_modules in a home folder is nobody's incomplete install. And when
+ * the install this server ran exits 0 and the binary is still not linked,
+ * which bin-links=false in .npmrc does on every install, the call says so
+ * once and leaves a note: later calls run the pinned engine instead of
+ * installing again, until a binary is linked or an engine is stopped inside
+ * an install.
+ */
 const ENGINE_PACKAGE = "extension";
-const ENGINE_BINARY = process.platform === "win32" ? "extension.cmd" : "extension";
+const ENGINE_BIN_ENTRY = /^extension(\.[a-z0-9]+)?$/i;
+
+function engineLinked(modules: string): boolean {
+  try {
+    return fs.readdirSync(path.join(modules, ".bin")).some((name) => ENGINE_BIN_ENTRY.test(name));
+  } catch {
+    return false;
+  }
+}
 
 function declaresEngine(root: string): boolean {
   try {
@@ -411,10 +441,13 @@ export function incompleteInstall(projectPath: string): IncompleteInstall | null
     const modules = path.join(dir, "node_modules");
 
     if (fs.existsSync(path.join(modules, ENGINE_PACKAGE))) {
-      return fs.existsSync(path.join(modules, ".bin", ENGINE_BINARY)) ? null : { root: dir, reason: "binary-missing" };
+      if (engineLinked(modules)) fs.rmSync(installUnlinkedPath(projectPath), { force: true });
+      else if (!fs.existsSync(installUnlinkedPath(projectPath))) return { root: dir, reason: "binary-missing" };
+
+      return null;
     }
 
-    if (path.dirname(dir) === dir) return null;
+    if (isWorkspaceOrRepositoryRoot(dir) || path.dirname(dir) === dir) return null;
   }
 }
 
@@ -513,7 +546,7 @@ export interface InstallRefusal {
   byHand: string;
   command: string | null;
   output: string;
-  reason: "failed" | "not-rerun" | "manager-missing";
+  reason: "failed" | "not-rerun" | "manager-missing" | "unlinked";
 }
 
 export type SettledInstall =
@@ -543,10 +576,10 @@ export async function settleInstall(
   const { turn } = outcome;
   const plan = repairPlan(engineProjectRoot(projectPath));
 
-  const refusal = (reason: InstallRefusal["reason"], command: string | null, output: string): SettledInstall => {
+  const refusal = (reason: InstallRefusal["reason"], command: string | null, output: string, root = incomplete.root): SettledInstall => {
     turn.release();
 
-    return { state: "incomplete", root: incomplete.root, installRoot: plan.cwd, byHand: `${plan.manager} install`, command, output, reason };
+    return { state: "incomplete", root, installRoot: plan.cwd, byHand: `${plan.manager} install`, command, output, reason };
   };
 
   if (!plan.args) {
@@ -585,7 +618,15 @@ export async function settleInstall(
   }
 
   if (result.code === 0) fs.rmSync(installStoppedPath(projectPath), { force: true });
-  if (result.code !== 0 || incompleteInstall(projectPath)) return refusal("failed", said, result.output.trim().slice(-2000));
+  if (result.code !== 0) return refusal("failed", said, result.output.trim().slice(-2000));
+
+  const still = incompleteInstall(projectPath);
+
+  if (still) {
+    note(installUnlinkedPath(projectPath));
+
+    return refusal("unlinked", said, result.output.trim().slice(-2000), still.root);
+  }
 
   const repaired = { root: incomplete.root, ranIn: plan.cwd, command: said, tookMs: Date.now() - began };
 
@@ -641,13 +682,21 @@ export function repairedInstallNote(repair: InstallRepair, did = "building"): st
 export function incompleteInstallMessage(refusal: InstallRefusal, nothing = "Nothing was built"): string {
   const found = `${nothing}: node_modules under ${refusal.root} is incomplete (an install did not finish)`;
 
+  if (refusal.reason === "unlinked") {
+    return `${nothing}: ${refusal.command} completed in ${refusal.installRoot} and still linked no extension binary under ${path.join(refusal.root, "node_modules", ".bin")}.`;
+  }
+
   if (refusal.reason === "manager-missing") return `${found}, and ${refusal.byHand.split(" ")[0]}, which installs this project, is not on the PATH this server runs with.`;
   if (refusal.reason === "not-rerun") return `${found}, and this server does not rerun this project's package manager itself.`;
 
   return `${found}, and ${refusal.command}, which this call ran ${ranWhere(refusal.root, refusal.installRoot)} to repair it, did not complete it.`;
 }
 
-export function incompleteInstallHint(command: string, refusal: InstallRefusal): string {
+export function incompleteInstallHint(command: string, refusal: InstallRefusal, then = "builds"): string {
+  if (refusal.reason === "unlinked") {
+    return `Call ${command} again with the same arguments: it does not rerun the install, and ${then} with this server's pinned engine instead of the project's own. A package manager set not to link binaries (bin-links=false in .npmrc) leaves node_modules this way.`;
+  }
+
   return refusal.reason === "failed"
     ? `Read value.output for the package manager's own report and fix what it names (the network, the registry or a dependency version), then call ${command} again: it reruns the install first. This is not a compile error.`
     : `Run ${refusal.byHand} in ${refusal.installRoot}, then call ${command} again. This is not a compile error.`;
@@ -704,7 +753,7 @@ export async function sessionInstallGate(command: string, projectPath: string): 
           retry: "safe",
         },
         value: { started: false, installRoot: install.installRoot, ...(install.command ? { installCommand: install.command } : {}), ...(install.output ? { output: install.output } : {}) },
-        hint: incompleteInstallHint(command, install),
+        hint: incompleteInstallHint(command, install, "starts the session"),
       }),
     };
   }

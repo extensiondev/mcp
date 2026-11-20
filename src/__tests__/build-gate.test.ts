@@ -1201,6 +1201,60 @@ describe("948: a folder an install left incomplete is repaired under the record,
     expect(result.hint).toBe(`Run pnpm install in ${dir}, then call extension_build again. This is not a compile error.`);
   });
 
+  it("answers once when a completed install still links no binary, then builds without repairing again", async () => {
+    const dir = halfInstalled();
+    installLinks = () => null;
+
+    const first = JSON.parse(await build.handler({ projectPath: dir }));
+
+    expect(first).toMatchObject({ ok: false, status: "install-incomplete" });
+    expect(first.error.retry).toBe("safe");
+    expect(first.error.message).toBe(
+      `Nothing was built: npm install --ignore-scripts completed in ${dir} and still linked no extension binary under ${path.join(dir, "node_modules", ".bin")}.`,
+    );
+
+    expect(first.hint).toBe(
+      "Call extension_build again with the same arguments: it does not rerun the install, and builds with this server's pinned engine instead of the project's own. A package manager set not to link binaries (bin-links=false in .npmrc) leaves node_modules this way.",
+    );
+
+    const second = JSON.parse(await build.handler({ projectPath: dir }));
+
+    expect(installCalls).toHaveLength(1);
+    expect(second.status).toBe("built");
+  });
+
+  it.each([
+    ["extension.exe", 0],
+    ["extension.CMD", 0],
+    ["extension-create", 1],
+  ])("reads a .bin entry named %s as %i repairs to run", async (entry, repairs) => {
+    const dir = halfInstalled();
+    fs.mkdirSync(path.join(dir, "node_modules", ".bin"));
+    fs.writeFileSync(path.join(dir, "node_modules", ".bin", entry), "");
+
+    await build.handler({ projectPath: dir });
+
+    expect(installCalls).toHaveLength(repairs);
+  });
+
+  it("never repairs a node_modules above the project's own repository", async () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-above-"));
+    const dir = path.join(outside, "repo");
+
+    tmpDirs.push(outside);
+    fs.mkdirSync(path.join(outside, "node_modules", "extension"), { recursive: true });
+    fs.mkdirSync(path.join(dir, ".git"), { recursive: true });
+    fs.mkdirSync(path.join(dir, "src"));
+    fs.mkdirSync(path.join(dir, "node_modules", "react"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: "repo", dependencies: { react: "19" }, devDependencies: { extension: "latest" } }));
+    fs.writeFileSync(path.join(dir, "src", "manifest.json"), JSON.stringify({ manifest_version: 3, name: "Repo", version: "1.0.0" }));
+
+    const result = JSON.parse(await build.handler({ projectPath: dir }));
+
+    expect(installCalls).toEqual([]);
+    expect(result.status).toBe("built");
+  });
+
   it("reads the engine binary not found as an incomplete install, and the next call reinstalls", async () => {
     const dir = project({ manifest_version: 3, name: "Stray", version: "1.0.0" });
     fs.mkdirSync(path.join(dir, "node_modules"));
