@@ -16,6 +16,7 @@ import {
   blockerFor,
   manualSteps,
   otherCopyBlocker,
+  otherRegistrationBlocker,
   retryFor,
   RETRY_SAY,
   unsignedRowBlocker,
@@ -91,8 +92,12 @@ function appOf(appexPath: string): string {
   return app ? app[1]! : path.basename(appexPath);
 }
 
+function canonical(file: string): string {
+  return posixPath(file).replace(/^\/private(?=\/(?:tmp|var|etc)\/)/, "");
+}
+
 function registeredUnder(entry: PluginkitEntry, root: string | null): boolean {
-  return root !== null && posixPath(entry.path).startsWith(`${dropTrailing(posixPath(root), "/")}/`);
+  return root !== null && canonical(entry.path).startsWith(`${dropTrailing(canonical(root), "/")}/`);
 }
 
 const NOT_CONNECTED = "The background has not connected yet: call extension_wait again; if it stays unattached, open a page the extension matches with extension_open url.";
@@ -123,6 +128,15 @@ export function readSafariEnable(input: SafariEnableInput): { safari: SafariEnab
     personSteps: input.personSteps,
     manualSteps: manualSteps(input.appName),
   };
+
+  if (current && input.appPath && !registeredUnder(current, input.appPath)) {
+    const blocker = otherRegistrationBlocker(input, current.bundleId, posixPath(current.path));
+
+    return {
+      safari: { ...base, enabled: false, source: "pluginkit", carriesOver: false, blocker, unknownReason: null, retry: retryFor(input, blocker.fix) },
+      hint: `${input.appName} is not enabled in Safari as this build. What blocks it: ${blocker.detail}. ${blocker.fix}${personSay}`,
+    };
+  }
 
   if (input.rows === null) {
     const reason = input.plistReason || "Safari's Extensions.plist could not be read";

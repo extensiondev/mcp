@@ -170,6 +170,28 @@ describe("extension_dev / extension_wait on a Safari session the engine could no
     expect(automationCalls).toBe(0);
   }, 10_000);
 
+  it("976: never answers enabled when the bundle id is registered from another checkout's app, and names that copy and the fix", async () => {
+    session(BUILT);
+    const other = path.join(os.tmpdir(), "other-checkout", "dist", "safari-xcode", ".derived", "Build", "Products", "Release", "Visionario.app", "Contents", "PlugIns", "Visionario Extension.appex");
+    safariEnableProbes.pluginkitList = () => `+    ${NEW_ID}(1.0)\t3E3BBEFD-8E88-414A-B1B4-4BA28401048E\t2026-11-06 18:15:33 +0000\t${other}\n (1 plug-ins)\n`;
+    safariEnableProbes.extensionsPlist = () => ({ xml: extensionsPlistXml([{ id: NEW_ID, identity: TEAM, enabled: true }]), reason: "" });
+
+    const result = await wait();
+
+    expect(result.value.safari).toMatchObject({ enabled: false, bundleId: NEW_ID, appPath, registeredPath: other });
+    expect(result.value.safari.blocker.kind).toBe("other-registration");
+    expect(result.hint).toContain(other);
+    expect(result.hint).toContain(`pluginkit -r "${other}"`);
+    expect(result.hint).toContain("distinct bundleId");
+    expect(result.hint).not.toMatch(/is enabled in Safari|nothing in Safari Settings is left to do/);
+    expect(result.value.safari.retry.say).not.toContain("Nothing to redo");
+
+    const own = path.join(appPath, "Contents", "PlugIns", "Visionario Extension.appex");
+    safariEnableProbes.pluginkitList = () => `+    ${NEW_ID}(1.0)\t3E3BBEFD-8E88-414A-B1B4-4BA28401048E\t2026-11-06 18:15:33 +0000\t/private${own}\n (1 plug-ins)\n`;
+
+    expect(safariEnableFrame(dir, "safari", true)?.safari.enabled).toBe(true);
+  }, 10_000);
+
   it("says the earlier enable does not carry over when the bundle id changed, and names the Settings window read as what failed", async () => {
     session(BUILT + SETTINGS_DID_NOT_OPEN);
     safariEnableProbes.pluginkitList = () => listing([{ mark: "+", id: OLD_ID, app: "Hands-free.app" }, { mark: " ", id: NEW_ID, app: "Visionario.app" }]);

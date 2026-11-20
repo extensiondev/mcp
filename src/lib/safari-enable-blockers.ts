@@ -21,6 +21,7 @@ export type SafariBlockerKind =
   | "settings-window"
   | "switch-off"
   | "other-copy"
+  | "other-registration"
   | "unsigned-row"
   | "not-requested";
 
@@ -193,6 +194,14 @@ export function otherCopyBlocker(input: SafariBlockerInput, fresh: string, live:
     kind: "other-copy",
     detail,
     fix: `${RETRY_SAY} The engine switches the team-signed row ${appName} (${fresh}) on; or by hand in Safari > Settings > Extensions turn off ${appName} (${live.identity}) and turn on ${appName} (${fresh}).`,
+  };
+}
+
+export function otherRegistrationBlocker(input: SafariBlockerInput, bundleId: string, registeredPath: string): SafariBlocker {
+  return {
+    kind: "other-registration",
+    detail: `pluginkit registers ${bundleId} from ${registeredPath}, not from this build's ${input.appPath ?? "app"}, so Safari runs that other copy and its files`,
+    fix: `Unregister the other copy (pluginkit -r "${registeredPath}", or delete that app), or give this build a distinct bundleId, then call extension_dev again with replace: true and enableExtension: true.`,
   };
 }
 
