@@ -54,6 +54,18 @@ describe("extension_wait names every port the session bound, so 'tell me the por
     expect(out.value.debugPortNote).toMatch(/no browser debug port/i);
   }, 10_000);
 
+  it("978: carries no Chromium or Gecko debug port note and no CDP target note on a ready Safari session", async () => {
+    const dir = project();
+    contract(dir, "safari", attachedDevContract("safari", { cdpPort: undefined, webdriverPort: 4444, webdriverSessionId: "S-1" }));
+
+    const out = JSON.parse(await wait({ projectPath: dir, browser: "safari", timeoutMs: 1500 }));
+
+    expect(out.status).toBe("ready");
+    expect(out.value.debugPortNote).toBeUndefined();
+    expect(out.value.guestLoadNote).toBeUndefined();
+    expect(JSON.stringify(out)).not.toMatch(/\bCDP\b|\bRDP\b|Chromium|[Gg]ecko|Firefox/);
+  }, 10_000);
+
   it("reports a gecko session's RDP port as its debug port", async () => {
     const dir = project();
     contract(dir, "firefox", attachedDevContract("firefox", { cdpPort: undefined, rdpPort: 6000 }));

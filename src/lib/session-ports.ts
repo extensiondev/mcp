@@ -89,7 +89,7 @@ export function sessionPorts(contract: ReadyContract): SessionPorts {
     controlPort: portOrNull(contract.controlPort),
     cdpPort,
     ...(rdpPort !== null ? { rdpPort } : {}),
-    ...(cdpPort === null && rdpPort === null
+    ...(cdpPort === null && rdpPort === null && !WEBKIT_FAMILY.has(contract.browser)
       ? {
           debugPortNote: production
             ? productionDebugPortNote(contract)

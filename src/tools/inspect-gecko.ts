@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { runActVerb } from "../lib/act";
+import { WEBKIT_FAMILY } from "../lib/browser-family";
 import { envelope } from "../lib/envelope";
 import { listBridgeTabs, navigateToUrlViaBridge } from "../lib/bridge-tabs";
 import { rdpPortMissingHint, resolveRdpPort } from "../lib/cdp-port";
@@ -231,6 +232,8 @@ async function collectGeckoDeepDom(
     `deepDom failed on ${browser}: ${reason}. The walk runs via tabs.executeScript (MV2) and needs the extension to hold host permissions for the target url.`,
   );
 }
+
+const SAFARI_CONSOLE_NOTE = "Safari serves no page console to this read; extension_logs streams the extension's own console.";
 
 async function collectGeckoConsole(
   args: { projectPath: string },
@@ -562,7 +565,9 @@ export async function inspectViaBridge(
     notes.push(restoredTabWarning(urlFilter ?? "the tab this read landed on"));
   }
 
-  if (include.has("console")) {
+  if (include.has("console") && WEBKIT_FAMILY.has(browser)) {
+    if (args.include?.includes("console")) notes.push(SAFARI_CONSOLE_NOTE);
+  } else if (include.has("console")) {
     await collectGeckoConsole(args, browser, urlFilter, result, notes);
   }
 

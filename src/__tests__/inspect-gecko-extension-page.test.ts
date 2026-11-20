@@ -212,3 +212,19 @@ describe("deepDom on Gecko says whether closed roots could be seen at all", () =
   });
 });
 });
+
+describe("extension_inspect on Safari carries only notes that apply to Safari", () => {
+  it("978: reads the page with no RDP console note, and says where the console is only when console was asked for", async () => {
+    const dir = project(MANIFEST);
+
+    const plain = JSON.parse(await inspect.handler({ projectPath: dir, browser: "safari" }));
+
+    expect(plain.ok).toBe(true);
+    expect(JSON.stringify(plain)).not.toMatch(/\bRDP\b|rdpPort|Firefox|Gecko/);
+
+    const asked = JSON.parse(await inspect.handler({ projectPath: dir, browser: "safari", include: ["meta", "console"] }));
+
+    expect(JSON.stringify(asked)).not.toMatch(/\bRDP\b|rdpPort|Firefox|Gecko/);
+    expect(asked.warnings.join(" ")).toContain("extension_logs");
+  });
+});

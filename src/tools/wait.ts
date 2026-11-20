@@ -27,6 +27,7 @@ import {
   compiledNotAttachedAnswer,
 } from "../lib/compiled-not-attached";
 import { safariSigningFrame } from "../lib/safari-signing";
+import { WEBKIT_FAMILY } from "../lib/browser-family";
 import { UnattachedWatch } from "../lib/executor-recovery";
 import {
   CONTRACT_MTIME_GRANULARITY_SLACK_MS,
@@ -351,7 +352,7 @@ export async function handler(args: {
             compiled: true,
             browserAttached: true,
             guestLoaded: guestCheck.checked ? guestCheck.loaded : null,
-            ...(guestCheck.checked ? { guestIds: guestCheck.guestIds } : { guestLoadNote: guestCheck.reason }),
+            ...(guestCheck.checked ? { guestIds: guestCheck.guestIds } : WEBKIT_FAMILY.has(browser) ? {} : { guestLoadNote: guestCheck.reason }),
             ...sessionCommandSinceEnvelopeOwnsCommand(contract),
             browser: contract.browser,
             ...sessionPorts(contract),
