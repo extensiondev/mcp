@@ -20,9 +20,25 @@ import {
   resolveEngineOverride,
 } from "./engine-override";
 import { envelope } from "./envelope";
+import { kernelProcessParents } from "./process-identity";
 
 import { dependencies } from "../../package.json";
 
+/* @invariant THE PROCESSES UNDER A PID ARE READ FROM THE KERNEL WHERE pgrep IS
+ * MISSING. A slim container image ships neither pgrep nor ps, and there the
+ * tree under an engine read as empty: a first build past its budget was
+ * signalled in the middle of its install, only the top process was signalled
+ * and the package manager under it lived on, and the next call ran a repair
+ * beside it. Ledger 949 gave extension_stop and the start times a /proc
+ * read and left this one out. pgrep that ran and found nothing is an empty
+ * tree; pgrep that could not be started is answered from the parent field
+ * of every /proc/<pid>/stat.
+ */
+function descendantsIn(parents: Map<number, number>, pid: number): number[] {
+  const direct = [...parents].filter(([, parent]) => parent === pid).map(([child]) => child);
+
+  return direct.flatMap((child) => [child, ...descendantsIn(parents, child)]);
+}
 
 export function descendantPids(pid: number): number[] {
   try {
@@ -33,8 +49,10 @@ export function descendantPids(pid: number): number[] {
       .filter((n: number) => Number.isInteger(n) && n > 0);
 
     return direct.flatMap((childPid: number) => [childPid, ...descendantPids(childPid)]);
-  } catch {
-    return [];
+  } catch (err) {
+    const parents = (err as NodeJS.ErrnoException)?.code === "ENOENT" ? kernelProcessParents() : null;
+
+    return parents ? descendantsIn(parents, pid) : [];
   }
 }
 

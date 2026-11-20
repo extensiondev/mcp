@@ -54,8 +54,9 @@ const build = await import("../tools/build");
 const dev = await import("../tools/dev");
 const start = await import("../tools/start");
 const { buildSummaryPath } = await import("../lib/session-paths");
-const { installRecordPath, installStoppedPath, isInstallCommand, runningInstall, takeInstallTurn } = await import("../lib/project-install");
-const { processStartedAt } = await import("../lib/process-identity");
+const { installRecordPath, installStoppedPath, installerUnder, isInstallCommand, runningInstall, takeInstallTurn } = await import("../lib/project-install");
+const { processStartedAt, procfs } = await import("../lib/process-identity");
+const { descendantPids } = await import("../lib/exec");
 const { buildCliAnswer, buildSummary, zipArtifacts, browserFromCliArgs, writeEngineDist } = await import("./fixtures/engine-answers");
 
 const tmpDirs: string[] = [];
@@ -939,6 +940,41 @@ describe("941: one dependency install runs on a project at a time, and a build s
     expect(isInstallCommand("bun install")).toBe(true);
     expect(isInstallCommand("npm exec extension@4.1.41 build /work --browser chrome")).toBe(false);
     expect(isInstallCommand("node /home/me/.npm/_npx/1a2b/node_modules/.bin/extension build /work/install --browser chrome")).toBe(false);
+    expect(isInstallCommand("/Users/Jo Smith/.nvm/versions/node/v24/bin/node /Users/Jo Smith/.nvm/versions/node/v24/lib/node_modules/pnpm/bin/pnpm.cjs install --ignore-scripts")).toBe(true);
+    expect(isInstallCommand("node /home/me/.yarn/releases/yarn-4.5.0.cjs install")).toBe(true);
+    expect(isInstallCommand("node /usr/local/bin/corepack pnpm install --ignore-scripts")).toBe(true);
+    expect(isInstallCommand(["/opt/My Tools/node", "/work/npm install/extension.js", "build", "/work"])).toBe(false);
+  });
+
+  it.skipIf(process.platform === "win32")("finds the install under an engine from the kernel's process files where pgrep and ps are missing", () => {
+    const proc = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-proc-"));
+    const emptyBin = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-no-pgrep-"));
+    const previous = { path: process.env.PATH, root: procfs.root };
+
+    const entry = (pid: number, parent: number, name: string, argv: string[]): void => {
+      fs.mkdirSync(path.join(proc, String(pid)));
+      fs.writeFileSync(path.join(proc, String(pid), "stat"), `${pid} (${name}) S ${parent} ${pid} ${pid} 0 -1 4194304 900 0 0 0 12 3 0 0 20 0 11 0 360000 1 2 3`);
+      fs.writeFileSync(path.join(proc, String(pid), "cmdline"), `${argv.join("\0")}\0`);
+    };
+
+    tmpDirs.push(proc, emptyBin);
+    entry(100, 1, "node", ["node", "/work/node_modules/.bin/extension", "build", "/work"]);
+    entry(101, 100, "sh", ["sh", "-c", "pnpm install"]);
+    entry(102, 101, "node (pnpm)", ["/home/Jo Smith/bin/node", "/home/Jo Smith/lib/pnpm/bin/pnpm.cjs", "install", "--ignore-scripts"]);
+    entry(200, 1, "npm", ["npm", "install"]);
+    fs.mkdirSync(path.join(proc, "self"));
+    process.env.PATH = emptyBin;
+    procfs.root = proc;
+
+    try {
+      expect(descendantPids(100)).toEqual([101, 102]);
+      expect(installerUnder(100)).toBe(102);
+      expect(installerUnder(101)).toBe(102);
+      expect(installerUnder(102)).toBeNull();
+    } finally {
+      process.env.PATH = previous.path;
+      procfs.root = previous.root;
+    }
   });
 });
 

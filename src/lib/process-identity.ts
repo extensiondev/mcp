@@ -183,6 +183,56 @@ function windowsProcessStartTimes(pids: number[]): Map<number, string> {
  */
 const LINUX_CLOCK_TICKS_PER_SECOND = 100;
 
+export const procfs = { root: "/proc" };
+
+export function linuxParentFromStat(stat: string): number | null {
+  const parent = Number(stat.slice(stat.lastIndexOf(")") + 1).trim().split(" ")[1]);
+
+  return Number.isInteger(parent) && parent >= 0 ? parent : null;
+}
+
+export function kernelProcessParents(): Map<number, number> | null {
+  let names: string[];
+
+  try {
+    names = fs.readdirSync(procfs.root);
+  } catch {
+    return null;
+  }
+
+  const parents = new Map<number, number>();
+
+  for (const name of names) {
+    if (!/^\d+$/.test(name)) continue;
+
+    try {
+      const parent = linuxParentFromStat(fs.readFileSync(path.join(procfs.root, name, "stat"), "utf8"));
+
+      if (parent !== null) parents.set(Number(name), parent);
+    } catch {
+    }
+  }
+
+  return parents;
+}
+
+export function kernelCommandLine(pid: number): string[] | null {
+  try {
+    const raw = fs.readFileSync(path.join(procfs.root, String(pid), "cmdline"), "utf8");
+    let end = raw.length;
+
+    while (end > 0 && raw.charCodeAt(end - 1) === 0) end -= 1;
+
+    const args = raw.slice(0, end).split("\0");
+
+    if (args.length === 1 && !args[0].trim()) return null;
+
+    return args.length === 1 ? args[0].trim().split(/\s+/) : args;
+  } catch {
+    return null;
+  }
+}
+
 function linuxBootTimeMs(): number | null {
   try {
     const seconds = /^btime\s+(\d+)$/m.exec(fs.readFileSync("/proc/stat", "utf8"))?.[1];

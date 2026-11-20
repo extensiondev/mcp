@@ -15,7 +15,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { noteCallWait } from "./call-waits";
 import { envelope } from "./envelope";
 import { descendantPids, runPackageInstall } from "./exec";
-import { pidState, processStartedAt } from "./process-identity";
+import { kernelCommandLine, pidState, processStartedAt } from "./process-identity";
 import { sessionStateDir } from "./process-manager";
 import { liveProjectSessions } from "./session-browser";
 import { engineProjectRoot, readyContractPath } from "./session-paths";
@@ -51,6 +51,14 @@ import { modulesMissing, startingSession } from "./session-starting";
  * resolves a symlink and, on a disk that ignores case, the case the caller
  * typed; Windows paths are lowercased as well. Keyed by the path as typed,
  * /Users/x/App and /users/x/app held two records for one node_modules.
+ *
+ * AN INSTALL IS A PACKAGE MANAGER FOLLOWED BY ITS INSTALL VERB, WHEREVER IN
+ * THE COMMAND LINE THE TWO SIT. The line is read as the kernel's own
+ * argument list where /proc gives one, which keeps a path with a space in
+ * one piece, and from ps otherwise. Read only at the first two words, a
+ * Node path with a space, Yarn's yarn-4.5.0.cjs and an install run through
+ * corepack all read as no install, and the engine above them was stopped at
+ * its budget in the middle of one.
  *
  * NO STEP OF TAKING THE RECORD READS AND THEN ACTS. The record is taken by
  * renaming a folder that already holds its file onto the record's path,
@@ -344,17 +352,20 @@ function managerName(token: string): string {
   return path
     .basename(token)
     .replace(/\.(cmd|exe)$/i, "")
-    .replace(/(-cli)?\.[cm]?js$/i, "");
+    .replace(/(-cli)?\.[cm]?js$/i, "")
+    .replace(/-\d[\w.-]*$/, "");
 }
 
-export function isInstallCommand(commandLine: string): boolean {
-  const tokens = commandLine.trim().split(/\s+/);
-  const at = tokens.slice(0, 2).findIndex((token) => PACKAGE_MANAGERS.has(managerName(token)));
+export function isInstallCommand(commandLine: string | string[]): boolean {
+  const tokens = typeof commandLine === "string" ? commandLine.trim().split(/\s+/) : commandLine;
 
-  return at !== -1 && INSTALL_VERBS.has(tokens[at + 1] ?? "");
+  return tokens.some((token, at) => PACKAGE_MANAGERS.has(managerName(token)) && INSTALL_VERBS.has(tokens[at + 1] ?? ""));
 }
 
-function commandLine(pid: number): string {
+function commandLine(pid: number): string | string[] {
+  const fromKernel = kernelCommandLine(pid);
+  if (fromKernel) return fromKernel;
+
   try {
     return execFileSync("ps", ["-o", "args=", "-p", String(pid)], {
       encoding: "utf8",
