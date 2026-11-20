@@ -156,6 +156,9 @@ describe("extension_dev for Safari says how the built app was signed", () => {
     expect(warning).toContain('Xcode has no account for team 62ZL6K4MM4: xcodebuild printed "No Account for Team" in this session\'s log.');
     expect(warning).toContain("sign in to Xcode with that team's Apple ID (Xcode > Settings > Accounts), set developmentTeam to a team Xcode already knows, or drop developmentTeam for an ad-hoc build");
     expect(result.hint).not.toContain("signing identity changed");
+    expect(result.hint).not.toMatch(/headless/i);
+    expect(result.hint).not.toMatch(/ {2}/);
+    expect(result.value).not.toHaveProperty("headless");
 
     const marker = findSessionInfo(project, "safari");
     expect(marker?.developmentTeam).toBe("62ZL6K4MM4");

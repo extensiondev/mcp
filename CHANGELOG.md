@@ -2,6 +2,7 @@
 
 ## 11.1.0
 
+- Ledger 977. `extension_dev` on Safari says nothing about headless. Its hint said the browser was headless and offered `headless: false`, and `value.headless` read `true`, while Safari has no headless mode; a Safari answer now carries neither.
 - Ledger 980. A Safari background that never attached is called "not attached yet", not "unloaded". A read before the first attach answered that Safari had unloaded an idle background page; it now says the background has not attached yet in this session and names `extension_wait` as the next step.
 - Ledger 979. A Safari target that was not found points at a step Safari can follow. The hint said to call `extension_dom_snapshot` with `listTargets: true`, which Safari refuses; on a WebKit answer it now names `listTabs: true` and `extension_open url`.
 - Ledger 982. The Safari refusal of a background, popup, options or sidebar eval says `retry: "no"`. It said `retry: "after-read"`, inviting a retry that can never succeed, since Safari never reaches those contexts.
