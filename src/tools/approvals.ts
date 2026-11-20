@@ -12,24 +12,22 @@ import { hostedOnly } from "../lib/hosted-only";
 
 export const schema = {
   name: "extension_approvals",
-  description: "Read or revoke one approval on extension.dev; revoke a pending or unused one approved by mistake (owner token).",
+  description: "List the open approvals this login asked for, read one, or revoke one approved by mistake (owner token) on extension.dev.",
   inputSchema: {
     type: "object" as const,
     properties: {
       action: {
         type: "string",
-        enum: ["status", "revoke"],
-        default: "status",
-        description: "Read or revoke.",
+        enum: ["list", "status", "revoke"],
+        description: "List (the default with no approvalId), read or revoke.",
       },
       approvalId: {
         type: "string",
-        description: "The apr_ id.",
+        description: "The apr_ id; status and revoke need it.",
       },
       project: PROJECT_TOKEN_INPUT,
       api: API_BASE,
     },
-    required: ["approvalId"],
   },
 };
 

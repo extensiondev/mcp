@@ -73,7 +73,7 @@ export const TOOL_TITLES: Record<string, string> = {
   extension_shares: "Manage share links",
   extension_publish: "Publish a build link",
   extension_release_status: "Read the release status",
-  extension_approvals: "Read or revoke an approval",
+  extension_approvals: "List or revoke approvals",
   extension_builds: "Read and download builds",
   extension_builds_act: "Rebuild and configure builds",
   extension_workspace: "Read or change the workspace",

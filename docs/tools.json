@@ -76,7 +76,7 @@
       "name": "extension_approvals",
       "tier": "platform",
       "group": "platform",
-      "description": "Read or revoke one approval on extension.dev; revoke a pending or unused one approved by mistake (owner token).",
+      "description": "List the open approvals this login asked for, read one, or revoke one approved by mistake (owner token) on extension.dev.",
       "gate": "the server started with --features=local,platform, and a login; revoke needs a token a workspace owner minted",
       "samplePrompt": "I approved that App Review submission by mistake, revoke it",
       "readOnly": false,
@@ -87,16 +87,15 @@
       "inputs": [
         {
           "name": "action",
-          "type": "\"status\" | \"revoke\"",
+          "type": "\"list\" | \"status\" | \"revoke\"",
           "required": false,
-          "default": "status",
-          "description": "Read or revoke."
+          "description": "List (the default with no approvalId), read or revoke."
         },
         {
           "name": "approvalId",
           "type": "string",
-          "required": true,
-          "description": "The apr_ id."
+          "required": false,
+          "description": "The apr_ id; status and revoke need it."
         },
         {
           "name": "project",

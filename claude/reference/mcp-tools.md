@@ -26,12 +26,12 @@ Analyze a BUILT extension in dist/<browser>: sizes, entries, permissions, store 
 
 ## extension_approvals
 
-Read or revoke one approval on extension.dev; revoke a pending or unused one approved by mistake (owner token).
+List the open approvals this login asked for, read one, or revoke one approved by mistake (owner token) on extension.dev.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "status" \| "revoke" | no | `"status"` | Read or revoke. |
-| `approvalId` | string | yes |  | The apr_ id. |
+| `action` | "list" \| "status" \| "revoke" | no |  | List (the default with no approvalId), read or revoke. |
+| `approvalId` | string | no |  | The apr_ id; status and revoke need it. |
 | `project` | string | no |  | Stored login '<workspace>/<project>' when several exist. |
 | `api` | string | no |  | Platform URL; default from env. |
 
