@@ -4,8 +4,8 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import snapshot from "../lib/templates-meta.snapshot.json";
 import { renderReadmeSetup, spliceReadmeSetup } from "../clients/readme";
+import snapshot from "../lib/templates-meta.snapshot.json";
 
 const readmePath = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),

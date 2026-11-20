@@ -399,7 +399,7 @@ function shortRef(ref: string): string {
   return /^[0-9a-f]{40}$/i.test(ref) ? ref.slice(0, 7) : ref;
 }
 
-function refGroups(named: [string, string][], listed: number): string {
+function refGroups(named: Array<[string, string]>, listed: number): string {
   const byRef = new Map<string, string[]>();
 
   for (const [project, ref] of named) byRef.set(ref, [...(byRef.get(ref) ?? []), project]);

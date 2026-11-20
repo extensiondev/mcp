@@ -3,10 +3,12 @@ import os from "node:os";
 import path from "node:path";
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import type * as EngineManifestEntry from "extension-develop/manifest";
+
 
 import { isChromiumFamily, isGeckoFamily } from "../lib/browser-family";
 import { handler as validateManifest } from "../tools/manifest-validate";
+
+import type * as EngineManifestEntry from "extension-develop/manifest";
 
 describe("browser-family", () => {
   it("classifies every Extension.js browser name", () => {
