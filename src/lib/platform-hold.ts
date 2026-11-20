@@ -261,16 +261,25 @@ function createForm(www: string, prefill: CreatePrefill): Required<Pick<LaneClos
   };
 }
 
+const ACCOUNT_REFUSAL_MARKERS = ["open only to invited accounts", "is the review account"];
+
+function closedForAccount(message: string | undefined): boolean {
+  const text = String(message ?? "");
+
+  return ACCOUNT_REFUSAL_MARKERS.some((marker) => text.includes(marker));
+}
+
 export function laneClosedFacts(options: { api?: string; message?: string; prefill?: CreatePrefill }): LaneClosedFacts {
   const origins = mcpOrigins(options.api);
   const publicHold = String(options.message ?? "").includes(HOLD_MARKER_TEXT);
+  const noConsole = publicHold || closedForAccount(options.message);
 
   return {
     api: effectiveApiBase(options.api) || origins.www,
     publicHold,
     allowlistNamed: false,
-    ...(publicHold ? {} : { consoleUrl: origins.console }),
-    ...(publicHold || !options.prefill ? {} : createForm(origins.www, options.prefill)),
+    ...(noConsole ? {} : { consoleUrl: origins.console }),
+    ...(noConsole || !options.prefill ? {} : createForm(origins.www, options.prefill)),
   };
 }
 
@@ -293,6 +302,18 @@ export function laneClosedHint(options: { api?: string; message?: string; subjec
 
   if (facts.publicHold) {
     return `This is the platform's public hold on ${facts.api}: headless ${noun} creation there is open only to workspaces on the platform's allowlist, and it refused this one. Its answer names no allowlisted workspace and no opening date, so nothing on this machine opens it, and the console answers its gate page during the hold, so creating it there is no route either. Building, running and packaging still work with no account: extension_create, extension_dev and extension_build.`;
+  }
+
+  if (closedForAccount(options.message)) {
+    const workspace = options.prefill?.project.split("/")[0] ?? "";
+    const who =
+      options.subject === "workspace"
+        ? "an invited account"
+        : workspace
+          ? `an invited member of ${workspace}`
+          : "an invited member of the workspace";
+
+    return `The platform at ${facts.api} closed headless ${noun} creation for this account; its own message above says why. Only ${who} can create it${options.subject === "workspace" ? "" : " there, or run the create again in a workspace this account may create in"}. Nothing on this machine changes who is invited. Building, running and packaging still work with no account: extension_create, extension_dev and extension_build.`;
   }
 
   const target =

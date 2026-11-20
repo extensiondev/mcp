@@ -4,7 +4,7 @@ import { describe, it, expect } from "vitest";
 import { schema as authSchema } from "../tools/auth";
 import { schema as createSchema } from "../tools/project-create";
 import { createRateLimitNote } from "../lib/project-batch";
-import { laneClosedHint, platformHoldMessage } from "../lib/platform-hold";
+import { laneClosedFacts, laneClosedHint, platformHoldMessage } from "../lib/platform-hold";
 import { pollDeviceGrant } from "../lib/device-flow";
 
 describe("the auth and create tools describe what the platform does", () => {
@@ -30,6 +30,33 @@ describe("the auth and create tools describe what the platform does", () => {
     const held = laneClosedHint({ subject: "project", message: "extension.dev is not open to the public yet." });
     expect(held).not.toMatch(/this workspace is not on it, so the console is the route/);
     expect(held).toMatch(/console answers its gate page/);
+  });
+
+  it("a lane closed for this account names who can create instead and never the console", () => {
+    const prefill = { project: "acme/ghost-app" };
+    const message =
+      "Creating projects from a terminal is open only to invited accounts for now, and stranger is not one of them. An invited member of acme can create projects there instead.";
+    const hint = laneClosedHint({ subject: "project", message, prefill });
+
+    expect(hint).toMatch(/closed headless project creation for this account/);
+    expect(hint).toMatch(/an invited member of acme/);
+    expect(hint).toMatch(/a workspace this account may create in/);
+    expect(hint).not.toMatch(/console/i);
+    expect(laneClosedFacts({ message, prefill })).not.toHaveProperty("consoleUrl");
+    expect(laneClosedFacts({ message, prefill })).not.toHaveProperty("createUrl");
+
+    const reviewer = laneClosedHint({
+      subject: "projects",
+      message: "walk-reviewer is the review account, which creates projects only in its own workspace, walk-reviewer. Start again from your terminal with walk-reviewer as the workspace.",
+    });
+    expect(reviewer).not.toMatch(/console/i);
+
+    const workspace = laneClosedHint({
+      subject: "workspace",
+      message: "Creating workspaces from a terminal is open only to invited accounts for now, and stranger is not one of them. An invited account can create the workspace instead.",
+    });
+    expect(workspace).toMatch(/an invited account/);
+    expect(workspace).not.toMatch(/console/i);
   });
 
   it("the rate note says what the platform counts", () => {
