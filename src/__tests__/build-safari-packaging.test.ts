@@ -3,8 +3,9 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 
+import { safariEnableProbes } from "../lib/safari-enable-probes";
 import { browserFromCliArgs, buildNarration, writeEngineDist } from "./fixtures/engine-answers";
 
 import type * as ExecModule from "../lib/exec";
@@ -147,7 +148,16 @@ function summariesOf(...summaries: Array<Record<string, unknown>>): CliResponse 
 const run = async (args: Parameters<typeof build.handler>[0]) =>
   JSON.parse(await build.handler(args));
 
+const savedProbes = { ...safariEnableProbes };
+const pluginkitRow = (id: string, appex: string) => `     ${id}(1.0)\t3E3BBEFD-8E88-414A-B1B4-4BA28401048E\t2026-11-06 18:15:33 +0000\t${appex}`;
+
+beforeEach(() => {
+  safariEnableProbes.platform = () => "darwin";
+  safariEnableProbes.pluginkitList = () => "  (no matches)\n";
+});
+
 afterEach(() => {
+  Object.assign(safariEnableProbes, savedProbes);
   codesignSays = null;
   cliCalls.length = 0;
   cliResponder = null;
@@ -245,16 +255,51 @@ describe("extension_build drives the Safari web-extension conversion", () => {
     const result = await run({ projectPath: dir, browser: "safari" });
 
     expect(result.value.signing.identity).toBe("ad-hoc");
-    expect(result.value.nextSteps).toEqual([
-      `To try it in Safari: open ${appPath} once so Safari registers the extension, turn on Safari > Settings > Developer > Allow unsigned extensions (an ad-hoc signed app needs it, and Safari turns it off at every quit), then turn the extension on in Safari > Settings > Extensions and set its Websites to Allow. Another app registered with the same bundle id wins over this one, so remove that copy first. Tell the person these clicks.`,
-    ]);
+    expect(result.value.nextSteps).toHaveLength(1);
+    expect(result.value.nextSteps[0]).toContain(`open ${appPath} once`);
+    expect(result.value.nextSteps[0]).toContain("Allow unsigned extensions");
+    expect(result.value.nextSteps[0]).toContain("Safari > Settings > Extensions");
 
     codesignSays = "Executable=x\nTeamIdentifier=ABCDE12345";
     const signed = await run({ projectPath: dir, browser: "safari" });
 
-    expect(signed.value.nextSteps).toEqual([
-      `To try it in Safari: open ${appPath} once so Safari registers the extension, then turn it on in Safari > Settings > Extensions and set its Websites to Allow. Another app registered with the same bundle id wins over this one, so remove that copy first. Tell the person these clicks.`,
-    ]);
+    expect(signed.value.nextSteps).toHaveLength(1);
+    expect(signed.value.nextSteps[0]).toContain(`open ${appPath} once`);
+    expect(signed.value.nextSteps[0]).toContain("Safari > Settings > Extensions");
+    expect(signed.value.nextSteps[0]).not.toContain("Allow unsigned extensions");
+  });
+
+  it("names another registered copy of the bundle id, with its path and the unregister command, only when pluginkit lists one", async () => {
+    const dir = project();
+    distFor(dir, "safari");
+    const appPath = path.join(dir, "Reading List.app");
+    fs.mkdirSync(appPath, { recursive: true });
+    codesignSays = "Executable=x\nTeamIdentifier=ABCDE12345";
+    cliResponse = summariesOf({ browser: "safari", safari: { appName: "Reading List", bundleId: "com.acme.readinglist", appPath } });
+
+    const own = path.join(appPath, "Contents", "PlugIns", "Reading List Extension.appex");
+    const other = "/Users/pat/other-checkout/Reading List.app/Contents/PlugIns/Reading List Extension.appex";
+    const unrelated = "/Users/pat/notes/Notes.app/Contents/PlugIns/Notes Extension.appex";
+    const copy = /same bundle id|another (app|copy)|pluginkit -r/i;
+
+    safariEnableProbes.pluginkitList = () => `${pluginkitRow("com.acme.readinglist.Extension", own)}\n${pluginkitRow("com.acme.notes.Extension", unrelated)}\n (2 plug-ins)\n`;
+    const alone = await run({ projectPath: dir, browser: "safari" });
+
+    expect(alone.value.nextSteps).toHaveLength(1);
+    expect(alone.value.nextSteps[0]).not.toMatch(copy);
+
+    safariEnableProbes.pluginkitList = () => `${pluginkitRow("com.acme.readinglist.Extension", other)}\n${pluginkitRow("com.acme.notes.Extension", unrelated)}\n (2 plug-ins)\n`;
+    const [step] = (await run({ projectPath: dir, browser: "safari" })).value.nextSteps as string[];
+
+    expect(step).toContain(`pluginkit -r "${other}"`);
+    expect(step).not.toContain(unrelated);
+    expect(step).not.toMatch(/\bwins\b/);
+    expect(step!.indexOf(other)).toBeLessThan(step!.indexOf(`open ${appPath} once`));
+
+    safariEnableProbes.pluginkitList = () => null;
+    const unread = await run({ projectPath: dir, browser: "safari" });
+
+    expect(unread.value.nextSteps[0]).not.toMatch(copy);
   });
 
   it("picks the summary for the browser that was asked for", async () => {

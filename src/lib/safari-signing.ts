@@ -203,15 +203,24 @@ export function identityChangedHint(previous: SigningIdentity, identity: Signing
   );
 }
 
-export function safariRunStep(appPath: string, identity: SigningIdentity): string | null {
+export interface SafariOtherCopy {
+  bundleId: string;
+  path: string;
+}
+
+export function safariRunStep(appPath: string, identity: SigningIdentity, otherCopies: SafariOtherCopy[] = []): string | null {
   if (identity === "unknown") return null;
 
   const enable =
     identity === "ad-hoc"
       ? "turn on Safari > Settings > Developer > Allow unsigned extensions (an ad-hoc signed app needs it, and Safari turns it off at every quit), then turn the extension on in Safari > Settings > Extensions"
       : "then turn it on in Safari > Settings > Extensions";
+  const first =
+    otherCopies.length > 0
+      ? `pluginkit also registers ${[...new Set(otherCopies.map((copy) => copy.bundleId))].join(", ")} from outside this build, at ${otherCopies.map((copy) => copy.path).join(" and ")}, so two apps are registered under one bundle ID. Before the clicks, unregister ${otherCopies.length > 1 ? "each" : "it"} with ${otherCopies.map((copy) => `pluginkit -r "${copy.path}"`).join(" and ")} (or delete that app). `
+      : "";
 
-  return `To try it in Safari: open ${appPath} once so Safari registers the extension, ${enable} and set its Websites to Allow. Another app registered with the same bundle id wins over this one, so remove that copy first. Tell the person these clicks.`;
+  return `${first}To try it in Safari: open ${appPath} once so Safari registers the extension, ${enable} and set its Websites to Allow. Tell the person these clicks.`;
 }
 
 export async function safariSigningFrame(

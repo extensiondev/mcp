@@ -28,7 +28,7 @@ import { safariEnableProbes, type SafariEnableProbes } from "./safari-enable-pro
 import { parseSafariEngineSays } from "./safari-enable-log";
 import { describeIdentity, parseSafariExtensionsPlist, plistIdentityOf, UNSIGNED_IDENTITY, type SafariExtensionRow } from "./safari-extensions-plist";
 import { safariPersonSteps, type SafariPersonStep } from "./safari-person-steps";
-import { parseCodesignIdentity, safariAppPath, type SigningIdentity } from "./safari-signing";
+import { parseCodesignIdentity, safariAppPath, type SafariOtherCopy, type SigningIdentity } from "./safari-signing";
 import { posixPath, readyContractPath } from "./session-paths";
 import { dropTrailing } from "./linear-text";
 
@@ -118,6 +118,21 @@ function canonical(file: string): string {
 
 function registeredUnder(entry: PluginkitEntry, root: string | null): boolean {
   return root !== null && canonical(entry.path).startsWith(`${dropTrailing(canonical(root), "/")}/`);
+}
+
+export function otherSafariRegistrations(appPath: string, bundleId: string | null, probes: SafariEnableProbes = safariEnableProbes): SafariOtherCopy[] {
+  if (probes.platform() !== "darwin") return [];
+
+  const listing = probes.pluginkitList();
+  if (listing === null) return [];
+
+  const entries = parsePluginkitList(listing);
+  const own = new Set(entries.filter((entry) => registeredUnder(entry, appPath)).map((entry) => entry.bundleId));
+  if (bundleId) own.add(`${bundleId}.Extension`);
+
+  return entries
+    .filter((entry) => own.has(entry.bundleId) && !registeredUnder(entry, appPath))
+    .map((entry) => ({ bundleId: entry.bundleId, path: posixPath(entry.path) }));
 }
 
 const NOT_CONNECTED = "The background has not connected yet: call extension_wait again; if it stays unattached, open a page the extension matches with extension_open url.";
