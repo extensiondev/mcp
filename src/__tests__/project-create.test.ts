@@ -361,6 +361,39 @@ describe("extension_project_create", () => {
     expect(schema.inputSchema.properties.ref.description).toContain("With repo");
   });
 
+  it("refuses a root directory or ref the platform would refuse before any approval is asked, and sends a root directory the way the platform stores it", async () => {
+    const { fn, calls } = createFetch({ token: [{ status: 200, body: grantBody }], create: CREATED });
+    vi.stubGlobal("fetch", fn);
+
+    for (const rootDirectory of ["a/./b", "a/.", "a\nb", "a\rextension-path=/etc", 'a"b', "a\u0000b", "a\u007fb", `${"a/".repeat(256)}b`]) {
+      const refused = JSON.parse(await handler({ ...baseArgs, rootDirectory }));
+
+      expect(refused.error?.name, JSON.stringify(rootDirectory.slice(0, 24))).toBe("RootDirectoryInvalid");
+    }
+
+    for (const ref of ["a..b", "main~1", "main^", "a:b", "a?b", "a*b", "a[b", "a\\b", "a//b", "a/", "a.", "/a", ".a", "a/.b", "a.lock", "@", "@{-1}", "a\u0000b", "a\u007fb", "x".repeat(251)]) {
+      const refused = JSON.parse(await handler({ ...baseArgs, ref }));
+
+      expect(refused.error?.name, JSON.stringify(ref.slice(0, 24))).toBe("RefInvalid");
+    }
+
+    expect(fn).not.toHaveBeenCalled();
+
+    for (const [typed, stored] of [["a//b", "a/b"], ["a\\b\\", "a/b"], [".\\a/", "a"], [`${"a/".repeat(255)}b`, `${"a/".repeat(255)}b`]]) {
+      calls.length = 0;
+      await handler({ ...baseArgs, rootDirectory: typed, deviceCode: "dev-code" });
+
+      expect(JSON.parse(String(calls.find((call) => call.url.endsWith("/api/cli/projects/create"))?.init?.body)).deployment.rootDirectory, typed.slice(0, 24)).toBe(stored);
+    }
+
+    for (const ref of ["v1.0+build.1", "release@2", "feat#12", "über", "refs/pull/5/head", "x".repeat(250)]) {
+      calls.length = 0;
+      await handler({ ...baseArgs, ref, deviceCode: "dev-code" });
+
+      expect(JSON.parse(String(calls.find((call) => call.url.endsWith("/api/cli/projects/create"))?.init?.body)).deployment.branch).toBe(ref);
+    }
+  });
+
   it("489: keeps the GitHub path's answer shape and names its source", async () => {
     const { fn } = createFetch({ token: [{ status: 200, body: grantBody }], create: CREATED });
     vi.stubGlobal("fetch", fn);
