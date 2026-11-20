@@ -44,7 +44,7 @@ export interface ShipAct {
   action: string;
   route: string;
   path?: string;
-  hints?: (code: string, retryAfterSeconds?: number) => string | undefined;
+  hints?: (code: string, retryAfterSeconds?: number, body?: Row) => string | undefined;
   method?: "POST" | "PUT";
   body: Row;
   approvalBody?: Row;
@@ -235,7 +235,7 @@ function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string
   const handSay = hand ? byHandSentence(text(body.message) || read.message, hand) : "";
   const billing = billingUrl(api.ref.workspace, act.apiHint);
   const allowance = allowanceRefusal(read.body, billing);
-  const hint = handSay || allowance?.message || (act.hints?.(read.code, read.retryAfterSeconds) ?? shipRefusalHint(read.code, read.retryAfterSeconds, text(act.value?.store), read.body, act.act, billing));
+  const hint = handSay || allowance?.message || (act.hints?.(read.code, read.retryAfterSeconds, body) ?? shipRefusalHint(read.code, read.retryAfterSeconds, text(act.value?.store), read.body, act.act, billing));
   const ownerOnly = read.code === OWNER_REQUIRED_CODE;
   const named = namedRefusalOf(read.code);
   const status = ownerOnly

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Ledger 986. A ship act's hints read the refusal body. `runShipAct` now hands the platform's refusal body to the act's `hints`, so the hosted `extension_submit` mint-signing names what a `SAFARI_TEAM_PAIR_REQUIRED` refusal lacks from `details.missing` (`appleTeam`, `sealedPair` or `liveCertificates`). This server's own answers do not change.
+
 ## 11.1.0
 
 - The MCP's bundled engine moves from Extension.js 4.1.41 to 4.2.0 (`extension-create`, `extension-develop` and `extension-install`). Its envelope schema now lets an `error.details` entry carry a `W_` code when its `severity` is `warning`, with `E_` kept for errors, and the copied contract is refreshed to match; this server emits no `details`, so its own answers do not change.
