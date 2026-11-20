@@ -29,10 +29,10 @@ import { modulesMissing, startingSession } from "./session-starting";
  * half of it: on 2026-11-18 (ledger 941) that answered E_BUILD_FAILED "sh:
  * 1: extension: not found" with retry "no" in 5 agent runs, after the first
  * build of the pair had been stopped at its budget in the middle of npm
- * install. A build that will install takes this record first, a file made
- * with the exclusive flag under the session state folder, so a second call
- * in this process and a second server process on the same project both see
- * it. The record names the processes that hold the install: the server
+ * install. A build that will install takes this record first, a folder
+ * under the session state folder that holds one file, so a second call in
+ * this process and a second server process on the same project both see it.
+ * The record names the processes that hold the install: the server
  * while its call runs, beside it the engine or package manager that call
  * started, from the moment that child has a PID, then the engine process
  * alone when the call ends at its budget and leaves that engine running. The
@@ -45,6 +45,16 @@ import { modulesMissing, startingSession } from "./session-starting";
  * holders are all gone is stale and is removed by whoever reads it. A dev
  * session that is still installing counts as a running install too, read
  * from the session itself.
+ *
+ * NO STEP OF TAKING THE RECORD READS AND THEN ACTS. The record is taken by
+ * renaming a folder that already holds its file onto the record's path,
+ * which the file system refuses while a file is in the folder there. Each
+ * taking names its file with its own random token, and a stale file is
+ * removed under the name that was read, so a reader that judged an old
+ * record stale can never remove the one a quicker server wrote in between.
+ * The first version compared the text and then deleted the path, and four
+ * servers released on one stale record shared it in 4 or 5 rounds of 250;
+ * moving the record aside to compare it lost the put back more often still.
  *
  * EVERY TOOL THAT RUNS THE ENGINE SETTLES THE INSTALL FIRST, AND A FOLDER AN
  * INSTALL LEFT INCOMPLETE IS REPAIRED, NOT REPORTED AS A COMPILE ERROR
@@ -113,7 +123,7 @@ function recordStem(projectPath: string): string {
 }
 
 export function installRecordPath(projectPath: string): string {
-  return `${recordStem(projectPath)}.json`;
+  return `${recordStem(projectPath)}.lock`;
 }
 
 export function installStoppedPath(projectPath: string): string {
@@ -167,8 +177,19 @@ function holds(holder: InstallHolder, key: string, since: string): boolean {
   return process.platform === "win32" || !fs.existsSync(path.join(key, "node_modules")) || installerUnder(holder.pid) !== null;
 }
 
-function removeIfUnchanged(file: string, text: string): void {
-  if (readText(file) === text) fs.rmSync(file, { force: true });
+function recordEntries(dir: string): string[] {
+  try {
+    return fs.readdirSync(dir);
+  } catch {
+    return [];
+  }
+}
+
+function dropEmpty(dir: string): void {
+  try {
+    fs.rmdirSync(dir);
+  } catch {
+  }
 }
 
 const OWNER_OF_ROLE: Record<InstallHolder["role"], RunningInstall["owner"]> = {
@@ -179,21 +200,23 @@ const OWNER_OF_ROLE: Record<InstallHolder["role"], RunningInstall["owner"]> = {
 };
 
 function recordedInstall(projectPath: string): RunningInstall | null {
-  const file = installRecordPath(projectPath);
-  const text = readText(file);
-  if (text === null) return null;
-
+  const dir = installRecordPath(projectPath);
   const key = projectKey(projectPath);
-  const record = parseRecord(text);
-  const holder = record?.holders.find((entry) => holds(entry, key, record.since));
+  const entries = recordEntries(dir);
 
-  if (!holder) {
-    removeIfUnchanged(file, text);
+  for (const name of entries) {
+    const file = path.join(dir, name);
+    const record = name.endsWith(".json") ? parseRecord(readText(file) ?? "") : null;
+    const holder = record?.holders.find((entry) => holds(entry, key, record.since));
 
-    return null;
+    if (holder) return { pid: holder.pid, owner: OWNER_OF_ROLE[holder.role] ?? "build-call", ...(holder.browser ? { browser: holder.browser } : {}) };
+
+    fs.rmSync(file, { force: true });
   }
 
-  return { pid: holder.pid, owner: OWNER_OF_ROLE[holder.role] ?? "build-call", ...(holder.browser ? { browser: holder.browser } : {}) };
+  if (entries.length > 0) dropEmpty(dir);
+
+  return null;
 }
 
 function sessionInstall(projectPath: string): RunningInstall | null {
@@ -210,22 +233,17 @@ export function runningInstall(projectPath: string): RunningInstall | null {
   return recordedInstall(projectPath) ?? sessionInstall(projectPath);
 }
 
-function writeWhole(file: string, record: InstallRecord, exclusive: boolean): void {
-  const draft = `${file}.${process.pid}.${crypto.randomBytes(4).toString("hex")}.draft`;
-
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(draft, JSON.stringify(record));
-
+function claim(draft: string, dir: string): void {
   try {
-    if (exclusive) fs.linkSync(draft, file);
-    else fs.renameSync(draft, file);
-  } finally {
-    fs.rmSync(draft, { force: true });
+    fs.renameSync(draft, dir);
+  } catch {
+    dropEmpty(dir);
+    fs.renameSync(draft, dir);
   }
 }
 
 export function takeInstallTurn(projectPath: string): InstallTurn | "taken" | "unavailable" {
-  const file = installRecordPath(projectPath);
+  const dir = installRecordPath(projectPath);
   const key = projectKey(projectPath);
 
   if (callsInFlight.has(key) || recordedInstall(projectPath)) return "taken";
@@ -233,21 +251,44 @@ export function takeInstallTurn(projectPath: string): InstallTurn | "taken" | "u
   ownStartedAt ??= processStartedAt(process.pid);
 
   const since = new Date().toISOString();
-  const record = (holders: InstallHolder[]): InstallRecord => ({ projectRoot: key, since, holders });
-
+  const token = crypto.randomBytes(8).toString("hex");
+  const file = path.join(dir, `${token}.json`);
+  const draft = `${dir}.${process.pid}.${token}.draft`;
   const own: InstallHolder = { pid: process.pid, startedAt: ownStartedAt, role: "server" };
+  const text = (holders: InstallHolder[]): string => JSON.stringify({ projectRoot: key, since, holders } satisfies InstallRecord);
 
   callsInFlight.add(key);
 
   try {
-    writeWhole(file, record([own]), true);
-  } catch (err) {
+    fs.mkdirSync(draft, { recursive: true });
+    fs.writeFileSync(path.join(draft, `${token}.json`), text([own]));
+    claim(draft, dir);
+  } catch {
     callsInFlight.delete(key);
+    fs.rmSync(draft, { recursive: true, force: true });
 
-    return (err as NodeJS.ErrnoException)?.code === "EEXIST" ? "taken" : "unavailable";
+    return fs.existsSync(dir) ? "taken" : "unavailable";
   }
 
   let held = true;
+
+  const rewrite = (holders: InstallHolder[]): void => {
+    const next = `${draft}.json`;
+
+    try {
+      fs.writeFileSync(next, text(holders));
+      fs.renameSync(next, file);
+    } catch (err) {
+      fs.rmSync(next, { force: true });
+
+      throw err;
+    }
+  };
+
+  const drop = (): void => {
+    fs.rmSync(file, { force: true });
+    dropEmpty(dir);
+  };
 
   return {
     release: () => {
@@ -255,14 +296,14 @@ export function takeInstallTurn(projectPath: string): InstallTurn | "taken" | "u
 
       held = false;
       callsInFlight.delete(key);
-      fs.rmSync(file, { force: true });
+      drop();
     },
     join: (pid, role) => {
       const name = (startedAt: string | null): void => {
         if (!held || startedAt === null) return;
 
         try {
-          writeWhole(file, record([own, { pid, startedAt, role }]), false);
+          rewrite([own, { pid, startedAt, role }]);
         } catch {
         }
       };
@@ -276,9 +317,9 @@ export function takeInstallTurn(projectPath: string): InstallTurn | "taken" | "u
       held = false;
 
       try {
-        writeWhole(file, record([{ pid, startedAt: processStartedAt(pid), ...as }]), false);
+        rewrite([{ pid, startedAt: processStartedAt(pid), ...as }]);
       } catch {
-        fs.rmSync(file, { force: true });
+        drop();
       }
 
       callsInFlight.delete(key);

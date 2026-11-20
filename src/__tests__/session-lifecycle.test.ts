@@ -824,9 +824,9 @@ describe("948: extension_dev and extension_start settle the install before they 
   const COLD = JSON.stringify({ name: "cold", devDependencies: { extension: "latest" } });
 
   function holdInstall(project: string, pid: number): void {
-    const file = installRecordPath(project);
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify({ projectRoot: project, since: new Date().toISOString(), holders: [{ pid, startedAt: processStartedAt(pid), role: "engine" }] }));
+    const record = installRecordPath(project);
+    fs.mkdirSync(record, { recursive: true });
+    fs.writeFileSync(path.join(record, "held.json"), JSON.stringify({ projectRoot: project, since: new Date().toISOString(), holders: [{ pid, startedAt: processStartedAt(pid), role: "engine" }] }));
   }
 
   beforeEach(() => {

@@ -2,6 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import readline from "node:readline";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { describe, it, expect, afterEach, vi } from "vitest";
@@ -686,15 +687,15 @@ describe("941: one dependency install runs on a project at a time, and a build s
     });
   }
 
-  function holdInstall(dir: string, pid: number): void {
-    const file = installRecordPath(dir);
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify({ projectRoot: dir, since: new Date().toISOString(), holders: [{ pid, startedAt: processStartedAt(pid), role: "engine" }] }));
+  function holdInstall(dir: string, pid: number, startedAt: string | null = processStartedAt(pid)): void {
+    const record = installRecordPath(dir);
+    fs.mkdirSync(record, { recursive: true });
+    fs.writeFileSync(path.join(record, "held.json"), JSON.stringify({ projectRoot: dir, since: new Date().toISOString(), holders: [{ pid, startedAt, role: "engine" }] }));
   }
 
   function recordText(dir: string): string {
     try {
-      return fs.readFileSync(installRecordPath(dir), "utf8");
+      return fs.readdirSync(installRecordPath(dir)).map((name) => fs.readFileSync(path.join(installRecordPath(dir), name), "utf8")).join("\n");
     } catch {
       return "";
     }
@@ -858,6 +859,61 @@ describe("941: one dependency install runs on a project at a time, and a build s
       expect(runningInstall(dir)).toBeNull();
     },
     30_000,
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "gives a stale record to one server only when four take it over in the same instant",
+    async () => {
+      const dir = coldProject();
+      const NOBODY = 2_147_483_000;
+      const TAKER = `
+        let turn = null;
+        const say = (word) => process.stdout.write(word + "\\n");
+
+        for await (const line of (await import("node:readline")).createInterface({ input: process.stdin })) {
+          const [verb, at] = line.split(" ");
+
+          if (verb === "take") {
+            while (Date.now() < Number(at)) {}
+
+            const taken = install.takeInstallTurn(process.argv[2]);
+            turn = typeof taken === "string" ? null : taken;
+            say(turn ? "held" : taken);
+          } else {
+            turn?.release();
+            turn = null;
+            say("released");
+          }
+        }
+      `;
+      const servers = [0, 1, 2, 3].map(() => {
+        const child = serverProcess(TAKER, [dir]);
+        victims.push(child);
+        child.stdin!.on("error", () => undefined);
+
+        return { child, lines: readline.createInterface({ input: child.stdout! })[Symbol.asyncIterator]() };
+      });
+
+      const all = async (line: string): Promise<string[]> => {
+        for (const server of servers) server.child.stdin!.write(`${line}\n`);
+
+        return Promise.all(servers.map(async (server) => String((await server.lines.next()).value)));
+      };
+
+      const until = Date.now() + 1_500;
+      const holdersPerRound = new Set<number>();
+
+      await all("release");
+
+      for (let round = 0; round < 250 && Date.now() < until; round += 1) {
+        holdInstall(dir, NOBODY, null);
+        holdersPerRound.add((await all(`take ${Date.now() + 3}`)).filter((answer) => answer === "held").length);
+        await all("release");
+      }
+
+      expect([...holdersPerRound]).toEqual([1]);
+    },
+    20_000,
   );
 
   it("reads an install from the command line a package manager runs under, not from a path that holds its name", () => {
