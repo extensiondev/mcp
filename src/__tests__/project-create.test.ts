@@ -1140,6 +1140,28 @@ describe("extension_project_create", () => {
     expect(withheld.value.allowance.remains).not.toContain("first build spent one");
   });
 
+  it("names reading the first build as the one step after the login, in value.nextSteps and after Next: in the hint, and never extension_publish", async () => {
+    const SHA = "255e7b57c6be400bde4ed8744257bc64e27e4012";
+    const pinned = await createdWith({ initialBuild: { dispatched: true }, ref: { requested: "main", branch: "main", sha: SHA } });
+    const read = `extension_builds (action: get, buildId: '${SHA}', project: 'acme/ghost-app') until it reads green`;
+
+    expect(pinned.value.nextSteps.at(-1)).toBe(read);
+    expect(pinned.hint.split("Next: ")[1]).toContain(`${read}.`);
+
+    const plain = await createdWith({ initialBuild: { dispatched: true } });
+    const listed = "extension_builds (action: list, project: 'acme/ghost-app') until its first build reads green";
+
+    expect(plain.value.nextSteps.at(-1)).toBe(listed);
+    expect(plain.hint.split("Next: ")[1]).toContain(`${listed}.`);
+
+    const withheld = await createdWith({ initialBuild: { dispatched: false, reason: "no_commits" } });
+
+    for (const out of [pinned, plain, withheld]) {
+      expect(JSON.stringify(out.value.nextSteps)).not.toContain("extension_publish");
+      expect(out.hint.split("Next: ")[1]).not.toContain("extension_publish");
+    }
+  });
+
   it("says in its description that the first build spends one of the monthly allowance", () => {
     expect(schema.description).toContain("spends one build of the workspace's monthly allowance");
   });

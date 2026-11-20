@@ -1254,6 +1254,9 @@ describe("extension_project_create with projects: a first build is counted, neve
     expect(plain.value.nextSteps).toEqual([
       "extension_builds (action: list) for each of ['acme/alpha', 'acme/beta', 'acme/gamma'] until its first build reads green",
     ]);
+
+    expect(plain.status).toBe("created");
+    expect(plain.hint.split("Next: ")[1]).toBe(`${plain.value.nextSteps[0]}.`);
   });
 });
 

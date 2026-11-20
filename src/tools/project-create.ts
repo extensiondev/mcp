@@ -1247,23 +1247,15 @@ async function sendCreate(
   });
   const ref = `${finalWorkspace}/${finalProject}`;
   const signedIn = login.login.stored || login.login.held === true;
-  const followBuild = reseeded
-    ? firstBuild.state === "dispatched"
-      ? "follows the build of the new archive"
-      : "names the build the project has"
-    : "follows the first build of the upload";
+  const builtSha = data.ref && typeof data.ref === "object" ? String((data.ref as { sha?: unknown }).sha ?? "").trim() : "";
   const buildStep =
-    ctx.source.kind === "upload"
-      ? `extension_builds (action: list, project: '${ref}') to follow the ${buildWord}, then extension_publish`
-      : firstBuild.state === "dispatched"
-        ? "extension_publish"
-        : `extension_release_status (include: ['releases'], project: '${ref}') until a build is listed, then extension_publish`;
-  const buildNext =
-    ctx.source.kind === "upload"
-      ? `extension_builds (action: list, project: '${ref}') ${followBuild}; extension_publish shares it once it is listed.`
-      : firstBuild.state === "dispatched"
-        ? "extension_publish to share it."
-        : "extension_release_status until a build is listed; extension_publish has nothing to share until a build exists.";
+    firstBuild.state === "dispatched"
+      ? builtSha
+        ? `extension_builds (action: get, buildId: '${builtSha}', project: '${ref}') until it reads green`
+        : `extension_builds (action: list, project: '${ref}') until its ${buildWord} reads green`
+      : ctx.source.kind === "upload"
+        ? `extension_builds (action: list, project: '${ref}') until a build is listed`
+        : `extension_release_status (include: ['releases'], project: '${ref}') until a build is listed`;
   const uploadWords = ctx.source.kind === "upload" ? `the upload of ${ctx.source.root} (${uploaded?.files ?? ctx.source.files} files, ${megabytes(uploaded?.bytes ?? ctx.source.bytes)} zipped), nothing was pushed` : "";
   const opening = reseeded
     ? `Project ${ref} was re-seeded from ${uploadWords}: the platform wrote ${reseedFiles.written} files and removed ${reseedFiles.removed} the new archive no longer holds, and created nothing, since the project already existed.`
@@ -1308,7 +1300,7 @@ async function sendCreate(
     },
     hint: `${opening} ${reseeded ? reseedBuildSentence(firstBuild, ref, buildsPageUrl) : firstBuildSentence(firstBuild, buildsPageUrl)} ${login.sentence} ${ctx.login ? `It ran under the stored login for ${ref}${replaceApprovalId ? ` and approval ${replaceApprovalId}, which is spent` : ""}; no provisioning grant was asked for, and the files` : "The provisioning grant is spent and not kept on this machine; the other files"} this tool leaves are its install id (install.json) and a note that ${ref} exists on this server (created-projects.json), so extension_auth does not doubt it. Next: ${
       signedIn ? "" : `extension_auth (action: login, project: '${ref}') to mint the project token, then `
-    }${buildNext} ${madeSentence(links)}`,
+    }${buildStep}. ${madeSentence(links)}`,
     warnings: [
       ...storedNotes(data.stored),
       ...(ctx.source.kind === "upload" && ctx.source.defaulted

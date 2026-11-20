@@ -944,7 +944,7 @@ function finalEnvelope(session: Session): string {
       value,
       hint:
         needLogin.length === 0
-          ? `All ${rows.length} projects exist, ${buildsSentence}, and this machine is signed in to every one of them for 7 days. ${spent} Token-scoped tools take \`project\` to pick one.`
+          ? `All ${rows.length} projects exist, ${buildsSentence}, and this machine is signed in to every one of them for 7 days. ${spent} Token-scoped tools take \`project\` to pick one.${nextSteps.length ? ` Next: ${nextSteps[0]}.` : ""}`
           : `All ${rows.length} projects exist and ${buildsSentence}, but no token was stored for ${needLogin.join(", ")}. ${spent} Sign in to those with one batch login: ${nextSteps[0]}.`,
       ...(needLogin.length || unbuilt.length
         ? {

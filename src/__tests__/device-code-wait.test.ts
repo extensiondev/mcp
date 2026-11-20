@@ -282,7 +282,7 @@ describe("extension_project_create stores the login the create minted (ledger 29
     expect(out.value.login).toMatchObject({ stored: true, project: PROJECT });
     expect(out.value.login.expiresAt).toMatch(/^\d{4}-/);
     expect(readCredentials({ project: PROJECT, api: API })?.token).toBe("project-token");
-    expect(out.value.nextSteps[0]).toBe("extension_publish");
+    expect(out.value.nextSteps).toEqual([`extension_builds (action: list, project: '${PROJECT}') until its first build reads green`]);
     expect(out.value.nextSteps.join(" ")).not.toContain("extension_auth");
     expect(out.hint).toContain("no extension_auth call is needed");
     expect(out.hint).not.toContain("to mint the project token");
