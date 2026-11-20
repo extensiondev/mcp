@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { isChromiumFamily } from "./browser-family";
+import { isChromiumFamily, isGeckoFamily } from "./browser-family";
 
 export const LAUNCH_FLAG_SCHEMA = {
   profile: {
@@ -81,6 +81,16 @@ export function headlessLaunch(
   }
 
   return { headless: envIsHeadless(env) };
+}
+
+export function geckoLaunchEnv(
+  browser: string,
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
+): Record<string, string> | null {
+  if (!isGeckoFamily(browser) || platform !== "linux" || env.MOZ_DISABLE_SOCKET_PROCESS !== undefined) return null;
+
+  return { MOZ_DISABLE_SOCKET_PROCESS: "1" };
 }
 
 export interface HiddenBrowserUi {

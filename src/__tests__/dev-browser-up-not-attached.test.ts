@@ -244,3 +244,48 @@ describe("extension_dev relays the legs this server read when the engine stamps 
     expect(result.warnings.join(" ")).toContain("Control port 49239 is the replaced session's: the engine keeps one control port per project and browser on purpose");
   }, 15_000);
 });
+
+describe("extension_dev never answers started when the ready contract says the browser is gone", () => {
+  const EXITED = "the gecko-based process exited (code unknown) before the extension loaded, nothing is running";
+
+  it("answers browser-exited, not ok, with the engine's words and the stop it made", async () => {
+    const project = tmpProject();
+
+    waitAnswer = () =>
+      JSON.stringify({
+        ok: false,
+        status: "contract-error",
+        error: { code: "E_BROWSER_EXITED", message: EXITED, contractCode: "browser_exited" },
+        value: { errors: [EXITED], browser: "chrome", budgetMs: 45_000, elapsedMs: 13_041 },
+      });
+
+    const result = JSON.parse(await dev.handler({ projectPath: project }));
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("browser-exited");
+    expect(result.error.code).toBe("E_BROWSER_EXITED");
+    expect(result.error.message).toContain(EXITED);
+    expect(result.value.ready).toMatchObject({ status: "contract-error", errors: [EXITED] });
+    expect(typeof result.value.sessionStopped).toBe("boolean");
+    expect(result.hint).toContain("replace: true");
+  }, 15_000);
+
+  it("answers any other contract error not ok with the engine's code", async () => {
+    const project = tmpProject();
+
+    waitAnswer = () =>
+      JSON.stringify({
+        ok: false,
+        status: "contract-error",
+        error: { code: "E_COMPILE_FAILED", message: "extension.config.js threw", contractCode: "compile_failed" },
+        value: { errors: ["extension.config.js threw"], browser: "chrome", budgetMs: 45_000, elapsedMs: 900 },
+      });
+
+    const result = JSON.parse(await dev.handler({ projectPath: project }));
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("contract-error");
+    expect(result.error.code).toBe("E_COMPILE_FAILED");
+    expect(result.error.message).toContain("extension.config.js threw");
+  }, 15_000);
+});

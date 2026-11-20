@@ -39,6 +39,7 @@ import { guardSameBrowserSession } from "../lib/same-browser-session";
 import { DEFAULT_IDLE_MINUTES, IDLE_MINUTES_SCHEMA, armSessionIdle, resolveIdleMinutes } from "../lib/session-idle";
 import {
   LAUNCH_FLAG_SCHEMA,
+  geckoLaunchEnv,
   headlessLaunch,
   launchFlagArgs,
   type LaunchFlagArgs,
@@ -234,9 +235,10 @@ export async function handler(
 
   const spawnedAt = Date.now();
   const visibility = headlessLaunch(args);
+  const launchEnv = { ...visibility.env, ...geckoLaunchEnv(browser) };
   const spawned = spawnExtensionCli(cliArgs, {
     projectDir: args.projectPath,
-    ...(visibility.env ? { env: visibility.env } : {}),
+    ...(Object.keys(launchEnv).length > 0 ? { env: launchEnv } : {}),
   });
   const { child } = spawned;
 

@@ -56,7 +56,7 @@ vi.mock("extension-create", () => ({
 
 let scaffoldTarget = "";
 
-const { headlessLaunch } = await import("../lib/launch-flags");
+const { geckoLaunchEnv, headlessLaunch } = await import("../lib/launch-flags");
 const dev = await import("../tools/dev");
 const start = await import("../tools/start");
 const { sessionIsHeadless } = await import("../tools/open");
@@ -119,6 +119,14 @@ describe("a person can ask to see the browser (headless input)", () => {
 
     expect(headlessLaunch({}, { EXTENSION_HEADLESS: "1" })).toEqual({ headless: true });
     expect(headlessLaunch({}, {})).toEqual({ headless: false });
+  });
+
+  it("a Gecko launch on Linux runs without the socket process, whose fork the engine adopts as the browser", () => {
+    expect(geckoLaunchEnv("gecko-based", "linux", {})).toEqual({ MOZ_DISABLE_SOCKET_PROCESS: "1" });
+    expect(geckoLaunchEnv("firefox", "linux", {})).toEqual({ MOZ_DISABLE_SOCKET_PROCESS: "1" });
+    expect(geckoLaunchEnv("firefox", "darwin", {})).toBeNull();
+    expect(geckoLaunchEnv("chrome", "linux", {})).toBeNull();
+    expect(geckoLaunchEnv("firefox", "linux", { MOZ_DISABLE_SOCKET_PROCESS: "0" })).toBeNull();
   });
 
   it("extension_dev and extension_start take the input", () => {

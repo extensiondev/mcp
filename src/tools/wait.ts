@@ -407,7 +407,9 @@ export async function handler(args: {
             elapsedMs: Date.now() - start,
           },
           hint:
-            contract.code === "compile_failed"
+            contract.code === "browser_exited" || contract.code === "browser_launch_failed"
+              ? "The browser is gone and the dev server does not relaunch it: read extension_logs for its last words, then call extension_dev with replace: true."
+              : contract.code === "compile_failed"
               ? "The compiler failed outside a module (a plugin hook or extension.config.js threw), which the dev server's watcher does not recover from: fix the cause, then call extension_dev with replace: true."
               : 'Fix the errors in value.errors and save: the dev server recompiles. Call extension_wait with for: "rebuild" to wait for that compile.',
         });

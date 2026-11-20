@@ -48,6 +48,7 @@ import { handler as logsHandler } from "./logs";
 import {
   LAUNCH_FLAG_SCHEMA,
   headlessHint,
+  geckoLaunchEnv,
   headlessLaunch,
   hiddenBrowserUi,
   hiddenBrowserUiHint,
@@ -187,9 +188,10 @@ export async function handler(
 
   const visibility = headlessLaunch(args);
   const spawnedAt = Date.now();
+  const launchEnv = { ...visibility.env, ...geckoLaunchEnv(browser) };
   const spawned = spawnExtensionCli(cliArgs, {
     projectDir: args.projectPath,
-    ...(visibility.env ? { env: visibility.env } : {}),
+    ...(Object.keys(launchEnv).length > 0 ? { env: launchEnv } : {}),
   });
   const { child, logPath } = spawned;
 
@@ -384,6 +386,39 @@ export async function handler(
     args.wait === false || args.noBrowser
       ? null
       : await awaitReadyAndFirstLogs(args.projectPath, browser, Math.max(15_000, 45_000 - installGate.spentMs));
+
+  if (readiness?.readyError) {
+    const { readyError, ...exitedReadiness } = readiness;
+    const code = readyError.code ?? "E_CONTRACT_ERROR";
+    const exited = code === "E_BROWSER_EXITED";
+    const said = (readyError.message ?? "").replace(/\.\s*$/, "");
+    const stop = await stopFailedBoot(args.projectPath, browser);
+    const output = spawned.readOutput();
+
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: exited ? "browser-exited" : "contract-error",
+      error: {
+        code,
+        message: exited
+          ? `The ${browser} browser exited before the extension loaded: ${said || "the engine gave no reason"}. ${stop.sessionStopped ? "The dev server was stopped, so nothing is running." : "The dev server could not be stopped."}`
+          : `The dev server stamped its ready contract with an error: ${said || code}. ${stop.sessionStopped ? "The dev server was stopped, so nothing is running." : "The dev server could not be stopped."}`,
+      },
+      value: {
+        ...session,
+        ...stop,
+        ...exitedReadiness,
+        output: output.slice(-2000),
+        ...(output.length > 2000 ? { outputTruncated: { shown: 2000, total: output.length, kept: "tail" } } : {}),
+      },
+      hint: exited
+        ? `Read value.output for the browser's last words: a binary that refuses the launch flags, a crash at startup or a browser killed from outside are the common causes. Call extension_dev with replace: true to launch it again; ${profileAdvice}`
+        : "Read value.ready.errors and value.output for the cause, fix it, then call extension_dev with replace: true.",
+      warnings: boot.warnings,
+    });
+  }
+
   const sessionReady = readiness?.ready.status === "ready";
   const stillStarting = readiness?.ready.status === "starting";
   const readyProfilePath: unknown = readiness
@@ -576,6 +611,7 @@ function readyDistPath(ready: Record<string, unknown> | undefined): string | nul
 async function awaitReadyAndFirstLogs(projectPath: string, browser: string, budgetMs: number) {
   const ready = JSON.parse(await waitHandler({ projectPath, browser, timeoutMs: budgetMs })) as {
     status: string;
+    error?: { code?: string; message?: string };
     value?: Record<string, unknown>;
   };
   const logs = JSON.parse(await logsHandler({ projectPath, browser, limit: 20 })) as {
@@ -592,6 +628,7 @@ async function awaitReadyAndFirstLogs(projectPath: string, browser: string, budg
 
   return {
     ready: { status: ready.status, ...readyValue },
+    ...(ready.status === "contract-error" && ready.error ? { readyError: ready.error } : {}),
     firstLogs: logs.ok ? (logs.value ?? {}) : { status: logs.status },
     ...(firstLogsNote ? { firstLogsNote } : {}),
   };
