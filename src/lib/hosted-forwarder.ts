@@ -138,7 +138,7 @@ function refreshes(args: Args): boolean {
 }
 
 export const FORWARDED_TOOLS: Readonly<Record<string, ForwardRule>> = Object.freeze({
-  extension_approvals: { reads: reading("status", "status") },
+  extension_approvals: { reads: reading("status", "status", "list") },
   extension_release_status: { reads: (args) => !refreshes(args) },
   extension_release_promote: {},
   extension_workspace: { reads: reading("info", "info", "projects", "usage", "settings") },
