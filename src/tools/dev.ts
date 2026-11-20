@@ -586,6 +586,7 @@ async function awaitReadyAndFirstLogs(projectPath: string, browser: string, budg
 
   const readyValue: Record<string, unknown> = { ...(ready.value ?? {}) };
   delete readyValue.signing;
+  delete readyValue.safari;
 
   const firstLogsNote = firstLogsRecoveryNote(readyValue);
 

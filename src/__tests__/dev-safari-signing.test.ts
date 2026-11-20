@@ -186,13 +186,19 @@ describe("extension_dev for Safari says how the built app was signed", () => {
       JSON.stringify({
         ok: false,
         status: "compiled-not-attached",
-        value: { compiled: true, browserAttached: false, signing: { requested: "JU3XAJJQ2G", identity: "team:JU3XAJJQ2G" } },
+        value: {
+          compiled: true,
+          browserAttached: false,
+          signing: { requested: "JU3XAJJQ2G", identity: "team:JU3XAJJQ2G" },
+          safari: { bundleId: "dev.extensionjs.Leon.Extension", enabled: false, manualSteps: ["Safari > Settings > Extensions > turn on Leon"] },
+        },
       });
 
     const result = JSON.parse(await dev.handler({ projectPath: project, browser: "safari", developmentTeam: "JU3XAJJQ2G", appName: "Leon" }));
 
     expect(result.value.ready.status).toBe("compiled-not-attached");
     expect(result.value.ready.signing).toBeUndefined();
+    expect(result.value.ready.safari).toBeUndefined();
     expect(result.value.signing).toEqual({ requested: "JU3XAJJQ2G", identity: "team:JU3XAJJQ2G", status: "team-signed", appPath: expect.stringMatching(/Leon\.app$/) });
     expect(result.warnings.some((line: string) => line.startsWith("developmentTeam"))).toBe(false);
     expect(result.hint).toContain("The extension is not enabled in Safari yet");
