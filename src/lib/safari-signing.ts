@@ -211,7 +211,7 @@ export function safariRunStep(appPath: string, identity: SigningIdentity): strin
       ? "turn on Safari > Settings > Developer > Allow unsigned extensions (an ad-hoc signed app needs it, and Safari turns it off at every quit), then turn the extension on in Safari > Settings > Extensions"
       : "then turn it on in Safari > Settings > Extensions";
 
-  return `To try it in Safari: open ${appPath} once so Safari registers the extension, ${enable}. Tell the person these clicks.`;
+  return `To try it in Safari: open ${appPath} once so Safari registers the extension, ${enable} and set its Websites to Allow. Another app registered with the same bundle id wins over this one, so remove that copy first. Tell the person these clicks.`;
 }
 
 export async function safariSigningFrame(

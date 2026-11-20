@@ -2,6 +2,7 @@
 
 ## 11.1.0
 
+- Ledger 983. The Safari run step names the Websites step and the duplicate bundle id. `value.nextSteps` on a Safari build now says to set the extension's Websites to Allow after turning it on, and that another app registered with the same bundle id wins, so that copy goes first.
 - Ledger 976. A Safari enable read never credits this build with another copy's enable. When pluginkit registers the bundle id from an app outside this build (`registeredPath` not under `appPath`, such as another checkout's build), the answer is `enabled: false` with blocker `other-registration`, naming that copy and the fix: unregister it (`pluginkit -r`) or give this build a distinct `bundleId`. It said the enable belonged to this build and "nothing left to do".
 - Ledger 981. `extension_dev` on Safari states the Safari enable read once. The whole block was in `value.ready.safari`, copied from the wait, and again in `value.safari`; only `value.safari` carries it now.
 - Ledger 978. Safari answers carry only notes that apply to Safari. `extension_wait` and `extension_dev` on Safari no longer carry `guestLoadNote` or `debugPortNote`, which spoke of CDP and RDP ports, and `extension_inspect` no longer warns that console capture rides the RDP watcher; asked for `console`, it says `extension_logs` streams the console.

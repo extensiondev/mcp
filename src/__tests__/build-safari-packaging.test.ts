@@ -246,14 +246,14 @@ describe("extension_build drives the Safari web-extension conversion", () => {
 
     expect(result.value.signing.identity).toBe("ad-hoc");
     expect(result.value.nextSteps).toEqual([
-      `To try it in Safari: open ${appPath} once so Safari registers the extension, turn on Safari > Settings > Developer > Allow unsigned extensions (an ad-hoc signed app needs it, and Safari turns it off at every quit), then turn the extension on in Safari > Settings > Extensions. Tell the person these clicks.`,
+      `To try it in Safari: open ${appPath} once so Safari registers the extension, turn on Safari > Settings > Developer > Allow unsigned extensions (an ad-hoc signed app needs it, and Safari turns it off at every quit), then turn the extension on in Safari > Settings > Extensions and set its Websites to Allow. Another app registered with the same bundle id wins over this one, so remove that copy first. Tell the person these clicks.`,
     ]);
 
     codesignSays = "Executable=x\nTeamIdentifier=ABCDE12345";
     const signed = await run({ projectPath: dir, browser: "safari" });
 
     expect(signed.value.nextSteps).toEqual([
-      `To try it in Safari: open ${appPath} once so Safari registers the extension, then turn it on in Safari > Settings > Extensions. Tell the person these clicks.`,
+      `To try it in Safari: open ${appPath} once so Safari registers the extension, then turn it on in Safari > Settings > Extensions and set its Websites to Allow. Another app registered with the same bundle id wins over this one, so remove that copy first. Tell the person these clicks.`,
     ]);
   });
 
