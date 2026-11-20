@@ -227,3 +227,108 @@ describe("a package root is adopted only when it owns the manifest, as the engin
     }
   });
 });
+
+describe("a src manifest with no package.json beside it is rooted where the engine that will run builds it", () => {
+  const KEYS = ["EXTENSION_MCP_CLI_VERSION", "EXTENSION_MCP_ENGINE_DIR", "EXTENSION_MCP_ENGINE_BIN"];
+  const saved = KEYS.map((key) => [key, process.env[key]] as const);
+
+  afterEach(() => {
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+
+  function bareSrc(): { dir: string; src: string } {
+    const dir = tmp();
+    const src = path.join(dir, "src");
+    fs.mkdirSync(src);
+    fs.writeFileSync(path.join(src, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "F", version: "1.0.0" }));
+
+    return { dir, src };
+  }
+
+  function enginePackage(version: string): string {
+    const dir = tmp();
+    fs.mkdirSync(path.join(dir, "bin"));
+    fs.writeFileSync(path.join(dir, "bin", "extension.cjs"), "");
+    fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: "extension", version }));
+
+    return dir;
+  }
+
+  it("is src under an engine older than 4.2.0 named by EXTENSION_MCP_CLI_VERSION, and says why", () => {
+    for (const key of KEYS) delete process.env[key];
+    const { dir, src } = bareSrc();
+
+    expect(engineProjectRoot(dir)).toBe(dir);
+
+    process.env.EXTENSION_MCP_CLI_VERSION = "4.1.41";
+    expect(engineProjectRoot(dir)).toBe(src);
+    expect(readyContractPath(dir, "chrome")).toBe(bridge.readyContractPath(src, "chrome"));
+    expect(projectRootNote(dir)).toBe(`Project root: ${src}, the manifest's folder, because the Extension.js that runs here is older than 4.2.0 and no package.json or deno.json sits beside src; dist and zips live there.`);
+
+    for (const current of ["4.2.0", "^4.2.0", "4.3.1", "5.0.0", "canary", "latest"]) {
+      process.env.EXTENSION_MCP_CLI_VERSION = current;
+      expect(engineProjectRoot(dir), current).toBe(dir);
+    }
+  });
+
+  it("is src under an older engine override, and the folder passed under a current one, whatever the version variable says", () => {
+    for (const key of KEYS) delete process.env[key];
+    const { dir, src } = bareSrc();
+
+    process.env.EXTENSION_MCP_ENGINE_DIR = enginePackage("4.1.41");
+    expect(engineProjectRoot(dir)).toBe(src);
+
+    process.env.EXTENSION_MCP_CLI_VERSION = "4.1.41";
+    process.env.EXTENSION_MCP_ENGINE_DIR = enginePackage("4.2.0");
+    expect(engineProjectRoot(dir)).toBe(dir);
+
+    delete process.env.EXTENSION_MCP_ENGINE_DIR;
+    process.env.EXTENSION_MCP_ENGINE_BIN = path.join(enginePackage("4.0.9"), "bin", "extension.cjs");
+    process.env.EXTENSION_MCP_CLI_VERSION = "4.2.0";
+    expect(engineProjectRoot(dir)).toBe(src);
+  });
+
+  it.skipIf(process.platform === "win32")("reads the project's own engine before the version variable", () => {
+    for (const key of KEYS) delete process.env[key];
+    const { dir, src } = bareSrc();
+    const bin = path.join(dir, "node_modules", ".bin");
+    fs.mkdirSync(bin, { recursive: true });
+    fs.mkdirSync(path.join(dir, "node_modules", "extension"));
+    fs.writeFileSync(path.join(bin, "extension"), "#!/bin/sh\n", { mode: 0o755 });
+    fs.writeFileSync(path.join(dir, "node_modules", "extension", "package.json"), JSON.stringify({ name: "extension", version: "4.1.41" }));
+
+    process.env.EXTENSION_MCP_CLI_VERSION = "4.2.0";
+    expect(engineProjectRoot(dir)).toBe(src);
+
+    fs.writeFileSync(path.join(dir, "node_modules", "extension", "package.json"), JSON.stringify({ name: "extension", version: "4.2.0" }));
+    process.env.EXTENSION_MCP_CLI_VERSION = "4.1.41";
+    expect(engineProjectRoot(dir)).toBe(dir);
+  });
+
+  it("leaves every layout the older engine roots the same way where it is", () => {
+    for (const key of KEYS) delete process.env[key];
+    process.env.EXTENSION_MCP_CLI_VERSION = "4.1.41";
+
+    const owned = tmp();
+    fs.writeFileSync(path.join(owned, "package.json"), JSON.stringify({ name: "a" }));
+    fs.mkdirSync(path.join(owned, "src"));
+    fs.writeFileSync(path.join(owned, "src", "manifest.json"), "{}");
+    expect(engineProjectRoot(owned)).toBe(owned);
+
+    const broken = bareSrc();
+    fs.writeFileSync(path.join(broken.dir, "package.json"), "{ not json");
+    expect(engineProjectRoot(broken.dir)).toBe(broken.src);
+
+    const deno = bareSrc();
+    fs.writeFileSync(path.join(deno.dir, "deno.json"), JSON.stringify({ imports: { extension: "npm:extension@4.1.41" } }));
+    expect(engineProjectRoot(deno.dir)).toBe(deno.dir);
+
+    const flat = tmp();
+    fs.writeFileSync(path.join(flat, "manifest.json"), "{}");
+    expect(engineProjectRoot(flat)).toBe(flat);
+    expect(engineProjectRoot(broken.src)).toBe(broken.src);
+  });
+});

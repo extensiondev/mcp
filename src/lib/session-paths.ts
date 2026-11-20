@@ -11,8 +11,14 @@ import path from "node:path";
 
 import * as bridge from "extension-develop/bridge";
 
+import { readPackageVersion, resolveEngineOverride } from "./engine-override";
 import { STORE_MD_FILENAME } from "./store-md";
 
+import { dependencies } from "../../package.json";
+
+const PACKAGE_MANIFEST = "package.json";
+const DENO_MANIFESTS = ["deno.jsonc", "deno.json"];
+const RELEASE = /^[\^~v]*(\d+)\.(\d+)\.\d+/;
 export const EXTENSION_CONFIG_FILENAMES = [
   "extension.config.js",
   "extension.config.mjs",
@@ -26,6 +32,16 @@ export function posixPath(file: string): string {
 function isFile(file: string): boolean {
   try {
     return fs.statSync(file).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function parsesAsJson(file: string): boolean {
+  try {
+    JSON.parse(fs.readFileSync(file, "utf8"));
+
+    return true;
   } catch {
     return false;
   }
@@ -52,23 +68,77 @@ function bundledEngineRoot(start: string): string {
   }
 }
 
+function isExecutable(file: string): boolean {
+  try {
+    fs.accessSync(file, fs.constants.X_OK);
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function runningEngineVersion(start: string): string | null {
+  const override = resolveEngineOverride();
+  if (override) return override.packageDir ? readPackageVersion(override.packageDir) : null;
+
+  const modules = path.join(start, "node_modules");
+  const bin = path.join(modules, ".bin", process.platform === "win32" ? "extension.cmd" : "extension");
+  if (isExecutable(bin)) return readPackageVersion(path.join(modules, "extension"));
+
+  return String(process.env.EXTENSION_MCP_CLI_VERSION || "").trim() || String(dependencies["extension-develop"] ?? "");
+}
+
+function runsAnEngineBeforeTheNamedFolderRule(start: string): boolean {
+  const release = RELEASE.exec(String(runningEngineVersion(start) ?? "").trim());
+  if (!release) return false;
+
+  const major = Number(release[1]);
+
+  return major < 4 || (major === 4 && Number(release[2]) < 2);
+}
+
+function rootBesideTheManifest(start: string): string | null {
+  const src = path.join(start, "src");
+  if (!isFile(path.join(src, "manifest.json"))) return null;
+  if (parsesAsJson(path.join(start, PACKAGE_MANIFEST))) return null;
+  if (DENO_MANIFESTS.some((name) => isFile(path.join(start, name)))) return null;
+
+  return runsAnEngineBeforeTheNamedFolderRule(start) ? src : null;
+}
+
 /* @invariant ONE PROJECT ROOT AN ANSWER, THE ENGINE'S, ASKED AND NEVER
  * COPIED. The root is what the bundled engine's resolveSessionProjectRoot
  * answers: the MCP kept its own copy of that walk until 2026-11-20 and the
  * copy disagreed in four layouts (ledger 1025), so a good build was read as
- * no dist and a live session as no session. Every dist and session path is
- * read from this root; an answer whose root is not the folder it was passed
- * says so once. */
+ * no dist and a live session as no session. One difference between engines
+ * is known and handled here: before Extension.js 4.2.0 a src/manifest.json
+ * with no package.json or deno.json beside the folder passed was built from
+ * src (ledger 925, 1026), so when the engine that will run is older, src is
+ * the root. Which engine runs is read in the order exec.ts spawns one: an
+ * engine override, the project's own binary, EXTENSION_MCP_CLI_VERSION, the
+ * pin; exec.ts is not imported, so no test setup loads it before a mock.
+ * Every dist and session path is read from this root; an answer whose root
+ * is not the folder it was passed says so once. */
+function resolvedRoot(projectPath: string): { start: string; root: string; besideManifest: boolean } {
+  const start = path.resolve(projectPath);
+  const root = bundledEngineRoot(start);
+  const beside = root === start ? rootBesideTheManifest(start) : null;
+
+  return { start, root: beside ?? root, besideManifest: beside !== null };
+}
+
 export function engineProjectRoot(projectPath: string): string {
-  return bundledEngineRoot(path.resolve(projectPath));
+  return resolvedRoot(projectPath).root;
 }
 
 export function projectRootNote(projectPath: string): string | null {
-  const start = path.resolve(projectPath);
-  const root = engineProjectRoot(start);
+  const { start, root, besideManifest } = resolvedRoot(projectPath);
   if (root === start) return null;
 
-  return `Project root: ${root}, the folder of the package.json or deno.json that owns this manifest; dist, zips and ${STORE_MD_FILENAME} live there.`;
+  return besideManifest
+    ? `Project root: ${root}, the manifest's folder, because the Extension.js that runs here is older than 4.2.0 and no package.json or deno.json sits beside src; dist and zips live there.`
+    : `Project root: ${root}, the folder of the package.json or deno.json that owns this manifest; dist, zips and ${STORE_MD_FILENAME} live there.`;
 }
 
 export function statedProjectRoot(projectPath: string): { root: string; note: string } | null {
