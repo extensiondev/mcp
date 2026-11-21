@@ -17,7 +17,7 @@ import { codeExpiryFromStart, secondsLeft } from "./device-wait";
 import { envelope, type ErrorCode, type RetryVerdict } from "./envelope";
 import { kernelHook } from "./kernel-hooks";
 import { fetchLoginConfig, resolveApiBase, safeApiBase } from "./login-flow";
-import { closedForOf, laneClosedFacts, laneClosedHint, platformHoldEnvelope, sawPlatformHold } from "./platform-hold";
+import { closedForOf, laneClosedFacts, laneClosedHint, platformHoldEnvelope, refusedAtApproval, sawPlatformHold } from "./platform-hold";
 import {
   BATCH_UNSUPPORTED_MESSAGE,
   createCapNote,
@@ -1262,7 +1262,7 @@ export async function createProjectBatch(args: BatchCreateArgs, local: BatchCrea
         poll.message || "Headless project creation is not open yet.",
         "lane-closed",
         "E_PLATFORM",
-        { retry: "no", hint: laneClosedHint({ api: apiBase, message: poll.message, closedFor: closedForOf(poll.body), subject: "projects", workspace: parsed.workspace }), value: { ...laneClosedFacts({ api: apiBase, message: poll.message, closedFor: closedForOf(poll.body) }) } },
+        { retry: "no", hint: laneClosedHint({ api: apiBase, message: poll.message, closedFor: closedForOf(poll.body), subject: "projects", workspace: parsed.workspace, atApproval: refusedAtApproval(poll.body) }), value: { ...laneClosedFacts({ api: apiBase, message: poll.message, closedFor: closedForOf(poll.body) }) } },
       );
     }
 

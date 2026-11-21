@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Ledger 1047. A create code refused at extension.dev/device because the approving account may not create now ends at once: the platform closes the code with `refusedAt: "approval"`, and `extension_project_create` and `extension_workspace_create` answer with one step, call again without the deviceCode and have an invited member (or, for a workspace, an invited account) approve the new code.
 - Ledger 1054. Three more guards have their own cases: the review-account answer keyed on `closedFor` alone, a start session stopped on `compile_error`, and `extension_dev` saying nothing is running when the dev server exited on an error it would otherwise keep.
 - Ledger 1053. The warning for a person's own `MOZ_DISABLE_SOCKET_PROCESS` names a step that works. Removing the variable alone let this server inject it again; the warning now says to remove it, set `EXTENSION_KEEP_SOCKET_PROCESS=1` and relaunch with `replace: true`.
 - Ledger 1052. Every door that reads `closedFor` has its own case, as do the start stop, the start engine sentence, the socket-process warning and the same-page tabs on the Firefox eval route. Three spec files that waited out the real boot window and stop grace now shorten both through module mocks and run in about two seconds each.

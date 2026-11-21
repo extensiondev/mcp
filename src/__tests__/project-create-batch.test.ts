@@ -1109,6 +1109,13 @@ describe("extension_project_create with projects: the grant and the list", () =>
     expect(account.status).toBe("lane-closed");
     expect(account.hint).toMatch(/for this account/);
     expect(account.value).not.toHaveProperty("consoleUrl");
+
+    harness({
+      token: [{ status: 403, body: { error: "access_denied", message: "reworded", code: "CLI_PROJECT_CREATE_DISABLED", closedFor: "account", refusedAt: "approval" } }],
+    });
+
+    const atApproval = await run({ projects: THREE, deviceCode: "dev-code" });
+    expect(atApproval.hint).toMatch(/Call extension_project_create again without the deviceCode and have an invited member of acme approve the new code\.$/);
   });
 
   it("answers lane-closed when the device code is refused for a closed lane", async () => {

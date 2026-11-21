@@ -24,7 +24,7 @@ import {
 } from "../lib/login-flow";
 import { consoleBase } from "../lib/registry";
 import { CREATE_CEILING_SENTENCE, CREATE_STUCK_AFTER_SECONDS, creatingForWords, type CreatingAge } from "../lib/create-ceiling";
-import { closedForOf, laneClosedFacts, laneClosedHint, platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
+import { closedForOf, laneClosedFacts, laneClosedHint, platformHoldEnvelope, refusedAtApproval, sawPlatformHold } from "../lib/platform-hold";
 import { WORKSPACE_CREATE_LOCAL } from "./workspace-create-local";
 import { answerIsUnknownOutcome, readCreatedWorkspace } from "../lib/create-answer";
 import { bearerFetch } from "../lib/platform-fetch";
@@ -87,14 +87,14 @@ function fail(name: string, message: string, status: string, code: ErrorCode, hi
   });
 }
 
-function closedLane(name: string, message: string, api: string, workspace: string, closedFor?: unknown): string {
+function closedLane(name: string, message: string, api: string, workspace: string, closedFor?: unknown, atApproval = false): string {
   return envelope({
     ok: false,
     command: COMMAND,
     status: "lane-closed",
     error: { code: "E_PLATFORM", name, message, retry: "no" },
     value: { workspace, ...laneClosedFacts({ api, message, closedFor }) },
-    hint: laneClosedHint({ api, message, closedFor, subject: "workspace" }),
+    hint: laneClosedHint({ api, message, closedFor, subject: "workspace", atApproval }),
   });
 }
 
@@ -301,6 +301,7 @@ async function finishFromPoll(
           ctx.apiBase,
           ctx.workspace,
           closedForOf(poll.body),
+          refusedAtApproval(poll.body),
         );
       }
 

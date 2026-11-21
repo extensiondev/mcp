@@ -578,6 +578,19 @@ describe("extension_project_create", () => {
     expect(out.value).not.toHaveProperty("consoleUrl");
   });
 
+  it("1047: stops on a code /device refused for the approver and names who can approve a new one", async () => {
+    const { fn } = createFetch({
+      token: [{ status: 403, body: { error: "access_denied", message: "reworded", code: "CLI_PROJECT_CREATE_DISABLED", closedFor: "account", refusedAt: "approval" } }],
+    });
+    vi.stubGlobal("fetch", fn);
+
+    const out = JSON.parse(await handler({ ...baseArgs, deviceCode: "dev-code" }));
+
+    expect(out.status).toBe("lane-closed");
+    expect(out.hint).toMatch(/refused this code at extension\.dev\/device.*Call extension_project_create again without the deviceCode and have an invited member of acme approve the new code\.$/);
+    expect(fn.mock.calls.filter((call) => String(call[0]).endsWith("/token"))).toHaveLength(1);
+  });
+
   it("carries a prefilled create form link when the lane is closed", async () => {
     const { fn } = createFetch({
       code: {

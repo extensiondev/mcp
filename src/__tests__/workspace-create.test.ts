@@ -302,6 +302,18 @@ describe("extension_workspace_create", () => {
     expect(out.value).not.toHaveProperty("consoleUrl");
   });
 
+  it("1047: names an invited account as the approver of a new code when /device refused this one", async () => {
+    const { fn } = createFetch({
+      token: [{ status: 403, body: { error: "access_denied", message: "reworded", code: "CLI_WORKSPACE_CREATE_DISABLED", closedFor: "account", refusedAt: "approval" } }],
+    });
+    vi.stubGlobal("fetch", fn);
+
+    const out = JSON.parse(await handler({ workspace: "new-org", deviceCode: "dev-code" }));
+
+    expect(out.status).toBe("lane-closed");
+    expect(out.hint).toMatch(/refused this code at extension\.dev\/device.*Call extension_workspace_create again without the deviceCode and have an invited account approve the new code\.$/);
+  });
+
   async function workspaceAnswers(create: Route | "no-answer") {
     const { fn } = createFetch({
       token: [{ status: 200, body: grantBody }],

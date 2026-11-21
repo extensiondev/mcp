@@ -41,7 +41,7 @@ import {
 import { megabytes, SOURCE_SKIPPED_EXTENSIONS, SOURCE_SKIPPED_FOLDERS } from "../lib/source-archive-words";
 import { consoleBase, consoleProjectUrl } from "../lib/registry";
 import { mcpOrigins } from "../lib/origins";
-import { closedForOf, laneClosedFacts, laneClosedHint, platformHoldEnvelope, sawPlatformHold, type CreatePrefill } from "../lib/platform-hold";
+import { closedForOf, laneClosedFacts, laneClosedHint, platformHoldEnvelope, refusedAtApproval, sawPlatformHold, type CreatePrefill } from "../lib/platform-hold";
 import { firstBuildSpendNarration, type BuildAllowance } from "../lib/build-allowance";
 import { answerIsUnknownOutcome, readCreatedProject } from "../lib/create-answer";
 import { CREATE_CEILING_SENTENCE, CREATE_STUCK_AFTER_SECONDS, creatingAgeAt, creatingForWords } from "../lib/create-ceiling-words";
@@ -220,7 +220,7 @@ function fail(
   });
 }
 
-function closedLane(name: string, message: string, api: string, prefill: CreatePrefill, closedFor?: unknown): string {
+function closedLane(name: string, message: string, api: string, prefill: CreatePrefill, closedFor?: unknown, atApproval = false): string {
   const workspace = prefill.project.split("/")[0] ?? "";
   const facts = laneClosedFacts({ api, message, closedFor, prefill });
 
@@ -230,7 +230,7 @@ function closedLane(name: string, message: string, api: string, prefill: CreateP
     status: "lane-closed",
     error: { code: "E_PLATFORM", name, message, retry: "no" },
     value: { workspace, ...facts },
-    hint: laneClosedHint({ api, message, closedFor, subject: "project", prefill }),
+    hint: laneClosedHint({ api, message, closedFor, subject: "project", prefill, atApproval }),
   });
 }
 
@@ -683,7 +683,7 @@ async function finishFromPoll(
 
     if (poll.reason === "denied") {
       if (poll.code === "CLI_PROJECT_CREATE_DISABLED") {
-        return closedLane("CreateClosed", poll.message || `Headless project creation is not open on ${ctx.apiBase}.`, ctx.apiBase, { project: ctx.project, repo: ctx.args.repo }, closedForOf(poll.body));
+        return closedLane("CreateClosed", poll.message || `Headless project creation is not open on ${ctx.apiBase}.`, ctx.apiBase, { project: ctx.project, repo: ctx.args.repo }, closedForOf(poll.body), refusedAtApproval(poll.body));
       }
 
       return fail(

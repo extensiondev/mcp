@@ -267,10 +267,14 @@ const ACCOUNT_REFUSAL_MARKERS = ["open only to invited accounts", REVIEW_ACCOUNT
 
 const OWN_WORKSPACE = /only in its own workspace, ([a-z0-9][a-z0-9-]*)\./i;
 
-type LaneClosedRead = { api?: string; message?: string; closedFor?: unknown; prefill?: CreatePrefill };
+type LaneClosedRead = { api?: string; message?: string; closedFor?: unknown; prefill?: CreatePrefill; atApproval?: boolean };
 
 export function closedForOf(body: unknown): unknown {
   return body && typeof body === "object" ? (body as { closedFor?: unknown }).closedFor : undefined;
+}
+
+export function refusedAtApproval(body: unknown): boolean {
+  return Boolean(body && typeof body === "object" && (body as { refusedAt?: unknown }).refusedAt === "approval");
 }
 
 function closedForReviewAccount(options: LaneClosedRead): boolean {
@@ -339,6 +343,14 @@ export function laneClosedHint(options: LaneClosedRead & { subject: LaneSubject;
   if (closedForAccount(options)) {
     const workspace = options.workspace ?? options.prefill?.project.split("/")[0] ?? "";
     const what = options.subject === "projects" ? "them" : "it";
+
+    if (options.atApproval) {
+      const approver = options.subject === "workspace" ? "an invited account" : `an invited member of ${workspace || "that workspace"}`;
+      const tool = options.subject === "workspace" ? "extension_workspace_create" : "extension_project_create";
+
+      return `The platform at ${facts.api} refused this code at extension.dev/device because the account that approved it may not create ${noun}s there; its own message above says why, and the code is closed. Call ${tool} again without the deviceCode and have ${approver} approve the new code.`;
+    }
+
     const who =
       options.subject === "workspace"
         ? "Only an invited account can create it"
