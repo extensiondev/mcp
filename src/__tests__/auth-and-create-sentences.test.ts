@@ -70,6 +70,27 @@ describe("the auth and create tools describe what the platform does", () => {
     expect(laneClosedHint({ subject: "project", message: reworded, prefill })).toMatch(/Create the project in the console/);
   });
 
+  it("1049: the review account is sent back to its own workspace, by closedFor or by the sentence", () => {
+    const project = "walk-reviewer is the review account, which creates projects only in its own workspace, walk-reviewer. Start again from your terminal with walk-reviewer as the workspace.";
+    const workspace = "walk-reviewer is the review account, which cannot create workspaces. It creates projects only in its own workspace, walk-reviewer.";
+
+    for (const closedFor of ["review-account", undefined]) {
+      const single = laneClosedHint({ subject: "project", message: project, closedFor, prefill: { project: "acme/ghost-app" } });
+      expect(single, String(closedFor)).toMatch(/extension_project_create again with project "walk-reviewer\/ghost-app"/);
+      expect(single).not.toMatch(/invited member|console/i);
+
+      const list = laneClosedHint({ subject: "projects", message: project, closedFor, workspace: "acme" });
+      expect(list).toMatch(/every project under walk-reviewer\//);
+      expect(list).not.toMatch(/invited member/);
+
+      const team = laneClosedHint({ subject: "workspace", message: workspace, closedFor });
+      expect(team).toMatch(/extension_project_create with a project under walk-reviewer\//);
+      expect(team).not.toMatch(/invited account/);
+    }
+
+    expect(laneClosedFacts({ message: "reworded", closedFor: "review-account" })).not.toHaveProperty("consoleUrl");
+  });
+
   it("1046: an account refusal for a list names its workspace and gives one next step", () => {
     const hint = laneClosedHint({ subject: "projects", message: "closed", closedFor: "account", workspace: "acme" });
 

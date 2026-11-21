@@ -48,13 +48,18 @@ type RdpCall = { port: number; expression: string; picked: RdpTab | null | undef
 const rdpCalls: RdpCall[] = [];
 let openTabs: RdpTab[] = [];
 let rdpAnswer: (picked: RdpTab) => unknown = () => ({ ok: true, value: "over-protocol" });
+let listRefused = false;
 
 vi.mock("../lib/rdp", async (importOriginal) => {
   const actual = await importOriginal<typeof RdpModule>();
 
   return {
     ...actual,
-    rdpListTabs: async () => openTabs,
+    rdpListTabs: async () => {
+      if (listRefused) throw new Error("connect ECONNREFUSED 127.0.0.1:9222");
+
+      return openTabs;
+    },
     rdpEvaluateInTab: async (
       port: number,
       options: { select: (tabs: RdpTab[]) => RdpTab | null | undefined; expression: string },
@@ -132,6 +137,7 @@ afterEach(() => {
   openTabs = [];
   rdpPort = 9222;
   rdpAnswer = () => ({ ok: true, value: "over-protocol" });
+  listRefused = false;
   respond = () => value(1);
   for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
 });
@@ -538,6 +544,22 @@ describe("985: a web page the extension holds no host access to", () => {
     expect(rdpCalls).toHaveLength(0);
   });
 
+  it("1045: evaluates one of two tabs that show the same page, since nothing is ambiguous", async () => {
+    const dir = project(MV3);
+    respond = () => refusedHostAccess();
+    openTabs = [
+      { actor: "tab1", url: "http://127.0.0.1:4173/note.html", title: "one" },
+      { actor: "tab2", url: "http://127.0.0.1:4173/note.html", title: "two", selected: true },
+    ];
+
+    const result = JSON.parse(
+      await evalTool.handler({ projectPath: dir, browser: "firefox", context: "page", url: "note", expression: "document.title" }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(rdpCalls).toHaveLength(1);
+  });
+
   it("1045: claims a debugger-protocol read only when the read happened", async () => {
     const dir = project(MV3);
     respond = () => refusedHostAccess();
@@ -553,6 +575,14 @@ describe("985: a web page the extension holds no host access to", () => {
 
     expect(result.status).toBe("rdp-failed");
     expect((result.warnings ?? []).join("\n")).not.toMatch(/went over the debugger protocol/);
+
+    listRefused = true;
+    const dead = JSON.parse(
+      await evalTool.handler({ projectPath: dir, browser: "firefox", context: "page", url: "http://127.0.0.1:4173/note.html", expression: "document.title" }),
+    );
+
+    expect(dead.status).toBe("rdp-failed");
+    expect(dead.error).toMatchObject({ code: "E_RDP", retry: "safe" });
   });
 
   it("keeps a refusal that names no missing host access, since only that one is a debug read away", async () => {

@@ -1021,6 +1021,21 @@ function sameTabsSeen(matching: RdpTab[]): TabsSeen | undefined {
   return matching.length > 1 ? { matched: matching.length, refs: [...matching].sort(geckoRecency).map(geckoTabRef) } : undefined;
 }
 
+function rdpFailed(browser: string, port: number, err: unknown): string {
+  return envelope({
+    ok: false,
+    command: schema.name,
+    status: "rdp-failed",
+    error: {
+      code: "E_RDP",
+      name: "RdpFailed",
+      message: `The ${browser} remote-debugging port ${port} did not answer: ${err instanceof Error ? err.message : String(err)}. The tab's documents were not read.`,
+      retry: "safe",
+    },
+    hint: "extension_doctor says whether the browser is still up; if it is, retry.",
+  });
+}
+
 async function evaluateInGeckoTab(
   args: ActArgs & { expression: string },
   browser: string,
@@ -1043,18 +1058,7 @@ async function evaluateInGeckoTab(
       timeoutMs: args.timeout ?? 10_000,
     });
   } catch (err) {
-    return envelope({
-      ok: false,
-      command: schema.name,
-      status: "rdp-failed",
-      error: {
-        code: "E_RDP",
-        name: "RdpFailed",
-        message: `The ${browser} remote-debugging port ${resolved.port} did not answer: ${err instanceof Error ? err.message : String(err)}. The tab's documents were not read.`,
-        retry: "safe",
-      },
-      hint: "extension_doctor says whether the browser is still up; if it is, retry.",
-    });
+    return rdpFailed(browser, resolved.port, err);
   }
 
   if (outcome.ok) {
@@ -1229,8 +1233,8 @@ async function evaluatePagePastHostAccess(
 
   try {
     tabs = await rdpListTabs(resolved.port);
-  } catch {
-    return null;
+  } catch (err) {
+    return rdpFailed(browser, resolved.port, err);
   }
 
   const url = args.url;

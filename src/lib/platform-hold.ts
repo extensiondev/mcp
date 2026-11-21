@@ -261,7 +261,11 @@ function createForm(www: string, prefill: CreatePrefill): Required<Pick<LaneClos
   };
 }
 
-const ACCOUNT_REFUSAL_MARKERS = ["open only to invited accounts", "is the review account"];
+const REVIEW_ACCOUNT_MARKER = "is the review account";
+
+const ACCOUNT_REFUSAL_MARKERS = ["open only to invited accounts", REVIEW_ACCOUNT_MARKER];
+
+const OWN_WORKSPACE = /only in its own workspace, ([a-z0-9][a-z0-9-]*)\./i;
 
 type LaneClosedRead = { api?: string; message?: string; closedFor?: unknown; prefill?: CreatePrefill };
 
@@ -269,8 +273,12 @@ export function closedForOf(body: unknown): unknown {
   return body && typeof body === "object" ? (body as { closedFor?: unknown }).closedFor : undefined;
 }
 
+function closedForReviewAccount(options: LaneClosedRead): boolean {
+  return options.closedFor === "review-account" || String(options.message ?? "").includes(REVIEW_ACCOUNT_MARKER);
+}
+
 function closedForAccount(options: LaneClosedRead): boolean {
-  if (options.closedFor === "account") return true;
+  if (options.closedFor === "account" || options.closedFor === "review-account") return true;
 
   const text = String(options.message ?? "");
 
@@ -310,6 +318,22 @@ export function laneClosedHint(options: LaneClosedRead & { subject: LaneSubject;
 
   if (facts.publicHold) {
     return `This is the platform's public hold on ${facts.api}: headless ${noun} creation there is open only to workspaces on the platform's allowlist, and it refused this one. Its answer names no allowlisted workspace and no opening date, so nothing on this machine opens it, and the console answers its gate page during the hold, so creating it there is no route either. Building, running and packaging still work with no account: extension_create, extension_dev and extension_build.`;
+  }
+
+  if (closedForReviewAccount(options)) {
+    const own = OWN_WORKSPACE.exec(String(options.message ?? ""))?.[1]?.toLowerCase() ?? "";
+    const under = own ? `${own}/` : "its own workspace (the one named after the review login)";
+    const name = options.prefill?.project.split("/")[1] ?? "";
+    const step =
+      options.subject === "workspace"
+        ? `Call extension_project_create with a project under ${under} instead.`
+        : options.subject === "project" && own && name
+          ? `Call extension_project_create again with project "${own}/${name}".`
+          : options.subject === "projects"
+            ? `Run the list again with every project under ${under}.`
+            : `Run the create again with the project under ${under}.`;
+
+    return `The platform at ${facts.api} closed headless ${noun} creation here for the review account, which creates projects only in its own workspace; its own message above says so. ${step}`;
   }
 
   if (closedForAccount(options)) {
