@@ -35,6 +35,7 @@ import { schema as themeVerifySchema } from "../tools/theme-verify";
 import { schema as evalSchema } from "../tools/eval";
 import { schema as docsSearchSchema } from "../tools/docs-search";
 import { schema as elementSchema } from "../tools/element";
+import { schema as approvalsSchema } from "../tools/approvals";
 
 const devSchema = devTool.schema;
 
@@ -48,6 +49,11 @@ describe("validateToolInput", () => {
         browsers: ["chrome", "firefox"],
       }),
     ).toEqual([]);
+  });
+
+  it("lets extension_approvals list with no approvalId, which list mode never needs", () => {
+    expect(validateToolInput(approvalsSchema.inputSchema, {})).toEqual([]);
+    expect(validateToolInput(approvalsSchema.inputSchema, { action: "list" })).toEqual([]);
   });
 
   it("flags a missing required argument", () => {

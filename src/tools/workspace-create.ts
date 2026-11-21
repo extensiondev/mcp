@@ -24,7 +24,7 @@ import {
 } from "../lib/login-flow";
 import { consoleBase } from "../lib/registry";
 import { CREATE_CEILING_SENTENCE, CREATE_STUCK_AFTER_SECONDS, creatingForWords, type CreatingAge } from "../lib/create-ceiling";
-import { laneClosedFacts, laneClosedHint, platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
+import { closedForOf, laneClosedFacts, laneClosedHint, platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
 import { WORKSPACE_CREATE_LOCAL } from "./workspace-create-local";
 import { answerIsUnknownOutcome, readCreatedWorkspace } from "../lib/create-answer";
 import { bearerFetch } from "../lib/platform-fetch";
@@ -87,14 +87,14 @@ function fail(name: string, message: string, status: string, code: ErrorCode, hi
   });
 }
 
-function closedLane(name: string, message: string, api: string, workspace: string): string {
+function closedLane(name: string, message: string, api: string, workspace: string, closedFor?: unknown): string {
   return envelope({
     ok: false,
     command: COMMAND,
     status: "lane-closed",
     error: { code: "E_PLATFORM", name, message, retry: "no" },
-    value: { workspace, ...laneClosedFacts({ api, message }) },
-    hint: laneClosedHint({ api, message, subject: "workspace" }),
+    value: { workspace, ...laneClosedFacts({ api, message, closedFor }) },
+    hint: laneClosedHint({ api, message, closedFor, subject: "workspace" }),
   });
 }
 
@@ -213,6 +213,7 @@ export async function handleWorkspaceCreate(args: HandlerArgs, local: WorkspaceC
           serverMessage || `Headless workspace creation is not open on ${apiBase} yet. (${message})`,
           apiBase,
           workspace,
+          err?.serverClosedFor,
         );
       }
 
@@ -299,6 +300,7 @@ async function finishFromPoll(
           poll.message || `Headless workspace creation is not open on ${ctx.apiBase}.`,
           ctx.apiBase,
           ctx.workspace,
+          closedForOf(poll.body),
         );
       }
 
@@ -545,6 +547,7 @@ async function sendCreate(ctx: CreateContext, kept: boolean, keepGrant: () => vo
         String(data.message || `Headless workspace creation is not open on ${ctx.apiBase} yet.`),
         ctx.apiBase,
         ctx.workspace,
+        closedForOf(data),
       );
     }
 

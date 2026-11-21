@@ -127,7 +127,34 @@ describe("a person can ask to see the browser (headless input)", () => {
     expect(geckoLaunchEnv("firefox", "darwin", {})).toBeNull();
     expect(geckoLaunchEnv("chrome", "linux", {})).toBeNull();
     expect(geckoLaunchEnv("firefox", "linux", { MOZ_DISABLE_SOCKET_PROCESS: "0" })).toBeNull();
+    expect(geckoLaunchEnv("firefox", "linux", { EXTENSION_KEEP_SOCKET_PROCESS: "1" })).toBeNull();
   });
+
+  it.each([
+    ["extension_dev", () => dev],
+    ["extension_start", () => start],
+  ] as const)("%s hands a Linux Gecko launch the socket-process variable", async (_name, tool) => {
+    const projectPath = tmp("mcp-gecko-env-");
+    const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
+    const inherited = process.env.MOZ_DISABLE_SOCKET_PROCESS;
+
+    delete process.env.MOZ_DISABLE_SOCKET_PROCESS;
+    Object.defineProperty(process, "platform", { ...platform, value: "linux" });
+
+    let out: { warnings?: string[] } = {};
+
+    try {
+      out = JSON.parse(await tool().handler({ projectPath, browser: "firefox", wait: false }));
+    } finally {
+      Object.defineProperty(process, "platform", platform);
+      if (inherited !== undefined) process.env.MOZ_DISABLE_SOCKET_PROCESS = inherited;
+
+      removeSession(projectPath, "firefox");
+    }
+
+    expect(spawnCalls[0]?.env).toMatchObject({ MOZ_DISABLE_SOCKET_PROCESS: "1" });
+    expect((out.warnings ?? []).join(" ")).toMatch(/WebRTC.*EXTENSION_KEEP_SOCKET_PROCESS=1/);
+  }, 15_000);
 
   it("extension_dev and extension_start take the input", () => {
     for (const schema of [dev.schema, start.schema]) {

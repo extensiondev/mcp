@@ -508,6 +508,74 @@ describe("985: a web page the extension holds no host access to", () => {
     expect(rdpCalls.every((call) => call.picked === undefined)).toBe(true);
   });
 
+  it("1043: keeps the not-scriptable refusal for a statement list when no web tab would be evaluated", async () => {
+    const dir = project(MV3);
+    respond = () => refusedHostAccess();
+    openTabs = [{ actor: "tab1", url: "about:addons", title: "Add-ons", selected: true }];
+
+    const result = JSON.parse(
+      await evalTool.handler({ projectPath: dir, browser: "firefox", context: "page", expression: "const a = 1; a" }),
+    );
+
+    expect(result.error.code).toBe("E_PAGE_NOT_SCRIPTABLE");
+    expect(rdpCalls).toHaveLength(0);
+  });
+
+  it("1045: refuses a url that two different web pages contain, as the extension-page route does", async () => {
+    const dir = project(MV3);
+    respond = () => refusedHostAccess();
+    openTabs = [
+      { actor: "tab1", url: "http://127.0.0.1:4173/note.html", title: "Note" },
+      { actor: "tab2", url: "https://bank.example/notes/transfer", title: "Bank", selected: true },
+    ];
+
+    const result = JSON.parse(
+      await evalTool.handler({ projectPath: dir, browser: "firefox", context: "page", url: "note", expression: "document.title" }),
+    );
+
+    expect(result.error.code).toBe("E_AMBIGUOUS_TARGET");
+    expect(result.value.matchingUrls).toEqual(expect.arrayContaining(["http://127.0.0.1:4173/note.html", "https://bank.example/notes/transfer"]));
+    expect(rdpCalls).toHaveLength(0);
+  });
+
+  it("1045: claims a debugger-protocol read only when the read happened", async () => {
+    const dir = project(MV3);
+    respond = () => refusedHostAccess();
+    openTabs = [{ actor: "tab1", url: "http://127.0.0.1:4173/note.html", title: "Note", selected: true }];
+
+    rdpAnswer = () => {
+      throw new Error("socket hang up");
+    };
+
+    const result = JSON.parse(
+      await evalTool.handler({ projectPath: dir, browser: "firefox", context: "page", url: "http://127.0.0.1:4173/note.html", expression: "document.title" }),
+    );
+
+    expect(result.status).toBe("rdp-failed");
+    expect((result.warnings ?? []).join("\n")).not.toMatch(/went over the debugger protocol/);
+  });
+
+  it("keeps a refusal that names no missing host access, since only that one is a debug read away", async () => {
+    const dir = project(MV3);
+    respond = () =>
+      envelope({
+        ok: false,
+        command: "extension_eval",
+        status: "page-not-scriptable",
+        error: { code: "E_PAGE_NOT_SCRIPTABLE", name: "InjectionRefused", message: "The page cannot be scripted in reader view", engine: "firefox" },
+        hint: "The tab is open, but firefox refused to script it, so nothing ran there.",
+      });
+
+    openTabs = [{ actor: "tab1", url: "https://example.com/story", title: "Story", selected: true }];
+
+    const result = JSON.parse(
+      await evalTool.handler({ projectPath: dir, browser: "firefox", context: "page", url: "https://example.com/story", expression: "document.title" }),
+    );
+
+    expect(result.error.code).toBe("E_PAGE_NOT_SCRIPTABLE");
+    expect(rdpCalls).toHaveLength(0);
+  });
+
   it("keeps the refusal when the session publishes no debugger port, and the hint never asks to widen the manifest", async () => {
     const dir = project(MV3);
     rdpPort = null;

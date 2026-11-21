@@ -40,7 +40,7 @@ describe("the auth and create tools describe what the platform does", () => {
 
     expect(hint).toMatch(/closed headless project creation for this account/);
     expect(hint).toMatch(/an invited member of acme/);
-    expect(hint).toMatch(/a workspace this account may create in/);
+    expect(hint).not.toMatch(/a workspace this account may create in/);
     expect(hint).not.toMatch(/console/i);
     expect(laneClosedFacts({ message, prefill })).not.toHaveProperty("consoleUrl");
     expect(laneClosedFacts({ message, prefill })).not.toHaveProperty("createUrl");
@@ -57,6 +57,25 @@ describe("the auth and create tools describe what the platform does", () => {
     });
     expect(workspace).toMatch(/an invited account/);
     expect(workspace).not.toMatch(/console/i);
+  });
+
+  it("1042: the platform's closedFor field names an account refusal whatever its sentence says", () => {
+    const prefill = { project: "acme/ghost-app" };
+    const reworded = "This login may not create projects from a terminal yet.";
+    const hint = laneClosedHint({ subject: "project", message: reworded, closedFor: "account", prefill });
+
+    expect(hint).toMatch(/closed headless project creation for this account/);
+    expect(hint).not.toMatch(/console/i);
+    expect(laneClosedFacts({ message: reworded, closedFor: "account", prefill })).not.toHaveProperty("consoleUrl");
+    expect(laneClosedHint({ subject: "project", message: reworded, prefill })).toMatch(/Create the project in the console/);
+  });
+
+  it("1046: an account refusal for a list names its workspace and gives one next step", () => {
+    const hint = laneClosedHint({ subject: "projects", message: "closed", closedFor: "account", workspace: "acme" });
+
+    expect(hint).toMatch(/Only an invited member of acme can create them there/);
+    expect(hint).not.toMatch(/the workspace\b/);
+    expect(hint).not.toMatch(/, or run the create again/);
   });
 
   it("the rate note says what the platform counts", () => {

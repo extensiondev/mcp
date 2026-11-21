@@ -88,10 +88,14 @@ export function geckoLaunchEnv(
   platform: NodeJS.Platform = process.platform,
   env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
 ): Record<string, string> | null {
-  if (!isGeckoFamily(browser) || platform !== "linux" || env.MOZ_DISABLE_SOCKET_PROCESS !== undefined) return null;
+  if (!isGeckoFamily(browser) || platform !== "linux") return null;
+  if (env.MOZ_DISABLE_SOCKET_PROCESS !== undefined || env.EXTENSION_KEEP_SOCKET_PROCESS === "1") return null;
 
   return { MOZ_DISABLE_SOCKET_PROCESS: "1" };
 }
+
+export const GECKO_SOCKET_PROCESS_WARNING =
+  "This Linux Firefox runs with MOZ_DISABLE_SOCKET_PROCESS=1, which lowers how often the engine loses the browser at startup. Firefox's WebRTC networking runs on the socket process, so RTCPeerConnection in this session likely connects no peers. Set EXTENSION_KEEP_SOCKET_PROCESS=1 in this server's environment and relaunch with replace: true to keep the socket process.";
 
 export interface HiddenBrowserUi {
   flag: string;

@@ -121,6 +121,7 @@ export async function requestDeviceCode(args: {
     ) as Error & {
       serverMessage?: string;
       serverCode?: string;
+      serverClosedFor?: string;
       httpStatus?: number;
     };
 
@@ -130,6 +131,10 @@ export async function requestDeviceCode(args: {
 
     if (typeof data.code === "string" && data.code.trim()) {
       error.serverCode = data.code.trim();
+    }
+
+    if (typeof data.closedFor === "string" && data.closedFor.trim()) {
+      error.serverClosedFor = data.closedFor.trim();
     }
 
     error.httpStatus = res.status;

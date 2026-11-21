@@ -41,7 +41,7 @@ import {
 import { megabytes, SOURCE_SKIPPED_EXTENSIONS, SOURCE_SKIPPED_FOLDERS } from "../lib/source-archive-words";
 import { consoleBase, consoleProjectUrl } from "../lib/registry";
 import { mcpOrigins } from "../lib/origins";
-import { laneClosedFacts, laneClosedHint, platformHoldEnvelope, sawPlatformHold, type CreatePrefill } from "../lib/platform-hold";
+import { closedForOf, laneClosedFacts, laneClosedHint, platformHoldEnvelope, sawPlatformHold, type CreatePrefill } from "../lib/platform-hold";
 import { firstBuildSpendNarration, type BuildAllowance } from "../lib/build-allowance";
 import { answerIsUnknownOutcome, readCreatedProject } from "../lib/create-answer";
 import { CREATE_CEILING_SENTENCE, CREATE_STUCK_AFTER_SECONDS, creatingAgeAt, creatingForWords } from "../lib/create-ceiling-words";
@@ -220,9 +220,9 @@ function fail(
   });
 }
 
-function closedLane(name: string, message: string, api: string, prefill: CreatePrefill): string {
+function closedLane(name: string, message: string, api: string, prefill: CreatePrefill, closedFor?: unknown): string {
   const workspace = prefill.project.split("/")[0] ?? "";
-  const facts = laneClosedFacts({ api, message, prefill });
+  const facts = laneClosedFacts({ api, message, closedFor, prefill });
 
   return envelope({
     ok: false,
@@ -230,7 +230,7 @@ function closedLane(name: string, message: string, api: string, prefill: CreateP
     status: "lane-closed",
     error: { code: "E_PLATFORM", name, message, retry: "no" },
     value: { workspace, ...facts },
-    hint: laneClosedHint({ api, message, subject: "project", prefill }),
+    hint: laneClosedHint({ api, message, closedFor, subject: "project", prefill }),
   });
 }
 
@@ -567,6 +567,7 @@ export async function createProject(args: ProjectCreateArgs, local: ProjectCreat
           serverMessage || `Headless project creation is not open on ${apiBase} yet. (${message})`,
           apiBase,
           { project, repo: args.repo },
+          err?.serverClosedFor,
         );
       }
 
@@ -682,7 +683,7 @@ async function finishFromPoll(
 
     if (poll.reason === "denied") {
       if (poll.code === "CLI_PROJECT_CREATE_DISABLED") {
-        return closedLane("CreateClosed", poll.message || `Headless project creation is not open on ${ctx.apiBase}.`, ctx.apiBase, { project: ctx.project, repo: ctx.args.repo });
+        return closedLane("CreateClosed", poll.message || `Headless project creation is not open on ${ctx.apiBase}.`, ctx.apiBase, { project: ctx.project, repo: ctx.args.repo }, closedForOf(poll.body));
       }
 
       return fail(
@@ -1120,6 +1121,7 @@ async function sendCreate(
         String(data.message || `Headless project creation is not open on ${ctx.apiBase} yet.`),
         ctx.apiBase,
         { project: ctx.project, repo: ctx.args.repo },
+        closedForOf(data),
       );
     }
 
@@ -1348,7 +1350,7 @@ function uploadFailed(
     }
 
     if (upload.code === "CLI_PROJECT_CREATE_DISABLED") {
-      return closedLane("CreateClosed", upload.message, ctx.apiBase, { project: ctx.project });
+      return closedLane("CreateClosed", upload.message, ctx.apiBase, { project: ctx.project }, closedForOf(upload.body));
     }
   }
 

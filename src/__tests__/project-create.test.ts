@@ -546,6 +546,20 @@ describe("extension_project_create", () => {
     expect(out.hint).not.toContain("pushed to");
   });
 
+  it("1042: answers an approver the platform refused by closedFor, with no console form", async () => {
+    const { fn } = createFetch({
+      token: [{ status: 403, body: { error: "access_denied", message: "reworded", code: "CLI_PROJECT_CREATE_DISABLED", closedFor: "account" } }],
+    });
+    vi.stubGlobal("fetch", fn);
+
+    const out = JSON.parse(await handler({ ...baseArgs, deviceCode: "dev-code" }));
+
+    expect(out.status).toBe("lane-closed");
+    expect(out.hint).toMatch(/closed headless project creation for this account/);
+    expect(out.value).not.toHaveProperty("createUrl");
+    expect(out.value).not.toHaveProperty("consoleUrl");
+  });
+
   it("carries a prefilled create form link when the lane is closed", async () => {
     const { fn } = createFetch({
       code: {

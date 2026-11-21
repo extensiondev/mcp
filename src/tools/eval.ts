@@ -1225,12 +1225,23 @@ async function evaluatePagePastHostAccess(
   const resolved = await resolveRdpPort(args.projectPath, browser, { waitMs: 1_000, graceMs: 500 });
   if (!resolved?.port) return null;
 
+  let tabs: RdpTab[];
+
+  try {
+    tabs = await rdpListTabs(resolved.port);
+  } catch {
+    return null;
+  }
+
   const url = args.url;
   const seen: TabsSeen = { matched: 0 };
-  const webTabs = (tabs: RdpTab[]) => tabs.filter((tab) => WEB_DOCUMENT.test(String(tab.url ?? "")));
+  const webTabs = (list: RdpTab[]) => list.filter((tab) => WEB_DOCUMENT.test(String(tab.url ?? "")));
   const select = url
-    ? (tabs: RdpTab[]) => tabByUrl(webTabs(tabs), url, seen)
-    : (tabs: RdpTab[]) => webTabs(tabs).find((tab) => tab.selected === true);
+    ? (list: RdpTab[]) => tabByUrl(webTabs(list), url, seen)
+    : (list: RdpTab[]) => webTabs(list).find((tab) => tab.selected === true);
+
+  if (!select(tabs)) return null;
+  if (url && seen.refs && distinctUrls(seen.refs).length > 1) return ambiguousUrl(url, seen.refs);
 
   if (!isOneExpression(args.expression)) {
     return notOneExpression(`The extension holds no host access to this page, so ${browser} evaluates it over the debugger protocol`, args.expression);
@@ -1239,6 +1250,7 @@ async function evaluatePagePastHostAccess(
   const answer = await evaluateInGeckoTab(args, browser, select, url ? `No open tab matches url: ${url}` : "No web page is selected in the dev browser.", seen);
   const parsed = answer === null ? null : parseFrameObject(answer);
   if (!parsed || parsed.status === "no-matching-target") return null;
+  if (parsed.ok !== true) return actFrameJson(parsed);
 
   addWarning(
     parsed,

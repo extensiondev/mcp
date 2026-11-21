@@ -263,16 +263,24 @@ function createForm(www: string, prefill: CreatePrefill): Required<Pick<LaneClos
 
 const ACCOUNT_REFUSAL_MARKERS = ["open only to invited accounts", "is the review account"];
 
-function closedForAccount(message: string | undefined): boolean {
-  const text = String(message ?? "");
+type LaneClosedRead = { api?: string; message?: string; closedFor?: unknown; prefill?: CreatePrefill };
+
+export function closedForOf(body: unknown): unknown {
+  return body && typeof body === "object" ? (body as { closedFor?: unknown }).closedFor : undefined;
+}
+
+function closedForAccount(options: LaneClosedRead): boolean {
+  if (options.closedFor === "account") return true;
+
+  const text = String(options.message ?? "");
 
   return ACCOUNT_REFUSAL_MARKERS.some((marker) => text.includes(marker));
 }
 
-export function laneClosedFacts(options: { api?: string; message?: string; prefill?: CreatePrefill }): LaneClosedFacts {
+export function laneClosedFacts(options: LaneClosedRead): LaneClosedFacts {
   const origins = mcpOrigins(options.api);
   const publicHold = String(options.message ?? "").includes(HOLD_MARKER_TEXT);
-  const noConsole = publicHold || closedForAccount(options.message);
+  const noConsole = publicHold || closedForAccount(options);
 
   return {
     api: effectiveApiBase(options.api) || origins.www,
@@ -296,7 +304,7 @@ function prefilledFormSentence(facts: LaneClosedFacts, prefill: CreatePrefill): 
   return `Create the project in the console: open ${facts.createUrl}, the create form with ${carried} prefilled. ${asks}; ${CREATE_FORM_SETTINGS_LATER}. Then run extension_auth (action: login) against it.`;
 }
 
-export function laneClosedHint(options: { api?: string; message?: string; subject: LaneSubject; prefill?: CreatePrefill }): string {
+export function laneClosedHint(options: LaneClosedRead & { subject: LaneSubject; workspace?: string }): string {
   const facts = laneClosedFacts(options);
   const noun = options.subject === "workspace" ? "workspace" : "project";
 
@@ -304,16 +312,15 @@ export function laneClosedHint(options: { api?: string; message?: string; subjec
     return `This is the platform's public hold on ${facts.api}: headless ${noun} creation there is open only to workspaces on the platform's allowlist, and it refused this one. Its answer names no allowlisted workspace and no opening date, so nothing on this machine opens it, and the console answers its gate page during the hold, so creating it there is no route either. Building, running and packaging still work with no account: extension_create, extension_dev and extension_build.`;
   }
 
-  if (closedForAccount(options.message)) {
-    const workspace = options.prefill?.project.split("/")[0] ?? "";
+  if (closedForAccount(options)) {
+    const workspace = options.workspace ?? options.prefill?.project.split("/")[0] ?? "";
+    const what = options.subject === "projects" ? "them" : "it";
     const who =
       options.subject === "workspace"
-        ? "an invited account"
-        : workspace
-          ? `an invited member of ${workspace}`
-          : "an invited member of the workspace";
+        ? "Only an invited account can create it"
+        : `Only an invited member of ${workspace || "that workspace"} can create ${what} there`;
 
-    return `The platform at ${facts.api} closed headless ${noun} creation for this account; its own message above says why. Only ${who} can create it${options.subject === "workspace" ? "" : " there, or run the create again in a workspace this account may create in"}. Nothing on this machine changes who is invited. Building, running and packaging still work with no account: extension_create, extension_dev and extension_build.`;
+    return `The platform at ${facts.api} closed headless ${noun} creation for this account; its own message above says why. ${who}, so ask one to run this create; nothing on this machine changes who is invited. Building, running and packaging still work with no account: extension_create, extension_dev and extension_build.`;
   }
 
   const target =

@@ -1090,6 +1090,15 @@ describe("extension_project_create with projects: the grant and the list", () =>
     const closed = await run({ projects: THREE, deviceCode: "dev-code" });
     expect(closed.status).toBe("lane-closed");
     expect(closed.error.retry).toBe("no");
+
+    harness({
+      token: [{ status: 403, body: { error: "access_denied", message: "reworded", code: "CLI_PROJECT_CREATE_DISABLED", closedFor: "account" } }],
+    });
+
+    const account = await run({ projects: THREE, deviceCode: "dev-code" });
+    expect(account.status).toBe("lane-closed");
+    expect(account.hint).toMatch(/for this account/);
+    expect(account.value).not.toHaveProperty("consoleUrl");
   });
 
   it("answers lane-closed when the device code is refused for a closed lane", async () => {
@@ -1102,6 +1111,14 @@ describe("extension_project_create with projects: the grant and the list", () =>
     expect(out.status).toBe("lane-closed");
     expect(out.error.message).toBe("not open");
     expect(out.error.retry).toBe("no");
+
+    harness({
+      code: { status: 403, body: { error: "access_denied", message: "reworded", code: "CLI_PROJECT_CREATE_DISABLED", closedFor: "account" } },
+    });
+
+    const account = await run({ projects: THREE });
+    expect(account.hint).toMatch(/for this account/);
+    expect(account.value).not.toHaveProperty("consoleUrl");
   });
 
   it("says a platform that refuses the list form may predate it", async () => {

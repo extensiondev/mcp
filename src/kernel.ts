@@ -66,7 +66,7 @@ export type { CallDeadline, WaitCut } from "./lib/outcome-clock";
 export { GRANT_QUERY, REGISTRY_TOKEN_QUERY, artifactWithAddress, channelXpiAddress, isPackageArtifact, packageAddress, packageAddressMode, packageFileOf, shareGrantOf, updateManifestAddress } from "./lib/package-address";
 export type { PackageScope } from "./lib/package-address";
 export { PLATFORM_DISPATCH_TIMEOUT_MS, bearerFetch, platformFetch, withoutRedirects } from "./lib/platform-fetch";
-export { PLATFORM_HOLD_CODE, PLATFORM_HOLD_STATUS, PLATFORM_HOLD_STILL_WORKS, allowanceRefusal, allowanceValue, laneClosedFacts, laneClosedHint, platformHoldEnvelope, platformHoldMessage, pricedRefusal, readPlatformCode, readPlatformMessage, sawPlatformHold, templatesOrigin } from "./lib/platform-hold";
+export { PLATFORM_HOLD_CODE, PLATFORM_HOLD_STATUS, PLATFORM_HOLD_STILL_WORKS, allowanceRefusal, allowanceValue, closedForOf, laneClosedFacts, laneClosedHint, platformHoldEnvelope, platformHoldMessage, pricedRefusal, readPlatformCode, readPlatformMessage, sawPlatformHold, templatesOrigin } from "./lib/platform-hold";
 export type { CreatePrefill } from "./lib/platform-hold";
 export { earlierSubmissions, findStoreSubmission, readPlatformStoreRecords, readStoreSubmissionById } from "./lib/platform-store-records";
 export type { StoreHistoryEntry, SubmissionLookup } from "./lib/platform-store-records";

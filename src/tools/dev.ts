@@ -49,6 +49,7 @@ import { handler as logsHandler } from "./logs";
 import {
   LAUNCH_FLAG_SCHEMA,
   headlessHint,
+  GECKO_SOCKET_PROCESS_WARNING,
   geckoLaunchEnv,
   headlessLaunch,
   hiddenBrowserUi,
@@ -185,7 +186,8 @@ export async function handler(
   if (args.allowEval) cliArgs.push("--allow-eval");
 
   const visibility = headlessLaunch(args);
-  const launchEnv = { ...visibility.env, ...geckoLaunchEnv(browser) };
+  const geckoEnv = geckoLaunchEnv(browser);
+  const launchEnv = { ...visibility.env, ...geckoEnv };
   const installGate = await sessionInstallGate(schema.name, args.projectPath);
   if (installGate.refusal) return installGate.refusal;
 
@@ -249,6 +251,8 @@ export async function handler(
     since: spawnedAt,
     noBrowser: Boolean(args.noBrowser),
   });
+  if (geckoEnv) boot.warnings.push(GECKO_SOCKET_PROCESS_WARNING);
+
   const cleanOutput = boot.evidenceTail;
   const session = { projectPath: args.projectPath, browser, pid, logPath };
 
