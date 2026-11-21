@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 11.2.0
 
 - The bundled engine moves to Extension.js 4.3.0 (`extension-create`, `extension-develop` and `extension-install`). Its envelope contract is byte for byte the 4.2.0 one, so only the contract pin's version changes. 4.3.0 carries the engine fix for a Gecko session on Linux that adopted a short-lived Firefox fork (Extension.js ledger 1504); ledger 987 closes once the fork smoke passes 20 times on it.
 - Ledger 1055. No spec imports `extension-develop/manifest`, which Extension.js 4.3.0 removes. The engine's 4.2.0 `filterKeysForThisBrowser` answers for the browser table and the emitted manifests are frozen in `src/__tests__/fixtures/engine-manifest-answers.json`, and the per-browser view is held to that copy, so the suite passes on either engine.
