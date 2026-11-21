@@ -109,7 +109,7 @@ export function geckoSocketWarning(
   if (noBrowser || !isGeckoFamily(browser) || platform !== "linux") return null;
 
   if (env.MOZ_DISABLE_SOCKET_PROCESS !== undefined) {
-    return `MOZ_DISABLE_SOCKET_PROCESS is set in this server's environment, and Firefox reads it as set whatever its value, 0 included, so this Firefox runs without its socket process and RTCPeerConnection in this session likely connects no peers. Remove the variable from this server's environment to keep the socket process.`;
+    return `MOZ_DISABLE_SOCKET_PROCESS is set in this server's environment, and Firefox reads it as set whatever its value, 0 included, so this Firefox runs without its socket process and RTCPeerConnection in this session likely connects no peers. Remove it, set EXTENSION_KEEP_SOCKET_PROCESS=1 in this server's environment, then relaunch with replace: true.`;
   }
 
   if (keepsSocketProcess(env)) return null;

@@ -146,6 +146,8 @@ describe("a person can ask to see the browser (headless input)", () => {
     expect(geckoSocketWarning("firefox", false, "darwin", {})).toBeNull();
     expect(geckoSocketWarning("firefox", false, "linux", { EXTENSION_KEEP_SOCKET_PROCESS: "1" })).toBeNull();
     expect(geckoSocketWarning("firefox", false, "linux", { MOZ_DISABLE_SOCKET_PROCESS: "0" })).toMatch(/whatever its value, 0 included.*RTCPeerConnection/);
+    expect(geckoSocketWarning("firefox", false, "linux", { MOZ_DISABLE_SOCKET_PROCESS: "0" })).toMatch(/Remove it, set EXTENSION_KEEP_SOCKET_PROCESS=1 in this server's environment, then relaunch with replace: true\.$/);
+    expect(geckoLaunchEnv("firefox", "linux", { EXTENSION_KEEP_SOCKET_PROCESS: "1" })).toBeNull();
   });
 
   it.each([
