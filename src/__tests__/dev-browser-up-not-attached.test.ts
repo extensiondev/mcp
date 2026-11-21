@@ -248,16 +248,20 @@ describe("extension_dev relays the legs this server read when the engine stamps 
 describe("extension_dev never answers started when the ready contract says the browser is gone", () => {
   const EXITED = "the gecko-based process exited (code unknown) before the extension loaded, nothing is running";
 
+  const contractError = (code: string, contractCode: string, message: string): string =>
+    JSON.stringify({
+      ok: false,
+      status: "contract-error",
+      error: { code, message, contractCode },
+      value: { errors: [message], browser: "chrome", budgetMs: 45_000, elapsedMs: 6_000 },
+    });
+
+  const engineGone = (child: ChildProcess): boolean => child.exitCode !== null || child.signalCode !== null;
+
   it("answers browser-exited, not ok, with the engine's words and the stop it made", async () => {
     const project = tmpProject();
 
-    waitAnswer = () =>
-      JSON.stringify({
-        ok: false,
-        status: "contract-error",
-        error: { code: "E_BROWSER_EXITED", message: EXITED, contractCode: "browser_exited" },
-        value: { errors: [EXITED], browser: "chrome", budgetMs: 45_000, elapsedMs: 13_041 },
-      });
+    waitAnswer = () => contractError("E_BROWSER_EXITED", "browser_exited", EXITED);
 
     const result = JSON.parse(await dev.handler({ projectPath: project }));
 
@@ -266,26 +270,46 @@ describe("extension_dev never answers started when the ready contract says the b
     expect(result.error.code).toBe("E_BROWSER_EXITED");
     expect(result.error.message).toContain(EXITED);
     expect(result.value.ready).toMatchObject({ status: "contract-error", errors: [EXITED] });
-    expect(typeof result.value.sessionStopped).toBe("boolean");
+    expect(result.value.sessionStopped).toBe(true);
+    await vi.waitFor(() => expect(engineGone(spawned[spawned.length - 1])).toBe(true));
     expect(result.hint).toContain("replace: true");
   }, 15_000);
 
-  it("answers any other contract error not ok with the engine's code", async () => {
+  it.each([
+    { code: "E_BROWSER_LAUNCH_FAILED", contractCode: "browser_launch_failed", message: "firefox refused the launch flags" },
+    { code: "E_COMPILE_FAILED", contractCode: "compile_failed", message: "extension.config.js threw" },
+  ])("stops the dev server on $code, which its watcher does not recover from", async ({ code, contractCode, message }) => {
     const project = tmpProject();
 
-    waitAnswer = () =>
-      JSON.stringify({
-        ok: false,
-        status: "contract-error",
-        error: { code: "E_COMPILE_FAILED", message: "extension.config.js threw", contractCode: "compile_failed" },
-        value: { errors: ["extension.config.js threw"], browser: "chrome", budgetMs: 45_000, elapsedMs: 900 },
-      });
+    waitAnswer = () => contractError(code, contractCode, message);
 
     const result = JSON.parse(await dev.handler({ projectPath: project }));
 
     expect(result.ok).toBe(false);
     expect(result.status).toBe("contract-error");
-    expect(result.error.code).toBe("E_COMPILE_FAILED");
-    expect(result.error.message).toContain("extension.config.js threw");
+    expect(result.error.code).toBe(code);
+    expect(result.error.message).toContain(message);
+    expect(result.value.sessionStopped).toBe(true);
+    await vi.waitFor(() => expect(engineGone(spawned[spawned.length - 1])).toBe(true));
+  }, 15_000);
+
+  it("keeps the dev server on a compile_error stamped after the boot window, since a save recompiles it", async () => {
+    const project = tmpProject();
+    const parse = "Module parse failed: Unexpected token (3:1)";
+
+    waitAnswer = () => contractError("E_COMPILE_ERROR", "compile_error", parse);
+
+    const result = JSON.parse(await dev.handler({ projectPath: project }));
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("compile-failed");
+    expect(result.error.code).toBe("E_FIRST_COMPILE");
+    expect(result.error.message).toContain(parse);
+    expect(result.error.message).not.toContain("nothing is running");
+    expect(result.value.sessionStopped).toBeUndefined();
+    expect(result.value.compileErrors).toEqual([parse]);
+    expect(result.hint).toContain("the dev server is still running and will recompile");
+    expect(result.hint).not.toContain("replace: true");
+    expect(engineGone(spawned[spawned.length - 1])).toBe(false);
   }, 15_000);
 });

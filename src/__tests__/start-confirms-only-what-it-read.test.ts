@@ -49,7 +49,7 @@ const start = await import("../tools/start");
 const wait = await import("../tools/wait");
 const { removeSession } = await import("../lib/process-manager");
 const { readyContractPath } = await import("../lib/session-paths");
-const { readyContract } = await import("./fixtures/engine-answers");
+const { errorContract, readyContract } = await import("./fixtures/engine-answers");
 
 const tmpDirs: string[] = [];
 
@@ -171,6 +171,34 @@ describe("extension_start confirms only what it read and never points at a temp 
     expect(result.value.browserAlive).toBe(false);
     expect(result.value.loadEvidence).toMatch(/gone/);
   }, 10_000);
+
+  it("stops the engine when the contract says the browser exited after the boot window, and says nothing is running", async () => {
+    const project = tmpProject();
+    const file = readyContractPath(project, "chrome");
+    const exited = errorContract("chrome", "browser_exited", { command: "start", distPath: path.join(project, "dist", "chrome") });
+    let cli: SpawnedCli | null = null;
+
+    nextChild = () => {
+      cli = fakeCli(
+        `const fs = require("node:fs"); const path = require("node:path");
+         const file = ${JSON.stringify(file)};
+         setTimeout(() => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(Object.assign(${JSON.stringify(exited)}, { pid: process.pid }))); }, 5300);
+         setTimeout(() => {}, 60000);`,
+      );
+
+      return cli;
+    };
+
+    const result = JSON.parse(await start.handler({ projectPath: project }));
+
+    expect(result.ok).toBe(false);
+    expect(result.error.code).toBe("E_BROWSER_EXITED");
+    expect(result.error.message).toContain("The start process was stopped, so nothing is running.");
+    expect(result.value.sessionStopped).toBe(true);
+    expect(result.hint).toContain("extension_start with replace: true");
+    expect(result.hint).not.toContain("extension_dev");
+    await vi.waitFor(() => expect(cli!.child.exitCode !== null || cli!.child.signalCode !== null).toBe(true));
+  }, 20_000);
 
   it("the description says what a production session cannot do, and that the load is read over the debug port", () => {
     expect(start.schema.description).not.toMatch(/opens no debug port/);

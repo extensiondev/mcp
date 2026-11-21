@@ -169,9 +169,11 @@ describe("a session whose compile failed is never told its browser is launching"
     { code: "compile_error" as const, next: /for: "rebuild"/ },
     { code: "compile_failed" as const, next: /replace: true/ },
     { code: "browser_exited" as const, next: /^(?!.*recompiles).*extension_dev with replace: true/ },
-  ])("wait names the next call after a $code", async ({ code, next }) => {
+    { code: "browser_exited" as const, command: "start", next: /^(?!.*extension_dev).*extension_start with replace: true/ },
+    { code: "browser_launch_failed" as const, command: "preview", next: /^(?!.*extension_dev).*extension_start with build: false and replace: true/ },
+  ])("wait names the next call after a $code on a $command session", async ({ code, command, next }) => {
     const project = tmpProject();
-    writeReady(project, "chrome", errorContract("chrome", code));
+    writeReady(project, "chrome", errorContract("chrome", code, command ? { command } : {}));
 
     const result = JSON.parse(await waitTool.handler({ projectPath: project, browser: "chrome" }));
 

@@ -14,7 +14,7 @@ import { pollBootVerdict,
   bootFailureHint,
   bootFailureMessage,
 } from "../lib/boot-verdict";
-import { stopFailedBoot } from "../lib/boot-failed-stop";
+import { isDeadContractCode, stopFailedBoot } from "../lib/boot-failed-stop";
 import {
   profileCarryoverBeforeLaunch,
   profileReusedAt,
@@ -418,8 +418,12 @@ export async function handler(
 
   const landing =
     args.wait === false || args.noBrowser ? null : await awaitStartLanding(args.projectPath, browser);
+  const deadStop =
+    landing?.kind === "failed" && isDeadContractCode(landing.frame.error?.contractCode)
+      ? await stopFailedBoot(args.projectPath, browser)
+      : null;
   const freshContract = readFreshContract(args.projectPath, browser, spawnedAt);
-  const engineExit = engineExitAfterBoot(child, spawned.readOutput);
+  const engineExit = deadStop ? null : engineExitAfterBoot(child, spawned.readOutput);
 
   if (args.noBrowser && engineExit?.exitCode === 0 && !engineExit.signal) {
     return buildOnlyAnswer({
@@ -434,7 +438,7 @@ export async function handler(
 
   const profileReused = profileReusedAt(carryover, freshContract?.profilePath, spawnedAt);
 
-  if (profileReused !== carryover.reused) {
+  if (!deadStop && profileReused !== carryover.reused) {
     markerWarning = registerSession({
       pid,
       browser,
@@ -484,6 +488,7 @@ export async function handler(
     replacedSession: replaced[0],
     landing,
     engineExit,
+    deadStop,
     warnings: [
       profileReused && !args.noBrowser
         ? `${reusedProfileNote(freshContract?.profilePath ?? carryover.profilePath)}${settled.copyId && !settled.keyId && !isGeckoFamily(browser) ? ` That carry-over does not reach this controlled copy: its id ${loaded.extensionId ?? settled.copyId} is its own, so its chrome.storage starts empty and it holds no grants from the plain build's runs.` : ""}`

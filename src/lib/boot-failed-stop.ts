@@ -8,6 +8,12 @@
 
 import { stopOne } from "../tools/stop";
 
+const DEAD_CONTRACT_CODES = new Set(["browser_exited", "browser_launch_failed", "compile_failed"]);
+
+export function isDeadContractCode(contractCode: unknown): boolean {
+  return typeof contractCode === "string" && DEAD_CONTRACT_CODES.has(contractCode);
+}
+
 export interface FailedBootStop {
   sessionStopped: boolean;
   stopDetail?: string;

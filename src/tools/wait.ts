@@ -411,7 +411,7 @@ export async function handler(args: {
           },
           hint:
             contract.code === "browser_exited" || contract.code === "browser_launch_failed"
-              ? "The browser is gone and the dev server does not relaunch it: read extension_logs for its last words, then call extension_dev with replace: true."
+              ? browserGoneHint(contract.command)
               : contract.code === "compile_failed"
               ? "The compiler failed outside a module (a plugin hook or extension.config.js threw), which the dev server's watcher does not recover from: fix the cause, then call extension_dev with replace: true."
               : 'Fix the errors in value.errors and save: the dev server recompiles. Call extension_wait with for: "rebuild" to wait for that compile.',
@@ -500,4 +500,14 @@ export async function handler(args: {
     warnings: [clampNote, staleContractNote],
     hint: "Still building, call extension_wait again to keep waiting (it resumes polling the same contract). If it never readies, check the dev process with extension_doctor.",
   });
+}
+
+function browserGoneHint(command: unknown): string {
+  if (command === "start" || command === "preview") {
+    const relaunch = command === "preview" ? "extension_start with build: false and replace: true" : "extension_start with replace: true";
+
+    return `The browser is gone and a ${command} session does not relaunch it: read extension_logs for its last words, then call ${relaunch}.`;
+  }
+
+  return "The browser is gone and the dev server does not relaunch it: read extension_logs for its last words, then call extension_dev with replace: true.";
 }

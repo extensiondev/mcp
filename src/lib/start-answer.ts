@@ -17,6 +17,7 @@ import { handler as waitHandler } from "../tools/wait";
 
 import type { ChildProcess } from "node:child_process";
 import type { ProductionLaunchEvidence } from "./production-launch";
+import type { FailedBootStop } from "./boot-failed-stop";
 import type { ReadyContract } from "./types";
 
 interface WaitFrame {
@@ -65,6 +66,7 @@ export interface StartFacts {
   warnings: Array<string | null | false | undefined>;
   landing: StartLanding | null;
   engineExit: EngineExit | null;
+  deadStop?: FailedBootStop | null;
 }
 
 export interface EngineExit {
@@ -192,16 +194,39 @@ function landedAnswer(facts: StartFacts, frame: WaitFrame): string {
   });
 }
 
+function engineState(facts: StartFacts): string {
+  const { deadStop, engineExit, verb } = facts;
+
+  if (deadStop) {
+    return deadStop.sessionStopped
+      ? `The ${verb} process was stopped, so nothing is running.`
+      : `The ${verb} process could not be stopped: ${deadStop.stopDetail ?? "no reason given"}.`;
+  }
+
+  return engineExit
+    ? `The engine's ${verb} process has exited, so nothing is running.`
+    : `The ${verb} process is still running; extension_stop with this projectPath ends it.`;
+}
+
 function failedAnswer(facts: StartFacts, frame: WaitFrame): string {
+  const error = frame.error ?? {
+    code: "E_CONTRACT_ERROR",
+    message: `The ${facts.verb} process was alive 5 s after spawn, but the wait for the build answered ${frame.status ?? "nothing"}.`,
+  };
+  const said = String(error.message ?? "").replace(/\.\s*$/, "");
+
   return envelope({
     ok: false,
     command: facts.command,
     status: frame.status ?? "wait-failed",
-    error: frame.error ?? {
-      code: "E_CONTRACT_ERROR",
-      message: `The ${facts.verb} process was alive 5 s after spawn, but the wait for the build answered ${frame.status ?? "nothing"}.`,
+    error: { ...error, message: `${said}. ${engineState(facts)}` },
+    value: {
+      ...sessionValue(facts),
+      ...(frame.value ?? {}),
+      ...(facts.deadStop ?? {}),
+      pid: facts.pid,
+      waited: { ...waitedOut(frame), status: "failed" },
     },
-    value: { ...sessionValue(facts), ...(frame.value ?? {}), pid: facts.pid, waited: { ...waitedOut(frame), status: "failed" } },
     ...(frame.hint ? { hint: frame.hint } : {}),
     warnings: [...facts.warnings, ...((frame.warnings ?? []) as Array<string | null>)],
   });

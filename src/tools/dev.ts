@@ -18,7 +18,7 @@ import { pollBootVerdict,
   bootFailureHint,
   bootFailureMessage,
 } from "../lib/boot-verdict";
-import { stopFailedBoot } from "../lib/boot-failed-stop";
+import { isDeadContractCode, stopFailedBoot } from "../lib/boot-failed-stop";
 import {
   profileCarryoverBeforeLaunch,
   profileReusedAt,
@@ -403,8 +403,43 @@ export async function handler(
     const code = readyError.code ?? "E_CONTRACT_ERROR";
     const exited = code === "E_BROWSER_EXITED";
     const said = (readyError.message ?? "").replace(/\.\s*$/, "");
-    const stop = await stopFailedBoot(args.projectPath, browser);
     const output = spawned.readOutput();
+    const outputTail = {
+      output: output.slice(-2000),
+      ...(output.length > 2000 ? { outputTruncated: { shown: 2000, total: output.length, kept: "tail" } } : {}),
+    };
+
+    const { contractCode } = readyError as { contractCode?: unknown };
+
+    if (!isDeadContractCode(contractCode)) {
+      const listed = (exitedReadiness.ready as Record<string, unknown>).errors;
+      const errors = Array.isArray(listed) ? listed.map(String) : [];
+      const recompiles = contractCode === "compile_error";
+
+      return envelope({
+        ok: false,
+        command: schema.name,
+        status: recompiles ? "compile-failed" : "contract-error",
+        error: {
+          code: recompiles ? "E_FIRST_COMPILE" : code,
+          message: recompiles
+            ? `The first compile failed: ${said || code}. The dev server is still running and will recompile on save.`
+            : `The dev server stamped its ready contract with an error: ${said || code}. The dev server is still running.`,
+        },
+        value: {
+          ...session,
+          ...exitedReadiness,
+          ...(recompiles ? { compileErrors: errors } : {}),
+          ...outputTail,
+        },
+        hint: recompiles
+          ? "Fix the compile error listed in `value.compileErrors` and save: the dev server is still running and will recompile. extension_wait answers contract-error while the build is failed and ready once a compile lands."
+          : "Read value.ready.errors and value.output for the cause and fix it. The dev server is still running: call extension_wait to read the contract again, or extension_stop with this projectPath to end it.",
+        warnings: boot.warnings,
+      });
+    }
+
+    const stop = await stopFailedBoot(args.projectPath, browser);
 
     return envelope({
       ok: false,
@@ -420,8 +455,7 @@ export async function handler(
         ...session,
         ...stop,
         ...exitedReadiness,
-        output: output.slice(-2000),
-        ...(output.length > 2000 ? { outputTruncated: { shown: 2000, total: output.length, kept: "tail" } } : {}),
+        ...outputTail,
       },
       hint: exited
         ? `Read value.output for the browser's last words: a binary that refuses the launch flags, a crash at startup or a browser killed from outside are the common causes. Call extension_dev with replace: true to launch it again; ${profileAdvice}`
