@@ -5,6 +5,7 @@ import { refusedFrame } from "../lib/tool-frames";
 import { envelope } from "../lib/envelope";
 import { createToolDispatcher, type ToolModule } from "../lib/tool-dispatch";
 import { inputValidationError } from "../lib/validate-input";
+import { composedRefusal as kernelComposedRefusal } from "../kernel";
 
 describe("toolResultFrame maps the envelope verdict onto the transport flag", () => {
   it("marks a refusing envelope (ok:false) as isError", () => {
@@ -87,6 +88,20 @@ describe("a refusal leaves the untrusted fence only when this server built it in
 
     expect(text).not.toContain("untrusted");
     expect(JSON.parse(text).error.code).toBe("E_INPUT_VALIDATION");
+  });
+
+  it("leaves a refusal a hosted lane composed through the kernel's own export bare on a fenced tool", async () => {
+    const text = await answered(async () =>
+      kernelComposedRefusal({
+        ok: false,
+        command: "extension_wait",
+        status: "auth-refused",
+        error: { code: "E_NO_LOGIN_FOR_PROJECT", message: "This connection covers acme/tabs, not acme/other." },
+      }),
+    );
+
+    expect(text).not.toContain("untrusted");
+    expect(JSON.parse(text).error.code).toBe("E_NO_LOGIN_FOR_PROJECT");
   });
 
   it.each([

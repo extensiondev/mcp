@@ -9,6 +9,7 @@
 export { kernelHook, registerKernelHooks, registeredKernelHooks, type KernelHooks, type PathLoginRead, type UnloggedProjectStep } from "./lib/kernel-hooks";
 export { createToolDispatcher, installToolHandlers, listedTools, toolResultFrame, type ToolModule } from "./lib/tool-dispatch";
 export { envelope, isEnvelope, okOrRefusal, reframed, type Envelope, type ParsedFrame } from "./lib/envelope";
+export { composedRefusal } from "./lib/composed-refusal";
 export { REFUSAL_MESSAGES } from "./lib/refusal-hints";
 export { requestCredential, uncoveredRef, withRequestCredential, type RequestCredential, type ScopedProject } from "./lib/credential-scope";
 export { installRequestFetch } from "./lib/request-fetch";
