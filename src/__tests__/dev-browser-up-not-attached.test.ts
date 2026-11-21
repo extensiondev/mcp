@@ -315,6 +315,25 @@ describe("extension_dev never answers started when the ready contract says the b
     expect(result.hint).not.toMatch(/extension_wait|extension_stop/);
   }, 15_000);
 
+  it("says nothing is running when the dev server exited on an error it would otherwise keep", async () => {
+    const project = tmpProject();
+
+    waitAnswer = (async () => {
+      const child = spawned[spawned.length - 1];
+      const exited = new Promise((resolve) => child.once("exit", resolve));
+
+      child.kill("SIGKILL");
+      await exited;
+
+      return contractError("E_EXTENSION_LOAD_REFUSED", "extension_load_refused", "the browser refused to load the extension");
+    }) as unknown as () => string;
+
+    const result = JSON.parse(await dev.handler({ projectPath: project }));
+
+    expect(result.status).toBe("contract-error");
+    expect(result.error.message).toMatch(/The dev server has exited, so nothing is running\.$/);
+  }, 15_000);
+
   it("keeps the dev server on a compile_error stamped after the boot window, since a save recompiles it", async () => {
     const project = tmpProject();
     const parse = "Module parse failed: Unexpected token (3:1)";

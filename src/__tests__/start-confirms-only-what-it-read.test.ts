@@ -208,7 +208,7 @@ describe("extension_start confirms only what it read and never points at a temp 
     await vi.waitFor(() => expect(cli!.child.exitCode !== null || cli!.child.signalCode !== null).toBe(true));
   }, 20_000);
 
-  function engineStamps(project: string, code: "extension_load_refused", then: "stay" | "exit"): SpawnedCli {
+  function engineStamps(project: string, code: "extension_load_refused" | "compile_error", then: "stay" | "exit"): SpawnedCli {
     const file = readyContractPath(project, "chrome");
     const refused = errorContract("chrome", code, { command: "start", distPath: path.join(project, "dist", "chrome") });
     const cli = fakeCli(
@@ -239,6 +239,20 @@ describe("extension_start confirms only what it read and never points at a temp 
     expect(result.hint).toContain("extension_start with replace: true");
     expect(result.hint).not.toMatch(/extension_stop|extension_dev/);
     expect(cli!.child.exitCode).toBeNull();
+  }, 10_000);
+
+  it("stops the engine on a compile_error, since a start build never rebuilds", async () => {
+    const project = tmpProject();
+    let cli: SpawnedCli | null = null;
+
+    nextChild = () => (cli = engineStamps(project, "compile_error", "stay"));
+
+    const result = JSON.parse(await start.handler({ projectPath: project }));
+
+    expect(result.ok).toBe(false);
+    expect(result.value.sessionStopped).toBe(true);
+    expect(result.error.message).toContain("The start process was stopped, so nothing is running.");
+    await vi.waitFor(() => expect(cli!.child.exitCode !== null || cli!.child.signalCode !== null).toBe(true));
   }, 10_000);
 
   it("says nothing is running when the engine exited after the failed wait", async () => {

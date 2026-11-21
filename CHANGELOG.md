@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Ledger 1054. Three more guards have their own cases: the review-account answer keyed on `closedFor` alone, a start session stopped on `compile_error`, and `extension_dev` saying nothing is running when the dev server exited on an error it would otherwise keep.
 - Ledger 1053. The warning for a person's own `MOZ_DISABLE_SOCKET_PROCESS` names a step that works. Removing the variable alone let this server inject it again; the warning now says to remove it, set `EXTENSION_KEEP_SOCKET_PROCESS=1` and relaunch with `replace: true`.
 - Ledger 1052. Every door that reads `closedFor` has its own case, as do the start stop, the start engine sentence, the socket-process warning and the same-page tabs on the Firefox eval route. Three spec files that waited out the real boot window and stop grace now shorten both through module mocks and run in about two seconds each.
 - Ledger 1051. A start or preview session gets start hints for compile codes. `extension_wait` on its `compile_failed` or `compile_error` contract says to fix the cause and call `extension_start with replace: true`, never to save for a dev server it does not have, and `extension_start` stops the engine on a `compile_error` too. The kept-session answers of `extension_dev` and `extension_start` give one next step and say whether the process still runs. The WebRTC warning is left out when no browser launches, covers a `MOZ_DISABLE_SOCKET_PROCESS` the person set (Firefox reads `0` as set), and `EXTENSION_KEEP_SOCKET_PROCESS` takes any value but empty, `0` or `false`.

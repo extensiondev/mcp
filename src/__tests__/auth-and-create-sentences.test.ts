@@ -89,6 +89,10 @@ describe("the auth and create tools describe what the platform does", () => {
     }
 
     expect(laneClosedFacts({ message: "reworded", closedFor: "review-account" })).not.toHaveProperty("consoleUrl");
+
+    const reworded = "This login is for directory review and creates projects only in its own workspace, walk-reviewer.";
+    expect(laneClosedHint({ subject: "project", message: reworded, closedFor: "review-account", prefill: { project: "acme/ghost-app" } }))
+      .toMatch(/extension_project_create again with project "walk-reviewer\/ghost-app"/);
   });
 
   it("1046: an account refusal for a list names its workspace and gives one next step", () => {
