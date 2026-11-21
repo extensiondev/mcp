@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Ledger 1055. No spec imports `extension-develop/manifest`, which Extension.js 4.3.0 removes. The engine's 4.2.0 `filterKeysForThisBrowser` answers for the browser table and the emitted manifests are frozen in `src/__tests__/fixtures/engine-manifest-answers.json`, and the per-browser view is held to that copy, so the suite passes on either engine.
 - Ledger 1047. A create code refused at extension.dev/device because the approving account may not create now ends at once: the platform closes the code with `refusedAt: "approval"`, and `extension_project_create` and `extension_workspace_create` answer with one step, call again without the deviceCode and have an invited member (or, for a workspace, an invited account) approve the new code.
 - Ledger 1054. Three more guards have their own cases: the review-account answer keyed on `closedFor` alone, a start session stopped on `compile_error`, and `extension_dev` saying nothing is running when the dev server exited on an error it would otherwise keep.
 - Ledger 1053. The warning for a person's own `MOZ_DISABLE_SOCKET_PROCESS` names a step that works. Removing the variable alone let this server inject it again; the warning now says to remove it, set `EXTENSION_KEEP_SOCKET_PROCESS=1` and relaunch with `replace: true`.

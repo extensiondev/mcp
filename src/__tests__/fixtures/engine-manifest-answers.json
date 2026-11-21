@@ -1,0 +1,759 @@
+{
+  "engine": "extension-develop@4.2.0 filterKeysForThisBrowser",
+  "table": {
+    "manifest": {
+      "name": "plain",
+      "chromium:name": "family chromium",
+      "chrome:name": "chrome",
+      "edge:name": "edge",
+      "gecko:name": "family gecko",
+      "firefox:name": "firefox",
+      "safari:name": "safari",
+      "webkit:name": "webkit",
+      "brave:only_here": true,
+      "zen:only_here": true,
+      "unknown:dropped": true,
+      "__proto__": {
+        "kept": "as a key"
+      },
+      "manifest_version": 3,
+      "firefox:manifest_version": 2,
+      "background": {
+        "service_worker": "sw.js",
+        "firefox:scripts": [
+          "sw.js"
+        ],
+        "chromium:type": "module"
+      },
+      "content_scripts": [
+        {
+          "matches": [
+            "https://example.com/*"
+          ],
+          "js": [
+            "a.js"
+          ],
+          "gecko:run_at": "document_start",
+          "chrome:world": "MAIN"
+        },
+        "text",
+        7,
+        null
+      ],
+      "nested": {
+        "https://example.com/": 1,
+        "trailing:": 2,
+        ":leading": 3,
+        "firefox:chrome:twice": 4
+      },
+      "firefox:after_gecko": "firefox",
+      "gecko:after_gecko": "gecko",
+      "gecko:before_firefox": "gecko",
+      "firefox:before_firefox": "firefox"
+    },
+    "answers": {
+      "chrome": {
+        "name": "chrome",
+        "__proto__": {
+          "kept": "as a key"
+        },
+        "manifest_version": 3,
+        "background": {
+          "service_worker": "sw.js",
+          "type": "module"
+        },
+        "content_scripts": [
+          {
+            "matches": [
+              "https://example.com/*"
+            ],
+            "js": [
+              "a.js"
+            ],
+            "world": "MAIN"
+          },
+          "text",
+          7,
+          null
+        ],
+        "nested": {}
+      },
+      "chromium": {
+        "name": "family chromium",
+        "__proto__": {
+          "kept": "as a key"
+        },
+        "manifest_version": 3,
+        "background": {
+          "service_worker": "sw.js",
+          "type": "module"
+        },
+        "content_scripts": [
+          {
+            "matches": [
+              "https://example.com/*"
+            ],
+            "js": [
+              "a.js"
+            ]
+          },
+          "text",
+          7,
+          null
+        ],
+        "nested": {}
+      },
+      "edge": {
+        "name": "edge",
+        "__proto__": {
+          "kept": "as a key"
+        },
+        "manifest_version": 3,
+        "background": {
+          "service_worker": "sw.js",
+          "type": "module"
+        },
+        "content_scripts": [
+          {
+            "matches": [
+              "https://example.com/*"
+            ],
+            "js": [
+              "a.js"
+            ]
+          },
+          "text",
+          7,
+          null
+        ],
+        "nested": {}
+      },
+      "brave": {
+        "name": "family chromium",
+        "__proto__": {
+          "kept": "as a key"
+        },
+        "manifest_version": 3,
+        "background": {
+          "service_worker": "sw.js",
+          "type": "module"
+        },
+        "content_scripts": [
+          {
+            "matches": [
+              "https://example.com/*"
+            ],
+            "js": [
+              "a.js"
+            ]
+          },
+          "text",
+          7,
+          null
+        ],
+        "nested": {},
+        "only_here": true
+      },
+      "opera": {
+        "name": "family chromium",
+        "__proto__": {
+          "kept": "as a key"
+        },
+        "manifest_version": 3,
+        "background": {
+          "service_worker": "sw.js",
+          "type": "module"
+        },
+        "content_scripts": [
+          {
+            "matches": [
+              "https://example.com/*"
+            ],
+            "js": [
+              "a.js"
+            ]
+          },
+          "text",
+          7,
+          null
+        ],
+        "nested": {}
+      },
+      "vivaldi": {
+        "name": "family chromium",
+        "__proto__": {
+          "kept": "as a key"
+        },
+        "manifest_version": 3,
+        "background": {
+          "service_worker": "sw.js",
+          "type": "module"
+        },
+        "content_scripts": [
+          {
+            "matches": [
+              "https://example.com/*"
+            ],
+            "js": [
+              "a.js"
+            ]
+          },
+          "text",
+          7,
+          null
+        ],
+        "nested": {}
+      },
+      "yandex": {
+        "name": "family chromium",
+        "__proto__": {
+          "kept": "as a key"
+        },
+        "manifest_version": 3,
+        "background": {
+          "service_worker": "sw.js",
+          "type": "module"
+        },
+        "content_scripts": [
+          {
+            "matches": [
+              "https://example.com/*"
+            ],
+            "js": [
+              "a.js"
+            ]
+          },
+          "text",
+          7,
+          null
+        ],
+        "nested": {}
+      },
+      "chromium-based": {
+        "name": "family chromium",
+        "__proto__": {
+          "kept": "as a key"
+        },
+        "manifest_version": 3,
+        "background": {
+          "service_worker": "sw.js",
+          "type": "module"
+        },
+        "content_scripts": [
+          {
+            "matches": [
+              "https://example.com/*"
+            ],
+            "js": [
+              "a.js"
+            ]
+          },
+          "text",
+          7,
+          null
+        ],
+        "nested": {}
+      },
+      "chromium-emulator": {
+        "name": "family chromium",
+        "__proto__": {
+          "kept": "as a key"
+        },
+        "manifest_version": 3,
+        "background": {
+          "service_worker": "sw.js",
+          "type": "module"
+        },
+        "content_scripts": [
+          {
+            "matches": [
+              "https://example.com/*"
+            ],
+            "js": [
+              "a.js"
+            ]
+          },
+          "text",
+          7,
+          null
+        ],
+        "nested": {}
+      },
+      "firefox": {
+        "name": "firefox",
+        "__proto__": {
+          "kept": "as a key"
+        },
+        "manifest_version": 2,
+        "background": {
+          "service_worker": "sw.js",
+          "scripts": [
+            "sw.js"
+          ]
+        },
+        "content_scripts": [
+          {
+            "matches": [
+              "https://example.com/*"
+            ],
+            "js": [
+              "a.js"
+            ],
+            "run_at": "document_start"
+          },
+          "text",
+          7,
+          null
+        ],
+        "nested": {
+          "chrome:twice": 4
+        },
+        "after_gecko": "firefox",
+        "before_firefox": "firefox"
+      },
+      "waterfox": {
+        "name": "firefox",
+        "__proto__": {
+          "kept": "as a key"
+        },
+        "manifest_version": 2,
+        "background": {
+          "service_worker": "sw.js",
+          "scripts": [
+            "sw.js"
+          ]
+        },
+        "content_scripts": [
+          {
+            "matches": [
+              "https://example.com/*"
+            ],
+            "js": [
+              "a.js"
+            ],
+            "run_at": "document_start"
+          },
+          "text",
+          7,
+          null
+        ],
+        "nested": {
+          "chrome:twice": 4
+        },
+        "after_gecko": "gecko",
+        "before_firefox": "firefox"
+      },
+      "librewolf": {
+        "name": "firefox",
+        "__proto__": {
+          "kept": "as a key"
+        },
+        "manifest_version": 2,
+        "background": {
+          "service_worker": "sw.js",
+          "scripts": [
+            "sw.js"
+          ]
+        },
+        "content_scripts": [
+          {
+            "matches": [
+              "https://example.com/*"
+            ],
+            "js": [
+              "a.js"
+            ],
+            "run_at": "document_start"
+          },
+          "text",
+          7,
+          null
+        ],
+        "nested": {
+          "chrome:twice": 4
+        },
+        "after_gecko": "gecko",
+        "before_firefox": "firefox"
+      },
+      "zen": {
+        "name": "firefox",
+        "__proto__": {
+          "kept": "as a key"
+        },
+        "manifest_version": 2,
+        "background": {
+          "service_worker": "sw.js",
+          "scripts": [
+            "sw.js"
+          ]
+        },
+        "content_scripts": [
+          {
+            "matches": [
+              "https://example.com/*"
+            ],
+            "js": [
+              "a.js"
+            ],
+            "run_at": "document_start"
+          },
+          "text",
+          7,
+          null
+        ],
+        "nested": {
+          "chrome:twice": 4
+        },
+        "after_gecko": "gecko",
+        "before_firefox": "firefox",
+        "only_here": true
+      },
+      "floorp": {
+        "name": "firefox",
+        "__proto__": {
+          "kept": "as a key"
+        },
+        "manifest_version": 2,
+        "background": {
+          "service_worker": "sw.js",
+          "scripts": [
+            "sw.js"
+          ]
+        },
+        "content_scripts": [
+          {
+            "matches": [
+              "https://example.com/*"
+            ],
+            "js": [
+              "a.js"
+            ],
+            "run_at": "document_start"
+          },
+          "text",
+          7,
+          null
+        ],
+        "nested": {
+          "chrome:twice": 4
+        },
+        "after_gecko": "gecko",
+        "before_firefox": "firefox"
+      },
+      "gecko-based": {
+        "name": "firefox",
+        "__proto__": {
+          "kept": "as a key"
+        },
+        "manifest_version": 2,
+        "background": {
+          "service_worker": "sw.js",
+          "scripts": [
+            "sw.js"
+          ]
+        },
+        "content_scripts": [
+          {
+            "matches": [
+              "https://example.com/*"
+            ],
+            "js": [
+              "a.js"
+            ],
+            "run_at": "document_start"
+          },
+          "text",
+          7,
+          null
+        ],
+        "nested": {
+          "chrome:twice": 4
+        },
+        "after_gecko": "gecko",
+        "before_firefox": "firefox"
+      },
+      "firefox-based": {
+        "name": "firefox",
+        "__proto__": {
+          "kept": "as a key"
+        },
+        "manifest_version": 2,
+        "background": {
+          "service_worker": "sw.js",
+          "scripts": [
+            "sw.js"
+          ]
+        },
+        "content_scripts": [
+          {
+            "matches": [
+              "https://example.com/*"
+            ],
+            "js": [
+              "a.js"
+            ],
+            "run_at": "document_start"
+          },
+          "text",
+          7,
+          null
+        ],
+        "nested": {
+          "chrome:twice": 4
+        },
+        "after_gecko": "gecko",
+        "before_firefox": "firefox"
+      },
+      "safari": {
+        "name": "webkit",
+        "__proto__": {
+          "kept": "as a key"
+        },
+        "manifest_version": 3,
+        "background": {
+          "service_worker": "sw.js",
+          "type": "module"
+        },
+        "content_scripts": [
+          {
+            "matches": [
+              "https://example.com/*"
+            ],
+            "js": [
+              "a.js"
+            ]
+          },
+          "text",
+          7,
+          null
+        ],
+        "nested": {}
+      },
+      "webkit-based": {
+        "name": "webkit",
+        "__proto__": {
+          "kept": "as a key"
+        },
+        "manifest_version": 3,
+        "background": {
+          "service_worker": "sw.js",
+          "type": "module"
+        },
+        "content_scripts": [
+          {
+            "matches": [
+              "https://example.com/*"
+            ],
+            "js": [
+              "a.js"
+            ]
+          },
+          "text",
+          7,
+          null
+        ],
+        "nested": {}
+      },
+      "nothing-known": {
+        "name": "plain",
+        "__proto__": {
+          "kept": "as a key"
+        },
+        "manifest_version": 3,
+        "background": {
+          "service_worker": "sw.js"
+        },
+        "content_scripts": [
+          {
+            "matches": [
+              "https://example.com/*"
+            ],
+            "js": [
+              "a.js"
+            ]
+          },
+          "text",
+          7,
+          null
+        ],
+        "nested": {}
+      }
+    }
+  },
+  "emitted": [
+    {
+      "browser": "chrome",
+      "source": {
+        "manifest_version": 3,
+        "name": "Sidebar",
+        "version": "1.0.0",
+        "chromium:background": {
+          "service_worker": "background/service_worker.js"
+        },
+        "firefox:background": {
+          "scripts": [
+            "background/scripts.js"
+          ]
+        },
+        "chromium:action": {
+          "default_title": "Open"
+        },
+        "firefox:browser_action": {
+          "default_title": "Open"
+        },
+        "chromium:side_panel": {
+          "default_path": "sidebar/index.html"
+        },
+        "firefox:sidebar_action": {
+          "default_panel": "sidebar/index.html"
+        },
+        "chromium:permissions": [
+          "sidePanel",
+          "storage"
+        ],
+        "firefox:permissions": [
+          "storage"
+        ],
+        "host_permissions": [
+          "https://example.com/*"
+        ],
+        "firefox:browser_specific_settings": {
+          "gecko": {
+            "id": "sidebar@example.com"
+          }
+        }
+      },
+      "answer": {
+        "manifest_version": 3,
+        "name": "Sidebar",
+        "version": "1.0.0",
+        "host_permissions": [
+          "https://example.com/*"
+        ],
+        "background": {
+          "service_worker": "background/service_worker.js"
+        },
+        "action": {
+          "default_title": "Open"
+        },
+        "side_panel": {
+          "default_path": "sidebar/index.html"
+        },
+        "permissions": [
+          "sidePanel",
+          "storage"
+        ]
+      }
+    },
+    {
+      "browser": "firefox",
+      "source": {
+        "manifest_version": 3,
+        "name": "Sidebar",
+        "version": "1.0.0",
+        "chromium:background": {
+          "service_worker": "background/service_worker.js"
+        },
+        "firefox:background": {
+          "scripts": [
+            "background/scripts.js"
+          ]
+        },
+        "chromium:action": {
+          "default_title": "Open"
+        },
+        "firefox:browser_action": {
+          "default_title": "Open"
+        },
+        "chromium:side_panel": {
+          "default_path": "sidebar/index.html"
+        },
+        "firefox:sidebar_action": {
+          "default_panel": "sidebar/index.html"
+        },
+        "chromium:permissions": [
+          "sidePanel",
+          "storage"
+        ],
+        "firefox:permissions": [
+          "storage"
+        ],
+        "host_permissions": [
+          "https://example.com/*"
+        ],
+        "firefox:browser_specific_settings": {
+          "gecko": {
+            "id": "sidebar@example.com"
+          }
+        }
+      },
+      "answer": {
+        "manifest_version": 3,
+        "name": "Sidebar",
+        "version": "1.0.0",
+        "host_permissions": [
+          "https://example.com/*"
+        ],
+        "background": {
+          "scripts": [
+            "background/scripts.js"
+          ]
+        },
+        "browser_action": {
+          "default_title": "Open"
+        },
+        "sidebar_action": {
+          "default_panel": "sidebar/index.html"
+        },
+        "permissions": [
+          "storage"
+        ],
+        "browser_specific_settings": {
+          "gecko": {
+            "id": "sidebar@example.com"
+          }
+        }
+      }
+    },
+    {
+      "browser": "chrome",
+      "source": {
+        "manifest_version": 3,
+        "name": "P",
+        "version": "1.0.0",
+        "permissions": [
+          "storage"
+        ]
+      },
+      "answer": {
+        "manifest_version": 3,
+        "name": "P",
+        "version": "1.0.0",
+        "permissions": [
+          "storage"
+        ]
+      }
+    },
+    {
+      "browser": "firefox",
+      "source": {
+        "manifest_version": 3,
+        "name": "P",
+        "version": "1.0.0",
+        "permissions": [
+          "storage",
+          "tabs"
+        ]
+      },
+      "answer": {
+        "manifest_version": 3,
+        "name": "P",
+        "version": "1.0.0",
+        "permissions": [
+          "storage",
+          "tabs"
+        ]
+      }
+    }
+  ]
+}
