@@ -22,6 +22,14 @@ import type * as LogsModule from "../tools/logs";
 const spawned: ChildProcess[] = [];
 const onSpawn = vi.hoisted(() => ({ write: null as null | (() => void), replaced: [] as Array<{ pid: number; browser: string; controlPort?: number }> }));
 
+vi.mock("../lib/boot-verdict", async (importOriginal) =>
+  (await import("./fixtures/short-boot")).shortBootWindow(await importOriginal()),
+);
+
+vi.mock("node:timers/promises", async (importOriginal) =>
+  (await import("./fixtures/short-boot")).shortSleeps(await importOriginal()),
+);
+
 vi.mock("../lib/same-browser-session", () => ({
   guardSameBrowserSession: async () => ({ replaced: onSpawn.replaced }),
 }));
@@ -291,6 +299,20 @@ describe("extension_dev never answers started when the ready contract says the b
     expect(result.error.message).toContain(message);
     expect(result.value.sessionStopped).toBe(true);
     await vi.waitFor(() => expect(engineGone(spawned[spawned.length - 1])).toBe(true));
+  }, 15_000);
+
+  it("keeps the dev server on an error it may still recover from, says whether it runs, and gives one next step", async () => {
+    const project = tmpProject();
+
+    waitAnswer = () => contractError("E_EXTENSION_LOAD_REFUSED", "extension_load_refused", "the browser refused to load the extension");
+
+    const result = JSON.parse(await dev.handler({ projectPath: project }));
+
+    expect(result.status).toBe("contract-error");
+    expect(result.error.message).toMatch(/The dev server is still running\.$/);
+    expect(result.value.sessionStopped).toBeUndefined();
+    expect(result.hint).toContain("extension_dev with replace: true");
+    expect(result.hint).not.toMatch(/extension_wait|extension_stop/);
   }, 15_000);
 
   it("keeps the dev server on a compile_error stamped after the boot window, since a save recompiles it", async () => {

@@ -39,8 +39,8 @@ import { guardSameBrowserSession } from "../lib/same-browser-session";
 import { DEFAULT_IDLE_MINUTES, IDLE_MINUTES_SCHEMA, armSessionIdle, resolveIdleMinutes } from "../lib/session-idle";
 import {
   LAUNCH_FLAG_SCHEMA,
-  GECKO_SOCKET_PROCESS_WARNING,
   geckoLaunchEnv,
+  geckoSocketWarning,
   headlessLaunch,
   launchFlagArgs,
   type LaunchFlagArgs,
@@ -233,6 +233,7 @@ export async function handler(
   );
   const visibility = headlessLaunch(args);
   const geckoEnv = geckoLaunchEnv(browser);
+  const socketWarning = geckoSocketWarning(browser, Boolean(args.noBrowser));
   const launchEnv = { ...visibility.env, ...geckoEnv };
   const installGate = await sessionInstallGate(schema.name, args.projectPath);
   if (installGate.refusal) return installGate.refusal;
@@ -285,7 +286,7 @@ export async function handler(
     since: spawnedAt,
     noBrowser: Boolean(args.noBrowser),
   });
-  if (geckoEnv) boot.warnings.push(GECKO_SOCKET_PROCESS_WARNING);
+  if (socketWarning) boot.warnings.push(socketWarning);
 
   const cleanOutput = boot.evidenceTail;
   const session = { projectPath: args.projectPath, browser, pid };
@@ -423,7 +424,7 @@ export async function handler(
   const landing =
     args.wait === false || args.noBrowser ? null : await awaitStartLanding(args.projectPath, browser);
   const deadStop =
-    landing?.kind === "failed" && isDeadContractCode(landing.frame.error?.contractCode)
+    landing?.kind === "failed" && isDeadContractCode(landing.frame.error?.contractCode, command)
       ? await stopFailedBoot(args.projectPath, browser)
       : null;
   const freshContract = readFreshContract(args.projectPath, browser, spawnedAt);

@@ -546,6 +546,24 @@ describe("extension_project_create", () => {
     expect(out.hint).not.toContain("pushed to");
   });
 
+  it.each([
+    ["the device code start", { code: { status: 403, body: { error: "access_denied", message: "reworded", code: "CLI_PROJECT_CREATE_DISABLED", closedFor: "account" } }, token: [] }, false],
+    ["the create door", { token: [{ status: 200, body: grantBody }], create: { status: 403, body: { message: "reworded", code: "CLI_PROJECT_CREATE_DISABLED", closedFor: "account" } } }, false],
+    ["the upload door", { token: [{ status: 200, body: grantBody }], source: { status: 403, body: { message: "reworded", code: "CLI_PROJECT_CREATE_DISABLED", closedFor: "account" } } }, true],
+  ])("1042: reads closedFor at %s", async (_door, routes, upload) => {
+    const { fn } = createFetch(routes as Parameters<typeof createFetch>[0]);
+    vi.stubGlobal("fetch", fn);
+    const args = upload
+      ? { project: "acme/ghost-app", projectPath: extensionFolder("ext"), deviceCode: "dev-code" }
+      : { ...baseArgs, ...("code" in routes ? {} : { deviceCode: "dev-code" }) };
+
+    const out = JSON.parse(await handler(args));
+
+    expect(out.status).toBe("lane-closed");
+    expect(out.hint).toMatch(/closed headless project creation for this account/);
+    expect(out.value).not.toHaveProperty("consoleUrl");
+  });
+
   it("1042: answers an approver the platform refused by closedFor, with no console form", async () => {
     const { fn } = createFetch({
       token: [{ status: 403, body: { error: "access_denied", message: "reworded", code: "CLI_PROJECT_CREATE_DISABLED", closedFor: "account" } }],

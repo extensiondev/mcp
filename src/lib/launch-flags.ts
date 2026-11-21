@@ -89,13 +89,33 @@ export function geckoLaunchEnv(
   env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
 ): Record<string, string> | null {
   if (!isGeckoFamily(browser) || platform !== "linux") return null;
-  if (env.MOZ_DISABLE_SOCKET_PROCESS !== undefined || env.EXTENSION_KEEP_SOCKET_PROCESS === "1") return null;
+  if (env.MOZ_DISABLE_SOCKET_PROCESS !== undefined || keepsSocketProcess(env)) return null;
 
   return { MOZ_DISABLE_SOCKET_PROCESS: "1" };
 }
 
-export const GECKO_SOCKET_PROCESS_WARNING =
-  "This Linux Firefox runs with MOZ_DISABLE_SOCKET_PROCESS=1, which lowers how often the engine loses the browser at startup. Firefox's WebRTC networking runs on the socket process, so RTCPeerConnection in this session likely connects no peers. Set EXTENSION_KEEP_SOCKET_PROCESS=1 in this server's environment and relaunch with replace: true to keep the socket process.";
+function keepsSocketProcess(env: NodeJS.ProcessEnv | Record<string, string | undefined>): boolean {
+  const raw = String(env.EXTENSION_KEEP_SOCKET_PROCESS ?? "").trim().toLowerCase();
+
+  return raw.length > 0 && raw !== "0" && raw !== "false";
+}
+
+export function geckoSocketWarning(
+  browser: string,
+  noBrowser: boolean,
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
+): string | null {
+  if (noBrowser || !isGeckoFamily(browser) || platform !== "linux") return null;
+
+  if (env.MOZ_DISABLE_SOCKET_PROCESS !== undefined) {
+    return `MOZ_DISABLE_SOCKET_PROCESS is set in this server's environment, and Firefox reads it as set whatever its value, 0 included, so this Firefox runs without its socket process and RTCPeerConnection in this session likely connects no peers. Remove the variable from this server's environment to keep the socket process.`;
+  }
+
+  if (keepsSocketProcess(env)) return null;
+
+  return "This Linux Firefox runs with MOZ_DISABLE_SOCKET_PROCESS=1, which lowers how often the engine loses the browser at startup. Firefox's WebRTC networking runs on the socket process, so RTCPeerConnection in this session likely connects no peers. Set EXTENSION_KEEP_SOCKET_PROCESS=1 in this server's environment and relaunch with replace: true to keep the socket process.";
+}
 
 export interface HiddenBrowserUi {
   flag: string;

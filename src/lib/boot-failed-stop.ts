@@ -10,7 +10,9 @@ import { stopOne } from "../tools/stop";
 
 const DEAD_CONTRACT_CODES = new Set(["browser_exited", "browser_launch_failed", "compile_failed"]);
 
-export function isDeadContractCode(contractCode: unknown): boolean {
+export function isDeadContractCode(contractCode: unknown, session: "dev" | "start" | "preview" = "dev"): boolean {
+  if (session !== "dev" && contractCode === "compile_error") return true;
+
   return typeof contractCode === "string" && DEAD_CONTRACT_CODES.has(contractCode);
 }
 

@@ -12,6 +12,14 @@ import type * as TemplatesCache from "../lib/templates-cache";
 
 const spawnCalls: Array<{ args: string[]; env?: Record<string, string> }> = [];
 
+vi.mock("../lib/boot-verdict", async (importOriginal) =>
+  (await import("./fixtures/short-boot")).shortBootWindow(await importOriginal()),
+);
+
+vi.mock("node:timers/promises", async (importOriginal) =>
+  (await import("./fixtures/short-boot")).shortSleeps(await importOriginal()),
+);
+
 vi.mock("../lib/exec", async (importOriginal) => {
   const actual = await importOriginal<typeof Exec>();
 
@@ -56,7 +64,7 @@ vi.mock("extension-create", () => ({
 
 let scaffoldTarget = "";
 
-const { geckoLaunchEnv, headlessLaunch } = await import("../lib/launch-flags");
+const { geckoLaunchEnv, geckoSocketWarning, headlessLaunch } = await import("../lib/launch-flags");
 const dev = await import("../tools/dev");
 const start = await import("../tools/start");
 const { sessionIsHeadless } = await import("../tools/open");
@@ -128,6 +136,16 @@ describe("a person can ask to see the browser (headless input)", () => {
     expect(geckoLaunchEnv("chrome", "linux", {})).toBeNull();
     expect(geckoLaunchEnv("firefox", "linux", { MOZ_DISABLE_SOCKET_PROCESS: "0" })).toBeNull();
     expect(geckoLaunchEnv("firefox", "linux", { EXTENSION_KEEP_SOCKET_PROCESS: "1" })).toBeNull();
+    expect(geckoLaunchEnv("firefox", "linux", { EXTENSION_KEEP_SOCKET_PROCESS: "true" })).toBeNull();
+    expect(geckoLaunchEnv("firefox", "linux", { EXTENSION_KEEP_SOCKET_PROCESS: "0" })).toEqual({ MOZ_DISABLE_SOCKET_PROCESS: "1" });
+  });
+
+  it("warns about WebRTC only when a Linux Firefox launches without its socket process", () => {
+    expect(geckoSocketWarning("firefox", false, "linux", {})).toMatch(/This Linux Firefox runs with MOZ_DISABLE_SOCKET_PROCESS=1/);
+    expect(geckoSocketWarning("firefox", true, "linux", {})).toBeNull();
+    expect(geckoSocketWarning("firefox", false, "darwin", {})).toBeNull();
+    expect(geckoSocketWarning("firefox", false, "linux", { EXTENSION_KEEP_SOCKET_PROCESS: "1" })).toBeNull();
+    expect(geckoSocketWarning("firefox", false, "linux", { MOZ_DISABLE_SOCKET_PROCESS: "0" })).toMatch(/whatever its value, 0 included.*RTCPeerConnection/);
   });
 
   it.each([
@@ -142,9 +160,12 @@ describe("a person can ask to see the browser (headless input)", () => {
     Object.defineProperty(process, "platform", { ...platform, value: "linux" });
 
     let out: { warnings?: string[] } = {};
+    let buildOnly: { warnings?: string[] } = {};
 
     try {
       out = JSON.parse(await tool().handler({ projectPath, browser: "firefox", wait: false }));
+      removeSession(projectPath, "firefox");
+      buildOnly = JSON.parse(await tool().handler({ projectPath, browser: "firefox", wait: false, noBrowser: true }));
     } finally {
       Object.defineProperty(process, "platform", platform);
       if (inherited !== undefined) process.env.MOZ_DISABLE_SOCKET_PROCESS = inherited;
@@ -154,6 +175,7 @@ describe("a person can ask to see the browser (headless input)", () => {
 
     expect(spawnCalls[0]?.env).toMatchObject({ MOZ_DISABLE_SOCKET_PROCESS: "1" });
     expect((out.warnings ?? []).join(" ")).toMatch(/WebRTC.*EXTENSION_KEEP_SOCKET_PROCESS=1/);
+    expect((buildOnly.warnings ?? []).join(" ")).not.toMatch(/WebRTC/);
   }, 15_000);
 
   it("extension_dev and extension_start take the input", () => {

@@ -205,7 +205,7 @@ function engineState(facts: StartFacts): string {
 
   return engineExit
     ? `The engine's ${verb} process has exited, so nothing is running.`
-    : `The ${verb} process is still running; extension_stop with this projectPath ends it.`;
+    : `The ${verb} process is still running.`;
 }
 
 function failedAnswer(facts: StartFacts, frame: WaitFrame): string {

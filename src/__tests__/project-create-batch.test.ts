@@ -880,6 +880,16 @@ describe("extension_project_create with projects: every project keeps its own an
     expect(out.error.retry).toBe("no");
     expect(out.hint).toContain("console");
     expect(out.value.results).toHaveLength(3);
+
+    harness({
+      token: [grant(SLUGS)],
+      create: () => refused(403, "CLI_PROJECT_CREATE_DISABLED", { closedFor: "account" }),
+    });
+
+    const account = await run({ projects: THREE, deviceCode: "dev-code" });
+
+    expect(account.hint).toMatch(/Only an invited member of acme can create them there/);
+    expect(account.value).not.toHaveProperty("consoleUrl");
   });
 
   it("stores no login when the platform registered a different name", async () => {

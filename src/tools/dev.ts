@@ -49,8 +49,8 @@ import { handler as logsHandler } from "./logs";
 import {
   LAUNCH_FLAG_SCHEMA,
   headlessHint,
-  GECKO_SOCKET_PROCESS_WARNING,
   geckoLaunchEnv,
+  geckoSocketWarning,
   headlessLaunch,
   hiddenBrowserUi,
   hiddenBrowserUiHint,
@@ -187,6 +187,7 @@ export async function handler(
 
   const visibility = headlessLaunch(args);
   const geckoEnv = geckoLaunchEnv(browser);
+  const socketWarning = geckoSocketWarning(browser, Boolean(args.noBrowser));
   const launchEnv = { ...visibility.env, ...geckoEnv };
   const installGate = await sessionInstallGate(schema.name, args.projectPath);
   if (installGate.refusal) return installGate.refusal;
@@ -251,7 +252,7 @@ export async function handler(
     since: spawnedAt,
     noBrowser: Boolean(args.noBrowser),
   });
-  if (geckoEnv) boot.warnings.push(GECKO_SOCKET_PROCESS_WARNING);
+  if (socketWarning) boot.warnings.push(socketWarning);
 
   const cleanOutput = boot.evidenceTail;
   const session = { projectPath: args.projectPath, browser, pid, logPath };
@@ -428,7 +429,7 @@ export async function handler(
           code: recompiles ? "E_FIRST_COMPILE" : code,
           message: recompiles
             ? `The first compile failed: ${said || code}. The dev server is still running and will recompile on save.`
-            : `The dev server stamped its ready contract with an error: ${said || code}. The dev server is still running.`,
+            : `The dev server stamped its ready contract with an error: ${said || code}. ${engineGone(spawned.child) ? "The dev server has exited, so nothing is running." : "The dev server is still running."}`,
         },
         value: {
           ...session,
@@ -438,7 +439,7 @@ export async function handler(
         },
         hint: recompiles
           ? "Fix the compile error listed in `value.compileErrors` and save: the dev server is still running and will recompile. extension_wait answers contract-error while the build is failed and ready once a compile lands."
-          : "Read value.ready.errors and value.output for the cause and fix it. The dev server is still running: call extension_wait to read the contract again, or extension_stop with this projectPath to end it.",
+          : "Read value.ready.errors and value.output for the cause, fix it, then call extension_dev with replace: true.",
         warnings: boot.warnings,
       });
     }
@@ -712,4 +713,8 @@ async function awaitReadyAndFirstLogs(projectPath: string, browser: string, budg
         ? ({ safari: safariRead as SafariEnableValue, hint: typeof ready.hint === "string" ? ready.hint : "" } satisfies SafariEnableRead)
         : null,
   };
+}
+
+function engineGone(child: { exitCode: number | null; signalCode: NodeJS.Signals | null }): boolean {
+  return child.exitCode !== null || child.signalCode !== null;
 }

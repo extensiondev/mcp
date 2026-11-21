@@ -410,8 +410,10 @@ export async function handler(args: {
             elapsedMs: Date.now() - start,
           },
           hint:
-            contract.code === "browser_exited" || contract.code === "browser_launch_failed"
-              ? browserGoneHint(contract.command)
+            contract.command === "start" || contract.command === "preview"
+              ? productionContractHint(contract.code, contract.command)
+              : contract.code === "browser_exited" || contract.code === "browser_launch_failed"
+              ? "The browser is gone and the dev server does not relaunch it: read extension_logs for its last words, then call extension_dev with replace: true."
               : contract.code === "compile_failed"
               ? "The compiler failed outside a module (a plugin hook or extension.config.js threw), which the dev server's watcher does not recover from: fix the cause, then call extension_dev with replace: true."
               : 'Fix the errors in value.errors and save: the dev server recompiles. Call extension_wait with for: "rebuild" to wait for that compile.',
@@ -502,12 +504,12 @@ export async function handler(args: {
   });
 }
 
-function browserGoneHint(command: unknown): string {
-  if (command === "start" || command === "preview") {
-    const relaunch = command === "preview" ? "extension_start with build: false and replace: true" : "extension_start with replace: true";
+function productionContractHint(code: unknown, command: "start" | "preview"): string {
+  const relaunch = command === "preview" ? "extension_start with build: false and replace: true" : "extension_start with replace: true";
 
+  if (code === "browser_exited" || code === "browser_launch_failed") {
     return `The browser is gone and a ${command} session does not relaunch it: read extension_logs for its last words, then call ${relaunch}.`;
   }
 
-  return "The browser is gone and the dev server does not relaunch it: read extension_logs for its last words, then call extension_dev with replace: true.";
+  return `A ${command} session builds once and does not rebuild after a fix: fix the cause in value.errors, then call ${relaunch}.`;
 }

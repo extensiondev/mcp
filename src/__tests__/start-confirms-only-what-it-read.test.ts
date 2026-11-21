@@ -36,6 +36,14 @@ function fakeCli(script: string): SpawnedCli {
 
 let nextChild: () => SpawnedCli = () => fakeCli("setTimeout(()=>{}, 60000)");
 
+vi.mock("../lib/boot-verdict", async (importOriginal) =>
+  (await import("./fixtures/short-boot")).shortBootWindow(await importOriginal()),
+);
+
+vi.mock("node:timers/promises", async (importOriginal) =>
+  (await import("./fixtures/short-boot")).shortSleeps(await importOriginal()),
+);
+
 vi.mock("../lib/exec", async (importOriginal) => {
   const actual = await importOriginal<typeof ExecModule>();
 
@@ -131,7 +139,7 @@ describe("extension_start confirms only what it read and never points at a temp 
         `const fs = require("node:fs"); const path = require("node:path");
          const file = ${JSON.stringify(file)};
          const body = Object.assign(${JSON.stringify(stamped)}, { pid: process.pid, browserPid: process.pid, launcherPid: process.pid });
-         setTimeout(() => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(body)); }, 500);
+         setTimeout(() => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(body)); }, 50);
          setTimeout(() => {}, 60000);`,
       );
 
@@ -182,7 +190,7 @@ describe("extension_start confirms only what it read and never points at a temp 
       cli = fakeCli(
         `const fs = require("node:fs"); const path = require("node:path");
          const file = ${JSON.stringify(file)};
-         setTimeout(() => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(Object.assign(${JSON.stringify(exited)}, { pid: process.pid }))); }, 5300);
+         setTimeout(() => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(Object.assign(${JSON.stringify(exited)}, { pid: process.pid }))); }, 400);
          setTimeout(() => {}, 60000);`,
       );
 
@@ -199,6 +207,50 @@ describe("extension_start confirms only what it read and never points at a temp 
     expect(result.hint).not.toContain("extension_dev");
     await vi.waitFor(() => expect(cli!.child.exitCode !== null || cli!.child.signalCode !== null).toBe(true));
   }, 20_000);
+
+  function engineStamps(project: string, code: "extension_load_refused", then: "stay" | "exit"): SpawnedCli {
+    const file = readyContractPath(project, "chrome");
+    const refused = errorContract("chrome", code, { command: "start", distPath: path.join(project, "dist", "chrome") });
+    const cli = fakeCli(
+      `const fs = require("node:fs"); const path = require("node:path");
+       const file = ${JSON.stringify(file)};
+       setTimeout(() => {
+         fs.mkdirSync(path.dirname(file), { recursive: true });
+         fs.writeFileSync(file, JSON.stringify(Object.assign(${JSON.stringify(refused)}, { pid: process.pid })));
+         ${then === "exit" ? "process.exit(1);" : ""}
+       }, 400);
+       setTimeout(() => {}, 60000);`,
+    );
+
+    return cli;
+  }
+
+  it("keeps a start session whose failure the engine can still be read on, and gives one next step", async () => {
+    const project = tmpProject();
+    let cli: SpawnedCli | null = null;
+
+    nextChild = () => (cli = engineStamps(project, "extension_load_refused", "stay"));
+
+    const result = JSON.parse(await start.handler({ projectPath: project }));
+
+    expect(result.ok).toBe(false);
+    expect(result.error.message).toMatch(/The start process is still running\.$/);
+    expect(result.value.sessionStopped).toBeUndefined();
+    expect(result.hint).toContain("extension_start with replace: true");
+    expect(result.hint).not.toMatch(/extension_stop|extension_dev/);
+    expect(cli!.child.exitCode).toBeNull();
+  }, 10_000);
+
+  it("says nothing is running when the engine exited after the failed wait", async () => {
+    const project = tmpProject();
+
+    nextChild = () => engineStamps(project, "extension_load_refused", "exit");
+
+    const result = JSON.parse(await start.handler({ projectPath: project }));
+
+    expect(result.ok).toBe(false);
+    expect(result.error.message).toContain("The engine's start process has exited, so nothing is running.");
+  }, 10_000);
 
   it("the description says what a production session cannot do, and that the load is read over the debug port", () => {
     expect(start.schema.description).not.toMatch(/opens no debug port/);

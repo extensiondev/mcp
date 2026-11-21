@@ -287,6 +287,21 @@ describe("extension_workspace_create", () => {
     expect(out.error.message).toContain("Headless workspace creation");
   });
 
+  it.each([
+    ["the device code start", { code: { status: 403, body: { error: "access_denied", message: "reworded", code: "CLI_WORKSPACE_CREATE_DISABLED", closedFor: "account" } }, token: [] }, {}],
+    ["the token poll", { token: [{ status: 403, body: { error: "access_denied", message: "reworded", code: "CLI_WORKSPACE_CREATE_DISABLED", closedFor: "account" } }] }, { deviceCode: "dev-code" }],
+    ["the create door", { token: [{ status: 200, body: grantBody }], create: { status: 403, body: { message: "reworded", code: "CLI_WORKSPACE_CREATE_DISABLED", closedFor: "account" } } }, { deviceCode: "dev-code" }],
+  ])("1042: reads closedFor at %s", async (_door, routes, extra) => {
+    const { fn } = createFetch(routes as Parameters<typeof createFetch>[0]);
+    vi.stubGlobal("fetch", fn);
+
+    const out = JSON.parse(await handler({ workspace: "new-org", ...extra }));
+
+    expect(out.status).toBe("lane-closed");
+    expect(out.hint).toMatch(/closed headless workspace creation for this account/);
+    expect(out.value).not.toHaveProperty("consoleUrl");
+  });
+
   async function workspaceAnswers(create: Route | "no-answer") {
     const { fn } = createFetch({
       token: [{ status: 200, body: grantBody }],
