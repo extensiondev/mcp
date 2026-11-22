@@ -831,7 +831,7 @@ describe("941: one dependency install runs on a project at a time, and a build s
     expect(result.value.waitedMs).toBeGreaterThanOrEqual(135_000);
     expect(result.hint).toMatch(
       new RegExp(
-        `^Nothing was built: the engine an earlier extension_build call left running \\(pid ${pid}\\) is still installing this project's dependencies, and this call waited [0-9.]+ s for it to end\\. ${INSTALL_HINT.replace(/[.;:]/g, "\\$&")}$`,
+        `^Nothing was built: the engine an earlier extension_build call left running \\(pid ${pid}\\) is still installing this project's dependencies, and this call waited [0-9.]+ s for it to end\\. ${INSTALL_HINT.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
       ),
     );
   }, 20_000);

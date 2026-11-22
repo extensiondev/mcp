@@ -6,6 +6,7 @@ import { spawn } from "node:child_process";
 import { describe, it, expect, vi, afterEach } from "vitest";
 
 import type { ChildProcess } from "node:child_process";
+import type * as BootVerdictModule from "../lib/boot-verdict";
 import type * as ExecModule from "../lib/exec";
 import type { SpawnedCli } from "../lib/exec";
 
@@ -36,9 +37,21 @@ function fakeCli(script: string): SpawnedCli {
 
 let nextChild: () => SpawnedCli = () => fakeCli("setTimeout(()=>{}, 60000)");
 
-vi.mock("../lib/boot-verdict", async (importOriginal) =>
-  (await import("./fixtures/short-boot")).shortBootWindow(await importOriginal()),
-);
+vi.mock("../lib/boot-verdict", async (importOriginal) => {
+  const short = (await import("./fixtures/short-boot")).shortBootWindow(await importOriginal<typeof BootVerdictModule>());
+  const nodeFs = await import("node:fs");
+  const nodePath = await import("node:path");
+
+  return {
+    ...short,
+    pollBootVerdict: async (...args: Parameters<typeof short.pollBootVerdict>) => {
+      const reading = await short.pollBootVerdict(...args);
+      nodeFs.writeFileSync(nodePath.join(args[0], ".boot-polled"), "");
+
+      return reading;
+    },
+  };
+});
 
 vi.mock("node:timers/promises", async (importOriginal) =>
   (await import("./fixtures/short-boot")).shortSleeps(await importOriginal()),
@@ -190,7 +203,8 @@ describe("extension_start confirms only what it read and never points at a temp 
       cli = fakeCli(
         `const fs = require("node:fs"); const path = require("node:path");
          const file = ${JSON.stringify(file)};
-         setTimeout(() => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(Object.assign(${JSON.stringify(exited)}, { pid: process.pid }))); }, 400);
+         const gate = ${JSON.stringify(path.join(project, ".boot-polled"))};
+         const tick = setInterval(() => { if (!fs.existsSync(gate)) return; clearInterval(tick); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(Object.assign(${JSON.stringify(exited)}, { pid: process.pid }))); }, 20);
          setTimeout(() => {}, 60000);`,
       );
 
@@ -214,11 +228,14 @@ describe("extension_start confirms only what it read and never points at a temp 
     const cli = fakeCli(
       `const fs = require("node:fs"); const path = require("node:path");
        const file = ${JSON.stringify(file)};
-       setTimeout(() => {
+       const gate = ${JSON.stringify(path.join(project, ".boot-polled"))};
+       const tick = setInterval(() => {
+         if (!fs.existsSync(gate)) return;
+         clearInterval(tick);
          fs.mkdirSync(path.dirname(file), { recursive: true });
          fs.writeFileSync(file, JSON.stringify(Object.assign(${JSON.stringify(refused)}, { pid: process.pid })));
          ${then === "exit" ? "process.exit(1);" : ""}
-       }, 400);
+       }, 20);
        setTimeout(() => {}, 60000);`,
     );
 
