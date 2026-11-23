@@ -336,11 +336,13 @@ describe("924: a theme Chromium cannot load is a Chromium issue, and a theme man
   });
 
   it("does not ask a static theme for the Firefox data collection declaration, which AMO's linter asks of an extension only", async () => {
-    const theme = await validate(project({ ...THEME, theme: { colors: ARRAYS } }), ["firefox"]);
-    const extension = await validate(project({ ...THEME }), ["firefox"]);
+    const asked = (dir: string) => manifestValidate.handler({ projectPath: dir, browsers: ["firefox"], include: ["storeReadiness"] }).then((s) => JSON.parse(s));
+    const theme = await asked(project({ ...THEME, theme: { colors: ARRAYS } }));
+    const extension = await asked(project({ ...THEME }));
 
-    expect(theme.value.warnings.join("\n")).not.toContain("data_collection_permissions");
-    expect(extension.value.warnings.join("\n")).toContain("no browser_specific_settings.gecko.data_collection_permissions");
+    expect(theme.value.storeReadiness.join("\n")).not.toContain("data_collection_permissions");
+    expect(extension.value.storeReadiness.join("\n")).toContain("no browser_specific_settings.gecko.data_collection_permissions");
+    expect(extension.value.warnings.join("\n")).not.toContain("data_collection_permissions");
   });
 });
 

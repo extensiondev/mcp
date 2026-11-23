@@ -977,20 +977,27 @@ describe("wave-2 swarm lies stay fixed", () => {
     fs.writeFileSync(path.join(dir, "icon16.png"), "");
     fs.writeFileSync(path.join(dir, "icon48.png"), "");
 
+    const plain = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["chrome"] }));
+
+    expect(JSON.stringify(plain)).not.toContain("128x128");
+    expect(plain.value.storeReadinessOmitted).toBe(1);
+    expect(plain.value).not.toHaveProperty("storeReadiness");
+
     const result = JSON.parse(
-      await manifestValidate.handler({ projectPath: dir, browsers: ["chrome"] }),
+      await manifestValidate.handler({ projectPath: dir, browsers: ["chrome"], include: ["storeReadiness"] }),
     );
 
-    expect(result.value.warnings.join(" ")).toContain("128x128");
-    expect(result.value.warnings.find((w: string) => w.startsWith("No 128x128 icon declared"))).toContain(
+    expect(result.value.warnings.join(" ")).not.toContain("128x128");
+    expect(result.value).not.toHaveProperty("storeReadinessOmitted");
+    expect(result.value.storeReadiness.find((w: string) => w.startsWith("No 128x128 icon declared"))).toContain(
       'Until they supply it, save a plain placeholder PNG there as icons/icon-128.png, add "icons": { "128": "icons/icon-128.png" } to the manifest',
     );
 
     fs.writeFileSync(path.join(dir, "logo.png"), Buffer.concat([Buffer.from("89504e470d0a1a0a0000000d49484452", "hex"), Buffer.from([0, 0, 0, 128, 0, 0, 0, 128, 8, 6, 0, 0, 0])]));
 
-    const held = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["chrome"] }));
+    const held = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["chrome"], include: ["storeReadiness"] }));
 
-    expect(held.value.warnings.find((w: string) => w.startsWith("No 128x128 icon declared"))).toContain(
+    expect(held.value.storeReadiness.find((w: string) => w.startsWith("No 128x128 icon declared"))).toContain(
       'logo.png under the manifest\'s folder is 128x128: add "icons": { "128": "logo.png" } to the manifest',
     );
   });

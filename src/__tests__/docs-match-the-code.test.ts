@@ -232,6 +232,10 @@ describe("the docs say what the code does", () => {
     expect(read("claude/README.md")).not.toMatch(/^MIT$/m);
   });
 
+  it("has the publish command ask the validator for the store listing lines, which a plain validation leaves out", () => {
+    expect(read("claude/commands/extension-publish.md")).toMatch(/Call `extension_manifest_validate` for each target browser with `include: \["storeReadiness"\]`.* report warnings and every line of `value\.storeReadiness`/);
+  });
+
   it("quotes the engine's own Node floor", () => {
     const pkg = require("../../package.json") as { engines: { node: string } };
     const engine = require("extension-develop/package.json") as { engines: { node: string } };

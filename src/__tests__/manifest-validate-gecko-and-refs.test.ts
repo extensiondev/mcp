@@ -110,10 +110,10 @@ describe("the Firefox report names what Firefox itself would say", () => {
       ["public/images/icon-16.png"],
     );
 
-    const result = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"] }));
+    const result = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"], include: ["storeReadiness"] }));
 
     expect(result.value.warnings.find((w: string) => w.includes("gecko.id"))).toBeUndefined();
-    const declaration = result.value.warnings.find((w: string) => w.includes("data_collection_permissions"));
+    const declaration = result.value.storeReadiness.find((w: string) => w.includes("data_collection_permissions"));
 
     expect(declaration).toContain("ask the person and write the block");
     expect(declaration).toContain("with the categories they state");
@@ -132,8 +132,8 @@ describe("the Firefox report names what Firefox itself would say", () => {
       },
       ["public/images/icon-16.png"],
     );
-    const quiet = JSON.parse(await manifestValidate.handler({ projectPath: complete, browsers: ["firefox"] }));
-    expect(quiet.value.warnings.find((w: string) => w.includes("data_collection_permissions"))).toBeUndefined();
+    const quiet = JSON.parse(await manifestValidate.handler({ projectPath: complete, browsers: ["firefox"], include: ["storeReadiness"] }));
+    expect(quiet.value.storeReadiness.find((w: string) => w.includes("data_collection_permissions"))).toBeUndefined();
   });
 
   it("gives an MV2 Firefox manifest the keys to port for Chromium", async () => {
@@ -270,10 +270,10 @@ describe("928: a missing Firefox add-on ID is written now, with a value the answ
 
     if (pkg) fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify(pkg));
 
-    const result = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"] }));
+    const result = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"], include: ["storeReadiness"] }));
     const warnings: string[] = result.value.warnings;
 
-    return { result, warnings, line: warnings.find((w) => w.includes("no browser_specific_settings.gecko.id")) ?? "" };
+    return { result, warnings, store: result.value.storeReadiness as string[], line: warnings.find((w) => w.includes("no browser_specific_settings.gecko.id")) ?? "" };
   }
 
   it("says to write it now with the proposed value, that it is provisional and locks at the first submission, and to tell the owner", async () => {
@@ -288,12 +288,13 @@ describe("928: a missing Firefox add-on ID is written now, with a value the answ
   });
 
   it("the declaration rule comes first and names the declaration alone, so no sentence after the ID line takes its instruction back", async () => {
-    const { warnings, line } = await answer({ name: "Clip Shelf" });
-    const declaration = warnings.find((w) => w.includes("no browser_specific_settings.gecko.data_collection_permissions")) ?? "";
+    const { warnings, store, line } = await answer({ name: "Clip Shelf" });
+    const declaration = store.find((w) => w.includes("no browser_specific_settings.gecko.data_collection_permissions")) ?? "";
 
     expect(declaration).toMatch(/Do not add it on their behalf, and do not propose a value for it either\. This rule is about the declaration alone\.$/);
     expect(declaration).not.toMatch(/gecko\.id\b/);
-    expect(warnings.indexOf(declaration)).toBeLessThan(warnings.indexOf(line));
+    expect(warnings).toContain(line);
+    expect(warnings.join("\n")).not.toContain("data_collection_permissions");
     expect(line).not.toMatch(/do not (add|propose|write)|on their behalf|ask the/i);
   });
 

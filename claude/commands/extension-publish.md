@@ -11,7 +11,7 @@ Default to `chrome` and `firefox`. `all` means chrome, firefox, edge and safari.
 
 ## Steps
 
-1. **Check the manifest.** Call `extension_manifest_validate` for each target browser. Fix every `buildBlocking` finding before going on; report warnings. When a Firefox target has no `browser_specific_settings.gecko.id`, write the provisional ID the answer proposes (`value.proposedGeckoId`) as `firefox:browser_specific_settings.gecko.id`, and tell the owner it locks at the first Firefox submission so they can change it before then.
+1. **Check the manifest.** Call `extension_manifest_validate` for each target browser with `include: ["storeReadiness"]`, which adds the store listing lines (128x128 icon, Firefox data collection declaration) a plain validation only counts. Fix every `buildBlocking` finding before going on; report warnings and every line of `value.storeReadiness`. When a Firefox target has no `browser_specific_settings.gecko.id`, write the provisional ID the answer proposes (`value.proposedGeckoId`) as `firefox:browser_specific_settings.gecko.id`, and tell the owner it locks at the first Firefox submission so they can change it before then.
 
 2. **Build store bundles.** Call `extension_build` with `zip: true` for each target. If it refuses on a blocking manifest error or returns compiler errors in `value.errors`, fix and rebuild.
 

@@ -740,7 +740,7 @@ async function validationPreflight(
   try {
     const manifestValidate = await import("./manifest-validate");
     const parsed = JSON.parse(
-      await manifestValidate.handler({ projectPath, browsers: [browser] }),
+      await manifestValidate.handler({ projectPath, browsers: [browser], include: ["storeReadiness"] }),
     );
 
     if (
@@ -761,7 +761,7 @@ async function validationPreflight(
         valid: Boolean(value.valid),
         buildBlocking: Boolean(value.buildBlocking),
         errors: Array.isArray(value.errors) ? value.errors : [],
-        warnings: Array.isArray(value.warnings) ? value.warnings : [],
+        warnings: [...(Array.isArray(value.storeReadiness) ? value.storeReadiness : []), ...(Array.isArray(value.warnings) ? value.warnings : [])],
         refusedKeys: Array.isArray(value.browserSupport?.[browser]?.refusedKeys) ? value.browserSupport[browser].refusedKeys : [],
         ...(typeof value.proposedGeckoId === "string" ? { proposedGeckoId: value.proposedGeckoId } : {}),
       },
@@ -1230,7 +1230,7 @@ export async function handler(args: {
         ...droppedPages.map((page) => page.say),
         ...shownBuildWarnings.filter((line) => !engineNamesDroppedPage(line, droppedPages)),
         ...reviewRiskPointer(risks),
-        mode === "development" ? null : storeMdLine(path.dirname(storeMdPath(args.projectPath)), risks, browser),
+        mode === "development" || !(args.zip || fs.existsSync(storeMdPath(args.projectPath))) ? null : storeMdLine(path.dirname(storeMdPath(args.projectPath)), risks, browser),
         mode === "development" ? null : wasmGrantLine(review),
         ...reviewCoverageNotes(review),
         ...zipNotes,

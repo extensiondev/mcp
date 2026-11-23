@@ -1341,9 +1341,9 @@
         },
         {
           "name": "include",
-          "type": "array of \"similarTemplates\"",
+          "type": "array of \"similarTemplates\" | \"storeReadiness\"",
           "required": false,
-          "description": "similarTemplates adds up to five catalog templates with the same surfaces."
+          "description": "similarTemplates adds up to five catalog templates with the same surfaces; storeReadiness adds the store listing lines."
         }
       ]
     },

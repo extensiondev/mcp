@@ -96,8 +96,8 @@ export const schema = {
       },
       include: {
         type: "array",
-        items: { type: "string", enum: ["similarTemplates"] },
-        description: "similarTemplates adds up to five catalog templates with the same surfaces.",
+        items: { type: "string", enum: ["similarTemplates", "storeReadiness"] },
+        description: "similarTemplates adds up to five catalog templates with the same surfaces; storeReadiness adds the store listing lines.",
       },
     },
     required: [],
@@ -428,6 +428,8 @@ export async function handler(args: {
   }
 
   const wantsSimilar = Array.isArray(args.include) && args.include.includes("similarTemplates");
+  const wantsStore = Array.isArray(args.include) && args.include.includes("storeReadiness");
+  const storeReadiness: string[] = [];
   const explicitBrowsers = Array.isArray(args.browsers) && args.browsers.length > 0;
   const browsers = explicitBrowsers ? (args.browsers as string[]) : DEFAULT_BROWSERS;
   const unknownTargets = browsers.filter((b) => !KNOWN_TARGETS.includes(b));
@@ -580,7 +582,7 @@ export async function handler(args: {
   const iconMap = chromiumManifest.icons as Record<string, unknown> | undefined;
 
   if (!iconMap || typeof iconMap["128"] !== "string") {
-    result.warnings.push(
+    storeReadiness.push(
       `No 128x128 icon declared ("128" key in icons). The Chrome Web Store requires one for a store listing, and Edge Add-ons expects it too. ${icon128Fix(path.resolve(manifestPath))}`,
     );
   }
@@ -846,7 +848,7 @@ export async function handler(args: {
       const staticTheme = Boolean(effective.theme) && typeof effective.theme === "object";
 
       if (!staticTheme && (!dataCollection || typeof dataCollection !== "object")) {
-        result.warnings.push(
+        storeReadiness.push(
           'Firefox: no browser_specific_settings.gecko.data_collection_permissions. AMO requires it for new add-ons and the Firefox build warns on every run. What the extension collects is the owner\'s declaration to Mozilla, so ask the person and write the block under firefox:browser_specific_settings.gecko.data_collection_permissions with the categories they state (https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/). Do not add it on their behalf, and do not propose a value for it either. This rule is about the declaration alone.',
         );
       }
@@ -1100,6 +1102,7 @@ export async function handler(args: {
     value: {
       ...result,
       ...(wantsSimilar ? { similarTemplates: result.similarTemplates ?? [] } : {}),
+      ...(wantsStore ? { storeReadiness } : { storeReadinessOmitted: storeReadiness.length }),
       buildBlocking: result.errors.length > 0,
     },
   });

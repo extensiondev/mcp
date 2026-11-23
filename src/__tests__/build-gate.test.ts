@@ -174,7 +174,7 @@ describe("extension_build says when the engine installed the project's dependenc
 });
 
 describe("extension_build validation gate", () => {
-  it("refuses to build a manifest with build-blocking errors", async () => {
+  it("refuses to build a manifest with build-blocking errors, and asks the validator for the store listing lines it leaves out by default", async () => {
     const dir = project({ manifest_version: 3, version: "1.0.0" });
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
@@ -183,6 +183,7 @@ describe("extension_build validation gate", () => {
     expect(result.status).toBe("manifest-blocked");
     expect(result.value.errors.join(" ")).toContain("name");
     expect(result.hint).toContain("skipValidation");
+    expect(result.warnings.join(" ")).toContain("No 128x128 icon declared");
     expect(cliCalls).toHaveLength(0);
   });
 
@@ -365,21 +366,23 @@ describe("extension_build zip path reporting", () => {
     expect(result.warnings.join(" ")).not.toContain("names no zip");
   });
 
-  it("says a build has no STORE.md beside it and where its format is, zipped or not, and says nothing once the file is there", async () => {
+  it("says a zipped build has no STORE.md beside it and where its format is, and says nothing for a plain build or once the file is there", async () => {
     const dir = builtProject("zip-probe-ext");
     const zip = path.join(dir, "dist", "zipprobeext-1.0.0-chrome.zip");
     engineWrites(dir, [zip]);
 
-    for (const args of [{ zip: true }, {}]) {
-      const missing = JSON.parse(await build.handler({ projectPath: dir, ...args }));
-      const said = missing.warnings.filter((w: string) => w.includes("STORE.md"));
+    const missing = JSON.parse(await build.handler({ projectPath: dir, zip: true }));
+    const said = missing.warnings.filter((w: string) => w.includes("STORE.md"));
 
-      expect(said).toHaveLength(1);
-      expect(said[0]).toContain(`No STORE.md is in ${dir}`);
-      expect(said[0]).toContain('extension_docs_search "STORE.md" has the rest');
-      expect(said[0]).toContain("Leave only its data-use and privacy rows unanswered");
-      expect(missing.hint).not.toContain("STORE.md");
-    }
+    expect(said).toHaveLength(1);
+    expect(said[0]).toContain(`No STORE.md is in ${dir}`);
+    expect(said[0]).toContain('extension_docs_search "STORE.md" has the rest');
+    expect(said[0]).toContain("Leave only its data-use and privacy rows unanswered");
+    expect(missing.hint).not.toContain("STORE.md");
+
+    const plain = JSON.parse(await build.handler({ projectPath: dir }));
+
+    expect(`${plain.hint} ${plain.warnings.join(" ")}`).not.toContain("STORE.md");
 
     fs.writeFileSync(path.join(dir, "STORE.md"), "# Store metadata\n");
 

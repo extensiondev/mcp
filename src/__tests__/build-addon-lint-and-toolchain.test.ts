@@ -283,7 +283,7 @@ describe("916: a build answer says each review risk once and stays light", () =>
   it("919: says once, in warnings, to write STORE.md with a justification for each declared permission, host permission and content script match, and names no data-use value", async () => {
     const dir = riskyProject();
 
-    const missing = JSON.parse(await build.handler({ projectPath: dir, browser: "firefox" }));
+    const missing = JSON.parse(await build.handler({ projectPath: dir, browser: "firefox", zip: true }));
     const lines = missing.warnings.filter((w: string) => w.includes("STORE.md"));
 
     expect(lines).toHaveLength(1);
@@ -345,7 +345,7 @@ describe("925: one project root an answer, the folder the engine built from", ()
   it("answers a src manifest with no package.json from the folder passed, where the engine writes dist from 4.2.0, with no root line", async () => {
     const dir = bareSrcProject();
 
-    const result = JSON.parse(await build.handler({ projectPath: dir, browser: "chrome" }));
+    const result = JSON.parse(await build.handler({ projectPath: dir, browser: "chrome", zip: true }));
 
     expect(result.ok).toBe(true);
     expect(result.value).not.toHaveProperty("projectRoot");
@@ -380,7 +380,7 @@ describe("925: one project root an answer, the folder the engine built from", ()
   it("names no root and adds no line when a package.json sits beside src, the conventional layout", async () => {
     const dir = project();
 
-    const result = JSON.parse(await build.handler({ projectPath: dir, browser: "chrome" }));
+    const result = JSON.parse(await build.handler({ projectPath: dir, browser: "chrome", zip: true }));
 
     expect(result.value).not.toHaveProperty("projectRoot");
     expect(result.value.outputPath).toBe(path.join(dir, "dist", "chrome"));

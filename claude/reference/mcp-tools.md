@@ -307,7 +307,7 @@ Validate manifest.json after any edit, in place of jq or a linter: per-browser e
 | `projectPath` | string | no |  | Project root (manifest at root or src/). |
 | `browsers` | array of string | no | `["chrome","firefox","edge"]` | Browsers to validate against. |
 | `browser` | string | no |  | One browser; alias for browsers:[browser]. |
-| `include` | array of "similarTemplates" | no |  | similarTemplates adds up to five catalog templates with the same surfaces. |
+| `include` | array of "similarTemplates" \| "storeReadiness" | no |  | similarTemplates adds up to five catalog templates with the same surfaces; storeReadiness adds the store listing lines. |
 
 ## extension_network
 
