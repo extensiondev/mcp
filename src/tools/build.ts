@@ -744,7 +744,7 @@ async function validationPreflight(
 
     if (
       parsed?.ok === false &&
-      /^manifest-(unreadable|not-found)$/.test(String(parsed?.status ?? ""))
+      /^manifest-(unreadable|not-found|path-refused)$/.test(String(parsed?.status ?? ""))
     ) {
       return {
         state: "could-not-run",

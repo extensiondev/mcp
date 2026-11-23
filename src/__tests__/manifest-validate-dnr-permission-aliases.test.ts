@@ -116,3 +116,69 @@ describe("declarativeNetRequestWithHostAccess grants chrome.declarativeNetReques
     expect(firefox.out.value.browserSupport.firefox.supported).toBe(false);
   });
 });
+
+describe("1058: only a manifest.json that really sits in its project is read", () => {
+  const tmp = (prefix: string): string => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+    dirs.push(dir);
+
+    return dir;
+  };
+
+  it("1058: a manifestPath that names another file, or sits outside projectPath, is refused before anything is read", async () => {
+    const inside = tmp("extjs-manifest-in-");
+    const outside = tmp("extjs-manifest-out-");
+    const notes = path.join(outside, "notes.env");
+    fs.writeFileSync(notes, "SECRET_TOKEN=hunter2-first-line\n");
+    fs.writeFileSync(path.join(outside, "package.json"), JSON.stringify({ name: "outside-secret-name" }));
+    fs.writeFileSync(path.join(outside, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "Outside Secret", version: "1.0.0" }));
+    fs.writeFileSync(path.join(inside, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "Inside", version: "1.0.0" }));
+
+    for (const args of [
+      { manifestPath: notes },
+      { manifestPath: path.join(outside, "package.json") },
+      { manifestPath: path.join(outside, "missing.json") },
+      { manifestPath: path.join(outside, "manifest.json"), projectPath: inside },
+      { manifestPath: path.join(inside, "..", path.basename(outside), "manifest.json"), projectPath: inside },
+    ]) {
+      const parsed = JSON.parse(await manifestValidate.handler(args));
+
+      expect(parsed, JSON.stringify(args)).toMatchObject({ ok: false, status: "manifest-path-refused", error: { code: "E_BAD_REQUEST", retry: "no" }, value: { valid: false } });
+      expect(parsed.error.message).toMatch(/so nothing was read\.$/);
+      expect(parsed.error.hint).toMatch(/^Pass /);
+      expect(JSON.stringify(parsed)).not.toMatch(/SECRET|hunter2|outside-secret-name|Outside Secret/);
+    }
+
+    expect(JSON.parse(await manifestValidate.handler({ manifestPath: path.join(inside, "manifest.json"), projectPath: inside })).status).not.toBe("manifest-path-refused");
+    expect(JSON.parse(await manifestValidate.handler({ manifestPath: path.join(outside, "manifest.json") })).status).not.toBe("manifest-path-refused");
+  });
+
+  it.skipIf(process.platform === "win32")("1058: a manifest.json that is a link to a file outside the project is refused, and a project reached through a linked folder is read", async () => {
+    const inside = tmp("extjs-manifest-in-");
+    const outside = tmp("extjs-manifest-out-");
+    const link = path.join(inside, "manifest.json");
+    fs.writeFileSync(path.join(outside, "notes.env"), "SECRET_TOKEN=hunter2-first-line\n");
+    fs.writeFileSync(path.join(outside, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "Outside Secret", version: "1.0.0" }));
+    fs.writeFileSync(path.join(inside, "settings.json"), JSON.stringify({ name: "Inside Secret" }));
+
+    for (const target of [path.join(outside, "notes.env"), path.join(outside, "manifest.json"), path.join(inside, "settings.json")]) {
+      fs.rmSync(link, { force: true });
+      fs.symlinkSync(target, link);
+
+      for (const args of [{ manifestPath: link }, { projectPath: inside }, { manifestPath: link, projectPath: inside }]) {
+        const parsed = JSON.parse(await manifestValidate.handler(args));
+
+        expect(parsed, `${target} ${JSON.stringify(args)}`).toMatchObject({ ok: false, status: "manifest-path-refused", error: { code: "E_BAD_REQUEST" } });
+        expect(parsed.error.hint).toMatch(/^(Pass|Put) /);
+        expect(JSON.stringify(parsed)).not.toMatch(/SECRET|hunter2|Outside Secret|Inside Secret/);
+      }
+    }
+
+    const linkedFolder = path.join(outside, "linked-project");
+    fs.rmSync(link);
+    fs.writeFileSync(link, JSON.stringify({ manifest_version: 3, name: "Inside", version: "1.0.0" }));
+    fs.symlinkSync(inside, linkedFolder);
+
+    expect(JSON.parse(await manifestValidate.handler({ manifestPath: path.join(linkedFolder, "manifest.json") })).status).not.toMatch(/refused|unreadable/);
+  });
+});

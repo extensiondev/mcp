@@ -103,7 +103,11 @@ describe("reviewDistReport risks", () => {
   it("returns nothing for a folder without a manifest, and says the manifest was the reason", () => {
     write("a.js", "eval(x)");
     expect(codes()).toEqual([]);
-    expect(reviewDistReport(dist, "chrome").manifestUnreadable).toMatch(/ENOENT|no such file/);
+    expect(reviewDistReport(dist, "chrome").manifestUnreadable).toBe("ENOENT");
+
+    write("manifest.json", "SECRET_TOKEN=hunter2-first-line\n");
+
+    expect(reviewDistReport(dist, "chrome").manifestUnreadable).toBe("not valid JSON at line 1, column 1");
   });
 
   it("never calls a permission unused when a shipped script could not be read", () => {

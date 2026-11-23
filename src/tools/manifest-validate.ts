@@ -18,6 +18,7 @@ import { droppedRuntimePages } from "../lib/dropped-runtime-pages";
 import { icon128Fix } from "../lib/store-review";
 import { geckoIdWarning, proposedGeckoId } from "../lib/firefox-addon-id";
 import { chromeThemeRefusalLines } from "../lib/theme-manifest-discards";
+import { readManifestFile } from "../lib/manifest-path";
 import { toolListed } from "../lib/tool-policy";
 import { CONTENT_SCRIPT_SENTENCE, UNSAFE_EVAL_PHRASE, WASM_GRANT, WASM_POLICY, WASM_POLICY_BLOCK, WASM_POLICY_KEY, WASM_WARNING_PREFIX, needsWasmGrant, wasmEvidence, wasmPolicyOf, wasmSignIn, type WasmSeen } from "../lib/wasm-policy";
 import { ADMIN_INSTALL_ONLY_KEY, ENTERPRISE_CHANNEL_SENTENCE, adminInstallOnlyOf, adminInstallOnlyTypeIssue } from "../lib/firefox-enterprise";
@@ -457,21 +458,17 @@ export async function handler(args: {
 
   const manifestDir = path.dirname(path.resolve(manifestPath));
 
-  let manifest: Record<string, unknown>;
+  const manifestRead = readManifestFile(manifestPath, args.projectPath);
 
-  try {
-    const raw = fs.readFileSync(path.resolve(manifestPath), "utf8");
-    manifest = JSON.parse(raw);
-  } catch (err) {
-    const errors = [
-      `Cannot read manifest: ${err instanceof Error ? err.message : err}`,
-    ];
+  if (!manifestRead.ok) {
+    const refused = manifestRead.kind === "refused";
+    const errors = [refused ? manifestRead.message : `Cannot read manifest: ${manifestRead.message}`];
 
     return envelope({
       ok: false,
       command: COMMAND,
-      status: "manifest-unreadable",
-      error: { code: "E_BAD_MANIFEST", message: errors[0] },
+      status: refused ? "manifest-path-refused" : "manifest-unreadable",
+      error: { code: refused ? "E_BAD_REQUEST" : "E_BAD_MANIFEST", message: errors[0], hint: manifestRead.hint },
       value: {
         valid: false,
         errors,
@@ -480,6 +477,8 @@ export async function handler(args: {
       warnings: [],
     });
   }
+
+  const manifest = manifestRead.manifest as Record<string, unknown>;
 
   if (!manifest.name) {
     result.errors.push("Missing required field: name");

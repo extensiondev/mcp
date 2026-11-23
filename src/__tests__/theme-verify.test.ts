@@ -8,7 +8,7 @@ import { handler } from "../tools/theme-verify";
 
 const tmp: string[] = [];
 afterEach(() => {
-  for (const f of tmp.splice(0)) fs.rmSync(f, { force: true });
+  for (const f of tmp.splice(0)) fs.rmSync(f, { force: true, recursive: true });
 });
 
 function verify(input: Record<string, unknown>) {
@@ -233,12 +233,10 @@ describe("D3 parity gap: image-derived colors the resolver cannot model", () => 
 
 describe("input handling", () => {
   it("reads a manifest from a path", async () => {
-    const file = path.join(
-      os.tmpdir(),
-      `theme-verify-${Date.now()}.json`,
-    );
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "theme-verify-"));
+    const file = path.join(dir, "manifest.json");
     fs.writeFileSync(file, JSON.stringify(CLEAN));
-    tmp.push(file);
+    tmp.push(dir);
 
     const r = await verify({ manifestPath: file });
     expect(r.ok).toBe(true);
@@ -258,8 +256,53 @@ describe("input handling", () => {
   });
 
   it("errors on an unreadable manifest path", async () => {
-    const r = await verify({ manifestPath: "/nope/does/not/exist.json" });
+    const r = await verify({ manifestPath: "/nope/does/not/exist/manifest.json" });
     expect(r.ok).toBe(false);
-    expect(r.error.message).toMatch(/Cannot read/);
+    expect(r.error.message).toBe(`Cannot read the theme manifest: ${path.resolve("/nope/does/not/exist/manifest.json")} could not be read (ENOENT)`);
+  });
+
+  it("1058: reads only a file called manifest.json and answers a parse failure as a place, never as the file's text", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "theme-verify-"));
+    const notes = path.join(dir, "notes.env");
+    const file = path.join(dir, "manifest.json");
+    tmp.push(dir);
+    fs.writeFileSync(notes, "SECRET_TOKEN=hunter2-first-line\n");
+    fs.writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ secret_key_name: "Inside Secret" }));
+    fs.writeFileSync(file, "SECRET_TOKEN=hunter2-first-line\n");
+
+    for (const manifestPath of [notes, path.join(dir, "settings.json"), path.join(dir, "missing.json")]) {
+      const refused = await verify({ manifestPath });
+
+      expect(refused).toMatchObject({ ok: false, status: "manifest-path-refused", error: { code: "E_BAD_REQUEST", name: "InputError" } });
+      expect(refused.error.message).toBe(`manifestPath has to name a file called manifest.json, and ${manifestPath} is not one, so nothing was read.`);
+      expect(refused.error.hint).toBe("Pass the path of the project's manifest.json and call again.");
+      expect(JSON.stringify(refused)).not.toMatch(/SECRET|hunter2|secret_key_name|Inside Secret/);
+    }
+
+    const unparsed = await verify({ manifestPath: file });
+
+    expect(unparsed).toMatchObject({ ok: false, status: "bad-input", error: { code: "E_BAD_REQUEST" } });
+    expect(unparsed.error.message).toBe(`${file} is not valid JSON at line 1, column 1`);
+    expect(JSON.stringify(unparsed)).not.toMatch(/SECRET|hunter2/);
+  });
+
+  it.skipIf(process.platform === "win32")("1058: refuses a manifest.json that is a link to a file outside its folder", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "theme-verify-"));
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "theme-verify-out-"));
+    const link = path.join(dir, "manifest.json");
+    tmp.push(dir, outside);
+    fs.writeFileSync(path.join(outside, "manifest.json"), JSON.stringify({ ...CLEAN, name: "Outside Secret" }));
+    fs.writeFileSync(path.join(outside, "notes.env"), "SECRET_TOKEN=hunter2-first-line\n");
+
+    for (const target of [path.join(outside, "manifest.json"), path.join(outside, "notes.env")]) {
+      fs.rmSync(link, { force: true });
+      fs.symlinkSync(target, link);
+
+      const refused = await verify({ manifestPath: link });
+
+      expect(refused).toMatchObject({ ok: false, status: "manifest-path-refused", error: { code: "E_BAD_REQUEST" } });
+      expect(refused.error.hint).toMatch(/^Put the manifest\.json itself in the project folder/);
+      expect(JSON.stringify(refused)).not.toMatch(/SECRET|hunter2|Outside Secret/);
+    }
   });
 });

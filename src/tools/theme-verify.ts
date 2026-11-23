@@ -6,9 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { promises as fs } from "node:fs";
-import path from "node:path";
-
 import {
   CHROME_THEME_IMAGE_KEYS,
   CHROME_THEME_PROPERTY_KEYS,
@@ -25,6 +22,7 @@ import {
   discardedProperties,
 } from "../lib/theme-manifest-discards";
 import { engineManifestView } from "../lib/engine-manifest-view";
+import { readManifestFile } from "../lib/manifest-path";
 
 const COMMAND = "extension_theme_verify";
 
@@ -133,40 +131,23 @@ export async function handler(args: {
   let raw: unknown;
 
   if (args.manifestPath) {
-    const abs = path.resolve(args.manifestPath);
-    let text: string;
+    const read = readManifestFile(args.manifestPath);
 
-    try {
-      text = await fs.readFile(abs, "utf8");
-    } catch {
+    if (!read.ok) {
       return envelope({
         ok: false,
         command: COMMAND,
-        status: "bad-input",
+        status: read.kind === "refused" ? "manifest-path-refused" : "bad-input",
         error: {
           code: "E_BAD_REQUEST",
           name: "InputError",
-          message: `Cannot read ${abs}`,
+          message: read.kind === "unreadable" ? `Cannot read the theme manifest: ${read.message}` : read.message,
+          hint: read.hint,
         },
       });
     }
 
-    try {
-      raw = JSON.parse(text);
-    } catch (err) {
-      return envelope({
-        ok: false,
-        command: COMMAND,
-        status: "bad-input",
-        error: {
-          code: "E_BAD_REQUEST",
-          name: "InputError",
-          message: `${abs} is not valid JSON: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        },
-      });
-    }
+    raw = read.manifest;
   } else if (args.manifest) {
     raw = args.manifest;
   } else {

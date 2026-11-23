@@ -17,6 +17,7 @@ import { STORE_SECTIONS, SUBSECTION_KEYS } from "./store-md-declarations";
 import { STORE_MD_FILENAME } from "./store-md";
 import { REVIEWER_NOTE_BUILD_SHAPE, firefoxNotesLackBuildLine, reviewerNoteBuildSentence } from "./store-md-toolchain";
 import { CONTENT_SCRIPT_SENTENCE, WASM_GRANT, WASM_POLICY_BLOCK, WASM_POLICY_KEY, needsWasmGrant, remoteWasmIn, wasmPolicyOf } from "./wasm-policy";
+import { jsonReadFailure } from "./manifest-path";
 
 export type ReviewRiskCode =
   | "BROAD_HOST_ACCESS"
@@ -471,7 +472,7 @@ export function reviewDistReport(distPath: string, browser: string, sourceManife
       risks: [],
       unreadable: [],
       notScanned: [],
-      manifestUnreadable: err instanceof Error ? err.message : String(err),
+      manifestUnreadable: jsonReadFailure(err, path.join(distPath, "manifest.json")),
     };
   }
 

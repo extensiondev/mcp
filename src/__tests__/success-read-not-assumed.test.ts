@@ -52,7 +52,12 @@ describe("extension_analyze reads the dist before calling it analyzed", () => {
     const out = JSON.parse(await analyze.handler({ projectPath: root }));
     expect(out.ok).toBe(false);
     expect(out.status).toBe("dist-unreadable");
-    expect(out.error.message).toMatch(/could not be parsed/);
+    expect(out.error.message).toMatch(/could not be parsed \(not valid JSON: it ends before its value is complete, at line 1, column 2\)/);
+
+    const quoted = JSON.parse(await analyze.handler({ projectPath: distWith({ "manifest.json": "SECRET_TOKEN=hunter2-first-line\n" }) }));
+
+    expect(quoted.error.message).toMatch(/could not be parsed \(not valid JSON at line 1, column 1\)/);
+    expect(JSON.stringify(quoted)).not.toMatch(/SECRET|hunter2/);
   });
 
   it("refuses a dist with a manifest-less file set", async () => {
@@ -242,6 +247,11 @@ describe("extension_add_feature reads the manifest before saying safe", () => {
     expect(out.status).toBe("planned-with-conflicts");
     expect(out.value.manifestReadable).toBe(false);
     expect(out.hint).toBeUndefined();
-    expect(out.warnings.join("\n")).toMatch(/could not be parsed/);
+    expect(out.warnings.join("\n")).toMatch(/could not be parsed \(not valid JSON at line 1, column 3\)/);
+
+    const quoted = JSON.parse(await addFeature.handler({ projectPath: project("SECRET_TOKEN=hunter2-first-line\n"), feature: "options" }));
+
+    expect(quoted.warnings.join("\n")).toMatch(/could not be parsed \(not valid JSON at line 1, column 1\)/);
+    expect(JSON.stringify(quoted)).not.toMatch(/SECRET|hunter2/);
   });
 });

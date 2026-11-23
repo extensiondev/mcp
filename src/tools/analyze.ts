@@ -18,6 +18,7 @@ import { engineProjectRoot, sourceManifestPath, statedProjectRoot, storeMdPath }
 import { specialFolderEntrypoints, specialFolderSettings } from "../lib/special-folder-entries";
 import { manifestByBrowser } from "../lib/manifest-by-browser";
 import { duplicateAssetSentence, duplicateOf, findDuplicateAssets } from "../lib/duplicate-assets";
+import { jsonReadFailure } from "../lib/manifest-path";
 
 const COMMAND = "extension_analyze";
 
@@ -153,7 +154,7 @@ export async function handler(args: {
       status: "dist-unreadable",
       error: {
         code: "E_NO_DIST",
-        message: `${manifestPath} ${fs.existsSync(manifestPath) ? `could not be parsed (${(err as Error)?.message ?? String(err)})` : "does not exist"}, so this dist cannot be analyzed. Run extension_build first.`,
+        message: `${manifestPath} ${fs.existsSync(manifestPath) ? `could not be parsed (${jsonReadFailure(err, manifestPath)})` : "does not exist"}, so this dist cannot be analyzed. Run extension_build first.`,
       },
     });
   }

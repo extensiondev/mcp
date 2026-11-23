@@ -22,6 +22,7 @@ import {
 } from "../lib/platform-hold";
 import { PREVIEW_WEB_LOCAL } from "./preview-web-local";
 import { dropTrailing } from "../lib/linear-text";
+import { jsonReadFailure } from "../lib/manifest-path";
 
 import type { uploadPreview } from "../lib/preview-upload";
 import type { recordSharedPreview } from "../lib/share-record";
@@ -411,9 +412,7 @@ export async function previewWebWith(args: PreviewWebArgs, local: PreviewWebLoca
       status: "bad-dist-manifest",
       error: {
         code: "E_BAD_MANIFEST",
-        message: `manifest.json in ${distDir} is not valid JSON: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
+        message: `manifest.json in ${distDir} could not be read: ${jsonReadFailure(err, manifestPath)}`,
       },
       value: { stage: "resolve-dist", distDir },
     });

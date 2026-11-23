@@ -400,7 +400,7 @@ describe("extension_preview_web", () => {
 
   it("errors when the dist manifest is not valid JSON", async () => {
     const dir = tmpDist();
-    fs.writeFileSync(path.join(dir, "manifest.json"), "{ not json");
+    fs.writeFileSync(path.join(dir, "manifest.json"), "{ SECRET_TOKEN=hunter2");
 
     try {
       const out = JSON.parse(
@@ -411,7 +411,8 @@ describe("extension_preview_web", () => {
       expect(out.error.code).toBe("E_BAD_MANIFEST");
       expect(out.value.stage).toBe("resolve-dist");
       expect(out.value.distDir).toBe(path.resolve(dir));
-      expect(out.error.message).toContain("not valid JSON");
+      expect(out.error.message).toBe(`manifest.json in ${path.resolve(dir)} could not be read: not valid JSON at line 1, column 3`);
+      expect(JSON.stringify(out)).not.toMatch(/SECRET|hunter2/);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

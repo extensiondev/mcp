@@ -37,6 +37,7 @@ import {
   startingSession,
 } from "../lib/session-starting";
 import { recentErrorLogs } from "./doctor";
+import { jsonReadFailure } from "../lib/manifest-path";
 
 import type { ReadyContract } from "../lib/types";
 
@@ -422,7 +423,7 @@ export async function handler(args: {
     } catch (err) {
       const code = (err as NodeJS.ErrnoException)?.code;
       contractUnreadable =
-        code === "ENOENT" ? null : `${readyPath} exists but could not be read: ${(err as Error)?.message ?? String(err)}`;
+        code === "ENOENT" ? null : `${readyPath} exists but could not be read: ${jsonReadFailure(err, readyPath)}`;
     }
 
     await sleep(pollInterval);

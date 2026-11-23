@@ -16,6 +16,7 @@ import {
   templateCatalogUrl,
 } from "../lib/template-artifact-source";
 import { envelope } from "../lib/envelope";
+import { jsonReadFailure } from "../lib/manifest-path";
 
 const COMMAND = "extension_add_feature";
 
@@ -323,7 +324,7 @@ export async function handler(args: {
     current = parsed as Record<string, unknown>;
     manifestKeys = Object.keys(current);
   } catch (err) {
-    manifestUnreadable = err instanceof Error ? err.message : String(err);
+    manifestUnreadable = jsonReadFailure(err, manifestPath);
   }
 
   const merged: string[] = [];

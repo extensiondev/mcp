@@ -90,9 +90,11 @@ describe("manifest-validate handler", () => {
 
   it("returns error for non-existent manifest", async () => {
     const result = await manifestValidate.handler({
-      manifestPath: "/tmp/nonexistent-manifest.json",
+      manifestPath: "/tmp/nonexistent-manifest-folder/manifest.json",
     });
     const parsed = JSON.parse(result);
+
+    expect(parsed.error.message).toBe(`Cannot read manifest: ${path.resolve("/tmp/nonexistent-manifest-folder/manifest.json")} could not be read (ENOENT)`);
     expect(parsed.value.valid).toBe(false);
     expect(parsed.value.errors.length).toBeGreaterThan(0);
     expect(parsed.ok).toBe(false);
@@ -111,6 +113,37 @@ describe("manifest-validate handler", () => {
     expect(parsed.status).toBe("manifest-unreadable");
     expect(parsed.error.code).toBe("E_BAD_MANIFEST");
     expect(parsed.value.valid).toBe(false);
+    expect(parsed.error.message).toBe(`Cannot read manifest: ${file} is not valid JSON at line 1, column 3`);
+  });
+
+  it("1058: a parse or read failure names a place or a kind, never the file's text", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "extjs-manifest-"));
+    const file = path.join(dir, "manifest.json");
+
+    const answer = async (text: string) => {
+      fs.writeFileSync(file, text);
+
+      return JSON.parse(await manifestValidate.handler({ manifestPath: file }));
+    };
+
+    for (const [text, where] of [
+      ["SECRET_TOKEN=hunter2-first-line\nsecond line\n", " at line 1, column 1"],
+      ['{"name": "ok",\n  "api_key": "sk-recognizable", oops}\n', " at line 2, column 33"],
+      ['{"name": "sk-recognizable"', ": it ends before its value is complete, at line 1, column 27"],
+      ['{"name": "sk-recognizable"} trailing-secret', " at line 1, column 29"],
+    ] as const) {
+      const parsed = await answer(text);
+
+      expect(parsed.status).toBe("manifest-unreadable");
+      expect(parsed.error.message).toBe(`Cannot read manifest: ${file} is not valid JSON${where}`);
+      expect(parsed.value.errors).toEqual([parsed.error.message]);
+      expect(JSON.stringify(parsed)).not.toMatch(/SECRET|hunter2|sk-recog|oops|trailing-secret/);
+    }
+
+    fs.rmSync(file);
+    fs.mkdirSync(file);
+
+    expect(JSON.parse(await manifestValidate.handler({ manifestPath: file })).error.message).toBe(`Cannot read manifest: ${file} could not be read (EISDIR)`);
   });
 
   it("recognizes chrome:/edge: prefixes, not just chromium:", async () => {

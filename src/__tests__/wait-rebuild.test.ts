@@ -42,6 +42,20 @@ function millisecondAfter(iso: string): string {
   return new Date(Date.parse(iso) + 1).toISOString();
 }
 
+describe("1058: a ready contract that cannot be parsed is named by place, never quoted", () => {
+  it("times out saying where the contract stops being JSON", async () => {
+    const file = readyContractPath(dir, "chrome");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, "SECRET_TOKEN=hunter2-first-line\n");
+
+    const result = JSON.parse(await handler({ projectPath: dir, browser: "chrome", timeoutMs: 300 }));
+
+    expect(result).toMatchObject({ ok: false, status: "timeout", error: { code: "E_WAIT_TIMEOUT" } });
+    expect(result.error.message).toContain(`${file} exists but could not be read: not valid JSON at line 1, column 1.`);
+    expect(JSON.stringify(result)).not.toMatch(/SECRET|hunter2/);
+  });
+});
+
 describe("extension_wait for: rebuild", () => {
   it.each(["chrome", "firefox", "safari"])(
     "answers the new compile stamp and the background reconnecting on %s",
