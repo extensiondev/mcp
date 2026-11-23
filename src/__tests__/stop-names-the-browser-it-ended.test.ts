@@ -315,6 +315,28 @@ describe("a ready contract that dates its own pids is believed before any stamp 
         stat(browserPid, 701);
 
         expect(contractPidState(projectPath, "chrome", stepped, "browser")).toBe("dead");
+
+        stat(browserPid, 700);
+        fs.mkdirSync(path.join(proc, "sys", "kernel", "random"), { recursive: true });
+        fs.writeFileSync(path.join(proc, "sys", "kernel", "random", "boot_id"), "0b1c2d3e-4f50-4a61-8b72-93a4b5c6d7e8\n");
+
+        expect(contractPidState(projectPath, "chrome", stepped, "browser")).toBe("alive");
+        expect(findSessionInfo(projectPath, "chrome")?.bootId).toBeUndefined();
+
+        registerSession({ pid: serverPid, browser: "firefox", projectPath, command: "dev" });
+
+        const firefox = { ...attachedDevContract("firefox", { pid: serverPid, pidStartedAt: hourEarlier(processStartedAt(serverPid)), browserPid, browserStartedAt }) };
+
+        expect(contractPidState(projectPath, "firefox", firefox, "browser")).toBe("alive");
+        expect(findSessionInfo(projectPath, "firefox")).toMatchObject({ processStartTicks: 500, browserStartTicks: 700, bootId: "0b1c2d3e-4f50-4a61-8b72-93a4b5c6d7e8" });
+        expect(listSessionMarkers().find((marker) => marker.browser === "firefox")).toMatchObject({ processStartTicks: 500, bootId: "0b1c2d3e-4f50-4a61-8b72-93a4b5c6d7e8" });
+        expect(contractPidState(projectPath, "firefox", firefox, "engine")).toBe("alive");
+
+        fs.writeFileSync(path.join(proc, "sys", "kernel", "random", "boot_id"), "9f8e7d6c-5b4a-4392-8170-6f5e4d3c2b1a\n");
+
+        expect(contractPidState(projectPath, "firefox", firefox, "engine")).toBe("dead");
+        expect(contractPidState(projectPath, "firefox", firefox, "browser")).toBe("dead");
+        expect(contractPidState(projectPath, "chrome", stepped, "browser")).toBe("alive");
       } finally {
         procfs.root = previousRoot;
       }

@@ -15,6 +15,7 @@ import { PROJECT_PATH } from "../lib/common-schema";
 import {
   describeForeignPid,
   describeRecycledPid,
+  linuxBootId,
   namedLikeSessionProcess,
   pidState,
   processStartTicks,
@@ -217,6 +218,7 @@ export interface ContractProcessHints {
   pids: number[];
   startedAt?: Record<number, string>;
   startTicks?: Record<number, number>;
+  bootId?: string;
 }
 
 export function contractProcessHints(
@@ -232,6 +234,7 @@ export function contractProcessHints(
   );
   const startedAt: Record<number, string> = {};
   const startTicks: Record<number, number> = {};
+  let bootId: string | undefined;
 
   for (const role of ["browser", "launcher"] as const) {
     const stamp = contractPidStart(projectPath, browser, contract, role);
@@ -240,6 +243,8 @@ export function contractProcessHints(
 
     startedAt[pid] = stamp.startedAt;
     if (stamp.startTicks !== undefined) startTicks[pid] = stamp.startTicks;
+
+    bootId ??= stamp.bootId;
   }
 
   return {
@@ -249,11 +254,12 @@ export function contractProcessHints(
     pids,
     ...(Object.keys(startedAt).length > 0 ? { startedAt } : {}),
     ...(Object.keys(startTicks).length > 0 ? { startTicks } : {}),
+    ...(bootId !== undefined ? { bootId } : {}),
   };
 }
 
 function hintedStart(hints: ContractProcessHints, pid: number): ProcessStart {
-  return startRecord(hints.startedAt?.[pid], hints.startTicks?.[pid]);
+  return startRecord(hints.startedAt?.[pid], hints.startTicks?.[pid], hints.bootId);
 }
 
 function commandLineOf(
@@ -404,7 +410,7 @@ async function reapSessionProcesses(
 
   const startedAt = new Map<number, ProcessStart>();
 
-  for (const [pid, stamp] of processStartTimes(pids)) startedAt.set(pid, startRecord(stamp, processStartTicks(pid)));
+  for (const [pid, stamp] of processStartTimes(pids)) startedAt.set(pid, startRecord(stamp, processStartTicks(pid), linuxBootId()));
   for (const pid of Object.keys(hints.startedAt ?? {})) startedAt.set(Number(pid), hintedStart(hints, Number(pid)));
 
   for (const pid of pids) {

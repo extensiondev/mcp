@@ -311,7 +311,7 @@ describe("extension_workspace_create", () => {
     const out = JSON.parse(await handler({ workspace: "new-org", deviceCode: "dev-code" }));
 
     expect(out.status).toBe("lane-closed");
-    expect(out.hint).toMatch(/refused this code at extension\.dev\/device.*Call extension_workspace_create again without the deviceCode and have an invited account approve the new code\.$/);
+    expect(out.hint).toMatch(/refused this code at extension\.dev\/device because the account that answered it there may not create workspaces; .*Call extension_workspace_create again without the deviceCode and have an invited account approve the new code\.$/);
   });
 
   async function workspaceAnswers(create: Route | "no-answer") {

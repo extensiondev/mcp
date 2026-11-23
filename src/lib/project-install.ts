@@ -90,6 +90,7 @@ export interface InstallHolder {
   pid: number;
   startedAt: string | null;
   startTicks?: number;
+  bootId?: string;
   role: "server" | "engine" | "installer" | "session";
   browser?: string;
   readyPath?: string;

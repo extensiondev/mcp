@@ -909,6 +909,42 @@ describe("941: one dependency install runs on a project at a time, and a build s
     }
   });
 
+  it("1065: a holder's record takes the boot id with its ticks, and the same pid at the same ticks after a reboot does not hold it", () => {
+    const dir = coldProject();
+    const pid = installerStandIn();
+    const proc = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-proc-boot-"));
+    const previousRoot = procfs.root;
+    const BOOT = "0b1c2d3e-4f50-4a61-8b72-93a4b5c6d7e8";
+    const boot = (id: string): void => fs.writeFileSync(path.join(proc, "sys", "kernel", "random", "boot_id"), `${id}\n`);
+
+    tmpDirs.push(proc);
+    fs.mkdirSync(path.join(proc, String(pid)));
+    fs.mkdirSync(path.join(proc, "sys", "kernel", "random"), { recursive: true });
+    fs.writeFileSync(path.join(proc, String(pid), "stat"), `${pid} (node) S 1 ${pid} ${pid} 0 -1 4194304 900 0 0 0 12 3 0 0 20 0 11 0 360000 1 2 3`);
+    boot(BOOT);
+    procfs.root = proc;
+
+    try {
+      const turn = takeInstallTurn(dir);
+
+      if (typeof turn === "string") throw new Error(`the install turn was ${turn}`);
+
+      turn.handOver(pid);
+
+      const file = path.join(installRecordPath(dir), fs.readdirSync(installRecordPath(dir))[0]);
+      const record = JSON.parse(fs.readFileSync(file, "utf8"));
+
+      expect(record.holders).toMatchObject([{ pid, role: "engine", startTicks: 360_000, bootId: BOOT }]);
+      expect(runningInstall(dir)).toEqual({ pid, owner: "build-engine" });
+
+      boot("9f8e7d6c-5b4a-4392-8170-6f5e4d3c2b1a");
+
+      expect(runningInstall(dir)).toBeNull();
+    } finally {
+      procfs.root = previousRoot;
+    }
+  });
+
   it("builds once the install it waited on has ended, and clears a record nobody holds", async () => {
     const dir = coldProject();
     const pid = installerStandIn();

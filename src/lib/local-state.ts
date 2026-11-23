@@ -13,6 +13,7 @@ export interface RegistrationStamp {
   at: number;
   startedAt?: string;
   startTicks?: number;
+  bootId?: string;
 }
 
 export interface LocalState {

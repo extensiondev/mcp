@@ -12,7 +12,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { localState } from "./local-state";
-import { processStart, type ProcessStart } from "./process-identity";
+import { linuxBootId, processStart, type ProcessStart } from "./process-identity";
 
 import type { ProcessInfo } from "./types";
 
@@ -187,7 +187,7 @@ function serverStart(): ProcessStart {
 }
 
 function writeMarkerBestEffort(info: ProcessInfo, registeredAtMs: number): string | null {
-  const { startedAt, startTicks } = serverStart();
+  const { startedAt, startTicks, bootId } = serverStart();
 
   try {
     fs.mkdirSync(markerDir(), { recursive: true });
@@ -199,6 +199,7 @@ function writeMarkerBestEffort(info: ProcessInfo, registeredAtMs: number): strin
         serverPid: process.pid,
         ...(startedAt ? { serverStartedAt: startedAt } : {}),
         ...(startTicks !== undefined ? { serverStartTicks: startTicks } : {}),
+        ...(bootId !== undefined && info.bootId === undefined ? { bootId } : {}),
         registeredAt: new Date(registeredAtMs).toISOString(),
       }),
     );
@@ -236,15 +237,26 @@ export function registerSession(info: ProcessInfo): string | null {
   const known = info.processStartedAt ?? (samePid ? prior.startedAt : undefined);
   const read = known === undefined ? processStart(info.pid) : undefined;
   const startedAt = known ?? read?.startedAt ?? undefined;
-  const startTicks = info.processStartTicks ?? (samePid && known === prior.startedAt ? prior.startTicks : undefined) ?? read?.startTicks;
+  const carriedTicks = info.processStartTicks ?? (samePid && known === prior.startedAt ? prior.startTicks : undefined);
+  const startTicks = carriedTicks ?? read?.startTicks;
+  const tickBootId = carriedTicks === undefined ? read?.bootId : info.processStartTicks === undefined ? prior?.bootId : undefined;
+  const bootId = info.bootId ?? tickBootId ?? (samePid ? sessions.get(key)?.bootId : undefined);
   const carried = samePid ? contractPidsOf(sessions.get(key)) : {};
   const recorded: ProcessInfo = {
     ...carried,
     ...info,
     ...(startedAt ? { processStartedAt: startedAt } : {}),
     ...(startTicks !== undefined ? { processStartTicks: startTicks } : {}),
+    ...(bootId !== undefined ? { bootId } : {}),
   };
-  registrations.set(key, { pid: info.pid, at, ...(startedAt ? { startedAt } : {}), ...(startTicks !== undefined ? { startTicks } : {}) });
+  registrations.set(key, {
+    pid: info.pid,
+    at,
+    ...(startedAt ? { startedAt } : {}),
+    ...(startTicks !== undefined ? { startTicks } : {}),
+    ...(bootId !== undefined ? { bootId } : {}),
+  });
+
   sessions.set(key, recorded);
 
   return writeMarkerBestEffort(recorded, at);
@@ -254,7 +266,10 @@ export function recordContractPids(projectPath: string, browser: string, record:
   const key = sessionKey(projectPath, browser);
   const { sessions } = localState();
   const inMemory = sessions.get(key);
-  if (inMemory) sessions.set(key, { ...inMemory, ...record });
+  const bootNow = record.browserStartTicks === undefined && record.launcherStartTicks === undefined ? null : linuxBootId();
+  const booted = (held: { bootId?: unknown }): { bootId?: string } => (bootNow === null || typeof held.bootId === "string" ? {} : { bootId: bootNow });
+
+  if (inMemory) sessions.set(key, { ...inMemory, ...record, ...booted(inMemory) });
 
   const file = markerPath(projectPath, browser);
 
@@ -263,7 +278,7 @@ export function recordContractPids(projectPath: string, browser: string, record:
     if (!parsed || typeof parsed !== "object") return;
     if (inMemory && typeof parsed.pid === "number" && parsed.pid !== inMemory.pid) return;
 
-    fs.writeFileSync(file, JSON.stringify({ ...parsed, ...record }));
+    fs.writeFileSync(file, JSON.stringify({ ...parsed, ...record, ...booted(parsed) }));
   } catch {
   }
 }

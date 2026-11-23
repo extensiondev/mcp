@@ -348,7 +348,7 @@ export function laneClosedHint(options: LaneClosedRead & { subject: LaneSubject;
       const approver = options.subject === "workspace" ? "an invited account" : `an invited member of ${workspace || "that workspace"}`;
       const tool = options.subject === "workspace" ? "extension_workspace_create" : "extension_project_create";
 
-      return `The platform at ${facts.api} refused this code at extension.dev/device because the account that approved it may not create ${noun}s there; its own message above says why, and the code is closed. Call ${tool} again without the deviceCode and have ${approver} approve the new code.`;
+      return `The platform at ${facts.api} refused this code at extension.dev/device because the account that answered it there may not create ${noun}s; its own message above says why, and the code is closed. Call ${tool} again without the deviceCode and have ${approver} approve the new code.`;
     }
 
     const who =

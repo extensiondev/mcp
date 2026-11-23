@@ -118,6 +118,7 @@ export interface ProcessInfo {
   pid: number;
   processStartedAt?: string;
   processStartTicks?: number;
+  bootId?: string;
   browser: string;
   port?: number;
   projectPath: string;

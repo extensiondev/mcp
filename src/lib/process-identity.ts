@@ -359,30 +359,58 @@ export function sameProcessStart(recorded: string, current: string): boolean {
  * answers for that PID. A record from an older server, from macOS or from
  * Windows holds only the wall-clock time and is compared as before.
  */
+
+/* @invariant CLOCK TICKS ARE READ WITHIN ONE BOOT. Ticks count from boot, so
+ * after a restart of the machine another process can hold the same PID at
+ * the same tick count and would read as the recorded holder (ledger 1065).
+ * A record that takes ticks takes the kernel's boot id with them
+ * (/proc/sys/kernel/random/boot_id, one per record), and a record whose
+ * boot id differs from the one the kernel gives now is dead before any
+ * tick is compared. A record with ticks and no boot id (written before
+ * this rule), or a kernel that gives no boot id now, is decided as before.
+ */
 export interface ProcessStart {
   startedAt: string | null;
   startTicks?: number;
+  bootId?: string;
 }
 
 export type RecordedStart = string | ProcessStart | null | undefined;
 
-export function startRecord(startedAt: unknown, startTicks?: unknown): ProcessStart {
+const BOOT_ID = /^[0-9a-f-]{8,64}$/i;
+
+export function startRecord(startedAt: unknown, startTicks?: unknown, bootId?: unknown): ProcessStart {
+  const ticked = typeof startTicks === "number" && Number.isFinite(startTicks) && startTicks >= 0;
+
   return {
     startedAt: typeof startedAt === "string" && startedAt ? startedAt : null,
-    ...(typeof startTicks === "number" && Number.isFinite(startTicks) && startTicks >= 0 ? { startTicks } : {}),
+    ...(ticked ? { startTicks } : {}),
+    ...(ticked && typeof bootId === "string" && BOOT_ID.test(bootId) ? { bootId } : {}),
   };
 }
 
-export function sessionStart(info: { processStartedAt?: string; processStartTicks?: number }): ProcessStart {
-  return startRecord(info.processStartedAt, info.processStartTicks);
+export function linuxBootId(): string | null {
+  try {
+    const id = fs.readFileSync(path.join(procfs.root, "sys", "kernel", "random", "boot_id"), "utf8").trim();
+
+    return BOOT_ID.test(id) ? id : null;
+  } catch {
+    return null;
+  }
 }
 
-export function serverStart(info: { serverStartedAt?: string; serverStartTicks?: number }): ProcessStart {
-  return startRecord(info.serverStartedAt, info.serverStartTicks);
+export function sessionStart(info: { processStartedAt?: string; processStartTicks?: number; bootId?: string }): ProcessStart {
+  return startRecord(info.processStartedAt, info.processStartTicks, info.bootId);
+}
+
+export function serverStart(info: { serverStartedAt?: string; serverStartTicks?: number; bootId?: string }): ProcessStart {
+  return startRecord(info.serverStartedAt, info.serverStartTicks, info.bootId);
 }
 
 function recordOf(recorded: RecordedStart): ProcessStart {
-  return recorded && typeof recorded === "object" ? startRecord(recorded.startedAt, recorded.startTicks) : startRecord(recorded);
+  return recorded && typeof recorded === "object"
+    ? startRecord(recorded.startedAt, recorded.startTicks, recorded.bootId)
+    : startRecord(recorded);
 }
 
 export function linuxStartTicksFromStat(stat: string): number | null {
@@ -401,11 +429,15 @@ export function processStartTicks(pid: number): number | null {
 }
 
 export function processStart(pid: number): ProcessStart {
-  return startRecord(processStartedAt(pid), processStartTicks(pid));
+  return startRecord(processStartedAt(pid), processStartTicks(pid), linuxBootId());
 }
 
 function startedAsRecordedOrUnknown(pid: number, recorded: RecordedStart, readStartedAt?: string | null): boolean | null {
-  const { startedAt, startTicks } = recordOf(recorded);
+  const { startedAt, startTicks, bootId } = recordOf(recorded);
+  const bootNow = bootId === undefined ? null : linuxBootId();
+
+  if (bootNow !== null && bootNow !== bootId) return false;
+
   const ticks = startTicks === undefined ? null : processStartTicks(pid);
 
   if (startTicks !== undefined && ticks !== null) return ticks === startTicks;

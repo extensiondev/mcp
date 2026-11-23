@@ -10,6 +10,7 @@ export const CHROMIUM_MANIFEST_ERRORS_URL =
   "https://source.chromium.org/chromium/chromium/src/+/main:extensions/common/manifest_constants.h";
 export const CHROMIUM_ICON_KEY_MAX = 2048;
 export const CHROMIUM_CHROME_STYLE_FROM_MANIFEST = 3;
+export const CHROMIUM_ACTION_FROM_MANIFEST = 3;
 
 export type ChromiumRefusedKeys = { keys: string[]; reason: string };
 
@@ -25,8 +26,14 @@ export type ChromiumRefusedKeys = { keys: string[]; reason: string };
  * left the extension out: `options_ui.chrome_style` under Manifest V3 with
  * either value, and a key of `icons` or of an `action.default_icon` object
  * that is not a whole pixel size ("any", "16.5", "0" and "4096" are refused,
- * "+16" loads, and a `default_icon` given as one path string loads). The
- * WebExtensions group asks Chrome to turn both into warnings (issues 1135
+ * "+16" loads, and a `default_icon` given as one path string loads).
+ * `action` is read from Manifest V3 only: on 2026-11-23 the same four keys
+ * under `action.default_icon` of a Manifest V2 extension raised no icon
+ * error in Chrome for Testing 133, 141, 143, 151 and 156, which installed
+ * it disabled (133) or refused it as "Cannot install extension because it
+ * uses an unsupported manifest version" beside a Manifest V2 extension with
+ * no `action` at all, so the key is never the reason there (ledger 1064).
+ * The WebExtensions group asks Chrome to turn both into warnings (issues 1135
  * and 1136 of w3c/webextensions); when Chromium does, the entry leaves this
  * list.
  */
@@ -42,7 +49,8 @@ export function chromiumRefusedKeys(manifest: Record<string, unknown>): Chromium
       return !(size > 0 && size <= CHROMIUM_ICON_KEY_MAX);
     });
   const iconKeys = refusedSizes(manifest.icons);
-  const actionIconKeys = refusedSizes(row(manifest.action).default_icon);
+  const actionIconKeys =
+    Number(manifest.manifest_version) >= CHROMIUM_ACTION_FROM_MANIFEST ? refusedSizes(row(manifest.action).default_icon) : [];
 
   if (Number(manifest.manifest_version) >= CHROMIUM_CHROME_STYLE_FROM_MANIFEST && "chrome_style" in optionsUi) {
     out.push({

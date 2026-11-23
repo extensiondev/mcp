@@ -587,7 +587,7 @@ describe("extension_project_create", () => {
     const out = JSON.parse(await handler({ ...baseArgs, deviceCode: "dev-code" }));
 
     expect(out.status).toBe("lane-closed");
-    expect(out.hint).toMatch(/refused this code at extension\.dev\/device.*Call extension_project_create again without the deviceCode and have an invited member of acme approve the new code\.$/);
+    expect(out.hint).toMatch(/refused this code at extension\.dev\/device because the account that answered it there may not create projects; .*Call extension_project_create again without the deviceCode and have an invited member of acme approve the new code\.$/);
     expect(fn.mock.calls.filter((call) => String(call[0]).endsWith("/token"))).toHaveLength(1);
   });
 

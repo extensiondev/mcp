@@ -1043,6 +1043,44 @@ describe("extension_stop judges a session by its pid and its start time", () => 
     }
   });
 
+  it("1065: a record that holds clock ticks and a boot id is dead once the machine has booted again, whatever the ticks say", () => {
+    const proc = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-proc-boot-"));
+    const previousRoot = procfs.root;
+    const own = processStartedAt(process.pid);
+    const BOOT = "0b1c2d3e-4f50-4a61-8b72-93a4b5c6d7e8";
+    const NEXT_BOOT = "9f8e7d6c-5b4a-4392-8170-6f5e4d3c2b1a";
+    const boot = (id: string): void => fs.writeFileSync(path.join(proc, "sys", "kernel", "random", "boot_id"), `${id}\n`);
+
+    fs.mkdirSync(path.join(proc, String(process.pid)));
+    fs.mkdirSync(path.join(proc, "sys", "kernel", "random"), { recursive: true });
+    fs.writeFileSync(path.join(proc, String(process.pid), "stat"), `${process.pid} (node) S 1 1 1 0 -1 0 0 0 0 0 0 0 0 0 20 0 1 0 150 1 2 3`);
+    boot(BOOT);
+    procfs.root = proc;
+
+    try {
+      const taken = processStart(process.pid);
+
+      expect(taken).toEqual({ startedAt: own, startTicks: 150, bootId: BOOT });
+      expect(pidState(process.pid, taken)).toBe("alive");
+
+      boot(NEXT_BOOT);
+
+      expect(pidState(process.pid, taken)).toBe("dead");
+      expect(startedAsRecorded(process.pid, taken)).toBe(false);
+      expect(describeRecycledPid(process.pid, taken)).toContain(`pid ${process.pid} now belongs to`);
+      expect(pidState(process.pid, { startedAt: own, startTicks: 150 })).toBe("alive");
+      expect(pidState(process.pid, { startedAt: own, bootId: BOOT })).toBe("alive");
+
+      fs.rmSync(path.join(proc, "sys"), { recursive: true, force: true });
+
+      expect(pidState(process.pid, taken)).toBe("alive");
+      expect(processStart(process.pid)).toEqual({ startedAt: own, startTicks: 150 });
+    } finally {
+      procfs.root = previousRoot;
+      fs.rmSync(proc, { recursive: true, force: true });
+    }
+  });
+
   it.skipIf(process.platform === "win32")("739: a pid the process table refuses is read without a word on stderr", () => {
     const identity = pathToFileURL(path.resolve(__dirname, "../lib/process-identity.ts")).href;
     const script = `import { processCommand, processStartTimes } from ${JSON.stringify(identity)};

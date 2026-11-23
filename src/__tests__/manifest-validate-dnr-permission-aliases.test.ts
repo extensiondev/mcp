@@ -23,6 +23,7 @@ vi.mock("../lib/templates-cache", async (importOriginal) => {
 
 const manifestValidate = await import("../tools/manifest-validate");
 const { MANIFEST_BYTES_MAX, jsonReadFailure, readManifestFile, withoutParserQuote } = await import("../lib/manifest-path");
+const { jsonReadFailure: hostedJsonReadFailure } = await import("../kernel");
 
 const dirs: string[] = [];
 
@@ -224,6 +225,10 @@ describe("1058: only a manifest.json that really sits in its project is read", (
     expect(jsonReadFailure(new Error("the ready contract names no port"), file)).toBe("the ready contract names no port");
     expect(jsonReadFailure(new TypeError("SECRETLINE is not iterable"), file)).toBe("read failed");
     expect(jsonReadFailure(Object.assign(new Error("EACCES: permission denied, open SECRETLINE"), { code: "EACCES" }), file)).toBe("EACCES");
+    expect(jsonReadFailure(new SyntaxError("Unexpected token 'r'"), file)).toBe("not valid JSON at line 1, column 1");
+    expect(hostedJsonReadFailure(new SyntaxError("Unexpected token 'r'"), file)).toBe("not valid JSON");
+    expect(hostedJsonReadFailure(Object.assign(new Error("EACCES: permission denied, open SECRETLINE"), { code: "EACCES" }), file)).toBe("EACCES");
+    expect(fs.readFileSync(new URL("../lib/json-read-failure.ts", import.meta.url), "utf8")).not.toMatch(/^import |\bfrom "|require\(/m);
     expect(withoutParserQuote(`${file} cannot be read as JSON (Unexpected token 'r', "root:x:0:0"... is not valid JSON), so no dependency was checked`, file)).toBe(
       `${file} cannot be read as JSON (not valid JSON at line 1, column 1), so no dependency was checked`,
     );

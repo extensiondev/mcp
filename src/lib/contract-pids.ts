@@ -148,7 +148,9 @@ export function contractPidStart(
 
   const startedAt = contractPidStartedAt(projectPath, browser, contract, role);
 
-  return startRecord(startedAt, contractPidStartTicks(projectPath, browser, role, pid, startedAt));
+  const startTicks = contractPidStartTicks(projectPath, browser, role, pid, startedAt);
+
+  return startRecord(startedAt, startTicks, findSessionInfo(projectPath, browser)?.bootId);
 }
 
 export function contractPidState(

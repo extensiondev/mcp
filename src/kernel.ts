@@ -58,6 +58,7 @@ export { withHandUploadRows } from "./lib/hand-upload";
 export { CREATE_IN_PROGRESS_CODE, grantExpiresAt, heldUntilSentence } from "./lib/held-create-grant-words";
 export type { HeldCreateGrant } from "./lib/held-create-grant-words";
 export type { PageOpening } from "./lib/kernel-hooks";
+export { jsonReadFailure } from "./lib/json-read-failure";
 export { expiredLoginFor, expiredLoginRefusal, loginExpiredRefusal, renewCall, startLoginRenewal } from "./lib/login-expired";
 export { fetchLoginConfig, persistTokenResponse, resolveApiBase, safeApiBase, tokenTtlNote } from "./lib/login-flow";
 export { mcpOrigins } from "./lib/origins";

@@ -257,6 +257,9 @@ describe("822: a manifest key the Chromium family refuses to load is an error wi
 
     expect(keys({ manifest_version: 2, options_ui: { page: "options.html", chrome_style: true } })).toEqual([]);
     expect(keys({ manifest_version: 3, options_ui: { page: "options.html", chrome_style: true } })).toEqual(["options_ui.chrome_style"]);
+    expect(keys({ manifest_version: 2, action: { default_icon: { any: "icon.svg", "16.5": "a.png", "0": "a.png", "4096": "a.png" } } })).toEqual([]);
+    expect(keys({ manifest_version: 2, icons: { any: "icon.svg" }, action: { default_icon: { any: "icon.svg" } } })).toEqual(["icons.any"]);
+    expect(keys({ manifest_version: 3, action: { default_icon: { any: "icon.svg" } } })).toEqual(["action.default_icon.any"]);
     expect(keys({ manifest_version: 3, icons: { "+16": "icon.png", "2048": "icon.png" }, action: { default_icon: { "+32": "icon.png" } } })).toEqual([]);
     expect(keys({ manifest_version: 3, icons: { "-16": "a.png", "0": "a.png", "2049": "a.png", "16px": "a.png" } })).toEqual(["icons.0", "icons.2049", "icons.-16", "icons.16px"]);
   });
