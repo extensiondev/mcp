@@ -18,6 +18,7 @@ import { droppedRuntimePages } from "../lib/dropped-runtime-pages";
 import { icon128Fix } from "../lib/store-review";
 import { geckoIdWarning, proposedGeckoId } from "../lib/firefox-addon-id";
 import { chromeThemeRefusalLines } from "../lib/theme-manifest-discards";
+import { chromiumRefusedKeys } from "../lib/chromium-manifest-load";
 import { readManifestFile } from "../lib/manifest-path";
 import { toolListed } from "../lib/tool-policy";
 import { CONTENT_SCRIPT_SENTENCE, UNSAFE_EVAL_PHRASE, WASM_GRANT, WASM_POLICY, WASM_POLICY_BLOCK, WASM_POLICY_KEY, WASM_WARNING_PREFIX, needsWasmGrant, wasmEvidence, wasmPolicyOf, wasmSignIn, type WasmSeen } from "../lib/wasm-policy";
@@ -219,11 +220,35 @@ function findManifest(projectPath: string): string | null {
   return null;
 }
 
+/* @invariant A KEY CHROMIUM REFUSES TO LOAD IS AN ERROR HERE, BEFORE ANY
+ * BROWSER IS LAUNCHED, IN THE WORDS THE PLATFORM'S PREFLIGHT USES. Firefox
+ * and Safari ignore a manifest key they do not know, so the build is green
+ * and the extension still loads nowhere in the Chromium family. The rule is
+ * `chromiumRefusedKeys`, the copy of the one the platform's Chrome and Edge
+ * manifest-load checks run, read against each Chromium-family browser's own
+ * view of the manifest. The key paths ride as `refusedKeys` beside the
+ * browser's issues and at the top of the answer, the sentence is the
+ * platform's ("refuses to load ..., so nobody can install it: ..."), and
+ * extension_build for that browser refuses with the same paths.
+ */
+const CHROMIUM_LOAD_NAMES: Record<string, string> = { chrome: "Chrome", edge: "Microsoft Edge" };
+
+function refusedToLoad(browser: string, view: Record<string, unknown>): { keys: string[]; issue: string } | null {
+  const refused = chromiumRefusedKeys(view);
+  if (!refused.length) return null;
+
+  return {
+    keys: refused.flatMap((entry) => entry.keys),
+    issue: `${CHROMIUM_LOAD_NAMES[browser] ?? "Chromium"} refuses to load this manifest, so nobody can install the extension: ${refused.map((entry) => entry.reason).join("; ")}. Other browsers ignore these keys, which is why the build is green. Fix the manifest and validate again.`,
+  };
+}
+
 interface ValidationResult {
   valid: boolean;
   errors: string[];
   warnings: string[];
-  browserSupport: Record<string, { supported: boolean; issues: string[] }>;
+  browserSupport: Record<string, { supported: boolean; issues: string[]; refusedKeys?: string[] }>;
+  refusedKeys?: string[];
   similarTemplates?: Array<{ slug: string; surfaces: string[] }>;
   proposedGeckoId?: string;
 }
@@ -974,9 +999,17 @@ export async function handler(args: {
       for (const page of droppedRuntimePages(projectRoot, browser, null, manifest)) result.warnings.push(page.say);
     }
 
+    const refused = isChromium ? refusedToLoad(browser, effective) : null;
+
+    if (refused) {
+      issues.push(refused.issue);
+      result.refusedKeys = [...new Set([...(result.refusedKeys ?? []), ...refused.keys])];
+    }
+
     result.browserSupport[browser] = {
       supported: issues.length === 0,
       issues,
+      ...(refused ? { refusedKeys: refused.keys } : {}),
     };
 
     if (issues.length) {
@@ -1053,11 +1086,13 @@ export async function handler(args: {
     ? `This is a theme manifest: extension_theme_verify with manifestPath "${path.resolve(manifestPath)}" reads the colors Chromium paints from it and the keys it drops; ${toolListed("extension_theme_verify") ? "call it next." : "it is in the extras feature group, so add extras to --features in this server's MCP config, or ask the user to, then call it."}`
     : "";
 
+  const refusedStep = result.refusedKeys?.length ? ` (the Chromium family refuses to load ${result.refusedKeys.join(", ")})` : "";
+
   return envelope({
     ...okOrRefusal(result.valid, () => ({
       code: "E_BAD_MANIFEST",
       message: `The manifest has ${result.errors.length} error${result.errors.length === 1 ? "" : "s"}, the first: ${result.errors[0]}`,
-      hint: `Fix each line of value.errors in the manifest, then call extension_manifest_validate again; extension_build refuses the same errors.${themeStep ? ` ${themeStep}` : ""}`,
+      hint: `Fix each line of value.errors in the manifest${refusedStep}, then call extension_manifest_validate again; extension_build refuses the same errors.${themeStep ? ` ${themeStep}` : ""}`,
     })),
     ...(themeStep && result.valid ? { hint: themeStep } : {}),
     command: COMMAND,

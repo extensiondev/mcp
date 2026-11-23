@@ -186,6 +186,29 @@ describe("extension_build validation gate", () => {
     expect(cliCalls).toHaveLength(0);
   });
 
+  it("822: refuses a Chromium-family build over a key the browser will not load and names the key paths, and builds the same manifest for Firefox", async () => {
+    const manifest = {
+      manifest_version: 3,
+      name: "Refused",
+      version: "1.0.0",
+      options_ui: { page: "options.html", chrome_style: true },
+      icons: { 16: "icon.png", any: "icon.png" },
+      browser_specific_settings: { gecko: { id: "refused@example.com" } },
+    };
+    const dir = project(manifest, ["options.html", "icon.png"]);
+    const result = JSON.parse(await build.handler({ projectPath: dir, browser: "edge" }));
+
+    expect(result).toMatchObject({ ok: false, status: "manifest-blocked", error: { code: "E_MANIFEST_BLOCKING" } });
+    expect(result.value.refusedKeys).toEqual(["options_ui.chrome_style", "icons.any"]);
+    expect(result.value.errors.join(" ")).toContain('edge: Microsoft Edge refuses to load this manifest, so nobody can install the extension: options_ui.chrome_style is set to true, and Chromium answers "The chrome_style option cannot be used with manifest version 3."');
+    expect(cliCalls).toHaveLength(0);
+
+    const firefox = JSON.parse(await build.handler({ projectPath: dir, browser: "firefox" }));
+
+    expect(firefox.status).toBe("built");
+    expect(firefox.value.refusedKeys).toBeUndefined();
+  });
+
   it("builds anyway under skipValidation, as an explicit escape hatch", async () => {
     const dir = project({ manifest_version: 3, version: "1.0.0" });
 
@@ -851,6 +874,7 @@ describe("941: one dependency install runs on a project at a time, and a build s
 
     try {
       const turn = takeInstallTurn(dir);
+
       if (typeof turn === "string") throw new Error(`the install turn was ${turn}`);
 
       turn.handOver(pid);
@@ -861,6 +885,7 @@ describe("941: one dependency install runs on a project at a time, and a build s
       expect(record.holders).toMatchObject([{ pid, role: "engine", startTicks: 360_000 }]);
 
       const stepped = new Date(Date.parse(record.holders[0].startedAt ?? new Date().toISOString()) - 3_600_000).toISOString();
+
       const write = (holder: Record<string, unknown>): void => {
         fs.mkdirSync(path.dirname(file), { recursive: true });
         fs.writeFileSync(file, JSON.stringify({ ...record, holders: [holder] }));

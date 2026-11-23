@@ -725,6 +725,7 @@ interface ValidationPreflight {
   buildBlocking: boolean;
   errors: string[];
   warnings: string[];
+  refusedKeys: string[];
   proposedGeckoId?: string;
 }
 
@@ -761,6 +762,7 @@ async function validationPreflight(
         buildBlocking: Boolean(value.buildBlocking),
         errors: Array.isArray(value.errors) ? value.errors : [],
         warnings: Array.isArray(value.warnings) ? value.warnings : [],
+        refusedKeys: Array.isArray(value.browserSupport?.[browser]?.refusedKeys) ? value.browserSupport[browser].refusedKeys : [],
         ...(typeof value.proposedGeckoId === "string" ? { proposedGeckoId: value.proposedGeckoId } : {}),
       },
     };
@@ -846,6 +848,7 @@ export async function handler(args: {
       value: {
         browser,
         errors: preflight.errors,
+        ...(preflight.refusedKeys.length ? { refusedKeys: preflight.refusedKeys } : {}),
         duration: Date.now() - start,
       },
       warnings: [...carrierNotes, ...preflight.warnings],

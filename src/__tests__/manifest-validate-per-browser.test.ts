@@ -197,6 +197,61 @@ describe("a permission gap names the key that holds the grant and the key this t
   });
 });
 
+describe("822: a manifest key the Chromium family refuses to load is an error with its key paths, in the platform preflight's words", () => {
+  const REFUSED = {
+    manifest_version: 3,
+    name: "Refused",
+    version: "1.0.0",
+    options_ui: { page: "options.html", chrome_style: false },
+    icons: { 16: "icon.png", any: "icon.svg" },
+    action: { default_icon: { "16.5": "icon.png", 32: "icon.png" } },
+  };
+  const FILES = ["src/options.html", "src/icon.png", "src/icon.svg"];
+  const KEYS = ["options_ui.chrome_style", "icons.any", "action.default_icon.16.5"];
+  const REASONS =
+    'options_ui.chrome_style is set to false, and Chromium answers "The chrome_style option cannot be used with manifest version 3." for any value, false included; delete the key; ' +
+    'icons has the key "any", and Chromium answers "Invalid key in icons" for a key that is not a whole pixel size from 1 to 2048; keep sizes such as "16", "48" and "128" and move anything else out of icons; ' +
+    'action.default_icon has the key "16.5", and Chromium refuses the extension over an icon key that is not a whole pixel size from 1 to 2048; keep sizes such as "16" and "32" there';
+
+  it.each([
+    ["chrome", "Chrome"],
+    ["edge", "Microsoft Edge"],
+    ["brave", "Chromium"],
+  ])("names the refused keys for %s", async (browser, name) => {
+    const out = await validate(project(REFUSED, FILES), [browser]);
+    const sentence = `${name} refuses to load this manifest, so nobody can install the extension: ${REASONS}. Other browsers ignore these keys, which is why the build is green. Fix the manifest and validate again.`;
+
+    expect(out).toMatchObject({ ok: false, status: "invalid", error: { code: "E_BAD_MANIFEST" } });
+    expect(out.value.refusedKeys).toEqual(KEYS);
+    expect(out.value.browserSupport[browser]).toEqual({ supported: false, issues: [sentence], refusedKeys: KEYS });
+    expect(out.value.errors).toEqual([`${browser}: ${sentence}`]);
+    expect(out.value.buildBlocking).toBe(true);
+    expect(out.error.hint).toBe(
+      `Fix each line of value.errors in the manifest (the Chromium family refuses to load ${KEYS.join(", ")}), then call extension_manifest_validate again; extension_build refuses the same errors.`,
+    );
+  });
+
+  it("says nothing for Firefox, which ignores the keys, and nothing for a manifest that carries none", async () => {
+    const firefox = await validate(project({ ...REFUSED, browser_specific_settings: { gecko: { id: "refused@example.com" } } }, FILES), ["firefox"]);
+
+    expect(firefox.value.refusedKeys).toBeUndefined();
+    expect(firefox.value.browserSupport.firefox.refusedKeys).toBeUndefined();
+    expect(JSON.stringify(firefox)).not.toContain("refuses to load");
+
+    const clean = await validate(project({ ...REFUSED, options_ui: { page: "options.html" }, icons: { 16: "icon.png" }, action: { default_icon: "icon.png" } }, FILES), ["chrome"]);
+
+    expect(clean.status).toBe("valid");
+    expect(clean.value.refusedKeys).toBeUndefined();
+    expect(clean.value.browserSupport.chrome).toEqual({ supported: true, issues: [] });
+  });
+
+  it("reads each browser's own view, so a key kept under firefox: is not refused for chrome", async () => {
+    const out = await validate(project({ manifest_version: 3, name: "Views", version: "1.0.0", "firefox:icons": { any: "icon.svg" }, "chromium:icons": { 16: "icon.png" } }, FILES), ["chrome"]);
+
+    expect(out.value.refusedKeys).toBeUndefined();
+  });
+});
+
 describe("924: a theme Chromium cannot load is a Chromium issue, and a theme manifest is sent to extension_theme_verify", () => {
   const HEX = { frame: "#1b263b", toolbar: "#415a77", tab_background_text: "#e0e1dd", ntp_background: "#0d1b2a", ntp_text: "#e0e1dd" };
   const ARRAYS = { frame: [27, 38, 59], toolbar: [65, 90, 119], tab_background_text: [224, 225, 221], ntp_background: [13, 27, 42], ntp_text: [224, 225, 221] };
