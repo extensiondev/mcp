@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { actionFingerprint } from "../lib/approval-gate";
 import { approvalVerdict } from "../lib/approval-policy";
-import { STORE_SETTINGS_ACTION, modeToPatch, readStoreSettingsChange, storeSettingsDigest } from "../lib/store-settings";
+import { STORE_SETTINGS_ACTION, modeToPatch, readStoreSettingsChange, requestedLines, storeSettingsDigest } from "../lib/store-settings";
 import { submitCheckRefused } from "../lib/submit-action-safety";
 import { TOOL_POLICY } from "../lib/tool-policy";
 import { validateToolInput } from "../lib/validate-input";
@@ -54,6 +54,23 @@ describe("extension_submit configure-store changes a store's settings as a plain
     expect(readStoreSettingsChange("chrome", { dashboardPasted: true })).toEqual({ patch: { dashboardPasted: true }, requested: { dashboardPasted: true } });
     expect(readStoreSettingsChange("edge", { dashboardPasted: true })).toEqual({ problem: '"dashboardPasted" is a chrome store setting; edge does not have it.' });
     expect(readStoreSettingsChange("chrome", { dashboardPasted: "yes" })).toEqual({ problem: "storeSettings.dashboardPasted must be true or false." });
+  });
+
+  it("takes the version source on any store as the project's one setting, hashes it last, the bytes the platform hashes, and refuses any other word", async () => {
+    const { createHash } = await import("node:crypto");
+    const platformBytes = JSON.stringify({ store: "firefox", settings: { enabled: true, versionSource: "repo" } });
+
+    expect(storeSettingsDigest("firefox", { versionSource: "repo", enabled: true })).toBe(createHash("sha256").update(platformBytes).digest("hex"));
+
+    for (const store of ["chrome", "firefox", "edge", "safari"] as const) {
+      expect(readStoreSettingsChange(store, { versionSource: "Repo" }), store).toEqual({ patch: { versionSource: "repo" }, requested: { versionSource: "repo" } });
+    }
+
+    expect(readStoreSettingsChange("chrome", { versionSource: "platform" })).toEqual({ patch: { versionSource: "platform" }, requested: { versionSource: "platform" } });
+    expect(readStoreSettingsChange("chrome", { versionSource: "manifest" })).toEqual({ problem: 'storeSettings.versionSource must be platform or repo; got "manifest".' });
+    expect(requestedLines("chrome", { enabled: true, versionSource: "repo" })).toEqual(["chrome.enabled: true", 'stores.versionSource: "repo"']);
+    expect(submitCheckRefused({ action: "configure-store", store: "chrome", storeSettings: { versionSource: "repo" } })).toBeNull();
+    expect(submitCheckRefused({ action: "configure-store", store: "chrome", storeSettings: { enabled: true } })).toContain("asks for one, as does a change of the store version source");
   });
 
   it("refuses an Edge listing URL without a crx id, a Chrome store URL off the dashboard, and a store URL off Edge and Chrome, before anything is sent", () => {

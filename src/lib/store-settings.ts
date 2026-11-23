@@ -33,7 +33,7 @@ export const SAFARI_RELEASE_LINE_SENTENCE =
 
 const SAFARI_RELEASE_KEYS = new Set(["releasetype", "release", "releasemode"]);
 
-export const STORE_SETTING_KEYS = ["enabled", "submissionMode", "sourceArchive", "releaseChannel", "chromeItemId", "edgeProductId", "firefoxAddonGuid", "appStoreId", "bundleId", "firstSubmitted", "storeUrl", "publisherId", "dashboardPasted"] as const;
+export const STORE_SETTING_KEYS = ["enabled", "submissionMode", "sourceArchive", "releaseChannel", "chromeItemId", "edgeProductId", "firefoxAddonGuid", "appStoreId", "bundleId", "firstSubmitted", "storeUrl", "publisherId", "dashboardPasted", "versionSource"] as const;
 
 const FIREFOX_ONLY_KEYS = new Set(["sourceArchive", "releaseChannel"]);
 
@@ -77,7 +77,6 @@ const CONSOLE_ONLY_KEYS = new Set([
   "appAppleId",
   "deployPercentage",
   "reviewExemption",
-  "versionSource",
   "dryRun",
   "skipPublish",
   "stagedPublish",
@@ -86,7 +85,7 @@ const CONSOLE_ONLY_KEYS = new Set([
 
 const CREDENTIAL_KEY = /secret|token|password|credential|issuer|key|client|json|p8|pem|cert|account|oauth|refresh/i;
 
-export const PATCH_KEYS = ["enabled", "dryRun", "skipPublish", "stagedPublish", "publishAfter", "releaseChannel", "sourceArchive", "storeId", "bundleId", "firstSubmitted", "storeUrl", "publisherId", "dashboardPasted"] as const;
+export const PATCH_KEYS = ["enabled", "dryRun", "skipPublish", "stagedPublish", "publishAfter", "releaseChannel", "sourceArchive", "storeId", "bundleId", "firstSubmitted", "storeUrl", "publisherId", "dashboardPasted", "versionSource"] as const;
 
 export type StoreSettingsPatch = Partial<Record<(typeof PATCH_KEYS)[number], boolean | string | null>>;
 
@@ -365,6 +364,24 @@ function readStoreSettingsRow(store: StoreSettingsStore, raw: Row): StoreSetting
     requested.sourceArchive = archive;
   }
 
+  /* @invariant THE VERSION SOURCE IS THE PROJECT'S, WHICHEVER STORE CARRIES
+   * IT. "platform" adds the platform's build number to the manifest version
+   * each store receives and "repo" sends the manifest version as built; the
+   * platform keeps one value for every store of the project, takes it inside
+   * the patch of the store this call names, and keeps a change to it on the
+   * approve page.
+   */
+  if ("versionSource" in raw) {
+    const source = text(raw.versionSource).toLowerCase();
+
+    if (source !== "platform" && source !== "repo") {
+      return { problem: `storeSettings.versionSource must be platform or repo; got "${text(raw.versionSource)}".` };
+    }
+
+    patch.versionSource = source;
+    requested.versionSource = source;
+  }
+
   return { patch, requested };
 }
 
@@ -426,7 +443,7 @@ function readStoreId(store: StoreSettingsStore, raw: Row): { key: string; storeI
  * a sha256 over {store, settings} with the settings keys in the order
  * enabled, dryRun, skipPublish, stagedPublish, publishAfter, releaseChannel,
  * sourceArchive, storeId, bundleId, firstSubmitted, storeUrl, publisherId,
- * dashboardPasted, only the keys the patch carries, rendered with JSON.stringify. A digest that differs from the platform's asks a human to
+ * dashboardPasted, versionSource, only the keys the patch carries, rendered with JSON.stringify. A digest that differs from the platform's asks a human to
  * approve a change that can never run, so it is refused instead.
  */
 export function storeSettingsDigest(store: StoreSettingsStore, patch: StoreSettingsPatch): string {
@@ -440,5 +457,5 @@ export function storeSettingsDigest(store: StoreSettingsStore, patch: StoreSetti
 }
 
 export function requestedLines(store: StoreSettingsStore, requested: Row): string[] {
-  return Object.entries(requested).map(([key, value]) => `${store}.${key}: ${JSON.stringify(value)}`);
+  return Object.entries(requested).map(([key, value]) => `${key === "versionSource" ? "stores" : store}.${key}: ${JSON.stringify(value)}`);
 }

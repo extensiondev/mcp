@@ -63,16 +63,19 @@ export function plainListingAsk(store: string): string {
  * reads the saved mode and answers the approval ask for a dry-run exit and
  * the plain-write sentence for every other move (ledger 893). The way into a
  * dry run, and a write that names no mode, cannot leave one and stay plain.
+ * A write that names the store version source goes to the lane the same way:
+ * the platform keeps a change of it on the approve page, and only the saved
+ * value says whether this write is a change.
  */
 function plainSetting(args: Args): boolean {
   const settings = args.storeSettings && typeof args.storeSettings === "object" ? (args.storeSettings as Args) : {};
   const write = { store: String(args.store ?? ""), submissionMode: String(settings.submissionMode ?? ""), releaseChannel: String(settings.releaseChannel ?? "") };
 
-  return approvalVerdict(STORE_SETTINGS_ACTION, write) !== "approval" && !namesRealMode(write);
+  return approvalVerdict(STORE_SETTINGS_ACTION, write) !== "approval" && !namesRealMode(write) && !("versionSource" in settings);
 }
 
 export function plainSettingAsk(store: string): string {
-  return `This ${store} settings change is a plain write the platform makes at once under the owner's own token with no approval page (only a submission mode that takes the store out of its dry run, or that sends the next upload to a review that publishes it, asks for one), so ${SUBMIT_CHECK_TOOL} cannot ask for it; that call ${RUN_THERE}`;
+  return `This ${store} settings change is a plain write the platform makes at once under the owner's own token with no approval page (only a submission mode that takes the store out of its dry run, or that sends the next upload to a review that publishes it, asks for one, as does a change of the store version source), so ${SUBMIT_CHECK_TOOL} cannot ask for it; that call ${RUN_THERE}`;
 }
 
 export function submitCheckRefusal(args: Args): string | null {
