@@ -1,8 +1,8 @@
-[npm-version-image]: https://img.shields.io/npm/v/%40extension.dev%2Fmcp.svg?color=26FFB8
+[npm-version-image]: https://img.shields.io/npm/v/%40extension.dev%2Fmcp.svg?color=000000
 [npm-version-url]: https://www.npmjs.com/package/@extension.dev/mcp
-[npm-downloads-image]: https://img.shields.io/npm/dm/%40extension.dev%2Fmcp.svg?color=26FFB8
+[npm-downloads-image]: https://img.shields.io/npm/dm/%40extension.dev%2Fmcp.svg?color=000000
 [npm-downloads-url]: https://www.npmjs.com/package/@extension.dev/mcp
-[discord-image]: https://img.shields.io/discord/1253608412890271755?label=Discord&logo=discord&style=flat&color=26FFB8
+[discord-image]: https://img.shields.io/discord/1253608412890271755?label=Discord&logo=discord&style=flat&color=000000
 [discord-url]: https://discord.gg/v9h2RgeTSN
 
 # extension.dev MCP [![Version][npm-version-image]][npm-version-url] [![Downloads][npm-downloads-image]][npm-downloads-url] [![Discord][discord-image]][discord-url]
