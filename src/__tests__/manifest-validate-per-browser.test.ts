@@ -6,6 +6,7 @@ import path from "node:path";
 import { describe, it, expect, afterEach, vi } from "vitest";
 
 import type * as TemplatesCacheModule from "../lib/templates-cache";
+import { chromiumRefusedKeys } from "../lib/chromium-manifest-load";
 import { DEFAULT_SERVER_OPTIONS, setServerOptions } from "../lib/tool-policy";
 
 vi.mock("../lib/templates-cache", async (importOriginal) => {
@@ -249,6 +250,15 @@ describe("822: a manifest key the Chromium family refuses to load is an error wi
     const out = await validate(project({ manifest_version: 3, name: "Views", version: "1.0.0", "firefox:icons": { any: "icon.svg" }, "chromium:icons": { 16: "icon.png" } }, FILES), ["chrome"]);
 
     expect(out.value.refusedKeys).toBeUndefined();
+  });
+
+  it("refuses chrome_style from manifest version 3 only, and reads a signed whole size as the size it is", () => {
+    const keys = (manifest: Record<string, unknown>) => chromiumRefusedKeys(manifest).flatMap((entry) => entry.keys);
+
+    expect(keys({ manifest_version: 2, options_ui: { page: "options.html", chrome_style: true } })).toEqual([]);
+    expect(keys({ manifest_version: 3, options_ui: { page: "options.html", chrome_style: true } })).toEqual(["options_ui.chrome_style"]);
+    expect(keys({ manifest_version: 3, icons: { "+16": "icon.png", "2048": "icon.png" }, action: { default_icon: { "+32": "icon.png" } } })).toEqual([]);
+    expect(keys({ manifest_version: 3, icons: { "-16": "a.png", "0": "a.png", "2049": "a.png", "16px": "a.png" } })).toEqual(["icons.0", "icons.2049", "icons.-16", "icons.16px"]);
   });
 });
 
