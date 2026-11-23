@@ -3,7 +3,7 @@
 [npm-downloads-image]: https://img.shields.io/npm/dm/%40extension.dev%2Fmcp.svg?labelColor=f4f4f5&color=1c1c1e
 [npm-downloads-url]: https://www.npmjs.com/package/@extension.dev/mcp
 [discord-image]: https://img.shields.io/discord/1253608412890271755?label=Discord&logo=discord&style=flat&labelColor=f4f4f5&color=1c1c1e&logoColor=1c1c1e
-[discord-url]: https://discord.gg/v9h2RgeTSN
+[discord-url]: https://discord.gg/BRqbPDfPxb
 
 # extension.dev MCP [![Version][npm-version-image]][npm-version-url] [![Downloads][npm-downloads-image]][npm-downloads-url] [![Discord][discord-image]][discord-url]
 
@@ -13,7 +13,7 @@
 
 extension.dev MCP is the MCP server for building browser extensions in Claude Code, Cursor, VS Code, Codex and any MCP client. Your agent creates an extension, runs it, proves it works and ships it to four stores.
 
-[Documentation](https://docs.extension.dev/tools/mcp) · [Tools](#tools) · [Skill](https://www.npmjs.com/package/@extension.dev/skill) · [Changelog](CHANGELOG.md) · [Troubleshooting](#troubleshooting) · [Discord](https://discord.gg/v9h2RgeTSN)
+[Documentation](https://docs.extension.dev/tools/mcp) · [Tools](#tools) · [Skill](https://www.npmjs.com/package/@extension.dev/skill) · [Changelog](CHANGELOG.md) · [Troubleshooting](#troubleshooting) · [Discord](https://discord.gg/BRqbPDfPxb)
 
 ## Install
 
@@ -224,7 +224,7 @@ Every refusal carries an error code and a hint (`error.hint`) naming what to cha
 
 ## Community
 
-Help and feedback on [Discord](https://discord.gg/v9h2RgeTSN); templates at [templates.extension.dev](https://templates.extension.dev); issues at [extensiondev/mcp](https://github.com/extensiondev/mcp/issues).
+Help and feedback on [Discord](https://discord.gg/BRqbPDfPxb); templates at [templates.extension.dev](https://templates.extension.dev); issues at [extensiondev/mcp](https://github.com/extensiondev/mcp/issues).
 
 ## License
 
