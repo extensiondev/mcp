@@ -154,7 +154,7 @@
       "name": "extension_auth",
       "tier": "platform",
       "group": "platform",
-      "description": "Sign in to an existing extension.dev project (a code for extension.dev/device, then deviceCode and waitSeconds), list stored logins, or clear them. Identity is the stored token, not the working directory; value.tokenCheck.verdict is confirmed, refused or unavailable. Tokens live 7 days (CI: Access tokens).",
+      "description": "Sign in to an existing extension.dev project (a code for extension.dev/device, then deviceCode and waitSeconds), list stored logins, or clear them. Identity is the stored token, not the working directory; value.tokenCheck.verdict is confirmed, refused or unavailable. A login lasts a day, or what lifetime says (CI: Access tokens).",
       "gate": "the server started with --features=local,platform",
       "samplePrompt": "Log this machine in to the acme/newtab project on extension.dev",
       "readOnly": false,
@@ -199,6 +199,13 @@
           "type": "string",
           "required": false,
           "description": "login: resume token."
+        },
+        {
+          "name": "lifetime",
+          "type": "\"hour\" | \"day\" | \"week\"",
+          "required": false,
+          "default": "day",
+          "description": "login: how long it lasts."
         },
         {
           "name": "waitSeconds",
@@ -1645,6 +1652,12 @@
           "description": "With repo: the folder inside it to build, e.g. 'examples/action'."
         },
         {
+          "name": "workspaceRoot",
+          "type": "string",
+          "required": false,
+          "description": "With repo: where dependencies install, '.' for the repo root; default rootDirectory."
+        },
+        {
           "name": "ref",
           "type": "string",
           "required": false,
@@ -1706,7 +1719,7 @@
           "name": "projects",
           "type": "array of object",
           "required": false,
-          "description": "Instead of project and its source: 1 to 10 (max 20) { project, repo (and rootDirectory, ref) or projectPath } of one workspace, one approval."
+          "description": "Instead of project and its source: 1 to 10 (max 20) { project, repo (and rootDirectory, workspaceRoot, ref) or projectPath } of one workspace, one approval."
         },
         {
           "name": "deviceCode",

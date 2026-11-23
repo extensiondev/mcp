@@ -48,7 +48,7 @@ Run a test stage on an extension_dev or extension_start session: pass, fail, not
 
 ## extension_auth
 
-Sign in to an existing extension.dev project (a code for extension.dev/device, then deviceCode and waitSeconds), list stored logins, or clear them. Identity is the stored token, not the working directory; value.tokenCheck.verdict is confirmed, refused or unavailable. Tokens live 7 days (CI: Access tokens).
+Sign in to an existing extension.dev project (a code for extension.dev/device, then deviceCode and waitSeconds), list stored logins, or clear them. Identity is the stored token, not the working directory; value.tokenCheck.verdict is confirmed, refused or unavailable. A login lasts a day, or what lifetime says (CI: Access tokens).
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -58,6 +58,7 @@ Sign in to an existing extension.dev project (a code for extension.dev/device, t
 | `projects` | array \| string | no |  | login: 1 to 20 existing projects of one workspace, at most 48 characters each, or "*" with workspace. |
 | `workspace` | string | no |  | login with projects: "*": the workspace. |
 | `deviceCode` | string | no |  | login: resume token. |
+| `lifetime` | "hour" \| "day" \| "week" | no | `"day"` | login: how long it lasts. |
 | `waitSeconds` | number | no |  | With deviceCode, seconds the call blocks for approval (0 to 900). |
 | `api` | string | no |  | Platform URL; default from env. |
 
@@ -374,6 +375,7 @@ Create an extension.dev project from a folder (projectPath, uploaded, no push; a
 | `projectPath` | string | no |  | Folder holding manifest.json, uploaded as it is (absolute or relative to the server cwd; default: the cwd when it holds manifest.json or extension.config.*). node_modules, dist, .git, .extension-dev, .zip, .crx, .xpi, .env*, key files and .gitignore entries stay out; 4 MB zipped at most. On an uploaded project with a login this re-seeds and rebuilds it after an approval; extension_builds_act rebuild rebuilds its stored tree without a new upload. |
 | `repo` | string | no |  | GitHub '<owner>/<repo>' the platform reads the source from, never writes to; instead of projectPath. |
 | `rootDirectory` | string | no |  | With repo: the folder inside it to build, e.g. 'examples/action'. |
+| `workspaceRoot` | string | no |  | With repo: where dependencies install, '.' for the repo root; default rootDirectory. |
 | `ref` | string | no |  | With repo: the branch, tag or full commit sha to build; default the repo's default branch. |
 | `installationId` | string | no |  | Omit; the platform finds it or answers a connect link. |
 | `displayName` | string | no |  | Human name; rename later with extension_workspace configure-project. |
@@ -383,7 +385,7 @@ Create an extension.dev project from a folder (projectPath, uploaded, no push; a
 | `outputDirectory` | string | no | `"dist/<browser>"` | Build output; `<browser>` substituted. |
 | `browsers` | array of "chrome" \| "edge" \| "firefox" | no | `["chrome"]` | Browsers to build. |
 | `outputDirectories` | object | no |  | Per-browser outputDirectory overrides. |
-| `projects` | array of object | no |  | Instead of project and its source: 1 to 10 (max 20) { project, repo (and rootDirectory, ref) or projectPath } of one workspace, one approval. |
+| `projects` | array of object | no |  | Instead of project and its source: 1 to 10 (max 20) { project, repo (and rootDirectory, workspaceRoot, ref) or projectPath } of one workspace, one approval. |
 | `deviceCode` | string | no |  | Resume token; reuse re-reads the outcome. |
 | `waitSeconds` | number | no |  | With deviceCode, seconds the call blocks for approval (0 to 900). |
 | `login` | boolean | no | `true` | Store the minted login. |

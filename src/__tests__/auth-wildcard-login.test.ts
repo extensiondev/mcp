@@ -183,6 +183,7 @@ describe("extension_auth login to every project of a workspace with projects: \"
       projects: "*",
       workspace: "acme",
       clientName: "extension-mcp",
+      lifetime: "day",
     });
 
     expect(h.to("/api/cli/device/token")[0]?.body).toEqual({

@@ -242,6 +242,8 @@ describe("extension_project_create with projects: refusals before a device code 
     ["an entry with both sources", [{ project: "acme/alpha", repo: "octo/a", projectPath: "/tmp/alpha" }], "names both repo and projectPath"],
     ["a root directory outside the repository", [{ project: "acme/alpha", repo: "octo/a", rootDirectory: "../up" }], "rootDirectory must be a relative path inside the repository"],
     ["a root directory beside a folder upload", [{ project: "acme/alpha", projectPath: "/tmp/alpha", rootDirectory: "examples/a" }], "point projectPath at that folder instead"],
+    ["a workspace root that does not hold the root directory", [{ project: "acme/alpha", repo: "octo/a", rootDirectory: "apps/a", workspaceRoot: "packages" }], "workspaceRoot must be '.' for the repository root"],
+    ["a workspace root beside a folder upload", [{ project: "acme/alpha", projectPath: "/tmp/alpha", workspaceRoot: "." }], "workspaceRoot applies to a repo source only"],
     ["an entry with an unknown key", [{ project: "acme/alpha", repo: "octo/a", branch: "main" }], "Unknown key 'branch'"],
     ["an entry with an unsupported browser", [{ project: "acme/alpha", repo: "octo/a", browsers: ["safari"] }], "browsers must be"],
     ["an entry whose build command is not a string", [{ project: "acme/alpha", repo: "octo/a", buildCommand: 3 }], "buildCommand must be a string"],
@@ -466,6 +468,7 @@ describe("extension_project_create with projects: one approval", () => {
         projectId: `prj_${slug}`,
         consoleUrl: expect.stringContaining(`/acme/${slug}`),
         firstBuild: { dispatched: true },
+        installDirectory: ".",
         expiresAt: new Date(1_900_000_000 * 1000).toISOString(),
       })),
     );
@@ -636,7 +639,7 @@ describe("952: extension_project_create with projects takes folders under one ap
 
   it("uploads each folder entry with the batch grant and creates it from its uploadId, beside a repo entry", async () => {
     const h = harness({ token: [grant(["alpha", "beta"])] });
-    const out = await run({ projects: [{ project: "acme/alpha", projectPath: folder("alpha") }, { project: "acme/beta", repo: "octo/beta-src", rootDirectory: "examples/beta" }], deviceCode: "dev-code" });
+    const out = await run({ projects: [{ project: "acme/alpha", projectPath: folder("alpha") }, { project: "acme/beta", repo: "octo/beta-src", rootDirectory: "examples/beta", workspaceRoot: "." }], deviceCode: "dev-code" });
 
     expect(out.ok).toBe(true);
     expect(out.status).toBe("created");
@@ -652,6 +655,9 @@ describe("952: extension_project_create with projects takes folders under one ap
     expect(alpha?.body.deployment.rootDirectory).toBeUndefined();
     expect(beta?.body.github).toMatchObject({ owner: "octo", repo: "beta-src" });
     expect(beta?.body.deployment.rootDirectory).toBe("examples/beta");
+    expect(alpha?.body.deployment.workspaceRoot).toBeUndefined();
+    expect(beta?.body.deployment.workspaceRoot).toBe(".");
+    expect(out.value.results.map((row: { installDirectory?: string }) => row.installDirectory)).toEqual([undefined, "."]);
   });
 
   it("asks one device code for a list of folders, and refuses a folder with no manifest before spending one", async () => {

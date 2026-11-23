@@ -30,7 +30,7 @@ import {
   type HeldCreateGrant,
 } from "../lib/held-create-grant-words";
 import { createProjectBatch, keptBatchArgs, type BatchCreateArgs, type BatchCreateLocal } from "../lib/project-create-batch";
-import { buildCreateBody, readRef, readRootDirectory, REF_INVALID, REF_WITH_UPLOAD, rootDirectoryOf, ROOT_DIRECTORY_INVALID, ROOT_DIRECTORY_WITH_UPLOAD, type CreateBodySource } from "../lib/project-create-body";
+import { buildCreateBody, installDirectoryOf, installDirectoryWarning, installDirectoryWords, readRef, readRootDirectory, readWorkspaceRoot, REF_INVALID, REF_WITH_UPLOAD, rootDirectoryOf, ROOT_DIRECTORY_INVALID, ROOT_DIRECTORY_WITH_UPLOAD, workspaceRootOf, WORKSPACE_ROOT_INVALID, WORKSPACE_ROOT_WITH_UPLOAD, type CreateBodySource } from "../lib/project-create-body";
 import {
   projectCreateUrl,
   SOURCE_UPLOAD_CONSUMED_CODE,
@@ -135,6 +135,10 @@ export const schema = {
         type: "string",
         description: "With repo: the folder inside it to build, e.g. 'examples/action'.",
       },
+      workspaceRoot: {
+        type: "string",
+        description: "With repo: where dependencies install, '.' for the repo root; default rootDirectory.",
+      },
       ref: {
         type: "string",
         description: "With repo: the branch, tag or full commit sha to build; default the repo's default branch.",
@@ -177,7 +181,7 @@ export const schema = {
       projects: {
         type: "array",
         items: { type: "object" },
-        description: `Instead of project and its source: 1 to ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} (max ${MAX_BATCH_PROJECTS}) { project, repo (and rootDirectory, ref) or projectPath } of one workspace, one approval.`,
+        description: `Instead of project and its source: 1 to ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} (max ${MAX_BATCH_PROJECTS}) { project, repo (and rootDirectory, workspaceRoot, ref) or projectPath } of one workspace, one approval.`,
       },
       deviceCode: {
         type: "string",
@@ -332,7 +336,7 @@ async function pendingEnvelope(start: {
   verificationUri: string;
   verificationUriComplete?: string;
   expiresIn: number;
-}, pendingFor: { apiBase: string; project: string; ref?: string }, waitSeconds: unknown): Promise<string> {
+}, pendingFor: { apiBase: string; project: string; ref?: string; install?: { rootDirectory: string; workspaceRoot: string } }, waitSeconds: unknown): Promise<string> {
   const complete = String(start.verificationUriComplete || "").trim();
   const hasCompleteLink =
     complete.length > 0 && complete !== start.verificationUri;
@@ -349,8 +353,11 @@ async function pendingEnvelope(start: {
   const message = hasCompleteLink
     ? `Open ${complete} and approve creating the project (code ${start.userCode} is pre-filled). If the page asks for a code, enter ${start.userCode} at ${start.verificationUri}. ${deadlineSentence(expiresAt)}`
     : `Open ${start.verificationUri}, enter code ${start.userCode} and approve creating the project. ${deadlineSentence(expiresAt)}`;
-  const said = `${message}${built}`;
+  const installWarning = pendingFor.install ? installDirectoryWarning(pendingFor.install) : null;
+  const installs = pendingFor.install?.rootDirectory ? ` Its dependencies will install in ${installDirectoryWords(installDirectoryOf(pendingFor.install))}.` : "";
+  const said = `${message}${built}${installs}`;
   const asked = deviceWait({ waitSeconds, fallbackMs: 0 });
+  const warnings = [...(asked.waiting ? [firstCallWaitWarning("extension_project_create", asked.bound)] : []), ...(installWarning ? [installWarning] : [])];
 
   return envelope({
     ok: true,
@@ -364,9 +371,10 @@ async function pendingEnvelope(start: {
       expiresAt,
       expiresInSeconds: start.expiresIn,
       ...(pendingFor.ref ? { ref: pendingFor.ref } : {}),
+      ...(pendingFor.install ? { installDirectory: installDirectoryOf(pendingFor.install) } : {}),
     },
     hint: said,
-    ...(asked.waiting ? { warnings: [firstCallWaitWarning("extension_project_create", asked.bound)] } : {}),
+    ...(warnings.length ? { warnings } : {}),
   });
 }
 
@@ -374,6 +382,7 @@ export type ProjectCreateArgs = {
   project?: string;
   repo?: string;
   rootDirectory?: string;
+  workspaceRoot?: string;
   ref?: string;
   projectPath?: string;
   projects?: unknown;
@@ -478,6 +487,11 @@ export async function createProject(args: ProjectCreateArgs, local: ProjectCreat
 
   if (!root.ok) return fail("RootDirectoryInvalid", `${ROOT_DIRECTORY_INVALID}: no leading slash or drive and no '..' segment, such as 'examples/action'.`, "bad-request", "E_BAD_REQUEST");
   if (root.rootDirectory && !repo) return fail("RootDirectoryWithUpload", `${ROOT_DIRECTORY_WITH_UPLOAD}.`, "bad-request", "E_BAD_REQUEST");
+
+  const workspaceRoot = readWorkspaceRoot(args.workspaceRoot, root.rootDirectory);
+
+  if (!workspaceRoot.ok) return fail("WorkspaceRootInvalid", `${WORKSPACE_ROOT_INVALID}${root.rootDirectory ? ` ('${root.rootDirectory}')` : ""}.`, "bad-request", "E_BAD_REQUEST");
+  if (workspaceRoot.workspaceRoot && !repo) return fail("WorkspaceRootWithUpload", `${WORKSPACE_ROOT_WITH_UPLOAD}.`, "bad-request", "E_BAD_REQUEST");
 
   const ref = readRef(args.ref);
 
@@ -589,7 +603,7 @@ export async function createProject(args: ProjectCreateArgs, local: ProjectCreat
     });
 
     if (!early.ok && early.reason === "pending") {
-      return pendingEnvelope(start, { apiBase, project, ref: ref.ref }, args.waitSeconds);
+      return pendingEnvelope(start, { apiBase, project, ref: ref.ref, ...(repo ? { install: { rootDirectory: root.rootDirectory, workspaceRoot: workspaceRoot.workspaceRoot } } : {}) }, args.waitSeconds);
     }
 
     return finishFromPoll(early, {
@@ -637,6 +651,7 @@ async function finishFromPoll(
     args: {
       repo?: string;
       rootDirectory?: string;
+      workspaceRoot?: string;
       ref?: string;
       installationId?: string;
       displayName?: string;
@@ -850,6 +865,7 @@ function replaceGate(ctx: { project: string; args: CreateArgs; source: CreateSou
 type CreateArgs = {
   repo?: string;
   rootDirectory?: string;
+  workspaceRoot?: string;
   ref?: string;
   installationId?: string;
   displayName?: string;
@@ -971,6 +987,7 @@ async function sendCreate(
     projectSlug: wantProject,
     source: bodySource,
     rootDirectory: rootDirectoryOf(ctx.args.rootDirectory),
+    workspaceRoot: workspaceRootOf(ctx.args.workspaceRoot, rootDirectoryOf(ctx.args.rootDirectory)),
     ref: ctx.args.ref,
     displayName: ctx.args.displayName,
     description: ctx.args.description,
@@ -1263,6 +1280,9 @@ async function sendCreate(
     ? `Project ${ref} was re-seeded from ${uploadWords}: the platform wrote ${reseedFiles.written} files and removed ${reseedFiles.removed} the new archive no longer holds, and created nothing, since the project already existed.`
     : `Project ${ref} exists${uploadWords ? `, created from ${uploadWords}` : ""}.${data.replayed === true ? " The platform read this back from its record of the earlier create request with this grant; nothing was created twice." : ""}`;
   const act = reseeded ? "This re-seed" : "This project creation";
+  const install = { rootDirectory: rootDirectoryOf(ctx.args.rootDirectory), workspaceRoot: workspaceRootOf(ctx.args.workspaceRoot, rootDirectoryOf(ctx.args.rootDirectory)) };
+  const installDirectory = ctx.source.kind === "github" ? installDirectoryOf({ ...install, answered: data.installDirectory }) : "";
+  const installWarning = ctx.source.kind === "github" && installDirectory === install.rootDirectory ? installDirectoryWarning(install) : null;
 
   return envelope({
     ok: true,
@@ -1275,7 +1295,7 @@ async function sendCreate(
       consoleUrl,
       source: ctx.source.kind,
       ...(ctx.source.kind === "github"
-        ? { sourceRepo: ctx.source.repo, ...(data.ref && typeof data.ref === "object" ? { ref: data.ref } : {}) }
+        ? { sourceRepo: ctx.source.repo, ...(data.ref && typeof data.ref === "object" ? { ref: data.ref } : {}), installDirectory }
         : { projectPath: ctx.source.root, uploaded: uploaded ?? { bytes: ctx.source.bytes, files: ctx.source.files }, leftOut: ctx.source.leftOut }),
       ...(reseeded ? { reseeded: true, files: reseedFiles } : {}),
       outcome: recordedOutcome(reseeded ? "reseeded" : data.replayed === true ? "created-earlier" : "created"),
@@ -1300,11 +1320,12 @@ async function sendCreate(
         buildStep,
       ],
     },
-    hint: `${opening} ${reseeded ? reseedBuildSentence(firstBuild, ref, buildsPageUrl) : firstBuildSentence(firstBuild, buildsPageUrl)} ${login.sentence} ${ctx.login ? `It ran under the stored login for ${ref}${replaceApprovalId ? ` and approval ${replaceApprovalId}, which is spent` : ""}; no provisioning grant was asked for, and the files` : "The provisioning grant is spent and not kept on this machine; the other files"} this tool leaves are its install id (install.json) and a note that ${ref} exists on this server (created-projects.json), so extension_auth does not doubt it. Next: ${
+    hint: `${opening}${installDirectory ? ` Its builds install dependencies in ${installDirectoryWords(installDirectory)}.` : ""} ${reseeded ? reseedBuildSentence(firstBuild, ref, buildsPageUrl) : firstBuildSentence(firstBuild, buildsPageUrl)} ${login.sentence} ${ctx.login ? `It ran under the stored login for ${ref}${replaceApprovalId ? ` and approval ${replaceApprovalId}, which is spent` : ""}; no provisioning grant was asked for, and the files` : "The provisioning grant is spent and not kept on this machine; the other files"} this tool leaves are its install id (install.json) and a note that ${ref} exists on this server (created-projects.json), so extension_auth does not doubt it. Next: ${
       signedIn ? "" : `extension_auth (action: login, project: '${ref}') to mint the project token, then `
     }${buildStep}. ${madeSentence(links)}`,
     warnings: [
       ...storedNotes(data.stored),
+      ...(installWarning ? [installWarning] : []),
       ...(ctx.source.kind === "upload" && ctx.source.defaulted
         ? [`projectPath was not given, so the server's cwd ${ctx.source.root} was uploaded because it holds the extension's manifest.`]
         : []),

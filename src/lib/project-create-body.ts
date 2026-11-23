@@ -50,6 +50,57 @@ export function readRootDirectory(value: unknown): { ok: true; rootDirectory: st
   return { ok: true, rootDirectory: segments.join("/") };
 }
 
+export const WORKSPACE_ROOT_INVALID =
+  "workspaceRoot must be '.' for the repository root, or a relative folder inside the repository that is rootDirectory itself or a folder above it";
+
+export const WORKSPACE_ROOT_WITH_UPLOAD =
+  "workspaceRoot applies to a repo source only; an uploaded folder installs its dependencies at its own root";
+
+export const REPOSITORY_ROOT = ".";
+
+/* @invariant THE INSTALL DIRECTORY IS NAMED BEFORE THE BUILD, AND IT IS THE
+ * ONE THE BUILD LANE USES. The lane installs in the stored workspace root,
+ * and the platform stores the root directory there when a create names none
+ * (ledger 957: a walk up to the repository's workspace file broke every
+ * examples template). So a package in a monorepo subfolder whose lockfile
+ * lives higher installed with no lockfile and nobody was told (ledger 1080).
+ * workspaceRoot takes '.' for the repository root or a folder that holds the
+ * root directory, and installDirectoryOf answers what the lane will use.
+ */
+export function readWorkspaceRoot(value: unknown, rootDirectory: string): { ok: true; workspaceRoot: string } | { ok: false } {
+  if (value === undefined || value === null) return { ok: true, workspaceRoot: "" };
+
+  const read = readRootDirectory(value);
+  if (!read.ok) return { ok: false };
+  if (!read.rootDirectory) return { ok: true, workspaceRoot: String(value).trim() ? REPOSITORY_ROOT : "" };
+
+  const holds = rootDirectory === read.rootDirectory || rootDirectory.startsWith(`${read.rootDirectory}/`);
+
+  return holds ? { ok: true, workspaceRoot: read.rootDirectory } : { ok: false };
+}
+
+export function workspaceRootOf(value: unknown, rootDirectory: string): string {
+  const read = readWorkspaceRoot(value, rootDirectory);
+
+  return read.ok ? read.workspaceRoot : "";
+}
+
+export function installDirectoryOf(args: { rootDirectory?: string; workspaceRoot?: string; answered?: unknown }): string {
+  const answered = typeof args.answered === "string" ? args.answered.trim() : "";
+
+  return answered || args.workspaceRoot || args.rootDirectory || REPOSITORY_ROOT;
+}
+
+export function installDirectoryWords(installDirectory: string): string {
+  return installDirectory === REPOSITORY_ROOT ? "the repository root" : `'${installDirectory}'`;
+}
+
+export function installDirectoryWarning(args: { rootDirectory?: string; workspaceRoot?: string }): string | null {
+  if (!args.rootDirectory || args.workspaceRoot) return null;
+
+  return `workspaceRoot was left out, so dependencies install inside '${args.rootDirectory}' itself. If its lockfile or workspace file lives higher in the repository (workspace: or catalog: dependencies), the install does not find it: name that folder in workspaceRoot, '.' for the repository root.`;
+}
+
 export const REF_INVALID = `ref must be a branch, tag or full commit sha: at most ${REF_MAX_LENGTH} characters of letters, digits and . _ / + @ # -, with no '..' or '//'`;
 
 export const REF_WITH_UPLOAD = "ref applies to a repo source only; an uploaded folder is built as it is, so leave ref out or name repo instead";
@@ -86,6 +137,7 @@ export function buildCreateBody(args: {
   projectSlug: string;
   source: CreateBodySource;
   rootDirectory?: string;
+  workspaceRoot?: string;
   ref?: string;
   displayName?: string;
   description?: string;
@@ -164,6 +216,7 @@ export function buildCreateBody(args: {
       runWhatsNew: false,
       runExtensionExecutables: false,
       ...(source.kind === "github" && args.rootDirectory ? { rootDirectory: args.rootDirectory } : {}),
+      ...(source.kind === "github" && args.workspaceRoot ? { workspaceRoot: args.workspaceRoot } : {}),
     },
     ...origin,
     workspaceSlug: args.workspace,

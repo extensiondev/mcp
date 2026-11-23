@@ -87,7 +87,7 @@ export async function startLoginRenewal(expired: ExpiredLogin, api?: string): Pr
 
   try {
     const config = await fetchLoginConfig(apiCheck.base, boundedFetch);
-    const start = await requestDeviceCode({ apiBase: apiCheck.base, path: config.deviceCodeUrl, project: expired.project, fetchImpl: boundedFetch });
+    const start = await requestDeviceCode({ apiBase: apiCheck.base, path: config.deviceCodeUrl, project: expired.project, lifetime: "day", fetchImpl: boundedFetch });
     const expiresAt = codeExpiryFromStart(start.expiresIn);
     const complete = String(start.verificationUriComplete || "").trim();
     const verificationUrl = devicePageOn(apiCheck.base, complete || start.verificationUri);

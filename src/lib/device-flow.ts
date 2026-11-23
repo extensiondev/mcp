@@ -26,6 +26,16 @@ export interface DeviceCodeStart {
 
 export type DeviceIntent = "login" | "create" | "create-workspace";
 
+/* @invariant A LOGIN ASKS FOR NO LONGER THAN ITS WORK NEEDS, AND ONLY A LOGIN
+ * ASKS. The platform takes `lifetime: "hour" | "day"` on a login start, mints
+ * for that long and says so on the approval page; a create or workspace start
+ * that carries the field is refused (DEVICE_LIFETIME_INVALID), so it is left
+ * off those. A platform that predates the field ignores it and mints seven
+ * days, which is why every answer reads the end from the token it was handed
+ * and never from what was asked (ledger 1078).
+ */
+export type DeviceLifetime = "hour" | "day";
+
 function originOf(url: string): string | null {
   try {
     return new URL(url).origin;
@@ -90,6 +100,7 @@ export async function requestDeviceCode(args: {
   workspace?: string;
   clientName?: string;
   intent?: DeviceIntent;
+  lifetime?: DeviceLifetime;
   fetchImpl?: FetchImpl;
 }): Promise<DeviceCodeStart> {
   const doFetch = deviceFetch(args.fetchImpl ?? fetch);
@@ -104,6 +115,7 @@ export async function requestDeviceCode(args: {
       ...(args.workspace ? { workspace: args.workspace } : {}),
       clientName: args.clientName ?? "extension-mcp",
       ...(args.intent ? { intent: args.intent } : {}),
+      ...(args.lifetime && (!args.intent || args.intent === "login") ? { lifetime: args.lifetime } : {}),
     }),
   });
   const text = await res.text();

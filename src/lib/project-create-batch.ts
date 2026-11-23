@@ -25,7 +25,7 @@ import {
   parseProjectBatch,
   sameProjectSet,
 } from "./project-batch";
-import { buildCreateBody, readRef, readRootDirectory, REF_INVALID, REF_WITH_UPLOAD, ROOT_DIRECTORY_INVALID, ROOT_DIRECTORY_WITH_UPLOAD, type CreateBodySource } from "./project-create-body";
+import { buildCreateBody, installDirectoryOf, readRef, readRootDirectory, readWorkspaceRoot, REF_INVALID, REF_WITH_UPLOAD, ROOT_DIRECTORY_INVALID, ROOT_DIRECTORY_WITH_UPLOAD, WORKSPACE_ROOT_INVALID, WORKSPACE_ROOT_WITH_UPLOAD, type CreateBodySource } from "./project-create-body";
 import { projectCreateUrl, uploadProjectSource } from "./project-source-upload";
 import { consoleBase, consoleProjectUrl } from "./registry";
 import { bearerFetch } from "./platform-fetch";
@@ -40,6 +40,7 @@ const ENTRY_KEYS = [
   "project",
   "repo",
   "rootDirectory",
+  "workspaceRoot",
   "ref",
   "projectPath",
   "displayName",
@@ -61,7 +62,7 @@ const ENTRY_STRING_KEYS = [
 
 const BROWSERS = ["chrome", "edge", "firefox"];
 
-const SINGLE_ONLY_KEYS = ["project", "repo", "rootDirectory", "ref", "displayName", "description"];
+const SINGLE_ONLY_KEYS = ["project", "repo", "rootDirectory", "workspaceRoot", "ref", "displayName", "description"];
 
 export interface BatchCreateLocal {
   requestDeviceCode(args: { apiBase: string; path: string; project?: string; projects?: string[]; intent?: DeviceIntent }): Promise<DeviceCodeStart>;
@@ -103,6 +104,7 @@ interface BatchEntry {
   repoName: string;
   projectPath: string;
   rootDirectory: string;
+  workspaceRoot: string;
   gitRef: string;
   upload?: BatchUpload;
   displayName?: string;
@@ -124,6 +126,7 @@ type Row =
       firstBuild: { dispatched: boolean | null; reason?: string };
       expiresAt?: string | null;
       ref?: unknown;
+      installDirectory?: string;
       tokenCode?: string;
       hint?: string;
     }
@@ -325,6 +328,11 @@ export function parseBatchCreateArgs(
       return { ok: false, message: `In the entry for '${ref}', ${ROOT_DIRECTORY_WITH_UPLOAD}.` };
     }
 
+    const workspaceRoot = readWorkspaceRoot(raw.workspaceRoot, root.rootDirectory);
+
+    if (!workspaceRoot.ok) return { ok: false, message: `In the entry for '${ref}', ${WORKSPACE_ROOT_INVALID}.` };
+    if (workspaceRoot.workspaceRoot && projectPath) return { ok: false, message: `In the entry for '${ref}', ${WORKSPACE_ROOT_WITH_UPLOAD}.` };
+
     const gitRef = readRef(raw.ref);
 
     if (!gitRef.ok) return { ok: false, message: `In the entry for '${ref}', ${REF_INVALID}, such as 'main', 'v1.2.0' or a 40-character sha.` };
@@ -378,6 +386,7 @@ export function parseBatchCreateArgs(
       repoName,
       projectPath,
       rootDirectory: root.rootDirectory,
+      workspaceRoot: workspaceRoot.workspaceRoot,
       gitRef: gitRef.ok ? gitRef.ref : "",
       displayName: raw.displayName as string | undefined,
       description: raw.description as string | undefined,
@@ -581,6 +590,7 @@ async function createOne(local: BatchCreateLocal, session: Session, entry: Batch
       projectSlug: entry.slug,
       source: source.source,
       rootDirectory: entry.rootDirectory,
+      workspaceRoot: entry.workspaceRoot,
       ref: entry.gitRef,
       displayName: entry.displayName,
       description: entry.description,
@@ -716,6 +726,7 @@ async function createOne(local: BatchCreateLocal, session: Session, entry: Batch
     session.apiBase,
   );
   const firstBuild = firstBuildValue(readFirstBuild(data));
+  const installed = entry.repo ? { installDirectory: installDirectoryOf({ rootDirectory: entry.rootDirectory, workspaceRoot: entry.workspaceRoot, answered: data.installDirectory }) } : {};
   const token = String(data.token || "").trim();
   const scoped =
     finalWorkspace.toLowerCase() === entry.workspace &&
@@ -750,6 +761,7 @@ async function createOne(local: BatchCreateLocal, session: Session, entry: Batch
           projectId: createdAnswer.projectId,
           consoleUrl,
           firstBuild,
+          ...installed,
           tokenCode: "TOKEN_NOT_STORED",
           hint: `${entry.ref} was created, but its token could not be stored on this machine and was discarded: ${storeFailure} Sign in with extension_auth (action: login) once that is fixed.`,
         },
@@ -764,6 +776,7 @@ async function createOne(local: BatchCreateLocal, session: Session, entry: Batch
         projectId: createdAnswer.projectId,
         consoleUrl,
         firstBuild,
+        ...installed,
         expiresAt: expiresAt ? new Date(expiresAt * 1000).toISOString() : null,
         ...(data.ref && typeof data.ref === "object" ? { ref: data.ref } : {}),
       },
@@ -782,6 +795,7 @@ async function createOne(local: BatchCreateLocal, session: Session, entry: Batch
       projectId: createdAnswer.projectId,
       consoleUrl,
       firstBuild,
+      ...installed,
       tokenCode,
       hint: scoped
         ? `${entry.ref} was created but the platform issued no token for it. Sign in with extension_auth (action: login).`

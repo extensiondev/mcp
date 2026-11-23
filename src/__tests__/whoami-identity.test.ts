@@ -189,7 +189,7 @@ describe("7-day token TTL disclosure", () => {
   });
 
   it("extension_auth states the TTL and where CI re-mints", () => {
-    expect(auth.schema.description).toContain("7 days");
+    expect(auth.schema.description).toContain("A login lasts a day, or what lifetime says");
     expect(auth.schema.description).toContain("Access tokens");
   });
 

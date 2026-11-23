@@ -49,6 +49,7 @@ export { pollDeviceGrant, requestDeviceCode } from "./lib/device-flow";
 export type { DeviceCodeStart, DeviceIntent } from "./lib/device-flow";
 export { DEVICE_WAIT_MAX_SECONDS, codeExpiresAt, codeExpiryFromStart, deviceWait, deviceWaitDescription, expiredSentence, firstCallWaitWarning, forgetCodeExpiry, rememberCodeExpiry, resumeWaitSentence, waitRanOutSentence, waitValue } from "./lib/device-wait";
 export type { DeviceWait } from "./lib/device-wait";
+export { LOGIN_LIFETIMES, readLoginLifetime } from "./lib/login-lifetime";
 export { repairEdgeStoreUrl } from "./lib/edge-listing";
 export { envelopeObject } from "./lib/envelope";
 export type { ErrorCode } from "./lib/envelope";

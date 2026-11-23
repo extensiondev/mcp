@@ -334,6 +334,45 @@ describe("extension_project_create", () => {
     expect(fn).not.toHaveBeenCalled();
   });
 
+  it("1080: sends a repo's workspaceRoot inside deployment and names the directory the build installs in, with a warning when a subfolder installs alone", async () => {
+    const { fn, calls } = createFetch({ token: [{ status: 200, body: grantBody }], create: CREATED });
+    vi.stubGlobal("fetch", fn);
+    const sentBodies = () => calls.filter((call) => call.url.endsWith("/api/cli/projects/create")).map((call) => JSON.parse(String(call.init?.body)));
+
+    const named = JSON.parse(await handler({ ...baseArgs, rootDirectory: "apps/extensions/tools", workspaceRoot: "./", deviceCode: "dev-code" }));
+
+    expect(named.status).toBe("created");
+    expect(sentBodies()[0].deployment).toMatchObject({ rootDirectory: "apps/extensions/tools", workspaceRoot: "." });
+    expect(named.value.installDirectory).toBe(".");
+    expect(named.hint).toContain("install dependencies in the repository root");
+    expect(named.warnings ?? []).toEqual([]);
+
+    const alone = JSON.parse(await handler({ ...baseArgs, rootDirectory: "apps/extensions/tools", deviceCode: "dev-code" }));
+
+    expect(sentBodies()[1].deployment.workspaceRoot).toBeUndefined();
+    expect(alone.value.installDirectory).toBe("apps/extensions/tools");
+    expect(alone.hint).toContain("install dependencies in 'apps/extensions/tools'");
+    expect(alone.warnings.join(" ")).toContain("name that folder in workspaceRoot, '.' for the repository root");
+
+    const above = JSON.parse(await handler({ ...baseArgs, rootDirectory: "apps/extensions/tools", workspaceRoot: "apps", deviceCode: "dev-code" }));
+
+    expect(sentBodies()[2].deployment.workspaceRoot).toBe("apps");
+    expect(above.value.installDirectory).toBe("apps");
+
+    fn.mockClear();
+
+    for (const workspaceRoot of ["packages", "apps/extensions/tools/src", "../up", "/etc", 7]) {
+      const refused = JSON.parse(await handler({ ...baseArgs, rootDirectory: "apps/extensions/tools", workspaceRoot: workspaceRoot as string }));
+
+      expect(refused.error?.name, String(workspaceRoot)).toBe("WorkspaceRootInvalid");
+    }
+
+    const beside = JSON.parse(await handler({ project: "acme/ghost-app", projectPath: extensionFolder("ext"), workspaceRoot: "." }));
+
+    expect(beside.error.name).toBe("WorkspaceRootWithUpload");
+    expect(fn).not.toHaveBeenCalled();
+  });
+
   it("958: sends a repo's ref as deployment.branch, names it in the pending answer and the created one, and refuses one beside an upload", async () => {
     const ref = { requested: "v1.2.0", branch: "v1.2.0", sha: "603fc8a6b1e2d3c4f5a6b7c8d9e0f1a2b3c4d5e6" };
     const { fn, calls } = createFetch({ token: [{ status: 200, body: grantBody }], create: { status: 200, body: { ...CREATED.body, ref } } });

@@ -11,6 +11,7 @@ import { appendWarnings } from "../lib/envelope-warnings";
 import { DEVICE_WAIT_MAX_SECONDS, deviceWaitDescription } from "../lib/device-wait";
 import { envelope } from "../lib/envelope";
 import { loginToProject, loginToProjects, loginToWorkspace } from "./login";
+import { LOGIN_LIFETIMES, readLoginLifetime } from "../lib/login-lifetime";
 import { WORKSPACE_WILDCARD } from "../lib/project-batch";
 import { readIdentity } from "./whoami";
 import { clearLocalCredentials } from "./logout";
@@ -19,7 +20,7 @@ import { projectAtPath } from "./auth-local";
 export const schema = {
   name: "extension_auth",
   description:
-    "Sign in to an existing extension.dev project (a code for extension.dev/device, then deviceCode and waitSeconds), list stored logins, or clear them. Identity is the stored token, not the working directory; value.tokenCheck.verdict is confirmed, refused or unavailable. Tokens live 7 days (CI: Access tokens).",
+    "Sign in to an existing extension.dev project (a code for extension.dev/device, then deviceCode and waitSeconds), list stored logins, or clear them. Identity is the stored token, not the working directory; value.tokenCheck.verdict is confirmed, refused or unavailable. A login lasts a day, or what lifetime says (CI: Access tokens).",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -50,6 +51,12 @@ export const schema = {
         type: "string",
         description: "login: resume token.",
       },
+      lifetime: {
+        type: "string",
+        enum: [...LOGIN_LIFETIMES],
+        default: "day",
+        description: "login: how long it lasts.",
+      },
       waitSeconds: {
         type: "number",
         minimum: 0,
@@ -79,9 +86,16 @@ export async function handler(args: {
   workspace?: string;
   deviceCode?: string;
   waitSeconds?: unknown;
+  lifetime?: unknown;
   api?: string;
 }): Promise<string> {
   const action = args.action ?? "status";
+  const lifetime = readLoginLifetime(args.lifetime);
+
+  if (action === "login" && !lifetime) {
+    return listMisuse(`lifetime must be one of ${LOGIN_LIFETIMES.map((name) => `"${name}"`).join(", ")}; got ${JSON.stringify(args.lifetime)}. Leave it out for a login that lasts a day.`);
+  }
+
   const hasList = args.projects !== undefined && args.projects !== null;
   const hasWorkspace = String(args.workspace ?? "").trim() !== "";
   const wildcard = args.projects === WORKSPACE_WILDCARD;
@@ -118,6 +132,7 @@ export async function handler(args: {
         workspace: args.workspace,
         deviceCode: args.deviceCode,
         waitSeconds: args.waitSeconds,
+        lifetime: lifetime ?? undefined,
         api: args.api,
       });
     }
@@ -126,6 +141,7 @@ export async function handler(args: {
       projects: args.projects,
       deviceCode: args.deviceCode,
       waitSeconds: args.waitSeconds,
+      lifetime: lifetime ?? undefined,
       api: args.api,
     });
   }
@@ -145,6 +161,7 @@ export async function handler(args: {
       project: atPath?.project ?? named,
       deviceCode: args.deviceCode,
       waitSeconds: args.waitSeconds,
+      lifetime: lifetime ?? undefined,
       api: args.api,
     });
 

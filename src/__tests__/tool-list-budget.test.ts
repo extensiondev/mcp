@@ -25,9 +25,11 @@ import { FEATURE_GROUPS } from "../lib/tool-policy";
  * tool's own `title` field, the one the connector directories read, and
  * since ledger 757 only there: `annotations` carries the four hints and no
  * second copy of the title, which won back about 1,200 characters for the
- * split of extension_builds. */
+ * split of extension_builds. Ledger 1078 and 1080 raised the whole list
+ * from 67,000 to 67,300 for two arguments an agent could not do without:
+ * lifetime on extension_auth and workspaceRoot on extension_project_create. */
 const PER_TOOL = 6_000;
-const WHOLE_LIST = 67_000;
+const WHOLE_LIST = 67_300;
 
 type Listed = Awaited<ReturnType<Client["listTools"]>>["tools"][number];
 

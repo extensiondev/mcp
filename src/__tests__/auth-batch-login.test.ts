@@ -225,7 +225,28 @@ describe("extension_auth login with projects: refusals before a device code is s
     expect(h.to("/api/cli/device/code")[0]?.body).toEqual({
       project: "acme/alpha",
       clientName: "extension-mcp",
+      lifetime: "day",
     });
+  });
+
+  it("1078: asks the platform for the lifetime the call names, a day when it names none, and refuses an unknown one before a code is spent", async () => {
+    const h = harness({});
+    const day = await run({ action: "login", project: "acme/alpha" });
+    const hour = await run({ action: "login", project: "acme/alpha", lifetime: "hour" });
+    await run({ action: "login", project: "acme/alpha", lifetime: "week" });
+    await run({ action: "login", projects: LIST, lifetime: "hour" });
+
+    expect(h.to("/api/cli/device/code").map((call) => call.body.lifetime)).toEqual(["day", "hour", undefined, "hour"]);
+    expect(day.warnings.join(" ")).toContain("asked to last 1 day");
+    expect(hour.warnings.join(" ")).toContain("asked to last 1 hour");
+    expect(schema.inputSchema.properties.lifetime.enum).toEqual(["hour", "day", "week"]);
+
+    const before = h.to("/api/cli/device/code").length;
+    const refused = await run({ action: "login", project: "acme/alpha", lifetime: "minute" });
+
+    expect(refused.status).toBe("bad-request");
+    expect(refused.error.message).toContain('"hour", "day", "week"');
+    expect(h.to("/api/cli/device/code")).toHaveLength(before);
   });
 
   it("refuses project and projects together", async () => {
@@ -297,6 +318,7 @@ describe("extension_auth login with projects: one approval, one token per projec
     expect(h.to("/api/cli/device/code")[0]?.body).toEqual({
       projects: LIST,
       clientName: "extension-mcp",
+      lifetime: "day",
     });
 
     expect(h.to("/api/cli/device/token")[0]?.body).toEqual({

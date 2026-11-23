@@ -11,6 +11,7 @@ import {
   pollDeviceGrant,
   pollDeviceToken,
   type DeviceGrantPollResult,
+  type DeviceLifetime,
   type DevicePollResult,
 } from "../lib/device-flow";
 import {
@@ -45,6 +46,7 @@ import {
 import { consoleBase } from "../lib/registry";
 import { isMemberLogin, isProjectRef, memberLabel, memberProjects } from "../lib/credentials";
 import { followProjectMove, followSentence, readProjectMove } from "../lib/project-move";
+import { DEFAULT_LOGIN_LIFETIME, type LoginLifetime } from "../lib/login-lifetime";
 import { projectPresence, sameSlugElsewhere } from "./auth-local";
 
 import type { ProjectPresence } from "../lib/project-on-server";
@@ -52,8 +54,23 @@ import type { ProjectPresence } from "../lib/project-on-server";
 const FIRST_CALL_BUDGET_MS = 8_000;
 const RESUME_BUDGET_MS = 22_000;
 
-const PENDING_TTL_NOTE =
-  "Once authorized, the minted token lives at most 7 days (server-enforced); CI must re-mint before expiry (console: project settings -> Access tokens).";
+const LIFETIME_WORDS: Record<LoginLifetime, string> = { hour: "1 hour", day: "1 day", week: "7 days" };
+
+function deviceLifetime(lifetime: LoginLifetime | undefined): DeviceLifetime | undefined {
+  const asked = lifetime ?? DEFAULT_LOGIN_LIFETIME;
+
+  return asked === "week" ? undefined : asked;
+}
+
+function pendingTtlNote(lifetime?: LoginLifetime): string {
+  return lifetime
+    ? `This login was asked to last ${LIFETIME_WORDS[lifetime]} and the approval page states it; the answer that completes the login names the moment it ends in value.expiresAt. lifetime takes "hour" for one task, "day" or "week".`
+    : "Once authorized, the login lasts what the approval page states, 7 days at most; the answer that completes it names the moment it ends.";
+}
+
+function endsSentence(expiresAt: string | null | undefined): string {
+  return expiresAt ? `ends ${expiresAt}` : "ends within 7 days";
+}
 
 function fail(
   name: string,
@@ -96,9 +113,7 @@ function success(creds: {
       String(process.env.EXTENSION_DEV_TOKEN || "").trim()
         ? `EXTENSION_DEV_TOKEN is set, so an unnamed extension_publish still sends it; pass project: "${creds.workspaceSlug}/${creds.projectSlug}" to use this stored login.`
         : "extension_publish can now use the stored token."
-    } The token expires ${
-      expiresAt ?? "within 7 days"
-    }: extension.dev CLI tokens live at most 7 days, so CI must re-mint before then (console: project settings -> Access tokens).`,
+    } The login ${endsSentence(expiresAt)} and stops working by itself then.`,
     warnings: [tokenTtlNote(creds.workspaceSlug, creds.projectSlug, creds.api)],
   });
 }
@@ -111,6 +126,7 @@ function pending(
     verificationUriComplete?: string;
     expiresAt: string;
     waitSeconds: unknown;
+    lifetime?: LoginLifetime;
   },
   presence: { warning: string | null; value: Record<string, unknown> | null } = { warning: null, value: null },
 ): string {
@@ -140,7 +156,7 @@ function pending(
     warnings: [
       ...(presence.warning ? [presence.warning] : []),
       ...(asked.waiting ? [firstCallWaitWarning("extension_auth (action: login)", asked.bound)] : []),
-      PENDING_TTL_NOTE,
+      pendingTtlNote(start.lifetime),
     ],
   });
 }
@@ -161,7 +177,7 @@ function resumePending(deviceCode: string, verificationUri: string, wait: Device
       legacyStatus: "authorization_pending",
     },
     hint: message,
-    warnings: [PENDING_TTL_NOTE],
+    warnings: [pendingTtlNote()],
   });
 }
 
@@ -298,6 +314,7 @@ export async function loginToProject(args: {
   project: string;
   deviceCode?: string;
   waitSeconds?: unknown;
+  lifetime?: LoginLifetime;
   api?: string;
 }): Promise<string> {
   const project = String(args.project || "").trim();
@@ -367,6 +384,7 @@ export async function loginToProject(args: {
       apiBase,
       path: config.deviceCodeUrl,
       project,
+      lifetime: deviceLifetime(args.lifetime),
     });
   } catch (err: any) {
     return fail(
@@ -402,6 +420,7 @@ export async function loginToProject(args: {
       verificationUriComplete: start.verificationUriComplete,
       expiresAt,
       waitSeconds: args.waitSeconds,
+      lifetime: args.lifetime ?? DEFAULT_LOGIN_LIFETIME,
     },
     presenceWarning(presence, { apiBase, project }),
   );
@@ -418,6 +437,7 @@ function batchPending(args: {
   verificationUriComplete?: string;
   wait: DeviceWait;
   expiresAt: string | null;
+  lifetime?: LoginLifetime;
 }): string {
   const complete = String(args.verificationUriComplete || "").trim();
   const hasCompleteLink =
@@ -448,7 +468,7 @@ function batchPending(args: {
       legacyStatus: "authorization_pending",
     },
     hint,
-    warnings: [PENDING_TTL_NOTE, BATCH_FINAL_POLL_NOTE],
+    warnings: [pendingTtlNote(args.lifetime), BATCH_FINAL_POLL_NOTE],
   });
 }
 
@@ -526,6 +546,7 @@ export async function loginToProjects(args: {
   projects: unknown;
   deviceCode?: string;
   waitSeconds?: unknown;
+  lifetime?: LoginLifetime;
   api?: string;
 }): Promise<string> {
   const parsed = parseProjectBatch(args.projects);
@@ -600,6 +621,7 @@ export async function loginToProjects(args: {
         apiBase,
         path: config.deviceCodeUrl,
         projects,
+        lifetime: deviceLifetime(args.lifetime),
       });
     } catch (err: any) {
       return fail(
@@ -642,6 +664,7 @@ export async function loginToProjects(args: {
         verificationUriComplete: start?.verificationUriComplete,
         wait,
         expiresAt,
+        ...(start ? { lifetime: args.lifetime ?? DEFAULT_LOGIN_LIFETIME } : {}),
       });
     }
 
@@ -675,7 +698,7 @@ export async function loginToProjects(args: {
     command: "extension_auth",
     status: "logged-in",
     value: { workspaceSlug: parsed.batch.workspace, logins },
-    hint: `Logged in to ${logins.length} project${logins.length === 1 ? "" : "s"} in ${parsed.batch.workspace}: ${logins.map((login) => login.projectSlug).join(", ")}. Each has its own stored token; token-scoped tools take \`project\` to pick one, and extension_auth (action: status) lists them. The default login was left as it was unless none existed. Every token expires within 7 days, so one batch login renews them together.`,
+    hint: `Logged in to ${logins.length} project${logins.length === 1 ? "" : "s"} in ${parsed.batch.workspace}: ${logins.map((login) => login.projectSlug).join(", ")}. Each has its own stored token; token-scoped tools take \`project\` to pick one, and extension_auth (action: status) lists them. The default login was left as it was unless none existed. Every token ${endsSentence(logins[0]?.expiresAt)}, so one batch login renews them together.`,
     warnings: [tokenTtlNote(undefined, undefined, apiBase)],
   });
 }
@@ -688,6 +711,7 @@ function workspacePending(args: {
   verificationUriComplete?: string;
   wait: DeviceWait;
   expiresAt: string | null;
+  lifetime?: LoginLifetime;
 }): string {
   const complete = String(args.verificationUriComplete || "").trim();
   const hasCompleteLink =
@@ -719,7 +743,7 @@ function workspacePending(args: {
       legacyStatus: "authorization_pending",
     },
     hint,
-    warnings: [PENDING_TTL_NOTE, BATCH_FINAL_POLL_NOTE],
+    warnings: [pendingTtlNote(args.lifetime), BATCH_FINAL_POLL_NOTE],
   });
 }
 
@@ -727,6 +751,7 @@ export async function loginToWorkspace(args: {
   workspace: unknown;
   deviceCode?: string;
   waitSeconds?: unknown;
+  lifetime?: LoginLifetime;
   api?: string;
 }): Promise<string> {
   const parsed = parseWorkspaceSlug(args.workspace);
@@ -786,6 +811,7 @@ export async function loginToWorkspace(args: {
         path: config.deviceCodeUrl,
         projects: WORKSPACE_WILDCARD,
         workspace,
+        lifetime: deviceLifetime(args.lifetime),
       });
     } catch (err: any) {
       return fail(
@@ -827,6 +853,7 @@ export async function loginToWorkspace(args: {
         verificationUriComplete: start?.verificationUriComplete,
         wait,
         expiresAt,
+        ...(start ? { lifetime: args.lifetime ?? DEFAULT_LOGIN_LIFETIME } : {}),
       });
     }
 
@@ -862,7 +889,7 @@ export async function loginToWorkspace(args: {
         login: { kind: "member", project: memberLabel(member), projects: projects.map((project) => `${workspace}/${project}`), expiresAt },
         logins: [{ project: memberLabel(member), kind: "member", workspaceSlug: workspace, projects: projects.map((project) => `${workspace}/${project}`), expiresAt }],
       },
-      hint: `Logged in to ${workspace} as a member: one stored login reads its ${projects.length} project${projects.length === 1 ? "" : "s"} (${projects.join(", ")}), each call naming the project it is for with \`project\` (or projectPath), and extension_workspace reads the workspace with it. A project created later is not covered: run this login again to add it. The login expires ${expiresAt ?? "within 7 days"}.`,
+      hint: `Logged in to ${workspace} as a member: one stored login reads its ${projects.length} project${projects.length === 1 ? "" : "s"} (${projects.join(", ")}), each call naming the project it is for with \`project\` (or projectPath), and extension_workspace reads the workspace with it. A project created later is not covered: run this login again to add it. The login ${endsSentence(expiresAt)}.`,
       warnings: [tokenTtlNote(undefined, undefined, apiBase)],
     });
   }
@@ -881,7 +908,7 @@ export async function loginToWorkspace(args: {
     command: "extension_auth",
     status: "logged-in",
     value: { workspaceSlug: workspace, projects: WORKSPACE_WILDCARD, logins },
-    hint: `Logged in to all ${logins.length} project${logins.length === 1 ? "" : "s"} of ${workspace} the approver saw: ${logins.map((login) => login.projectSlug).join(", ")}. Each has its own stored token; token-scoped tools take \`project\` to pick one, and extension_workspace reads the workspace with any of them. A project created later is not covered: run this login again to add it. Every token expires within 7 days.`,
+    hint: `Logged in to all ${logins.length} project${logins.length === 1 ? "" : "s"} of ${workspace} the approver saw: ${logins.map((login) => login.projectSlug).join(", ")}. Each has its own stored token; token-scoped tools take \`project\` to pick one, and extension_workspace reads the workspace with any of them. A project created later is not covered: run this login again to add it. Every token ${endsSentence(logins[0]?.expiresAt)}.`,
     warnings: [tokenTtlNote(undefined, undefined, apiBase)],
   });
 }

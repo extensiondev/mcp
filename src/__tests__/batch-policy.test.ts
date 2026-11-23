@@ -232,6 +232,7 @@ describe("--project holds a batch to the pinned project, name by name", () => {
     expect(sentTo("/api/cli/device/code")[0]).toEqual({
       projects: ["acme/app"],
       clientName: "extension-mcp",
+      lifetime: "day",
     });
 
     const create = await call(client, "extension_project_create", {
@@ -254,6 +255,7 @@ describe("--project holds a batch to the pinned project, name by name", () => {
     expect(sentTo("/api/cli/device/code")[0]).toEqual({
       project: "acme/app",
       clientName: "extension-mcp",
+      lifetime: "day",
     });
   });
 });
