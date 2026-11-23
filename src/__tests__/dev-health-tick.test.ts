@@ -38,6 +38,15 @@ function fakeCli(script: string): SpawnedCli {
 
 let nextChild: () => SpawnedCli = () => fakeCli("setTimeout(()=>{}, 60000)");
 
+vi.mock("../lib/boot-verdict", async (importOriginal) => (await import("./fixtures/short-boot")).shortBootWindow(await importOriginal(), 800));
+vi.mock("node:timers/promises", async (importOriginal) => (await import("./fixtures/short-boot")).shortSleeps(await importOriginal()));
+
+const building = (land: () => void) => () => {
+  setTimeout(land, 300);
+
+  return fakeCli('console.log("building"); setTimeout(()=>{}, 60000);');
+};
+
 vi.mock("../lib/exec", async (importOriginal) => {
   const actual = await importOriginal<typeof ExecModule>();
 
@@ -256,11 +265,7 @@ describe("extension_dev health tick", () => {
 
     fs.writeFileSync(path.join(project, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "x", version: "1.0.0", action }));
 
-    nextChild = () => {
-      setTimeout(() => writeModernContract(project, "chrome", { controlPort: 43210 }), 300);
-
-      return fakeCli('console.log("building"); setTimeout(()=>{}, 60000);');
-    };
+    nextChild = building(() => writeModernContract(project, "chrome", { controlPort: 43210 }));
 
     expect(JSON.parse(await dev.handler({ wait: false, projectPath: project })).hint).toMatch(said);
   }, 15_000);
@@ -268,12 +273,7 @@ describe("extension_dev health tick", () => {
   it("names the output that browser's session owns, not a profile lock, when a session already runs", async () => {
     const project = tmpProject();
 
-    nextChild = () => {
-      const cli = fakeCli('console.log("building"); setTimeout(()=>{}, 60000);');
-      setTimeout(() => writeModernContract(project, "chrome", { controlPort: 43210 }), 300);
-
-      return cli;
-    };
+    nextChild = building(() => writeModernContract(project, "chrome", { controlPort: 43210 }));
 
     const first = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
     expect(first.status).toBe("started");
@@ -390,7 +390,7 @@ describe("extension_dev port truth", () => {
           runtime: "attached",
           executorAttachedAt: new Date().toISOString(),
         });
-      }, 1000);
+      }, 300);
 
       return cli;
     };

@@ -12,11 +12,11 @@ import type * as TimersModule from "node:timers/promises";
 export const SHORT_BOOT_MS = 200;
 export const SHORT_SLEEP_MS = 100;
 
-export function shortBootWindow(actual: typeof BootVerdictModule): typeof BootVerdictModule {
+export function shortBootWindow(actual: typeof BootVerdictModule, windowMs = SHORT_BOOT_MS): typeof BootVerdictModule {
   return {
     ...actual,
     pollBootVerdict: (projectPath, browser, options) =>
-      actual.pollBootVerdict(projectPath, browser, { ...options, budgetMs: Math.min(options.budgetMs, SHORT_BOOT_MS) }),
+      actual.pollBootVerdict(projectPath, browser, { ...options, budgetMs: Math.min(options.budgetMs, windowMs) }),
   };
 }
 
