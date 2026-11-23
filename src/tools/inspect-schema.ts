@@ -16,7 +16,7 @@ import { TARGET_ID_PROPERTY } from "../lib/target-pick";
 export const schema = {
   name: "extension_inspect",
   description:
-    "Inspect a web page (or targetId) over the debugger protocol: HTML, DOM, console, probes, closed shadow roots. Surfaces by name are extension_dom_snapshot. Firefox: agent bridge, needs allowEval:true.",
+    "Inspect a web page or targetId over the debugger protocol: HTML, DOM, console, probes, closed shadow roots. Pick it over extension_dom_snapshot for a web page. Firefox: agent bridge, needs allowEval.",
   inputSchema: {
     type: "object" as const,
     properties: {

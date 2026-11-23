@@ -27,7 +27,7 @@ import {
 export const schema = {
   name: "extension_storage",
   description:
-    "Read or write one chrome.storage key from the background, over the control channel.",
+    "Read or write the extension's chrome.storage from the background over the control channel, no eval.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -35,7 +35,7 @@ export const schema = {
       action: {
         type: "string",
         enum: ["get", "set"],
-        description: "get reads a key or the whole area; set writes one.",
+        description: "get: a key, or the whole area; set: one key, read back in value.readBack.",
       },
       area: {
         type: "string",

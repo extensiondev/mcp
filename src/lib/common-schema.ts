@@ -59,7 +59,7 @@ export const SESSION_PROJECT_PATH = {
 
 export const SESSION_BROWSER = {
   type: "string",
-  description: "Session browser; required when several run.",
+  description: "Session browser; required if several run.",
 } as const;
 
 export const CALL_TIMEOUT = {

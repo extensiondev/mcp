@@ -63,7 +63,7 @@ const MIN_TIMEOUT_MS = 1_000;
 export const schema = {
   name: "extension_wait",
   description:
-    "Wait for a session to be ready, or for: \"rebuild\" after an edit; only after wait:false, a ready.status not \"ready\", or noBrowser; answers port, controlPort and cdpPort or rdpPort. A page condition is extension_eval until; never sleep in a shell.",
+    "Wait for a session to be ready (only after wait:false, a ready.status not \"ready\", or noBrowser) or for: \"rebuild\" after an edit. Answers port, controlPort and cdpPort or rdpPort. A page condition is extension_eval until; never sleep in a shell.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -73,7 +73,7 @@ export const schema = {
         type: "number",
         default: DEFAULT_TIMEOUT_MS,
         description:
-          `Wait budget in ms, clamped ${MIN_TIMEOUT_MS}-${SAFE_CEILING_MS}.`,
+          `Wait budget in ms, clamped ${MIN_TIMEOUT_MS}-${SAFE_CEILING_MS}; on starting, call again.`,
       },
       timeout: {
         type: "number",

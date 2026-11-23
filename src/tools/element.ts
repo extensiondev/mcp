@@ -29,7 +29,7 @@ import { pickTargetFor, type Picked } from "./element-target";
 export const schema = {
   name: "extension_element",
   description:
-    "Click, fill, read or wait for one element by CSS selector, or send trusted mouse and key input in an open surface, a page by url or a targetId. Runs no caller code, so no allowEval; Chromium only.",
+    "Click, fill, read or wait for one element by CSS selector, or send trusted mouse and key input in a surface, page or targetId. Pick it over extension_eval: no caller code, no allowEval. Chromium only.",
   inputSchema: {
     type: "object" as const,
     properties: {

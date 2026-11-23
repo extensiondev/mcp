@@ -140,7 +140,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; required when several run."
+          "description": "Session browser; required if several run."
         },
         {
           "name": "timeout",
@@ -820,7 +820,7 @@
       "name": "extension_dom_snapshot",
       "tier": "see",
       "group": "local",
-      "description": "Take a shallow DOM snapshot of one open surface or targetId, or list what is open (listTargets on the debug port, listTabs). Closed shadow roots and probes: extension_inspect.",
+      "description": "Take a shallow DOM snapshot of one open surface or targetId, or list what is open (listTargets on the debug port, listTabs). Pick it over extension_inspect for a named surface.",
       "gate": "a dev session, which carries control unless started with allowControl: false",
       "samplePrompt": "Snapshot the popup and tell me what it rendered",
       "readOnly": true,
@@ -857,7 +857,7 @@
           "name": "targetId",
           "type": "string",
           "required": false,
-          "description": "targetId from extension_open or dom_snapshot listTargets; overrides url."
+          "description": "From extension_open or dom_snapshot listTargets; overrides url."
         },
         {
           "name": "listTargets",
@@ -906,7 +906,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; required when several run."
+          "description": "Session browser; required if several run."
         },
         {
           "name": "timeout",
@@ -920,7 +920,7 @@
       "name": "extension_element",
       "tier": "act",
       "group": "local",
-      "description": "Click, fill, read or wait for one element by CSS selector, or send trusted mouse and key input in an open surface, a page by url or a targetId. Runs no caller code, so no allowEval; Chromium only.",
+      "description": "Click, fill, read or wait for one element by CSS selector, or send trusted mouse and key input in a surface, page or targetId. Pick it over extension_eval: no caller code, no allowEval. Chromium only.",
       "gate": "a live Chromium dev or start session with its debug port; no allowEval",
       "samplePrompt": "Click the Save button in the popup, then read the status line",
       "readOnly": false,
@@ -1023,13 +1023,13 @@
           "name": "targetId",
           "type": "string",
           "required": false,
-          "description": "targetId from extension_open or dom_snapshot listTargets; overrides url."
+          "description": "From extension_open or dom_snapshot listTargets; overrides url."
         },
         {
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; required when several run."
+          "description": "Session browser; required if several run."
         },
         {
           "name": "timeout",
@@ -1043,7 +1043,7 @@
       "name": "extension_eval",
       "tier": "act",
       "group": "local",
-      "description": "Evaluate JavaScript in a running extension's background, surface, content script, page or targetId. Needs allowEval:true at start (by hand: --allow-eval) on every route, the debug port included, whose runs carry a user gesture. Safari: pages only; extension_logs reads the background.",
+      "description": "Evaluate JavaScript in a running extension's background, surface, content script, page or targetId. Needs allowEval:true at start (by hand: --allow-eval) on every route, the debug port included, whose runs carry a user gesture. Safari: pages only; extension_logs reads the background. Pick it last.",
       "gate": "a session started with allowEval: true on extension_dev",
       "samplePrompt": "Evaluate chrome.runtime.id in the background and in the popup",
       "readOnly": false,
@@ -1086,20 +1086,20 @@
           "name": "targetId",
           "type": "string",
           "required": false,
-          "description": "targetId from extension_open or dom_snapshot listTargets; overrides url."
+          "description": "From extension_open or dom_snapshot listTargets; overrides url."
         },
         {
           "name": "observe",
           "type": "boolean | string",
           "required": false,
           "default": false,
-          "description": "true adds value.observation, the surface's elements once settled; a surface name (popup, options...) reads that one."
+          "description": "true adds value.observation, the settled surface's elements; a surface name (e.g. popup) reads that one."
         },
         {
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; required when several run."
+          "description": "Session browser; required if several run."
         },
         {
           "name": "timeout",
@@ -1119,7 +1119,7 @@
       "name": "extension_inspect",
       "tier": "see",
       "group": "local",
-      "description": "Inspect a web page (or targetId) over the debugger protocol: HTML, DOM, console, probes, closed shadow roots. Surfaces by name are extension_dom_snapshot. Firefox: agent bridge, needs allowEval:true.",
+      "description": "Inspect a web page or targetId over the debugger protocol: HTML, DOM, console, probes, closed shadow roots. Pick it over extension_dom_snapshot for a web page. Firefox: agent bridge, needs allowEval.",
       "gate": "a live dev or start session",
       "samplePrompt": "Read the DOM the content script injected on the cart page, shadow roots included",
       "readOnly": false,
@@ -1144,7 +1144,7 @@
           "name": "targetId",
           "type": "string",
           "required": false,
-          "description": "targetId from extension_open or dom_snapshot listTargets; overrides url."
+          "description": "From extension_open or dom_snapshot listTargets; overrides url."
         },
         {
           "name": "probe",
@@ -1167,7 +1167,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; required when several run."
+          "description": "Session browser; required if several run."
         },
         {
           "name": "maxBytes",
@@ -1189,7 +1189,7 @@
       "name": "extension_list_extensions",
       "tier": "see",
       "group": "local",
-      "description": "List the extensions in a session's browser; its own carries ownExtension:true.",
+      "description": "List the extensions installed in a session's browser, read-only; its own row has ownExtension:true.",
       "gate": "a live dev or start session",
       "samplePrompt": "Which extensions are loaded in the dev browser right now?",
       "readOnly": true,
@@ -1208,7 +1208,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; required when several run."
+          "description": "Session browser; required if several run."
         }
       ]
     },
@@ -1216,7 +1216,7 @@
       "name": "extension_logs",
       "tier": "see",
       "group": "local",
-      "description": "Read a dev session's logs from every context in one timeline, or follow:true for live frames after the replayed ring. Works on a `npx extension dev` run by hand (follow needs --allow-control there); not on extension_start.",
+      "description": "Read a dev session's logs from every context in one timeline, or follow:true for live frames after the replayed ring. Pick it for what happened. Works on a `npx extension dev` run by hand (follow needs --allow-control there); not on extension_start.",
       "gate": "a live dev or start session",
       "samplePrompt": "Show me every log line since the session started, in order",
       "readOnly": true,
@@ -1420,7 +1420,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; required when several run."
+          "description": "Session browser; required if several run."
         }
       ]
     },
@@ -1518,13 +1518,13 @@
           "type": "boolean | string",
           "required": false,
           "default": false,
-          "description": "true adds value.observation, the surface's elements once settled; a surface name (popup, options...) reads that one."
+          "description": "true adds value.observation, the settled surface's elements; a surface name (e.g. popup) reads that one."
         },
         {
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; required when several run."
+          "description": "Session browser; required if several run."
         },
         {
           "name": "timeout",
@@ -2046,13 +2046,13 @@
           "type": "boolean | string",
           "required": false,
           "default": false,
-          "description": "true adds value.observation, the surface's elements once settled; a surface name (popup, options...) reads that one."
+          "description": "true adds value.observation, the settled surface's elements; a surface name (e.g. popup) reads that one."
         },
         {
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; required when several run."
+          "description": "Session browser; required if several run."
         },
         {
           "name": "timeout",
@@ -2085,7 +2085,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; required when several run."
+          "description": "Session browser; required if several run."
         },
         {
           "name": "context",
@@ -2104,7 +2104,7 @@
           "name": "targetId",
           "type": "string",
           "required": false,
-          "description": "targetId from extension_open or dom_snapshot listTargets; overrides url."
+          "description": "From extension_open or dom_snapshot listTargets; overrides url."
         },
         {
           "name": "width",
@@ -2448,7 +2448,7 @@
       "name": "extension_storage",
       "tier": "act",
       "group": "local",
-      "description": "Read or write one chrome.storage key from the background, over the control channel.",
+      "description": "Read or write the extension's chrome.storage from the background over the control channel, no eval.",
       "gate": "a dev session, which carries control unless started with allowControl: false",
       "samplePrompt": "Read chrome.storage.local and set settings.theme to dark",
       "readOnly": false,
@@ -2467,7 +2467,7 @@
           "name": "action",
           "type": "\"get\" | \"set\"",
           "required": true,
-          "description": "get reads a key or the whole area; set writes one."
+          "description": "get: a key, or the whole area; set: one key, read back in value.readBack."
         },
         {
           "name": "area",
@@ -2499,13 +2499,13 @@
           "type": "boolean | string",
           "required": false,
           "default": false,
-          "description": "true adds value.observation, the surface's elements once settled; a surface name (popup, options...) reads that one."
+          "description": "true adds value.observation, the settled surface's elements; a surface name (e.g. popup) reads that one."
         },
         {
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; required when several run."
+          "description": "Session browser; required if several run."
         },
         {
           "name": "timeout",
@@ -2944,7 +2944,7 @@
       "name": "extension_wait",
       "tier": "run",
       "group": "local",
-      "description": "Wait for a session to be ready, or for: \"rebuild\" after an edit; only after wait:false, a ready.status not \"ready\", or noBrowser; answers port, controlPort and cdpPort or rdpPort. A page condition is extension_eval until; never sleep in a shell.",
+      "description": "Wait for a session to be ready (only after wait:false, a ready.status not \"ready\", or noBrowser) or for: \"rebuild\" after an edit. Answers port, controlPort and cdpPort or rdpPort. A page condition is extension_eval until; never sleep in a shell.",
       "gate": "a live dev or start session",
       "samplePrompt": "Wait until the dev session is ready, then tell me the ports",
       "readOnly": true,
@@ -2963,14 +2963,14 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; required when several run."
+          "description": "Session browser; required if several run."
         },
         {
           "name": "timeoutMs",
           "type": "number",
           "required": false,
           "default": 45000,
-          "description": "Wait budget in ms, clamped 1000-50000."
+          "description": "Wait budget in ms, clamped 1000-50000; on starting, call again."
         },
         {
           "name": "timeout",

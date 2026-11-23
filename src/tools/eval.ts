@@ -132,7 +132,7 @@ const pageRef = (t: { targetId: string; url: string }): TargetRef => ({ targetId
 export const schema = {
   name: "extension_eval",
   description:
-    "Evaluate JavaScript in a running extension's background, surface, content script, page or targetId. Needs allowEval:true at start (by hand: --allow-eval) on every route, the debug port included, whose runs carry a user gesture. Safari: pages only; extension_logs reads the background.",
+    "Evaluate JavaScript in a running extension's background, surface, content script, page or targetId. Needs allowEval:true at start (by hand: --allow-eval) on every route, the debug port included, whose runs carry a user gesture. Safari: pages only; extension_logs reads the background. Pick it last.",
   inputSchema: {
     type: "object" as const,
     properties: {

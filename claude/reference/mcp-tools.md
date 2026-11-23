@@ -43,7 +43,7 @@ Run a test stage on an extension_dev or extension_start session: pass, fail, not
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
 | `expect` | array of object | yes |  | Each { assert: <id>, ...args }: background-worker-booted; surface-rendered {surface, selector?, minNodes?}; content-script-injected {url}; storage-key-present {key, area?, equals?, context?}; console-errors-empty {context?, since?, ignore?}; page-world-clean {url, pageGlobals?}; no-outside-requests {allow?, durationMs?}. |
-| `browser` | string | no |  | Session browser; required when several run. |
+| `browser` | string | no |  | Session browser; required if several run. |
 | `timeout` | number | no |  | Timeout ms (default 30000; Firefox 10000; debug port 15000). |
 
 ## extension_auth
@@ -195,7 +195,7 @@ Diagnose a dev session leg by leg, each with its remediation; run it first when 
 
 ## extension_dom_snapshot
 
-Take a shallow DOM snapshot of one open surface or targetId, or list what is open (listTargets on the debug port, listTabs). Closed shadow roots and probes: extension_inspect.
+Take a shallow DOM snapshot of one open surface or targetId, or list what is open (listTargets on the debug port, listTabs). Pick it over extension_inspect for a named surface.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -203,19 +203,19 @@ Take a shallow DOM snapshot of one open surface or targetId, or list what is ope
 | `tab` | number | no |  | chrome.tabs id; else url, else the active tab. |
 | `url` | string | no |  | content/page: the tab by url. |
 | `tabUrl` | string | no |  | The tab by url from the target list. |
-| `targetId` | string | no |  | targetId from extension_open or dom_snapshot listTargets; overrides url. |
+| `targetId` | string | no |  | From extension_open or dom_snapshot listTargets; overrides url. |
 | `listTargets` | boolean | no | `false` | List page targets and return. |
 | `listTabs` | boolean | no | `false` | List tabs with ids and return. |
 | `context` | "content" \| "page" \| "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" | no | `"content"` | A closed surface is opened first (as extension_open does); the answer then says opened: true. |
 | `include` | array of "summary" \| "html" \| "elements" | no | `["summary"]` | summary: counts. html: markup to maxBytes. elements: visible interactive elements with role, name, unique selector and state. |
 | `maxBytes` | number | no | `32768` | Byte cap on the html. |
 | `withConsole` | number \| boolean | no |  | Console lines: a count, or true for 50. |
-| `browser` | string | no |  | Session browser; required when several run. |
+| `browser` | string | no |  | Session browser; required if several run. |
 | `timeout` | number | no |  | Timeout ms (default 30000; Firefox 10000; debug port 15000). |
 
 ## extension_element
 
-Click, fill, read or wait for one element by CSS selector, or send trusted mouse and key input in an open surface, a page by url or a targetId. Runs no caller code, so no allowEval; Chromium only.
+Click, fill, read or wait for one element by CSS selector, or send trusted mouse and key input in a surface, page or targetId. Pick it over extension_eval: no caller code, no allowEval. Chromium only.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -234,13 +234,13 @@ Click, fill, read or wait for one element by CSS selector, or send trusted mouse
 | `deltaY` | number | no |  | scroll: wheel delta in CSS pixels (positive scrolls down). |
 | `context` | "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" | no |  | An open surface (extension_open first). |
 | `url` | string | no |  | A web page's tab by url. |
-| `targetId` | string | no |  | targetId from extension_open or dom_snapshot listTargets; overrides url. |
-| `browser` | string | no |  | Session browser; required when several run. |
+| `targetId` | string | no |  | From extension_open or dom_snapshot listTargets; overrides url. |
+| `browser` | string | no |  | Session browser; required if several run. |
 | `timeout` | number | no |  | Timeout ms; wait polls until it (default 10000, max 30000). |
 
 ## extension_eval
 
-Evaluate JavaScript in a running extension's background, surface, content script, page or targetId. Needs allowEval:true at start (by hand: --allow-eval) on every route, the debug port included, whose runs carry a user gesture. Safari: pages only; extension_logs reads the background.
+Evaluate JavaScript in a running extension's background, surface, content script, page or targetId. Needs allowEval:true at start (by hand: --allow-eval) on every route, the debug port included, whose runs carry a user gesture. Safari: pages only; extension_logs reads the background. Pick it last.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -249,39 +249,39 @@ Evaluate JavaScript in a running extension's background, surface, content script
 | `context` | "background" \| "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" \| "content" \| "page" | no |  | Default page on a Chromium MV3 session, else background; a closed surface is opened first (as extension_open does). |
 | `url` | string | no |  | content/page: the tab by url. |
 | `tab` | number | no |  | chrome.tabs id to break a url tie. |
-| `targetId` | string | no |  | targetId from extension_open or dom_snapshot listTargets; overrides url. |
-| `observe` | boolean \| string | no | `false` | true adds value.observation, the surface's elements once settled; a surface name (popup, options...) reads that one. |
-| `browser` | string | no |  | Session browser; required when several run. |
+| `targetId` | string | no |  | From extension_open or dom_snapshot listTargets; overrides url. |
+| `observe` | boolean \| string | no | `false` | true adds value.observation, the settled surface's elements; a surface name (e.g. popup) reads that one. |
+| `browser` | string | no |  | Session browser; required if several run. |
 | `timeout` | number | no |  | Timeout ms (default 30000; Firefox 10000; debug port 15000). |
 | `until` | object | no |  | Repeat until truthy ({} for defaults); never sleep in a shell. |
 
 ## extension_inspect
 
-Inspect a web page (or targetId) over the debugger protocol: HTML, DOM, console, probes, closed shadow roots. Surfaces by name are extension_dom_snapshot. Firefox: agent bridge, needs allowEval:true.
+Inspect a web page or targetId over the debugger protocol: HTML, DOM, console, probes, closed shadow roots. Pick it over extension_dom_snapshot for a web page. Firefox: agent bridge, needs allowEval.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
 | `url` | string | no |  | Navigate here first, or the url substring to pick. |
-| `targetId` | string | no |  | targetId from extension_open or dom_snapshot listTargets; overrides url. |
+| `targetId` | string | no |  | From extension_open or dom_snapshot listTargets; overrides url. |
 | `probe` | array of string | no |  | CSS selectors to count and sample. |
 | `include` | array of "html" \| "summary" \| "meta" \| "dom_snapshot" \| "console" \| "extension_roots" | no | `["summary","meta","console"]` | What to include |
-| `browser` | string | no |  | Session browser; required when several run. |
+| `browser` | string | no |  | Session browser; required if several run. |
 | `maxBytes` | number | no | `32768` | HTML byte cap (0 = none). |
 | `deepDom` | boolean | no | `false` | Pierce closed shadow roots; other open roots are not crossed. |
 
 ## extension_list_extensions
 
-List the extensions in a session's browser; its own carries ownExtension:true.
+List the extensions installed in a session's browser, read-only; its own row has ownExtension:true.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
-| `browser` | string | no |  | Session browser; required when several run. |
+| `browser` | string | no |  | Session browser; required if several run. |
 
 ## extension_logs
 
-Read a dev session's logs from every context in one timeline, or follow:true for live frames after the replayed ring. Works on a `npx extension dev` run by hand (follow needs --allow-control there); not on extension_start.
+Read a dev session's logs from every context in one timeline, or follow:true for live frames after the replayed ring. Pick it for what happened. Works on a `npx extension dev` run by hand (follow needs --allow-control there); not on extension_start.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -324,7 +324,7 @@ Stub a network response on a Chromium session: add a rule, list or clear the rul
 | `body` | string | no |  | add: response text. |
 | `json` | any | no |  | add: response as a JSON value; not with body. |
 | `contentType` | string | no |  | add: Content-Type; default by body or json. |
-| `browser` | string | no |  | Session browser; required when several run. |
+| `browser` | string | no |  | Session browser; required if several run. |
 
 ## extension_open
 
@@ -344,8 +344,8 @@ Open an extension surface or a url, or replay the toolbar action, a context menu
 | `newTab` | boolean | no | `false` | New tab even if one shows the url. |
 | `tab` | number | no |  | With url: navigate this chrome.tabs id (not a tab position; from dom_snapshot listTabs: true); with menuItemId: the tab the click is for (default the active tab). |
 | `asTab` | boolean | no | `false` | Render the surface in a tab. |
-| `observe` | boolean \| string | no | `false` | true adds value.observation, the surface's elements once settled; a surface name (popup, options...) reads that one. |
-| `browser` | string | no |  | Session browser; required when several run. |
+| `observe` | boolean \| string | no | `false` | true adds value.observation, the settled surface's elements; a surface name (e.g. popup) reads that one. |
+| `browser` | string | no |  | Session browser; required if several run. |
 | `timeout` | number | no |  | Timeout ms (default 30000; Firefox 10000; debug port 15000). |
 
 ## extension_preview_web
@@ -456,8 +456,8 @@ Reload a live session's background, or one tab, over the control channel (allowC
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
 | `context` | "background" \| "content" \| "page" | no | `"background"` | Background, or a content or page tab. |
 | `tab` | number | no |  | content/page: the tab id. |
-| `observe` | boolean \| string | no | `false` | true adds value.observation, the surface's elements once settled; a surface name (popup, options...) reads that one. |
-| `browser` | string | no |  | Session browser; required when several run. |
+| `observe` | boolean \| string | no | `false` | true adds value.observation, the settled surface's elements; a surface name (e.g. popup) reads that one. |
+| `browser` | string | no |  | Session browser; required if several run. |
 | `timeout` | number | no |  | Timeout ms (default 30000; Firefox 10000; debug port 15000). |
 
 ## extension_screenshot
@@ -467,10 +467,10 @@ Take a .png of one surface, page or targetId in a live session (Safari: pages on
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
-| `browser` | string | no |  | Session browser; required when several run. |
+| `browser` | string | no |  | Session browser; required if several run. |
 | `context` | "page" \| "popup" \| "options" \| "sidebar" \| "newtab" \| "history" \| "bookmarks" | no | `"page"` | page: the tab url picks; else that open surface. |
 | `url` | string | no |  | page: tab url substring. |
-| `targetId` | string | no |  | targetId from extension_open or dom_snapshot listTargets; overrides url. |
+| `targetId` | string | no |  | From extension_open or dom_snapshot listTargets; overrides url. |
 | `width` | number | no |  | Viewport width (CSS px). |
 | `height` | number | no |  | Viewport height (CSS px). |
 | `deviceScaleFactor` | number | no |  | Pixel ratio, 0.5 to 4. |
@@ -541,18 +541,18 @@ Stop a dev or start session and its browser when done; answers the server and br
 
 ## extension_storage
 
-Read or write one chrome.storage key from the background, over the control channel.
+Read or write the extension's chrome.storage from the background over the control channel, no eval.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
-| `action` | "get" \| "set" | yes |  | get reads a key or the whole area; set writes one. |
+| `action` | "get" \| "set" | yes |  | get: a key, or the whole area; set: one key, read back in value.readBack. |
 | `area` | "local" \| "sync" \| "session" \| "managed" | no | `"local"` | chrome.storage area. |
 | `key` | string | no |  | Key to get or set. |
 | `value` | any | no |  | Value to set; for null or "" use valueJson. |
 | `valueJson` | string | no |  | Value as JSON text; not with value. |
-| `observe` | boolean \| string | no | `false` | true adds value.observation, the surface's elements once settled; a surface name (popup, options...) reads that one. |
-| `browser` | string | no |  | Session browser; required when several run. |
+| `observe` | boolean \| string | no | `false` | true adds value.observation, the settled surface's elements; a surface name (e.g. popup) reads that one. |
+| `browser` | string | no |  | Session browser; required if several run. |
 | `timeout` | number | no |  | Timeout ms (default 30000; Firefox 10000; debug port 15000). |
 
 ## extension_submit
@@ -649,13 +649,13 @@ Run a published extension.dev build in a fresh profile on this machine, no insta
 
 ## extension_wait
 
-Wait for a session to be ready, or for: "rebuild" after an edit; only after wait:false, a ready.status not "ready", or noBrowser; answers port, controlPort and cdpPort or rdpPort. A page condition is extension_eval until; never sleep in a shell.
+Wait for a session to be ready (only after wait:false, a ready.status not "ready", or noBrowser) or for: "rebuild" after an edit. Answers port, controlPort and cdpPort or rdpPort. A page condition is extension_eval until; never sleep in a shell.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Extension project root |
-| `browser` | string | no |  | Session browser; required when several run. |
-| `timeoutMs` | number | no | `45000` | Wait budget in ms, clamped 1000-50000. |
+| `browser` | string | no |  | Session browser; required if several run. |
+| `timeoutMs` | number | no | `45000` | Wait budget in ms, clamped 1000-50000; on starting, call again. |
 | `timeout` | number | no |  | Deprecated alias of timeoutMs. |
 | `for` | "ready" \| "rebuild" | no | `"ready"` | rebuild: the next compile and reload after an edit. |
 | `since` | string | no |  | rebuild: ISO time a compile must follow. |

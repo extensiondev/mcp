@@ -50,7 +50,7 @@ export const OBSERVE_PROPERTY = {
   type: ["boolean", "string"],
   default: false,
   description:
-    "true adds value.observation, the surface's elements once settled; a surface name (popup, options...) reads that one.",
+    "true adds value.observation, the settled surface's elements; a surface name (e.g. popup) reads that one.",
 };
 
 export type ObserveAsk = { on: false } | { on: true; context?: string; refused?: string };
