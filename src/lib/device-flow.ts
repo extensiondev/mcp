@@ -22,6 +22,7 @@ export interface DeviceCodeStart {
   verificationUriComplete: string;
   interval: number;
   expiresIn: number;
+  lifetime?: DeviceLifetime;
 }
 
 export type DeviceIntent = "login" | "create" | "create-workspace";
@@ -44,6 +45,18 @@ export type DeviceLifetime = "hour" | "day";
 export const CREATE_LOGIN_LIFETIME: DeviceLifetime = "day";
 
 const LIFETIME_REFUSED = "DEVICE_LIFETIME_INVALID";
+
+/* @invariant A PENDING CREATE STATES THE SIGN-IN THE PLATFORM ACCEPTED, NOT
+ * THE ONE THAT WAS ASKED. The start answers with the lifetime the accepted
+ * request carried, and with none when the platform refused the field and the
+ * start was made again without it, which is the platform's seven days.
+ */
+export function createSignInWords(start: Pick<DeviceCodeStart, "lifetime">): string {
+  if (start.lifetime === "hour") return "1 hour";
+  if (start.lifetime === "day") return "1 day";
+
+  return "7 days, since this platform takes no shorter lifetime on a create";
+}
 
 function originOf(url: string): string | null {
   try {
@@ -113,6 +126,7 @@ export async function requestDeviceCode(args: {
   fetchImpl?: FetchImpl;
 }): Promise<DeviceCodeStart> {
   const doFetch = deviceFetch(args.fetchImpl ?? fetch);
+  const sentLifetime = args.lifetime && args.intent !== "create-workspace" ? args.lifetime : undefined;
   const batch =
     args.projects === "*" || (Array.isArray(args.projects) && args.projects.length > 0);
   const res = await doFetch(`${args.apiBase}${args.path}`, {
@@ -124,7 +138,7 @@ export async function requestDeviceCode(args: {
       ...(args.workspace ? { workspace: args.workspace } : {}),
       clientName: args.clientName ?? "extension-mcp",
       ...(args.intent ? { intent: args.intent } : {}),
-      ...(args.lifetime && args.intent !== "create-workspace" ? { lifetime: args.lifetime } : {}),
+      ...(sentLifetime ? { lifetime: sentLifetime } : {}),
     }),
   });
   const text = await res.text();
@@ -136,7 +150,7 @@ export async function requestDeviceCode(args: {
     data = { message: text };
   }
 
-  if (res.status === 400 && data.code === LIFETIME_REFUSED && args.lifetime && args.intent === "create") {
+  if (res.status === 400 && data.code === LIFETIME_REFUSED && sentLifetime && args.intent === "create") {
     return requestDeviceCode({ ...args, lifetime: undefined });
   }
 
@@ -185,6 +199,7 @@ export async function requestDeviceCode(args: {
     ),
     interval: positiveNumber(data.interval, 5),
     expiresIn: positiveNumber(data.expires_in, 900),
+    ...(sentLifetime ? { lifetime: sentLifetime } : {}),
   };
 }
 

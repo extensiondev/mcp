@@ -45,8 +45,8 @@ export { LOGIN_STEPS, MEMBER_PROJECT, NO_TOKEN_MESSAGE, PROJECT_TOKEN_INPUT, cre
 export type { CredentialSelector, StoredCredentials } from "./lib/credentials";
 export { composedDashboardUrl } from "./lib/dashboard-url-meter";
 export { deferWarning } from "./lib/deferred-warnings";
-export { pollDeviceGrant, requestDeviceCode } from "./lib/device-flow";
-export type { DeviceCodeStart, DeviceIntent } from "./lib/device-flow";
+export { CREATE_LOGIN_LIFETIME, createSignInWords, pollDeviceGrant, requestDeviceCode } from "./lib/device-flow";
+export type { DeviceCodeStart, DeviceIntent, DeviceLifetime } from "./lib/device-flow";
 export { DEVICE_WAIT_MAX_SECONDS, codeExpiresAt, codeExpiryFromStart, deviceWait, deviceWaitDescription, expiredSentence, firstCallWaitWarning, forgetCodeExpiry, rememberCodeExpiry, resumeWaitSentence, waitRanOutSentence, waitValue } from "./lib/device-wait";
 export type { DeviceWait } from "./lib/device-wait";
 export { LOGIN_LIFETIMES, readLoginLifetime } from "./lib/login-lifetime";

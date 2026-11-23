@@ -13,7 +13,7 @@ import { wwwImportPath } from "@extension.dev/urls/paths";
 import { linksOf, madeSentence, recordedOutcome } from "../lib/act-outcome";
 import { createRequestDeadline, readBackOnce, RESUME_POLL_MS } from "../lib/call-budget";
 import { API_BASE } from "../lib/common-schema";
-import { CREATE_LOGIN_LIFETIME, pollDeviceGrant, type DeviceCodeStart } from "../lib/device-flow";
+import { CREATE_LOGIN_LIFETIME, createSignInWords, pollDeviceGrant, type DeviceCodeStart, type DeviceLifetime } from "../lib/device-flow";
 import { laneClosedByServer } from "../lib/credential-source";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { kernelHook } from "../lib/kernel-hooks";
@@ -336,6 +336,7 @@ async function pendingEnvelope(start: {
   verificationUri: string;
   verificationUriComplete?: string;
   expiresIn: number;
+  lifetime?: DeviceLifetime;
 }, pendingFor: { apiBase: string; project: string; ref?: string; install?: { rootDirectory: string; workspaceRoot: string } }, waitSeconds: unknown): Promise<string> {
   const complete = String(start.verificationUriComplete || "").trim();
   const hasCompleteLink =
@@ -355,7 +356,8 @@ async function pendingEnvelope(start: {
     : `Open ${start.verificationUri}, enter code ${start.userCode} and approve creating the project. ${deadlineSentence(expiresAt)}`;
   const installWarning = pendingFor.install ? installDirectoryWarning(pendingFor.install) : null;
   const installs = pendingFor.install?.rootDirectory ? ` Its dependencies will install in ${installDirectoryWords(installDirectoryOf(pendingFor.install))}.` : "";
-  const said = `${message}${built}${installs}`;
+  const signsIn = ` Approving also signs this machine in to the project for ${createSignInWords(start)}.`;
+  const said = `${message}${built}${installs}${signsIn}`;
   const asked = deviceWait({ waitSeconds, fallbackMs: 0 });
   const warnings = [...(asked.waiting ? [firstCallWaitWarning("extension_project_create", asked.bound)] : []), ...(installWarning ? [installWarning] : [])];
 

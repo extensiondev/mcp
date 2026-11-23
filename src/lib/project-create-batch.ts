@@ -12,7 +12,7 @@ import { answerIsUnknownOutcome, readCreatedProject } from "./create-answer";
 import { firstBuildValue, readFirstBuild, withheldBecause } from "./first-build";
 import { answerDeadline, RESUME_POLL_MS, START_WORK_WITHIN_MS } from "./call-budget";
 import { scratchShelf } from "./call-memory";
-import { CREATE_LOGIN_LIFETIME, pollDeviceGrant, type DeviceCodeStart, type DeviceIntent, type DeviceLifetime } from "./device-flow";
+import { CREATE_LOGIN_LIFETIME, createSignInWords, pollDeviceGrant, type DeviceCodeStart, type DeviceIntent, type DeviceLifetime } from "./device-flow";
 import { codeExpiryFromStart, secondsLeft } from "./device-wait";
 import { envelope, type ErrorCode, type RetryVerdict } from "./envelope";
 import { kernelHook } from "./kernel-hooks";
@@ -426,13 +426,14 @@ function pendingEnvelope(args: {
   verificationUriComplete?: string;
   expiresAt: string | null;
   gitRefs: Record<string, string>;
+  signedInFor?: string;
 }): string {
   const complete = String(args.verificationUriComplete || "").trim();
   const hasCompleteLink =
     complete.length > 0 && complete !== args.verificationUri;
   const left = secondsLeft(args.expiresAt);
   const again = `then call extension_project_create again with this deviceCode${args.expiresAt ? ` before ${args.expiresAt.slice(11, 16)} UTC, when the code expires` : ""}; the list is kept here, so the other arguments can be left out`;
-  const page = `The page lists all ${args.refs.length} projects this one approval creates and states how long this device is also signed in to each, a day when the platform takes the lifetime this call asks for`;
+  const page = `The page lists all ${args.refs.length} projects this one approval creates and says this device is also signed in to each${args.signedInFor ? ` for ${args.signedInFor}` : " for as long as it states"}`;
   const named = Object.entries(args.gitRefs);
   const built = named.length ? ` It builds ${refGroups(named, args.refs.length)}, so tell the owner before they approve.` : "";
   const hint = `${!args.userCode
@@ -1264,6 +1265,7 @@ export async function createProjectBatch(args: BatchCreateArgs, local: BatchCrea
         verificationUri: start?.verificationUri ?? config.verificationUri,
         userCode: start?.userCode,
         verificationUriComplete: start?.verificationUriComplete,
+        ...(start ? { signedInFor: createSignInWords(start) } : {}),
         expiresAt: keptLists().get(listKey(apiBase, deviceCode))?.expiresAt ?? null,
         gitRefs: Object.fromEntries(parsed.entries.filter((entry) => entry.gitRef).map((entry) => [entry.ref, entry.gitRef])),
       });

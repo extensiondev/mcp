@@ -943,27 +943,52 @@ describe("extension_project_create", () => {
     expect(JSON.parse(String(codeCall!.init?.body)).lifetime).toBe("day");
   });
 
-  it("1078: starts the create again without a lifetime when the platform refuses the field, so a platform that predates it still creates", async () => {
-    const { fn, calls } = createFetch({
-      token: [{ status: 400, body: { error: "authorization_pending" } }],
-    });
-    const older = vi.fn(async (url: any, init?: RequestInit) => {
-      if (String(url).endsWith("/api/cli/device/code") && JSON.parse(String(init?.body)).lifetime) {
-        calls.push({ url: String(url), init });
+  it("1078: starts the create again without a lifetime only when the platform refuses the field on a create, once, and the pending hint states the sign-in the platform accepted", async () => {
+    const started = async (refusal: { status: number; body: Record<string, unknown> } | null) => {
+      const { fn, calls } = createFetch({
+        token: [{ status: 400, body: { error: "authorization_pending" } }],
+      });
+      const platform = vi.fn(async (url: any, init?: RequestInit) => {
+        if (refusal && String(url).endsWith("/api/cli/device/code") && JSON.parse(String(init?.body)).lifetime) {
+          calls.push({ url: String(url), init });
 
-        return jsonResponse({ code: "DEVICE_LIFETIME_INVALID", message: "Field 'lifetime' is 'hour' or 'day', and only a login takes it." }, 400);
-      }
+          return jsonResponse(refusal.body, refusal.status);
+        }
 
-      return fn(url, init);
-    });
-    vi.stubGlobal("fetch", older);
+        return fn(url, init);
+      });
+      vi.stubGlobal("fetch", platform);
 
-    const out = JSON.parse(await handler(baseArgs));
-    const starts = calls.filter((c) => c.url.endsWith("/api/cli/device/code")).map((c) => JSON.parse(String(c.init?.body)));
+      const out = JSON.parse(await handler(baseArgs));
+      const starts = calls.filter((c) => c.url.endsWith("/api/cli/device/code")).map((c) => JSON.parse(String(c.init?.body)));
 
-    expect(starts.map((body) => [body.intent, body.lifetime])).toEqual([["create", "day"], ["create", undefined]]);
-    expect(out.status).toBe("authorization-pending");
-    expect(out.value.userCode).toBe("ABCD-1234");
+      return { out, starts: starts.map((body) => [body.intent, body.lifetime]) };
+    };
+
+    const taken = await started(null);
+
+    expect(taken.starts).toEqual([["create", "day"]]);
+    expect(taken.out.hint).toContain("Approving also signs this machine in to the project for 1 day.");
+
+    const older = await started({ status: 400, body: { code: "DEVICE_LIFETIME_INVALID", message: "Field 'lifetime' is 'hour' or 'day', and only a login takes it." } });
+
+    expect(older.starts).toEqual([["create", "day"], ["create", undefined]]);
+    expect(older.out.status).toBe("authorization-pending");
+    expect(older.out.value.userCode).toBe("ABCD-1234");
+    expect(older.out.hint).toContain("Approving also signs this machine in to the project for 7 days, since this platform takes no shorter lifetime on a create.");
+    expect(older.out.hint).not.toContain("1 day");
+
+    for (const refusal of [
+      { status: 400, body: { code: "DEVICE_BATCH_INVALID", message: "Bad list." } },
+      { status: 400, body: { message: "DEVICE_LIFETIME_INVALID" } },
+      { status: 429, body: { code: "DEVICE_LIFETIME_INVALID", message: "Slow down." } },
+      { status: 500, body: { code: "DEVICE_LIFETIME_INVALID", message: "Down." } },
+    ]) {
+      const refused = await started(refusal);
+
+      expect(refused.starts, JSON.stringify(refusal)).toEqual([["create", "day"]]);
+      expect(refused.out.ok).toBe(false);
+    }
   });
 
   it("keeps the login the platform minted when the project already exists, so no second approval is asked", async () => {

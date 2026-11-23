@@ -34,6 +34,28 @@ describe("requestDeviceCode reads the platform's numbers, never NaN", () => {
   });
 });
 
+describe("requestDeviceCode and a platform that refuses the lifetime field", () => {
+  it("1078: starts again without it for a create only, and answers the lifetime the accepted start carried", async () => {
+    const run = async (intent: "login" | "create" | "create-workspace", refuses: boolean) => {
+      const bodies: Array<Record<string, unknown>> = [];
+      const fetchImpl = (async (_url: unknown, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body));
+        bodies.push(body);
+
+        return refuses && body.lifetime ? answer({ code: "DEVICE_LIFETIME_INVALID", message: "refused" }, 400) : answer({ device_code: "d", user_code: "U" });
+      }) as typeof fetch;
+      const start = await requestDeviceCode({ apiBase: "http://localhost:3100", path: "/api/cli/device/code", project: "acme/widget", intent, lifetime: "hour", fetchImpl }).catch((error: Error & { serverCode?: string }) => error.serverCode);
+
+      return { lifetimes: bodies.map((body) => body.lifetime), start: typeof start === "string" ? start : start?.lifetime };
+    };
+
+    expect(await run("create", false)).toEqual({ lifetimes: ["hour"], start: "hour" });
+    expect(await run("create", true)).toEqual({ lifetimes: ["hour", undefined], start: undefined });
+    expect(await run("login", true)).toEqual({ lifetimes: ["hour"], start: "DEVICE_LIFETIME_INVALID" });
+    expect(await run("create-workspace", true)).toEqual({ lifetimes: [undefined], start: undefined });
+  });
+});
+
 describe("pollDeviceGrant never calls an answer it cannot read pending", () => {
   it.each([["an empty object", {}], ["a page of html", "<html>ok</html>"], ["tokens with no token", { tokens: [{ token: "t" }] }]])(
     "answers error for %s",

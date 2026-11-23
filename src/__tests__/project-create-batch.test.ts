@@ -412,7 +412,7 @@ describe("extension_project_create with projects: one approval", () => {
 
     expect(out.hint).toContain("lists all 3 projects");
     expect(out.hint).toContain("the other arguments can be left out");
-    expect(out.hint).toContain("states how long this device is also signed in to each");
+    expect(out.hint).toContain("says this device is also signed in to each for 1 day;");
     expect(out.hint).not.toContain("7 days");
 
     const codes = h.to("/api/cli/device/code");
