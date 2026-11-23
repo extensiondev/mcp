@@ -75,6 +75,8 @@ import { installPlatformKernelHooks } from "./lib/platform-kernel-hooks";
 import { registerKernelHooks } from "./lib/kernel-hooks";
 import { forwarderApprovalState } from "./lib/forward-approval-state";
 import { forwardable } from "./lib/hosted-forwarder";
+import { installPromptHandlers } from "./lib/prompts";
+import { installResourceHandlers } from "./lib/resources";
 
 import { version } from "../package.json";
 import { description as SERVER_DESCRIPTION, icons as SERVER_ICONS } from "../server.json";
@@ -286,6 +288,8 @@ export function createServer(
     {
       capabilities: {
         tools: { listChanged: true },
+        prompts: {},
+        resources: {},
       },
       instructions: serverInstructions(options),
     },
@@ -298,6 +302,9 @@ export function createServer(
     ...(setup.stamp ? { stamp: setup.stamp } : {}),
     ...(setup.importBuild ? { importBuild: setup.importBuild } : {}),
   });
+
+  installPromptHandlers(server, options);
+  installResourceHandlers(server);
 
   return server;
 }

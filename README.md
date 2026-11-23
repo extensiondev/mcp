@@ -188,6 +188,26 @@ claude mcp add --transport http extension-dev https://mcp.extension.dev/mcp
 
 The local group scaffolds, builds, runs, inspects, drives and asserts; the platform group logs in, shares, promotes, submits, reads builds, releases and approvals, and runs a published build with `extension_try`; the extras group, off unless named, verifies a Chrome theme and stubs network responses. Every tool has a page under the [tool reference](https://docs.extension.dev/tools/mcp#reference), generated from the schema the server registers, with its inputs, whether it only reads, the gate it needs and a prompt that reaches for it.
 
+## Prompts and resources
+
+The server lists four prompts, starting points a client shows in its prompt menu. Each one tells the agent which tools to call, in order, and to call a change done only after seeing it work in a real browser.
+
+| Prompt | Arguments | What it starts |
+| --- | --- | --- |
+| `create-extension` | `idea`, `browser` (optional) | A new extension from a template, run and proven in a browser |
+| `verify-change` | `change`, `projectPath` and `browser` (optional) | A verdict on an edit, read from a live session |
+| `debug-extension` | `symptom`, `projectPath` and `browser` (optional) | The cause of a content script, popup or background script that does nothing |
+| `prepare-store-submission` | `stores` and `projectPath` (optional) | A store checklist that stops before anything goes to review |
+
+It also serves four read-only documents from its own package, never from your project or the network.
+
+| Resource | What it is |
+| --- | --- |
+| `extension-dev://reference/tools` | Every tool with its inputs, types and defaults |
+| `extension-dev://reference/store-md` | The fields a `STORE.md` may carry |
+| `extension-dev://reference/security` | The [Security](#security) section of this file |
+| `extension-dev://changelog/current` | The [changelog](CHANGELOG.md) section of the running version |
+
 ## Pair with the skill
 
 This server gives agents hands; [`@extension.dev/skill`](https://www.npmjs.com/package/@extension.dev/skill) gives them judgment: cross-browser rules, silent-failure gotchas, debugging playbooks and the store checklist.

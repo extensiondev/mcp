@@ -1,9 +1,14 @@
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import { createServer, SERVER_INSTRUCTIONS, serverInstructions, tools } from "../index";
-import { DEFAULT_SERVER_OPTIONS, isToolListed } from "../lib/tool-policy";
+import { DEFAULT_SERVER_OPTIONS, isToolListed, type ServerOptions } from "../lib/tool-policy";
+
+import pkg from "../../package.json";
 
 async function initialized(): Promise<Client> {
   const [clientTransport, serverTransport] =
@@ -207,5 +212,142 @@ describe("924: theme work is routed to extension_theme_verify where it is listed
 describe("951: a closed headless create routes to the console import", () => {
   it("says to create at the console import when the status lists the create tool as closed", () => {
     expect(serverInstructions(PLATFORM_ON)).toContain("call extension_project_create, then extension_auth, or use the console import when extension_auth status lists it in hostedLane.closed.");
+  });
+});
+
+describe("the server offers prompts to start from and its own reference to read", () => {
+  const shipped = (rel: string) => fs.readFileSync(fileURLToPath(new URL(`../../${rel}`, import.meta.url)), "utf8");
+
+  const connected = async (options: ServerOptions = DEFAULT_SERVER_OPTIONS): Promise<Client> => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await createServer(options).connect(serverTransport);
+    const client = new Client({ name: "catalog-probe", version: "0.0.0" });
+    await client.connect(clientTransport);
+
+    return client;
+  };
+
+  const text = async (client: Client, name: string, args: Record<string, string>): Promise<string> => {
+    const { messages } = await client.getPrompt({ name, arguments: args });
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0].role).toBe("user");
+
+    return (messages[0].content as { type: string; text: string }).text;
+  };
+
+  const ARGS: Record<string, Record<string, string>> = {
+    "create-extension": { idea: "highlights external links", browser: "firefox" },
+    "verify-change": { change: "the popup now shows a counter", projectPath: "/work/link-lamp", browser: "edge" },
+    "debug-extension": { symptom: "the content script does nothing on example.com", projectPath: "/work/link-lamp" },
+    "prepare-store-submission": { stores: "chrome, firefox", projectPath: "/work/link-lamp" },
+  };
+
+  it("declares prompts and resources beside tools, with no subscribe and no list change it does not send", async () => {
+    const client = await connected();
+
+    expect(client.getServerCapabilities()).toEqual({ tools: { listChanged: true }, prompts: {}, resources: {} });
+    expect((await client.listPrompts()).prompts.length).toBeGreaterThan(0);
+    expect((await client.listResources()).resources.length).toBeGreaterThan(0);
+  });
+
+  it("lists four prompts by stable lowercase names, the ones the README table names, each with a title, a sentence and described arguments", async () => {
+    const { prompts } = await (await connected()).listPrompts();
+
+    expect(prompts.map((prompt) => prompt.name)).toEqual(Object.keys(ARGS));
+    expect([...shipped("README.md").matchAll(/^\| `([a-z]+(?:-[a-z]+)+)` \| `/gm)].map((row) => row[1])).toEqual(Object.keys(ARGS));
+
+    for (const prompt of prompts) {
+      expect(prompt.name).toMatch(/^[a-z]+(-[a-z]+)*$/);
+      expect(prompt.title?.length, prompt.name).toBeGreaterThan(0);
+      expect(prompt.description, prompt.name).toMatch(/\.$/);
+      expect(prompt.arguments!.length, prompt.name).toBeLessThanOrEqual(3);
+      expect(Object.keys(ARGS[prompt.name]).every((name) => prompt.arguments!.some((argument) => argument.name === name)), prompt.name).toBe(true);
+      for (const argument of prompt.arguments!) expect(argument.description, `${prompt.name}.${argument.name}`).toMatch(/\.$/);
+    }
+  });
+
+  it.each([
+    ["the platform tools off", DEFAULT_SERVER_OPTIONS],
+    ["the platform tools on", PLATFORM_ON],
+  ] as const)("renders every prompt with its arguments, naming only tools listed with %s, in order, with the done rule of the instructions", async (_label, options) => {
+    const client = await connected(options);
+    const listed = new Set((await client.listTools()).tools.map((tool) => tool.name));
+
+    for (const [name, args] of Object.entries(ARGS)) {
+      const rendered = await text(client, name, args);
+      const named = rendered.match(/(?<!")extension_[a-z_]+/g) ?? [];
+
+      for (const value of Object.values(args)) expect(rendered, name).toContain(name === "prepare-store-submission" && value === args.stores ? '["chrome","firefox"]' : value);
+
+      expect(named.length, name).toBeGreaterThan(1);
+      for (const tool of named) expect(listed.has(tool), `${name} names ${tool}`).toBe(true);
+
+      expect(rendered, name).toMatch(/\n1\. .*\n2\. /);
+      expect(rendered, name).toMatch(/name one next step/);
+      expect(rendered, name).not.toMatch(/\b(we|us|our)\b|—/i);
+    }
+
+    for (const name of ["create-extension", "verify-change", "debug-extension"]) {
+      expect(await text(client, name, ARGS[name]), name).toContain("only after seeing it work in a real browser through extension_dev");
+    }
+  });
+
+  it("prepares a store submission with the validator and a zip while the platform tools are off, and with the preflight and a dry run once they are listed", async () => {
+    const off = await text(await connected(), "prepare-store-submission", {});
+    const on = await text(await connected(PLATFORM_ON), "prepare-store-submission", {});
+
+    expect(off).toContain('browsers: ["chrome"]');
+    expect(off).toContain("zip: true");
+    expect(off).toContain("--features=local,platform");
+    expect(off).not.toContain("extension_submit");
+    expect(on).toContain('extension_submit_check with action: "preflight"');
+    expect(on).toContain("leaving dryRun at its default");
+    expect(on).toContain("Nothing goes to review in this task.");
+  });
+
+  it("refuses a prompt it does not have and a missing required argument by name, each with the call that works", async () => {
+    const client = await connected();
+
+    await expect(client.getPrompt({ name: "ship-it" })).rejects.toThrow(/No prompt is named "ship-it"\. Call prompts\/list for the names: create-extension, /);
+    await expect(client.getPrompt({ name: "create-extension", arguments: { browser: "chrome" } })).rejects.toThrow(/needs the argument "idea": .* Call prompts\/get again with it\./);
+  });
+
+  it("serves the four markdown documents the README table names under one scheme, each the bytes of a file the published package carries", async () => {
+    const client = await connected();
+    const { resources } = await client.listResources();
+
+    const section = (file: string, heading: string) => {
+      const from = shipped(file).split(`\n## ${heading}\n`);
+
+      expect(from, `${file} has one "## ${heading}"`).toHaveLength(2);
+
+      return `## ${heading}\n${from[1].split(/\n## /)[0].trimEnd()}\n`;
+    };
+
+    const expected: Record<string, [string, string]> = {
+      "extension-dev://reference/tools": ["claude/reference/mcp-tools.md", shipped("claude/reference/mcp-tools.md")],
+      "extension-dev://reference/store-md": ["claude/reference/store-md-fields.md", shipped("claude/reference/store-md-fields.md")],
+      "extension-dev://reference/security": ["README.md", section("README.md", "Security")],
+      "extension-dev://changelog/current": ["CHANGELOG.md", section("CHANGELOG.md", pkg.version)],
+    };
+
+    expect(resources.map((resource) => resource.uri)).toEqual(Object.keys(expected));
+    expect([...shipped("README.md").matchAll(/^\| `(extension-dev:\/\/[a-z/-]+)` \|/gm)].map((row) => row[1])).toEqual(Object.keys(expected));
+
+    for (const resource of resources) {
+      const [file, bytes] = expected[resource.uri];
+      const { contents } = await client.readResource({ uri: resource.uri });
+
+      expect(resource.mimeType).toBe("text/markdown");
+      expect(resource.description, resource.uri).toMatch(/\.$/);
+      expect(contents, resource.uri).toEqual([{ uri: resource.uri, mimeType: "text/markdown", text: bytes }]);
+      expect(bytes.length, resource.uri).toBeGreaterThan(200);
+      expect(pkg.files.some((entry) => file === entry || file.startsWith(`${entry}/`)), `${file} is published`).toBe(true);
+    }
+
+    expect(expected["extension-dev://reference/security"][1]).toContain("Approvals stay human");
+    await expect(client.readResource({ uri: "extension-dev://reference/nothing" })).rejects.toThrow(/No resource has the URI extension-dev:\/\/reference\/nothing\. Call resources\/list for the URIs: /);
+    await expect(client.readResource({ uri: "file:///etc/hosts" })).rejects.toThrow(/No resource has the URI/);
   });
 });
