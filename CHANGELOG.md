@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Ledger 1070. The `initialize` answer describes the server. `serverInfo` now carries `description` ("Build, run, debug, test and ship Chrome, Firefox, Edge and Safari extensions from your AI agent.") and `icons` (one 512x512 PNG), both read from `server.json` at build time, so they cannot differ from the registry entry. On 2026-11-23 `npx -y @lobehub/market-cli plugin init` against 11.3.0 refused with "Could not infer a plugin description from MCP server info or package.json" and wrote no file, since `serverInfo` held only `name`, `title` and `version`.
+
 ## 11.3.0
 
 - Ledger 1068. Store listing advice is said when it is asked for. `extension_manifest_validate` keeps `value.warnings` to what loads and runs: the 128x128 icon line and the Firefox data collection declaration line come back as `value.storeReadiness` only with `include: ["storeReadiness"]`, and a plain call answers how many it left out in `value.storeReadinessOmitted`. The Firefox add-on ID line stays a warning, since it changes how a dev session runs. `extension_build` asks the validator for those lines itself, so `value.reviewRisks` and its refusals read as before, and it says the "No STORE.md" paragraph only with `zip: true`; a project that already has a STORE.md still gets the lines that check it. The `/extension-publish` command asks the validator for the store lines. In an eval pilot on 2026-11-23, 20 of 20 validate answers and 17 of 17 build answers on bug fix and port tasks carried store paragraphs no caller had asked for, a quarter of what validate answered.

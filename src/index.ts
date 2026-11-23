@@ -77,6 +77,7 @@ import { forwarderApprovalState } from "./lib/forward-approval-state";
 import { forwardable } from "./lib/hosted-forwarder";
 
 import { version } from "../package.json";
+import { description as SERVER_DESCRIPTION, icons as SERVER_ICONS } from "../server.json";
 
 installPlatformKernelHooks();
 registerKernelHooks({ approvalState: forwarderApprovalState });
@@ -279,6 +280,8 @@ export function createServer(
       name: "extension-dev",
       title: SERVER_TITLE,
       version,
+      description: SERVER_DESCRIPTION,
+      icons: SERVER_ICONS,
     },
     {
       capabilities: {

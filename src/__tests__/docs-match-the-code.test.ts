@@ -433,4 +433,25 @@ describe("the docs say what the code does", () => {
       expect(read(file), file).not.toContain("extension.dev Browser Extensions");
     }
   });
+
+  it("answers initialize with the description and the icons the registry entry carries (ledger 1070)", async () => {
+    const registry = require("../../server.json") as {
+      description: string;
+      icons: Array<{ src: string; mimeType: string; sizes: string[] }>;
+    };
+
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await createServer().connect(serverTransport);
+    const client = new Client({ name: "description-probe", version: "0.0.0" });
+    await client.connect(clientTransport);
+    const info = client.getServerVersion();
+    await client.close();
+
+    expect(registry.description.length).toBeGreaterThan(0);
+    expect(registry.icons).toHaveLength(1);
+    expect({ description: info?.description, icons: info?.icons }).toEqual({
+      description: registry.description,
+      icons: registry.icons,
+    });
+  });
 });
