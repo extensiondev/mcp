@@ -68,6 +68,8 @@ import { safariNotAttachedHint } from "../lib/safari-app-stage";
 import { safariEnableFrame, type SafariEnableValue } from "../lib/safari-enable-read";
 import { droppedRuntimePages } from "../lib/dropped-runtime-pages";
 import { declaredToolbarButton } from "../lib/gecko-toolbar-click";
+import { declaresSidePanel } from "../lib/side-panel-click";
+import { isChromiumFamily } from "../lib/browser-family";
 import { teamUnknownToXcodeRefusal } from "../lib/xcode-teams";
 import { safariStartingUrlWarning } from "../lib/safari-session-notes";
 import {
@@ -482,7 +484,7 @@ export async function handler(
   const toolbarButton = controlBound && !args.noBrowser && !isSafariTarget(browser) ? declaredToolbarButton(args.projectPath, browser) : null;
   const toolbarClickNote =
     toolbarButton && !toolbarButton.popup
-      ? ` The toolbar button has no popup, so a click on it is extension_open with surface: "action", which replays ${toolbarButton.key}.onClicked.`
+      ? ` The toolbar button has no popup, so a click on it is extension_open with surface: "action", which replays ${toolbarButton.key}.onClicked${isChromiumFamily(browser) && declaresSidePanel(args.projectPath, browser) ? ", or opens the side panel when sidePanel.setPanelBehavior hands it the click" : ""}.`
       : "";
   const capabilities = {
     allowControl,

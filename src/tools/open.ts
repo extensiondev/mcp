@@ -71,6 +71,7 @@ import { loadedExtensionIds, sessionGuestIdentity } from "../lib/extension-ident
 import { clickGeckoToolbarButton, declaredToolbarButton } from "../lib/gecko-toolbar-click";
 import { geckoSidebarPanel, sidebarOpenedAnswer } from "../lib/gecko-sidebar";
 import { clickToolbarWithUserInput, declaresSidebarAction, noteReplayWithoutGesture } from "../lib/gecko-action-gesture";
+import { IDLE_ACTION_REFUSAL, readPanelBehavior } from "../lib/side-panel-click";
 import {
   extensionIdOf,
   extensionTargetsListed,
@@ -1362,7 +1363,7 @@ async function observeOpened(raw: string, args: OpenArgs, browser: string): Prom
   const landed = value.surfaceTarget ?? value.target ?? null;
   const targetId = isChromiumFamily(browser) && typeof landed?.targetId === "string" ? landed.targetId : undefined;
   const url = typeof landed?.url === "string" ? landed.url : args.url;
-  const context = observedSurface(args.surface);
+  const context = value.triggered === "sidePanel" ? "sidebar" : observedSurface(args.surface);
 
   await observeAfterAct(
     frame,
@@ -1525,6 +1526,12 @@ async function openOnce(args: OpenArgs): Promise<string> {
 
   const raw = await runActVerb(cli, args.projectPath, args.timeout, schema.name);
 
+  if (args.surface === "action" && isChromiumFamily(browser)) {
+    const idle = parseFrameObject(raw);
+
+    if (idle?.ok === false && IDLE_ACTION_REFUSAL.test(String(idle.error?.message ?? ""))) return clickWithNothingToReplay(args, browser, idle);
+  }
+
   const refusal = readWindowRefusal(raw, args.surface, browser);
 
   if (refusal) {
@@ -1615,6 +1622,45 @@ async function openOnce(args: OpenArgs): Promise<string> {
   }
 
   return confirmed;
+}
+
+async function clickWithNothingToReplay(args: OpenArgs, browser: string, refusal: Record<string, any>): Promise<string> {
+  if (!surfaceDocument(args.projectPath, browser, "sidebar")) {
+    refusal.error.hint =
+      "A click on this toolbar button does nothing as the extension is built: no popup, no onClicked listener and no side panel. Register an action.onClicked listener at the top level of the background script, then call extension_open again.";
+
+    return actFrameJson(refusal);
+  }
+
+  const behavior = await readPanelBehavior(args.projectPath, browser, args.timeout);
+
+  if (behavior.read && !behavior.opensOnClick) {
+    refusal.error.hint =
+      'chrome.sidePanel.getPanelBehavior() reads openPanelOnActionClick: false in the service worker, so a click on this toolbar button does nothing. Open the side panel itself with extension_open surface: "sidebar".';
+
+    return actFrameJson(refusal);
+  }
+
+  const opened = parseFrameObject(await openOnce({ ...args, surface: "sidebar" }));
+
+  if (!opened) {
+    refusal.error.hint = 'The click opens the side panel, which could not be opened from here. Call extension_open with surface: "sidebar".';
+
+    return actFrameJson(refusal);
+  }
+
+  const why = behavior.read
+    ? "chrome.sidePanel.getPanelBehavior() reads openPanelOnActionClick: true in the service worker, so a click on it opens the side panel"
+    : `the manifest declares a side panel, so a click on it opens the side panel if sidePanel.setPanelBehavior hands it the click, which could not be read (${behavior.reason})`;
+
+  addWarning(
+    opened,
+    `The toolbar button has no popup and no onClicked listener, and ${why}. The browser's own toolbar click cannot be replayed, so the server opened the side panel the way surface: "sidebar" does.`,
+  );
+
+  if (opened.ok === true) patchValue(opened, { triggered: "sidePanel", openPanelOnActionClick: behavior.read ? true : "unread" });
+
+  return actFrameJson(opened);
 }
 
 type WindowRefusal = {

@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Ledger 1070. The `initialize` answer describes the server. `serverInfo` now carries `description` ("Build, run, debug, test and ship Chrome, Firefox, Edge and Safari extensions from your AI agent.") and `icons` (one 512x512 PNG), both read from `server.json` at build time, so they cannot differ from the registry entry. On 2026-11-23 `npx -y @lobehub/market-cli plugin init` against 11.3.0 refused with "Could not infer a plugin description from MCP server info or package.json" and wrote no file, since `serverInfo` held only `name`, `title` and `version`.
+- Ledger 1072. `extension_open` with `surface: "action"` does what the click does on a toolbar button wired to the side panel. When a Chromium extension has no popup and no `action.onClicked` listener and its manifest declares `side_panel`, the server reads `chrome.sidePanel.getPanelBehavior()` in the service worker: on `openPanelOnActionClick: true` (or when it cannot be read) it opens the side panel the way `surface: "sidebar"` does, with `value.triggered: "sidePanel"` and a warning that says the browser's own click was not replayed; on `false` it refuses with one step, `extension_open surface: "sidebar"`. With no side panel the refusal says the click does nothing as the extension is built. The `extension_dev` hint for a popup-less button names the side panel beside `onClicked` when the manifest declares one, and the `E_NOT_IMPLEMENTED` default hint no longer points at a route that the engine's message does not name.
 
 ## 11.3.0
 

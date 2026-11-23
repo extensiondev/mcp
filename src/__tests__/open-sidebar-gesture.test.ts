@@ -28,7 +28,20 @@ const gestureRefusal = () =>
     warnings: [],
   });
 
+const idleActionRefusal = () =>
+  JSON.stringify({
+    schema: 1,
+    ok: false,
+    command: "extension_open",
+    status: "failed",
+    value: null,
+    error: { name: "Unsupported", message: "action has no popup and no action.onClicked listener registered", engine: "chromium", code: "E_NOT_IMPLEMENTED" },
+    warnings: [],
+  });
+
 let actResult = gestureRefusal();
+let actionResult: string | null = null;
+let panelBehavior: Record<string, unknown> | null = null;
 const cliCalls: string[][] = [];
 vi.mock("../lib/act", async (importOriginal) => {
   const actual = await importOriginal<typeof ActModule>();
@@ -38,7 +51,7 @@ vi.mock("../lib/act", async (importOriginal) => {
     runActVerb: async (cli: string[]) => {
       cliCalls.push(cli);
 
-      return actResult;
+      return cli[1] === "action" && actionResult ? actionResult : actResult;
     },
   };
 });
@@ -105,6 +118,10 @@ vi.mock("../lib/cdp", () => {
 
       if (method === "Runtime.evaluate") {
         const expression = String(params.expression ?? "");
+
+        if (expression.includes("getPanelBehavior")) {
+          return { result: { type: "object", value: panelBehavior } };
+        }
 
         if (expression.includes("chrome.sidePanel.open")) {
           armed = true;
@@ -212,6 +229,8 @@ afterEach(() => {
   }
 
   actResult = gestureRefusal();
+  actionResult = null;
+  panelBehavior = null;
   cliCalls.length = 0;
   commands.length = 0;
   cdpTargets = [];
@@ -399,5 +418,59 @@ describe("extension_open sidebar on Chromium when Chrome demands a user gesture"
     expect(result.ok).toBe(false);
     expect(result.error.code).toBe("E_USER_GESTURE_REQUIRED");
     expect(clicks()).toEqual([]);
+  });
+});
+
+describe("extension_open action on Chromium when the click has no popup and no listener to replay (ledger 1072)", () => {
+  const worker = (id: string): Target => ({ id: "sw", type: "service_worker", url: `chrome-extension://${id}/background/service_worker.js` });
+  const behaviorReads = () => commands.filter((c) => c.method === "Runtime.evaluate" && String(c.params.expression).includes("getPanelBehavior"));
+
+  it.each([
+    ["the service worker reads openPanelOnActionClick: true", true, true, "reads openPanelOnActionClick: true"],
+    ["no service worker answers, so the manifest's side panel is all there is to go on", false, "unread", "could not be read (no extension background is running in the browser)"],
+  ] as const)("opens the side panel as the click would when %s", async (_name, workerRuns, read, said) => {
+    const p = project();
+    actionResult = idleActionRefusal();
+    panelBehavior = { outcome: "read", openPanelOnActionClick: true };
+    if (workerRuns) cdpTargets = [worker(p.id)];
+
+    const result = JSON.parse(await open.handler({ projectPath: p.dir, surface: "action" }));
+
+    expect(cliCalls.map((cli) => cli[1])).toEqual(["action", "sidebar"]);
+    expect(result.ok).toBe(true);
+    expect(result.value).toMatchObject({ surface: "sidebar", gesture: "synthetic-click", triggered: "sidePanel", openPanelOnActionClick: read, surfaceTarget: { targetId: "panel" } });
+    expect(result.warnings.join("\n")).toContain(said);
+    expect(result.warnings.join("\n")).toContain("toolbar click cannot be replayed");
+  });
+
+  it("refuses with the side panel call as the one next step when the panel behavior reads false", async () => {
+    const p = project();
+    actionResult = idleActionRefusal();
+    panelBehavior = { outcome: "read", openPanelOnActionClick: false };
+    cdpTargets = [worker(p.id)];
+
+    const result = JSON.parse(await open.handler({ projectPath: p.dir, surface: "action" }));
+
+    expect(result.ok).toBe(false);
+    expect(result.error.code).toBe("E_NOT_IMPLEMENTED");
+    expect(result.error.hint).toContain("openPanelOnActionClick: false");
+    expect(result.error.hint).toMatch(/extension_open surface: "sidebar"\.$/);
+    expect(cliCalls.map((cli) => cli[1])).toEqual(["action"]);
+    expect(clicks()).toEqual([]);
+  });
+
+  it("says the click does nothing, without reading a panel behavior, when the manifest declares no side panel", async () => {
+    const p = project();
+    fs.writeFileSync(path.join(p.dir, "src", "manifest.json"), JSON.stringify({ manifest_version: 3, name: "F", action: { default_title: "F" } }));
+    actionResult = idleActionRefusal();
+    cdpTargets = [worker(p.id)];
+
+    const result = JSON.parse(await open.handler({ projectPath: p.dir, surface: "action" }));
+
+    expect(result.ok).toBe(false);
+    expect(result.error.hint).toContain("does nothing as the extension is built");
+    expect(result.error.hint).not.toContain("route error.message names");
+    expect(behaviorReads()).toEqual([]);
+    expect(cliCalls.map((cli) => cli[1])).toEqual(["action"]);
   });
 });

@@ -84,7 +84,7 @@ export const REFUSAL_HINTS: Record<ErrorCode, string> = {
   E_NAVIGATE_FAILED: "The browser did not load the address. Check url, and whether the session is up with extension_doctor.",
   E_NETWORK: "The host error.message names could not be reached. Check the network, then call {command} again.",
   E_NOT_ATTACHED: "The extension compiled but its runtime never connected. extension_doctor names the leg that failed; extension_dev with replace: true launches the browser again.",
-  E_NOT_IMPLEMENTED: "The project's engine has no implementation of this for the session's browser. Pass another browser, or use the route error.message names.",
+  E_NOT_IMPLEMENTED: "The project's engine does not do this here, for the reason in error.message. Change what the message names, or pass another browser when it names the browser.",
   E_NO_BACKGROUND: "No background of this extension is running. Confirm the session is ready with extension_wait and that the manifest declares a background.",
   E_NO_CONTEXT_MENUS: 'Add "contextMenus" to the manifest permissions and rebuild.',
   E_NO_CONTROL_CHANNEL: "The session runs without its control channel. Call extension_dev with replace: true and without allowControl: false, then call {command} again.",

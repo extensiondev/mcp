@@ -218,6 +218,7 @@ describe("912: every refusal carries error.code and a non-empty error.hint that 
     }
 
     expect(defaultRefusalHint("E_BAD_REQUEST", "extension_open")).toBe("Nothing ran. Change the argument error.message names and call extension_open again.");
+    expect(defaultRefusalHint("E_NOT_IMPLEMENTED", "extension_open"), "the engine writes this message and names no route in it").not.toContain("the route error.message names");
   });
 
   it("918: a failed submit preflight and an unavailable release status each have a code, a message and a hint of their own", () => {

@@ -258,12 +258,12 @@ describe("extension_dev health tick", () => {
     expect(result.hint).not.toMatch(/Control channel is ON/);
   }, 20_000);
 
-  const TOOLBAR_HINTS = [[{ default_title: "Save" }, /Control channel is ON .*a click on it is extension_open with surface: "action", which replays action\.onClicked\./], [{ default_popup: "popup.html" }, /Control channel is ON (?!.*surface: "action")/]] as const;
+  const TOOLBAR_HINTS = [[{ action: { default_title: "Save" } }, /Control channel is ON .*a click on it is extension_open with surface: "action", which replays action\.onClicked\./], [{ action: { default_title: "Save" }, side_panel: { default_path: "panel.html" } }, /surface: "action", which replays action\.onClicked, or opens the side panel when sidePanel\.setPanelBehavior hands it the click\./], [{ action: { default_popup: "popup.html" } }, /Control channel is ON (?!.*surface: "action")/]] as const;
 
-  it.each(TOOLBAR_HINTS)("names the call that clicks the toolbar button only when the button opens no popup (action %j)", async (action, said) => {
+  it.each(TOOLBAR_HINTS)("names the call that clicks the toolbar button only when the button opens no popup, and the side panel a click can open (%j)", async (keys, said) => {
     const project = tmpProject();
 
-    fs.writeFileSync(path.join(project, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "x", version: "1.0.0", action }));
+    fs.writeFileSync(path.join(project, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "x", version: "1.0.0", ...keys }));
 
     nextChild = building(() => writeModernContract(project, "chrome", { controlPort: 43210 }));
 
