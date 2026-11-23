@@ -13,7 +13,7 @@ import { wwwImportPath } from "@extension.dev/urls/paths";
 import { linksOf, madeSentence, recordedOutcome } from "../lib/act-outcome";
 import { createRequestDeadline, readBackOnce, RESUME_POLL_MS } from "../lib/call-budget";
 import { API_BASE } from "../lib/common-schema";
-import { pollDeviceGrant, type DeviceCodeStart } from "../lib/device-flow";
+import { CREATE_LOGIN_LIFETIME, pollDeviceGrant, type DeviceCodeStart } from "../lib/device-flow";
 import { laneClosedByServer } from "../lib/credential-source";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { kernelHook } from "../lib/kernel-hooks";
@@ -568,6 +568,7 @@ export async function createProject(args: ProjectCreateArgs, local: ProjectCreat
         path: config.deviceCodeUrl,
         project,
         intent: "create",
+        lifetime: CREATE_LOGIN_LIFETIME,
       });
     } catch (err: any) {
       const message = err?.message || "Could not start the device flow.";

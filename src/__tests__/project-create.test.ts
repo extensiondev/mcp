@@ -940,6 +940,30 @@ describe("extension_project_create", () => {
     const codeCall = calls.find((c) => c.url.endsWith("/api/cli/device/code"));
     expect(codeCall).toBeDefined();
     expect(JSON.parse(String(codeCall!.init?.body)).intent).toBe("create");
+    expect(JSON.parse(String(codeCall!.init?.body)).lifetime).toBe("day");
+  });
+
+  it("1078: starts the create again without a lifetime when the platform refuses the field, so a platform that predates it still creates", async () => {
+    const { fn, calls } = createFetch({
+      token: [{ status: 400, body: { error: "authorization_pending" } }],
+    });
+    const older = vi.fn(async (url: any, init?: RequestInit) => {
+      if (String(url).endsWith("/api/cli/device/code") && JSON.parse(String(init?.body)).lifetime) {
+        calls.push({ url: String(url), init });
+
+        return jsonResponse({ code: "DEVICE_LIFETIME_INVALID", message: "Field 'lifetime' is 'hour' or 'day', and only a login takes it." }, 400);
+      }
+
+      return fn(url, init);
+    });
+    vi.stubGlobal("fetch", older);
+
+    const out = JSON.parse(await handler(baseArgs));
+    const starts = calls.filter((c) => c.url.endsWith("/api/cli/device/code")).map((c) => JSON.parse(String(c.init?.body)));
+
+    expect(starts.map((body) => [body.intent, body.lifetime])).toEqual([["create", "day"], ["create", undefined]]);
+    expect(out.status).toBe("authorization-pending");
+    expect(out.value.userCode).toBe("ABCD-1234");
   });
 
   it("keeps the login the platform minted when the project already exists, so no second approval is asked", async () => {

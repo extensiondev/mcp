@@ -360,6 +360,7 @@ describe("extension_project_create with projects: refusals before a device code 
       project: "acme/alpha",
       clientName: "extension-mcp",
       intent: "create",
+      lifetime: "day",
     });
   });
 
@@ -411,7 +412,8 @@ describe("extension_project_create with projects: one approval", () => {
 
     expect(out.hint).toContain("lists all 3 projects");
     expect(out.hint).toContain("the other arguments can be left out");
-    expect(out.hint).toContain("7 days");
+    expect(out.hint).toContain("states how long this device is also signed in to each");
+    expect(out.hint).not.toContain("7 days");
 
     const codes = h.to("/api/cli/device/code");
     expect(codes).toHaveLength(1);
@@ -419,6 +421,7 @@ describe("extension_project_create with projects: one approval", () => {
       projects: ["acme/alpha", "acme/beta", "acme/gamma"],
       clientName: "extension-mcp",
       intent: "create",
+      lifetime: "day",
     });
 
     expect(h.to("/api/cli/device/token")[0]?.body).toEqual({

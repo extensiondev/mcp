@@ -243,6 +243,7 @@ describe("--project holds a batch to the pinned project, name by name", () => {
       projects: ["acme/app"],
       clientName: "extension-mcp",
       intent: "create",
+      lifetime: "day",
     });
   });
 

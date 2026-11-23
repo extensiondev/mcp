@@ -12,7 +12,7 @@ import { answerIsUnknownOutcome, readCreatedProject } from "./create-answer";
 import { firstBuildValue, readFirstBuild, withheldBecause } from "./first-build";
 import { answerDeadline, RESUME_POLL_MS, START_WORK_WITHIN_MS } from "./call-budget";
 import { scratchShelf } from "./call-memory";
-import { pollDeviceGrant, type DeviceCodeStart, type DeviceIntent } from "./device-flow";
+import { CREATE_LOGIN_LIFETIME, pollDeviceGrant, type DeviceCodeStart, type DeviceIntent, type DeviceLifetime } from "./device-flow";
 import { codeExpiryFromStart, secondsLeft } from "./device-wait";
 import { envelope, type ErrorCode, type RetryVerdict } from "./envelope";
 import { kernelHook } from "./kernel-hooks";
@@ -65,7 +65,7 @@ const BROWSERS = ["chrome", "edge", "firefox"];
 const SINGLE_ONLY_KEYS = ["project", "repo", "rootDirectory", "workspaceRoot", "ref", "displayName", "description"];
 
 export interface BatchCreateLocal {
-  requestDeviceCode(args: { apiBase: string; path: string; project?: string; projects?: string[]; intent?: DeviceIntent }): Promise<DeviceCodeStart>;
+  requestDeviceCode(args: { apiBase: string; path: string; project?: string; projects?: string[]; intent?: DeviceIntent; lifetime?: DeviceLifetime }): Promise<DeviceCodeStart>;
   identityHeaders(tool: string): Record<string, string>;
   writeCredentialBatch(batch: StoredCredentials[]): string | null;
 }
@@ -432,7 +432,7 @@ function pendingEnvelope(args: {
     complete.length > 0 && complete !== args.verificationUri;
   const left = secondsLeft(args.expiresAt);
   const again = `then call extension_project_create again with this deviceCode${args.expiresAt ? ` before ${args.expiresAt.slice(11, 16)} UTC, when the code expires` : ""}; the list is kept here, so the other arguments can be left out`;
-  const page = `The page lists all ${args.refs.length} projects this one approval creates and says this device is also signed in to each for 7 days`;
+  const page = `The page lists all ${args.refs.length} projects this one approval creates and states how long this device is also signed in to each, a day when the platform takes the lifetime this call asks for`;
   const named = Object.entries(args.gitRefs);
   const built = named.length ? ` It builds ${refGroups(named, args.refs.length)}, so tell the owner before they approve.` : "";
   const hint = `${!args.userCode
@@ -958,7 +958,7 @@ function finalEnvelope(session: Session): string {
       value,
       hint:
         needLogin.length === 0
-          ? `All ${rows.length} projects exist, ${buildsSentence}, and this machine is signed in to every one of them for 7 days. ${spent} Token-scoped tools take \`project\` to pick one.${nextSteps.length ? ` Next: ${nextSteps[0]}.` : ""}`
+          ? `All ${rows.length} projects exist, ${buildsSentence}, and this machine is signed in to every one of them until the expiresAt each row names. ${spent} Token-scoped tools take \`project\` to pick one.${nextSteps.length ? ` Next: ${nextSteps[0]}.` : ""}`
           : `All ${rows.length} projects exist and ${buildsSentence}, but no token was stored for ${needLogin.join(", ")}. ${spent} Sign in to those with one batch login: ${nextSteps[0]}.`,
       ...(needLogin.length || unbuilt.length
         ? {
@@ -1212,6 +1212,7 @@ export async function createProjectBatch(args: BatchCreateArgs, local: BatchCrea
         path: config.deviceCodeUrl,
         projects: refs,
         intent: "create",
+        lifetime: CREATE_LOGIN_LIFETIME,
       });
     } catch (err: any) {
       const serverCode = String(err?.serverCode || "");

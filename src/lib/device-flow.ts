@@ -26,15 +26,24 @@ export interface DeviceCodeStart {
 
 export type DeviceIntent = "login" | "create" | "create-workspace";
 
-/* @invariant A LOGIN ASKS FOR NO LONGER THAN ITS WORK NEEDS, AND ONLY A LOGIN
- * ASKS. The platform takes `lifetime: "hour" | "day"` on a login start, mints
- * for that long and says so on the approval page; a create or workspace start
- * that carries the field is refused (DEVICE_LIFETIME_INVALID), so it is left
- * off those. A platform that predates the field ignores it and mints seven
- * days, which is why every answer reads the end from the token it was handed
- * and never from what was asked (ledger 1078).
+/* @invariant A SIGN-IN ASKS FOR NO LONGER THAN ITS WORK NEEDS. The platform
+ * takes `lifetime: "hour" | "day"` on a login start and on a create start,
+ * mints for that long and says so on the approval page. A create asks for a
+ * day (CREATE_LOGIN_LIFETIME): the token a create hands back is the stored
+ * login the first build read and every later call use, an expired login
+ * costs one more approval and never the project, and a day is the default a
+ * plain login takes. A workspace start signs nothing in and never carries
+ * the field. A platform that predates the field on a create refuses it
+ * (DEVICE_LIFETIME_INVALID), so that one refusal is answered by starting
+ * again without it; a platform that predates it on a login ignores it and
+ * mints seven days. Every answer therefore reads the end from the token it
+ * was handed and never from what was asked (ledger 1078).
  */
 export type DeviceLifetime = "hour" | "day";
+
+export const CREATE_LOGIN_LIFETIME: DeviceLifetime = "day";
+
+const LIFETIME_REFUSED = "DEVICE_LIFETIME_INVALID";
 
 function originOf(url: string): string | null {
   try {
@@ -115,7 +124,7 @@ export async function requestDeviceCode(args: {
       ...(args.workspace ? { workspace: args.workspace } : {}),
       clientName: args.clientName ?? "extension-mcp",
       ...(args.intent ? { intent: args.intent } : {}),
-      ...(args.lifetime && (!args.intent || args.intent === "login") ? { lifetime: args.lifetime } : {}),
+      ...(args.lifetime && args.intent !== "create-workspace" ? { lifetime: args.lifetime } : {}),
     }),
   });
   const text = await res.text();
@@ -125,6 +134,10 @@ export async function requestDeviceCode(args: {
     data = JSON.parse(text);
   } catch {
     data = { message: text };
+  }
+
+  if (res.status === 400 && data.code === LIFETIME_REFUSED && args.lifetime && args.intent === "create") {
+    return requestDeviceCode({ ...args, lifetime: undefined });
   }
 
   if (!res.ok) {
