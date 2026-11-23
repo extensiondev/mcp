@@ -11,6 +11,7 @@ import type * as Exec from "../lib/exec";
 import type * as TemplatesCache from "../lib/templates-cache";
 
 const spawnCalls: Array<{ args: string[]; env?: Record<string, string> }> = [];
+let engineProbe: "answers" | "exits" | "throws" = "answers";
 
 vi.mock("../lib/boot-verdict", async (importOriginal) =>
   (await import("./fixtures/short-boot")).shortBootWindow(await importOriginal()),
@@ -25,6 +26,12 @@ vi.mock("../lib/exec", async (importOriginal) => {
 
   return {
     ...actual,
+    runExtensionCli: vi.fn(async (args: string[], options?: Parameters<typeof actual.runExtensionCli>[1]) => {
+      if (engineProbe === "answers" || !["capabilities", "--version"].includes(args[0])) return actual.runExtensionCli(args, options);
+      if (engineProbe === "throws") throw new Error("the probe timed out");
+
+      return { code: 1, stdout: "", stderr: "" };
+    }),
     spawnExtensionCli: vi.fn((args: string[], options?: { env?: Record<string, string> }) => {
       spawnCalls.push({ args, env: options?.env });
       const child = Object.assign(new EventEmitter(), { pid: 4_000_000 + spawnCalls.length, exitCode: null, signalCode: null });
@@ -64,7 +71,8 @@ vi.mock("extension-create", () => ({
 
 let scaffoldTarget = "";
 
-const { geckoLaunchEnv, geckoSocketWarning, headlessLaunch } = await import("../lib/launch-flags");
+const { headlessLaunch } = await import("../lib/launch-flags");
+const { geckoLaunchEnv, geckoSocketWarning } = await import("../lib/gecko-socket-process");
 const dev = await import("../tools/dev");
 const start = await import("../tools/start");
 const { sessionIsHeadless } = await import("../tools/open");
@@ -140,6 +148,27 @@ describe("a person can ask to see the browser (headless input)", () => {
     expect(geckoLaunchEnv("firefox", "linux", { EXTENSION_KEEP_SOCKET_PROCESS: "0" })).toEqual({ MOZ_DISABLE_SOCKET_PROCESS: "1" });
   });
 
+  it("987: only an engine older than 4.3.0, or one whose version is unknown, gets the variable and the warning", () => {
+    for (const older of ["4.1.41", "4.2.0", "4.3.0-canary.1", "not a version", null]) {
+      expect(geckoLaunchEnv("firefox", "linux", {}, older), String(older)).toEqual({ MOZ_DISABLE_SOCKET_PROCESS: "1" });
+      expect(geckoSocketWarning("firefox", false, "linux", {}, older), String(older)).toMatch(/Move the project to Extension\.js 4\.3\.0 or later and relaunch with replace: true to keep the socket process\.$/);
+    }
+
+    for (const fixed of ["4.3.0", "4.3.1", "5.0.0-canary.2"]) {
+      expect(geckoLaunchEnv("firefox", "linux", {}, fixed), fixed).toBeNull();
+      expect(geckoSocketWarning("firefox", false, "linux", {}, fixed), fixed).toBeNull();
+    }
+
+    expect(geckoSocketWarning("firefox", false, "linux", {}, "4.2.0")).toBe(
+      "This Linux Firefox runs with MOZ_DISABLE_SOCKET_PROCESS=1 because the Extension.js engine that runs this session is 4.2.0, and an engine older than 4.3.0 can lose the browser at startup without it. Firefox's WebRTC networking runs on the socket process, so RTCPeerConnection in this session likely connects no peers. Move the project to Extension.js 4.3.0 or later and relaunch with replace: true to keep the socket process.",
+    );
+
+    expect(geckoSocketWarning("firefox", false, "linux", {}, null)).toContain("because the version of the Extension.js engine that runs this session could not be read, and an engine older than 4.3.0");
+    expect(geckoSocketWarning("firefox", false, "linux", { MOZ_DISABLE_SOCKET_PROCESS: "1" }, "4.3.0")).toMatch(/whatever its value, 0 included/);
+    expect(geckoLaunchEnv("firefox", "linux", { MOZ_DISABLE_SOCKET_PROCESS: "1" }, "4.2.0")).toBeNull();
+    expect(geckoSocketWarning("firefox", false, "linux", { EXTENSION_KEEP_SOCKET_PROCESS: "1" }, "4.2.0")).toBeNull();
+  });
+
   it("warns about WebRTC only when a Linux Firefox launches without its socket process", () => {
     expect(geckoSocketWarning("firefox", false, "linux", {})).toMatch(/This Linux Firefox runs with MOZ_DISABLE_SOCKET_PROCESS=1/);
     expect(geckoSocketWarning("firefox", true, "linux", {})).toBeNull();
@@ -153,32 +182,75 @@ describe("a person can ask to see the browser (headless input)", () => {
   it.each([
     ["extension_dev", () => dev],
     ["extension_start", () => start],
-  ] as const)("%s hands a Linux Gecko launch the socket-process variable", async (_name, tool) => {
+  ] as const)("987: %s hands a Linux Gecko launch the socket-process variable by the engine that runs the session", async (_name, tool) => {
     const projectPath = tmp("mcp-gecko-env-");
     const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
-    const inherited = process.env.MOZ_DISABLE_SOCKET_PROCESS;
+    const inherited = { moz: process.env.MOZ_DISABLE_SOCKET_PROCESS, keep: process.env.EXTENSION_KEEP_SOCKET_PROCESS, pin: process.env.EXTENSION_MCP_CLI_VERSION };
+
+    const launch = async (pin: string, more: Record<string, unknown> = {}, probe: typeof engineProbe = "answers") => {
+      process.env.EXTENSION_MCP_CLI_VERSION = pin;
+      engineProbe = probe;
+      spawnCalls.length = 0;
+
+      try {
+        const out = JSON.parse(await tool().handler({ projectPath, browser: "firefox", wait: false, ...more }));
+
+        return { env: spawnCalls[0]?.env ?? {}, warnings: ((out.warnings ?? []) as string[]).join(" ") };
+      } finally {
+        removeSession(projectPath, "firefox");
+      }
+    };
 
     delete process.env.MOZ_DISABLE_SOCKET_PROCESS;
+    delete process.env.EXTENSION_KEEP_SOCKET_PROCESS;
     Object.defineProperty(process, "platform", { ...platform, value: "linux" });
 
-    let out: { warnings?: string[] } = {};
-    let buildOnly: { warnings?: string[] } = {};
-
     try {
-      out = JSON.parse(await tool().handler({ projectPath, browser: "firefox", wait: false }));
-      removeSession(projectPath, "firefox");
-      buildOnly = JSON.parse(await tool().handler({ projectPath, browser: "firefox", wait: false, noBrowser: true }));
+      const older = await launch("4.2.0");
+
+      expect(older.env).toMatchObject({ MOZ_DISABLE_SOCKET_PROCESS: "1" });
+      expect(older.warnings).toMatch(/engine that runs this session is 4\.2\.0.*WebRTC.*Move the project to Extension\.js 4\.3\.0 or later/);
+
+      for (const [pin, probe] of [["unread-exits", "exits"], ["unread-throws", "throws"]] as const) {
+        const unread = await launch(pin, {}, probe);
+
+        expect(unread.env).toMatchObject({ MOZ_DISABLE_SOCKET_PROCESS: "1" });
+        expect(unread.warnings).toMatch(/engine that runs this session could not be read.*WebRTC/);
+      }
+
+      const fixed = await launch("4.3.0");
+
+      expect(fixed.env).not.toHaveProperty("MOZ_DISABLE_SOCKET_PROCESS");
+      expect(fixed.warnings).not.toMatch(/WebRTC|MOZ_DISABLE_SOCKET_PROCESS/);
+
+      const buildOnly = await launch("4.2.0", { noBrowser: true });
+
+      expect(buildOnly.warnings).not.toMatch(/WebRTC/);
+
+      process.env.EXTENSION_KEEP_SOCKET_PROCESS = "1";
+
+      const kept = await launch("4.2.0");
+
+      expect(kept.env).not.toHaveProperty("MOZ_DISABLE_SOCKET_PROCESS");
+      expect(kept.warnings).not.toMatch(/WebRTC/);
+
+      delete process.env.EXTENSION_KEEP_SOCKET_PROCESS;
+      process.env.MOZ_DISABLE_SOCKET_PROCESS = "0";
+
+      const own = await launch("4.3.0");
+
+      expect(own.env).not.toHaveProperty("MOZ_DISABLE_SOCKET_PROCESS");
+      expect(own.warnings).toMatch(/MOZ_DISABLE_SOCKET_PROCESS is set in this server's environment.*Remove it, set EXTENSION_KEEP_SOCKET_PROCESS=1/);
     } finally {
       Object.defineProperty(process, "platform", platform);
-      if (inherited !== undefined) process.env.MOZ_DISABLE_SOCKET_PROCESS = inherited;
+      engineProbe = "answers";
 
-      removeSession(projectPath, "firefox");
+      for (const [name, value] of [["MOZ_DISABLE_SOCKET_PROCESS", inherited.moz], ["EXTENSION_KEEP_SOCKET_PROCESS", inherited.keep], ["EXTENSION_MCP_CLI_VERSION", inherited.pin]] as const) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
     }
-
-    expect(spawnCalls[0]?.env).toMatchObject({ MOZ_DISABLE_SOCKET_PROCESS: "1" });
-    expect((out.warnings ?? []).join(" ")).toMatch(/WebRTC.*EXTENSION_KEEP_SOCKET_PROCESS=1/);
-    expect((buildOnly.warnings ?? []).join(" ")).not.toMatch(/WebRTC/);
-  }, 15_000);
+  }, 30_000);
 
   it("extension_dev and extension_start take the input", () => {
     for (const schema of [dev.schema, start.schema]) {

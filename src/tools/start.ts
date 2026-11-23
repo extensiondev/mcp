@@ -39,12 +39,11 @@ import { guardSameBrowserSession } from "../lib/same-browser-session";
 import { DEFAULT_IDLE_MINUTES, IDLE_MINUTES_SCHEMA, armSessionIdle, resolveIdleMinutes } from "../lib/session-idle";
 import {
   LAUNCH_FLAG_SCHEMA,
-  geckoLaunchEnv,
-  geckoSocketWarning,
   headlessLaunch,
   launchFlagArgs,
   type LaunchFlagArgs,
 } from "../lib/launch-flags";
+import { geckoSocketLaunch } from "../lib/gecko-socket-process";
 
 export const schema = {
   name: "extension_start",
@@ -232,8 +231,7 @@ export async function handler(
     args.profile,
   );
   const visibility = headlessLaunch(args);
-  const geckoEnv = geckoLaunchEnv(browser);
-  const socketWarning = geckoSocketWarning(browser, Boolean(args.noBrowser));
+  const { env: geckoEnv, warning: socketWarning } = await geckoSocketLaunch(browser, Boolean(args.noBrowser), args.projectPath);
   const launchEnv = { ...visibility.env, ...geckoEnv };
   const installGate = await sessionInstallGate(schema.name, args.projectPath);
   if (installGate.refusal) return installGate.refusal;

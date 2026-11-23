@@ -49,14 +49,13 @@ import { handler as logsHandler } from "./logs";
 import {
   LAUNCH_FLAG_SCHEMA,
   headlessHint,
-  geckoLaunchEnv,
-  geckoSocketWarning,
   headlessLaunch,
   hiddenBrowserUi,
   hiddenBrowserUiHint,
   launchFlagArgs,
   type LaunchFlagArgs,
 } from "../lib/launch-flags";
+import { geckoSocketLaunch } from "../lib/gecko-socket-process";
 import {
   SAFARI_DEV_OPTION_SCHEMA,
   isSafariTarget,
@@ -186,8 +185,7 @@ export async function handler(
   if (args.allowEval) cliArgs.push("--allow-eval");
 
   const visibility = headlessLaunch(args);
-  const geckoEnv = geckoLaunchEnv(browser);
-  const socketWarning = geckoSocketWarning(browser, Boolean(args.noBrowser));
+  const { env: geckoEnv, warning: socketWarning } = await geckoSocketLaunch(browser, Boolean(args.noBrowser), args.projectPath);
   const launchEnv = { ...visibility.env, ...geckoEnv };
   const installGate = await sessionInstallGate(schema.name, args.projectPath);
   if (installGate.refusal) return installGate.refusal;
