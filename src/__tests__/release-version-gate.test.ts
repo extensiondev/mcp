@@ -35,13 +35,14 @@ const GIT_CELL_BUDGET_MS = 30_000;
 describe("the release rails fail closed", () => {
   const read = (rel: string) => fs.readFileSync(fileURLToPath(new URL(`../../${rel}`, import.meta.url)), "utf8");
 
-  it("publishes to npm before it pushes the bump commit and the tag", () => {
+  it("stages on npm first and pushes the bump commit and the tag only on the run that finds the version published", () => {
     const yml = read(".github/workflows/release.yml");
-    const publishAt = yml.indexOf("name: Publish to npm with provenance");
-    const tagAt = yml.indexOf("name: Commit and tag release");
-    expect(publishAt).toBeGreaterThan(-1);
-    expect(tagAt).toBeGreaterThan(publishAt);
-    expect(yml).toMatch(/if: steps\.published\.outputs\.already != 'true'/);
+    const stageAt = yml.indexOf("- name: Stage on npm with provenance\n");
+    const tagAt = yml.indexOf("- name: Commit and tag release\n");
+    expect(stageAt).toBeGreaterThan(-1);
+    expect(tagAt).toBeGreaterThan(stageAt);
+    expect(yml.slice(stageAt, tagAt)).toContain("if: steps.published.outputs.already != 'true'");
+    expect(yml.slice(tagAt, yml.indexOf("\n      - name: ", tagAt + 1))).toContain("if: inputs.channel == 'stable' && steps.published.outputs.already == 'true'");
   });
 
   it("publishes a canary under the canary tag and leaves main, tags, releases and the listing alone", () => {
@@ -58,7 +59,7 @@ describe("the release rails fail closed", () => {
     expect(yml).toMatch(/options: \[stable, canary\]/);
     expect(yml).toContain('echo "dist_tag=canary"');
     expect(yml).toContain('echo "dist_tag=latest"');
-    expect(step("Publish to npm with provenance")).toContain("--tag ${{ steps.validate.outputs.dist_tag }}");
+    expect(step("Stage on npm with provenance")).toContain("--tag ${{ steps.validate.outputs.dist_tag }}");
 
     for (const name of [
       "Extract release notes from CHANGELOG.md",
@@ -71,7 +72,7 @@ describe("the release rails fail closed", () => {
     }
   });
 
-  it("keeps a refused publish from tagging and reports it in the summary while the run stays red", () => {
+  it("tags nothing on the staging run and reports the approval and the second run in the summary", () => {
     const yml = read(".github/workflows/release.yml");
 
     const step = (name: string) => {
@@ -82,15 +83,17 @@ describe("the release rails fail closed", () => {
       return yml.slice(start, next === -1 ? undefined : next);
     };
 
-    expect(step("Publish to npm with provenance")).toContain("continue-on-error: true");
-    expect(step("Commit and tag release")).toContain("steps.publish.outcome != 'failure'");
+    expect(step("Stage on npm with provenance")).not.toContain("continue-on-error");
+    expect(step("Stage on npm with provenance")).toContain('npm pkg set "gitHead=$(git rev-parse HEAD)"');
     expect(step("Create GitHub release")).toContain("steps.tag.outcome == 'success'");
     expect(step("Create GitHub release")).toContain('gh release view "$TAG" >/dev/null 2>&1 || gh release create');
     expect(step("Publish the listing to the MCP registry")).toContain("steps.tag.outcome == 'success'");
 
-    const report = step("Report the npm publish");
-    expect(yml.indexOf("name: Report the npm publish")).toBeGreaterThan(yml.indexOf("name: Publish the listing to the MCP registry"));
-    expect(report).toContain("npm publish refused (npm/cli#9969)");
+    const report = step("Report the npm staging");
+    expect(yml.indexOf("name: Report the npm staging")).toBeGreaterThan(yml.indexOf("name: Publish the listing to the MCP registry"));
+    expect(report).toContain("!cancelled()");
+    expect(report).toMatch(/npm stage approve \$\{STAGE_ID:-<stage-id>\}/);
+    expect(report).toContain("-f channel=stable -f version=$VERSION");
     expect(report).toContain("scripts/stage-release.sh $VERSION");
     expect(report).toContain("release_commit=$BUILT_FROM");
     expect(report).toMatch(/exit 1\s*$/);
@@ -112,18 +115,21 @@ describe("the release rails fail closed", () => {
       expect(text).not.toContain("_authToken");
     }
 
-    for (const rel of ["release.yml", "ci.yml", "publish-mcp.yml", "sync-templates.yml"]) {
+    for (const rel of ["ci.yml", "publish-mcp.yml", "sync-templates.yml"]) {
       expect(read(`.github/workflows/${rel}`), rel).not.toContain("NPM_TOKEN");
     }
   });
 
-  it("publishes through the GitHub OIDC token and never through a tracked npm credential", () => {
+  it("stages with a provenance bundle signed by the GitHub OIDC token and hands the npm token to that one step", () => {
     const yml = read(".github/workflows/release.yml");
     expect(yml).toMatch(/^permissions:\n(?: {2}.*\n)* {2}id-token: write$/m);
-    const publishAt = yml.indexOf("name: Publish to npm with provenance");
-    expect(publishAt).toBeGreaterThan(-1);
-    expect(yml.slice(publishAt)).toMatch(/run: npm publish --provenance /);
-    expect(yml).not.toMatch(/NODE_AUTH_TOKEN:\s*\$\{\{/);
+    const stageAt = yml.indexOf("- name: Stage on npm with provenance\n");
+    const stage = yml.slice(stageAt, yml.indexOf("\n      - name: ", stageAt + 1));
+    expect(stage).toMatch(/npm stage publish --provenance /);
+    expect(stage).toMatch(/NODE_AUTH_TOKEN: \$\{\{ secrets\.NPM_TOKEN \}\}/);
+    expect(yml.match(/secrets\.NPM_TOKEN/g)).toHaveLength(1);
+    expect(yml.match(/NODE_AUTH_TOKEN:/g)).toHaveLength(1);
+    expect(yml).not.toMatch(/run: npm publish /);
     expect(yml).not.toContain(".npmrc");
   });
 

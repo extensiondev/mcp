@@ -225,26 +225,37 @@ jobs:
           git remote set-url --push origin "git@github.com:${{ github.repository }}.git"
           git config core.sshCommand "ssh -i ~/.ssh/release_push_key -o IdentitiesOnly=yes"
 
-      # OIDC trusted publishing needs npm >= 11.5.1; pin the newest npm so we
-      # never depend on which patch of npm the Node runtime happens to ship.
-      - name: Upgrade npm for trusted publishing
+      - name: Upgrade npm for staging
         run: npm install -g npm@latest
 
-      # No NODE_AUTH_TOKEN: npm authenticates via the GitHub OIDC token
-      # (id-token: write above) against the trusted publisher configured on
-      # npmjs.com for this repo/workflow. Provenance is generated automatically.
-      - name: Publish to npm with provenance
-        id: publish
+      # npm trusted publishing refuses this repository's OIDC subject
+      # (npm/cli#9969), so the run stages the tarball with a stage-only token
+      # and a maintainer approves it with a one-time code. The provenance
+      # bundle is signed by the OIDC token (id-token: write above), which
+      # staging accepts. The token cannot publish by itself.
+      - name: Stage on npm with provenance
+        id: stage
         if: steps.published.outputs.already != 'true'
-        continue-on-error: true
-        run: npm publish --provenance --access ${{ steps.meta.outputs.publish_access }} --tag ${{ steps.validate.outputs.dist_tag }} --ignore-scripts
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "NPM_TOKEN is unset; staging needs the stage-only npm token for this package" >&2
+            exit 1
+          fi
+          npm pkg set "gitHead=$(git rev-parse HEAD)"
+          npm stage publish --provenance --access ${{ steps.meta.outputs.publish_access }} --tag ${{ steps.validate.outputs.dist_tag }} --ignore-scripts 2>&1 | tee "$RUNNER_TEMP/stage.log"
+          STAGE_ID="$(sed -n 's/.*staged with id \([0-9a-f-]*\)).*/\1/p' "$RUNNER_TEMP/stage.log" | tail -n 1)"
+          echo "stage_id=$STAGE_ID" >> "$GITHUB_OUTPUT"
 
-      # The tag and the bump are pushed only once npm serves the tarball: a
-      # publish that fails after the push left vX.Y.Z tagged and main bumped
-      # while npm served nothing, and the rerun was refused by the tag check.
+      # The tag and the bump are pushed only once npm serves the tarball, on
+      # the run that follows the approval: a push before npm served anything
+      # left vX.Y.Z tagged and main bumped, and the rerun was refused by the
+      # tag check.
       - name: Commit and tag release
         id: tag
-        if: inputs.channel == 'stable' && steps.publish.outcome != 'failure'
+        if: inputs.channel == 'stable' && steps.published.outputs.already == 'true'
         env:
           VERSION: ${{ steps.validate.outputs.version }}
           TAG: ${{ steps.validate.outputs.tag }}
@@ -301,55 +312,50 @@ jobs:
         if: inputs.channel == 'stable' && steps.tag.outcome == 'success'
         run: ./scripts/publish-mcp-registry.sh
 
-      # extensiondev/mcp was recreated on 2026-10-11, after GitHub started giving
-      # new repositories an immutable OIDC subject, and npm trusted publishing
-      # does not match that subject yet (npm/cli#9969). Until it does, the
-      # exchange answers "package not found" and the publish ends in E404. The
-      # tag, the GitHub release and the listing wait for npm, so a refused
-      # publish leaves only the staged rerun below, and the run stays red.
-      - name: Report the npm publish
-        if: ${{ !cancelled() && (steps.publish.outcome == 'success' || steps.publish.outcome == 'failure') }}
+      - name: Report the npm staging
+        if: ${{ !cancelled() && (steps.stage.outcome == 'success' || steps.stage.outcome == 'failure') }}
+        shell: bash
         env:
           PKG: ${{ steps.meta.outputs.name }}
-          ACCESS: ${{ steps.meta.outputs.publish_access }}
           CHANNEL: ${{ inputs.channel }}
           VERSION: ${{ steps.validate.outputs.version }}
-          DIST_TAG: ${{ steps.validate.outputs.dist_tag }}
-          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+          STAGE_ID: ${{ steps.stage.outputs.stage_id }}
+          STAGE_OUTCOME: ${{ steps.stage.outcome }}
         run: |
-          if [ "$PUBLISH_OUTCOME" = "success" ]; then
-            echo "npm: $PKG@$VERSION published with provenance" >> "$GITHUB_STEP_SUMMARY"
+          BUILT_FROM="$(git rev-parse HEAD)"
+          if [ "$STAGE_OUTCOME" = "success" ]; then
+            {
+              echo "### $PKG@$VERSION is staged on npm with provenance"
+              echo
+              echo "Nothing is published yet. Approve it from a machine signed in to npm; it asks for a one-time code."
+              echo
+              echo '```sh'
+              echo "npm stage approve ${STAGE_ID:-<stage-id>}"
+              if [ "$CHANNEL" = "stable" ]; then
+                echo "gh workflow run release.yml -R ${{ github.repository }} -f channel=stable -f version=$VERSION"
+              fi
+              echo '```'
+              echo
+              if [ "$CHANNEL" = "stable" ]; then
+                echo "The second run sees $VERSION on npm, skips the staging, and commits, tags, releases and lists $BUILT_FROM, the commit this run built from. Do not bump, tag or push the release by hand."
+              else
+                echo "A canary needs nothing after the approval."
+              fi
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          BUILT_FROM="$(git rev-parse HEAD)"
           {
-            echo "### npm publish refused (npm/cli#9969)"
+            echo "### npm staging failed"
             echo
-            if [ "$CHANNEL" = "stable" ]; then
-              echo "Nothing was committed, tagged, released or listed. Stage $VERSION from $BUILT_FROM, the commit this run built from, approve it, then run this workflow again with release_commit: it sees the version on npm, skips the publish, and commits, tags, releases and lists that commit."
-              echo
-              echo '```sh'
-              echo "git clone git@github.com:${{ github.repository }}.git && cd mcp  # or, in an existing clean checkout: git fetch origin"
-              echo "git checkout $BUILT_FROM"
-              echo "pnpm install --frozen-lockfile"
-              echo "scripts/stage-release.sh $VERSION"
-              echo "npm stage approve <stage-id>  # asks for a one-time code"
-              echo "gh workflow run release.yml -R ${{ github.repository }} -f channel=stable -f version=$VERSION -f release_commit=$BUILT_FROM"
-              echo '```'
-              echo
-              echo "Do not bump, tag or push the release by hand: the rerun refuses an existing tag, and a hand bump leaves server.json, the GitHub release and the MCP registry listing behind (10.15.0 to 10.18.1)."
-            else
-              echo "Publish the canary from a machine; nothing else is needed for a canary."
-              echo
-              echo '```sh'
-              echo "git clone git@github.com:${{ github.repository }}.git && cd mcp  # or, in an existing clean checkout: git fetch origin"
-              echo "git checkout $BUILT_FROM"
-              echo "pnpm install --frozen-lockfile"
-              echo "node scripts/set-release-version.mjs $VERSION && pnpm compile"
-              echo "npm publish --access $ACCESS --tag $DIST_TAG --ignore-scripts --provenance=false --otp=<code>"
-              echo "git checkout -- ."
-              echo '```'
-            fi
+            echo "Nothing was staged, committed, tagged, released or listed. Read the Stage on npm with provenance step, fix the cause (an expired NPM_TOKEN is the usual one) and run the workflow again. To stage $VERSION from a machine instead, without provenance:"
+            echo
+            echo '```sh'
+            echo "git fetch origin && git checkout $BUILT_FROM"
+            echo "pnpm install --frozen-lockfile"
+            echo "scripts/stage-release.sh $VERSION"
+            echo "npm stage approve <stage-id>"
+            echo "gh workflow run release.yml -R ${{ github.repository }} -f channel=stable -f version=$VERSION -f release_commit=$BUILT_FROM"
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "::error::npm refused the trusted publish of $PKG@$VERSION (npm/cli#9969); the run summary lists the commands that finish the release from a machine"
+          echo "::error::npm did not stage $PKG@$VERSION; the run summary lists what to do"
           exit 1
