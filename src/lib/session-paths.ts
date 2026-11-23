@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import * as bridge from "extension-develop/bridge";
@@ -147,20 +148,52 @@ export function statedProjectRoot(projectPath: string): { root: string; note: st
   return note ? { root: engineProjectRoot(projectPath), note } : null;
 }
 
-function repositoryRoot(start: string): string | null {
-  for (let dir = start; ; dir = path.dirname(dir)) {
-    if (fs.existsSync(path.join(dir, ".git"))) return dir;
-    if (path.dirname(dir) === dir) return null;
+function realPath(dir: string): string | null {
+  try {
+    return fs.realpathSync(dir);
+  } catch {
+    return null;
   }
+}
+
+/* @invariant THE REPOSITORY ROOT IS THE GIT TOP LEVEL OF THE PROJECT'S REAL
+ * FOLDER, AND NEVER A HOME DIRECTORY. The walk starts from the real path, so
+ * a project reached through a symbolic link is read against the repository
+ * its files live in and never the one the link sits in. It stops at the
+ * first folder that holds .git and looks no higher. A home directory or a
+ * filesystem root that is itself a repository is refused: a STORE.md there
+ * belongs to no project, and its text would be sent to the platform.
+ */
+function repositoryRoot(start: string): string | null {
+  const real = realPath(start);
+  if (!real) return null;
+
+  const home = realPath(os.homedir());
+
+  for (let dir = real; ; dir = path.dirname(dir)) {
+    const top = path.dirname(dir) === dir;
+    if (fs.existsSync(path.join(dir, ".git"))) return top || dir === home ? null : dir;
+    if (top) return null;
+  }
+}
+
+function repositoryAbove(root: string): string | null {
+  const real = realPath(root);
+  const repository = repositoryRoot(root);
+  if (!real || !repository || repository === real) return null;
+
+  const lexical = path.resolve(root, path.relative(real, repository));
+
+  return realPath(lexical) === repository ? lexical : repository;
 }
 
 /* @invariant STORE.md IS FOUND IN THE ORDER THE BUILD LANE FINDS IT. The
  * lane reads the project's root directory first and the repository root
  * after it (ledger 1079), so a project in a subfolder of a repository may
  * keep one STORE.md at the top. Here the project's own folder is the folder
- * passed and then the engine's root, and the repository root is the nearest
- * folder above that holds .git. When no file exists anywhere the engine's
- * root is answered, the place a new one is written; an answer that read the
+ * passed and then the engine's root, and the repository root is what
+ * repositoryRoot answers. When no file exists anywhere the engine's root is
+ * answered, the place a new one is written; an answer that read the
  * repository's file says so once.
  */
 function storeMdRead(projectPath: string): { file: string; fromRepository: string | null } {
@@ -169,8 +202,8 @@ function storeMdRead(projectPath: string): { file: string; fromRepository: strin
   const found = own.find(isFile);
   if (found) return { file: found, fromRepository: null };
 
-  const repository = repositoryRoot(root);
-  const shared = repository && repository !== root ? path.join(repository, STORE_MD_FILENAME) : null;
+  const repository = repositoryAbove(root);
+  const shared = repository ? path.join(repository, STORE_MD_FILENAME) : null;
 
   return shared && isFile(shared) ? { file: shared, fromRepository: repository } : { file: own[1], fromRepository: null };
 }

@@ -141,6 +141,33 @@ describe("the forwarder", () => {
     expect(JSON.stringify(lane().map((hit) => hit.body))).not.toContain(tmp);
   });
 
+  it("1079: says on a submit, a preflight and a sync-listing answer that the repository's STORE.md was the one read, and nothing when the project holds its own", async () => {
+    const repo = path.join(tmp, "mono");
+    const project = path.join(repo, "apps", "tools");
+    fs.mkdirSync(path.join(repo, ".git"), { recursive: true });
+    fs.mkdirSync(project, { recursive: true });
+    fs.writeFileSync(path.join(project, "package.json"), JSON.stringify({ name: "tools" }));
+    fs.writeFileSync(path.join(project, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "x", version: "1.0.0" }));
+    fs.writeFileSync(path.join(repo, "STORE.md"), "# Store\n\n## Listing\n\n- Summary: hello\n");
+    const answer = () => JSON.parse(envelopeOf({ ok: true, command: "extension_submit", status: "preflight-read", value: {}, hint: "Go on.", warnings: ["The lane's own warning."] }));
+    const calls = [
+      ["extension_submit", { action: "submit", browsers: ["chrome"] }],
+      ["extension_submit_check", { action: "preflight", browsers: ["chrome"] }],
+      ["extension_submit", { action: "sync-listing", browsers: ["chrome"] }],
+    ] as const;
+    const { lane } = stubLane([...calls, ...calls].map(answer));
+    const ask = async (index: number) => JSON.parse(await forwardCall(calls[index]![0], { ...calls[index]![1], projectPath: project }, async () => "local", FORWARDING));
+    const note = `STORE.md read: ${path.join(repo, "STORE.md")}, at the repository root, because ${project} holds none. A STORE.md in the project's own folder is read first, here and by the build lane.`;
+
+    for (const index of [0, 1, 2]) expect((await ask(index)).warnings).toEqual(["The lane's own warning.", note]);
+
+    expect(lane().map((hit) => hit.body.args.local.facts.project.storeMdFile)).toEqual(["../../STORE.md", "../../STORE.md", "../../STORE.md"]);
+
+    fs.writeFileSync(path.join(project, "STORE.md"), "# Store\n");
+
+    for (const index of [0, 1, 2]) expect((await ask(index)).warnings).toEqual(["The lane's own warning."]);
+  });
+
   it("retries a lane that did not answer, and a refused cached credential, with the same key", async () => {
     const denied = { ok: false, status: "auth-refused", error: { code: "E_AUTH_DENIED", message: "Refused." } };
     const { lane } = stubLane([new Error("socket hang up"), LISTED, denied, LISTED]);

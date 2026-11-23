@@ -135,6 +135,35 @@ describe("a package root is adopted only when it owns the manifest, as the engin
     expect(storeMdPath(loose)).toBe(path.join(loose, "STORE.md"));
   });
 
+  it("1079: finds the repository from the project's real folder, never from where a link to it sits, and never reads a home directory's STORE.md", () => {
+    const real = tmp();
+    const elsewhere = tmp();
+    const project = path.join(real, "apps", "tools");
+
+    for (const repo of [real, elsewhere]) {
+      fs.mkdirSync(path.join(repo, ".git"));
+      fs.writeFileSync(path.join(repo, "STORE.md"), "# Store\n");
+    }
+
+    fs.mkdirSync(project, { recursive: true });
+    fs.writeFileSync(path.join(project, "package.json"), JSON.stringify({ name: "tools" }));
+    manifestAt(project);
+    fs.mkdirSync(path.join(elsewhere, "apps"));
+    const linked = path.join(elsewhere, "apps", "tools");
+    fs.symlinkSync(project, linked, "dir");
+
+    expect(storeMdPath(linked)).toBe(path.join(fs.realpathSync(real), "STORE.md"));
+    expect(storeMdRepositoryNote(linked)).toContain(`STORE.md read: ${path.join(fs.realpathSync(real), "STORE.md")}, at the repository root`);
+
+    vi.stubEnv("HOME", real);
+    vi.stubEnv("USERPROFILE", real);
+    expect(storeMdPath(project)).toBe(path.join(project, "STORE.md"));
+    expect(storeMdRepositoryNote(project)).toBeNull();
+    expect(storeMdPath(linked)).toBe(path.join(linked, "STORE.md"));
+    vi.unstubAllEnvs();
+    expect(storeMdPath(project)).toBe(path.join(real, "STORE.md"));
+  });
+
   it("keeps the documented src layout on the package root whatever the package declares", () => {
     const repo = tmp();
     fs.writeFileSync(path.join(repo, "package.json"), JSON.stringify({ name: "plain" }));

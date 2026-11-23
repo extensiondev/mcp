@@ -31,6 +31,7 @@ import { PROJECT_HEADER } from "./request-fetch";
 import { identityHeaders } from "./session-identity";
 import { readSharedPreviews } from "./share-record";
 import { forwardSubmitFacts, imagesTheLaneWants, labeledScreenshots, withProjectRoot, type ForwardFactsArgs, type WantedImage } from "./submit-facts-forward";
+import { storeMdSourceNote } from "./submit-facts-local";
 import { TOOL_POLICY } from "./tool-policy";
 
 import { version as packageVersion } from "../../package.json";
@@ -88,6 +89,15 @@ function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function withStoreMdSource(body: unknown, note: string | null): unknown {
+  if (!note || !body || typeof body !== "object" || Array.isArray(body)) return body;
+
+  const warnings = (body as Args).warnings;
+  const said = Array.isArray(warnings) ? warnings.map(String) : [];
+
+  return said.includes(note) ? body : { ...body, warnings: [...said, note] };
+}
+
 function actionOf(args: Args, fallback: string): string {
   return text(args.action) || fallback;
 }
@@ -101,7 +111,7 @@ const SUBMIT_RULE: ForwardRule = {
   },
   wants: imagesTheLaneWants,
   sent: (args) => (args.screenshots === undefined ? args : { ...args, screenshots: labeledScreenshots(args as ForwardFactsArgs) }),
-  answered: (args, body) => withProjectRoot(body, args.projectPath),
+  answered: (args, body) => withStoreMdSource(withProjectRoot(body, args.projectPath), storeMdSourceNote(args)),
 };
 
 /* @invariant AN ASK-ONLY CALL REACHES THE LANE UNDER THE ASK-ONLY TOOL'S NAME,

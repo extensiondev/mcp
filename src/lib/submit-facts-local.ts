@@ -23,7 +23,7 @@ import {
   storeMdAt,
   toolchainFactsOf,
 } from "./store-facts-local";
-import { storeMdPath } from "./session-paths";
+import { storeMdPath, storeMdRepositoryNote } from "./session-paths";
 import { LISTING_STORES, type ListingStore } from "./store-md-declarations";
 import { emptyProjectFacts, type ProjectFacts, type StoreMdRead, type SubmitFacts } from "./submit-facts";
 import { localListingOf } from "./store-listing-local";
@@ -87,6 +87,19 @@ function readProjectFacts(args: SubmitFactsArgs, action: string): ProjectFacts {
     draft: preflight && exists ? draftFactsOf(projectPath, storeMd) : null,
     shots: listing && exists ? shotsFactsOf(projectPath, listing, args.screenshots) : null,
   };
+}
+
+/* @invariant AN ANSWER BUILT ON THE REPOSITORY'S STORE.md SAYS SO. Submit,
+ * preflight and sync-listing send the text of the file found to the
+ * platform. When that file sits at the repository root and not in the
+ * project's own folder, the answer carries the one sentence that names it,
+ * so nobody learns from a store listing which file was read.
+ */
+export function storeMdSourceNote(args: SubmitFactsArgs): string | null {
+  const projectPath = text(args.projectPath);
+  const action = args.action === undefined ? "submit" : args.action;
+
+  return projectPath && READ_ACTIONS.has(action) ? storeMdRepositoryNote(projectPath) : null;
 }
 
 export function readSubmitFacts(args: SubmitFactsArgs): SubmitFacts {
