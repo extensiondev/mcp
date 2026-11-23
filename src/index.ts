@@ -205,11 +205,26 @@ const THEME_ROUTE = ", and a theme manifest then goes to extension_theme_verify,
 const PACKAGE_ROUTE =
   "To package or zip an extension for a store: extension_manifest_validate, then extension_build with zip: true, never a hand-made zip of the source folder.";
 
+/* @invariant DONE IS SAID AFTER THE CHANGE RAN IN A BROWSER.
+ * The instructions said which tools run and drive an extension and never
+ * that a fix has to be seen working in one. On 2026-11-23 (ledger 1069) two
+ * agents with these tools listed made no call, ran the background script
+ * under Node against a chrome object they wrote, and reported a toolbar fix
+ * done that the grader's click showed dead; a third ran the session and
+ * said no tool clicks a toolbar button (ledger 1067). The line is said
+ * while the platform tools are off, where it fits the 3,150 characters; the
+ * platform head has 61 characters left before the window cuts
+ * value.nextStep.
+ */
+const VERIFY_IN_BROWSER =
+  "Before saying a change works or is done, see it work in a real browser through these tools, never against a mocked chrome object or from a build alone: extension_dev runs it, extension_open acts on it (surface: 'action' replays a toolbar click) and extension_eval or extension_dom_snapshot reads the result.";
+
 const instructionsHead = (themeListed: boolean, platformListed: boolean): string[] => [
   "extension-dev runs, inspects, drives, builds and publishes browser extensions (Chrome, Edge, Firefox, Safari) through Extension.js and extension.dev. When a browser-extension skill is listed, load it first: it holds the rules these tools assume.",
   `When the ask is to create, scaffold, start from a template, edit, check, run, start, watch, inspect, drive, test, debug or build a browser extension, however small, search this server first and use its tools: extension_create starts every new extension, plain JavaScript too, never by hand; extension_manifest_validate checks a manifest after any edit (each browser, permissions the code calls), not jq or a linter${themeListed ? THEME_ROUTE : ""}; extension_build builds and answers the store review risks, not a package script or bundler; extension_dev runs the dev session and answers once it is ready; extension_wait, extension_logs, extension_open, extension_dom_snapshot, extension_inspect and extension_eval (allowEval: true on extension_dev) follow, read and drive it; extension_stop ends it.`,
   ...(platformListed ? [] : [PACKAGE_ROUTE]),
   "When the person wants to try the extension, offer to open it and call extension_dev yourself (headless: false shows a window); never hand the person a shell command such as npm run dev, and never say a browser is on their screen when the answer reports headless: true.",
+  ...(platformListed ? [] : [VERIFY_IN_BROWSER]),
 ];
 
 const SESSION_RULES = [
