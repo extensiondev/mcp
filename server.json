@@ -18,13 +18,13 @@
       ]
     }
   ],
-  "version": "11.2.0",
+  "version": "11.3.0",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@extension.dev/mcp",
-      "version": "11.2.0",
+      "version": "11.3.0",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
