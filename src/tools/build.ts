@@ -40,6 +40,7 @@ import {
   sourceManifestPath,
   statedProjectRoot,
   storeMdPath,
+  storeMdRepositoryNote,
 } from "../lib/session-paths";
 import { type Envelope, envelope, isEnvelope } from "../lib/envelope";
 import { platformListed } from "../lib/tool-policy";
@@ -1231,6 +1232,7 @@ export async function handler(args: {
         ...shownBuildWarnings.filter((line) => !engineNamesDroppedPage(line, droppedPages)),
         ...reviewRiskPointer(risks),
         mode === "development" || !(args.zip || fs.existsSync(storeMdPath(args.projectPath))) ? null : storeMdLine(path.dirname(storeMdPath(args.projectPath)), risks, browser),
+        mode === "development" ? null : storeMdRepositoryNote(args.projectPath),
         mode === "development" ? null : wasmGrantLine(review),
         ...reviewCoverageNotes(review),
         ...zipNotes,

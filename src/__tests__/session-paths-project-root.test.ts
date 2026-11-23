@@ -9,6 +9,7 @@ import {
   engineProjectRoot,
   projectRootNote,
   storeMdPath,
+  storeMdRepositoryNote,
   readyContractPath,
   logsPath,
   sessionArtifactsRootDir,
@@ -103,6 +104,35 @@ describe("a package root is adopted only when it owns the manifest, as the engin
     expect(projectRootNote(src)).toBe(`Project root: ${repo}, the folder of the package.json or deno.json that owns this manifest; dist, zips and STORE.md live there.`);
     expect(projectRootNote(manifestAt(tmp()))).toBeNull();
     expect(storeMdPath(src)).toBe(path.join(repo, "STORE.md"));
+  });
+
+  it("1079: reads STORE.md from the project's folder first and the repository root after it, the order the build lane reads, and says when the repository's was read", () => {
+    const repo = tmp();
+    fs.mkdirSync(path.join(repo, ".git"));
+    const project = path.join(repo, "apps", "extensions", "tools");
+    fs.mkdirSync(project, { recursive: true });
+    fs.writeFileSync(path.join(project, "package.json"), JSON.stringify({ name: "tools" }));
+    manifestAt(project);
+
+    expect(storeMdPath(project)).toBe(path.join(project, "STORE.md"));
+    expect(storeMdRepositoryNote(project)).toBeNull();
+
+    fs.writeFileSync(path.join(repo, "STORE.md"), "# Store\n");
+    expect(storeMdPath(project)).toBe(path.join(repo, "STORE.md"));
+    expect(storeMdRepositoryNote(project)).toBe(
+      `STORE.md read: ${path.join(repo, "STORE.md")}, at the repository root, because ${project} holds none. A STORE.md in the project's own folder is read first, here and by the build lane.`,
+    );
+
+    fs.writeFileSync(path.join(project, "STORE.md"), "# Store\n");
+    expect(storeMdPath(project)).toBe(path.join(project, "STORE.md"));
+    expect(storeMdRepositoryNote(project)).toBeNull();
+
+    const outside = tmp();
+    const loose = path.join(outside, "pkg");
+    fs.mkdirSync(loose);
+    manifestAt(loose);
+    fs.writeFileSync(path.join(outside, "STORE.md"), "# Store\n");
+    expect(storeMdPath(loose)).toBe(path.join(loose, "STORE.md"));
   });
 
   it("keeps the documented src layout on the package root whatever the package declares", () => {

@@ -133,7 +133,8 @@ export function emptyProjectFacts(projectPath = ""): ProjectFacts {
 }
 
 /* @invariant ONE PLACE SAYS WHICH FILE STORE.md IS. The local half finds the
- * file on disk (the folder passed first, then the engine's root) and sends
+ * file on disk (the folder passed first, then the engine's root, then the
+ * repository root, the order storeMdPath documents) and sends
  * where it sits as storeMdFile, a path relative to projectPath with forward
  * slashes. The hosted half holds projectPath as a label and no disk, so it
  * names the file from that fact; a forwarder that sends none, or anything

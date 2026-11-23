@@ -147,10 +147,44 @@ export function statedProjectRoot(projectPath: string): { root: string; note: st
   return note ? { root: engineProjectRoot(projectPath), note } : null;
 }
 
-export function storeMdPath(projectPath: string): string {
-  const passed = path.join(path.resolve(projectPath), STORE_MD_FILENAME);
+function repositoryRoot(start: string): string | null {
+  for (let dir = start; ; dir = path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, ".git"))) return dir;
+    if (path.dirname(dir) === dir) return null;
+  }
+}
 
-  return isFile(passed) ? passed : path.join(engineProjectRoot(projectPath), STORE_MD_FILENAME);
+/* @invariant STORE.md IS FOUND IN THE ORDER THE BUILD LANE FINDS IT. The
+ * lane reads the project's root directory first and the repository root
+ * after it (ledger 1079), so a project in a subfolder of a repository may
+ * keep one STORE.md at the top. Here the project's own folder is the folder
+ * passed and then the engine's root, and the repository root is the nearest
+ * folder above that holds .git. When no file exists anywhere the engine's
+ * root is answered, the place a new one is written; an answer that read the
+ * repository's file says so once.
+ */
+function storeMdRead(projectPath: string): { file: string; fromRepository: string | null } {
+  const root = engineProjectRoot(projectPath);
+  const own = [path.resolve(projectPath), root].map((dir) => path.join(dir, STORE_MD_FILENAME));
+  const found = own.find(isFile);
+  if (found) return { file: found, fromRepository: null };
+
+  const repository = repositoryRoot(root);
+  const shared = repository && repository !== root ? path.join(repository, STORE_MD_FILENAME) : null;
+
+  return shared && isFile(shared) ? { file: shared, fromRepository: repository } : { file: own[1], fromRepository: null };
+}
+
+export function storeMdPath(projectPath: string): string {
+  return storeMdRead(projectPath).file;
+}
+
+export function storeMdRepositoryNote(projectPath: string): string | null {
+  const { file, fromRepository } = storeMdRead(projectPath);
+
+  return fromRepository
+    ? `${STORE_MD_FILENAME} read: ${file}, at the repository root, because ${engineProjectRoot(projectPath)} holds none. A ${STORE_MD_FILENAME} in the project's own folder is read first, here and by the build lane.`
+    : null;
 }
 
 export function sourceManifestPath(projectPath: string): string | null {
