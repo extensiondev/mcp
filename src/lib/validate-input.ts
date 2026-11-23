@@ -19,13 +19,14 @@ export interface InputIssue {
 
 export const ENFORCED_TYPES = ["string", "number", "integer", "boolean", "array", "object"] as const;
 
-export const ENFORCED_KEYWORDS = ["type", "enum", "minimum", "maximum", "items", "properties", "required"] as const;
+export const ENFORCED_KEYWORDS = ["type", "enum", "pattern", "minimum", "maximum", "items", "properties", "required"] as const;
 
 export const ANNOTATION_KEYWORDS = ["description", "default"] as const;
 
 interface PropertySchema {
   type?: string | string[];
   enum?: unknown[];
+  pattern?: string;
   minimum?: number;
   maximum?: number;
   items?: PropertySchema;
@@ -87,6 +88,8 @@ export function expectation(schema: PropertySchema): string {
     parts.push(`one of ${schema.enum.map((option) => JSON.stringify(option)).join(", ")}`);
   }
 
+  if (typeof schema.pattern === "string") parts.push(`matching ${schema.pattern}`);
+
   if (typeof schema.minimum === "number" && typeof schema.maximum === "number") {
     parts.push(`from ${schema.minimum} to ${schema.maximum}`);
   } else if (typeof schema.minimum === "number") {
@@ -144,6 +147,12 @@ function checkValue(
 
       return;
     }
+  }
+
+  if (typeof value === "string" && typeof schema.pattern === "string" && !new RegExp(schema.pattern).test(value)) {
+    issues.push({ path, message: `must match ${schema.pattern}`, fix: `Pass ${path} as ${expectation(schema)}.` });
+
+    return;
   }
 
   if (typeof value === "number") {

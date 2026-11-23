@@ -26,12 +26,13 @@ import {
   type ErrorCode,
   reframedObject,
 } from "./envelope";
+import { withoutParserQuote } from "./manifest-path";
 import { withRefusalHint } from "./refusal-hints";
 import { withRetry } from "./retry";
 
 export function toMcpSpeak(text: string): string {
   return (
-    text
+    withoutParserQuote(text)
       .replace(
         /`?extension dev(?: [^\s`]*)? --browser[= ]([\w-]+) --allow-eval`?/g,
         'extension_dev with { browser: "$1", allowEval: true }',

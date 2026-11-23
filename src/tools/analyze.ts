@@ -9,7 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { PROJECT_PATH } from "../lib/common-schema";
+import { LAUNCHABLE_BROWSERS, PROJECT_PATH } from "../lib/common-schema";
 import { envelope } from "../lib/envelope";
 import { engineBrowserName } from "../lib/browser-family";
 import { readBuildType } from "../lib/build-type";
@@ -22,6 +22,10 @@ import { jsonReadFailure } from "../lib/manifest-path";
 
 const COMMAND = "extension_analyze";
 
+/* @invariant `browser` NAMES ONE FOLDER UNDER dist: it is joined into the
+ * path that is walked, so the schema holds it to letters and dashes and the
+ * handler to the browsers a build can target, before the disk is touched
+ * (1058). The schema names no list because tools/list has a size budget. */
 export const schema = {
   name: "extension_analyze",
   description:
@@ -32,6 +36,7 @@ export const schema = {
       projectPath: PROJECT_PATH,
       browser: {
         type: "string",
+        pattern: "^[a-z-]+$",
         default: "chrome",
         description: "Browser build to analyze.",
       },
@@ -109,6 +114,14 @@ export async function handler(args: {
   format?: string;
 }): Promise<string> {
   const browser = args.browser ?? "chrome";
+
+  if (!(LAUNCHABLE_BROWSERS as readonly string[]).includes(browser)) {
+    const message = `browser has to be one of ${LAUNCHABLE_BROWSERS.join(", ")}, and the value passed is not one, so nothing was read.`;
+    const hint = 'Call extension_analyze again with the browser the project was built for, such as browser: "chrome".';
+
+    return envelope({ ok: false, command: COMMAND, status: "unknown-browser", error: { code: "E_BAD_REQUEST", message, hint } });
+  }
+
   const distPath = path.join(engineProjectRoot(args.projectPath), "dist", engineBrowserName(browser));
 
   if (!fs.existsSync(distPath)) {

@@ -26,8 +26,20 @@ import path from "node:path";
  * the parser's message. `jsonReadFailure` gives the same words to every
  * other tool that reads a JSON file under a folder the call names (a dist
  * manifest, a ready contract), so none of them quotes the file either.
+ * The read itself goes through one descriptor: the file is opened, asked
+ * what it is and how large, and read from that same descriptor, so the
+ * check and the read see one file. Anything that is not a regular file, or
+ * is over MANIFEST_BYTES_MAX, is refused before a byte is read. The name is
+ * matched without regard to case, because the disks of macOS and Windows
+ * answer MANIFEST.JSON with the manifest itself. `realPathInside` is the
+ * same containment for a folder argument (a `distPath`), and
+ * `withoutParserQuote` takes the quoted file text out of a parser message
+ * that an engine wrote and a tool relays.
  */
 export const MANIFEST_FILE_NAME = "manifest.json";
+export const MANIFEST_BYTES_MAX = 1024 * 1024;
+
+const PARSER_QUOTE = /Unexpected token '[\s\S]{1,2}', (?:\.\.\.)?"[\s\S]{0,64}?"(?:\.\.\.)? is not valid JSON|Unexpected token [\s\S]{1,2} in JSON at position \d+/g;
 
 export type ManifestFileRead =
   | { ok: true; path: string; root: string; manifest: unknown }
@@ -193,6 +205,10 @@ export function jsonReadFailure(err: unknown, file: string): string {
   }
 }
 
+export function withoutParserQuote(text: string, file?: string): string {
+  return text.replace(PARSER_QUOTE, () => (file ? jsonReadFailure(new SyntaxError("not valid JSON"), file) : "not valid JSON"));
+}
+
 function namedManifest(file: string): boolean {
   return path.basename(file).toLowerCase() === MANIFEST_FILE_NAME;
 }
@@ -201,6 +217,41 @@ function inside(root: string, file: string): boolean {
   const relative = path.relative(root, file);
 
   return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+}
+
+export function realPathInside(root: string, target: string): string | null {
+  try {
+    const realRoot = fs.realpathSync(path.resolve(root));
+    const realTarget = fs.realpathSync(path.resolve(target));
+
+    return realTarget === realRoot || inside(realRoot, realTarget) ? realTarget : null;
+  } catch {
+    return null;
+  }
+}
+
+function readRegularFile(file: string): { text: string } | { code: string } | { bytes: number } {
+  const descriptor = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NONBLOCK ?? 0));
+
+  try {
+    const stat = fs.fstatSync(descriptor);
+    if (!stat.isFile()) return { code: stat.isDirectory() ? "EISDIR" : "ENOTSUP" };
+    if (stat.size > MANIFEST_BYTES_MAX) return { bytes: stat.size };
+
+    const buffer = Buffer.alloc(stat.size);
+    let filled = 0;
+
+    while (filled < buffer.length) {
+      const read = fs.readSync(descriptor, buffer, filled, buffer.length - filled, filled);
+      if (read === 0) break;
+
+      filled += read;
+    }
+
+    return { text: buffer.toString("utf8", 0, filled) };
+  } finally {
+    fs.closeSync(descriptor);
+  }
 }
 
 export function readManifestFile(manifestPath: string, projectPath?: string): ManifestFileRead {
@@ -245,9 +296,20 @@ export function readManifestFile(manifestPath: string, projectPath?: string): Ma
   let text: string;
 
   try {
-    if (!fs.statSync(realFile).isFile()) return unreadable({ code: "EISDIR" });
+    const read = readRegularFile(realFile);
+    if ("code" in read) return unreadable(read);
 
-    text = fs.readFileSync(realFile, "utf8");
+    if ("bytes" in read) {
+      return {
+        ok: false,
+        kind: "unreadable",
+        path: file,
+        message: `${file} is ${read.bytes} bytes, over the ${MANIFEST_BYTES_MAX} bytes a ${MANIFEST_FILE_NAME} is read up to, so it was not read.`,
+        hint: `Pass the path of the project's own ${MANIFEST_FILE_NAME} and call again.`,
+      };
+    }
+
+    text = read.text;
   } catch (err) {
     return unreadable(err);
   }

@@ -12,6 +12,7 @@ import path from "node:path";
 import * as build from "./build";
 import { navigateToUrl } from "./open";
 import { engineBrowserName } from "../lib/browser-family";
+import { realPathInside } from "../lib/manifest-path";
 import { uploadPreview } from "../lib/preview-upload";
 import { engineProjectRoot } from "../lib/session-paths";
 import { recordSharedPreview } from "../lib/share-record";
@@ -69,6 +70,10 @@ export const PREVIEW_WEB_LOCAL: PreviewWebLocal = {
     args.distPath
       ? path.resolve(args.distPath)
       : path.join(engineProjectRoot(args.projectPath), "dist", engineBrowserName(browser)),
+  distOutsideProject: (args) =>
+    Boolean(args.distPath) &&
+    fs.existsSync(path.resolve(args.distPath as string)) &&
+    [args.projectPath, engineProjectRoot(args.projectPath)].every((root) => realPathInside(root, args.distPath as string) === null),
   manifestExists: (manifestPath) => fs.existsSync(manifestPath),
   readManifest: (manifestPath) => JSON.parse(fs.readFileSync(manifestPath, "utf8")),
   devCheckout: (projectPath, label) => previewDevCheckout([projectPath, process.cwd()], label),

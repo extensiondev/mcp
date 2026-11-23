@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -21,6 +22,7 @@ vi.mock("../lib/templates-cache", async (importOriginal) => {
 });
 
 const manifestValidate = await import("../tools/manifest-validate");
+const { MANIFEST_BYTES_MAX, jsonReadFailure, readManifestFile, withoutParserQuote } = await import("../lib/manifest-path");
 
 const dirs: string[] = [];
 
@@ -180,5 +182,53 @@ describe("1058: only a manifest.json that really sits in its project is read", (
     fs.symlinkSync(inside, linkedFolder);
 
     expect(JSON.parse(await manifestValidate.handler({ manifestPath: path.join(linkedFolder, "manifest.json") })).status).not.toMatch(/refused|unreadable/);
+  });
+
+  it("1058: an oversized file is refused unread, and the name is matched in any case", async () => {
+    const inside = tmp("extjs-manifest-big-");
+    const big = path.join(inside, "manifest.json");
+    const shouted = path.join(tmp("extjs-manifest-case-"), "MANIFEST.JSON");
+    const read = vi.spyOn(fs, "readSync");
+    fs.writeFileSync(big, JSON.stringify({ pad: "x".repeat(MANIFEST_BYTES_MAX - 9) }));
+    fs.writeFileSync(shouted, JSON.stringify({ manifest_version: 3, name: "Shouted", version: "1.0.0" }));
+
+    const refused = readManifestFile(big);
+
+    expect(refused).toMatchObject({ ok: false, kind: "unreadable", hint: "Pass the path of the project's own manifest.json and call again." });
+    expect(refused.ok ? "" : refused.message).toBe(`${big} is ${MANIFEST_BYTES_MAX + 1} bytes, over the 1048576 bytes a manifest.json is read up to, so it was not read.`);
+    expect(read).not.toHaveBeenCalled();
+    read.mockRestore();
+
+    fs.writeFileSync(big, JSON.stringify({ pad: "x".repeat(MANIFEST_BYTES_MAX - 10) }));
+
+    expect(fs.statSync(big).size).toBe(MANIFEST_BYTES_MAX);
+    expect(readManifestFile(big).ok).toBe(true);
+    expect(readManifestFile(shouted)).toMatchObject({ ok: true, manifest: { name: "Shouted" } });
+    expect(JSON.parse(await manifestValidate.handler({ manifestPath: shouted })).status).not.toMatch(/refused|unreadable/);
+  });
+
+  it.skipIf(process.platform === "win32")("1058: a manifest.json that is not a regular file is answered as unreadable without waiting on it", () => {
+    const pipe = path.join(tmp("extjs-manifest-pipe-"), "manifest.json");
+    const folder = path.join(tmp("extjs-manifest-dir-"), "manifest.json");
+    execFileSync("mkfifo", [pipe]);
+    fs.mkdirSync(folder);
+
+    expect(readManifestFile(pipe)).toMatchObject({ ok: false, kind: "unreadable", message: `${pipe} could not be read (ENOTSUP)` });
+    expect(readManifestFile(folder)).toMatchObject({ ok: false, kind: "unreadable", message: `${folder} could not be read (EISDIR)` });
+  });
+
+  it("1058: a failure is worded as its own sentence, its code or its place, and a relayed parser message loses the text it quoted", () => {
+    const file = path.join(tmp("extjs-manifest-words-"), "package.json");
+    fs.writeFileSync(file, "root:x:0:0:SECRETLINE\n");
+
+    expect(jsonReadFailure(new Error("the ready contract names no port"), file)).toBe("the ready contract names no port");
+    expect(jsonReadFailure(new TypeError("SECRETLINE is not iterable"), file)).toBe("read failed");
+    expect(jsonReadFailure(Object.assign(new Error("EACCES: permission denied, open SECRETLINE"), { code: "EACCES" }), file)).toBe("EACCES");
+    expect(withoutParserQuote(`${file} cannot be read as JSON (Unexpected token 'r', "root:x:0:0"... is not valid JSON), so no dependency was checked`, file)).toBe(
+      `${file} cannot be read as JSON (not valid JSON at line 1, column 1), so no dependency was checked`,
+    );
+
+    expect(withoutParserQuote('a (Unexpected token \'S\', ..."T", "x": SECRET"... is not valid JSON) b (Unexpected token r in JSON at position 0) c')).toBe("a (not valid JSON) b (not valid JSON) c");
+    expect(withoutParserQuote("Unexpected end of JSON input")).toBe("Unexpected end of JSON input");
   });
 });

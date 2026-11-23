@@ -284,6 +284,14 @@ describe("input handling", () => {
     expect(unparsed).toMatchObject({ ok: false, status: "bad-input", error: { code: "E_BAD_REQUEST" } });
     expect(unparsed.error.message).toBe(`${file} is not valid JSON at line 1, column 1`);
     expect(JSON.stringify(unparsed)).not.toMatch(/SECRET|hunter2/);
+
+    fs.writeFileSync(file, JSON.stringify({ secret_key_name: "Inside Secret", other_key_name: 1 }));
+
+    const themeless = await verify({ manifestPath: file });
+
+    expect(themeless).toMatchObject({ ok: false, status: "no-theme", error: { code: "E_NO_THEME" } });
+    expect(themeless.error.message).toBe("The manifest declares no `theme` block and no top-level colors, tints or images (2 top-level keys present, none of them one of those), so there is nothing to verify.");
+    expect(JSON.stringify(themeless)).not.toMatch(/secret_key_name|other_key_name|Inside Secret/);
   });
 
   it.skipIf(process.platform === "win32")("1058: refuses a manifest.json that is a link to a file outside its folder", async () => {

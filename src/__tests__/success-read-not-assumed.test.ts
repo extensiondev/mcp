@@ -14,6 +14,7 @@ vi.mock("extension-install", () => ({
 }));
 
 const analyze = await import("../tools/analyze");
+const { validateToolInput } = await import("../lib/validate-input");
 const themeVerify = await import("../tools/theme-verify");
 const nodeEngine = await import("../lib/node-engine");
 const uninstall = await import("../tools/uninstall-browser");
@@ -66,6 +67,34 @@ describe("extension_analyze reads the dist before calling it analyzed", () => {
     expect(out.ok).toBe(false);
     expect(out.status).toBe("dist-unreadable");
     expect(out.error.message).toMatch(/does not exist/);
+  });
+
+  it("1058: holds browser to the known browser names, so it never walks a folder outside dist", async () => {
+    const root = distWith({ "manifest.json": JSON.stringify({ manifest_version: 3, name: "Inside", version: "1.0.0" }) });
+    const creds = path.join(path.dirname(root), `${path.basename(root)}-creds`);
+    tmpDirs.push(creds);
+    fs.mkdirSync(creds);
+    fs.writeFileSync(path.join(creds, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "Outside Secret", version: "1.0.0" }));
+    const walked = vi.spyOn(fs, "readdirSync");
+
+    for (const browser of [`../../${path.basename(creds)}`, "../../../../../../../..", "Chrome", "chrome/../..", ""]) {
+      const out = JSON.parse(await analyze.handler({ projectPath: root, browser }));
+
+      expect(out, browser).toMatchObject({ ok: false, status: "unknown-browser", error: { code: "E_BAD_REQUEST", retry: "no" } });
+      expect(out.error.message).toMatch(/^browser has to be one of chrome, .*so nothing was read\.$/);
+      expect(out.error.hint).toBe('Call extension_analyze again with the browser the project was built for, such as browser: "chrome".');
+      expect(JSON.stringify(out)).not.toMatch(/Outside Secret|creds/);
+    }
+
+    expect(walked).not.toHaveBeenCalled();
+    walked.mockRestore();
+    expect(validateToolInput(analyze.schema.inputSchema, { projectPath: root, browser: "../../creds" })).toEqual([
+      { path: "browser", message: "must match ^[a-z-]+$", fix: "Pass browser as a string, matching ^[a-z-]+$." },
+    ]);
+
+    expect(validateToolInput(analyze.schema.inputSchema, { projectPath: root, browser: "gecko-based" })).toEqual([]);
+    expect(JSON.parse(await analyze.handler({ projectPath: root, browser: "gecko-based" })).status).toBe("no-dist");
+    expect(JSON.parse(await analyze.handler({ projectPath: root, browser: "chrome" })).ok).toBe(true);
   });
 
   it("calls an empty dist nothing to analyze instead of passing every readiness flag", async () => {

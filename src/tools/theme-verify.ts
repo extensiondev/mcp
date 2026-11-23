@@ -190,7 +190,7 @@ export async function handler(args: {
       error: {
         code: "E_NO_THEME",
         name: "InputError",
-        message: `The manifest declares no \`theme\` block and no top-level colors, tints or images (keys present: ${Object.keys(manifest).join(", ") || "none"}), so there is nothing to verify.`,
+        message: `The manifest declares no \`theme\` block and no top-level colors, tints or images (${Object.keys(manifest).length} top-level ${Object.keys(manifest).length === 1 ? "key" : "keys"} present, none of them one of those), so there is nothing to verify.`,
       },
       hint: "A Chrome theme is a manifest with a `theme` object holding colors, tints, images or properties. Check the key's spelling.",
     });

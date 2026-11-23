@@ -1000,6 +1000,15 @@ describe("extension_stop judges a session by its pid and its start time", () => 
     expect(stop.namesAnotherBrowser('"node.exe" "extension.cjs" "dev" "C:\\Users\\jo\\proj"', "chrome")).toBe(false);
     expect(stop.engineRunsOn(engine, folder, false)).toBe(false);
     expect(runs('"node.exe" "C:\\tools\\lint.cjs" "dev" "C:\\Users\\jo\\proj"')).toBe(false);
+
+    for (const verb of ["build", "create", "devs", "x"]) {
+      for (const line of [shimWrapper, npxWrapper, engine, bare]) {
+        const stranger = line.replace(/(["^ ])(dev|start|preview)(["^ ])/, `$1${verb}$3`);
+
+        expect(stranger, line).not.toBe(line);
+        expect(new RegExp(stop.cliCommandLinePattern(folder), "i").test(stranger), stranger).toBe(false);
+      }
+    }
   });
 
   it("1022 d: a record that holds clock ticks is decided by them where the kernel answers, and by the wall clock where it does not", () => {

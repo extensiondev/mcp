@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { withRequestCredential } from "../lib/credential-scope";
 import { handler, previewWebWith, schema } from "../tools/preview-web";
+import { PREVIEW_WEB_LOCAL } from "../tools/preview-web-local";
 
 import type * as CdpPortModule from "../lib/cdp-port";
 
@@ -61,6 +62,7 @@ describe("extension_preview_web", () => {
     const local = {
       build: vi.fn(async () => JSON.stringify({ ok: true })),
       distDirOf: vi.fn(() => "/elsewhere/widget/dist/chrome"),
+      distOutsideProject: vi.fn(() => false),
       manifestExists: vi.fn(() => true),
       readManifest: vi.fn(() => ({ ...MANIFEST })),
       devCheckout: vi.fn(() => null),
@@ -86,6 +88,36 @@ describe("extension_preview_web", () => {
     expect(local.devCheckout).toHaveBeenCalledWith("/elsewhere/widget", "preview.extension.dev");
     expect(local.recordSharedPreview).toHaveBeenCalledWith("/elsewhere/widget", expect.objectContaining({ artifactId: "gen_probe", browser: "chrome" }));
     expect(JSON.parse(out)).toMatchObject({ ok: true, status: "previewed", value: { built: true, share: { ok: true, artifactId: "gen_probe" } } });
+  });
+
+  it.skipIf(process.platform === "win32")("1058: refuses a distPath outside the project, a link out of it included, before anything is read or uploaded", async () => {
+    const project = tmpDist(MANIFEST);
+    const outside = tmpDist({ ...MANIFEST, name: "Outside Secret" });
+    const link = path.join(project, "linked-dist");
+    const uploaded = vi.spyOn(PREVIEW_WEB_LOCAL, "uploadPreview");
+    const read = vi.spyOn(PREVIEW_WEB_LOCAL, "readManifest");
+    fs.symlinkSync(outside, link);
+    fs.mkdirSync(path.join(project, "inner"));
+    fs.writeFileSync(path.join(project, "inner", "manifest.json"), JSON.stringify(MANIFEST));
+
+    try {
+      for (const distPath of [outside, link, path.join(project, "..", path.basename(outside)), path.dirname(project)]) {
+        const out = JSON.parse(await handler({ projectPath: project, distPath, share: true, probe: false }));
+
+        expect(out, distPath).toMatchObject({ ok: false, status: "dist-path-refused", error: { code: "E_BAD_REQUEST", retry: "no" }, value: { stage: "resolve-dist" } });
+        expect(out.error.message).toMatch(/so nothing was read or uploaded\.$/);
+        expect(out.error.hint).toBe("Pass a distPath inside projectPath, or leave distPath out so the project's own dist is previewed, and call again.");
+        expect(JSON.stringify(out)).not.toContain("Outside Secret");
+      }
+
+      expect(uploaded).not.toHaveBeenCalled();
+      expect(read).not.toHaveBeenCalled();
+      expect(JSON.parse(await handler({ projectPath: project, distPath: path.join(project, "inner"), probe: false })).status).not.toBe("dist-path-refused");
+      expect(JSON.parse(await handler({ projectPath: project, distPath: path.join(project, "missing"), probe: false })).status).toBe("no-dist");
+    } finally {
+      fs.rmSync(project, { recursive: true, force: true });
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
   });
 
   it("defaults to preview and emits a base64url-round-tripping preview://build deep link (probe off)", async () => {
@@ -313,13 +345,14 @@ describe("extension_preview_web", () => {
 
     const nested = path.join(checkout, "packages", "probe");
     fs.mkdirSync(nested, { recursive: true });
+    fs.cpSync(dir, path.join(nested, "out"), { recursive: true });
     global.fetch = (async () => {
       throw new Error("fetch failed");
     }) as unknown as typeof fetch;
 
     try {
       const out = JSON.parse(
-        await handler({ projectPath: nested, build: false, distPath: dir }),
+        await handler({ projectPath: nested, build: false, distPath: path.join(nested, "out") }),
       );
       expect(out.ok).toBe(false);
       expect(out.warnings.join(" ")).toMatch(/Start it/);

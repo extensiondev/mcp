@@ -20,6 +20,7 @@ import {
 import { resolveEngineOverride } from "../lib/engine-override";
 import { projectEngineCheck, projectEngineValue } from "../lib/project-engine-check";
 import { toMcpSpeak } from "../lib/act";
+import { withoutParserQuote } from "../lib/manifest-path";
 import { envelope, isEnvelope, okOrRefusal, type EnvelopeError } from "../lib/envelope";
 import {
   ambiguousSessionRefusal,
@@ -470,7 +471,9 @@ export async function handler(args: {
     const readOnlyLeg = controlOffByChoiceLeg(checks);
 
     for (const check of checks) {
-      if (typeof check.detail === "string") check.detail = toMcpSpeak(check.detail);
+      if (typeof check.detail === "string") {
+        check.detail = toMcpSpeak(check.check === "peer-rspack" ? withoutParserQuote(check.detail, path.join(projectPath, "package.json")) : check.detail);
+      }
 
       if (typeof check.remediation === "string") {
         check.remediation = toMcpSpeak(check.remediation);

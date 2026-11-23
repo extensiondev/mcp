@@ -30,6 +30,7 @@ import type { recordSharedPreview } from "../lib/share-record";
 export interface PreviewWebLocal {
   build(projectPath: string, browser: string): Promise<string>;
   distDirOf(args: { projectPath: string; distPath?: string }, browser: string): string;
+  distOutsideProject(args: { projectPath: string; distPath?: string }): boolean;
   manifestExists(manifestPath: string): boolean;
   readManifest(manifestPath: string): Record<string, any>;
   devCheckout(projectPath: string, label: string): string | null;
@@ -353,6 +354,20 @@ export async function previewWebWith(args: PreviewWebArgs, local: PreviewWebLoca
       status: "bad-host-url",
       error: { code: "E_BAD_HOST_URL", message: host.message },
       value: { stage: "resolve-host", hostUrl: args.hostUrl },
+    });
+  }
+
+  if (args.distPath && local.distOutsideProject(args)) {
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "dist-path-refused",
+      error: {
+        code: "E_BAD_REQUEST",
+        message: `distPath has to be a folder inside the project at ${args.projectPath} once its links are followed, and ${args.distPath} is not, so nothing was read or uploaded.`,
+        hint: "Pass a distPath inside projectPath, or leave distPath out so the project's own dist is previewed, and call again.",
+      },
+      value: { stage: "resolve-dist" },
     });
   }
 
