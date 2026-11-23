@@ -12,6 +12,7 @@ export interface RegistrationStamp {
   pid: number;
   at: number;
   startedAt?: string;
+  startTicks?: number;
 }
 
 export interface LocalState {

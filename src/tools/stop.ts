@@ -17,11 +17,16 @@ import {
   describeRecycledPid,
   namedLikeSessionProcess,
   pidState,
+  processStartTicks,
   processStartTimes,
   processStartedAt,
   readWindowsProcessTable,
+  serverStart,
+  sessionStart,
+  startRecord,
   startedAsRecorded,
   type PidState,
+  type ProcessStart,
   type WindowsProcessRow,
 } from "../lib/process-identity";
 import {
@@ -37,7 +42,7 @@ import {
 } from "../lib/session-browser";
 import { browserProfileRootDir, readyContractPath } from "../lib/session-paths";
 import { removeCarrier } from "../lib/carrier";
-import { contractPid, contractPidStartedAt } from "../lib/contract-pids";
+import { contractPid, contractPidStart } from "../lib/contract-pids";
 import { contractBrowserPid, describeEnded, endedProcesses, readReadyContract } from "../lib/stop-ended";
 import { sweepCarriers, type CarrierSweepEntry } from "../lib/carrier-exit";
 import { readRememberedCarriers } from "../lib/carrier-registry";
@@ -176,9 +181,25 @@ function escapeRegex(text: string): string {
 }
 
 const PATH_OPENS = "(^|[ =\"'])";
-const PATH_CLOSES = "([\"' ]|$)";
+const PATH_CLOSES = "([\"'^ ]|$)";
+
+/* @invariant AN ARGUMENT MAY ARRIVE QUOTED, AND ON WINDOWS IT ALWAYS DOES.
+ * cross-spawn quotes every argument there, so the engine's own process reads
+ * `...extension.cjs" "dev" "C:\proj" "--browser" "chrome"` in
+ * Win32_Process.CommandLine, and the cmd.exe that wraps a .cmd shim carries
+ * the same quotes behind one or three carets (`^"dev^"`, `^^^"dev^^^"`). A
+ * matcher that wanted the verb, the folder and the browser bare recognized
+ * no session on Windows (ledger 1022 e), so each one allows quotes and
+ * carets around an argument. A folder whose name holds a character cmd.exe
+ * escapes (a space, a parenthesis) is still not matched in the caret form.
+ */
+const ARGUMENT_QUOTES = "[\"'^]*";
 const PATH_CLOSES_OR_DESCENDS = "([/\\\\\"' ]|$)";
 const OPTIONAL_TRAILING_SEPARATOR = "[/\\\\]?";
+
+export function cliCommandLinePattern(folder: string): string {
+  return `extension[^ ]* ${ARGUMENT_QUOTES}(dev|start|preview)${ARGUMENT_QUOTES} ${ARGUMENT_QUOTES}${escapeRegex(folder)}${OPTIONAL_TRAILING_SEPARATOR}${PATH_CLOSES}`;
+}
 
 function projectPathForms(projectPath: string): string[] {
   const forms = new Set([projectPath, path.resolve(projectPath)]);
@@ -195,6 +216,7 @@ export interface ContractProcessHints {
   profilePath?: string;
   pids: number[];
   startedAt?: Record<number, string>;
+  startTicks?: Record<number, number>;
 }
 
 export function contractProcessHints(
@@ -209,11 +231,15 @@ export function contractProcessHints(
       typeof pid === "number" && Number.isInteger(pid) && pid > 0,
   );
   const startedAt: Record<number, string> = {};
+  const startTicks: Record<number, number> = {};
 
   for (const role of ["browser", "launcher"] as const) {
-    const stamp = contractPidStartedAt(projectPath, browser, contract, role);
+    const stamp = contractPidStart(projectPath, browser, contract, role);
     const pid = role === "browser" ? contract.browserPid : contract.launcherPid;
-    if (stamp && typeof pid === "number") startedAt[pid] = stamp;
+    if (!stamp?.startedAt || typeof pid !== "number") continue;
+
+    startedAt[pid] = stamp.startedAt;
+    if (stamp.startTicks !== undefined) startTicks[pid] = stamp.startTicks;
   }
 
   return {
@@ -222,7 +248,12 @@ export function contractProcessHints(
       : {}),
     pids,
     ...(Object.keys(startedAt).length > 0 ? { startedAt } : {}),
+    ...(Object.keys(startTicks).length > 0 ? { startTicks } : {}),
   };
+}
+
+function hintedStart(hints: ContractProcessHints, pid: number): ProcessStart {
+  return startRecord(hints.startedAt?.[pid], hints.startTicks?.[pid]);
 }
 
 function commandLineOf(
@@ -247,10 +278,12 @@ function commandLineOf(
 
 const ENGINE_DEFAULT_BROWSER = "chrome";
 
-function namesAnotherBrowser(commandLine: string | null, browser: string): boolean {
+const BROWSER_FLAG = new RegExp(`--browser${ARGUMENT_QUOTES}[= ]${ARGUMENT_QUOTES}([^\\s"'^]+)`);
+
+export function namesAnotherBrowser(commandLine: string | null, browser: string): boolean {
   if (commandLine === null) return false;
 
-  const named = commandLine.match(/--browser[= ]([^\s"']+)/);
+  const named = commandLine.match(BROWSER_FLAG);
 
   return (named ? named[1] : ENGINE_DEFAULT_BROWSER) !== browser;
 }
@@ -287,12 +320,11 @@ function sessionProcessPids(
   }
 
   for (const pid of hints.pids) {
-    if (pid !== process.pid && pidState(pid, hints.startedAt?.[pid]) !== "dead") pids.add(pid);
+    if (pid !== process.pid && pidState(pid, hintedStart(hints, pid)) !== "dead") pids.add(pid);
   }
 
   for (const form of projectPathForms(projectPath)) {
-    const escaped = escapeRegex(form);
-    const cliCommandLine = `extension[^ ]* (dev|start|preview) ["']?${escaped}${OPTIONAL_TRAILING_SEPARATOR}${PATH_CLOSES}`;
+    const cliCommandLine = cliCommandLinePattern(form);
     const browserArgvNamingTheManagedProfile = `${PATH_OPENS}${escapeRegex(browserProfileRootDir(form, browser))}${escapeRegex(path.sep)}`;
 
     for (const pid of found(cliCommandLine)) {
@@ -304,7 +336,7 @@ function sessionProcessPids(
 
   return {
     pids: [...pids].filter(
-      (pid) => startedAsRecorded(pid, hints.startedAt?.[pid]) || namedLikeSessionProcess(pid),
+      (pid) => startedAsRecorded(pid, hintedStart(hints, pid)) || namedLikeSessionProcess(pid),
     ),
     verified,
   };
@@ -324,16 +356,15 @@ function sessionProcessPids(
  * is found and the search for survivors could run; otherwise the records
  * stay and the answer is E_STOP_INCOMPLETE, saying they were kept.
  */
-const ENGINE_VERB_BEFORE_A_PATH = /extension[^ ]* (?:dev|start|preview) ["']?$/;
+const ENGINE_VERB_BEFORE_A_PATH = new RegExp(`extension[^ ]* ${ARGUMENT_QUOTES}(?:dev|start|preview)${ARGUMENT_QUOTES} ${ARGUMENT_QUOTES}$`);
 
-function engineRunsOn(commandLine: string, folder: string): boolean {
-  const insensitive = process.platform === "win32";
+export function engineRunsOn(commandLine: string, folder: string, insensitive = process.platform === "win32"): boolean {
   const haystack = insensitive ? commandLine.toLowerCase() : commandLine;
   const needle = insensitive ? folder.toLowerCase() : folder;
 
   for (let at = haystack.indexOf(needle); at !== -1; at = haystack.indexOf(needle, at + 1)) {
     const after = haystack.charAt(at + needle.length);
-    const closed = after === "" || after === '"' || after === "'" || after.trim() === "";
+    const closed = after === "" || after === '"' || after === "'" || after === "^" || after.trim() === "";
 
     if (closed && ENGINE_VERB_BEFORE_A_PATH.test(haystack.slice(Math.max(0, at - 96), at))) return true;
   }
@@ -371,9 +402,10 @@ async function reapSessionProcesses(
   const { pids } = sessionProcessPids(projectPath, browser, hints);
   if (pids.length === 0) return { reaped: [], unconfirmed: [] };
 
-  const startedAt = processStartTimes(pids);
+  const startedAt = new Map<number, ProcessStart>();
 
-  for (const [pid, stamp] of Object.entries(hints.startedAt ?? {})) startedAt.set(Number(pid), stamp);
+  for (const [pid, stamp] of processStartTimes(pids)) startedAt.set(pid, startRecord(stamp, processStartTicks(pid)));
+  for (const pid of Object.keys(hints.startedAt ?? {})) startedAt.set(Number(pid), hintedStart(hints, Number(pid)));
 
   for (const pid of pids) {
     if (process.platform === "win32") {
@@ -514,12 +546,12 @@ export async function stopOne(
   const contract = readReadyContract(projectPath, browser);
   const pid = session?.pid ?? pidFromReadyContract(projectPath, browser);
   const startedAt =
-    session?.processStartedAt ??
-    (pid !== null && contractPid(contract, "engine") === pid ? contractPidStartedAt(projectPath, browser, contract, "engine") : null);
-  const reusedSince = pid !== null && !session && !startedAt ? startedAfterContract(pid, projectPath, browser) : null;
+    (session?.processStartedAt ? sessionStart(session) : null) ??
+    (pid !== null && contractPid(contract, "engine") === pid ? contractPidStart(projectPath, browser, contract, "engine") : null);
+  const reusedSince = pid !== null && !session && !startedAt?.startedAt ? startedAfterContract(pid, projectPath, browser) : null;
   const hints = contractProcessHints(projectPath, browser);
   const browserPid = contractBrowserPid(projectPath, browser);
-  const browserStartedAt = contractPidStartedAt(projectPath, browser, contract, "browser");
+  const browserStartedAt = contractPidStart(projectPath, browser, contract, "browser");
   const noBrowser = session?.noBrowser === true;
 
   if (pid == null) {
@@ -697,7 +729,7 @@ export async function handler(args: {
 
       const key = `${path.resolve(m.projectPath)}::${m.browser}`;
       const foreign =
-        typeof m.serverPid === "number" && m.serverPid !== process.pid && pidState(m.serverPid, m.serverStartedAt) === "alive";
+        typeof m.serverPid === "number" && m.serverPid !== process.pid && pidState(m.serverPid, serverStart(m)) === "alive";
 
       if (foreign && !args.includeOtherServers) {
         skippedForeign.push({ projectPath: m.projectPath, browser: m.browser, serverPid: m.serverPid as number });

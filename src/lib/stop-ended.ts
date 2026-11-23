@@ -9,7 +9,7 @@
 import fs from "node:fs";
 
 import { contractPid } from "./contract-pids";
-import { pidState } from "./process-identity";
+import { pidState, type RecordedStart } from "./process-identity";
 import { readyContractPath } from "./session-paths";
 
 import type { ReadyContract } from "./types";
@@ -37,7 +37,7 @@ export function contractBrowserPid(projectPath: string, browser: string): number
 export function endedProcesses(
   serverGone: boolean | null,
   browserPid: number | null,
-  browserStartedAt: string | null = null,
+  browserStartedAt: RecordedStart = null,
 ): EndedProcesses {
   return {
     serverGone,

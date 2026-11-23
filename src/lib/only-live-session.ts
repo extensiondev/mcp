@@ -9,7 +9,7 @@
 import path from "node:path";
 
 import { listSessions, readSessionMarkers } from "./process-manager";
-import { pidState } from "./process-identity";
+import { pidState, serverStart, sessionStart } from "./process-identity";
 
 import type { ProcessInfo } from "./types";
 
@@ -46,7 +46,7 @@ export function onlyLiveSession(): OnlyLiveSession {
   const candidates = new Map<string, ProcessInfo>();
 
   for (const s of listSessions()) {
-    if (pidState(s.pid, s.processStartedAt) !== "alive") continue;
+    if (pidState(s.pid, sessionStart(s)) !== "alive") continue;
 
     candidates.set(`${path.resolve(s.projectPath)}::${s.browser}`, s);
   }
@@ -55,8 +55,8 @@ export function onlyLiveSession(): OnlyLiveSession {
 
   for (const m of markersRead.markers) {
     const foreign =
-      typeof m.serverPid === "number" && m.serverPid !== process.pid && pidState(m.serverPid, m.serverStartedAt) === "alive";
-    if (foreign || pidState(m.pid, m.processStartedAt) !== "alive") continue;
+      typeof m.serverPid === "number" && m.serverPid !== process.pid && pidState(m.serverPid, serverStart(m)) === "alive";
+    if (foreign || pidState(m.pid, sessionStart(m)) !== "alive") continue;
 
     const key = `${path.resolve(m.projectPath)}::${m.browser}`;
     if (!candidates.has(key)) candidates.set(key, m);

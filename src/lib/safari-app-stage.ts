@@ -10,7 +10,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 
 import { envelope } from "./envelope";
-import { pidState } from "./process-identity";
+import { pidState, sessionStart } from "./process-identity";
 import { findSessionInfo } from "./process-manager";
 import { isSafariTarget, notAttachedHint } from "./safari-dev-options";
 import { parseSafariEngineSays } from "./safari-enable-log";
@@ -93,7 +93,7 @@ export function safariAppBuilding(projectPath: string, browser: string): SafariA
   if (!isSafariTarget(browser)) return null;
 
   const session = findSessionInfo(projectPath, browser);
-  if (!session?.logPath || pidState(session.pid, session.processStartedAt) === "dead") return null;
+  if (!session?.logPath || pidState(session.pid, sessionStart(session)) === "dead") return null;
 
   let log: string;
 

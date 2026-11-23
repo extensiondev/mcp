@@ -33,7 +33,7 @@ import { noSessionEnvelope, readSessionReceipt } from "../lib/production-receipt
 import { EVAL_UNTIL_PROPERTY, evalUntilTruthy, pollTimeoutWithin, type EvalUntil } from "../lib/eval-until";
 import { parseFrameObject } from "../lib/frame-json";
 import { findSessionInfo } from "../lib/process-manager";
-import { pidState } from "../lib/process-identity";
+import { pidState, sessionStart } from "../lib/process-identity";
 import { sessionStartingEnvelope, startingSession } from "../lib/session-starting";
 import { awaitsAtTopLevel, isOneExpression, isSingleExpression, protocolExpression } from "../lib/one-expression";
 import {
@@ -1507,7 +1507,7 @@ function evalNotAllowed(projectPath: string, browser: string): string {
   if (starting) return sessionStartingEnvelope(schema.name, projectPath, starting);
 
   const started = findSessionInfo(projectPath, browser);
-  const ended = started !== undefined && pidState(started.pid, started.processStartedAt) === "dead";
+  const ended = started !== undefined && pidState(started.pid, sessionStart(started)) === "dead";
 
   if (ended || (!started && !knownSessionBrowsers(projectPath).includes(browser))) {
     return noSessionEnvelope({
@@ -1752,7 +1752,7 @@ async function evaluateAsAsked(args: EvalArgs): Promise<string> {
     () => {
       const known = findSessionInfo(args.projectPath, browser);
 
-      return known !== undefined && pidState(known.pid, known.processStartedAt) !== "dead";
+      return known !== undefined && pidState(known.pid, sessionStart(known)) !== "dead";
     },
   );
 }

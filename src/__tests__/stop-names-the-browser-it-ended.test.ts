@@ -8,7 +8,7 @@ import { describe, it, expect, afterEach, afterAll } from "vitest";
 import { emptyReason } from "../tools/logs";
 import * as stop from "../tools/stop";
 import { contractPidStartedAt, contractPidState } from "../lib/contract-pids";
-import { processStartedAt } from "../lib/process-identity";
+import { processStartedAt, procfs } from "../lib/process-identity";
 import { findSessionInfo, listSessionMarkers, registerSession } from "../lib/process-manager";
 import { readyContractPath } from "../lib/session-paths";
 import { attachedDevContract, readyContract } from "./fixtures/engine-answers";
@@ -267,6 +267,57 @@ describe("a ready contract that dates its own pids is believed before any stamp 
       expect(contractPidStartedAt(projectPath, "chrome", contract, "browser")).toBe(browserStartedAt);
       expect(contractPidState(projectPath, "chrome", contract, "browser")).toBe("alive");
       expect(findSessionInfo(projectPath, "chrome")?.browserStartedAt).toBe(LONG_AGO);
+    },
+    15_000,
+  );
+
+  posixOnly(
+    "1022 d: a session's engine and browser stay alive across a step of the wall clock, by the clock ticks its record took",
+    async () => {
+      const projectPath = tmpProject();
+      const serverPid = spawnHolder("server");
+      const browserPid = spawnHolder("browser");
+      const proc = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-proc-ticks-"));
+      const previousRoot = procfs.root;
+
+      const stat = (pid: number, ticks: number): void => {
+        fs.mkdirSync(path.join(proc, String(pid)), { recursive: true });
+        fs.writeFileSync(path.join(proc, String(pid), "stat"), `${pid} (node) S 1 ${pid} ${pid} 0 -1 4194304 900 0 0 0 12 3 0 0 20 0 11 0 ${ticks} 1 2 3`);
+      };
+
+      tmpDirs.push(proc);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      stat(serverPid, 500);
+      stat(browserPid, 700);
+      procfs.root = proc;
+
+      try {
+        registerSession({ pid: serverPid, browser: "chrome", projectPath, command: "dev" });
+
+        const browserStartedAt = processStartedAt(browserPid);
+        const contract = attachedDevContract("chrome", { pid: serverPid, pidStartedAt: processStartedAt(serverPid), browserPid, browserStartedAt });
+
+        expect(contractPidState(projectPath, "chrome", contract, "browser")).toBe("alive");
+        expect(findSessionInfo(projectPath, "chrome")).toMatchObject({ processStartTicks: 500, browserPid, browserStartTicks: 700 });
+        expect(listSessionMarkers().find((marker) => marker.pid === serverPid)).toMatchObject({ processStartTicks: 500, browserStartTicks: 700 });
+
+        const hourEarlier = (stamp: string | null): string => new Date(Date.parse(stamp ?? new Date().toISOString()) - 3_600_000).toISOString();
+        const stepped = { ...contract, pidStartedAt: hourEarlier(processStartedAt(serverPid)), browserStartedAt: hourEarlier(browserStartedAt) };
+
+        expect(contractPidState(projectPath, "chrome", stepped, "engine")).toBe("alive");
+        expect(contractPidState(projectPath, "chrome", stepped, "browser")).toBe("alive");
+        expect(stop.contractProcessHints(projectPath, "chrome").startTicks).toBeUndefined();
+
+        writeContract(projectPath, stepped);
+
+        expect(stop.contractProcessHints(projectPath, "chrome").startTicks).toEqual({ [browserPid]: 700 });
+
+        stat(browserPid, 701);
+
+        expect(contractPidState(projectPath, "chrome", stepped, "browser")).toBe("dead");
+      } finally {
+        procfs.root = previousRoot;
+      }
     },
     15_000,
   );

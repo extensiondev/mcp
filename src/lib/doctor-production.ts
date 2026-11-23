@@ -10,8 +10,8 @@ import { BridgeController, readControlToken } from "extension-develop/bridge";
 
 import { isChromiumFamily, isGeckoFamily } from "./browser-family";
 import { CDPClient } from "./cdp";
-import { contractPidStartedAt } from "./contract-pids";
-import { describeForeignPid, pidState } from "./process-identity";
+import { contractPidStart } from "./contract-pids";
+import { describeForeignPid, pidState, type RecordedStart } from "./process-identity";
 import { waitCall } from "./production-receipt";
 import { engineProjectRoot } from "./session-paths";
 
@@ -97,7 +97,7 @@ function readyContractLeg(receipt: ProductionReceipt, projectPath: string, brows
   }
 }
 
-function serverProcessLeg(receipt: ProductionReceipt, startedAt: string | null): DoctorLeg {
+function serverProcessLeg(receipt: ProductionReceipt, startedAt: RecordedStart): DoctorLeg {
   const pid = receipt.contract.pid;
 
   if (typeof pid !== "number") {
@@ -268,7 +268,7 @@ async function controlLegs(projectPath: string, browser: string, receipt: Produc
   }
 }
 
-function browserLeg(receipt: ProductionReceipt, startedAt: string | null): DoctorLeg {
+function browserLeg(receipt: ProductionReceipt, startedAt: RecordedStart): DoctorLeg {
   const { contract } = receipt;
   const binary = typeof contract.binary === "string" && contract.binary ? ` (${contract.binary})` : "";
 
@@ -330,7 +330,7 @@ async function debugPortLeg(browser: string, receipt: ProductionReceipt): Promis
 
 export async function productionSessionChecks(projectPath: string, browser: string, receipt: ProductionReceipt): Promise<DoctorLeg[]> {
   const ready = readyContractLeg(receipt, projectPath, browser);
-  const server = serverProcessLeg(receipt, contractPidStartedAt(projectPath, browser, receipt.contract, "engine"));
+  const server = serverProcessLeg(receipt, contractPidStart(projectPath, browser, receipt.contract, "engine"));
   const live = ready.status === "pass" && server.status === "pass";
   const control = live
     ? await controlLegs(projectPath, browser, receipt)
@@ -341,7 +341,7 @@ export async function productionSessionChecks(projectPath: string, browser: stri
     server,
     portAgreementLeg(receipt),
     ...control,
-    browserLeg(receipt, contractPidStartedAt(projectPath, browser, receipt.contract, "browser")),
+    browserLeg(receipt, contractPidStart(projectPath, browser, receipt.contract, "browser")),
     await debugPortLeg(browser, receipt),
   ];
 }

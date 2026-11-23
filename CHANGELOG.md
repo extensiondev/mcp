@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Ledger 1022 (d, e). A wall clock step on Linux no longer takes a live process for a dead one. A record written on Linux carries the process's clock ticks since boot (`startTicks` beside `startedAt` in the install record, `processStartTicks`, `serverStartTicks`, `browserStartTicks` and `launcherStartTicks` in the session record), and a record that holds them is compared by them, so a virtual machine that resumes or a time sync no longer hands a held install record to a second install or reads a running session as ended. A record from an older server, from macOS or from Windows holds the wall-clock time only and is compared as before. On Windows, where every argument of the engine's command line is quoted (`"dev" "C:\proj" "--browser" "chrome"`), `extension_stop` now recognizes the session's processes by that command line; a folder whose name holds a space is still not matched in the caret-escaped line of the `cmd.exe` wrapper.
+
 ## 11.2.0
 
 - The bundled engine moves to Extension.js 4.3.0 (`extension-create`, `extension-develop` and `extension-install`). Its envelope contract is byte for byte the 4.2.0 one, so only the contract pin's version changes. 4.3.0 carries the engine fix for a Gecko session on Linux that adopted a short-lived Firefox fork (Extension.js ledger 1504); ledger 987 closes once the fork smoke passes 20 times on it.

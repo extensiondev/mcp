@@ -117,6 +117,7 @@ export interface ReadyContract {
 export interface ProcessInfo {
   pid: number;
   processStartedAt?: string;
+  processStartTicks?: number;
   browser: string;
   port?: number;
   projectPath: string;
@@ -125,10 +126,13 @@ export interface ProcessInfo {
   profileReused?: boolean;
   serverPid?: number;
   serverStartedAt?: string;
+  serverStartTicks?: number;
   browserPid?: number;
   browserStartedAt?: string;
+  browserStartTicks?: number;
   launcherPid?: number;
   launcherStartedAt?: string;
+  launcherStartTicks?: number;
   headless?: boolean;
   idleMinutes?: number | null;
   allowControl?: boolean;

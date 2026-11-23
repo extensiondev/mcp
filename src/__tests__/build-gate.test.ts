@@ -836,6 +836,54 @@ describe("941: one dependency install runs on a project at a time, and a build s
     );
   }, 20_000);
 
+  it("1022 d: a holder keeps the record across a step of the wall clock, by its clock ticks since boot, and loses it when the ticks are another process's", () => {
+    const dir = coldProject();
+    const pid = installerStandIn();
+    const proc = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-proc-ticks-"));
+    const previousRoot = procfs.root;
+    const stat = (ticks: number): void =>
+      fs.writeFileSync(path.join(proc, String(pid), "stat"), `${pid} (node) S 1 ${pid} ${pid} 0 -1 4194304 900 0 0 0 12 3 0 0 20 0 11 0 ${ticks} 1 2 3`);
+
+    tmpDirs.push(proc);
+    fs.mkdirSync(path.join(proc, String(pid)));
+    stat(360_000);
+    procfs.root = proc;
+
+    try {
+      const turn = takeInstallTurn(dir);
+      if (typeof turn === "string") throw new Error(`the install turn was ${turn}`);
+
+      turn.handOver(pid);
+
+      const file = path.join(installRecordPath(dir), fs.readdirSync(installRecordPath(dir))[0]);
+      const record = JSON.parse(fs.readFileSync(file, "utf8"));
+
+      expect(record.holders).toMatchObject([{ pid, role: "engine", startTicks: 360_000 }]);
+
+      const stepped = new Date(Date.parse(record.holders[0].startedAt ?? new Date().toISOString()) - 3_600_000).toISOString();
+      const write = (holder: Record<string, unknown>): void => {
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, JSON.stringify({ ...record, holders: [holder] }));
+      };
+
+      write({ ...record.holders[0], startedAt: stepped });
+
+      expect(runningInstall(dir)).toEqual({ pid, owner: "build-engine" });
+      expect(takeInstallTurn(dir)).toBe("taken");
+
+      write({ pid, startedAt: stepped, role: "engine" });
+
+      expect(runningInstall(dir)).toBeNull();
+
+      write({ ...record.holders[0], startedAt: stepped });
+      stat(360_001);
+
+      expect(runningInstall(dir)).toBeNull();
+    } finally {
+      procfs.root = previousRoot;
+    }
+  });
+
   it("builds once the install it waited on has ended, and clears a record nobody holds", async () => {
     const dir = coldProject();
     const pid = installerStandIn();

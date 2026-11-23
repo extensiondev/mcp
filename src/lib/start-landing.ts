@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { pidState } from "./process-identity";
+import { pidState, sessionStart, type ProcessStart, type RecordedStart } from "./process-identity";
 import { findSessionInfo, sessionSinceMs } from "./process-manager";
 import { productionDebugPortOutlook } from "./production-launch";
 import { readSessionReceipt } from "./session-receipt";
@@ -26,12 +26,12 @@ export interface LandingRun {
   seen: string;
 }
 
-function alive(pid: number | undefined, startedAt: string | null | undefined): boolean {
+function alive(pid: number | undefined, startedAt: RecordedStart): boolean {
   return typeof pid === "number" && pidState(pid, startedAt) === "alive";
 }
 
-function enginePidStartedAt(contract: ReadyContract, registered: ProcessInfo | undefined): string | null {
-  return registered !== undefined && registered.pid === contract.pid ? (registered.processStartedAt ?? null) : null;
+function enginePidStart(contract: ReadyContract, registered: ProcessInfo | undefined): ProcessStart | null {
+  return registered !== undefined && registered.pid === contract.pid ? sessionStart(registered) : null;
 }
 
 function contractStamp(contract: ReadyContract): number | null {
@@ -64,7 +64,7 @@ export function landingRun(projectPath: string, browser: string, now = Date.now(
   if (receipt.kind === "build") return null;
 
   const registered = findSessionInfo(projectPath, browser);
-  const registeredAlive = registered !== undefined && alive(registered.pid, registered.processStartedAt);
+  const registeredAlive = registered !== undefined && alive(registered.pid, sessionStart(registered));
   const since = sessionSinceMs(projectPath, browser);
 
   if (receipt.kind === "none") {
@@ -90,7 +90,7 @@ export function landingRun(projectPath: string, browser: string, now = Date.now(
     return landing(receipt.verb, runSince(contract, registered, since), now, `read status ${contract.status} when the call arrived`);
   }
 
-  if (!alive(contract.pid, enginePidStartedAt(contract, registered)) || contract.status !== "starting" || typeof contract.cdpPort === "number") return null;
+  if (!alive(contract.pid, enginePidStart(contract, registered)) || contract.status !== "starting" || typeof contract.cdpPort === "number") return null;
 
   return landing("dev", runSince(contract, registered, since), now, "read status starting when the call arrived");
 }

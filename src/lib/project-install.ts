@@ -15,7 +15,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { noteCallWait } from "./call-waits";
 import { envelope } from "./envelope";
 import { descendantPids, runPackageInstall } from "./exec";
-import { kernelCommandLine, pidState, processStartedAt } from "./process-identity";
+import { kernelCommandLine, pidState, processStart, type ProcessStart } from "./process-identity";
 import { sessionStateDir } from "./process-manager";
 import { liveProjectSessions } from "./session-browser";
 import { engineProjectRoot, readyContractPath } from "./session-paths";
@@ -89,6 +89,7 @@ import { findWorkspaceMember, isWorkspaceOrRepositoryRoot, lockfileManager, pinn
 export interface InstallHolder {
   pid: number;
   startedAt: string | null;
+  startTicks?: number;
   role: "server" | "engine" | "installer" | "session";
   browser?: string;
   readyPath?: string;
@@ -119,7 +120,7 @@ export const INSTALL_POLL_MS = 1_000;
 
 const CONTRACT_MTIME_SLACK_MS = 2_000;
 const callsInFlight = new Set<string>();
-let ownStartedAt: string | null | undefined;
+let ownStart: ProcessStart | undefined;
 
 function projectKey(projectPath: string): string {
   const root = engineProjectRoot(projectPath);
@@ -196,7 +197,7 @@ function stampedSince(readyPath: string | undefined, since: string): boolean {
 function holds(holder: InstallHolder, key: string, since: string): boolean {
   if (typeof holder?.pid !== "number") return false;
   if (holder.role === "server" && holder.pid === process.pid) return callsInFlight.has(key);
-  if (pidState(holder.pid, holder.startedAt) !== "alive") return false;
+  if (pidState(holder.pid, holder) !== "alive") return false;
 
   if (holder.role !== "session") return true;
   if (stampedSince(holder.readyPath, since)) return false;
@@ -275,13 +276,13 @@ export function takeInstallTurn(projectPath: string): InstallTurn | "taken" | "u
 
   if (callsInFlight.has(key) || recordedInstall(projectPath)) return "taken";
 
-  ownStartedAt ??= processStartedAt(process.pid);
+  ownStart ??= processStart(process.pid);
 
   const since = new Date().toISOString();
   const token = crypto.randomBytes(8).toString("hex");
   const file = path.join(dir, `${token}.json`);
   const draft = `${dir}.${process.pid}.${token}.draft`;
-  const own: InstallHolder = { pid: process.pid, startedAt: ownStartedAt, role: "server" };
+  const own: InstallHolder = { pid: process.pid, ...ownStart, role: "server" };
   const text = (holders: InstallHolder[]): string => JSON.stringify({ projectRoot: key, since, holders } satisfies InstallRecord);
 
   callsInFlight.add(key);
@@ -326,17 +327,17 @@ export function takeInstallTurn(projectPath: string): InstallTurn | "taken" | "u
       drop();
     },
     join: (pid, role) => {
-      const name = (startedAt: string | null): void => {
-        if (!held || startedAt === null) return;
+      const name = (start: ProcessStart): void => {
+        if (!held || start.startedAt === null) return;
 
         try {
-          rewrite([own, { pid, startedAt, role }]);
+          rewrite([own, { pid, ...start, role }]);
         } catch {
         }
       };
 
-      name(new Date().toISOString());
-      name(processStartedAt(pid));
+      name({ startedAt: new Date().toISOString() });
+      name(processStart(pid));
     },
     handOver: (pid, as = { role: "engine" }) => {
       if (!held) return;
@@ -344,7 +345,7 @@ export function takeInstallTurn(projectPath: string): InstallTurn | "taken" | "u
       held = false;
 
       try {
-        rewrite([{ pid, startedAt: processStartedAt(pid), ...as }]);
+        rewrite([{ pid, ...processStart(pid), ...as }]);
       } catch {
         drop();
       }

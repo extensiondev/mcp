@@ -12,7 +12,7 @@ import path from "node:path";
 import { contractPidState } from "./contract-pids";
 import { envelope } from "./envelope";
 import { findSessionInfo, sessionSinceMs } from "./process-manager";
-import { pidState } from "./process-identity";
+import { pidState, sessionStart } from "./process-identity";
 import { liveProjectSessions, resolveSessionBrowser } from "./session-browser";
 import { engineProjectRoot, readyContractPath } from "./session-paths";
 import { declaredDependencyNames, findWorkspaceMember } from "./workspace-member";
@@ -125,7 +125,7 @@ export function startingSession(projectPath: string, browser: string): StartingS
   const info = findSessionInfo(projectPath, browser);
 
   if (info) {
-    if (info.command !== "dev" || pidState(info.pid, info.processStartedAt) !== "alive") return null;
+    if (info.command !== "dev" || pidState(info.pid, sessionStart(info)) !== "alive") return null;
 
     return {
       browser,

@@ -12,7 +12,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { localState } from "./local-state";
-import { processStartedAt } from "./process-identity";
+import { processStart, type ProcessStart } from "./process-identity";
 
 import type { ProcessInfo } from "./types";
 
@@ -178,16 +178,16 @@ export function listSessionMarkers(): ProcessInfo[] {
   return readSessionMarkers().markers;
 }
 
-let serverStartedAtCache: string | null | undefined;
+let serverStartCache: ProcessStart | undefined;
 
-function serverStartedAt(): string | null {
-  if (serverStartedAtCache === undefined) serverStartedAtCache = processStartedAt(process.pid);
+function serverStart(): ProcessStart {
+  serverStartCache ??= processStart(process.pid);
 
-  return serverStartedAtCache;
+  return serverStartCache;
 }
 
 function writeMarkerBestEffort(info: ProcessInfo, registeredAtMs: number): string | null {
-  const startedAt = serverStartedAt();
+  const { startedAt, startTicks } = serverStart();
 
   try {
     fs.mkdirSync(markerDir(), { recursive: true });
@@ -198,6 +198,7 @@ function writeMarkerBestEffort(info: ProcessInfo, registeredAtMs: number): strin
         projectPath: path.resolve(info.projectPath),
         serverPid: process.pid,
         ...(startedAt ? { serverStartedAt: startedAt } : {}),
+        ...(startTicks !== undefined ? { serverStartTicks: startTicks } : {}),
         registeredAt: new Date(registeredAtMs).toISOString(),
       }),
     );
@@ -209,10 +210,10 @@ function writeMarkerBestEffort(info: ProcessInfo, registeredAtMs: number): strin
 }
 
 export type ContractPidRecord = Partial<
-  Pick<ProcessInfo, "browserPid" | "browserStartedAt" | "launcherPid" | "launcherStartedAt">
+  Pick<ProcessInfo, "browserPid" | "browserStartedAt" | "browserStartTicks" | "launcherPid" | "launcherStartedAt" | "launcherStartTicks">
 >;
 
-const CONTRACT_PID_FIELDS = ["browserPid", "browserStartedAt", "launcherPid", "launcherStartedAt"] as const;
+const CONTRACT_PID_FIELDS = ["browserPid", "browserStartedAt", "browserStartTicks", "launcherPid", "launcherStartedAt", "launcherStartTicks"] as const;
 
 function contractPidsOf(info: ProcessInfo | undefined): ContractPidRecord {
   const out: ContractPidRecord = {};
@@ -232,11 +233,18 @@ export function registerSession(info: ProcessInfo): string | null {
   const prior = registrations.get(key);
   const samePid = prior !== undefined && prior.pid === info.pid;
   const at = samePid ? prior.at : Date.now();
-  const startedAt =
-    info.processStartedAt ?? (samePid ? prior.startedAt : undefined) ?? processStartedAt(info.pid) ?? undefined;
+  const known = info.processStartedAt ?? (samePid ? prior.startedAt : undefined);
+  const read = known === undefined ? processStart(info.pid) : undefined;
+  const startedAt = known ?? read?.startedAt ?? undefined;
+  const startTicks = info.processStartTicks ?? (samePid && known === prior.startedAt ? prior.startTicks : undefined) ?? read?.startTicks;
   const carried = samePid ? contractPidsOf(sessions.get(key)) : {};
-  const recorded: ProcessInfo = { ...carried, ...info, ...(startedAt ? { processStartedAt: startedAt } : {}) };
-  registrations.set(key, { pid: info.pid, at, ...(startedAt ? { startedAt } : {}) });
+  const recorded: ProcessInfo = {
+    ...carried,
+    ...info,
+    ...(startedAt ? { processStartedAt: startedAt } : {}),
+    ...(startTicks !== undefined ? { processStartTicks: startTicks } : {}),
+  };
+  registrations.set(key, { pid: info.pid, at, ...(startedAt ? { startedAt } : {}), ...(startTicks !== undefined ? { startTicks } : {}) });
   sessions.set(key, recorded);
 
   return writeMarkerBestEffort(recorded, at);

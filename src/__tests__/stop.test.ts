@@ -14,7 +14,7 @@ import {
   listSessions,
 } from "../lib/process-manager";
 import { resolveExtensionInvocation } from "../lib/exec";
-import { PLAUSIBLE_SESSION_BINARY, commandLineNames, linuxStartFromStat, linuxStateFromStat, pidState, processCommand, processStartedAt } from "../lib/process-identity";
+import { PLAUSIBLE_SESSION_BINARY, commandLineNames, describeRecycledPid, linuxStartFromStat, linuxStartTicksFromStat, linuxStateFromStat, pidState, processCommand, processStart, processStartedAt, procfs, startedAsRecorded } from "../lib/process-identity";
 import { liveNetworkStubs, openNetworkStubs, stubLinks } from "../lib/network-stubs";
 import { liveProjectSessions } from "../lib/session-browser";
 import { readyContract } from "./fixtures/engine-answers";
@@ -975,6 +975,63 @@ describe("extension_stop judges a session by its pid and its start time", () => 
     expect(pidState(process.pid, "2001-01-01T00:00:00.000Z")).toBe("dead");
     expect(pidState(process.pid, processStartedAt(process.pid))).toBe("alive");
     expect(pidState(process.pid)).toBe("alive");
+  });
+
+  it("1022 e: recognizes a session's command line as Windows prints it, every argument quoted by cross-spawn", () => {
+    const folder = "C:\\Users\\jo\\proj";
+    const shimWrapper =
+      'C:\\WINDOWS\\system32\\cmd.exe /d /s /c "C:\\Users\\jo\\proj\\node_modules\\.bin\\extension.cmd ^^^"dev^^^" ^^^"C:\\Users\\jo\\proj^^^" ^^^"--browser^^^" ^^^"chrome^^^" ^^^"--allow-control^^^""';
+    const npxWrapper =
+      'C:\\WINDOWS\\system32\\cmd.exe /d /s /c "npx ^"extension@4.3.0^" ^"start^" ^"C:\\Users\\jo\\proj^" ^"--browser^" ^"chrome^" ^"--allow-control^""';
+    const engine =
+      '"C:\\Program Files\\nodejs\\node.exe"  "C:\\Users\\jo\\proj\\node_modules\\.bin\\\\..\\extension\\bin\\extension.cjs" "dev" "c:\\users\\jo\\proj" "--browser" "chrome" "--allow-control"';
+    const bare = "C:\\nodejs\\node.exe C:\\engine\\node_modules\\extension\\bin\\extension.cjs preview C:\\Users\\jo\\proj --browser=chrome";
+    const runs = (line: string, on = folder): boolean => new RegExp(stop.cliCommandLinePattern(on), "i").test(line) && stop.engineRunsOn(line, on, true);
+
+    for (const line of [shimWrapper, npxWrapper, engine, bare]) {
+      expect(runs(line), line).toBe(true);
+      expect(stop.namesAnotherBrowser(line, "chrome"), line).toBe(false);
+      expect(stop.namesAnotherBrowser(line, "firefox"), line).toBe(true);
+      expect(runs(line.replaceAll("proj", "proj-2")), line).toBe(false);
+      expect(runs(line.replaceAll("jo\\proj", "jo\\proj\\nested")), line).toBe(false);
+    }
+
+    expect(stop.namesAnotherBrowser(engine.replace('"chrome"', '"firefox"'), "chrome")).toBe(true);
+    expect(stop.namesAnotherBrowser('"node.exe" "extension.cjs" "dev" "C:\\Users\\jo\\proj"', "chrome")).toBe(false);
+    expect(stop.engineRunsOn(engine, folder, false)).toBe(false);
+    expect(runs('"node.exe" "C:\\tools\\lint.cjs" "dev" "C:\\Users\\jo\\proj"')).toBe(false);
+  });
+
+  it("1022 d: a record that holds clock ticks is decided by them where the kernel answers, and by the wall clock where it does not", () => {
+    const proc = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-proc-ticks-"));
+    const previousRoot = procfs.root;
+    const own = processStartedAt(process.pid);
+    const LONG_AGO = "2001-01-01T00:00:00.000Z";
+
+    expect(linuxStartTicksFromStat("58 (Web Content) (x) R 1 58 58 0 -1 0 0 0 0 0 0 0 0 0 20 0 1 0 150 1 2 3")).toBe(150);
+    expect(linuxStartTicksFromStat("59 (node) S 1 59")).toBeNull();
+
+    procfs.root = proc;
+
+    try {
+      expect(pidState(process.pid, { startedAt: LONG_AGO, startTicks: 150 })).toBe("dead");
+      expect(pidState(process.pid, { startedAt: own, startTicks: 150 })).toBe("alive");
+      expect(describeRecycledPid(process.pid, { startedAt: own, startTicks: 150 })).toBeNull();
+
+      fs.mkdirSync(path.join(proc, String(process.pid)));
+      fs.writeFileSync(path.join(proc, String(process.pid), "stat"), `${process.pid} (node) S 1 1 1 0 -1 0 0 0 0 0 0 0 0 0 20 0 1 0 150 1 2 3`);
+
+      expect(pidState(process.pid, { startedAt: LONG_AGO, startTicks: 150 })).toBe("alive");
+      expect(startedAsRecorded(process.pid, { startedAt: LONG_AGO, startTicks: 150 })).toBe(true);
+      expect(pidState(process.pid, { startedAt: own, startTicks: 151 })).toBe("dead");
+      expect(describeRecycledPid(process.pid, { startedAt: own, startTicks: 151 })).toContain(`pid ${process.pid} now belongs to`);
+      expect(pidState(process.pid, LONG_AGO)).toBe("dead");
+      expect(pidState(process.pid, { startedAt: LONG_AGO })).toBe("dead");
+      expect(processStart(process.pid)).toEqual({ startedAt: own, startTicks: 150 });
+    } finally {
+      procfs.root = previousRoot;
+      fs.rmSync(proc, { recursive: true, force: true });
+    }
   });
 
   it.skipIf(process.platform === "win32")("739: a pid the process table refuses is read without a word on stderr", () => {

@@ -346,12 +346,78 @@ export function sameProcessStart(recorded: string, current: string): boolean {
   return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= SAME_START_TOLERANCE_MS;
 }
 
-export function startedAsRecorded(pid: number, startedAt: string | null | undefined): boolean {
-  if (!startedAt) return false;
+/* @invariant ON LINUX A RECORDED PROCESS IS COMPARED BY ITS CLOCK TICKS SINCE
+ * BOOT, NEVER BY THE WALL CLOCK, WHEN THE RECORD HOLDS THEM. The wall-clock
+ * start of a Linux process is the btime line of /proc/stat plus field 22 of
+ * /proc/<pid>/stat, and btime moves with every step of the wall clock: a
+ * virtual machine that resumes, or a time sync, shifted it by more than the
+ * two seconds allowed, so a live holder of the install record read as dead
+ * and a second install was started in its folder (ledger 1022 d). Field 22
+ * is fixed for the life of the process, so a record written on Linux carries
+ * it beside the wall-clock time (`startTicks` beside `startedAt`), and a
+ * record that holds it is decided by it alone whenever the kernel still
+ * answers for that PID. A record from an older server, from macOS or from
+ * Windows holds only the wall-clock time and is compared as before.
+ */
+export interface ProcessStart {
+  startedAt: string | null;
+  startTicks?: number;
+}
 
-  const current = processStartedAt(pid);
+export type RecordedStart = string | ProcessStart | null | undefined;
 
-  return current !== null && sameProcessStart(startedAt, current);
+export function startRecord(startedAt: unknown, startTicks?: unknown): ProcessStart {
+  return {
+    startedAt: typeof startedAt === "string" && startedAt ? startedAt : null,
+    ...(typeof startTicks === "number" && Number.isFinite(startTicks) && startTicks >= 0 ? { startTicks } : {}),
+  };
+}
+
+export function sessionStart(info: { processStartedAt?: string; processStartTicks?: number }): ProcessStart {
+  return startRecord(info.processStartedAt, info.processStartTicks);
+}
+
+export function serverStart(info: { serverStartedAt?: string; serverStartTicks?: number }): ProcessStart {
+  return startRecord(info.serverStartedAt, info.serverStartTicks);
+}
+
+function recordOf(recorded: RecordedStart): ProcessStart {
+  return recorded && typeof recorded === "object" ? startRecord(recorded.startedAt, recorded.startTicks) : startRecord(recorded);
+}
+
+export function linuxStartTicksFromStat(stat: string): number | null {
+  const fields = stat.slice(stat.lastIndexOf(")") + 1).trim().split(" ");
+  const ticks = Number(fields[19]);
+
+  return fields.length < 20 || !fields[19] || !Number.isFinite(ticks) || ticks < 0 ? null : ticks;
+}
+
+export function processStartTicks(pid: number): number | null {
+  try {
+    return linuxStartTicksFromStat(fs.readFileSync(path.join(procfs.root, String(pid), "stat"), "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+export function processStart(pid: number): ProcessStart {
+  return startRecord(processStartedAt(pid), processStartTicks(pid));
+}
+
+function startedAsRecordedOrUnknown(pid: number, recorded: RecordedStart, readStartedAt?: string | null): boolean | null {
+  const { startedAt, startTicks } = recordOf(recorded);
+  const ticks = startTicks === undefined ? null : processStartTicks(pid);
+
+  if (startTicks !== undefined && ticks !== null) return ticks === startTicks;
+  if (!startedAt) return null;
+
+  const current = readStartedAt ?? processStartedAt(pid);
+
+  return current === null ? null : sameProcessStart(startedAt, current);
+}
+
+export function startedAsRecorded(pid: number, recorded: RecordedStart): boolean {
+  return startedAsRecordedOrUnknown(pid, recorded) === true;
 }
 
 function processExecutable(pid: number): string {
@@ -380,40 +446,38 @@ function linuxZombie(pid: number): boolean {
   }
 }
 
-export function pidRecycled(pid: number, startedAt: string | null | undefined): boolean {
-  if (!startedAt) return false;
-
-  const current = processStartedAt(pid);
-
-  return current !== null && !sameProcessStart(startedAt, current);
+export function pidRecycled(pid: number, recorded: RecordedStart): boolean {
+  return startedAsRecordedOrUnknown(pid, recorded) === false;
 }
 
-export function pidState(pid: number, startedAt?: string | null): PidState {
+export function pidState(pid: number, recorded?: RecordedStart): PidState {
   try {
     process.kill(pid, 0);
   } catch (err) {
     if ((err as NodeJS.ErrnoException)?.code !== "EPERM") return "dead";
 
-    return pidRecycled(pid, startedAt) ? "dead" : "foreign";
+    return pidRecycled(pid, recorded) ? "dead" : "foreign";
   }
 
   const row = process.platform === "win32" || process.platform === "linux" ? undefined : posixProcessRows([pid]).get(pid);
 
   if (row ? row.state.startsWith("Z") : linuxZombie(pid)) return "dead";
 
-  const current = startedAt ? (row?.startedAt ?? processStartedAt(pid)) : null;
-  if (startedAt && current !== null) return sameProcessStart(startedAt, current) ? "alive" : "dead";
+  const same = startedAsRecordedOrUnknown(pid, recorded, row?.startedAt);
+  if (same !== null) return same ? "alive" : "dead";
 
   return plausibleSessionProcess(pid) ? "alive" : "foreign";
 }
 
-export function describeRecycledPid(pid: number, startedAt: string | null | undefined): string | null {
-  if (!startedAt) return null;
+export function describeRecycledPid(pid: number, recorded: RecordedStart): string | null {
+  if (startedAsRecordedOrUnknown(pid, recorded) !== false) return null;
 
+  const { startedAt } = recordOf(recorded);
   const current = processStartedAt(pid);
-  if (current === null || sameProcessStart(startedAt, current)) return null;
 
-  return `pid ${pid} now belongs to a process started at ${current}, not the session process started at ${startedAt}`;
+  return current !== null && startedAt
+    ? `pid ${pid} now belongs to a process started at ${current}, not the session process started at ${startedAt}`
+    : `pid ${pid} now belongs to another process, not the session process`;
 }
 
 export function describeForeignPid(pid: number): string {

@@ -11,8 +11,8 @@ import path from "node:path";
 
 import { envelope } from "./envelope";
 import { listSessionMarkers, listSessions } from "./process-manager";
-import { contractPidStartedAt } from "./contract-pids";
-import { pidState } from "./process-identity";
+import { contractPidStart } from "./contract-pids";
+import { pidState, sessionStart, type ProcessStart, type RecordedStart } from "./process-identity";
 import {
   readyContractPath,
   sessionArtifactsRootDir,
@@ -27,7 +27,7 @@ interface ContractSighting {
   browser: string;
   mtimeMs: number;
   pid?: number;
-  startedAt: string | null;
+  start: ProcessStart | null;
 }
 
 function contractSightings(projectPath: string): ContractSighting[] {
@@ -54,7 +54,7 @@ function contractSightings(projectPath: string): ContractSighting[] {
         browser: dir,
         mtimeMs: stat.mtimeMs,
         pid: typeof contract.pid === "number" ? contract.pid : undefined,
-        startedAt: contractPidStartedAt(projectPath, dir, contract, "engine"),
+        start: contractPidStart(projectPath, dir, contract, "engine"),
       });
     } catch {
     }
@@ -63,7 +63,7 @@ function contractSightings(projectPath: string): ContractSighting[] {
   return sightings;
 }
 
-function pidAlive(pid: number, startedAt: string | null | undefined): boolean {
+function pidAlive(pid: number, startedAt: RecordedStart): boolean {
   return pidState(pid, startedAt) === "alive";
 }
 
@@ -78,7 +78,7 @@ export function knownSessionBrowsers(projectPath: string): string[] {
   }
 
   for (const sighting of contractSightings(projectPath)) {
-    if (sighting.pid !== undefined && !pidAlive(sighting.pid, sighting.startedAt)) continue;
+    if (sighting.pid !== undefined && !pidAlive(sighting.pid, sighting.start)) continue;
 
     browsers.push(sighting.browser);
   }
@@ -98,7 +98,7 @@ export function liveProjectSessions(projectPath: string): LiveSession[] {
 
   for (const session of listSessions()) {
     if (path.resolve(session.projectPath) !== resolved) continue;
-    if (!pidAlive(session.pid, session.processStartedAt)) continue;
+    if (!pidAlive(session.pid, sessionStart(session))) continue;
 
     out.set(session.browser, {
       browser: session.browser,
@@ -108,7 +108,7 @@ export function liveProjectSessions(projectPath: string): LiveSession[] {
   }
 
   for (const sighting of contractSightings(projectPath)) {
-    if (sighting.pid === undefined || !pidAlive(sighting.pid, sighting.startedAt)) continue;
+    if (sighting.pid === undefined || !pidAlive(sighting.pid, sighting.start)) continue;
     if (out.has(sighting.browser)) continue;
 
     out.set(sighting.browser, {
@@ -121,7 +121,7 @@ export function liveProjectSessions(projectPath: string): LiveSession[] {
   for (const marker of listSessionMarkers()) {
     if (path.resolve(marker.projectPath) !== resolved) continue;
     if (out.has(marker.browser)) continue;
-    if (typeof marker.pid !== "number" || !pidAlive(marker.pid, marker.processStartedAt)) continue;
+    if (typeof marker.pid !== "number" || !pidAlive(marker.pid, sessionStart(marker))) continue;
 
     out.set(marker.browser, {
       browser: marker.browser,
@@ -170,7 +170,7 @@ export function deadReadySession(
   for (const sighting of contractSightings(projectPath)) {
     if (browser && sighting.browser !== browser) continue;
 
-    if (sighting.pid !== undefined && !pidAlive(sighting.pid, sighting.startedAt)) {
+    if (sighting.pid !== undefined && !pidAlive(sighting.pid, sighting.start)) {
       return { browser: sighting.browser, pid: sighting.pid };
     }
   }
@@ -245,7 +245,7 @@ export function resolveSessionBrowser(
   const sightings = contractSightings(projectPath).sort(
     (a, b) => b.mtimeMs - a.mtimeMs,
   );
-  const live = sightings.filter((s) => s.pid === undefined || pidAlive(s.pid, s.startedAt));
+  const live = sightings.filter((s) => s.pid === undefined || pidAlive(s.pid, s.start));
 
   if (live.length > 0) {
     return { browser: live[0].browser, source: "contract" };

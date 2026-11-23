@@ -7,7 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { isChromiumFamily, isGeckoFamily, WEBKIT_FAMILY } from "./browser-family";
-import { contractPidStartedAt } from "./contract-pids";
+import { contractPidStart } from "./contract-pids";
 import { pidState } from "./process-identity";
 import { envelope, sessionCommandSinceEnvelopeOwnsCommand } from "./envelope";
 import {
@@ -53,7 +53,7 @@ export async function readDetachedVerdict(
 
   const pid = typeof contract.browserPid === "number" && contract.browserPid > 0 ? contract.browserPid : null;
 
-  const startedAt = session ? contractPidStartedAt(session.projectPath, session.browser, contract, "browser") : null;
+  const startedAt = session ? contractPidStart(session.projectPath, session.browser, contract, "browser") : null;
 
   if (pid === null || pidState(pid, startedAt) !== "alive") {
     return { kind: "gone", evidence: pid === null ? null : `the browser pid the launcher recorded (${pid}) is gone` };

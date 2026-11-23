@@ -10,7 +10,7 @@ import path from "node:path";
 
 import { envelope, sessionCommandSinceEnvelopeOwnsCommand } from "./envelope";
 import { verifyGuestLoaded } from "./guest-load-oracle";
-import { contractPidStartedAt } from "./contract-pids";
+import { contractPidStart } from "./contract-pids";
 import { pidState } from "./process-identity";
 import { findSessionInfo } from "./process-manager";
 import { isSafariTarget } from "./safari-dev-options";
@@ -66,7 +66,7 @@ export async function observeAttachLegs(
 
   const browserPid = typeof contract.browserPid === "number" ? contract.browserPid : null;
   const browserAlive =
-    browserPid === null ? null : pidState(browserPid, contractPidStartedAt(ctx.projectPath, ctx.browser, contract, "browser")) !== "dead";
+    browserPid === null ? null : pidState(browserPid, contractPidStart(ctx.projectPath, ctx.browser, contract, "browser")) !== "dead";
   const profilePath = typeof contract.profilePath === "string" && contract.profilePath.trim() ? contract.profilePath : null;
   const profileReused =
     typeof contract.profileReused === "boolean"
