@@ -249,6 +249,22 @@ describe("extension_dev health tick", () => {
     expect(result.hint).not.toMatch(/Control channel is ON/);
   }, 20_000);
 
+  const TOOLBAR_HINTS = [[{ default_title: "Save" }, /Control channel is ON .*a click on it is extension_open with surface: "action", which replays action\.onClicked\./], [{ default_popup: "popup.html" }, /Control channel is ON (?!.*surface: "action")/]] as const;
+
+  it.each(TOOLBAR_HINTS)("names the call that clicks the toolbar button only when the button opens no popup (action %j)", async (action, said) => {
+    const project = tmpProject();
+
+    fs.writeFileSync(path.join(project, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "x", version: "1.0.0", action }));
+
+    nextChild = () => {
+      setTimeout(() => writeModernContract(project, "chrome", { controlPort: 43210 }), 300);
+
+      return fakeCli('console.log("building"); setTimeout(()=>{}, 60000);');
+    };
+
+    expect(JSON.parse(await dev.handler({ wait: false, projectPath: project })).hint).toMatch(said);
+  }, 15_000);
+
   it("names the output that browser's session owns, not a profile lock, when a session already runs", async () => {
     const project = tmpProject();
 

@@ -67,6 +67,7 @@ import { safariSigningFrame } from "../lib/safari-signing";
 import { safariNotAttachedHint } from "../lib/safari-app-stage";
 import { safariEnableFrame, type SafariEnableValue } from "../lib/safari-enable-read";
 import { droppedRuntimePages } from "../lib/dropped-runtime-pages";
+import { declaredToolbarButton } from "../lib/gecko-toolbar-click";
 import { teamUnknownToXcodeRefusal } from "../lib/xcode-teams";
 import { safariStartingUrlWarning } from "../lib/safari-session-notes";
 import {
@@ -478,6 +479,11 @@ export async function handler(
   const controlVerbs = "storage, reload, open, dom_snapshot";
   const control = contractControlState(args.projectPath, browser, spawnedAt);
   const controlBound = allowControl && control.port !== null;
+  const toolbarButton = controlBound && !args.noBrowser && !isSafariTarget(browser) ? declaredToolbarButton(args.projectPath, browser) : null;
+  const toolbarClickNote =
+    toolbarButton && !toolbarButton.popup
+      ? ` The toolbar button has no popup, so a click on it is extension_open with surface: "action", which replays ${toolbarButton.key}.onClicked.`
+      : "";
   const capabilities = {
     allowControl,
     allowEval: Boolean(args.allowEval),
@@ -638,7 +644,7 @@ export async function handler(
       : `${nextStep} ${readiness?.ready.status === "compiled-not-attached" && !isSafariTarget(browser) ? `${REBUILD_NOT_REACHING_NOTE} ` : ""}${signingFrame?.hints.length ? `${signingFrame.hints.join(" ")} ` : ""}${isSafariTarget(browser) ? "" : `${headlessHint(visibility.headless)} `}${hiddenUi ? `${hiddenBrowserUiHint(hiddenUi)} ` : ""}${
         allowControl
           ? controlBound
-            ? `Control channel is ON (port ${control.port} per ready.json): extension_${controlVerbs.split(", ").join("/extension_")}${args.allowEval ? "/extension_eval" : ""} will work against this session.`
+            ? `Control channel is ON (port ${control.port} per ready.json): extension_${controlVerbs.split(", ").join("/extension_")}${args.allowEval ? "/extension_eval" : ""} will work against this session.${toolbarClickNote}`
             : control.unavailableReason
               ? `Control was requested, but the engine reports no control port (${control.unavailableReason}), so extension_${controlVerbs.split(", ").join("/extension_")} will be refused until the session is relaunched.`
               : `Control was requested; ready.json has not stamped the control port yet, so extension_wait is what confirms extension_${controlVerbs.split(", ").join("/extension_")} will work.`
