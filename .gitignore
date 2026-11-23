@@ -19,5 +19,3 @@ test-results/
 
 audit-*/
 
-# Local MCP client config for driving this server from the package itself
-.mcp.json

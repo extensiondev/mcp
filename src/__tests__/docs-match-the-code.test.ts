@@ -9,6 +9,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import { SERVER_TITLE, createServer, tools } from "../index";
+import { SERVER_NAME } from "../clients";
 import { renderToolsDoc, tableCell } from "../lib/docs-tools";
 import { renderClientsJson, renderToolsJson } from "../lib/docs-json";
 import { renderStoreMdFieldsDoc, renderStoreMdFieldsJson } from "../lib/docs-store-md-fields";
@@ -363,6 +364,19 @@ describe("the docs say what the code does", () => {
     expect(install).not.toMatch(/extension_login/);
 
     for (const { name } of server.packages[0].environmentVariables) expect(install, name).toContain(`\`${name}\``);
+  });
+
+  it("declares the server in a tracked root .mcp.json a catalog scanner reads, the same launch the install file gives and the default feature set, and keeps it out of the published package", () => {
+    const pkg = require("../../package.json") as { name: string; files: string[] };
+    const root = fileURLToPath(new URL("../..", import.meta.url));
+    const declared = JSON.parse(read(".mcp.json")) as { mcpServers: Record<string, { command: string; args: string[] }> };
+    const launch = { command: "npx", args: ["-y", `${pkg.name}@latest`] };
+
+    expect(declared).toEqual({ mcpServers: { [SERVER_NAME]: launch } });
+    expect(JSON.parse(read("llms-install.md").match(/```json\n([\s\S]*?)```/)![1])).toEqual(declared);
+    expect(resolveServerOptions(declared.mcpServers[SERVER_NAME].args.slice(2), {})).toEqual({ ok: true, options: DEFAULT_SERVER_OPTIONS });
+    expect(execFileSync("git", ["ls-files", "--", ".mcp.json"], { cwd: root, encoding: "utf8" }).trim()).toBe(".mcp.json");
+    expect(pkg.files).not.toContain(".mcp.json");
   });
 
   it("claims the Glama listing with the same name and sentence the registry carries, under three categories", () => {
