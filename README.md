@@ -155,6 +155,7 @@ Every template builds for Chrome, Edge and Firefox, and the same project ships t
 
 - **Approvals stay human.** A real submit, a channel promotion and a share revoke answer `approval-required`; a workspace owner approves the exact act on extension.dev, the call is repeated with the returned `approvalId`, and the server never approves anything itself. `extension_submit_check` carries the reads and the asks under `readOnlyHint: true`; `extension_submit` carries the act.
 - **Untrusted text** from pages comes back inside an `<untrusted-data-ID>` fence, and every tool carries MCP annotations.
+- **Report a vulnerability.** Use [private vulnerability reporting](https://github.com/extensiondev/mcp/security/advisories/new) on this repository, not a public issue. It reaches the maintainer directly.
 
 ## Telemetry
 
