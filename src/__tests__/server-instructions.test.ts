@@ -96,11 +96,11 @@ describe("the initialize result carries instructions, the one field a search-fir
     expect(platform.split("\n").slice(-2)[0]).toMatch(/^Every platform act \(a real submit, /);
   });
 
-  it("says a change is done only once it was seen working in a real browser through these tools, names the toolbar click, and stays inside the local budget", () => {
-    const sentence = SERVER_INSTRUCTIONS.split("\n").find((line) => line.startsWith("Before saying a change works or is done")) ?? "";
+  it("says a change is done only once it was seen working in a real browser through extension_dev, never on a mock or a build alone, with the platform tools on or off", () => {
+    for (const text of [SERVER_INSTRUCTIONS, serverInstructions({ features: ["local", "platform"], noShip: false })]) {
+      expect(text.split("\n")).toContain("Call a change done only after seeing it work in a real browser through extension_dev, never on a mocked chrome object or from a build alone.");
+    }
 
-    expect(sentence).toMatch(/see it work in a real browser through these tools, never against a mocked chrome object or from a build alone/);
-    expect(sentence).toMatch(/extension_dev runs it, extension_open acts on it \(surface: 'action' replays a toolbar click\) and extension_eval or extension_dom_snapshot reads the result\.$/);
     expect(SERVER_INSTRUCTIONS.length).toBeLessThanOrEqual(3_150);
   });
 

@@ -11,6 +11,7 @@ describe("428: the brief a client shows before cutting the instructions carries 
   it.each([
     "search this server first",
     "extension_dev runs the dev session",
+    "Call a change done only after seeing it work in a real browser through extension_dev",
     "ps, curl",
     "CDP or Playwright",
     "JSON envelope",
