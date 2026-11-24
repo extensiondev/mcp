@@ -563,6 +563,7 @@ Submit a platform build to the Chrome, Firefox, Edge and Safari stores through e
 | --- | --- | --- | --- | --- |
 | `action` | "submit" \| "status" \| "preflight" \| "sync-listing" \| "cancel" \| "rollout" \| "release" \| "publish" \| "review" \| "configure-store" \| "connect" \| "first-submission" \| "mint-signing" | no | `"submit"` | 'preflight', 'status' and submit with dryRun true are read-only; submit with dryRun:false and no approvalId executes nothing either, it only asks the owner's approval, as does the first call of any store act. submit: buildSha to the stores. preflight: readiness checks. status: each store's word. sync-listing: listing from STORE.md. publish (alias review): draft to review. release (Safari): approved version on sale. cancel: withdraw from review. rollout: raise Chrome's staged rollout. configure-store: storeSettings. connect: page where the person gives the platform the key. first-submission: page for a first Chrome or Edge upload. mint-signing (Safari): register the bundle id, mint certificates and profiles. |
 | `project` | string | no |  | Stored login '<workspace>/<project>' when several exist. |
+| `workspace` | string | no |  | connect: a workspace, for its shared account. |
 | `browsers` | array of "chrome" \| "firefox" \| "edge" \| "safari" | no |  | Stores; submit, publish and sync-listing take several under one approval. |
 | `buildSha` | string | no |  | Commit sha of a completed platform build (extension_builds). |
 | `version` | string | no |  | Label; default the built manifest's version. |
@@ -591,6 +592,7 @@ Read a store's state or ask for an approval, with extension_submit's inputs: pre
 | `action` | "preflight" \| "status" \| "submit" \| "publish" \| "review" \| "cancel" \| "rollout" \| "release" \| "sync-listing" \| "mint-signing" \| "configure-store" \| "connect" \| "first-submission" | no | `"submit"` | The read, or the act to ask approval for. |
 | `dryRun` | boolean | no | `true` | true reads only; false only asks the owner's approval of the real submit. |
 | `project` | string | no |  | As in extension_submit. |
+| `workspace` | string | no |  | As in extension_submit. |
 | `browsers` | array of "chrome" \| "firefox" \| "edge" \| "safari" | no |  | As in extension_submit. |
 | `buildSha` | string | no |  | As in extension_submit. |
 | `version` | string | no |  | As in extension_submit. |

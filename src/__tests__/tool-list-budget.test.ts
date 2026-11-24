@@ -27,9 +27,11 @@ import { FEATURE_GROUPS } from "../lib/tool-policy";
  * second copy of the title, which won back about 1,200 characters for the
  * split of extension_builds. Ledger 1078 and 1080 raised the whole list
  * from 67,000 to 67,300 for two arguments an agent could not do without:
- * lifetime on extension_auth and workspaceRoot on extension_project_create. */
+ * lifetime on extension_auth and workspaceRoot on extension_project_create.
+ * Ledger 1100 raised it to 67,450 for workspace on extension_submit and its
+ * check, the only way a connect can name a workspace's shared account. */
 const PER_TOOL = 6_000;
-const WHOLE_LIST = 67_300;
+const WHOLE_LIST = 67_450;
 
 type Listed = Awaited<ReturnType<Client["listTools"]>>["tools"][number];
 

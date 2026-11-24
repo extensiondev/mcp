@@ -43,6 +43,10 @@ export const schema = {
         type: "string",
         description: "As in extension_submit.",
       },
+      workspace: {
+        type: "string",
+        description: "As in extension_submit.",
+      },
       browsers: {
         type: "array",
         items: {

@@ -2542,6 +2542,12 @@
           "description": "Stored login '<workspace>/<project>' when several exist."
         },
         {
+          "name": "workspace",
+          "type": "string",
+          "required": false,
+          "description": "connect: a workspace, for its shared account."
+        },
+        {
           "name": "browsers",
           "type": "array of \"chrome\" | \"firefox\" | \"edge\" | \"safari\"",
           "required": false,
@@ -2681,6 +2687,12 @@
         },
         {
           "name": "project",
+          "type": "string",
+          "required": false,
+          "description": "As in extension_submit."
+        },
+        {
+          "name": "workspace",
           "type": "string",
           "required": false,
           "description": "As in extension_submit."

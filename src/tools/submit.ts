@@ -39,6 +39,10 @@ export const schema = {
         description: "'preflight', 'status' and submit with dryRun true are read-only; submit with dryRun:false and no approvalId executes nothing either, it only asks the owner's approval, as does the first call of any store act. submit: buildSha to the stores. preflight: readiness checks. status: each store's word. sync-listing: listing from STORE.md. publish (alias review): draft to review. release (Safari): approved version on sale. cancel: withdraw from review. rollout: raise Chrome's staged rollout. configure-store: storeSettings. connect: page where the person gives the platform the key. first-submission: page for a first Chrome or Edge upload. mint-signing (Safari): register the bundle id, mint certificates and profiles.",
       },
       project: PROJECT_TOKEN_INPUT,
+      workspace: {
+        type: "string",
+        description: "connect: a workspace, for its shared account.",
+      },
       browsers: {
         type: "array",
         items: {

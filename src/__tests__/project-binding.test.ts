@@ -286,6 +286,29 @@ describe("ledger 252: with several logins stored, an unpinned platform call neve
     expect(lane.sentAnything()).toBe(false);
   });
 
+  it("ledger 1100: answers a connect for a workspace with its Store accounts page, sends nothing and lists no login", async () => {
+    otherProcessesSignIn("rebeccat", "leon");
+
+    const out = await call("extension_submit", { action: "connect", workspace: "ExtensionDev", browsers: ["edge"], api: API });
+    const url = "http://console.extension.localhost/extensiondev/settings/store-accounts";
+
+    expect(out).toMatchObject({ ok: true, status: "workspace-connect-in-console", value: { workspace: "extensiondev", storeAccountsUrl: url, nextStep: { kind: "connect", url } } });
+    expect(out.hint).toContain(`Edge Add-ons for extensiondev at ${url}`);
+    expect(JSON.stringify(out)).not.toContain(`${WORKSPACE}/`);
+    expect(lane.sentAnything()).toBe(false);
+    expect(sent).toEqual([]);
+  });
+
+  it("ledger 1100: offers workspace beside the logins when a connect names neither", async () => {
+    otherProcessesSignIn("rebeccat", "leon");
+
+    const out = await call("extension_submit", { action: "connect", browsers: ["edge"], api: API });
+
+    expect(out.error.code).toBe("E_PROJECT_AMBIGUOUS");
+    expect(out.hint).toContain("or workspace: '<workspace>' for an account every project of that workspace uses");
+    expect(lane.sentAnything()).toBe(false);
+  });
+
   it("ledger 342: links the workspace's project list on the refusal, never the newest login's project page", async () => {
     otherProcessesSignIn("rebeccat", "leon");
 

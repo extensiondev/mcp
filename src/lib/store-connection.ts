@@ -11,7 +11,7 @@ import { ConsoleProjectPage, consoleWorkspacePath } from "@extension.dev/urls/pa
 import { approvalSubjectPhrase, subjectOf } from "./approval-subject";
 import { consoleBase, consoleProjectUrl } from "./console-urls";
 import { composedDashboardUrl } from "./dashboard-url-meter";
-import { isEnvelope, reframed } from "./envelope";
+import { envelope, isEnvelope, reframed } from "./envelope";
 import { handUploadSentence, platformVersionNote } from "./hand-upload";
 import { itemPackageUrl, packageAddressMode, packageFileOf, packagePathOf, type PackageScope } from "./package-address";
 import { isRow, text } from "./row";
@@ -475,6 +475,26 @@ export function workspaceStoreAccountsUrl(ref: ProjectRef | null, api?: string):
   return workspace
     ? `${consoleBase(api)}${consoleWorkspacePath(workspace)}/settings/store-accounts`
     : storeSettingsUrl(ref, api);
+}
+
+/* @invariant A WORKSPACE STORE ACCOUNT IS CONNECTED IN THE CONSOLE, AND THE
+ * CONNECT ACTION SAYS SO IN ONE STEP. The platform takes a workspace account
+ * only from an owner signed in to the console (a token is refused there by
+ * design), so a connect that names a workspace and no project is answered
+ * here with that workspace's Store accounts page, sends nothing and lists no
+ * login of any other workspace (ledger 1100).
+ */
+export function workspaceConnectAnswer(command: string, workspace: string, stores: string[], api?: string): string {
+  const url = workspaceStoreAccountsUrl({ workspace, project: "" }, api);
+  const say = `A workspace owner connects ${storeNames(stores)} for ${workspace} at ${url}, once for every project of the workspace that has no key of its own.`;
+
+  return envelope({
+    ok: true,
+    command,
+    status: "workspace-connect-in-console",
+    value: { workspace, storeAccountsUrl: url, sayToPerson: say, nextStep: nextStep("connect", say, url) },
+    hint: say,
+  });
 }
 
 export function storeLabel(store: string): string {

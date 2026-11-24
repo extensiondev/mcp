@@ -15,6 +15,7 @@ import { isEnvelope, reframed } from "./envelope";
 import { kernelHook } from "./kernel-hooks";
 import { noLoginForProjectRefusal } from "./no-login-for-project";
 import { clientProjectDir } from "./client-roots";
+import { workspaceConnectAnswer } from "./store-connection";
 import { runsOnPlatform, type ServerOptions } from "./tool-policy";
 
 type Args = Record<string, unknown>;
@@ -35,6 +36,10 @@ function takesProject(name: string, args: Args, inputSchema: Record<string, unkn
   if (name === "extension_workspace" && WORKSPACE_READS.has(text(args.action) || "info")) return false;
 
   return true;
+}
+
+function isConnect(name: string, args: Args): boolean {
+  return (name === "extension_submit" || name === "extension_submit_check") && text(args.action) === "connect";
 }
 
 function takesPath(inputSchema: Record<string, unknown>): boolean {
@@ -108,6 +113,12 @@ export function bindCallProject(
   if (held) return { args, answeredFor: refOf(held) };
   if (named) return { args, answeredFor: namedRef(named, text(args.workspace), api) };
 
+  if (isConnect(name, args) && text(args.workspace)) {
+    const stores = Array.isArray(args.browsers) ? args.browsers.map(text).filter(Boolean) : [];
+
+    return { refused: workspaceConnectAnswer(name, text(args.workspace).toLowerCase(), stores, api) };
+  }
+
   const sessionProject = name === "extension_submit" ? kernelHook("connectSessionProject")(args.connectSession) : null;
   if (sessionProject) return { args: { ...args, project: sessionProject }, answeredFor: sessionProject };
   if (options.project || pinnedProject() || requestCredential() || envToken()) return { args, answeredFor: resolvedRef(api) };
@@ -162,7 +173,9 @@ export function bindCallProject(
         name,
         "project-ambiguous",
         `This machine holds ${logins.live.length} logins for this server (${logins.live.join(", ")}) and ${unbound}, so it was not sent: the newest login could be another agent's project.`,
-        `Pass project: one of ${quoted(logins.live)}${takesPath(inputSchema) ? ", or projectPath for the extension's directory" : ""}.${expiredSaid}`,
+        isConnect(name, args)
+          ? `Pass project: one of ${quoted(logins.live)}, or workspace: '<workspace>' for an account every project of that workspace uses.${expiredSaid}`
+          : `Pass project: one of ${quoted(logins.live)}${takesPath(inputSchema) ? ", or projectPath for the extension's directory" : ""}.${expiredSaid}`,
         { logins: logins.live },
       ),
     };
