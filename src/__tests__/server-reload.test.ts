@@ -22,7 +22,7 @@ import type { ServerOptions } from "../lib/tool-policy";
 
 const API = "http://localhost:3100";
 const PROJECT_ID = "prj_probe";
-const OPTIONS: ServerOptions = { features: ["local", "platform"], noShip: false };
+const OPTIONS: ServerOptions = { features: ["local", "platform", "extras"], noShip: false };
 const BUILT = "2026-10-23T22:27:06.000Z";
 const REBUILT = "2026-10-23T23:37:13.000Z";
 const REBUILT_AGAIN = "2026-10-24T01:46:15.000Z";
@@ -154,7 +154,7 @@ describe("a server that knows it was rebuilt reloads its platform code instead o
     const stamp = createServerStamp(file);
     const call = await connect(stamp, importer);
 
-    const fresh = await call("extension_builds", { action: "list", api: API });
+    const fresh = await call("extension_builds_read", { action: "list", api: API });
 
     expect(fresh.out.status).toBe("listed");
     expect(fresh.out.value.builds).toHaveLength(1);
@@ -165,7 +165,7 @@ describe("a server that knows it was rebuilt reloads its platform code instead o
 
     writeBuild(file, fixtureBuild("build-two"), REBUILT);
 
-    const first = await call("extension_builds", { action: "list", api: API });
+    const first = await call("extension_builds_read", { action: "list", api: API });
 
     expect(first.isError).toBe(false);
     expect(first.out.value.answeredBy).toBe("build-two");
@@ -187,7 +187,7 @@ describe("a server that knows it was rebuilt reloads its platform code instead o
 
     writeBuild(file, fixtureBuild("build-three"), REBUILT_AGAIN);
 
-    const third = await call("extension_builds", { action: "list", api: API });
+    const third = await call("extension_builds_read", { action: "list", api: API });
 
     expect(third.out.value.answeredBy).toBe("build-three");
     expect(third.out.value.trail).toEqual(["build-two"]);
@@ -196,7 +196,7 @@ describe("a server that knows it was rebuilt reloads its platform code instead o
     expect(importer).toHaveBeenCalledTimes(2);
     expect(importer.mock.calls[1][0]).toBe(buildSpecifier(file, REBUILT_AGAIN, 2));
 
-    const fourth = await call("extension_builds", { action: "list", api: API });
+    const fourth = await call("extension_builds_read", { action: "list", api: API });
 
     expect(fourth.out.value.answeredBy).toBe("build-three");
     expect(fourth.out.warnings).toEqual([]);
@@ -208,7 +208,7 @@ describe("a server that knows it was rebuilt reloads its platform code instead o
 
     const call = await connect(createServerStamp(entryFile(tmp)), importer);
 
-    const { isError, out } = await call("extension_builds", { action: "list", api: API });
+    const { isError, out } = await call("extension_builds_read", { action: "list", api: API });
 
     expect(isError).toBe(false);
     expect(out.status).toBe("listed");
@@ -230,7 +230,7 @@ describe("a server that knows it was rebuilt reloads its platform code instead o
 
     writeBuild(file, "export const half = ;\n", REBUILT);
 
-    const broken = await call("extension_builds", { action: "list", api: API });
+    const broken = await call("extension_builds_read", { action: "list", api: API });
 
     expect(broken.isError).toBe(true);
     expect(broken.out.ok).toBe(false);
@@ -247,7 +247,7 @@ describe("a server that knows it was rebuilt reloads its platform code instead o
 
     writeBuild(file, "export const v = 1;\n", REBUILT);
 
-    const shapeless = await call("extension_builds", { action: "list", api: API });
+    const shapeless = await call("extension_builds_read", { action: "list", api: API });
 
     expect(shapeless.out.status).toBe("server-stale");
     expect(shapeless.out.value.reloadError).toBe(`the ${REBUILT} build does not export the reload contract (${RELOAD_CONTRACT.join(", ")})`);
@@ -256,14 +256,14 @@ describe("a server that knows it was rebuilt reloads its platform code instead o
 
     writeBuild(file, fixtureBuild("build-two"), REBUILT);
 
-    const mended = await call("extension_builds", { action: "list", api: API });
+    const mended = await call("extension_builds_read", { action: "list", api: API });
 
     expect(mended.out.value.answeredBy).toBe("build-two");
     expect(mended.out.warnings).toEqual([reloadedWarning(REBUILT)]);
     expect(importer).toHaveBeenCalledTimes(3);
 
     const bare = await connect(stamp);
-    const unloadable = await bare("extension_builds", { action: "list", api: API });
+    const unloadable = await bare("extension_builds_read", { action: "list", api: API });
 
     expect(unloadable.out.status).toBe("server-stale");
     expect(unloadable.out.error.message).toBe(staleSentence(REBUILT));
@@ -331,7 +331,7 @@ describe("a server that knows it was rebuilt reloads its platform code instead o
     expect(second.out.value.server).toEqual(server);
     expect(second.out.warnings.filter((w: string) => w === warning)).toHaveLength(1);
 
-    const platform = await call("extension_builds", { action: "list", api: API });
+    const platform = await call("extension_builds_read", { action: "list", api: API });
 
     expect(platform.out.value.answeredBy).toBe("build-two");
     expect(platform.out.warnings).toEqual([reloadedWarning(REBUILT)]);

@@ -23,6 +23,7 @@ export type ToolFrame = {
 export interface RebuiltCall {
   name: string;
   arguments?: Record<string, unknown>;
+  internal?: boolean;
 }
 
 export interface Handover {

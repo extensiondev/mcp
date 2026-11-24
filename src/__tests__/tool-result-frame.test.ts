@@ -71,7 +71,7 @@ describe("a refusal leaves the untrusted fence only when this server built it in
 
   const answered = async (handler: () => Promise<string>): Promise<string> => {
     const tool: ToolModule = { schema: { name: "extension_wait", description: "", inputSchema: { type: "object", properties: {} } }, handler };
-    const frame = await createToolDispatcher({ tools: [tool], options: { features: ["local"], noShip: false } })({ name: "extension_wait", arguments: {} });
+    const frame = await createToolDispatcher({ tools: [tool], options: { features: ["local", "extras"], noShip: false } })({ name: "extension_wait", arguments: {} });
 
     return frame.content[0]!.text;
   };
@@ -138,7 +138,7 @@ describe("1107: every answer carries the envelope as structuredContent, and a fe
   const dispatched = async (name: string, answer: string) => {
     const tool: ToolModule = { schema: { name, description: "", inputSchema: { type: "object", properties: {} } }, handler: async () => answer };
 
-    return createToolDispatcher({ tools: [tool], options: { features: ["local"], noShip: false } })({ name, arguments: {} });
+    return createToolDispatcher({ tools: [tool], options: { features: ["local", "extras"], noShip: false } })({ name, arguments: {} });
   };
 
   it("hands a trusted tool's envelope over as it is", async () => {

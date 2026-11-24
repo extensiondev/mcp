@@ -115,7 +115,7 @@ function storedNotes(stored: unknown): string[] {
 export const schema = {
   name: "extension_project_create",
   description:
-    "Create an extension.dev project from a folder (projectPath, uploaded, no push; again: re-seed and rebuild) or a GitHub repo, BEFORE extension_auth. The first call answers a URL a signed-in workspace member approves; resume with deviceCode and waitSeconds, the login is stored too. The first build spends one build of the workspace's monthly allowance, build command exactly as stored. extension_create, extension_templates and extension_add_feature work on local folders.",
+    "Create an extension.dev project from a folder (projectPath, uploaded, no push; again: re-seed and rebuild) or a GitHub repo, BEFORE extension_auth_login. The first call answers a URL a signed-in workspace member approves; resume with deviceCode and waitSeconds, the login is stored too. The first build spends one build of the workspace's monthly allowance, build command exactly as stored. extension_create, extension_templates and extension_add_feature work on local folders.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -149,7 +149,7 @@ export const schema = {
       },
       displayName: {
         type: "string",
-        description: "Human name; rename later with extension_workspace configure-project.",
+        description: "Human name; rename later with extension_workspace_configure configure-project.",
       },
       description: {
         type: "string",

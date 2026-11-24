@@ -18,6 +18,7 @@ import { bindApprovalProject } from "./approval-record";
 import { withAnsweredProject, withApprovalLogin } from "./approval-scope";
 import { withCallWaits } from "./call-waits";
 import { ENVELOPE_OUTPUT_SCHEMA, envelope } from "./envelope";
+import { appendWarnings } from "./envelope-warnings";
 import { argumentFailure } from "./exec";
 import { kernelHook, registeredKernelHooks } from "./kernel-hooks";
 import { crashAnswerFields, watchCall } from "./server-crash-log";
@@ -157,6 +158,33 @@ export function listedToolEntry(tool: ListedTool): {
   return { name: tool.name, title, description: tool.description, inputSchema: tool.inputSchema, outputSchema: ENVELOPE_OUTPUT_SCHEMA, annotations: { title, ...hints } };
 }
 
+function isFenced(text: string): boolean {
+  try {
+    const parsed = JSON.parse(text) as Record<string, unknown> | null;
+
+    return Boolean(parsed && typeof parsed === "object" && "untrustedEnd" in parsed);
+  } catch {
+    return false;
+  }
+}
+
+function aliasNoted(frame: ToolFrame, call: RebuiltCall): ToolFrame {
+  const aliasOf = TOOL_POLICY[call.name]?.aliasOf;
+
+  if (!aliasOf || call.internal) return frame;
+
+  const sentence = `${call.name} is now ${aliasOf.join(" and ")}; it still answers under the old name.`;
+  let noted = false;
+  const content = frame.content.map((part) => {
+    const text = isFenced(part.text) ? part.text : appendWarnings(part.text, [sentence]);
+    noted = noted || text !== part.text;
+
+    return { ...part, text };
+  });
+
+  return { ...frame, content: noted ? content : [...content, { type: "text", text: sentence }] };
+}
+
 export function createToolDispatcher(setup: ToolHandlerOptions): (call: RebuiltCall) => Promise<ToolFrame> {
   return createToolSurface(setup).dispatch;
 }
@@ -265,7 +293,7 @@ export function createToolSurface(setup: ToolHandlerOptions): {
       ? { rebuilt, reason: active.reloadError, version: null, assertChecks: null }
       : { rebuilt, reason: failure ?? noLocalCarryReason(rebuilt), version: active.version, assertChecks: active.assertChecks };
 
-  const dispatch = async (call: RebuiltCall): Promise<ToolFrame> => withStructuredContent(await withComposedRefusals(() => dispatched(call)), call.name);
+  const dispatch = async (call: RebuiltCall): Promise<ToolFrame> => withStructuredContent(aliasNoted(await withComposedRefusals(() => dispatched(call)), call), call.name);
 
   const dispatched = async ({ name, arguments: args }: RebuiltCall): Promise<ToolFrame> => {
     const tool = toolMap.get(name);
@@ -317,7 +345,8 @@ export function createToolSurface(setup: ToolHandlerOptions): {
 
       if (refusal) return refused(refusal);
 
-      const acted = await runAskingOnly(() => dispatch({ name: actsAs.tool, arguments: aliasedArgs }));
+      const inner = { name: actsAs.tool, arguments: actsAs.args ? actsAs.args(aliasedArgs) : aliasedArgs, internal: true };
+      const acted = actsAs.askingOnly ? await runAskingOnly(() => dispatch(inner)) : await dispatch(inner);
 
       return { isError: acted.isError, content: acted.content.map((part) => ({ ...part, text: answeredAs(part.text, name, actsAs.tool) })) };
     }

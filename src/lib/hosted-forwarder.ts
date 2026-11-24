@@ -167,7 +167,7 @@ async function guidedProjectConnect(command: string, args: Args, shown: Args, de
 function laneToolOf(command: string): string | null {
   if (!askingOnly() || TOOL_POLICY[command]?.actsAs) return command;
 
-  return Object.keys(TOOL_POLICY).find((name) => TOOL_POLICY[name]?.actsAs?.tool === command) ?? null;
+  return Object.keys(TOOL_POLICY).find((name) => TOOL_POLICY[name]?.actsAs?.askingOnly && TOOL_POLICY[name]?.actsAs?.tool === command) ?? null;
 }
 
 const reading =

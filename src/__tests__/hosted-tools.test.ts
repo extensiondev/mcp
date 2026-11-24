@@ -866,7 +866,7 @@ describe("the forwarder gives the person the wait they asked for and keeps what 
     const deferred = waiting.filter((tool) => tool.said === "As in extension_submit.");
     const stated = waiting.filter((tool) => !deferred.includes(tool));
 
-    expect(waiting.map((tool) => tool.name).sort()).toEqual(["extension_builds", "extension_builds_act", "extension_publish", "extension_release_promote", "extension_release_status", "extension_submit", "extension_submit_check"]);
+    expect(waiting.map((tool) => tool.name).sort()).toEqual(["extension_builds", "extension_builds_act", "extension_builds_download", "extension_builds_read", "extension_publish", "extension_release_promote", "extension_release_status", "extension_submit", "extension_submit_check"]);
 
     expect(deferred.map((tool) => tool.name)).toEqual(["extension_submit_check"]);
 

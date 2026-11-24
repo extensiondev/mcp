@@ -11,6 +11,7 @@ import { envelope } from "./envelope";
 import { sameStoredProject } from "./project-identity";
 import { submitCheckRefused, submitShips } from "./submit-action-safety";
 import { TOOL_ANNOTATIONS, type ToolAnnotations } from "./tool-annotations";
+import { TOOL_TWINS, TWIN_ALIASES, twinArgs, twinRefusal } from "./tool-twins";
 
 export type { ToolAnnotations } from "./tool-annotations";
 
@@ -30,7 +31,8 @@ export interface ToolPolicy {
   untrusted?: true;
   onThisMachine?: true;
   liveSession?: true;
-  actsAs?: { tool: string; refuse: (args: Args) => string | null };
+  actsAs?: { tool: string; refuse: (args: Args) => string | null; args?: (args: Args) => Args; askingOnly?: true };
+  aliasOf?: string[];
 }
 
 /* @invariant EVERY TOOL CARRIES A TITLE, THE VERB PHRASE A CLIENT SHOWS IN A
@@ -259,9 +261,32 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
     group: "platform",
     annotations: TOOL_ANNOTATIONS.extension_submit_check,
     untrusted: true,
-    actsAs: { tool: "extension_submit", refuse: submitCheckRefused },
+    actsAs: { tool: "extension_submit", refuse: submitCheckRefused, askingOnly: true },
   },
 };
+
+for (const name of ["extension_list_extensions", "extension_reload", "extension_wait", "extension_analyze", "extension_storage", "extension_browsers"]) {
+  TOOL_POLICY[name] = { ...TOOL_POLICY[name]!, group: "extras" };
+}
+
+for (const twin of TOOL_TWINS) {
+  const base = TOOL_POLICY[twin.of]!;
+
+  TOOL_POLICY[twin.name] = {
+    group: twin.group,
+    annotations: twin.annotations,
+    ...(base.ships && !twin.annotations.readOnlyHint ? { ships: typeof base.ships === "function" ? (args: Args) => (base.ships as (args: Args) => boolean)(twinArgs(twin, args)) : base.ships } : {}),
+    ...(base.untrusted ? { untrusted: true as const } : {}),
+    ...(base.onThisMachine ? { onThisMachine: true as const } : {}),
+    actsAs: { tool: twin.of, refuse: twinRefusal(twin), args: (args) => twinArgs(twin, args) },
+  };
+
+  TOOL_TITLES[twin.name] = twin.title;
+}
+
+for (const [name, twins] of Object.entries(TWIN_ALIASES)) {
+  TOOL_POLICY[name] = { ...TOOL_POLICY[name]!, aliasOf: twins };
+}
 
 export function runsOnPlatform(name: string): boolean {
   const policy = TOOL_POLICY[name];
@@ -360,7 +385,7 @@ export function resolveServerOptions(
 
 export function isToolListed(name: string, options: ServerOptions): boolean {
   const policy = TOOL_POLICY[name];
-  if (!policy) return false;
+  if (!policy || policy.aliasOf) return false;
   if (!options.features.includes(policy.group)) return false;
 
   return !(options.noShip && policy.ships === "always");

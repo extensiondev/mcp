@@ -116,7 +116,7 @@ describe("a server that knows it was rebuilt and has no loader refuses platform 
 
     const stamp = createServerStamp(entryFile(tmp));
 
-    const { isError, out } = await call(stamp, "extension_builds", { action: "list", api: API });
+    const { isError, out } = await call(stamp, "extension_builds_read", { action: "list", api: API });
 
     expect(isError).toBe(false);
     expect(out.ok).toBe(true);
@@ -134,7 +134,7 @@ describe("a server that knows it was rebuilt and has no loader refuses platform 
     const stamp = createServerStamp(file);
     fs.utimesSync(file, REBUILT_AT, REBUILT_AT);
 
-    const { isError, out } = await call(stamp, "extension_builds", { action: "list", api: API });
+    const { isError, out } = await call(stamp, "extension_builds_read", { action: "list", api: API });
 
     expect(isError).toBe(true);
     expect(out.ok).toBe(false);

@@ -2,18 +2,23 @@ import { describe, expect, it } from "vitest";
 
 import { serverInstructions, tools as ALL_TOOLS } from "../index";
 import { DEFAULT_SERVER_OPTIONS, isToolListed } from "../lib/tool-policy";
+import { TOOL_TWINS } from "../lib/tool-twins";
 
 const IMPERATIVE_VERBS = [
+  "Add",
   "Analyze",
   "Browse",
   "Build",
+  "Change",
   "Check",
   "Click",
   "Create",
   "Diagnose",
+  "Download",
   "Evaluate",
   "Find",
   "Inspect",
+  "Install",
   "List",
   "Open",
   "Plan",
@@ -24,6 +29,7 @@ const IMPERATIVE_VERBS = [
   "Rebuild",
   "Release",
   "Reload",
+  "Revoke",
   "Run",
   "Search",
   "Sign",
@@ -34,6 +40,7 @@ const IMPERATIVE_VERBS = [
   "Validate",
   "Verify",
   "Wait",
+  "Write",
 ];
 
 const ACRONYMS_ARE_NAMES_NOT_EMPHASIS = new Set([
@@ -254,20 +261,20 @@ describe("917: a description's first sentence says what the tool does and what i
     const text = (name: string): string => ALL_TOOLS.find((tool) => tool.schema.name === name)!.schema.description;
 
     expect(text("extension_build")).toMatch(/Answers the output path, warnings and store review risks/);
-    expect(text("extension_build")).toContain("Not for sharing (extension_builds)");
+    expect(text("extension_build")).toContain("Not for sharing: extension_builds_read");
     expect(text("extension_manifest_validate")).toMatch(/per-browser errors, permissions the code calls but lacks, and buildBlocking errors/);
     expect(text("extension_templates")).toContain("'javascript' (plain)");
   });
 });
 
 const ADJACENT_SETS = [
-  ["extension_inspect", "extension_dom_snapshot", "extension_element", "extension_eval", "extension_logs"],
+  ["extension_inspect", "extension_dom_snapshot", "extension_element_act", "extension_eval", "extension_logs"],
   ["extension_dev", "extension_start", "extension_open", "extension_reload", "extension_wait", "extension_stop"],
-  ["extension_build", "extension_builds", "extension_builds_act", "extension_analyze"],
+  ["extension_build", "extension_builds_read", "extension_builds_act", "extension_analyze"],
   ["extension_submit", "extension_submit_check", "extension_release_promote", "extension_release_status"],
-  ["extension_publish", "extension_shares", "extension_preview_web"],
+  ["extension_publish", "extension_shares_manage", "extension_preview_web"],
   ["extension_create", "extension_project_create", "extension_add_feature", "extension_templates"],
-  ["extension_auth", "extension_approvals", "extension_workspace"],
+  ...Object.values(TOOL_TWINS.reduce<Record<string, string[]>>((pairs, twin) => ({ ...pairs, [twin.of]: [...(pairs[twin.of] ?? []), twin.name] }), {})).filter((pair) => pair.length > 1),
 ];
 
 const DEFAULT_DESCRIPTION_CAP = 400;

@@ -75,7 +75,7 @@ describe("the deployment doctrine sits in the server instructions, in order, bes
   it("routes everything that leaves the machine to the platform build, extension_publish and extension_submit, with stores only on demand", () => {
     const rule = lines.find((line) => line.startsWith(ORDER[0])) ?? "";
 
-    expect(rule).toMatch(/platform build \(extension_builds\)/);
+    expect(rule).toMatch(/platform build \(extension_builds_read\)/);
     expect(rule).toMatch(/links from extension_publish/);
     expect(rule).toMatch(/stores from extension_submit/);
     expect(rule).toMatch(/a store is touched only when the person asks for a store/);

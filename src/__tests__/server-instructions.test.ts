@@ -36,7 +36,6 @@ describe("the initialize result carries instructions, the one field a search-fir
       "extension_create",
       "extension_manifest_validate",
       "extension_dev",
-      "extension_wait",
       "extension_logs",
       "extension_open",
       "extension_inspect",
@@ -211,7 +210,7 @@ describe("924: theme work is routed to extension_theme_verify where it is listed
 
 describe("951: a closed headless create routes to the console import", () => {
   it("says to create at the console import when the status lists the create tool as closed", () => {
-    expect(serverInstructions(PLATFORM_ON)).toContain("With no project yet: extension_project_create, then extension_auth, or the console import when extension_auth status lists it in hostedLane.closed.");
+    expect(serverInstructions(PLATFORM_ON)).toContain("With no project yet: extension_project_create, then extension_auth_login, or the console import when extension_auth_read lists it in hostedLane.closed.");
   });
 });
 

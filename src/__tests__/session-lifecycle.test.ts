@@ -549,7 +549,7 @@ describe("ledger 515: a session the agent owns ends itself after an idle time, a
       schema: { name: "extension_wait", description: "fake", inputSchema: { type: "object", properties: { projectPath: { type: "string" }, browser: { type: "string" } }, required: ["projectPath"] } },
       handler: async () => JSON.stringify({ ok: true, status: "ready", value: {} }),
     };
-    const dispatch = createToolDispatcher({ tools: [reads], options: { features: ["local"], noShip: false } });
+    const dispatch = createToolDispatcher({ tools: [reads], options: { features: ["local", "extras"], noShip: false } });
     await dispatch({ name: "extension_wait", arguments: { projectPath: project } });
 
     expect(fs.statSync(idleRecordPath(project, "chrome")).mtimeMs).toBeGreaterThan(before.getTime() + 30_000);

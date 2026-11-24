@@ -268,7 +268,7 @@ function detectSurfaces(manifest: Record<string, any>): string[] {
 export const schema = {
   name: "extension_preview_web",
   description:
-    "Preview a build in the web emulator; share:true returns a link anyone opens with no install. Answers share.previewUrl; extension_publish answers the tester link with real downloads, extension_shares lists and revokes links. Content scripts run only on sample pages, a limit of the preview only. The preview://build default is for developing extension.dev itself.",
+    "Preview a build in the web emulator; share:true returns a link that needs no install. Answers share.previewUrl; extension_publish answers a tester link with downloads, extension_shares_read lists, extension_shares_manage revokes. Content scripts run only on sample pages, a limit of the preview only. The preview://build default is for developing extension.dev itself.",
   inputSchema: {
     type: "object" as const,
     properties: {

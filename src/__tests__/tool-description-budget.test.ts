@@ -21,24 +21,36 @@ const CEILINGS: Record<string, number> = {
   extension_add_feature: 380,
   extension_analyze: 330,
   extension_approvals: 250,
+  extension_approvals_read: 170,
+  extension_approvals_revoke: 140,
   extension_assert: 350,
   extension_auth: 400,
+  extension_auth_login: 230,
+  extension_auth_read: 190,
   extension_browsers: 280,
+  extension_browsers_install: 240,
+  extension_browsers_read: 220,
   extension_build: 340,
   extension_builds: 330,
   extension_builds_act: 370,
+  extension_builds_download: 140,
+  extension_builds_read: 280,
   extension_create: 360,
   extension_dev: 370,
   extension_docs_search: 280,
   extension_doctor: 290,
   extension_dom_snapshot: 340,
   extension_element: 350,
+  extension_element_act: 320,
+  extension_element_read: 200,
   extension_eval: 400,
   extension_inspect: 400,
   extension_list_extensions: 210,
   extension_logs: 390,
   extension_manifest_validate: 290,
   extension_network: 260,
+  extension_network_read: 200,
+  extension_network_stub: 210,
   extension_open: 400,
   extension_preview_web: 370,
   extension_project_create: 480,
@@ -48,17 +60,24 @@ const CEILINGS: Record<string, number> = {
   extension_reload: 300,
   extension_screenshot: 240,
   extension_shares: 310,
+  extension_shares_manage: 290,
+  extension_shares_read: 190,
   extension_start: 370,
   extension_stop: 310,
   extension_storage: 320,
+  extension_storage_read: 250,
+  extension_storage_write: 260,
   extension_submit: 500,
   extension_submit_check: 390,
+  extension_submit_read: 200,
   extension_templates: 370,
   extension_theme_verify: 280,
   extension_try: 280,
   extension_wait: 380,
   extension_workspace: 370,
+  extension_workspace_configure: 270,
   extension_workspace_create: 240,
+  extension_workspace_read: 180,
 };
 
 const TARGET = 400;
@@ -106,5 +125,22 @@ describe("every tool carries a title a consent prompt can show", () => {
     expect(toolTitle("extension_storage")).toMatch(/write/);
     expect(toolTitle("extension_browsers")).toMatch(/Install/);
     expect(TOOL_POLICY.extension_submit_check!.annotations.readOnlyHint).toBe(false);
+  });
+
+  it("1108: splits every tool that read and wrote into a read-only twin and a write twin, and lists the old name nowhere", () => {
+    const twins = Object.entries(TOOL_POLICY).filter(([, policy]) => policy.actsAs && !policy.actsAs.askingOnly);
+    const split = [...new Set(twins.map(([, policy]) => policy.actsAs!.tool))].sort();
+
+    expect(split).toEqual(["extension_approvals", "extension_auth", "extension_browsers", "extension_builds", "extension_element", "extension_network", "extension_shares", "extension_storage", "extension_submit", "extension_workspace"]);
+
+    for (const old of split) {
+      const own = twins.filter(([, policy]) => policy.actsAs!.tool === old);
+
+      expect(own.some(([, policy]) => policy.annotations.readOnlyHint), `${old} has a read twin`).toBe(true);
+      if (old !== "extension_submit") expect(own.some(([, policy]) => !policy.annotations.readOnlyHint), `${old} has a write twin`).toBe(true);
+      if (old !== "extension_submit") expect(TOOL_POLICY[old]!.aliasOf, old).toEqual(own.map(([name]) => name));
+    }
+
+    for (const [name, policy] of twins) expect(policy.annotations.readOnlyHint ? !policy.annotations.destructiveHint && !policy.ships : true, name).toBe(true);
   });
 });

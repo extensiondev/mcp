@@ -275,7 +275,7 @@ describe("extension_eval until with no session", () => {
 describe("extension_wait stays read-only now that the condition wait lives in extension_eval", () => {
   it("lists extension_wait read-only and without until, and extension_eval with until", async () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    await createServer().connect(serverTransport);
+    await createServer({ features: ["local", "extras"], noShip: false }).connect(serverTransport);
     const client = new Client({ name: "eval-until-probe", version: "0.0.0" });
     await client.connect(clientTransport);
 

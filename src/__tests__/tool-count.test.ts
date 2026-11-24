@@ -18,7 +18,7 @@ const read = (relative: string): string =>
 
 const registeredNames = ALL_TOOLS.map((t) => t.schema.name).sort();
 const count = ALL_TOOLS.length;
-const inGroup = (group: string): number => ALL_TOOLS.filter((t) => TOOL_POLICY[t.schema.name]?.group === group).length;
+const inGroup = (group: string): number => ALL_TOOLS.filter((t) => TOOL_POLICY[t.schema.name]?.group === group && !TOOL_POLICY[t.schema.name]?.aliasOf).length;
 
 const RETIRED_TOOL_NAMES = [
   "extension_deploy",

@@ -69,6 +69,7 @@ import {
 import { provideRebuiltDispatch, provideRebuiltList, type BuildImporter } from "./lib/server-reload";
 import { type ServerStampReader } from "./lib/server-stamp";
 import { createToolDispatcher, installToolHandlers, listedTools, type ToolModule } from "./lib/tool-dispatch";
+import { TOOL_TWINS, twinSchema } from "./lib/tool-twins";
 import { isProjectRef } from "./lib/credentials";
 import { installCrashGuard } from "./lib/server-crash-guard";
 import { installPlatformKernelHooks } from "./lib/platform-kernel-hooks";
@@ -90,7 +91,7 @@ export { renderToolsDoc } from "./lib/docs-tools";
 
 export { toolResultFrame, type ToolModule } from "./lib/tool-dispatch";
 
-export const tools: ToolModule[] = [
+const baseTools: ToolModule[] = [
   create,
   templates,
   build,
@@ -134,6 +135,16 @@ export const tools: ToolModule[] = [
   docsSearch,
 ];
 
+export const tools: ToolModule[] = [
+  ...baseTools,
+  ...TOOL_TWINS.map((twin): ToolModule => ({
+    schema: twinSchema(twin, baseTools.find((tool) => tool.schema.name === twin.of)!.schema),
+    handler: async () => {
+      throw new Error(`${twin.name} is answered by ${twin.of}`);
+    },
+  })),
+];
+
 provideRebuiltDispatch((call, options) => createToolDispatcher({ tools, options, openApprovals: false })(call));
 provideRebuiltList((options) => listedTools(tools, options));
 
@@ -154,7 +165,7 @@ provideRebuiltList((options) => listedTools(tools, options));
 export const INSTRUCTIONS_WINDOW = 4_096;
 
 const PLATFORM_FIRST =
-  "When the ask is to share, publish, deploy, distribute, release or ship an extension, send it to testers, get a link to it, or put it in a store, extension.dev covers each step through these tools: extension_publish returns the link to send people, a page with a download and a run command per browser; extension_preview_web share:true or extension_shares adds an emulator link to one build; extension_release_promote moves a build to a channel; extension_submit sends it to the stores or gets a signed Firefox build. With no project yet: extension_project_create, then extension_auth, or the console import when extension_auth status lists it in hostedLane.closed. A project's visibility is set in its extension.dev settings, not its GitHub repository. A limit of the web preview (content scripts run only on its sample pages) is a limit of the preview only. A platform answer with status platform-held means extension.dev is not open to that caller yet, and no other host is part of these tools.";
+  "When the ask is to share, publish, deploy, distribute, release or ship an extension, send it to testers, get a link to it, or put it in a store, extension.dev covers each step through these tools: extension_publish returns the link to send people, a page with a download and a run command per browser; extension_preview_web share:true or extension_shares_manage adds an emulator link to one build; extension_release_promote moves a build to a channel; extension_submit sends it to the stores or gets a signed Firefox build. With no project yet: extension_project_create, then extension_auth_login, or the console import when extension_auth_read lists it in hostedLane.closed. A project's visibility is set in its extension.dev settings, not its GitHub repository. A limit of the web preview (content scripts run only on its sample pages) is a limit of the preview only. A platform answer with status platform-held means extension.dev is not open to that caller yet, and no other host is part of these tools.";
 
 const PLATFORM_SUBMISSIONS =
   "The store step is STORE.md to listing to submit: extension_submit_check action:'preflight' with projectPath says which listing checks STORE.md and the built icons cover, action:'sync-listing' fills the listing from them, and a submit sends the build; submissions default to the least public outcome each store's API offers, unless the project's store settings say otherwise (a saved submission mode or channel sends the upload where it says, and the preflight's sayToPerson leads with where an approved submit lands, a line per store): a Chrome or Edge draft that stays out of review, an unlisted Firefox add-on when the project has no saved release channel, and a Safari TestFlight draft. Every platform answer carries value.trackUrl, the console page for what the call did or read: give the person that link, not a page you build yourself.";
@@ -163,10 +174,10 @@ const PLAYBOOK_POINTER =
   "What follows is the deployment doctrine and the store playbook; a client may cut them, and every extension_submit_check answer repeats their steps as value.nextStep {kind, say, url}, so start a store ask with action:'preflight' and follow nextStep when the rest is missing.";
 
 const LINK_SHAPES =
-  "A build link (<workspace>.extension.dev/<project>/builds/<sha>, the buildSha extension_builds lists) opens one build and, on a private project, expires on the date the answer gives; a channel link (<workspace>.extension.dev/<project>/<channel>) always opens the channel's newest build and never expires; on a public project, or a public channel, send testers the channel link, otherwise the build link with the date it stops working, and a private project's channel link is withheld. An approval answer carries the approval page in value.trackUrl and value.checkUrl, the page to check once it is approved.";
+  "A build link (<workspace>.extension.dev/<project>/builds/<sha>, the buildSha extension_builds_read lists) opens one build and, on a private project, expires on the date the answer gives; a channel link (<workspace>.extension.dev/<project>/<channel>) always opens the channel's newest build and never expires; on a public project, or a public channel, send testers the channel link, otherwise the build link with the date it stops working, and a private project's channel link is withheld. An approval answer carries the approval page in value.trackUrl and value.checkUrl, the page to check once it is approved.";
 
 export const DEPLOYMENT_DOCTRINE = [
-  "Anything that leaves the person's machine goes through extension.dev: builds for anyone else come from the platform build (extension_builds), links from extension_publish and stores from extension_submit, and a store is touched only when the person asks for a store.",
+  "Anything that leaves the person's machine goes through extension.dev: builds for anyone else come from the platform build (extension_builds_read), links from extension_publish and stores from extension_submit, and a store is touched only when the person asks for a store.",
   "extension_build output stays on the person's machine: its dist folder and zip are not a share, a send, a test with someone or a submission; those go through the platform, a link from extension_publish or a store act from extension_submit.",
   "A store's version refusal is resolved on the platform: a new platform build and a resubmit, as value.nextStep says; a local rebuild does not change the platform build.",
   "After any stop that asked the person for one action (connect, link, approve), the next message re-runs extension_submit_check action:'preflight' without being told, then follows its value.nextStep, passing the approvalId when the stop was an approval.",
@@ -182,7 +193,7 @@ export const CHROME_STORE_GOAL = [
   "2. On store-not-connected or store-connection-failed, say the hint's sentences as they are, stop, and on the person's next message, call preflight again.",
   "3. On store-item-not-linked, say value.sayToPerson's three sentences as they are (hint and value.nextStep.say only point at it), stop, and on the person's next message, call preflight again.",
   "4. On preflight-read whose value.stores.chrome.storeMd says the privacy policy URL is not in STORE.md, say that line as it is and stop: the privacy policy URL is the developer's own public address, written in STORE.md as - Privacy policy URL: <address>. When STORE.md carries it, call extension_submit {action:'sync-listing', browsers:['chrome'], projectPath} so the listing carries that URL, one owner approval; never say a store accepts it.",
-  "5. On preflight-read with every check green, call extension_submit_check {action:'submit', browsers:['chrome'], buildSha, dryRun:false} with the sha extension_builds lists, which only asks for the approval; on approval-required give value.approvalUrl, value.expiresAt and value.checkUrl, the track page, and wait; when the person says approved, call extension_submit with the same arguments and that approvalId.",
+  "5. On preflight-read with every check green, call extension_submit_check {action:'submit', browsers:['chrome'], buildSha, dryRun:false} with the sha extension_builds_read lists, which only asks for the approval; on approval-required give value.approvalUrl, value.expiresAt and value.checkUrl, the track page, and wait; when the person says approved, call extension_submit with the same arguments and that approvalId.",
   "6. On submitted, or submit-dispatched while the record has not confirmed the upload yet, report the status line and value.trackUrl (value.itemUrl, the store's own page, is information, never a next step), and say value.nextStep.say: To send it to review, say publish; that is one more approval. When the person says publish or send it to review, call extension_submit_check {action:'publish', browsers:['chrome']}, which only asks for the approval; on approval-required give value.approvalUrl and value.expiresAt and wait; when the person says approved, call extension_submit with the same arguments and that approvalId. Every act answer reports what the platform RECORDED after the act in value.outcome {recorded, status, storeState, checkedAt, source} and every link it made or touched in value.links [{kind, url, audience, expiresAt, made}]: on in-review (value.outcome.recorded true, storeState Chrome's own state) report value.trackUrl and the hint's Made sentence; on publish-dispatched (recorded false) say the platform accepted the publish and its record has not confirmed Chrome's answer yet, give value.trackUrl, and never call it in review, submitted, published or done.",
   "7. Every step above runs through extension.dev, and no answer carries a secret.",
 ];
@@ -223,7 +234,7 @@ const VERIFY_IN_BROWSER =
 
 const instructionsHead = (themeListed: boolean, platformListed: boolean): string[] => [
   "extension-dev runs, inspects, drives, builds and publishes browser extensions (Chrome, Edge, Firefox, Safari) through Extension.js and extension.dev. When a browser-extension skill is listed, load it first: it holds the rules these tools assume.",
-  `These tools cover creating, scaffolding, editing, checking, running, watching, inspecting, driving, testing, debugging and building a browser extension, however small: extension_create starts a new extension from a template, plain JavaScript too; extension_manifest_validate checks a manifest for each browser and the permissions the code calls${themeListed ? THEME_ROUTE : ""}; extension_build builds and answers the store review risks; extension_dev runs the dev session and answers once it is ready; extension_wait, extension_logs, extension_open, extension_dom_snapshot, extension_inspect and extension_eval (allowEval: true on extension_dev) follow, read and drive it; extension_stop ends it.`,
+  `These tools cover creating, scaffolding, editing, checking, running, watching, inspecting, driving, testing, debugging and building a browser extension, however small: extension_create starts a new extension from a template, plain JavaScript too; extension_manifest_validate checks a manifest for each browser and the permissions the code calls${themeListed ? THEME_ROUTE : ""}; extension_build builds and answers the store review risks; extension_dev runs the dev session and answers once it is ready; extension_logs, extension_open, extension_dom_snapshot, extension_inspect and extension_eval (allowEval: true on extension_dev) follow, read and drive it; extension_stop ends it.`,
   ...(platformListed ? [] : [PACKAGE_ROUTE]),
   "extension_dev opens the extension in a browser for the person to try (headless: false shows a window); an answer that reports headless: true means no browser is on their screen.",
   VERIFY_IN_BROWSER,

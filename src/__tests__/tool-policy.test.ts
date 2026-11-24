@@ -138,10 +138,10 @@ describe("resolveServerOptions", () => {
 describe("the default start stays under a directory's tool ceiling", () => {
   const MOVED = { extension_try: "platform", extension_theme_verify: "extras", extension_network: "extras" } as const;
 
-  it("lists exactly 24 tools on a bare start, none of the three moved ones", async () => {
+  it("lists exactly 18 tools on a bare start, none of the moved ones (ledgers 1106 and 1108)", async () => {
     const listed = (await (await connected()).listTools()).tools.map((t) => t.name);
 
-    expect(listed).toHaveLength(24);
+    expect(listed).toHaveLength(18);
     for (const name of Object.keys(MOVED)) expect(listed, name).not.toContain(name);
   });
 
@@ -151,14 +151,14 @@ describe("the default start stays under a directory's tool ceiling", () => {
 
     for (const [name, group] of Object.entries(MOVED)) expect(TOOL_POLICY[name].group, name).toBe(group);
 
-    const groups = Object.values(TOOL_POLICY).map((policy) => policy.group);
+    const groups = Object.values(TOOL_POLICY).filter((policy) => !policy.aliasOf).map((policy) => policy.group);
 
-    expect(groups.filter((group) => group === "local")).toHaveLength(24);
-    expect(groups.filter((group) => group === "platform")).toHaveLength(15);
-    expect(groups.filter((group) => group === "extras")).toHaveLength(2);
+    expect(groups.filter((group) => group === "local")).toHaveLength(18);
+    expect(groups.filter((group) => group === "platform")).toHaveLength(21);
+    expect(groups.filter((group) => group === "extras")).toHaveLength(12);
   });
 
-  it("lists 39 with the platform group and all 41 once extras is named", async () => {
+  it("lists 39 with the platform group and all 51 once extras is named", async () => {
     const platform = (await (await connected({ features: ["local", "platform"], noShip: false })).listTools()).tools.map((t) => t.name);
     const everything = (await (await connected({ features: ["local", "platform", "extras"], noShip: false })).listTools()).tools.map((t) => t.name);
 
@@ -166,8 +166,8 @@ describe("the default start stays under a directory's tool ceiling", () => {
     expect(platform).toContain("extension_try");
     expect(platform).not.toContain("extension_network");
     expect(platform).not.toContain("extension_theme_verify");
-    expect(everything.sort()).toEqual(registered);
-    expect(everything).toHaveLength(41);
+    expect(everything.sort()).toEqual(registered.filter((name) => !TOOL_POLICY[name]!.aliasOf));
+    expect(everything).toHaveLength(51);
   });
 
   it("reads extras from the flag and the environment, in the table's order", () => {
@@ -220,7 +220,7 @@ describe("the server honors the options", () => {
   it("lists every tool with its annotations when every group is named", async () => {
     const client = await connected({ features: [...FEATURE_GROUPS], noShip: false });
     const listed = (await client.listTools()).tools;
-    expect(listed.map((t) => t.name).sort()).toEqual(registered);
+    expect(listed.map((t) => t.name).sort()).toEqual(registered.filter((name) => !TOOL_POLICY[name].aliasOf));
 
     for (const tool of listed) {
       expect(tool.annotations, tool.name).toEqual({ title: toolTitle(tool.name), ...TOOL_POLICY[tool.name].annotations });
@@ -232,7 +232,7 @@ describe("the server honors the options", () => {
   it("lists the local group alone on a bare start", async () => {
     const client = await connected();
     const listed = (await client.listTools()).tools.map((t) => t.name).sort();
-    const local = registered.filter((name) => TOOL_POLICY[name].group === "local");
+    const local = registered.filter((name) => TOOL_POLICY[name].group === "local" && !TOOL_POLICY[name].aliasOf);
     expect(listed).toEqual(local);
     const out = await call(client, "extension_auth", { action: "status" });
     expect(out.body.error.code).toBe("E_TOOL_DISABLED");
@@ -258,7 +258,7 @@ describe("the server honors the options", () => {
     expect(listed).not.toContain("extension_publish");
     expect(listed).not.toContain("extension_release_promote");
     expect(listed).toContain("extension_submit");
-    expect(listed).toContain("extension_shares");
+    expect(listed).toContain("extension_shares_manage");
     expect(listed).toContain("extension_preview_web");
 
     for (const [name, args] of [
@@ -267,6 +267,7 @@ describe("the server honors the options", () => {
       ["extension_submit", { buildSha: "abc", browsers: ["chrome"], dryRun: false }],
       ["extension_preview_web", { projectPath: "/nowhere", share: true }],
       ["extension_shares", { action: "revoke", artifactId: "gen_x" }],
+      ["extension_shares_manage", { artifactId: "gen_x" }],
     ] as const) {
       const out = await call(client, name, args);
       expect(out.body.error?.code, name).toBe("E_TOOL_DISABLED");
@@ -311,5 +312,39 @@ describe("the server honors the options", () => {
     for (const args of [{ action: "preflight" }, { action: "status" }, { dryRun: true }]) {
       expect(disabledToolEnvelope("extension_submit", args, noShip), JSON.stringify(args)).toBeNull();
     }
+  });
+});
+
+describe("1108: a tool that read and wrote answers as a read twin and a write twin", () => {
+  const ALL: ServerOptions = { features: [...FEATURE_GROUPS], noShip: false };
+
+  it("lists each twin with its own actions and hints, and refuses the other twin's action before anything runs", async () => {
+    const client = await connected(ALL);
+    const listed = (await client.listTools()).tools;
+    const read = listed.find((tool) => tool.name === "extension_browsers_read")!;
+    const install = listed.find((tool) => tool.name === "extension_browsers_install")!;
+
+    expect(listed.map((tool) => tool.name)).not.toContain("extension_browsers");
+    expect((read.inputSchema.properties as Record<string, { enum?: string[] }>).action.enum).toEqual(["detect", "list"]);
+    expect(read.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
+    expect(install.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
+
+    const refused = await call(client, "extension_browsers_read", { action: "install", browser: "firefox" });
+
+    expect(refused.isError).toBe(true);
+    expect(refused.body).toMatchObject({ command: "extension_browsers_read", status: "action-not-here", value: { useTool: "extension_browsers_install" } });
+  });
+
+  it("answers the old name, unlisted, with a warning that names its twins", async () => {
+    const client = await connected(ALL);
+    const out = await call(client, "extension_storage", { action: "set", key: "k", value: "v" });
+
+    expect(out.body.command).toBe("extension_storage");
+    expect(out.body.warnings).toContain("extension_storage is now extension_storage_read and extension_storage_write; it still answers under the old name.");
+
+    const twin = await call(client, "extension_storage_write", { key: "k", value: "v" });
+
+    expect(twin.body.command).toBe("extension_storage_write");
+    expect(JSON.stringify(twin.body.warnings ?? [])).not.toContain("still answers under the old name");
   });
 });

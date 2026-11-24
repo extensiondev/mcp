@@ -68,7 +68,7 @@ async function connect(file: string) {
   const listedNames = async () => (await client.listTools()).tools.map((tool) => tool.name);
 
   const call = async () => {
-    const result = await client.callTool({ name: "extension_builds", arguments: { action: "list", api: API } });
+    const result = await client.callTool({ name: "extension_builds_read", arguments: { action: "list", api: API } });
 
     return JSON.parse((result.content as Array<{ text: string }>)[0].text);
   };

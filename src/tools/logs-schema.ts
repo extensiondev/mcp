@@ -15,7 +15,7 @@ import {
 export const schema = {
   name: "extension_logs",
   description:
-    "Read a dev session's console from every context in one timeline, or follow:true for live lines after the replayed ones. Answers past events with a seq to poll from; extension_inspect and extension_dom_snapshot answer what shows now, extension_element acts, extension_eval runs code. Works on a `npx extension dev` run by hand (follow needs --allow-control there); not on extension_start.",
+    "Read a dev session's console from every context in one timeline, or follow:true for live lines after the replayed ones. Answers past events with a seq to poll; extension_inspect and extension_dom_snapshot answer what shows now, extension_element_act acts, extension_eval runs code. Works on a `npx extension dev` run by hand (follow needs --allow-control there); not on extension_start.",
   inputSchema: {
     type: "object" as const,
     properties: {

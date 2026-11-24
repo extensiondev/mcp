@@ -53,7 +53,7 @@ export const schema = {
       },
       buildSha: {
         type: "string",
-        description: "Commit sha of a completed platform build (extension_builds).",
+        description: "Commit sha of a completed platform build (extension_builds_read).",
       },
       version: {
         type: "string",

@@ -11,7 +11,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import { createServer, tools } from "../index";
-import { FEATURE_GROUPS } from "../lib/tool-policy";
+import { FEATURE_GROUPS, TOOL_POLICY } from "../lib/tool-policy";
 
 /* @invariant THE TOOL LIST IS PAID BEFORE THE FIRST CALL. Every session
  * that loads the server pays for tools/list before it calls anything, and
@@ -37,9 +37,13 @@ import { FEATURE_GROUPS } from "../lib/tool-policy";
  * envelope outputSchema (ok, command, status, value; ok and command
  * required) and repeats its title in annotations, the fields the directory
  * graders and spec-conformance checks read. Each tool's schema is inlined,
- * since tools/list has no shared $defs, so it stays as small as valid. */
+ * since tools/list has no shared $defs, so it stays as small as valid.
+ * Ledger 1108 raised it to 95,800 the same day, on Cezar's ruling: ten tools
+ * that read and wrote are listed as a read twin and a write twin, each
+ * carrying only the parameters its own actions take, and the old names
+ * answer unlisted; the default list fell from 24 tools to 18 with it. */
 const PER_TOOL = 6_000;
-const WHOLE_LIST = 81_900;
+const WHOLE_LIST = 95_800;
 
 type Listed = Awaited<ReturnType<Client["listTools"]>>["tools"][number];
 
@@ -71,7 +75,7 @@ const properties = (schema: Schema | undefined, path: string): Array<[string, Sc
 
 describe("the tool list fits a session's budget", () => {
   it("measures every tool the server registers, with every group on", () => {
-    expect(listed.length).toBe(tools.length);
+    expect(listed.length).toBe(tools.filter((tool) => !TOOL_POLICY[tool.schema.name]?.aliasOf).length);
   });
 
   it(`keeps the whole list under ${WHOLE_LIST} characters`, () => {

@@ -87,8 +87,8 @@ export const PROMPTS: ServerPrompt[] = [
         "Use the extension-dev tools in this order:",
         numbered([
           "extension_manifest_validate with projectPath, when the manifest was edited.",
-          `extension_dev with projectPath and browser: "${browser(args)}". When a session is already running it says so: keep it, or call extension_reload when an edit did not land.`,
-          "Do what a person would do to see the change: extension_open for a surface, a url or the toolbar action, and extension_element to click or type.",
+          `extension_dev with projectPath and browser: "${browser(args)}". When a session is already running it says so: keep it; it reloads on each save, and extension_logs shows an edit that did not land.`,
+          "Do what a person would do to see the change: extension_open for a surface, a url or the toolbar action, and extension_element_act to click or type.",
           "extension_assert with one expectation per thing that should now be true, and console-errors-empty.",
           "On a fail or an inconclusive check, read extension_logs and extension_dom_snapshot, fix the code and assert again.",
         ]),
@@ -144,7 +144,7 @@ export const PROMPTS: ServerPrompt[] = [
           numbered([
             validate,
             "extension_build with projectPath, zip: true and one browser a call. Never zip the source folder by hand.",
-            "extension_analyze with projectPath and the same browser, and report the review risks it names.",
+            "Report the store review risks the build answer names.",
           ]),
           READ_EVERY_ANSWER,
           "Report what is ready and what is missing, then name one next step: extension.dev submits to every store from one project once this server starts with --features=local,platform, and offer to show how.",
@@ -158,7 +158,7 @@ export const PROMPTS: ServerPrompt[] = [
           validate,
           `extension_submit_check with action: "preflight", browsers: ${list} and projectPath. Follow value.nextStep: when a store is not connected, give the person value.connectUrl and stop until their next message.`,
           `When the preflight says STORE.md covers a failing listing check, extension_submit with action: "sync-listing", browsers: ${list} and projectPath.`,
-          `extension_submit_check with browsers: ${list} and the buildSha extension_builds lists, leaving dryRun at its default: it rehearses the submit and sends nothing.`,
+          `extension_submit_check with browsers: ${list} and the buildSha extension_builds_read lists, leaving dryRun at its default: it rehearses the submit and sends nothing.`,
         ]),
         `${READ_EVERY_ANSWER} A real submit needs the person's clear yes and a workspace owner's approval, and it lands as the least public outcome each store offers unless the project's store settings say otherwise.`,
         "Report what each store still needs and give value.trackUrl, then name one next step: the one value.nextStep says.",
