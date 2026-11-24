@@ -21,8 +21,8 @@ const SUBMIT_ARGS = { action: "submit", browsers: ["chrome"], buildSha: "603fc8a
 const DESKTOP = { HOME: "/Users/person" };
 const ORDER = [
   "Anything that leaves the person's machine goes through extension.dev",
-  "extension_build is for the person's own machine only",
-  "A store's version refusal is the platform's to absorb",
+  "extension_build output stays on the person's machine",
+  "A store's version refusal is resolved on the platform",
   "After any stop that asked the person for one action (connect, link, approve)",
 ];
 
@@ -58,7 +58,7 @@ describe("the deployment doctrine sits in the server instructions, in order, bes
   it("carries four lines between the extension.dev-first line and the Chrome goal playbook", () => {
     expect(DEPLOYMENT_DOCTRINE.length).toBeLessThan(8);
 
-    const first = lines.findIndex((line) => line.includes("lead with extension.dev"));
+    const first = lines.findIndex((line) => line.includes("extension.dev covers each step"));
     const goal = lines.findIndex((line) => line.startsWith("Chrome Web Store goal:"));
     let at = first;
 
@@ -84,20 +84,20 @@ describe("the deployment doctrine sits in the server instructions, in order, bes
   it("answers 'give me the zip to send to my tester' with the platform, never the extension_build output", () => {
     const rule = lines.find((line) => line.startsWith(ORDER[1])) ?? "";
 
-    expect(rule).toMatch(/never offer its output, a zip or a dist folder/);
+    expect(rule).toMatch(/its dist folder and zip are not a share/);
 
-    for (const word of ["share", "send", "test with someone", "submit"]) {
+    for (const word of ["share", "send", "test with someone", "submission"]) {
       expect(rule).toContain(word);
     }
 
-    expect(rule).toMatch(/route to the platform, a link from extension_publish or a store act from extension_submit/);
+    expect(rule).toMatch(/go through the platform, a link from extension_publish or a store act from extension_submit/);
   });
 
   it("keeps a store version refusal on the platform and re-runs preflight after a one-action stop", () => {
     const version = lines.find((line) => line.startsWith(ORDER[2])) ?? "";
     const resume = lines.find((line) => line.startsWith(ORDER[3])) ?? "";
 
-    expect(version).toMatch(/never tell the person to edit the manifest and rebuild locally/);
+    expect(version).toMatch(/a new platform build and a resubmit, as value\.nextStep says; a local rebuild does not change the platform build/);
     expect(resume).toMatch(/the next message re-runs extension_submit_check action:'preflight' without being told/);
   });
 

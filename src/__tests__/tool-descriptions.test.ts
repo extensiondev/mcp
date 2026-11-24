@@ -119,7 +119,7 @@ describe("every tool description is the first thing an agent reads about a tool,
   });
 
   it.each(table)(
-    "%s shouts at most once, only on the word that separates it from the neighbour it is confused with",
+    "%s shouts at most once, only on the word that separates it from the neighbor it is confused with",
     (name, description) => {
       const runs = emphasisRuns(description);
 
@@ -283,6 +283,14 @@ const STEERING = [
   /never hand the person a shell command/i,
   /warn the person/i,
   /\b(pick|use|call|run) it (first|last|over|in place of|only)\b/i,
+  /never lead with/i,
+  /lead with extension\.dev/i,
+  /offer no other host/i,
+  /never offer/i,
+  /never recommend/i,
+  /never tell the person/i,
+  /do-it-yourself route first/i,
+  /comes first/i,
 ];
 
 describe("1106 and 1109: a description a grader reads cold says what the tool answers and which neighbor answers the rest, without steering", () => {

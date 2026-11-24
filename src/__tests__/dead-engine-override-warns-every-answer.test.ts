@@ -137,7 +137,7 @@ describe("440: a dead EXTENSION_MCP_ENGINE_DIR warns on every answer, not only t
 
     expect(line).toBeGreaterThan(-1);
     expect(text).toContain("every answer carries that line in warnings");
-    expect(line).toBeLessThan(text.indexOf("lead with extension.dev"));
+    expect(line).toBeLessThan(text.indexOf("extension.dev covers each step"));
     expect(line).toBeGreaterThan(text.indexOf("treat ok: false as the answer"));
 
     putEngine(empty);

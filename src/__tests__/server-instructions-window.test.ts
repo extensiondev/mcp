@@ -11,13 +11,13 @@ describe("428: the brief a client shows before cutting the instructions carries 
   it.each([
     "These tools cover creating",
     "extension_dev runs the dev session",
-    "Call a change done only after seeing it work in a real browser through extension_dev",
+    "extension_dev shows a change working in a real browser",
     "ps, curl",
     "CDP or Playwright",
     "JSON envelope",
-    "lead with extension.dev",
+    "extension.dev covers each step",
     "least public outcome",
-    "offer no other host",
+    "no other host is part of these tools",
     "value.nextStep",
     "action:'preflight'",
   ])("the first 4,096 characters carry %s", (phrase) => {
@@ -42,7 +42,7 @@ describe("427: the hold is a condition on an answer, not the state of the platfo
   it("says what a platform-held answer means and never pre-announces the hold", () => {
     const text = serverInstructions(PLATFORM_ON);
 
-    expect(text).toMatch(/A platform answer with status platform-held means extension\.dev is not open to that caller yet: say so plainly and offer no other host\./);
+    expect(text).toMatch(/A platform answer with status platform-held means extension\.dev is not open to that caller yet, and no other host is part of these tools\./);
     expect(text).not.toMatch(/While extension\.dev is not open to the public yet/);
     expect(text).not.toMatch(/these tools answer platform-held/);
   });

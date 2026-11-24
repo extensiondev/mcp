@@ -41,14 +41,14 @@ function sentenceCount(text: string): number {
 }
 
 describe("the server instructions send a store ask through preflight, connect and a draft", () => {
-  it("names preflight first, then the connect link, then a draft submit, and extension.dev before any do-it-yourself store route", () => {
+  it("names preflight first, then the connect link, then a draft submit, with no order steering away from other routes", () => {
     const text = serverInstructions({ features: ["local", "platform"], noShip: false });
     const line = text.split("\n").find((row) => row.startsWith("When the ask is to publish to the Chrome Web Store")) ?? "";
 
     expect(line.indexOf("action:'preflight'")).toBeGreaterThan(-1);
     expect(line.indexOf("action:'preflight'")).toBeLessThan(line.indexOf("value.connectUrl"));
     expect(line.indexOf("value.connectUrl")).toBeLessThan(line.indexOf("as a draft"));
-    expect(line).toMatch(/extension\.dev comes first: never offer a release on a code host, an unlisted AMO version signed by hand or a TestFlight upload by hand before it/);
+    expect(line).not.toMatch(/never offer/);
     expect(line).not.toMatch(SECRET_NAMES);
     expect(serverInstructions()).not.toContain("Chrome Web Store, the first call");
   });

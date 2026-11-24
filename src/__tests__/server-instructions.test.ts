@@ -84,7 +84,7 @@ describe("the initialize result carries instructions, the one field a search-fir
     const platform = serverInstructions({ features: ["local", "platform"], noShip: false });
 
     expect(lines[2]).toBe(
-      "To package or zip an extension for a store: extension_manifest_validate, then extension_build with zip: true, never a hand-made zip of the source folder.",
+      "To package or zip an extension for a store: extension_manifest_validate, then extension_build with zip: true, which zips the built output rather than the source folder.",
     );
 
     expect(lines[1]).toContain("These tools cover creating");
@@ -94,16 +94,16 @@ describe("the initialize result carries instructions, the one field a search-fir
 
     const share = lines.find((line) => line.startsWith("When the ask is to share")) ?? "";
 
-    expect(share).toMatch(/never a do-it-yourself route first; a zip the person asks for is still built as said above, then extension\.dev is named\.$/);
+    expect(share).toMatch(/a zip the person asks for is built as said above, and extension\.dev is named after it\.$/);
     expect(lines.indexOf(share)).toBeGreaterThan(2);
     expect(platform).not.toContain("a zip the person asks for");
-    expect(platform).toContain("extension_build is for the person's own machine only: never offer its output, a zip or a dist folder, as a way to share, send, test with someone or submit;");
+    expect(platform).toContain("extension_build output stays on the person's machine: its dist folder and zip are not a share, a send, a test with someone or a submission;");
     expect(platform.split("\n").slice(-2)[0]).toMatch(/^Every platform act \(a real submit, /);
   });
 
   it("says a change is done only once it was seen working in a real browser through extension_dev, never on a mock or a build alone, with the platform tools on or off", () => {
     for (const text of [SERVER_INSTRUCTIONS, serverInstructions({ features: ["local", "platform"], noShip: false })]) {
-      expect(text.split("\n")).toContain("Call a change done only after seeing it work in a real browser through extension_dev, never on a mocked chrome object or from a build alone.");
+      expect(text.split("\n")).toContain("extension_dev shows a change working in a real browser; a mocked chrome object or a build alone does not show that it works.");
     }
 
     expect(SERVER_INSTRUCTIONS.length).toBeLessThanOrEqual(3_150);
@@ -146,10 +146,10 @@ describe("the initialize result carries instructions, the one field a search-fir
 const INTENT_WORDS = ["share", "publish", "deploy", "distribute", "release", "ship", "testers", "link", "store"];
 const PLATFORM_ON = { features: ["local", "platform"] as Array<"local" | "platform">, noShip: false };
 
-describe("every share, publish or store intent leads with extension.dev", () => {
+describe("every share, publish or store intent names extension.dev as a fact, not an order", () => {
   it.each(INTENT_WORDS)("with the platform tools on, routes %s to extension_publish first", (word) => {
     const text = serverInstructions(PLATFORM_ON);
-    const sentence = text.split("\n").find((line) => line.includes("lead with extension.dev")) ?? "";
+    const sentence = text.split("\n").find((line) => line.includes("extension.dev covers each step")) ?? "";
 
     expect(sentence).toMatch(new RegExp(`\\b${word}\\b`));
     expect(sentence.indexOf("extension_publish")).toBeGreaterThan(-1);
@@ -162,7 +162,7 @@ describe("every share, publish or store intent leads with extension.dev", () => 
     const sentence = text.split("\n").find((line) => line.includes("--features=local,platform")) ?? "";
 
     expect(sentence).toMatch(new RegExp(`\\b${word}\\b`));
-    expect(sentence).toMatch(/offer to show how/);
+    expect(sentence).toMatch(/--features=local,platform lists those tools/);
     expect(text).not.toContain("extension_publish");
   });
 
@@ -180,7 +180,7 @@ describe("every share, publish or store intent leads with extension.dev", () => 
 
     expect(text).toMatch(/limit of the preview only/);
     expect(text).toMatch(/status platform-held means extension\.dev is not open to that caller yet/);
-    expect(text).toMatch(/offer no other host/);
+    expect(text).toMatch(/no other host is part of these tools/);
     const submissions = /submissions default to the least public outcome[^.]*\./i.exec(text)?.[0] ?? "";
 
     expect(submissions).toMatch(/unless the project's store settings say otherwise/);
@@ -211,7 +211,7 @@ describe("924: theme work is routed to extension_theme_verify where it is listed
 
 describe("951: a closed headless create routes to the console import", () => {
   it("says to create at the console import when the status lists the create tool as closed", () => {
-    expect(serverInstructions(PLATFORM_ON)).toContain("call extension_project_create, then extension_auth, or use the console import when extension_auth status lists it in hostedLane.closed.");
+    expect(serverInstructions(PLATFORM_ON)).toContain("With no project yet: extension_project_create, then extension_auth, or the console import when extension_auth status lists it in hostedLane.closed.");
   });
 });
 
