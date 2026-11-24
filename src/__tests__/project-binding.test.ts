@@ -23,7 +23,7 @@ import { storeMdFileOf } from "../lib/submit-facts";
 import { loginForPath, pathIdentity, serverLogins } from "../lib/path-project";
 import { PLATFORM_KERNEL_HOOKS, installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
 import { forwardable } from "../lib/hosted-forwarder";
-import { guideStoreConnect, launchGuidedBrowser, type GuidedConnectRuntime, type LaunchPlan } from "../lib/guided-connect";
+import { guideStoreConnect, guidedConnectRuntime, launchGuidedBrowser, type GuidedConnectRuntime, type LaunchPlan } from "../lib/guided-connect";
 import { workspaceConnectAnswer } from "../lib/store-connection";
 import { AMO_ADDON_API, bundledToolsDir, crxIdOf, readBundleRecord, readCrx3, resolveToolsExtension, treeSha256 } from "../lib/tools-extension";
 import { createToolDispatcher, type ToolModule } from "../lib/tool-dispatch";
@@ -571,7 +571,7 @@ describe("the guided store connect opens the MCP's own browser with extension.de
       }) as unknown as typeof fetch,
       stateDir: () => tmp,
       cacheDir: () => path.join(tmp, "cache"),
-      headless: () => true,
+      launchEnv: guidedConnectRuntime.launchEnv,
       launch: (plan) => {
         launches.push(plan);
 
@@ -748,18 +748,23 @@ describe("the guided store connect opens the MCP's own browser with extension.de
     fs.chmodSync(path.dirname(profileDir), 0o755);
     fs.writeFileSync(path.join(unpacked, "manifest.json"), "{}");
     fs.writeFileSync(path.join(unpacked, "node_modules", ".bin", "extension"), `#!/bin/sh\necho planted > "${mark}"\n`, { mode: 0o755 });
-    fs.writeFileSync(path.join(bin, "npx"), `#!/bin/sh\necho own > "${mark}"\n`, { mode: 0o755 });
-    const savedPath = process.env.PATH;
-    process.env.PATH = `${bin}${path.delimiter}${savedPath}`;
+    fs.writeFileSync(path.join(bin, "npx"), `#!/bin/sh\necho "own $EXTENSION_HEADLESS $EXTENSION_BROWSER_FLAGS" > "${mark}"\n`, { mode: 0o755 });
+    const before = { PATH: process.env.PATH, EXTENSION_HEADLESS: process.env.EXTENSION_HEADLESS, EXTENSION_BROWSER_FLAGS: process.env.EXTENSION_BROWSER_FLAGS };
+    process.env.PATH = `${bin}${path.delimiter}${before.PATH}`;
+    process.env.EXTENSION_HEADLESS = "1";
+    process.env.EXTENSION_BROWSER_FLAGS = "--headless=new --lang=pt-BR";
 
     try {
-      const out = launchGuidedBrowser({ choice: { browser: "chromium", binary: null, install: null, why: "" }, extensionDir: unpacked, profileDir, url: PAGE, headless: true });
+      const out = launchGuidedBrowser({ choice: { browser: "chromium", binary: null, install: null, why: "" }, extensionDir: unpacked, profileDir, url: PAGE, env: guidedConnectRuntime.launchEnv() });
 
       expect(out).toEqual({ launched: true, reused: false });
       for (let waited = 0; !fs.existsSync(mark) && waited < 100; waited += 1) await new Promise((resolve) => setTimeout(resolve, 20));
-      expect(fs.readFileSync(mark, "utf8").trim()).toBe("own");
+      expect(fs.readFileSync(mark, "utf8").trim()).toBe("own 0 --lang=pt-BR");
     } finally {
-      process.env.PATH = savedPath;
+      for (const [key, value] of Object.entries(before)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
     }
 
     for (const dir of [path.join(tmp, "state", "guided-browser"), path.dirname(profileDir), profileDir]) expect(fs.statSync(dir).mode & 0o777, dir).toBe(0o700);
@@ -828,6 +833,27 @@ describe("the guided store connect opens the MCP's own browser with extension.de
     expect(JSON.stringify(out)).not.toContain("one-time-secret-code");
     expect(JSON.stringify(out)).not.toContain("auth/handoff");
     expect(out.hint).toContain(`extension_workspace {action:"info", workspace:"cezaraugusto", include:["storeAccounts"]}`);
+  });
+
+  it("launches a visible window in a headless environment, keeping every other browser flag", async () => {
+    otherProcessesSignIn("rebeccat");
+    const before = { EXTENSION_HEADLESS: process.env.EXTENSION_HEADLESS, EXTENSION_BROWSER_FLAGS: process.env.EXTENSION_BROWSER_FLAGS };
+    process.env.EXTENSION_HEADLESS = "1";
+    process.env.EXTENSION_BROWSER_FLAGS = "--lang=pt-BR --headless --mute-audio";
+
+    try {
+      const out = await guided("cezaraugusto", runtime("edge", () => new Response("", { status: 404 })));
+
+      expect(launches[0]!.env).toEqual({ EXTENSION_HEADLESS: "0", EXTENSION_BROWSER_FLAGS: "--lang=pt-BR --mute-audio" });
+      expect(out).toMatchObject({ status: "workspace-connect-guided", value: { guidedBrowser: { opened: true } } });
+      expect(out.value.guidedBrowser).not.toHaveProperty("headless");
+      expect(out.value.sayToPerson).toContain("window that just opened");
+    } finally {
+      for (const [key, value] of Object.entries(before)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
   });
 
   it("opens a handoff only on the platform origin it calls or on its console, and sends next in the one shape the door takes", async () => {

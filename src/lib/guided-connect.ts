@@ -25,7 +25,7 @@ import {
   type GuidedBrowser,
   type GuidedBrowserChoice,
 } from "./guided-browser";
-import { envIsHeadless } from "./launch-flags";
+import { headlessLaunch } from "./launch-flags";
 import { mcpOrigins } from "./origins";
 import { withoutRedirects } from "./platform-fetch";
 import { isRow, text } from "./row";
@@ -44,7 +44,7 @@ export interface LaunchPlan {
   extensionDir: string;
   profileDir: string;
   url: string;
-  headless: boolean;
+  env: Record<string, string>;
 }
 
 export interface LaunchResult {
@@ -59,7 +59,7 @@ export interface GuidedConnectRuntime {
   fetch: typeof fetch;
   stateDir(): string;
   cacheDir(): string;
-  headless(): boolean;
+  launchEnv(): Record<string, string>;
   launch(plan: LaunchPlan): LaunchResult;
 }
 
@@ -187,7 +187,7 @@ export function launchGuidedBrowser(plan: LaunchPlan): LaunchResult {
     const spawned = spawnExtensionCli(previewArgs(plan), {
       cwd: path.dirname(plan.profileDir),
       ownEngine: true,
-      ...(plan.headless ? { env: { EXTENSION_HEADLESS: "1" } } : {}),
+      env: plan.env,
     });
     const pid = spawned.child.pid;
 
@@ -200,6 +200,16 @@ export function launchGuidedBrowser(plan: LaunchPlan): LaunchResult {
   } catch (err) {
     return { launched: false, reused: false, reason: err instanceof Error ? err.message : String(err) };
   }
+}
+
+/* @invariant THE GUIDED BROWSER IS THE PERSON'S OWN WINDOW, SO IT IS NEVER
+ * HEADLESS. EXTENSION_HEADLESS and a --headless in EXTENSION_BROWSER_FLAGS
+ * keep automated launches off the screen, and they are dropped for this one
+ * launch only; every other browser flag stays. An answer says a window
+ * opened only when the launch it describes was visible.
+ */
+export function visibleLaunchEnv(env: NodeJS.ProcessEnv | Record<string, string | undefined>): Record<string, string> {
+  return headlessLaunch({ headless: false }, env).env ?? {};
 }
 
 export const guidedConnectRuntime: GuidedConnectRuntime = {
@@ -218,7 +228,7 @@ export const guidedConnectRuntime: GuidedConnectRuntime = {
   fetch: (input, init) => globalThis.fetch(input, init),
   stateDir: () => path.dirname(credentialsPath()),
   cacheDir: () => path.join(userCacheDir(), "extension-dev-tools"),
-  headless: () => /^(1|true)$/i.test(process.env.EXTENSION_HEADLESS ?? "") || envIsHeadless(process.env),
+  launchEnv: () => visibleLaunchEnv(process.env),
   launch: launchGuidedBrowser,
 };
 
@@ -374,8 +384,8 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
   const next = handoffNext(workspace, store);
   const landing = await consoleLanding({ workspace, next, plainUrl, api: text(args.api) || undefined, fetchImpl: runtime.fetch });
   const profileDir = guidedProfileDir(runtime.stateDir(), choice.browser as GuidedBrowser);
-  const headless = runtime.headless();
-  const launched = runtime.launch({ choice, extensionDir: extension.dir, profileDir, url: landing.openUrl, headless });
+  const env = runtime.launchEnv();
+  const launched = runtime.launch({ choice, extensionDir: extension.dir, profileDir, url: landing.openUrl, env });
 
   if (!launched.launched) return plainAnswer(answer, `No browser was opened: ${label} did not start (${launched.reason ?? "no reason given"}).`);
 
@@ -392,7 +402,7 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
       workspace,
       ...(store ? { store } : {}),
       storeAccountsUrl: plainUrl,
-      guidedBrowser: { opened: true, browser: choice.browser, why: choice.why, profile: profileDir, reused: launched.reused, headless },
+      guidedBrowser: { opened: true, browser: choice.browser, why: choice.why, profile: profileDir, reused: launched.reused },
       toolsExtension: { source: extension.source, version: extension.version, note: extension.note },
       signedIn: landing.signedIn,
       sayToPerson: say,
