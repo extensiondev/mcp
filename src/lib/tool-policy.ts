@@ -289,6 +289,7 @@ const truthy = (raw: string | undefined): boolean => {
 export function isServerFlag(arg: string): boolean {
   return (
     arg === "--no-ship" ||
+    arg.startsWith("--no-ship=") ||
     arg === "--features" ||
     arg.startsWith("--features=") ||
     arg === "--project" ||
@@ -307,6 +308,13 @@ export function resolveServerOptions(
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--no-ship") noShip = true;
+    else if (arg.startsWith("--no-ship=")) {
+      const said = arg.slice("--no-ship=".length).trim().toLowerCase();
+
+      if (said === "true" || said === "1") noShip = true;
+      else if (said === "false" || said === "0") noShip = false;
+      else return { ok: false, message: `--no-ship takes true or false, got "${said}".` };
+    }
     else if (arg === "--features") rawFeatures = argv[++i] ?? "";
     else if (arg.startsWith("--features=")) rawFeatures = arg.slice("--features=".length);
     else if (arg === "--project") project = String(argv[++i] ?? "").trim().toLowerCase();

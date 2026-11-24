@@ -16,6 +16,7 @@ import {
   FEATURE_GROUPS,
   TOOL_POLICY,
   disabledToolEnvelope,
+  isServerFlag,
   resolveServerOptions,
   runsOnPlatform,
   type ServerOptions,
@@ -100,6 +101,14 @@ describe("resolveServerOptions", () => {
       ok: true,
       options: { features: ["local", "platform"], noShip: true },
     });
+  });
+
+  it("reads --no-ship bare or with true or false, as server.json declares it, and refuses any other value", () => {
+    expect(resolveServerOptions(["--no-ship=true"], {})).toEqual({ ok: true, options: { features: ["local"], noShip: true } });
+    expect(resolveServerOptions(["--no-ship=1"], {})).toEqual({ ok: true, options: { features: ["local"], noShip: true } });
+    expect(resolveServerOptions(["--no-ship=false"], { EXTENSION_DEV_NO_SHIP: "1" })).toEqual({ ok: true, options: { features: ["local"], noShip: false } });
+    expect(resolveServerOptions(["--no-ship=maybe"], {})).toEqual({ ok: false, message: '--no-ship takes true or false, got "maybe".' });
+    expect(isServerFlag("--no-ship=true")).toBe(true);
   });
 
   it("reads the env when no flag is passed", () => {
