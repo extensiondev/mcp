@@ -16,12 +16,14 @@ import { kernelHook } from "./kernel-hooks";
 import { noLoginForProjectRefusal } from "./no-login-for-project";
 import { clientProjectDir } from "./client-roots";
 import { workspaceConnectAnswer } from "./store-connection";
+import { inputValidationError } from "./validate-input";
 import { runsOnPlatform, type ServerOptions } from "./tool-policy";
 
 type Args = Record<string, unknown>;
 
 const UNBOUND = new Set(["extension_auth", "extension_workspace_create", "extension_project_create"]);
 const WORKSPACE_READS = new Set(["info", "projects", "usage"]);
+const WORKSPACE_SLUG = /^[a-z0-9][a-z0-9-]{0,99}$/;
 
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -113,10 +115,23 @@ export function bindCallProject(
   if (held) return { args, answeredFor: refOf(held) };
   if (named) return { args, answeredFor: namedRef(named, text(args.workspace), api) };
 
-  if (isConnect(name, args) && text(args.workspace)) {
+  if (isConnect(name, args) && args.workspace !== undefined && args.workspace !== "") {
+    const workspace = typeof args.workspace === "string" ? args.workspace : "";
+
+    if (!WORKSPACE_SLUG.test(workspace)) {
+      return {
+        refused: inputValidationError(
+          name,
+          [{ path: "workspace", message: "a workspace slug is lowercase letters, digits and dashes, at most 100" }],
+          undefined,
+          "Pass workspace as the slug in the workspace's console address, such as 'acme'.",
+        ),
+      };
+    }
+
     const stores = Array.isArray(args.browsers) ? args.browsers.map(text).filter(Boolean) : [];
 
-    return { refused: workspaceConnectAnswer(name, text(args.workspace).toLowerCase(), stores, api) };
+    return { refused: workspaceConnectAnswer(name, workspace, stores, api) };
   }
 
   const sessionProject = name === "extension_submit" ? kernelHook("connectSessionProject")(args.connectSession) : null;
