@@ -76,6 +76,7 @@ import { installPlatformKernelHooks } from "./lib/platform-kernel-hooks";
 import { registerKernelHooks } from "./lib/kernel-hooks";
 import { forwarderApprovalState } from "./lib/forward-approval-state";
 import { guideStoreConnect } from "./lib/guided-connect";
+import { guideFirstListing } from "./lib/guided-first-listing";
 import { forwardable } from "./lib/hosted-forwarder";
 import { installPromptHandlers } from "./lib/prompts";
 import { installResourceHandlers } from "./lib/resources";
@@ -84,7 +85,7 @@ import { version } from "../package.json";
 import { description as SERVER_DESCRIPTION, icons as SERVER_ICONS } from "../server.json";
 
 installPlatformKernelHooks();
-registerKernelHooks({ approvalState: forwarderApprovalState, guideStoreConnect: (result, args) => guideStoreConnect(result, args) });
+registerKernelHooks({ approvalState: forwarderApprovalState, guideStoreConnect: (result, args) => guideStoreConnect(result, args), guideFirstListing: (result, args) => guideFirstListing(result, args) });
 
 export { version };
 export { renderToolsDoc } from "./lib/docs-tools";

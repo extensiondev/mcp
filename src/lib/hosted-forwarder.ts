@@ -75,6 +75,7 @@ export interface ForwarderDeps {
   resolveLogin?: (options: { project?: string; api?: string }) => StoredLogin;
   storedLogins?: (api?: string) => StoredLogin[];
   guideStoreConnect?: (result: string, args: Args) => Promise<string>;
+  guideFirstListing?: (result: string, args: Args) => Promise<string | null>;
 }
 
 interface ForwardRule {
@@ -160,6 +161,15 @@ async function guidedProjectConnect(command: string, args: Args, shown: Args, de
   const status = laneStatus(readAnswer(answer));
 
   return status === GUIDED_STATUS || status === CONNECTED_STATUS ? answer : null;
+}
+
+async function guidedFirstListing(command: string, args: Args, shown: Args, deps: ForwarderDeps): Promise<string | null> {
+  if (command !== "extension_submit" || actionOf(args, "") !== "first-submission" || Number(args.waitSeconds ?? 0) > 0) return null;
+
+  const guide = deps.guideFirstListing ?? (registeredKernelHooks().includes("guideFirstListing") ? kernelHook("guideFirstListing") : undefined);
+  if (!guide) return null;
+
+  return guide(JSON.stringify(shown), args);
 }
 
 /* @invariant AN ASK-ONLY CALL REACHES THE LANE UNDER THE ASK-ONLY TOOL'S NAME,
@@ -742,7 +752,7 @@ async function forwardedAnswer(asked: { command: string; tool: string; rule: For
   body = withOneNotice(body);
 
   const shown = (rule.answered ? rule.answered(args, body) : body) as Args;
-  const guided = await guidedProjectConnect(command, args, shown, deps);
+  const guided = (await guidedProjectConnect(command, args, shown, deps)) ?? (await guidedFirstListing(command, args, shown, deps));
   if (guided) return guided;
 
   const opening = openLanePages(shown, deps);

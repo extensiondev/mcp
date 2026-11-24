@@ -1,0 +1,104 @@
+// ███╗   ███╗ ██████╗██████╗
+// ████╗ ████║██╔════╝██╔══██╗
+// ██╔████╔██║██║     ██████╔╝
+// ██║╚██╔╝██║██║     ██╔═══╝
+// ██║ ╚═╝ ██║╚██████╗██║
+// ╚═╝     ╚═╝ ╚═════╝╚═╝
+// Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
+
+import { envelope } from "./envelope";
+import { guidedConnectRuntime, openGuided, type GuidedConnectRuntime } from "./guided-connect";
+import { isRow, text } from "./row";
+import { nextStep } from "./store-connection";
+
+type Args = Record<string, unknown>;
+
+export const FIRST_LISTING_STATUS = "first-listing-guided";
+
+export const FIRST_LISTING_GUIDE = "first-listing";
+
+export const PARTNER_CENTER_OVERVIEW = "https://partner.microsoft.com/dashboard/microsoftedge/overview";
+
+const PRODUCT_IN_URL = /\/microsoftedge\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/|$)/i;
+
+export function firstListingStart(dashboardUrl: unknown): { url: string; productId: string } {
+  const productId = PRODUCT_IN_URL.exec(text(dashboardUrl))?.[1]?.toLowerCase() ?? "";
+
+  return productId ? { url: `https://partner.microsoft.com/dashboard/microsoftedge/${productId}/packages`, productId } : { url: PARTNER_CENTER_OVERVIEW, productId: "" };
+}
+
+export function firstListingSay(args: { label: string; productId: string; slug: string; signedIn: boolean; onStorePage: boolean }): string {
+  const where = args.onStorePage
+    ? `In front, the ${args.label} window shows ${args.productId ? `the Partner Center product ${args.productId}` : "the Edge overview in Partner Center"}; sign in to Partner Center there if it asks.`
+    : `In the ${args.label} window that just opened on the ${args.slug} Edge page, ${args.signedIn ? "" : "sign in to extension.dev once, then "}press "Fill it in Partner Center".`;
+  const create = args.productId ? "" : "presses \"Create new extension\" once and saves the new Product ID to the project's Edge store settings (no paste), ";
+
+  return `${where} The extension.dev tools panel on that page has one button: it ${create}uploads the platform's verified package of the latest build after checking its SHA-256, sets Availability to Hidden (the least public option), fills Properties, Privacy and Store listings from the project's store data with its images, and presses each page's Save only. It stops before Publish with a checklist of what is filled and what Partner Center still wants; Microsoft takes the first submission only from its dashboard, so the person presses Publish. Once Partner Center shows the product in review, the panel marks the first submission on the project.`;
+}
+
+/* @invariant A FIRST EDGE LISTING ENDS IN THE GUIDED BROWSER, NEVER IN A
+ * DEFAULT BROWSER WITHOUT EXTENSION.DEV TOOLS. When the platform answers that
+ * the Edge first submission is still to do, the MCP's own browser opens on
+ * Partner Center (the product, or the Edge overview when none exists) with
+ * the console signing in to the project's Edge page in a background tab, the
+ * page that offers extension.dev tools the guided session. Anything that
+ * keeps the window from opening leaves the platform's answer as it was.
+ */
+export async function guideFirstListing(result: string, args: Args, runtime: GuidedConnectRuntime = guidedConnectRuntime): Promise<string | null> {
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(result);
+  } catch {
+    return null;
+  }
+
+  if (!isRow(parsed) || !isRow(parsed.value)) return null;
+
+  const value = parsed.value;
+  const status = text(parsed.status);
+  const slug = text(value.project);
+  const [workspace = "", project = ""] = slug.split("/");
+  const pageUrl = text(value.pageUrl);
+
+  if (value.action !== "first-submission" || value.store !== "edge" || !workspace || !project || !pageUrl) return null;
+  if (status !== "first-submission-to-do" && status !== "first-submission-waiting") return null;
+
+  const start = firstListingStart(value.dashboardUrl);
+  const guideQuery = `?guide=${FIRST_LISTING_GUIDE}`;
+  const opened = await openGuided({
+    workspace,
+    next: `/${workspace}/${project}/submissions/edge${guideQuery}`,
+    plainUrl: `${pageUrl.split("?")[0]}${guideQuery}`,
+    storePage: start.url,
+    api: text(args.api) || undefined,
+    runtime,
+  });
+
+  if ("install" in opened || !opened.opened) return null;
+
+  const say = firstListingSay({ label: opened.label, productId: start.productId, slug, signedIn: opened.landing.signedIn, onStorePage: opened.onStorePage });
+  const kept = Object.fromEntries(Object.entries(value).filter(([key]) => !["opened", "openedNote", "openPages", "nextStep", "sayToPerson"].includes(key)));
+
+  return envelope({
+    ok: true,
+    command: text(parsed.command) || "extension_submit",
+    status: FIRST_LISTING_STATUS,
+    value: {
+      ...kept,
+      opened: true,
+      guidedBrowser: { opened: true, browser: opened.choice.browser, why: opened.choice.why, profile: opened.profileDir, reused: opened.launched.reused },
+      toolsExtension: { source: opened.extension.source, version: opened.extension.version, note: opened.extension.note },
+      signedIn: opened.landing.signedIn,
+      ...(opened.onStorePage ? { landedOn: start.url } : {}),
+      sayToPerson: say,
+      nextStep: nextStep("dashboard", say, opened.onStorePage ? start.url : `${pageUrl.split("?")[0]}${guideQuery}`),
+    },
+    hint: [
+      `${opened.launched.reused ? "The guided browser already running took the page:" : "Opened"} ${opened.choice.why} Profile: ${opened.profileDir}.`,
+      opened.extension.source === "bundled" ? opened.extension.note : "",
+      opened.landing.note,
+      `Tell the person: "${say}" When they say it is published, call extension_submit {action: "first-submission", store: "edge", project: "${slug}", waitSeconds: 300}.`,
+    ].filter(Boolean).join(" "),
+  });
+}

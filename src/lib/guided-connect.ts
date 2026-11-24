@@ -432,6 +432,56 @@ export async function guideStoreConnect(result: string, args: Args, runtime: Gui
   }
 }
 
+export type GuidedOpen =
+  | { install: GuidedBrowserChoice & { install: string } }
+  | { opened: false; note: string }
+  | { opened: true; choice: GuidedBrowserChoice; label: string; extension: ToolsExtension; landing: ConsoleLanding; launched: LaunchResult; profileDir: string; onStorePage: boolean };
+
+export async function openGuided(options: { workspace: string; next: string; plainUrl: string; storePage: string | null; api?: string; runtime: GuidedConnectRuntime }): Promise<GuidedOpen> {
+  const { runtime } = options;
+  const block = runtime.launchBlock();
+  if (block) return { opened: false, note: `No browser was opened: ${block}.` };
+
+  const choice = chooseGuidedBrowser(runtime.probe());
+  const label = choice.browser === "chrome" ? "Chrome for Testing" : guidedBrowserLabel(choice.browser);
+
+  if (choice.install) return { install: { ...choice, install: choice.install } };
+
+  const engine = guidedEngine(choice.browser);
+  const extension: ToolsExtension | { failed: string } = await resolveToolsExtension({ engine, edge: choice.browser === "edge", cacheDir: runtime.cacheDir(), fetchImpl: runtime.fetch });
+
+  if ("failed" in extension) return { opened: false, note: `No browser was opened: ${extension.failed}.` };
+
+  const secret = options.storePage ? crypto.randomBytes(32).toString("base64url") : "";
+  const launchHash = secret ? crypto.createHash("sha256").update(secret).digest("hex") : undefined;
+  const landing = await consoleLanding({ workspace: options.workspace, next: options.next, plainUrl: options.plainUrl, api: options.api, launchHash, fetchImpl: runtime.fetch });
+  const onStorePage = Boolean(options.storePage && landing.launchBound && landing.openUrl.split("#")[0] === LAUNCH_HANDOFF_PAGE);
+  const extensionDir = guidedCopy(extension.dir, runtime.cacheDir(), engine);
+
+  if (onStorePage) writeLaunchFile(extensionDir, { handoff: landing.openUrl, secret, expiresAt: launchExpiry(landing.expiresAt) });
+
+  const profileDir = guidedProfileDir(runtime.stateDir(), choice.browser as GuidedBrowser);
+  const launched = runtime.launch({ choice, extensionDir, profileDir, url: onStorePage && options.storePage ? options.storePage : landing.openUrl, env: runtime.launchEnv() });
+
+  if (!launched.launched) {
+    clearLaunchFile(extensionDir);
+
+    return { opened: false, note: `No browser was opened: ${label} did not start (${launched.reason ?? "no reason given"}).` };
+  }
+
+  if (onStorePage) (runtime.schedule ?? scheduleLater)(LAUNCH_FILE_KEEP_MS, () => clearLaunchFile(extensionDir));
+
+  const shown = runtime.windowCheck ? await runtime.windowCheck(profileDir) : "unknown";
+
+  if (shown === "headless") {
+    clearLaunchFile(extensionDir);
+
+    return { opened: false, note: `No window is showing: ${label} started headless, since a --headless flag reached it from this machine's own browser setup, not from this MCP.` };
+  }
+
+  return { opened: true, choice, label, extension, landing, launched, profileDir, onStorePage };
+}
+
 async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRuntime): Promise<string> {
   let parsed: unknown;
 
@@ -460,68 +510,29 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
   const accountState = unread ? { storeAccount: { read: false, reason: (read as { unread: string }).unread } } : {};
   const answer = { command: parsed.command, value: { ...value, ...accountState }, hint: [unread, text(parsed.hint)].filter(Boolean).join(" ") };
 
-  const block = runtime.launchBlock();
-  if (block) return plainAnswer(answer, `No browser was opened: ${block}.`);
+  const keyPage = GUIDED_KEY_PAGES[store];
+  const opened = await openGuided({ workspace, next: handoffNext(workspace, store), plainUrl, storePage: keyPage?.url ?? null, api: text(args.api) || undefined, runtime });
 
-  const choice = chooseGuidedBrowser(runtime.probe());
-  const label = choice.browser === "chrome" ? "Chrome for Testing" : guidedBrowserLabel(choice.browser);
-
-  if (choice.install) {
+  if ("install" in opened) {
     return envelope({
       ok: true,
       command: parsed.command,
       status: WORKSPACE_CONNECT_STATUS,
-      value: { ...answer.value, storeAccountsUrl: plainUrl, guidedBrowser: { opened: false, browser: choice.browser, why: choice.why, install: choice.install } },
-      hint: `${unread ? `${unread} ` : ""}${choice.why} It is not installed: install it with extension_browsers_install {action:"install", browser:"${choice.install}"}, then call this connect again to open it with extension.dev tools loaded.`,
+      value: { ...answer.value, storeAccountsUrl: plainUrl, guidedBrowser: { opened: false, browser: opened.install.browser, why: opened.install.why, install: opened.install.install } },
+      hint: `${unread ? `${unread} ` : ""}${opened.install.why} It is not installed: install it with extension_browsers_install {action:"install", browser:"${opened.install.install}"}, then call this connect again to open it with extension.dev tools loaded.`,
     });
   }
 
-  const extension: ToolsExtension | { failed: string } = await resolveToolsExtension({
-    engine: guidedEngine(choice.browser),
-    edge: choice.browser === "edge",
-    cacheDir: runtime.cacheDir(),
-    fetchImpl: runtime.fetch,
-  });
+  if (!opened.opened) return plainAnswer(answer, opened.note);
 
-  if ("failed" in extension) return plainAnswer(answer, `No browser was opened: ${extension.failed}.`);
-
-  const next = handoffNext(workspace, store);
-  const keyPage = GUIDED_KEY_PAGES[store];
-  const secret = keyPage ? crypto.randomBytes(32).toString("base64url") : "";
-  const launchHash = secret ? crypto.createHash("sha256").update(secret).digest("hex") : undefined;
-  const landing = await consoleLanding({ workspace, next, plainUrl, api: text(args.api) || undefined, launchHash, fetchImpl: runtime.fetch });
-  const onKeyPage = Boolean(keyPage && landing.launchBound && landing.openUrl.split("#")[0] === LAUNCH_HANDOFF_PAGE);
-
-  const extensionDir = guidedCopy(extension.dir, runtime.cacheDir(), guidedEngine(choice.browser));
-
-  if (onKeyPage) writeLaunchFile(extensionDir, { handoff: landing.openUrl, secret, expiresAt: launchExpiry(landing.expiresAt) });
-
-  const profileDir = guidedProfileDir(runtime.stateDir(), choice.browser as GuidedBrowser);
-  const env = runtime.launchEnv();
-  const launched = runtime.launch({ choice, extensionDir, profileDir, url: onKeyPage && keyPage ? keyPage.url : landing.openUrl, env });
-
-  if (!launched.launched) {
-    clearLaunchFile(extensionDir);
-
-    return plainAnswer(answer, `No browser was opened: ${label} did not start (${launched.reason ?? "no reason given"}).`);
-  }
-
-  if (onKeyPage) (runtime.schedule ?? scheduleLater)(LAUNCH_FILE_KEEP_MS, () => clearLaunchFile(extensionDir));
-
-  const shown = runtime.windowCheck ? await runtime.windowCheck(profileDir) : "unknown";
-
-  if (shown === "headless") {
-    clearLaunchFile(extensionDir);
-
-    return plainAnswer(answer, `No window is showing: ${label} started headless, since a --headless flag reached it from this machine's own browser setup, not from this MCP.`);
-  }
+  const { choice, label, extension, landing, launched, profileDir, onStorePage: onKeyPage } = opened;
 
   const storeName = store ? storeLabel(store) : "the store";
   const signIn = landing.signedIn ? "" : "sign in to extension.dev once, then ";
   const say = onKeyPage && keyPage
     ? `In front, the ${label} window shows the ${keyPage.page}; sign in to Partner Center there if it asks. Within a few seconds the extension.dev tools panel shows on that page (the ${workspace} console signs in by itself in a background tab) with one button to press, "Create a new API key and connect": it presses Partner Center's "New API key" for you, names the key extension.dev if asked, and sends the Client ID and the new key to the console, which checks them with ${storeName} before it keeps them, so no key passes through this chat. If the panel asks for "Turn on API" first, press that on the page. ${storeName} is connected only when the panel says so.`
     : `In the ${label} window that just opened on the ${workspace} Store accounts page, ${signIn}follow the extension.dev tools panel: it takes you to the ${storeName} key page, captures the values when you press it and hands them to the console, so no key passes through this chat. Tell me when the page says connected.`;
-  const opened = launched.reused ? "The guided browser already running took the page:" : "Opened";
+  const openedWord = launched.reused ? "The guided browser already running took the page:" : "Opened";
 
   return envelope({
     ok: true,
@@ -542,7 +553,7 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
     },
     hint: [
       unread,
-      `${opened} ${choice.why} Profile: ${profileDir}.`,
+      `${openedWord} ${choice.why} Profile: ${profileDir}.`,
       extension.source === "bundled" ? extension.note : "",
       landing.note,
       project ? `${project} uses the workspace's ${storeName} account once it is connected, unless it holds a key of its own.` : "",

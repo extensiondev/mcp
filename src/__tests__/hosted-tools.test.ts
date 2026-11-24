@@ -547,6 +547,43 @@ describe("the forwarder", () => {
     }
   });
 
+  it("hands an Edge first-submission answer to the guided first listing instead of the default browser, and never on a waiting read", async () => {
+    const opened: string[] = [];
+    const restore = setApprovalOpener((url) => {
+      opened.push(url);
+
+      return true;
+    });
+    const pageUrl = "https://console.extension.dev/acme/web/submissions/edge";
+    const todo = () => JSON.parse(envelopeOf({ ok: true, command: "extension_submit", status: "first-submission-to-do", value: { action: "first-submission", store: "edge", project: "acme/web", pageUrl, opened: true, openPages: [pageUrl] } }));
+    const handed: unknown[] = [];
+
+    const guideFirstListing = async (answer: string) => {
+      handed.push(JSON.parse(answer));
+
+      return envelopeOf({ ok: true, command: "extension_submit", status: "first-listing-guided", value: { store: "edge" } });
+    };
+
+    const ask = { action: "first-submission", store: "edge", project: "acme/web" };
+
+    try {
+      stubLane([todo(), todo()]);
+      const local = vi.fn(async () => "local");
+      const out = JSON.parse(await forwardCall("extension_submit", ask, local, { ...FORWARDING, platform: "darwin", guideFirstListing }));
+
+      expect(out.status).toBe("first-listing-guided");
+      expect(handed[0]).toMatchObject({ status: "first-submission-to-do", value: { store: "edge", pageUrl } });
+      expect(opened).toEqual([]);
+
+      const waited = JSON.parse(await forwardCall("extension_submit", { ...ask, waitSeconds: 300 }, local, { ...FORWARDING, platform: "darwin", guideFirstListing }));
+
+      expect(waited.status).toBe("first-submission-to-do");
+      expect(handed).toHaveLength(1);
+    } finally {
+      restore();
+    }
+  });
+
   it("opens the workspace's guided connect for a project Edge connect the lane answers pending, and keeps the lane's pages otherwise", async () => {
     const opened: string[] = [];
     const restore = setApprovalOpener((url) => {

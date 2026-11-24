@@ -24,6 +24,7 @@ import { loginForPath, pathIdentity, serverLogins } from "../lib/path-project";
 import { PLATFORM_KERNEL_HOOKS, installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
 import { forwardable } from "../lib/hosted-forwarder";
 import { GUIDED_KEY_PAGES, guideStoreConnect, guidedConnectRuntime, launchGuidedBrowser, type GuidedConnectRuntime, type LaunchPlan } from "../lib/guided-connect";
+import { PARTNER_CENTER_OVERVIEW, guideFirstListing } from "../lib/guided-first-listing";
 import { headlessFromProcesses } from "../lib/guided-window";
 import { workspaceConnectAnswer } from "../lib/store-connection";
 import { AMO_ADDON_API, bundledToolsDir, crxIdOf, readBundleRecord, readCrx3, resolveToolsExtension, treeSha256 } from "../lib/tools-extension";
@@ -1023,6 +1024,79 @@ describe("the guided store connect opens the MCP's own browser with extension.de
       expect(out).toMatchObject({ status: "workspace-connect-in-console", value: { guidedBrowser: { opened: false } } });
       expect(out.hint).toMatch(/^No window is showing: Edge started headless/);
       expect(fs.existsSync(path.join(launches[0]!.extensionDir, "launch.json"))).toBe(false);
+    });
+
+    describe("the guided Edge first listing", () => {
+      const PRODUCT = "4f2c1d8e-0b7a-4c55-9e21-7d3a6b9f0c12";
+
+      function firstSubmission(status: string, extra: Record<string, unknown> = {}): string {
+        return JSON.stringify({
+          ok: true,
+          command: "extension_submit",
+          status,
+          value: {
+            action: "first-submission",
+            store: "edge",
+            project: `${WORKSPACE}/rebeccat`,
+            state: "to-do",
+            pageUrl: `https://console.extension.dev/${WORKSPACE}/rebeccat/submissions/edge`,
+            dashboardUrl: null,
+            opened: true,
+            openPages: [{ url: "https://console.extension.dev/x" }],
+            sayToPerson: "Everything Edge Add-ons takes by hand is on the console page.",
+            ...extra,
+          },
+          hint: "lane words",
+        });
+      }
+
+      const bound = (bodies: string[], extra: Partial<GuidedConnectRuntime> = {}) =>
+        binding({ url: PROD_HANDOFF, launchBound: true, launchExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString() }, bodies, extra);
+
+      it("opens the Edge overview in front and signs the console in on the project's guided Edge page", async () => {
+        prodSignIn();
+        const bodies: string[] = [];
+        const out = JSON.parse((await guideFirstListing(firstSubmission("first-submission-to-do"), { api: PROD }, bound(bodies)))!);
+        const launch = JSON.parse(fs.readFileSync(path.join(launches[0]!.extensionDir, "launch.json"), "utf8"));
+
+        expect(launches[0]!.url).toBe(PARTNER_CENTER_OVERVIEW);
+        expect(JSON.parse(bodies[0]!)).toMatchObject({ next: `/${WORKSPACE}/rebeccat/submissions/edge?guide=first-listing` });
+        expect(crypto.createHash("sha256").update(launch.secret).digest("hex")).toBe(JSON.parse(bodies[0]!).launchHash);
+        expect(out).toMatchObject({ status: "first-listing-guided", value: { opened: true, landedOn: PARTNER_CENTER_OVERVIEW, guidedBrowser: { opened: true }, nextStep: { kind: "dashboard", url: PARTNER_CENTER_OVERVIEW } } });
+        expect(out.value).not.toHaveProperty("openPages");
+        expect(out.value.sayToPerson).toContain("presses \"Create new extension\" once");
+        expect(out.value.sayToPerson).toContain("stops before Publish");
+        expect(out.value.sayToPerson).toContain("Hidden");
+        expect(JSON.stringify(out)).not.toContain(launch.secret);
+        expect(JSON.stringify(out)).not.toContain("c".repeat(43));
+      });
+
+      it("opens the project's own product when Partner Center already holds one, and never presses Create for it", async () => {
+        prodSignIn();
+        const out = JSON.parse((await guideFirstListing(firstSubmission("first-submission-waiting", { dashboardUrl: `https://partner.microsoft.com/dashboard/microsoftedge/${PRODUCT}/packages/dashboard` }), { api: PROD }, bound([])))!);
+
+        expect(launches[0]!.url).toBe(`https://partner.microsoft.com/dashboard/microsoftedge/${PRODUCT}/packages`);
+        expect(out.value.sayToPerson).toContain(PRODUCT);
+        expect(out.value.sayToPerson).not.toContain("Create new extension");
+      });
+
+      it("leaves every other answer as the platform gave it and opens nothing", async () => {
+        prodSignIn();
+
+        for (const answer of [
+          firstSubmission("first-submission-done"),
+          firstSubmission("first-submission-to-do", { store: "chrome" }),
+          firstSubmission("first-submission-to-do", { action: "connect" }),
+          firstSubmission("first-submission-to-do", { project: "rebeccat" }),
+          "not json",
+        ]) {
+          expect(await guideFirstListing(answer, { api: PROD }, bound([])), answer).toBeNull();
+        }
+
+        expect(await guideFirstListing(firstSubmission("first-submission-to-do"), { api: PROD }, bound([], { windowCheck: async () => "headless" }))).toBeNull();
+        expect(launches).toHaveLength(1);
+        expect(fs.existsSync(path.join(launches[0]!.extensionDir, "launch.json"))).toBe(false);
+      });
     });
 
     it("reads headless from the guided profile's browser processes only", () => {

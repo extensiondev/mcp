@@ -43,6 +43,7 @@ export interface KernelHooks {
   openPagesForPerson(urls: string[]): PageOpening;
   approvalState(): ApprovalState;
   guideStoreConnect?(result: string, args: Args): Promise<string>;
+  guideFirstListing?(result: string, args: Args): Promise<string | null>;
 }
 
 let registered: Partial<KernelHooks> = {};
