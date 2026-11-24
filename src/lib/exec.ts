@@ -424,10 +424,10 @@ export interface SpawnedCli {
 
 export function spawnExtensionCli(
   args: string[],
-  options?: { cwd?: string; projectDir?: string; env?: Record<string, string> },
+  options?: { cwd?: string; projectDir?: string; env?: Record<string, string>; ownEngine?: boolean },
 ): SpawnedCli {
   const { command, prefixArgs, refusal } = resolveExtensionInvocation(
-    options?.projectDir ?? options?.cwd,
+    options?.ownEngine ? undefined : (options?.projectDir ?? options?.cwd),
   );
   const logDir = fs.mkdtempSync(path.join(os.tmpdir(), "extension-mcp-"));
   const logPath = path.join(logDir, "session.log");

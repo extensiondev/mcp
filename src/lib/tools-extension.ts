@@ -16,8 +16,8 @@ import { readZipEntry, unpackZip } from "./zip-entries";
 export const MIN_TOOLS_VERSION = "0.1.2";
 
 export const TOOLS_ITEMS = {
-  chrome: { id: "omndndgipeomhfdobfbhpfemempnnpjp", store: "the Chrome Web Store" },
-  edge: { id: "pnijfgjkilbnmjiomlajfbmiccjejbpm", store: "Edge Add-ons" },
+  chrome: { id: "omndndgipeomhfdobfbhpfemempnnpjp", publisher: "lfoeajgcchlidpicbabpmckkejpckcfb", store: "the Chrome Web Store" },
+  edge: { id: "pnijfgjkilbnmjiomlajfbmiccjejbpm", publisher: "ichpfokaninimeilopnpeolpmboclkbm", store: "Edge Add-ons" },
 } as const;
 
 export type ToolsStore = keyof typeof TOOLS_ITEMS;
@@ -32,13 +32,17 @@ export interface ToolsBundleRecord {
 export interface ToolsExtension {
   dir: string;
   version: string;
-  source: ToolsStore | "bundled";
+  source: ToolsStore | "firefox" | "bundled";
   note: string;
 }
 
 const CRX_MAGIC = "Cr24";
 const SIGNED_DATA_PREFIX = Buffer.from("CRX3 SignedData\x00", "binary");
 const MAX_CRX_BYTES = 16 * 1024 * 1024;
+
+export const AMO_ADDON_ID = "sidekick@extension.dev";
+
+export const AMO_ADDON_API = `https://addons.mozilla.org/api/v5/addons/addon/${encodeURIComponent(AMO_ADDON_ID)}/`;
 const UNPACK_LIMITS = { maxEntries: 2_000, maxBytes: 64 * 1024 * 1024 };
 const DOWNLOAD_TIMEOUT_MS = 15_000;
 
@@ -118,13 +122,43 @@ function protoFields(buf: Buffer): ProtoField[] | null {
 
 export type CrxRead = { ok: true; zip: Buffer } | { ok: false; reason: string };
 
-/* @invariant A STORE DOWNLOAD IS LOADED ONLY WHEN ITS CRX3 SIGNATURE PROVES
- * THE EXPECTED ITEM. The signed header names a crx_id; it must be the item id
- * asked for, one sha256_with_rsa proof's public key must hash to it, and that
- * proof's signature must verify over the signed header and the archive. Any
- * other answer is refused and the bundled copy is loaded instead.
+type ProofCheck = "verified" | "missing" | "unparsed" | "unverified";
+
+function proofBy(proofs: ProtoField[], id: string, signed: Buffer): ProofCheck {
+  for (const proof of proofs) {
+    const parts = protoFields(proof.bytes);
+    const publicKey = parts?.find((part) => part.field === 1)?.bytes;
+    const signature = parts?.find((part) => part.field === 2)?.bytes;
+    if (!publicKey || !signature || crxIdOf(publicKey) !== id) continue;
+
+    try {
+      const key = crypto.createPublicKey({ key: publicKey, format: "der", type: "spki" });
+
+      return crypto.verify("sha256", signed, key, signature) ? "verified" : "unverified";
+    } catch {
+      return "unparsed";
+    }
+  }
+
+  return "missing";
+}
+
+const PROOF_REASONS: Record<Exclude<ProofCheck, "verified">, (who: string) => string> = {
+  missing: (who) => `no CRX proof is signed by the key of ${who}`,
+  unparsed: (who) => `the CRX key of ${who} does not parse`,
+  unverified: (who) => `the CRX signature of ${who} does not verify`,
+};
+
+/* @invariant A STORE DOWNLOAD IS LOADED ONLY WHEN ITS CRX3 SIGNATURES PROVE
+ * THE EXPECTED ITEM AND ITS STORE. The signed header names a crx_id; it must
+ * be the item id asked for, a sha256_with_rsa proof whose public key hashes to
+ * that id must verify over the signed header and the archive, and so must the
+ * store's own publisher proof (the Chrome Web Store signs with the key of
+ * lfoeajgcchlidpicbabpmckkejpckcfb, Edge Add-ons with the key of
+ * ichpfokaninimeilopnpeolpmboclkbm). Any other answer is refused and the
+ * bundled copy is loaded instead.
  */
-export function readCrx3(bytes: Buffer, expectedId: string): CrxRead {
+export function readCrx3(bytes: Buffer, expectedId: string, publisherId?: string): CrxRead {
   if (bytes.length < 12 || bytes.subarray(0, 4).toString("binary") !== CRX_MAGIC) return { ok: false, reason: "the download is not a CRX file" };
   if (bytes.readUInt32LE(4) !== 3) return { ok: false, reason: `the download is CRX version ${bytes.readUInt32LE(4)}, not 3` };
 
@@ -145,25 +179,14 @@ export function readCrx3(bytes: Buffer, expectedId: string): CrxRead {
   const size = Buffer.alloc(4);
   size.writeUInt32LE(signedHeader.length);
   const signed = Buffer.concat([SIGNED_DATA_PREFIX, size, signedHeader, zip]);
+  const proofs = header.filter((entry) => entry.field === 2);
+  const item = proofBy(proofs, expectedId, signed);
+  if (item !== "verified") return { ok: false, reason: PROOF_REASONS[item](`item ${expectedId}`) };
 
-  for (const proof of header.filter((entry) => entry.field === 2)) {
-    const parts = protoFields(proof.bytes);
-    const publicKey = parts?.find((part) => part.field === 1)?.bytes;
-    const signature = parts?.find((part) => part.field === 2)?.bytes;
-    if (!publicKey || !signature || crxIdOf(publicKey) !== expectedId) continue;
+  const publisher = publisherId ? proofBy(proofs, publisherId, signed) : "verified";
+  if (publisher !== "verified") return { ok: false, reason: PROOF_REASONS[publisher](`the store publisher ${publisherId}`) };
 
-    try {
-      const key = crypto.createPublicKey({ key: publicKey, format: "der", type: "spki" });
-
-      if (crypto.verify("sha256", signed, key, signature)) return { ok: true, zip };
-    } catch {
-      return { ok: false, reason: "the CRX key of the item does not parse" };
-    }
-
-    return { ok: false, reason: "the CRX signature of the item does not verify" };
-  }
-
-  return { ok: false, reason: `no CRX proof is signed by the key of item ${expectedId}` };
+  return { ok: true, zip };
 }
 
 export function crxDownloadUrl(store: ToolsStore, prodVersion = "140.0.0.0"): string {
@@ -231,14 +254,43 @@ function manifestVersion(dir: string): string {
   }
 }
 
-function placed(cacheDir: string, name: string, fill: (into: string) => void): string {
+function privateDir(dir: string): void {
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  fs.chmodSync(dir, 0o700);
+}
+
+/* @invariant A CACHED COPY IS LOADED ONLY WHEN ITS FILES HASH TO WHAT WAS
+ * VERIFIED. A bundled copy is compared with the sha256 its record names, and a
+ * store copy with the tree of the archive that just passed its CRX3 check
+ * (without _metadata), so a folder edited or planted in the cache is rebuilt,
+ * never loaded. The cache folders are the person's alone (0700).
+ */
+function placed(cacheDir: string, name: string, expected: string | null, fill: (into: string) => void): string | null {
+  privateDir(cacheDir);
+
   const target = path.join(cacheDir, name);
-  if (fs.existsSync(path.join(target, "manifest.json"))) return target;
+  const present = fs.existsSync(path.join(target, "manifest.json"));
+  if (expected && present && treeSha256(target) === expected) return target;
 
   const staging = `${target}.${process.pid}.${Date.now()}`;
   fs.rmSync(staging, { recursive: true, force: true });
-  fs.mkdirSync(staging, { recursive: true });
+  privateDir(staging);
   fill(staging);
+
+  const built = treeSha256(staging);
+
+  if (expected && built !== expected) {
+    fs.rmSync(staging, { recursive: true, force: true });
+
+    return null;
+  }
+
+  if (!expected && present && treeSha256(target) === built) {
+    fs.rmSync(staging, { recursive: true, force: true });
+
+    return target;
+  }
+
   fs.rmSync(target, { recursive: true, force: true });
   fs.renameSync(staging, target);
 
@@ -253,7 +305,14 @@ function bundledCopy(cacheDir: string, folder: BundleFolder, bundleDir: string |
     return { failed: "the copy of extension.dev tools bundled with this MCP is missing from its package" };
   }
 
-  const dir = placed(cacheDir, `bundled-${folder}-${record.version}-${String(record.sha256[folder]).slice(0, 12)}`, (into) => fs.cpSync(source, into, { recursive: true }));
+  const expected = String(record.sha256[folder] ?? "");
+
+  if (!expected || treeSha256(source) !== expected) {
+    return { failed: "the copy of extension.dev tools bundled with this MCP does not match the sha256 its package records" };
+  }
+
+  const dir = placed(cacheDir, `bundled-${folder}-${record.version}-${expected.slice(0, 12)}`, expected, (into) => fs.cpSync(source, into, { recursive: true }));
+  if (!dir) return { failed: "the copy of extension.dev tools bundled with this MCP changed while it was copied" };
 
   const note = `${because}extension.dev tools ${record.version} is the copy bundled with this MCP.`;
 
@@ -276,7 +335,7 @@ async function readStore(store: ToolsStore, fetchImpl: typeof fetch): Promise<St
 
   if (bytes.length > MAX_CRX_BYTES) return { ok: false, reason: `its download is over ${MAX_CRX_BYTES} bytes` };
 
-  const crx = readCrx3(bytes, TOOLS_ITEMS[store].id);
+  const crx = readCrx3(bytes, TOOLS_ITEMS[store].id, TOOLS_ITEMS[store].publisher);
   if (!crx.ok) return { ok: false, reason: `its download was refused: ${crx.reason}` };
 
   const manifest = readZipEntry(crx.zip, "manifest.json", { maxEntries: UNPACK_LIMITS.maxEntries, maxBytes: 1024 * 1024 });
@@ -289,6 +348,103 @@ async function readStore(store: ToolsStore, fetchImpl: typeof fetch): Promise<St
   }
 }
 
+function amoFileHost(raw: string): boolean {
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.toLowerCase();
+
+    return url.protocol === "https:" && !url.username && !url.password && (host === "addons.mozilla.org" || host.endsWith(".mozilla.net"));
+  } catch {
+    return false;
+  }
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+type AmoRead = { ok: true; xpi: Buffer; version: string } | { ok: false; reason: string };
+
+/* @invariant A FIREFOX ADD-ONS COPY IS LOADED ONLY WHEN IT IS THE LISTED
+ * ADD-ON, AT THE PROTOCOL MINIMUM, FROM MOZILLA, WITH THE HASH AMO NAMES. The
+ * public API names the current version, its file address and its sha256; the
+ * file is fetched only over https from addons.mozilla.org or a mozilla.net
+ * host, must hash to that sha256 and must declare the gecko id
+ * sidekick@extension.dev. Anything else loads the bundled copy and says why.
+ */
+async function readAmo(fetchImpl: typeof fetch): Promise<AmoRead> {
+  let listing: unknown;
+
+  try {
+    const res = await fetchImpl(AMO_ADDON_API, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
+    if (res.status === 404 || res.status === 401) return { ok: false, reason: "it does not list the add-on yet" };
+    if (!res.ok) return { ok: false, reason: `it answered ${res.status}` };
+
+    listing = await res.json();
+  } catch (err) {
+    return { ok: false, reason: `it could not be reached (${err instanceof Error ? err.message : String(err)})` };
+  }
+
+  const current = isObject(listing) && isObject(listing.current_version) ? listing.current_version : {};
+  const file = isObject(current.file) ? current.file : {};
+  const version = typeof current.version === "string" ? current.version : "";
+  const fileUrl = typeof file.url === "string" ? file.url : "";
+  const hash = /^sha256:([0-9a-f]{64})$/i.exec(typeof file.hash === "string" ? file.hash : "")?.[1]?.toLowerCase() ?? "";
+
+  if (!version || !fileUrl || !hash) return { ok: false, reason: "its answer names no version, file and sha256" };
+  if (compareVersions(version, MIN_TOOLS_VERSION) < 0) return { ok: false, reason: `it serves ${version}, older than ${MIN_TOOLS_VERSION}` };
+  if (!amoFileHost(fileUrl)) return { ok: false, reason: "its file address is not an https address on addons.mozilla.org or mozilla.net" };
+
+  let xpi: Buffer;
+
+  try {
+    const res = await fetchImpl(fileUrl, { redirect: "follow", signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
+    if (res.url && !amoFileHost(res.url)) return { ok: false, reason: "its file redirected off addons.mozilla.org and mozilla.net" };
+    if (!res.ok) return { ok: false, reason: `its file answered ${res.status}` };
+
+    xpi = Buffer.from(await res.arrayBuffer());
+  } catch (err) {
+    return { ok: false, reason: `its file could not be reached (${err instanceof Error ? err.message : String(err)})` };
+  }
+
+  if (xpi.length > MAX_CRX_BYTES) return { ok: false, reason: `its file is over ${MAX_CRX_BYTES} bytes` };
+  if (crypto.createHash("sha256").update(xpi).digest("hex") !== hash) return { ok: false, reason: "its file does not match the sha256 it names" };
+
+  const manifest = readZipEntry(xpi, "manifest.json", { maxEntries: UNPACK_LIMITS.maxEntries, maxBytes: 1024 * 1024 });
+  if (!manifest.ok) return { ok: false, reason: `its file holds no readable manifest (${manifest.message})` };
+
+  let declared: unknown;
+
+  try {
+    declared = JSON.parse(manifest.data.toString("utf8"));
+  } catch {
+    return { ok: false, reason: "its file holds a manifest that does not parse" };
+  }
+
+  const settings = isObject(declared) && isObject(declared.browser_specific_settings) ? declared.browser_specific_settings : {};
+  const gecko = isObject(settings.gecko) ? settings.gecko : {};
+  if (gecko.id !== AMO_ADDON_ID) return { ok: false, reason: `its file declares the gecko id ${typeof gecko.id === "string" ? gecko.id : "(none)"}, not ${AMO_ADDON_ID}` };
+  if (isObject(declared) && declared.version !== version) return { ok: false, reason: `its file says ${String(declared.version)}, not ${version}` };
+
+  return { ok: true, xpi, version };
+}
+
+function unpackedStoreCopy(cacheDir: string, name: string, zip: Buffer, version: string): string | null {
+  let unpackFailure = "";
+
+  const dir = placed(cacheDir, name, null, (into) => {
+    const unpacked = unpackZip(zip, into, UNPACK_LIMITS);
+    if (!unpacked.ok) unpackFailure = unpacked.message;
+
+    fs.rmSync(path.join(into, "_metadata"), { recursive: true, force: true });
+  });
+
+  if (dir && !unpackFailure && manifestVersion(dir) === version) return dir;
+  if (dir) fs.rmSync(dir, { recursive: true, force: true });
+
+  return null;
+}
+
 export async function resolveToolsExtension(options: {
   engine: "chromium" | "gecko";
   edge: boolean;
@@ -298,7 +454,15 @@ export async function resolveToolsExtension(options: {
 }): Promise<ToolsExtension | { failed: string }> {
   const bundleDir = options.bundleDir === undefined ? bundledToolsDir() : options.bundleDir;
 
-  if (options.engine === "gecko") return bundledCopy(options.cacheDir, "firefox", bundleDir, "Firefox Add-ons lists the add-on unlisted, so ");
+  if (options.engine === "gecko") {
+    const amo = await readAmo(options.fetchImpl);
+    if (!amo.ok) return bundledCopy(options.cacheDir, "firefox", bundleDir, `Firefox Add-ons was not used because ${amo.reason}, so `);
+
+    const dir = unpackedStoreCopy(options.cacheDir, `firefox-${amo.version}`, amo.xpi, amo.version);
+    if (!dir) return bundledCopy(options.cacheDir, "firefox", bundleDir, "Firefox Add-ons was not used because its file did not unpack, so ");
+
+    return { dir, version: amo.version, source: "firefox", note: `extension.dev tools ${amo.version} comes from Firefox Add-ons.` };
+  }
 
   const store: ToolsStore = options.edge ? "edge" : "chrome";
   const name = TOOLS_ITEMS[store].store;
@@ -310,20 +474,8 @@ export async function resolveToolsExtension(options: {
     return bundledCopy(options.cacheDir, "chromium", bundleDir, `${name} serves ${read.version}, older than ${MIN_TOOLS_VERSION}, so `);
   }
 
-  let unpackFailure = "";
-
-  const dir = placed(options.cacheDir, `${store}-${read.version}`, (into) => {
-    const unpacked = unpackZip(read.zip, into, UNPACK_LIMITS);
-    if (!unpacked.ok) unpackFailure = unpacked.message;
-
-    fs.rmSync(path.join(into, "_metadata"), { recursive: true, force: true });
-  });
-
-  if (unpackFailure || manifestVersion(dir) !== read.version) {
-    fs.rmSync(dir, { recursive: true, force: true });
-
-    return bundledCopy(options.cacheDir, "chromium", bundleDir, `${name} was not used because its download did not unpack, so `);
-  }
+  const dir = unpackedStoreCopy(options.cacheDir, `${store}-${read.version}`, read.zip, read.version);
+  if (!dir) return bundledCopy(options.cacheDir, "chromium", bundleDir, `${name} was not used because its download did not unpack, so `);
 
   return { dir, version: read.version, source: store, note: `extension.dev tools ${read.version} comes from ${name}.` };
 }

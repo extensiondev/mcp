@@ -23,9 +23,9 @@ import { storeMdFileOf } from "../lib/submit-facts";
 import { loginForPath, pathIdentity, serverLogins } from "../lib/path-project";
 import { PLATFORM_KERNEL_HOOKS, installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
 import { forwardable } from "../lib/hosted-forwarder";
-import { guideStoreConnect, type GuidedConnectRuntime, type LaunchPlan } from "../lib/guided-connect";
+import { guideStoreConnect, launchGuidedBrowser, type GuidedConnectRuntime, type LaunchPlan } from "../lib/guided-connect";
 import { workspaceConnectAnswer } from "../lib/store-connection";
-import { crxIdOf, readCrx3 } from "../lib/tools-extension";
+import { AMO_ADDON_API, bundledToolsDir, crxIdOf, readBundleRecord, readCrx3, resolveToolsExtension, treeSha256 } from "../lib/tools-extension";
 import { createToolDispatcher, type ToolModule } from "../lib/tool-dispatch";
 import * as builds from "../tools/builds";
 import * as releaseStatus from "../tools/release-status";
@@ -33,6 +33,7 @@ import * as kernel from "../kernel";
 import * as submit from "../tools/submit";
 import { readIdentity } from "../tools/whoami";
 import { forwardOf, useForwardLane } from "./fixtures/forward-lane";
+import { storedZip } from "./fixtures/stored-zip";
 
 installPlatformKernelHooks();
 
@@ -591,11 +592,11 @@ describe("the guided store connect opens the MCP's own browser with extension.de
     return Buffer.concat([varint(field * 8 + 2), varint(bytes.length), bytes]);
   }
 
-  function signedCrx(zip: Buffer): { bytes: Buffer; id: string } {
+  function signedCrx(zip: Buffer, claimed?: string): { bytes: Buffer; id: string } {
     const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
     const der = publicKey.export({ type: "spki", format: "der" });
-    const id = crxIdOf(der);
-    const signedHeader = proto(1, Buffer.from(crypto.createHash("sha256").update(der).digest().subarray(0, 16)));
+    const id = claimed ?? crxIdOf(der);
+    const signedHeader = proto(1, Buffer.from([...id].map((char) => (char.charCodeAt(0) - 97).toString(16)).join(""), "hex"));
     const size = Buffer.alloc(4);
     size.writeUInt32LE(signedHeader.length);
     const signature = crypto.sign("sha256", Buffer.concat([Buffer.from("CRX3 SignedData\x00", "binary"), size, signedHeader, zip]), privateKey);
@@ -635,9 +636,134 @@ describe("the guided store connect opens the MCP's own browser with extension.de
 
     expect(readCrx3(crx.bytes, crx.id)).toMatchObject({ ok: true });
     expect(readCrx3(crx.bytes, "omndndgipeomhfdobfbhpfemempnnpjp")).toEqual({ ok: false, reason: `the CRX names item ${crx.id}, not omndndgipeomhfdobfbhpfemempnnpjp` });
-    expect(readCrx3(Buffer.concat([crx.bytes.subarray(0, -1), Buffer.from("X")]), crx.id)).toEqual({ ok: false, reason: "the CRX signature of the item does not verify" });
+    expect(readCrx3(Buffer.concat([crx.bytes.subarray(0, -1), Buffer.from("X")]), crx.id)).toEqual({ ok: false, reason: `the CRX signature of item ${crx.id} does not verify` });
     expect(readCrx3(Buffer.from("PK\x03\x04 not a crx"), crx.id)).toEqual({ ok: false, reason: "the download is not a CRX file" });
     expect(readCrx3(STORE_CRX, "omndndgipeomhfdobfbhpfemempnnpjp")).toMatchObject({ ok: true });
+  });
+
+  it("refuses a CRX that claims the item id under someone else's key, and one without the store's publisher proof", () => {
+    const item = "omndndgipeomhfdobfbhpfemempnnpjp";
+    const publisher = "lfoeajgcchlidpicbabpmckkejpckcfb";
+    const forged = signedCrx(Buffer.from("PK zip bytes"), item);
+    const own = signedCrx(Buffer.from("PK zip bytes"));
+
+    expect(readCrx3(forged.bytes, item)).toEqual({ ok: false, reason: `no CRX proof is signed by the key of item ${item}` });
+    expect(readCrx3(own.bytes, own.id, publisher)).toEqual({ ok: false, reason: `no CRX proof is signed by the key of the store publisher ${publisher}` });
+    expect(readCrx3(STORE_CRX, item, publisher)).toMatchObject({ ok: true });
+    expect(readCrx3(STORE_CRX, item, "ichpfokaninimeilopnpeolpmboclkbm")).toMatchObject({ ok: false });
+  });
+
+  it("refuses a bundled copy that differs from its recorded sha256, and rebuilds a cached copy someone edited", async () => {
+    const offline = (() => Promise.reject(new Error("offline"))) as unknown as typeof fetch;
+    const cacheDir = path.join(tmp, "tools-cache");
+    const edited = path.join(tmp, "edited-bundle");
+    fs.cpSync(bundledToolsDir()!, edited, { recursive: true });
+    fs.appendFileSync(path.join(edited, "chromium", "background", "service_worker.js"), "\nfetch('https://evil.test');\n");
+
+    expect(await resolveToolsExtension({ engine: "chromium", edge: false, cacheDir, fetchImpl: offline, bundleDir: edited })).toEqual({
+      failed: "the copy of extension.dev tools bundled with this MCP does not match the sha256 its package records",
+    });
+
+    const first = await resolveToolsExtension({ engine: "gecko", edge: false, cacheDir, fetchImpl: offline });
+    if ("failed" in first) throw new Error(first.failed);
+
+    fs.writeFileSync(path.join(first.dir, "POISON.js"), "planted");
+    fs.appendFileSync(path.join(first.dir, "manifest.json"), " ");
+    const again = await resolveToolsExtension({ engine: "gecko", edge: false, cacheDir, fetchImpl: offline });
+    if ("failed" in again) throw new Error(again.failed);
+
+    expect(fs.existsSync(path.join(again.dir, "POISON.js"))).toBe(false);
+    expect(treeSha256(again.dir)).toBe(readBundleRecord(bundledToolsDir()!)!.sha256.firefox);
+    expect(fs.statSync(cacheDir).mode & 0o777).toBe(0o700);
+  });
+
+  describe("the Firefox Add-ons copy", () => {
+    const FILE = "https://addons.mozilla.org/firefox/downloads/file/1/extension_dev_tools-0.1.3.xpi";
+
+    function xpi(id = "sidekick@extension.dev", version = "0.1.3"): Buffer {
+      return storedZip({ "manifest.json": JSON.stringify({ manifest_version: 3, version, browser_specific_settings: { gecko: { id } } }), "background/scripts.js": "void 0;" });
+    }
+
+    function amo(options: { status?: number; version?: string; url?: string; bytes?: Buffer; hash?: string }) {
+      const bytes = options.bytes ?? xpi();
+      const files: string[] = [];
+      const fetchImpl = (async (url: string) => {
+        if (url === AMO_ADDON_API) {
+          if (options.status) return new Response("", { status: options.status });
+
+          return Response.json({ current_version: { version: options.version ?? "0.1.3", file: { url: options.url ?? FILE, hash: options.hash ?? `sha256:${crypto.createHash("sha256").update(bytes).digest("hex")}` } } });
+        }
+
+        files.push(String(url));
+
+        return new Response(bytes);
+      }) as unknown as typeof fetch;
+
+      return { fetchImpl, files };
+    }
+
+    it("loads the listed add-on when its version, host, sha256 and gecko id all hold, and keeps the verified copy", async () => {
+      const cacheDir = path.join(tmp, "amo-cache");
+      const { fetchImpl } = amo({});
+      const first = await resolveToolsExtension({ engine: "gecko", edge: false, cacheDir, fetchImpl });
+
+      expect(first).toMatchObject({ source: "firefox", version: "0.1.3", note: "extension.dev tools 0.1.3 comes from Firefox Add-ons." });
+      if ("failed" in first) throw new Error(first.failed);
+
+      expect(fs.existsSync(path.join(first.dir, "background", "scripts.js"))).toBe(true);
+
+      fs.writeFileSync(path.join(first.dir, "POISON.js"), "planted");
+      const again = await resolveToolsExtension({ engine: "gecko", edge: false, cacheDir, fetchImpl });
+      if ("failed" in again) throw new Error(again.failed);
+
+      expect(fs.existsSync(path.join(again.dir, "POISON.js"))).toBe(false);
+    });
+
+    it.each([
+      ["not listed yet", { status: 404 }, "it does not list the add-on yet"],
+      ["an unlisted add-on, which AMO answers 401", { status: 401 }, "it does not list the add-on yet"],
+      ["a version under the minimum", { version: "0.1.0", bytes: xpi(undefined, "0.1.0") }, "it serves 0.1.0, older than 0.1.2"],
+      ["a file on another host", { url: "https://evil.test/extension_dev_tools-0.1.3.xpi" }, "its file address is not an https address on addons.mozilla.org or mozilla.net"],
+      ["a file over http", { url: "http://addons.mozilla.org/file.xpi" }, "its file address is not an https address on addons.mozilla.org or mozilla.net"],
+      ["a host that only ends like mozilla.net", { url: "https://evilmozilla.net/file.xpi" }, "its file address is not an https address on addons.mozilla.org or mozilla.net"],
+      ["a sha256 that does not match", { hash: `sha256:${"0".repeat(64)}` }, "its file does not match the sha256 it names"],
+      ["another gecko id", { bytes: xpi("other@evil.test") }, "its file declares the gecko id other@evil.test, not sidekick@extension.dev"],
+    ] as const)("loads the bundled copy on %s and says why", async (_case, options, reason) => {
+      const { fetchImpl, files } = amo(options);
+      const out = await resolveToolsExtension({ engine: "gecko", edge: false, cacheDir: path.join(tmp, "amo-cache"), fetchImpl });
+
+      expect(out).toMatchObject({ source: "bundled", note: `Firefox Add-ons was not used because ${reason}, so extension.dev tools 0.1.2 is the copy bundled with this MCP.` });
+      if (String((options as { url?: string }).url ?? "").includes("evil")) expect(files).toEqual([]);
+    });
+  });
+
+  it.skipIf(process.platform === "win32")("launches through the MCP's own engine, never a bin in the extension folder, and keeps the profile private", async () => {
+    const unpacked = path.join(tmp, "ext");
+    const bin = path.join(tmp, "bin");
+    const mark = path.join(tmp, "ran");
+    const profileDir = path.join(tmp, "state", "guided-browser", "chromium", "profile");
+    fs.mkdirSync(path.join(unpacked, "node_modules", ".bin"), { recursive: true });
+    fs.mkdirSync(bin, { recursive: true });
+    fs.mkdirSync(path.dirname(profileDir), { recursive: true, mode: 0o755 });
+    fs.chmodSync(path.dirname(profileDir), 0o755);
+    fs.writeFileSync(path.join(unpacked, "manifest.json"), "{}");
+    fs.writeFileSync(path.join(unpacked, "node_modules", ".bin", "extension"), `#!/bin/sh\necho planted > "${mark}"\n`, { mode: 0o755 });
+    fs.writeFileSync(path.join(bin, "npx"), `#!/bin/sh\necho own > "${mark}"\n`, { mode: 0o755 });
+    const savedPath = process.env.PATH;
+    process.env.PATH = `${bin}${path.delimiter}${savedPath}`;
+
+    try {
+      const out = launchGuidedBrowser({ choice: { browser: "chromium", binary: null, install: null, why: "" }, extensionDir: unpacked, profileDir, url: PAGE, headless: true });
+
+      expect(out).toEqual({ launched: true, reused: false });
+      for (let waited = 0; !fs.existsSync(mark) && waited < 100; waited += 1) await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(fs.readFileSync(mark, "utf8").trim()).toBe("own");
+    } finally {
+      process.env.PATH = savedPath;
+    }
+
+    for (const dir of [path.join(tmp, "state", "guided-browser"), path.dirname(profileDir), profileDir]) expect(fs.statSync(dir).mode & 0o777, dir).toBe(0o700);
+    expect(fs.statSync(path.join(path.dirname(profileDir), "running.json")).mode & 0o777).toBe(0o600);
   });
 
   it("refuses the Chrome Web Store item served for the Edge item and loads the bundled copy, saying so", async () => {

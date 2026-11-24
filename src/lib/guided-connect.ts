@@ -143,12 +143,26 @@ function previewArgs(plan: LaunchPlan): string[] {
   ];
 }
 
-/* @invariant ONE GUIDED BROWSER PER PROFILE. A second connect while the
- * guided browser of that profile still runs hands the page to the running
- * browser through its own single-instance door, never a second launch on the
- * same profile.
+export function privateProfile(profileDir: string): void {
+  const browserDir = path.dirname(profileDir);
+
+  for (const dir of [path.dirname(browserDir), browserDir, profileDir]) {
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    fs.chmodSync(dir, 0o700);
+  }
+}
+
+/* @invariant ONE GUIDED BROWSER PER PROFILE, KEPT PRIVATE AND RUN BY THE
+ * MCP'S OWN ENGINE. A second connect while the guided browser of that profile
+ * still runs hands the page to the running browser through its own
+ * single-instance door, never a second launch on the same profile. The
+ * profile holds the person's console and store sessions, so its folders are
+ * 0700 and the running marker 0600, and the engine is never resolved from the
+ * extension folder.
  */
 export function launchGuidedBrowser(plan: LaunchPlan): LaunchResult {
+  privateProfile(plan.profileDir);
+
   const marker = runningFile(plan.profileDir);
   let running: { pid?: number } = {};
 
@@ -169,18 +183,18 @@ export function launchGuidedBrowser(plan: LaunchPlan): LaunchResult {
     }
   }
 
-  fs.mkdirSync(plan.profileDir, { recursive: true });
-
   try {
     const spawned = spawnExtensionCli(previewArgs(plan), {
-      cwd: plan.extensionDir,
+      cwd: path.dirname(plan.profileDir),
+      ownEngine: true,
       ...(plan.headless ? { env: { EXTENSION_HEADLESS: "1" } } : {}),
     });
     const pid = spawned.child.pid;
 
     if (pid === undefined) return { launched: false, reused: false, reason: spawned.spawnError?.()?.message ?? "the Extension.js process did not start" };
 
-    fs.writeFileSync(marker, JSON.stringify({ pid, browser: plan.choice.browser }));
+    fs.writeFileSync(marker, JSON.stringify({ pid, browser: plan.choice.browser }), { mode: 0o600 });
+    fs.chmodSync(marker, 0o600);
 
     return { launched: true, reused: false };
   } catch (err) {
