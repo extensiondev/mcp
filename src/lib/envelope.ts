@@ -23,11 +23,8 @@ export const ENVELOPE_OUTPUT_SCHEMA = {
     command: { type: "string" },
     status: { type: "string" },
     value: {},
-    hint: { type: "string" },
-    warnings: { type: "array", items: { type: "string" } },
-    error: { type: ["object", "null"] },
   },
-  required: ["ok", "command", "status", "value"],
+  required: ["ok", "command"],
 } as const;
 
 
