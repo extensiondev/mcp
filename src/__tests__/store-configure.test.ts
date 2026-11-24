@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { actionFingerprint } from "../lib/approval-gate";
+import { firefoxSourceArchiveLine, firefoxSourcesOutcome } from "../lib/firefox-store";
 import { approvalVerdict } from "../lib/approval-policy";
 import { STORE_SETTINGS_ACTION, modeToPatch, readStoreSettingsChange, requestedLines, storeSettingsDigest } from "../lib/store-settings";
 import { submitCheckRefused } from "../lib/submit-action-safety";
@@ -122,6 +123,19 @@ describe("extension_submit configure-store changes a store's settings as a plain
     expect(validateToolInput(submitCheckSchema.inputSchema, asked)).toEqual([]);
     expect(submitCheckRefused(asked)).toBeNull();
     expect(readStoreSettingsChange("chrome", asked.storeSettings)).toEqual({ problem: "storeSettings.enabled must be true or false." });
+  });
+
+  it("takes the project source archive kind at the schema and the patch, and says what it attaches", () => {
+    const asked = { action: "configure-store", store: "firefox", storeSettings: { sourceArchive: "project" } };
+    const connectUrl = "https://console.extension.dev/acme/web/settings/stores";
+    const check = (actual: string) => ({ checks: [{ id: "store.firefox_source_archive", status: actual === "none" ? "fail" : "pass", actual }] });
+
+    expect(validateToolInput(submitSchema.inputSchema, asked)).toEqual([]);
+    expect(readStoreSettingsChange("firefox", { sourceArchive: "project" })).toEqual({ patch: { sourceArchive: "project" }, requested: { sourceArchive: "project" } });
+    expect(readStoreSettingsChange("firefox", { sourceArchive: "zip" })).toEqual({ problem: 'storeSettings.sourceArchive must be repository, project or none; got "zip".' });
+    expect(firefoxSourcesOutcome(undefined, "project", connectUrl)).toMatchObject({ attached: true, source: "store-setting", say: expect.stringContaining("the project folder plus its workspace packages") });
+    expect(firefoxSourceArchiveLine(check("project"), connectUrl)).toContain("attach the project folder plus the workspace packages it uses");
+    expect(firefoxSourceArchiveLine(check("none"), connectUrl)).toContain('sourceArchive:"project"');
   });
 
   it("writes a mode id as every field the platform derives it from", () => {

@@ -109,8 +109,8 @@ export const schema = {
           },
           sourceArchive: {
             type: "string",
-            enum: ["repository", "none"],
-            description: "Firefox: attach the source at the built commit.",
+            enum: ["repository", "project", "none"],
+            description: "Firefox sources: repo, or folder + packages.",
           },
           releaseChannel: {
             type: "string",

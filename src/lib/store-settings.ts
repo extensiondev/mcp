@@ -37,6 +37,8 @@ export const STORE_SETTING_KEYS = ["enabled", "submissionMode", "sourceArchive",
 
 const FIREFOX_ONLY_KEYS = new Set(["sourceArchive", "releaseChannel"]);
 
+export const SOURCE_ARCHIVE_KINDS: readonly string[] = ["repository", "project", "none"];
+
 export const ID_KEYS: Record<string, StoreSettingsStore> = { chromeItemId: "chrome", edgeProductId: "edge", firefoxAddonGuid: "firefox", appStoreId: "safari" };
 
 /* @invariant THE CHROME IDS ARE READ BY THE PLATFORM'S ONE RULE. The rule
@@ -356,8 +358,8 @@ function readStoreSettingsRow(store: StoreSettingsStore, raw: Row): StoreSetting
   if ("sourceArchive" in raw) {
     const archive = text(raw.sourceArchive).toLowerCase();
 
-    if (archive !== "repository" && archive !== "none") {
-      return { problem: `storeSettings.sourceArchive must be repository or none; got "${text(raw.sourceArchive)}".` };
+    if (!SOURCE_ARCHIVE_KINDS.includes(archive)) {
+      return { problem: `storeSettings.sourceArchive must be repository, project or none; got "${text(raw.sourceArchive)}".` };
     }
 
     patch.sourceArchive = archive;
