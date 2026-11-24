@@ -8,7 +8,7 @@
     "source": "github",
     "id": "1413830001"
   },
-  "websiteUrl": "https://extension.dev",
+  "websiteUrl": "https://docs.extension.dev/tools/mcp",
   "icons": [
     {
       "src": "https://media.extension.land/brand/extension-dev/favicon/icon-512.png",
@@ -47,6 +47,11 @@
           "name": "--project",
           "description": "Pin the server to one extension.dev project, so only that project's login is used.",
           "placeholder": "<workspace>/<project>"
+        },
+        {
+          "type": "named",
+          "name": "--no-ship",
+          "description": "A flag with no value. Refuses every call that puts something in front of other people: publish, promote, a real store submit, a share link or a share revoke. EXTENSION_DEV_NO_SHIP=1 does the same."
         }
       ],
       "environmentVariables": [

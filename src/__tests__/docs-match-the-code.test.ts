@@ -303,8 +303,11 @@ describe("the docs say what the code does", () => {
     expect(pkg.transport.type).toBe("stdio");
 
     const named = (pkg.packageArguments ?? []).filter((arg) => arg.type === "named");
-    expect(named.map((arg) => arg.name)).toEqual(["--features", "--project"]);
+    expect(named.map((arg) => arg.name)).toEqual(["--features", "--project", "--no-ship"]);
     for (const arg of named) expect(isServerFlag(arg.name!), arg.name).toBe(true);
+    const noShip = named.find((arg) => arg.name === "--no-ship")! as { format?: string; default?: string; value?: string };
+    expect([noShip.format, noShip.default, noShip.value]).toEqual([undefined, undefined, undefined]);
+    expect(resolveServerOptions(["--no-ship"], {})).toMatchObject({ ok: true, options: { noShip: true } });
     const features = named.find((arg) => arg.name === "--features")!;
     expect(features.choices).toEqual(["local", "local,platform", "local,extras", "local,platform,extras"]);
     expect(features.default).toBe(DEFAULT_SERVER_OPTIONS.features.join(","));
@@ -330,6 +333,10 @@ describe("the docs say what the code does", () => {
     });
 
     expect(server.remotes).toEqual([{ type: "streamable-http", url: "https://mcp.extension.dev/mcp" }]);
+    const { homepage } = require("../../package.json") as { homepage: string };
+    expect((server as { websiteUrl?: string }).websiteUrl).toBe(homepage);
+    expect(homepage).toBe("https://docs.extension.dev/tools/mcp");
+    expect(read("README.md")).toContain(`[Documentation](${homepage})`);
     expect(server.icons).toEqual([
       { src: "https://media.extension.land/brand/extension-dev/favicon/icon-512.png", mimeType: "image/png", sizes: ["512x512"] },
     ]);

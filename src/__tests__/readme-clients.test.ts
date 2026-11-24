@@ -40,7 +40,7 @@ describe("the README setup is generated from src/clients", () => {
     const everything = (id: string) => documented.clients.find((client) => client.id === id)!.recipes.everything;
 
     expect(setup.match(/```bash/g)).toHaveLength(1);
-    expect(everything("claude-code").command).toBe("claude mcp add extension-dev -- npx @extension.dev/mcp --features=local,platform");
+    expect(everything("claude-code").command).toBe("claude mcp add extension-dev -- npx -y @extension.dev/mcp --features=local,platform");
     expect(setup).toContain(`\`\`\`bash\n${everything("claude-code").command}\n\`\`\``);
     expect(setup).toContain(`\`\`\`json\n${everything("json").config!.text}\n\`\`\``);
     expect(setup).toContain("/plugin marketplace add extensiondev/skill\n/plugin install extension-dev@extensiondev");

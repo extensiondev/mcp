@@ -42,7 +42,7 @@ export const SERVER_NAME = "extension-dev";
 export const PACKAGE = "@extension.dev/mcp";
 
 export function serverArgs(input: Omit<RecipeInput, "client">): string[] {
-  const args = [PACKAGE];
+  const args = ["-y", PACKAGE];
 
   if (input.reach !== "local") args.push("--features=local,platform");
   if (input.reach !== "local" && input.project) args.push("--project", input.project);
@@ -65,7 +65,7 @@ const base64 = (text: string): string =>
 const tomlString = (value: string): string => JSON.stringify(value);
 
 export function loginCommand(project: string): string {
-  return `npx ${PACKAGE} login --project ${shellQuote(project)}`;
+  return `npx -y ${PACKAGE} login --project ${shellQuote(project)}`;
 }
 
 export function buildRecipe(input: RecipeInput): Recipe {

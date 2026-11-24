@@ -17,7 +17,7 @@
   "bugs": {
     "url": "https://github.com/extensiondev/mcp/issues"
   },
-  "homepage": "https://extension.dev",
+  "homepage": "https://docs.extension.dev/tools/mcp",
   "engines": {
     "node": ">=22.12"
   },

@@ -78,6 +78,12 @@ describe("the tool count is derived, never typed", () => {
     expect(countsIn(read("README.md"))).toEqual([]);
   });
 
+  it("1111: states only counts the registry holds in the directory review page, which reviewers read as the listing's truth", () => {
+    const stated = countsIn(read("docs/directory-review.md")).filter(({ text }) => /\b(local|platform|extras)\s+tools$/i.test(text));
+    expect(stated.length).toBeGreaterThan(0);
+    for (const { stated: n, expected, text } of stated) expect(n, text).toBe(expected);
+  });
+
   it("names only registered tools in the README, which points at the generated reference for the list", () => {
     const named = [...new Set([...read("README.md").matchAll(/\bextension_[a-z_]+\b/g)].map((m) => m[0]))];
     expect(named.length).toBeGreaterThan(0);

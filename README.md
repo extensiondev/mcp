@@ -20,7 +20,7 @@ extension.dev MCP is the MCP server for building browser extensions in Claude Co
 <!-- setup:start (generated from src/clients, run pnpm readme:clients) -->
 
 ```bash
-claude mcp add extension-dev -- npx @extension.dev/mcp --features=local,platform
+claude mcp add extension-dev -- npx -y @extension.dev/mcp --features=local,platform
 ```
 
 Or install the `extension-dev` plugin, the MCP server pinned to one published version plus the `browser-extension` skill, in one step:
@@ -30,7 +30,7 @@ Or install the `extension-dev` plugin, the MCP server pinned to one published ve
 /plugin install extension-dev@extensiondev
 ```
 
-[![Install in Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=extension-dev&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyJAZXh0ZW5zaW9uLmRldi9tY3AiLCItLWZlYXR1cmVzPWxvY2FsLHBsYXRmb3JtIl19) [![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22extension-dev%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22%40extension.dev%2Fmcp%22%2C%22--features%3Dlocal%2Cplatform%22%5D%7D)
+[![Install in Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=extension-dev&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBleHRlbnNpb24uZGV2L21jcCIsIi0tZmVhdHVyZXM9bG9jYWwscGxhdGZvcm0iXX0%3D) [![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22extension-dev%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40extension.dev%2Fmcp%22%2C%22--features%3Dlocal%2Cplatform%22%5D%7D)
 
 Other clients take the same server as `.mcp.json`; every client's block, with a local-only form, is on [Install in your client](https://docs.extension.dev/tools/mcp/clients).
 
@@ -40,6 +40,7 @@ Other clients take the same server as `.mcp.json`; every client's block, with a 
     "extension-dev": {
       "command": "npx",
       "args": [
+        "-y",
         "@extension.dev/mcp",
         "--features=local,platform"
       ]
@@ -75,7 +76,7 @@ The agent scaffolds from a template, starts the dev session, a browser opens wit
 The platform tools need a login once. You approve a code at [extension.dev/device](https://extension.dev/device); the project-scoped token stays on this machine, is never returned to the agent, and lives at most 7 days. No project yet? Request access at [extension.dev](https://extension.dev).
 
 ```bash
-npx @extension.dev/mcp login --project <workspace>/<project>
+npx -y @extension.dev/mcp login --project <workspace>/<project>
 ```
 
 Details under [Platform tools](https://docs.extension.dev/tools/mcp/platform).

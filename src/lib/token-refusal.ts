@@ -57,7 +57,7 @@ export function tokenRefusal(
         status: "refused",
         code: "E_AUTH_DENIED",
         name: "ConnectedAppScope",
-        hint: "This connection reads only the projects picked for it. Members, invites, access tokens, the team, the activity log, store accounts, usage and the plan are read in the console, or with your own login in the local server (npx @extension.dev/mcp).",
+        hint: "This connection reads only the projects picked for it. Members, invites, access tokens, the team, the activity log, store accounts, usage and the plan are read in the console, or with your own login in the local server (npx -y @extension.dev/mcp).",
       };
     case "FORBIDDEN":
       return {

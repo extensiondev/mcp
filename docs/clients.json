@@ -8,13 +8,13 @@
       "recipes": {
         "everything": {
           "client": "claude-code",
-          "command": "claude mcp add extension-dev -- npx @extension.dev/mcp --features=local,platform",
-          "login": "npx @extension.dev/mcp login --project ''"
+          "command": "claude mcp add extension-dev -- npx -y @extension.dev/mcp --features=local,platform",
+          "login": "npx -y @extension.dev/mcp login --project ''"
         },
         "local": {
           "client": "claude-code",
-          "command": "claude mcp add extension-dev -- npx @extension.dev/mcp --features=local",
-          "login": "npx @extension.dev/mcp login --project ''"
+          "command": "claude mcp add extension-dev -- npx -y @extension.dev/mcp --features=local",
+          "login": "npx -y @extension.dev/mcp login --project ''"
         }
       }
     },
@@ -24,23 +24,23 @@
       "recipes": {
         "everything": {
           "client": "cursor",
-          "deeplink": "https://cursor.com/en/install-mcp?name=extension-dev&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyJAZXh0ZW5zaW9uLmRldi9tY3AiLCItLWZlYXR1cmVzPWxvY2FsLHBsYXRmb3JtIl19",
+          "deeplink": "https://cursor.com/en/install-mcp?name=extension-dev&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBleHRlbnNpb24uZGV2L21jcCIsIi0tZmVhdHVyZXM9bG9jYWwscGxhdGZvcm0iXX0%3D",
           "config": {
             "language": "json",
             "path": ".cursor/mcp.json",
-            "text": "{\n  \"mcpServers\": {\n    \"extension-dev\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"@extension.dev/mcp\",\n        \"--features=local,platform\"\n      ]\n    }\n  }\n}"
+            "text": "{\n  \"mcpServers\": {\n    \"extension-dev\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@extension.dev/mcp\",\n        \"--features=local,platform\"\n      ]\n    }\n  }\n}"
           },
-          "login": "npx @extension.dev/mcp login --project ''"
+          "login": "npx -y @extension.dev/mcp login --project ''"
         },
         "local": {
           "client": "cursor",
-          "deeplink": "https://cursor.com/en/install-mcp?name=extension-dev&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyJAZXh0ZW5zaW9uLmRldi9tY3AiLCItLWZlYXR1cmVzPWxvY2FsIl19",
+          "deeplink": "https://cursor.com/en/install-mcp?name=extension-dev&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBleHRlbnNpb24uZGV2L21jcCIsIi0tZmVhdHVyZXM9bG9jYWwiXX0%3D",
           "config": {
             "language": "json",
             "path": ".cursor/mcp.json",
-            "text": "{\n  \"mcpServers\": {\n    \"extension-dev\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"@extension.dev/mcp\",\n        \"--features=local\"\n      ]\n    }\n  }\n}"
+            "text": "{\n  \"mcpServers\": {\n    \"extension-dev\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@extension.dev/mcp\",\n        \"--features=local\"\n      ]\n    }\n  }\n}"
           },
-          "login": "npx @extension.dev/mcp login --project ''"
+          "login": "npx -y @extension.dev/mcp login --project ''"
         }
       }
     },
@@ -50,25 +50,25 @@
       "recipes": {
         "everything": {
           "client": "vscode",
-          "command": "code --add-mcp '{\"name\":\"extension-dev\",\"command\":\"npx\",\"args\":[\"@extension.dev/mcp\",\"--features=local,platform\"]}'",
-          "deeplink": "vscode:mcp/install?%7B%22name%22%3A%22extension-dev%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22%40extension.dev%2Fmcp%22%2C%22--features%3Dlocal%2Cplatform%22%5D%7D",
+          "command": "code --add-mcp '{\"name\":\"extension-dev\",\"command\":\"npx\",\"args\":[\"-y\",\"@extension.dev/mcp\",\"--features=local,platform\"]}'",
+          "deeplink": "vscode:mcp/install?%7B%22name%22%3A%22extension-dev%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40extension.dev%2Fmcp%22%2C%22--features%3Dlocal%2Cplatform%22%5D%7D",
           "config": {
             "language": "json",
             "path": ".vscode/mcp.json",
-            "text": "{\n  \"servers\": {\n    \"extension-dev\": {\n      \"type\": \"stdio\",\n      \"command\": \"npx\",\n      \"args\": [\n        \"@extension.dev/mcp\",\n        \"--features=local,platform\"\n      ]\n    }\n  }\n}"
+            "text": "{\n  \"servers\": {\n    \"extension-dev\": {\n      \"type\": \"stdio\",\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@extension.dev/mcp\",\n        \"--features=local,platform\"\n      ]\n    }\n  }\n}"
           },
-          "login": "npx @extension.dev/mcp login --project ''"
+          "login": "npx -y @extension.dev/mcp login --project ''"
         },
         "local": {
           "client": "vscode",
-          "command": "code --add-mcp '{\"name\":\"extension-dev\",\"command\":\"npx\",\"args\":[\"@extension.dev/mcp\",\"--features=local\"]}'",
-          "deeplink": "vscode:mcp/install?%7B%22name%22%3A%22extension-dev%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22%40extension.dev%2Fmcp%22%2C%22--features%3Dlocal%22%5D%7D",
+          "command": "code --add-mcp '{\"name\":\"extension-dev\",\"command\":\"npx\",\"args\":[\"-y\",\"@extension.dev/mcp\",\"--features=local\"]}'",
+          "deeplink": "vscode:mcp/install?%7B%22name%22%3A%22extension-dev%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40extension.dev%2Fmcp%22%2C%22--features%3Dlocal%22%5D%7D",
           "config": {
             "language": "json",
             "path": ".vscode/mcp.json",
-            "text": "{\n  \"servers\": {\n    \"extension-dev\": {\n      \"type\": \"stdio\",\n      \"command\": \"npx\",\n      \"args\": [\n        \"@extension.dev/mcp\",\n        \"--features=local\"\n      ]\n    }\n  }\n}"
+            "text": "{\n  \"servers\": {\n    \"extension-dev\": {\n      \"type\": \"stdio\",\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@extension.dev/mcp\",\n        \"--features=local\"\n      ]\n    }\n  }\n}"
           },
-          "login": "npx @extension.dev/mcp login --project ''"
+          "login": "npx -y @extension.dev/mcp login --project ''"
         }
       }
     },
@@ -78,23 +78,23 @@
       "recipes": {
         "everything": {
           "client": "codex",
-          "command": "codex mcp add extension-dev -- npx @extension.dev/mcp --features=local,platform",
+          "command": "codex mcp add extension-dev -- npx -y @extension.dev/mcp --features=local,platform",
           "config": {
             "language": "toml",
             "path": "~/.codex/config.toml",
-            "text": "[mcp_servers.extension-dev]\ncommand = \"npx\"\nargs = [\"@extension.dev/mcp\", \"--features=local,platform\"]"
+            "text": "[mcp_servers.extension-dev]\ncommand = \"npx\"\nargs = [\"-y\", \"@extension.dev/mcp\", \"--features=local,platform\"]"
           },
-          "login": "npx @extension.dev/mcp login --project ''"
+          "login": "npx -y @extension.dev/mcp login --project ''"
         },
         "local": {
           "client": "codex",
-          "command": "codex mcp add extension-dev -- npx @extension.dev/mcp --features=local",
+          "command": "codex mcp add extension-dev -- npx -y @extension.dev/mcp --features=local",
           "config": {
             "language": "toml",
             "path": "~/.codex/config.toml",
-            "text": "[mcp_servers.extension-dev]\ncommand = \"npx\"\nargs = [\"@extension.dev/mcp\", \"--features=local\"]"
+            "text": "[mcp_servers.extension-dev]\ncommand = \"npx\"\nargs = [\"-y\", \"@extension.dev/mcp\", \"--features=local\"]"
           },
-          "login": "npx @extension.dev/mcp login --project ''"
+          "login": "npx -y @extension.dev/mcp login --project ''"
         }
       }
     },
@@ -107,18 +107,18 @@
           "config": {
             "language": "json",
             "path": ".mcp.json",
-            "text": "{\n  \"mcpServers\": {\n    \"extension-dev\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"@extension.dev/mcp\",\n        \"--features=local,platform\"\n      ]\n    }\n  }\n}"
+            "text": "{\n  \"mcpServers\": {\n    \"extension-dev\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@extension.dev/mcp\",\n        \"--features=local,platform\"\n      ]\n    }\n  }\n}"
           },
-          "login": "npx @extension.dev/mcp login --project ''"
+          "login": "npx -y @extension.dev/mcp login --project ''"
         },
         "local": {
           "client": "json",
           "config": {
             "language": "json",
             "path": ".mcp.json",
-            "text": "{\n  \"mcpServers\": {\n    \"extension-dev\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"@extension.dev/mcp\",\n        \"--features=local\"\n      ]\n    }\n  }\n}"
+            "text": "{\n  \"mcpServers\": {\n    \"extension-dev\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@extension.dev/mcp\",\n        \"--features=local\"\n      ]\n    }\n  }\n}"
           },
-          "login": "npx @extension.dev/mcp login --project ''"
+          "login": "npx -y @extension.dev/mcp login --project ''"
         }
       }
     }
