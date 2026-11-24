@@ -405,7 +405,7 @@ export function clearLaunchFile(extensionDir: string): void {
 }
 
 function readBack(workspace: string): string {
-  return `extension_workspace {action:"info", workspace:"${workspace}", include:["storeAccounts"]}`;
+  return `extension_workspace_read {action:"info", workspace:"${workspace}", include:["storeAccounts"]}`;
 }
 
 function plainAnswer(parsed: { command: string; value: Args; hint: string }, note: string): string {
@@ -472,7 +472,7 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
       command: parsed.command,
       status: WORKSPACE_CONNECT_STATUS,
       value: { ...value, storeAccountsUrl: plainUrl, guidedBrowser: { opened: false, browser: choice.browser, why: choice.why, install: choice.install } },
-      hint: `${choice.why} It is not installed: install it with extension_browsers {action:"install", browser:"${choice.install}"}, then call this connect again to open it with extension.dev tools loaded.`,
+      hint: `${choice.why} It is not installed: install it with extension_browsers_install {action:"install", browser:"${choice.install}"}, then call this connect again to open it with extension.dev tools loaded.`,
     });
   }
 

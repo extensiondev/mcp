@@ -199,7 +199,7 @@ describe("extension_auth login with projects: refusals before a device code is s
     expect(out.status).toBe("batch-unsupported");
     expect(out.error.code).toBe("E_PLATFORM");
     expect(out.error.message).toContain("does not advertise batch onboarding");
-    expect(out.hint).toContain("its own extension_auth (action: login, project) call");
+    expect(out.hint).toContain("its own extension_auth_login (action: login, project) call");
     expect(h.to("/api/cli/device/code")).toHaveLength(0);
     expect(h.to("/api/cli/device/token")).toHaveLength(0);
   });
@@ -493,7 +493,7 @@ describe("extension_auth login with projects: one approval, one token per projec
     const out = await run({ action: "login", projects: LIST });
 
     expect(out.status).toBe("login-failed");
-    expect(out.hint).toContain("its own extension_auth (action: login, project) call");
+    expect(out.hint).toContain("its own extension_auth_login (action: login, project) call");
   });
 
   it("leaves the single-project login exactly as it was", async () => {

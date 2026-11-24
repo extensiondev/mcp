@@ -21,7 +21,7 @@ export interface NoSessionWords {
 
 const NOT_DEV = "Do not start extension_dev for it: that replaces the production session with a dev session.";
 
-const BRIDGE_VERBS = "extension_storage, extension_reload, extension_open with a surface, extension_dom_snapshot by tab and extension_eval";
+const BRIDGE_VERBS = "extension_storage_read, extension_storage_write, extension_reload, extension_open with a surface, extension_dom_snapshot by tab and extension_eval";
 
 function controlNote(receipt: ProductionReceipt): string {
   if (receipt.control) return "";

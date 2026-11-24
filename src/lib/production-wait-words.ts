@@ -12,7 +12,7 @@ import { waitCall } from "./production-receipt";
 import type { ProductionLaunchEvidence } from "./production-launch";
 import type { ReadyContract } from "./types";
 
-const BRIDGE_VERBS = "extension_storage, extension_reload, extension_open with a surface, extension_dom_snapshot by tab and extension_eval";
+const BRIDGE_VERBS = "extension_storage_read, extension_storage_write, extension_reload, extension_open with a surface, extension_dom_snapshot by tab and extension_eval";
 
 const DEBUG_PORT_READS = "extension_open {url}, extension_assert, extension_screenshot and extension_dom_snapshot by url";
 

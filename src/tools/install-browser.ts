@@ -52,7 +52,7 @@ export async function installManagedBrowser(
           code: "E_BROWSER_INSTALL",
           message: `The installer returned, but no ${browser} binary is in the managed cache at ${destination}; nothing was installed there.`,
         },
-        hint: 'extension_browsers with action: "detect" says which binary a session would launch; a system install may already serve.',
+        hint: 'extension_browsers_read with action: "detect" says which binary a session would launch; a system install may already serve.',
       });
     }
 

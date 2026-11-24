@@ -95,7 +95,7 @@ describe("the no-session answer reads the start receipt before choosing its word
 
       expect(words.message).toMatch(/names no debug port yet/);
       expect(words.hint).toMatch(/^Call extension_wait \{projectPath/);
-      expect(words.hint).toMatch(/started without allowControl \(this server's session registry recorded the launch, and the ready contract names no controlPort\), so the debug-port reads work while extension_storage, extension_reload, extension_open with a surface, extension_dom_snapshot by tab and extension_eval need extension_start again with allowControl: true and replace: true/);
+      expect(words.hint).toMatch(/started without allowControl \(this server's session registry recorded the launch, and the ready contract names no controlPort\), so the debug-port reads work while extension_storage_read, extension_storage_write, extension_reload, extension_open with a surface, extension_dom_snapshot by tab and extension_eval need extension_start again with allowControl: true and replace: true/);
       expect(words.hint).toMatch(/Do not start extension_dev/);
     } finally {
       removeSession(project, "chrome", process.pid);
@@ -112,7 +112,7 @@ describe("the no-session answer reads the start receipt before choosing its word
 
       expect(words.message).toMatch(/is still starting/);
       expect(words.hint).not.toMatch(/without allowControl/);
-      expect(words.hint).toMatch(/This run asked for the control channel \(allowControl: true in this server's session registry\) and the contract has not recorded its port yet; once it lands, extension_storage, extension_reload, extension_open with a surface, extension_dom_snapshot by tab and extension_eval reach it, and the debug-port reads need no control at all\./);
+      expect(words.hint).toMatch(/This run asked for the control channel \(allowControl: true in this server's session registry\) and the contract has not recorded its port yet; once it lands, extension_storage_read, extension_storage_write, extension_reload, extension_open with a surface, extension_dom_snapshot by tab and extension_eval reach it, and the debug-port reads need no control at all\./);
       expect(words.hint).toMatch(/Do not start extension_dev/);
     } finally {
       removeSession(project, "chrome", process.pid);

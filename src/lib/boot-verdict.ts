@@ -167,7 +167,7 @@ function bootFailureCause(code: string | undefined, tool: string): string {
     case "compile_failed":
       return `The compiler failed outside a module (a plugin hook or extension.config.js threw), which the dev server's watcher does not recover from: fix the cause the engine names above, then call ${tool} again.`;
     case "browser_launch_failed":
-      return `The browser process could not start. extension_browsers (action: detect) says which binaries are usable; pass chromiumBinary or geckoBinary to ${tool} to pick one, then call ${tool} again.`;
+      return `The browser process could not start. extension_browsers_read (action: detect) says which binaries are usable; pass chromiumBinary or geckoBinary to ${tool} to pick one, then call ${tool} again.`;
     case "extension_load_refused":
       return `The browser refused to load the built extension. Run extension_manifest_validate and read extension_logs for the browser's reason, fix it, then call ${tool} again.`;
     case "dev_server_start_failed":

@@ -34,7 +34,7 @@ const OLD_PLATFORM = new Set([404, 405]);
 
 const STAGE_NEXT: Record<string, string> = {
   INVALID_LISTING: "fix the file the platform named (a PNG or JPEG at a size the store takes), then call sync-listing again",
-  OWNER_REQUIRED: "staging a listing image takes a workspace owner's token; log in as an owner with extension_auth (action: \"login\") and call sync-listing again",
+  OWNER_REQUIRED: "staging a listing image takes a workspace owner's token; log in as an owner with extension_auth_login (action: \"login\") and call sync-listing again",
   IMAGE_STAGE_FAILED: "the platform could not store the image; call sync-listing again with the same arguments",
   [IMAGE_BYTES_NOT_SENT]: "call sync-listing again with the same arguments, so the local server uploads the image before the hosted lane names it",
 };

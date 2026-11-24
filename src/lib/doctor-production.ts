@@ -140,7 +140,7 @@ function noControlLegs(): DoctorLeg[] {
     {
       check: "control-channel",
       status: "skip",
-      detail: "skipped: this production session was started without allowControl, so it carries no control channel; extension_storage, extension_reload, extension_open with a surface, extension_dom_snapshot by tab and extension_eval need extension_start with allowControl: true (allowEval: true for extension_eval)",
+      detail: "skipped: this production session was started without allowControl, so it carries no control channel; extension_storage_read, extension_storage_write, extension_reload, extension_open with a surface, extension_dom_snapshot by tab and extension_eval need extension_start with allowControl: true (allowEval: true for extension_eval)",
     },
     skipped("eval-token", "control-channel"),
     skipped("executor", "control-channel"),
@@ -358,5 +358,5 @@ export function spliceProductionLegs<T extends { check: string }>(engineChecks: 
 export function productionDoctorHint(receipt: ProductionReceipt): string {
   return receipt.control
     ? "This is a production session (extension_start with allowControl): the checks read the engine process, the control channel on the controlled copy of the build, its executor, the browser and its debug port. extension_logs has no console stream for it, and the port-agreement leg has nothing to compare on a production run."
-    : "This is a production session (extension_start without allowControl): the checks read the build receipt, the engine process, the browser and its debug port. The bridge verbs (extension_storage, extension_reload, extension_open with a surface, extension_dom_snapshot by tab, extension_eval) need extension_start again with allowControl: true and replace: true; this is not a dev session to restart.";
+    : "This is a production session (extension_start without allowControl): the checks read the build receipt, the engine process, the browser and its debug port. The bridge verbs (extension_storage_read, extension_storage_write, extension_reload, extension_open with a surface, extension_dom_snapshot by tab, extension_eval) need extension_start again with allowControl: true and replace: true; this is not a dev session to restart.";
 }

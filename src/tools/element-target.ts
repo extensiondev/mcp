@@ -145,7 +145,7 @@ async function pickSurface(port: number, args: TargetArgs, browser: string, cont
         message: `No open page at ${wanted}, so there is no ${context} to act in; a surface has a target only while it is open.`,
       },
       value: { wanted },
-      hint: `Open it first with extension_open surface: "${context}", then call extension_element again. extension_dom_snapshot with listTargets: true lists what is open.`,
+      hint: `Open it first with extension_open surface: "${context}", then call the same tool again. extension_dom_snapshot with listTargets: true lists what is open.`,
     });
   }
 

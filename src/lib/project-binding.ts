@@ -179,7 +179,7 @@ export function bindCallProject(
 
     const expired = logins.expired ?? [];
     const expiredSaid = expired.length
-      ? ` ${quoted(expired)} ${expired.length === 1 ? "is stored too but has expired, so it is not a choice" : "are stored too but have expired, so they are not choices"}; extension_auth (action: login, project: "${expired[0]}") signs in again.`
+      ? ` ${quoted(expired)} ${expired.length === 1 ? "is stored too but has expired, so it is not a choice" : "are stored too but have expired, so they are not choices"}; extension_auth_login (action: login, project: "${expired[0]}") signs in again.`
       : "";
     const unbound = text(args.projectPath) ? "the folder at projectPath names no project this server could bind" : "the call named neither project nor projectPath";
 

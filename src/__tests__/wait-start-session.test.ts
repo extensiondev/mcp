@@ -99,7 +99,7 @@ describe("extension_wait on a start session says at once that nothing will attac
     expect(result.value.loadEvidence).toBe(`Read over the browser's debug port ${cdpPort}: 2 live targets of ${id} (service_worker, page), so the browser loaded the extension.`);
     expect(result.hint).toContain(`and the browser loaded the extension (${result.value.loadEvidence})`);
     expect(result.hint).toContain(`The load is proven over the debug port ${cdpPort}, which extension_open {url}, extension_assert, extension_screenshot and extension_dom_snapshot by url read now; nothing here needs extension_dev.`);
-    expect(result.hint).toContain("extension_storage, extension_reload, extension_open with a surface, extension_dom_snapshot by tab and extension_eval need extension_start again with allowControl: true and replace: true.");
+    expect(result.hint).toContain("extension_storage_read, extension_storage_write, extension_reload, extension_open with a surface, extension_dom_snapshot by tab and extension_eval need extension_start again with allowControl: true and replace: true.");
     expect(result.hint).not.toMatch(/To prove the load|Do not call extension_wait again|stays false/);
   }, 10_000);
 

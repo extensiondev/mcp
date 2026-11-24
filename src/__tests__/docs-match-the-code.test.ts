@@ -87,7 +87,7 @@ describe("the docs say what the code does", () => {
       fs.writeFileSync(fileURLToPath(new URL("../../claude/reference/mcp-tools.md", import.meta.url)), rendered);
     }
 
-    expect(read("claude/reference/mcp-tools.md")).toBe(rendered);
+    expect([read("claude/reference/mcp-tools.md") === rendered, /^## extension_storage$/m.test(rendered), rendered.includes("| `extension_storage` | `extension_storage_read`, `extension_storage_write` |")]).toEqual([true, false, true]);
     for (const tool of tools) expect(read("claude/reference/mcp-tools.md")).toContain(`## ${tool.schema.name}`);
   });
 

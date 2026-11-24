@@ -494,7 +494,7 @@ export function detectSentences(detected: DetectedBrowser[]): {
   const hint = missing.length
     ? `Not found at the paths this server checks (the managed cache and the usual install locations): ${missing.map((d) => d.browser).join(", ")}.${
         missing.some((d) => MANAGED_INSTALLABLE.has(d.browser))
-          ? ` Use extension_browsers with action: "install" to install ${missing
+          ? ` Use extension_browsers_install with action: "install" to install ${missing
               .filter((d) => MANAGED_INSTALLABLE.has(d.browser))
               .map((d) => d.browser)
               .join(", ")}.`
@@ -513,7 +513,7 @@ export function detectSentences(detected: DetectedBrowser[]): {
     ...(unverified.length
       ? {
           warnings: unverified.map(
-            (d) => `${d.browser}: ${d.binaryPath} did not answer --version within 5s, so it is unverified; a quarantined or half-downloaded bundle looks like this. Run it once by hand, or reinstall it with extension_browsers action: "install".`,
+            (d) => `${d.browser}: ${d.binaryPath} did not answer --version within 5s, so it is unverified; a quarantined or half-downloaded bundle looks like this. Run it once by hand, or reinstall it with extension_browsers_install action: "install".`,
           ),
         }
       : {}),

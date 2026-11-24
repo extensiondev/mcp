@@ -426,5 +426,5 @@ export function stubbedReadWarning(name: string, args: Record<string, unknown>):
   const hits = sessions.reduce((sum, session) => sum + session.rules.reduce((inner, rule) => inner + rule.hits, 0), 0);
   const browsers = [...new Set(sessions.map((session) => session.browser))].join(", ");
 
-  return `${rules} network stub rule(s) from extension_network are live on the ${browsers} session (${hits} request(s) answered by them so far), so what this read shows may come from a stub, not the real server. extension_network {action: "requests"} says which requests hit one; {action: "clear"} takes them down.`;
+  return `${rules} network stub rule(s) from extension_network_stub are live on the ${browsers} session (${hits} request(s) answered by them so far), so what this read shows may come from a stub, not the real server. extension_network_read {action: "requests"} says which requests hit one; {action: "clear"} takes them down.`;
 }

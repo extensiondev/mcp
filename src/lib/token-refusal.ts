@@ -28,7 +28,7 @@ export function tokenRefusal(
 ): TokenRefusal | null {
   const workspace = context.workspace || "<workspace>";
   const project = context.project || `${workspace}/<project>`;
-  const loginAgain = "Run extension_auth (action: \"login\") for the project again to mint a fresh login.";
+  const loginAgain = "Run extension_auth_login (action: \"login\") for the project again to mint a fresh login.";
 
   switch (platformCode) {
     case "TOKEN_WORKSPACE_MISMATCH":
@@ -36,14 +36,14 @@ export function tokenRefusal(
         status: "refused",
         code: "E_AUTH_DENIED",
         name: "TokenWorkspaceMismatch",
-        hint: `This login belongs to another workspace, and a login reads only its own workspace. Log in to a project of ${workspace} with extension_auth (action: "login", project: "${workspace}/<project>"), or to all of its projects with extension_auth (action: "login", workspace: "${workspace}", projects: "*"), then call again.`,
+        hint: `This login belongs to another workspace, and a login reads only its own workspace. Log in to a project of ${workspace} with extension_auth_login (action: "login", project: "${workspace}/<project>"), or to all of its projects with extension_auth_login (action: "login", workspace: "${workspace}", projects: "*"), then call again.`,
       };
     case "TOKEN_PROJECT_MISMATCH":
       return {
         status: "refused",
         code: "E_AUTH_DENIED",
         name: "TokenProjectMismatch",
-        hint: `A project's own records are read only with that project's login. Log in to it with extension_auth (action: "login", project: "${project}") and pass it as project.`,
+        hint: `A project's own records are read only with that project's login. Log in to it with extension_auth_login (action: "login", project: "${project}") and pass it as project.`,
       };
     case "TOKEN_READ_ONLY":
       return {
@@ -64,7 +64,7 @@ export function tokenRefusal(
         status: "refused",
         code: "E_AUTH_DENIED",
         name: "MinterNotMember",
-        hint: "The account that approved this login is no longer a member of the workspace, so every login it minted there stopped working. Sign in again as a current member with extension_auth (action: \"login\").",
+        hint: "The account that approved this login is no longer a member of the workspace, so every login it minted there stopped working. Sign in again as a current member with extension_auth_login (action: \"login\").",
       };
     case "TOKEN_ISSUER_UNKNOWN":
       return {
@@ -108,7 +108,7 @@ export function tokenRefusal(
         status: "auth-required",
         code: "E_AUTH_REQUIRED",
         name: "ShareToken",
-        hint: "A share link's token opens that share only and is not a login. Sign in with extension_auth (action: \"login\").",
+        hint: "A share link's token opens that share only and is not a login. Sign in with extension_auth_login (action: \"login\").",
       };
     default:
       return null;

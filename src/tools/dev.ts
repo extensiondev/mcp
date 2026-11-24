@@ -650,7 +650,7 @@ export async function handler(
             : control.unavailableReason
               ? `Control was requested, but the engine reports no control port (${control.unavailableReason}), so extension_${controlVerbs.split(", ").join("/extension_")} will be refused until the session is relaunched.`
               : `Control was requested; ready.json has not stamped the control port yet, so extension_wait is what confirms extension_${controlVerbs.split(", ").join("/extension_")} will work.`
-          : "Control channel is OFF because this session was started with allowControl: false: extension_storage/reload/open/dom_snapshot are locked, and extension_eval needs allowEval: true. To unlock them, call extension_dev again without allowControl: false (plus allowEval: true for eval) and replace: true (it stops this session first); a plain second call is refused so the session does not fork."
+          : "Control channel is OFF because this session was started with allowControl: false: extension_storage_read, extension_storage_write, extension_reload, extension_open and extension_dom_snapshot are locked, and extension_eval needs allowEval: true. To unlock them, call extension_dev again without allowControl: false (plus allowEval: true for eval) and replace: true (it stops this session first); a plain second call is refused so the session does not fork."
         } When you are done, call extension_stop to shut down the dev server and browser.${idleMinutes === null ? "" : ` ${idleSentence(idleMinutes)}`}`,
   });
 }

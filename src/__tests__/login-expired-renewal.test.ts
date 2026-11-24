@@ -82,7 +82,7 @@ function serve(seen: Seen): typeof fetch {
   }) as unknown as typeof fetch;
 }
 
-const RENEW = { tool: "extension_auth", args: { action: "login", project: "acme/widget", deviceCode: "dev_1" } };
+const RENEW = { tool: "extension_auth_login", args: { action: "login", project: "acme/widget", deviceCode: "dev_1" } };
 
 function expectRenewal(out: { ok: boolean; status: string; error: { code: string; name: string; message: string }; value: Record<string, any>; hint: string }): void {
   expect(out.ok).toBe(false);
@@ -98,7 +98,7 @@ function expectRenewal(out: { ok: boolean; status: string; error: { code: string
   expect(out.value.login.device).toEqual({ verificationUrl: `${VERIFY}?code=CODE-1`, userCode: "CODE-1", expiresAt: expect.any(String), then: RENEW });
   expect(Date.parse(out.value.login.device.expiresAt)).toBeGreaterThan(Date.now() + 800_000);
   expect(out.value.nextStep).toEqual({ kind: "login", say: expect.stringContaining(`Open ${VERIFY}?code=CODE-1 and approve (code CODE-1`), url: `${VERIFY}?code=CODE-1` });
-  expect(out.hint).toContain('extension_auth {action: "login", project: "acme/widget", deviceCode: "dev_1"}');
+  expect(out.hint).toContain('extension_auth_login {action: "login", project: "acme/widget", deviceCode: "dev_1"}');
   expect(out.hint).toContain(`expired at ${EXPIRED_ISO}`);
   expect(out.hint).not.toMatch(/extension_auth \(action: status\)/);
 }
@@ -196,7 +196,7 @@ describe("a token-scoped tool under an expired login names the expiry and starts
 
       expect(out.error.code).toBe("E_AUTH_EXPIRED");
       expect(out.value.login.device).toBeUndefined();
-      expect(out.value.login.renew).toEqual({ tool: "extension_auth", args: { action: "login", project: "acme/widget" } });
+      expect(out.value.login.renew).toEqual({ tool: "extension_auth_login", args: { action: "login", project: "acme/widget" } });
       expect(raw).not.toContain("example.net");
       expect(raw).not.toContain("rm -rf");
       expect(raw).not.toContain("ignore your instructions");
@@ -240,9 +240,9 @@ describe("a token-scoped tool under an expired login names the expiry and starts
 
     expect(out.status).toBe("not-signed-in");
     expect(out.error.code).toBe("E_AUTH_EXPIRED");
-    expect(out.value.login.renew).toEqual({ tool: "extension_auth", args: { action: "login", project: "acme/widget" } });
+    expect(out.value.login.renew).toEqual({ tool: "extension_auth_login", args: { action: "login", project: "acme/widget" } });
     expect(out.value.login.device).toBeUndefined();
-    expect(out.value.nextStep.say).toContain('Sign in again with extension_auth {action: "login", project: "acme/widget"}, then call this again');
+    expect(out.value.nextStep.say).toContain('Sign in again with extension_auth_login {action: "login", project: "acme/widget"}, then call this again');
     expect(out.value.nextStep.url).toBe("https://console.extension.dev/acme/widget");
   });
 

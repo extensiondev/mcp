@@ -313,7 +313,7 @@ function prefilledFormSentence(facts: LaneClosedFacts, prefill: CreatePrefill): 
     ? "The form asks which browsers to build"
     : "The form still asks for the GitHub repository the platform reads the source from, never writes to, because the console's create form takes a repository only (extension_project_create with projectPath uploads a folder instead once the lane opens), and which browsers to build";
 
-  return `Create the project in the console: open ${facts.createUrl}, the create form with ${carried} prefilled. ${asks}; ${CREATE_FORM_SETTINGS_LATER}. Then run extension_auth (action: login) against it.`;
+  return `Create the project in the console: open ${facts.createUrl}, the create form with ${carried} prefilled. ${asks}; ${CREATE_FORM_SETTINGS_LATER}. Then run extension_auth_login (action: login) against it.`;
 }
 
 export function laneClosedHint(options: LaneClosedRead & { subject: LaneSubject; workspace?: string }): string {
@@ -364,7 +364,7 @@ export function laneClosedHint(options: LaneClosedRead & { subject: LaneSubject;
       ? `Create the workspace in the console at ${facts.consoleUrl} (workspace switcher, New workspace), then run extension_project_create against it.`
       : options.subject === "project" && options.prefill
         ? prefilledFormSentence(facts, options.prefill)
-        : `Create the ${options.subject === "projects" ? "projects" : "project"} in the console at ${facts.consoleUrl} (workspace page, New project), then run extension_auth (action: login) against ${options.subject === "projects" ? "them" : "it"}.`;
+        : `Create the ${options.subject === "projects" ? "projects" : "project"} in the console at ${facts.consoleUrl} (workspace page, New project), then run extension_auth_login (action: login) against ${options.subject === "projects" ? "them" : "it"}.`;
 
   return `The platform at ${facts.api} closed headless ${noun} creation for this call; its own message above says why. ${target}`;
 }

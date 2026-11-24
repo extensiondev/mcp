@@ -60,7 +60,7 @@ function describeServer(check: ServerCheck, api: string) {
   if (check.kind === "refused") {
     return {
       status: "refused-by-server",
-      note: `The server at ${api} refused this credential: it does not resolve to an identity there (expired, revoked, or minted for another environment). The workspace/project above is only what the local file claims. Run extension_auth (action: login) to re-authenticate.`,
+      note: `The server at ${api} refused this credential: it does not resolve to an identity there (expired, revoked, or minted for another environment). The workspace/project above is only what the local file claims. Run extension_auth_login (action: login) to re-authenticate.`,
       warning: null,
       value: { verdict: "refused", api },
     };
@@ -133,7 +133,7 @@ function elsewhereNote(local: AuthLocal, server: string): { note: string; logins
 
   return {
     logins,
-    note: `No stored login for ${server}, the server this call targets. This machine holds logins for other servers: ${logins.map((l) => `${l.project} on ${l.server}`).join(", ")}. Each login is used only against the server it was minted on: pass api (or set EXTENSION_DEV_API_URL) to that server to use one, or run extension_auth (action: login) to sign in to ${server}.`,
+    note: `No stored login for ${server}, the server this call targets. This machine holds logins for other servers: ${logins.map((l) => `${l.project} on ${l.server}`).join(", ")}. Each login is used only against the server it was minted on: pass api (or set EXTENSION_DEV_API_URL) to that server to use one, or run extension_auth_login (action: login) to sign in to ${server}.`,
   };
 }
 
@@ -150,7 +150,7 @@ function notSignedIn(local: AuthLocal, project: string, target: string, now: num
     command: "extension_auth",
     status: "not-signed-in",
     value: { project, api: target, logins },
-    hint: `No stored login for ${project} on ${target}, so there is nothing to report or verify for it. Run extension_auth (action: login, project: "${project}") to sign in to it${onServer.length ? `; the logins this machine holds for ${target} are ${onServer.map((login) => login.project).join(", ")}, listed under logins` : ""}.`,
+    hint: `No stored login for ${project} on ${target}, so there is nothing to report or verify for it. Run extension_auth_login (action: login, project: "${project}") to sign in to it${onServer.length ? `; the logins this machine holds for ${target} are ${onServer.map((login) => login.project).join(", ")}, listed under logins` : ""}.`,
   });
 }
 
@@ -173,7 +173,7 @@ export async function readIdentityWith(local: AuthLocal, deps?: {
         message: `The login store at ${problem.path} exists but ${problem.reason}, so the logins on this machine cannot be listed.`,
       },
       value: { path: problem.path },
-      hint: "This is not a logged-out machine: the file is there and may hold logins. Fix or move it and run extension_auth (action: status) again; a new login is refused while it is unreadable, and extension_auth (action: logout) with no project removes it if its logins are not worth recovering.",
+      hint: "This is not a logged-out machine: the file is there and may hold logins. Fix or move it and run extension_auth_read (action: status) again; a new login is refused while it is unreadable, and extension_auth_login (action: logout) with no project removes it if its logins are not worth recovering.",
     });
   }
 
@@ -212,8 +212,8 @@ export async function readIdentityWith(local: AuthLocal, deps?: {
             const claims = readTokenClaims(envToken());
 
             return claims ? ` (per its claims it belongs to ${claims.workspace}/${claims.project})` : " (its claims could not be read)";
-          })()}. Run extension_auth (action: login) to store a login as well.`
-        : "No stored credentials. Run extension_auth (action: login) to authenticate.",
+          })()}. Run extension_auth_login (action: login) to store a login as well.`
+        : "No stored credentials. Run extension_auth_login (action: login) to authenticate.",
     });
   }
 
@@ -255,10 +255,10 @@ export async function readIdentityWith(local: AuthLocal, deps?: {
   const hosted = Boolean(requestCredential());
   const forwarded = requestCredential()?.kind === "forward";
   const slugs = member && !namedProject ? memberLabel(creds) : `${creds.workspaceSlug}/${creds.projectSlug}`;
-  const memberRenew = `extension_auth (action: login, workspace: "${creds.workspaceSlug}", projects: "*")`;
+  const memberRenew = `extension_auth_login (action: login, workspace: "${creds.workspaceSlug}", projects: "*")`;
   const hostedNote = forwarded
     ? expired
-      ? "The short-lived forward credential for this call has expired. Call again: the local server exchanges its device login for a fresh one, and if extension.dev refuses that login, run extension_auth (action: login) on this machine."
+      ? "The short-lived forward credential for this call has expired. Call again: the local server exchanges its device login for a fresh one, and if extension.dev refuses that login, run extension_auth_login (action: login) on this machine."
       : `Signed in as ${slugs} through a short-lived forward credential the local server exchanged from this machine's device login, which scopes every call; the device login itself goes only to extension.dev, never to the hosted lane.`
     : expired
       ? "This connection's token has expired. Sign in again from your MCP client."
@@ -273,11 +273,11 @@ export async function readIdentityWith(local: AuthLocal, deps?: {
           : `Logged in to ${creds.workspaceSlug} as a member: one login reads ${listed.join(", ")}. It is sent for the project a call names with project (or projectPath); no project is assumed.`
       : wanted
         ? expired
-          ? `The stored login for ${slugs} has expired. Run extension_auth (action: login, project: "${slugs}") to refresh it.`
+          ? `The stored login for ${slugs} has expired. Run extension_auth_login (action: login, project: "${slugs}") to refresh it.`
           : `This is the login stored for ${slugs}, the one a token-scoped tool sends when it names project: "${slugs}"; the default login for unnamed calls may be another one.`
         : expired
-          ? "The stored token has expired. Run extension_auth (action: login) to refresh it."
-          : `Logged in as ${slugs}, per the token extension_auth stored on this machine. That token is what scopes the identity: it does not follow the current working directory or project folder.`;
+          ? "The stored token has expired. Run extension_auth_login (action: login) to refresh it."
+          : `Logged in as ${slugs}, per the token extension_auth_login stored on this machine. That token is what scopes the identity: it does not follow the current working directory or project folder.`;
   const resolved = local.resolveCredential({ api });
   const envTokenNote = envTokenSet
     ? `EXTENSION_DEV_TOKEN is set: an unnamed call sends it${resolved.ref ? ` (per its claims it belongs to ${resolved.ref.workspace}/${resolved.ref.project})` : " (its claims could not be read)"}, while a call naming a project, or a server pinned to one, sends that project's stored login first; this report describes only the stored login.`
@@ -293,7 +293,7 @@ export async function readIdentityWith(local: AuthLocal, deps?: {
   const defaultSaid = settled
     ? `the one above is the default for token-scoped tools on ${target}, each of them takes \`project\` to use another`
     : liveHere.length === 0
-      ? `every login for ${target} has expired, so a token-scoped tool there is refused until extension_auth (action: login) signs in again`
+      ? `every login for ${target} has expired, so a token-scoped tool there is refused until extension_auth_login (action: login) signs in again`
       : `none of them is the default on ${target}: ${liveHere.length} are live there (${liveHere.join(", ")}), so a token-scoped tool has to name \`project\`, or a projectPath whose project is one of them, and a call that names neither is refused`;
   const loginsNote =
     logins.length > 1

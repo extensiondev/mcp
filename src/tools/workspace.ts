@@ -11,7 +11,7 @@ import { hostedOnly } from "../lib/hosted-only";
 
 export const schema = {
   name: "extension_workspace",
-  description: "Read the workspace (projects, usage, settings) or change a project's settings. configure-project renames a project (displayName; slug and URLs stay). set-visibility public or a public liveChannel needs approval. Builds spend only on build branch pushes that change the root directory. extension_auth handles logins; extension_approvals lists and revokes approvals.",
+  description: "Read the workspace (projects, usage, settings) or change a project's settings. configure-project renames a project (displayName; slug and URLs stay). set-visibility public or a public liveChannel needs approval. Builds spend only on build branch pushes that change the root directory. extension_auth_login: logins; extension_approvals_read lists approvals.",
   inputSchema: {
     type: "object" as const,
     properties: {

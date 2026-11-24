@@ -301,9 +301,9 @@ describe("extension_project_create", () => {
     expect(out.value.projectPath).toBe(dir);
     expect(out.value.sourceRepo).toBeUndefined();
     expect(out.value.firstBuild).toEqual({ dispatched: true, spent: 1 });
-    expect(out.value.nextSteps.join(" ")).toContain("extension_builds (action: list, project: 'acme/ghost-app')");
+    expect(out.value.nextSteps.join(" ")).toContain("extension_builds_read (action: list, project: 'acme/ghost-app')");
     expect(out.hint).toContain("nothing was pushed");
-    expect(out.hint).toContain("extension_builds (action: list");
+    expect(out.hint).toContain("extension_builds_read (action: list");
     expect(out.warnings ?? []).toEqual([]);
   });
 
@@ -656,7 +656,7 @@ describe("extension_project_create", () => {
     expect(out.hint).toContain(out.value.createUrl);
     expect(out.hint).toContain("repository acme/ghost-app-src, name ghost-app and workspace acme prefilled");
     expect(out.hint).toContain("extension_builds_act (action: configure)");
-    expect(out.hint).toContain("extension_auth (action: login)");
+    expect(out.hint).toContain("extension_auth_login (action: login)");
   });
 
   it("489: says in its description that the platform takes the source from the folder or from a GitHub repository", () => {
@@ -1281,7 +1281,7 @@ describe("extension_project_create", () => {
     expect(out.value.firstBuild).toEqual({ dispatched: true, spent: 1 });
     expect(out.value.allowance.remains).toBe("Before this call the workspace had 8 of 350 builds left this month; the first build spends one, leaving 7.");
     expect(out.value.allowance.remaining).toBe(7);
-    expect(out.value.allowance.warning).toBe("7 builds remain of 350 this month; each project creation spends one, and so does a push to the build branch that changes a file under the root directory; a push to another branch, one that changes only docs or license files outside public/, or one whose head commit says [skip build] (or [skip ci], or carries an Extension-Build: skip trailer) spends nothing (extension_builds list names each skipped push with its outcome).");
+    expect(out.value.allowance.warning).toBe("7 builds remain of 350 this month; each project creation spends one, and so does a push to the build branch that changes a file under the root directory; a push to another branch, one that changes only docs or license files outside public/, or one whose head commit says [skip build] (or [skip ci], or carries an Extension-Build: skip trailer) spends nothing (extension_builds_read list names each skipped push with its outcome).");
 
     const planCall = calls.findIndex((c) => c.url.endsWith("/api/workspaces/acme/plan"));
     const createCall = calls.findIndex((c) => c.url.endsWith("/api/cli/projects/create"));
@@ -1309,13 +1309,13 @@ describe("extension_project_create", () => {
   it("names reading the first build as the one step after the login, in value.nextSteps and after Next: in the hint, and never extension_publish", async () => {
     const SHA = "255e7b57c6be400bde4ed8744257bc64e27e4012";
     const pinned = await createdWith({ initialBuild: { dispatched: true }, ref: { requested: "main", branch: "main", sha: SHA } });
-    const read = `extension_builds (action: get, buildId: '${SHA}', project: 'acme/ghost-app') until it reads green`;
+    const read = `extension_builds_read (action: get, buildId: '${SHA}', project: 'acme/ghost-app') until it reads green`;
 
     expect(pinned.value.nextSteps.at(-1)).toBe(read);
     expect(pinned.hint.split("Next: ")[1]).toContain(`${read}.`);
 
     const plain = await createdWith({ initialBuild: { dispatched: true } });
-    const listed = "extension_builds (action: list, project: 'acme/ghost-app') until its first build reads green";
+    const listed = "extension_builds_read (action: list, project: 'acme/ghost-app') until its first build reads green";
 
     expect(plain.value.nextSteps.at(-1)).toBe(listed);
     expect(plain.hint.split("Next: ")[1]).toContain(`${listed}.`);
@@ -1494,7 +1494,7 @@ describe("extension_project_create", () => {
     expect(out.status).toBe("reseeded");
     expect(out.value.firstBuild).toEqual({ dispatched: false, reason: "already_dispatched" });
     expect(out.hint).toContain("the archive is the same tree the project already built, so the build it has stands");
-    expect(out.hint).toContain("extension_builds (action: list, project: 'acme/ghost-app') names that build");
+    expect(out.hint).toContain("extension_builds_read (action: list, project: 'acme/ghost-app') names that build");
     expect(out.hint).toContain("nothing to upload again");
     expect(out.hint).not.toContain("No first build was dispatched");
     expect(out.hint).not.toContain("the platform's reason is already_dispatched");

@@ -72,7 +72,7 @@ const RDP_ACTOR_NOTE =
   "actor is an RDP tab descriptor actor id, NOT a chrome.tabs id: do not pass it as `tab`. " +
   "Target a tab with `targetId` (its browserId, listed as targetId), `tabUrl` (URL substring) or `url`; if you need a numeric tab id, call extension_dom_snapshot with listTabs: true.";
 
-const READ_LESS = 'call extension_dom_snapshot with include: ["elements"] for the interactive elements with a selector each, then extension_element with action: "text" and one selector';
+const READ_LESS = 'call extension_dom_snapshot with include: ["elements"] for the interactive elements with a selector each, then extension_element_read with action: "text" and one selector';
 
 export const schema = {
   name: "extension_dom_snapshot",

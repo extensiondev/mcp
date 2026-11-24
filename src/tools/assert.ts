@@ -1376,7 +1376,7 @@ async function assertStorageKeyPresent(
       id,
       subject,
       `The storage read returned something this server could not parse, so nothing was learned about ${subject}: ${truncate(raw)}`,
-      "Run extension_storage with the same arguments and read the frame directly.",
+      "Run extension_storage_read with the same arguments and read the frame directly.",
     );
   }
 
@@ -1402,7 +1402,7 @@ async function assertStorageKeyPresent(
       id,
       subject,
       `The engine's storage frame carried a shape this reader does not understand, so ${subject} was not observed: ${truncate(frame.value)}`,
-      "Read it with extension_storage and compare the frame; this check refuses to guess a value out of it.",
+      "Read it with extension_storage_read and compare the frame; this check refuses to guess a value out of it.",
     );
   }
 

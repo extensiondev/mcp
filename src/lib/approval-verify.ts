@@ -408,7 +408,7 @@ export async function verifyApproval(params: {
       APPROVAL_REJECTED_STATUS,
       "E_APPROVAL_REJECTED",
       "ApprovalConsumed",
-      `Approval ${approvalId} was already used once and approvals are single-use. This call executed nothing, but the call that used it may already have run the action: ${describedBy(input, minted)} Read the current state first (${input.stateRead ?? "extension_release_status for a promote or submission, extension_shares list for a revoke"}), and request a fresh approval by calling this tool with no approvalId only if the action did not happen.`,
+      `Approval ${approvalId} was already used once and approvals are single-use. This call executed nothing, but the call that used it may already have run the action: ${describedBy(input, minted)} Read the current state first (${input.stateRead ?? "extension_release_status for a promote or submission, extension_shares_read for a revoke"}), and request a fresh approval by calling this tool with no approvalId only if the action did not happen.`,
       { action: input.action, approvalId },
     );
   }

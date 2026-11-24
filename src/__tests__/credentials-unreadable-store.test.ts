@@ -139,7 +139,7 @@ describe("a login store that cannot be read is never written over", () => {
 
     expect(message).toContain(file);
     expect(message).toContain("nothing was stored");
-    expect(message).toContain("extension_auth (action: logout)");
+    expect(message).toContain("extension_auth_login (action: logout)");
   });
 
   it("still writes when there is no store, an empty file, or a store with no usable entry", () => {

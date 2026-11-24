@@ -162,7 +162,7 @@ describe("sentences", () => {
 
     const chrome = detectSentences([notFound("chrome")]);
 
-    expect(chrome.hint).toMatch(/Use extension_browsers with action: "install" to install chrome\./);
+    expect(chrome.hint).toMatch(/Use extension_browsers_install with action: "install" to install chrome\./);
   });
 });
 

@@ -195,7 +195,7 @@ describe("extension_auth status honors project like every token-scoped tool", ()
     expect(out.value.api).toBe(API);
     expect(out.value.projectSlug).toBeUndefined();
     expect(out.value.logins.map((login: { project: string }) => login.project)).toEqual([`${WORKSPACE}/pii-shield`, `${WORKSPACE}/leon`, `${WORKSPACE}/rebeccat`]);
-    expect(out.hint).toContain(`extension_auth (action: login, project: "${WORKSPACE}/nowhere")`);
+    expect(out.hint).toContain(`extension_auth_login (action: login, project: "${WORKSPACE}/nowhere")`);
     expect(out.hint).toContain(`${WORKSPACE}/leon, ${WORKSPACE}/rebeccat`);
     expect(platform.calls).toEqual([]);
     expect(typeof out.value.trackUrl).toBe("string");

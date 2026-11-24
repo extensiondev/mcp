@@ -349,12 +349,12 @@ describe("private projects", () => {
     {
       ref: { workspace: "acme", project: "other" },
       detail:
-        'No stored login covers acme/other: a login is minted per project, and the login stored for acme (acme/widget) does not read it, so run extension_auth {action: "login", project: "acme/other"}, or extension_auth {action: "login", workspace: "acme", projects: "*"} to cover every project of the workspace in one approval.',
+        'No stored login covers acme/other: a login is minted per project, and the login stored for acme (acme/widget) does not read it, so run extension_auth_login {action: "login", project: "acme/other"}, or extension_auth_login {action: "login", workspace: "acme", projects: "*"} to cover every project of the workspace in one approval.',
     },
     {
       ref: { workspace: "someone", project: "else" },
       detail:
-        'No stored login covers someone/else: a login is minted per project, so run extension_auth {action: "login", project: "someone/else"}, or extension_auth {action: "login", workspace: "someone", projects: "*"} to cover every project of the workspace in one approval.',
+        'No stored login covers someone/else: a login is minted per project, so run extension_auth_login {action: "login", project: "someone/else"}, or extension_auth_login {action: "login", workspace: "someone", projects: "*"} to cover every project of the workspace in one approval.',
     },
   ])("a read of $ref.workspace/$ref.project with no login for it names the exact login call in one sentence", async ({ ref, detail }) => {
     const fetchImpl = vi.fn(async () => jsonResponse({ error: "unauthorized", reason: "missing-token" }, 401));

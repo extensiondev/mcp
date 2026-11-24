@@ -82,6 +82,6 @@ function safariContextUnreachable(command: string, browser: string, where: strin
       retry: "no",
     },
     value: { browser, context: where },
-    hint: `${where === "background" ? "For storage, call extension_storage (action get or set), which reads and writes the extension's storage on Safari through code the bridge ships, with no eval. " : ""}Read the ${where} with extension_logs, which reads what the extension writes through the bridge. ${PAGE_ROUTE[route]} A page opened in a regular Safari window is outside the session and cannot be read from here. The popup, options and sidebar documents are not reachable on Safari: run the same project on chrome or firefox to evaluate in them.`,
+    hint: `${where === "background" ? "For storage, call extension_storage_read or extension_storage_write, which read and write the extension's storage on Safari through code the bridge ships, with no eval. " : ""}Read the ${where} with extension_logs, which reads what the extension writes through the bridge. ${PAGE_ROUTE[route]} A page opened in a regular Safari window is outside the session and cannot be read from here. The popup, options and sidebar documents are not reachable on Safari: run the same project on chrome or firefox to evaluate in them.`,
   });
 }

@@ -102,7 +102,7 @@ describe("ledger 287: a directory whose project has no login is not ambiguous", 
     expect(out.error.code).toBe("E_NO_LOGIN_FOR_PROJECT");
     expect(out.error.message).toContain("is the project cezaraugusto/hands-free, and no login stored on this machine is for it");
     expect(out.hint).toContain("extension_project_create (project: 'cezaraugusto/hands-free', repo: 'cezaraugusto/hands-free')");
-    expect(out.hint).toContain("extension_auth (action: login, project: 'cezaraugusto/hands-free')");
+    expect(out.hint).toContain("extension_auth_login (action: login, project: 'cezaraugusto/hands-free')");
     expect(out.hint).not.toContain("rebeccat");
     expect(out.hint).not.toContain("'cezaraugusto/leon'");
     expect(out.value.logins).toBeUndefined();
@@ -121,7 +121,7 @@ describe("ledger 287: a directory whose project has no login is not ambiguous", 
     expect(out.hint).toContain(`${API}/device?code=WXYZ-9876`);
     expect(out.hint).toContain(`code WXYZ-9876; it expires at ${expiresAt.slice(11, 16)} UTC`);
     expect(out.hint).toContain("call extension_project_create again with the deviceCode its first call answered");
-    expect(out.hint).toContain("extension_auth (action: login, project: 'cezaraugusto/hands-free')");
+    expect(out.hint).toContain("extension_auth_login (action: login, project: 'cezaraugusto/hands-free')");
     expect(out.value.pendingCreate).toEqual({ project: "cezaraugusto/hands-free", userCode: "WXYZ-9876", verificationUri: `${API}/device?code=WXYZ-9876`, expiresAt });
     expect(sent).toEqual([]);
   });

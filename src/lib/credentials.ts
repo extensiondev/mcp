@@ -222,7 +222,7 @@ export class CredentialStoreUnreadableError extends Error {
   readonly reason: string;
   constructor(file: string, reason: string) {
     super(
-      `The login store at ${file} exists but ${reason}, so it was left untouched and nothing was stored. Fix or move that file and sign in again; extension_auth (action: logout) with no project removes it if its logins are not worth recovering.`,
+      `The login store at ${file} exists but ${reason}, so it was left untouched and nothing was stored. Fix or move that file and sign in again; extension_auth_login (action: logout) with no project removes it if its logins are not worth recovering.`,
     );
 
     this.name = "CredentialStoreUnreadableError";
@@ -518,7 +518,7 @@ export function defaultLoginDrift(api?: string): { kept: string; newest: string 
 }
 
 export function loginDriftSentence(drift: { kept: string; newest: string }): string {
-  return `This server keeps using ${drift.kept}, the login it resolved first; ${drift.newest} was signed in later by another process that shares this machine's login store, and a call here with no project does not follow it. Pass project: '${drift.newest}' to act on it, or run extension_auth (action: login, project: '${drift.newest}') in this server.`;
+  return `This server keeps using ${drift.kept}, the login it resolved first; ${drift.newest} was signed in later by another process that shares this machine's login store, and a call here with no project does not follow it. Pass project: '${drift.newest}' to act on it, or run extension_auth_login (action: login, project: '${drift.newest}') in this server.`;
 }
 
 export function moveLogin(args: {
@@ -793,12 +793,12 @@ export const PROJECT_TOKEN_INPUT = {
 } as const;
 
 export const LOGIN_STEPS =
-  "Run extension_auth (action: login), or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard). An extension with no extension.dev project yet starts with extension_project_create, which makes one from its GitHub repository, then extension_auth.";
+  "Run extension_auth_login (action: login), or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard). An extension with no extension.dev project yet starts with extension_project_create, which makes one from its GitHub repository, then extension_auth.";
 
 export const NO_TOKEN_MESSAGE = `No token. ${LOGIN_STEPS}`;
 
 export function loginStep(project?: string): string {
-  return `Run extension_auth (action: login${project ? `, project: "${project}"` : ""}).`;
+  return `Run extension_auth_login (action: login${project ? `, project: "${project}"` : ""}).`;
 }
 
 export function noStoredLoginHint(project: string): string {
@@ -808,5 +808,5 @@ export function noStoredLoginHint(project: string): string {
     return `This connection's token does not cover ${project}${covered.length ? `; it covers ${covered.join(", ")}` : ""}. Sign in again from the MCP client and approve ${project} to use it.`;
   }
 
-  return `No stored login for ${project}. extension_auth (action: status) lists the logins on this machine; extension_auth (action: login, project: "${project}") adds one. Logging in to another project no longer replaces this one.`;
+  return `No stored login for ${project}. extension_auth_read (action: status) lists the logins on this machine; extension_auth_login (action: login, project: "${project}") adds one. Logging in to another project no longer replaces this one.`;
 }

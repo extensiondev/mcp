@@ -282,9 +282,9 @@ describe("extension_project_create stores the login the create minted (ledger 29
     expect(out.value.login).toMatchObject({ stored: true, project: PROJECT });
     expect(out.value.login.expiresAt).toMatch(/^\d{4}-/);
     expect(readCredentials({ project: PROJECT, api: API })?.token).toBe("project-token");
-    expect(out.value.nextSteps).toEqual([`extension_builds (action: list, project: '${PROJECT}') until its first build reads green`]);
+    expect(out.value.nextSteps).toEqual([`extension_builds_read (action: list, project: '${PROJECT}') until its first build reads green`]);
     expect(out.value.nextSteps.join(" ")).not.toContain("extension_auth");
-    expect(out.hint).toContain("no extension_auth call is needed");
+    expect(out.hint).toContain("no extension_auth_login call is needed");
     expect(out.hint).not.toContain("to mint the project token");
   });
 
@@ -299,8 +299,8 @@ describe("extension_project_create stores the login the create minted (ledger 29
     expect(out.status).toBe("created");
     expect(out.value.login).toEqual({ stored: false, project: PROJECT, reason: "PROJECT_TOKEN_NOT_ISSUED", message: "No token on this grant." });
     expect(readCredentials({ project: PROJECT, api: API })).toBeNull();
-    expect(out.value.nextSteps[0]).toContain("extension_auth (action: login, project: 'acme/ghost-app')");
-    expect(out.hint).toContain("The platform answered no project token on this grant (PROJECT_TOKEN_NOT_ISSUED), so one more approval is needed: extension_auth (action: login, project: 'acme/ghost-app')");
+    expect(out.value.nextSteps[0]).toContain("extension_auth_login (action: login, project: 'acme/ghost-app')");
+    expect(out.hint).toContain("The platform answered no project token on this grant (PROJECT_TOKEN_NOT_ISSUED), so one more approval is needed: extension_auth_login (action: login, project: 'acme/ghost-app')");
   });
 
   it("answers NO_TOKEN_IN_RESPONSE for a platform that says nothing about a token", async () => {

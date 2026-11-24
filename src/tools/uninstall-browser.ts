@@ -69,7 +69,7 @@ export async function uninstallManagedBrowser(args: {
           ? `${absent.join(", ")} ${absent.length === 1 ? "was" : "were"} not installed in the managed cache, so nothing was removed.`
           : status === "uninstalled-partially"
             ? `Removed ${removed.join(", ")}; ${absent.join(", ")} ${absent.length === 1 ? "was" : "were"} not installed.`
-            : 'Use extension_browsers with action: "list" to confirm what remains in the managed cache.',
+            : 'Use extension_browsers_read with action: "list" to confirm what remains in the managed cache.',
     });
   } catch (err) {
     return envelope({

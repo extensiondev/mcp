@@ -69,7 +69,7 @@ export function approvalLandedSentence(input: Pick<ApprovalGateInput, "nextCall"
   const waits = input.nextCall?.waits ? `, and that ${input.nextCall.tool} call with waitSeconds waits for the approval before it runs` : "";
   const approver = typeof approverRole === "string" ? APPROVERS[approverRole] : undefined;
 
-  return `extension_approvals {action: "status", approvalId: "${approvalId}"} reads whether ${approver ? `${approver} has approved it` : "it has been approved"}${waits}.`;
+  return `extension_approvals_read {action: "status", approvalId: "${approvalId}"} reads whether ${approver ? `${approver} has approved it` : "it has been approved"}${waits}.`;
 }
 
 function statusOf(out: string): string {

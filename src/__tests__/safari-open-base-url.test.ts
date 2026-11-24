@@ -132,7 +132,7 @@ describe("extension_eval on Safari's background points to the tool that works th
     const result = JSON.parse(await evalTool.handler({ projectPath: dir, browser: "safari", context: "background", expression: "1" }));
 
     expect(result.error.code).toBe("E_SAFARI_CONTEXT_UNREACHABLE");
-    expect(result.hint).toContain("For storage, call extension_storage (action get or set)");
+    expect(result.hint).toContain("For storage, call extension_storage_read or extension_storage_write");
     expect(result.hint).toContain("extension_open url (the automation window navigates there)");
   });
 

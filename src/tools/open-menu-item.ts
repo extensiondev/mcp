@@ -45,7 +45,7 @@ function replayedAnswer(args: MenuItemArgs, outcome: Extract<MenuReplayOutcome, 
     },
     hint:
       `contextMenus.onClicked was dispatched in the extension's service worker with info.menuItemId ${JSON.stringify(args.menuItemId)} for ${tabWords}, so its listeners ran as if the person had picked that item from the toolbar icon's menu. ${NO_GESTURE} ` +
-      "The id was not checked against the registered items, since Chrome lists none: a listener that matches on another id does nothing. Read what the listener did with extension_logs, extension_storage or extension_dom_snapshot.",
+      "The id was not checked against the registered items, since Chrome lists none: a listener that matches on another id does nothing. Read what the listener did with extension_logs, extension_storage_read or extension_dom_snapshot.",
   });
 }
 

@@ -57,8 +57,8 @@ export function handUploadOf(scope: PackageScope, answered?: unknown): HandUploa
 export function handUploadSentence(upload: HandUpload): string {
   const file = packageFileName(upload.browser);
   const save = upload.sha
-    ? `extension_builds (action: "download", buildId: "${upload.sha}", browser: "${upload.browser}")`
-    : `extension_builds (action: "download", buildId, browser: "${upload.browser}")`;
+    ? `extension_builds_download (action: "download", buildId: "${upload.sha}", browser: "${upload.browser}")`
+    : `extension_builds_download (action: "download", buildId, browser: "${upload.browser}")`;
   const where = upload.sha && upload.address ? `of build ${upload.sha} at ${upload.address}` : upload.sha ? `of build ${upload.sha} from its extension.dev build page` : "of a completed build from its extension.dev build page";
 
   return `Download ${file} ${where}, or let me save it with ${save}; upload it once as the item's first package.`;

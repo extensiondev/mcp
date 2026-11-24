@@ -107,7 +107,7 @@ export function reseedBuildSentence(
   }
 
   if (build.state === "withheld" && build.reason === "already_dispatched") {
-    return `No new build was dispatched: ${withheldBecause(build.reason)}. extension_builds (action: list, project: '${ref}') names that build and ${buildsPageUrl} shows it; there is nothing to upload again.`;
+    return `No new build was dispatched: ${withheldBecause(build.reason)}. extension_builds_read (action: list, project: '${ref}') names that build and ${buildsPageUrl} shows it; there is nothing to upload again.`;
   }
 
   if (build.state === "withheld") {

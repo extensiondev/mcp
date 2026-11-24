@@ -85,7 +85,7 @@ function engineRefusal(browser: string): string {
     "not-supported",
     "E_UNSUPPORTED_BROWSER",
     `Network stubs ride the Chrome DevTools Protocol's Fetch domain, and the engine's ${engine} does not carry request interception yet, so no rule can be installed on a ${browser} session.`,
-    "Run the same project with extension_dev on chrome, chromium or edge, then call extension_network again; on this browser, read the real traffic in its own network panel.",
+    "Run the same project with extension_dev on chrome, chromium or edge, then call this tool again; on this browser, read the real traffic in its own network panel.",
     { browser },
   );
 }
@@ -135,8 +135,8 @@ export async function handler(args: {
       value: { browser, ...rulesValue(session) },
       warnings: [session ? enableWarning(session) : null],
       hint: rules.length
-        ? `${rules.length} rule(s) are live on the ${browser} session: ${rules.slice(0, 5).map(describeRule).join("; ")}. extension_network {action: "requests"} says which requests hit one; {action: "clear"} takes them all down.`
-        : `No network stub is live on the ${browser} session, so every request reaches its real server. extension_network {action: "add", url, status, json} installs one.`,
+        ? `${rules.length} rule(s) are live on the ${browser} session: ${rules.slice(0, 5).map(describeRule).join("; ")}. extension_network_read {action: "requests"} says which requests hit one; {action: "clear"} takes them all down.`
+        : `No network stub is live on the ${browser} session, so every request reaches its real server. extension_network_stub {action: "add", url, status, json} installs one.`,
     });
   }
 
@@ -147,7 +147,7 @@ export async function handler(args: {
         command: schema.name,
         status: "no-rules",
         value: { browser, hit: [], missed: [], ...rulesValue(session) },
-        hint: `Requests are recorded only while a rule set is live, and none is on the ${browser} session. extension_network {action: "add", url, status, json} installs one; the requests made from then on are listed here.`,
+        hint: `Requests are recorded only while a rule set is live, and none is on the ${browser} session. extension_network_stub {action: "add", url, status, json} installs one; the requests made from then on are listed here.`,
       });
     }
 
@@ -197,7 +197,7 @@ export async function handler(args: {
   const parsed = parseStubRule(args, session ? session.rules.map((rule) => rule.id) : []);
 
   if ("problem" in parsed) {
-    return refusal("bad-request", "E_BAD_REQUEST", parsed.problem, 'Call extension_network {action: "add", url, status, json} again with the field fixed.', { browser });
+    return refusal("bad-request", "E_BAD_REQUEST", parsed.problem, 'Call extension_network_stub {action: "add", url, status, json} again with the field fixed.', { browser });
   }
 
   let stubs = session;
@@ -239,9 +239,9 @@ export async function handler(args: {
       rule: ruleRow(parsed.rule),
       ...rulesValue(stubs),
       covers: "requests the extension's pages and background make from now on; requests already made, startup included, were not covered",
-      until: "extension_stop, or extension_network {action: \"clear\"}",
+      until: "extension_stop, or extension_network_stub {action: \"clear\"}",
     },
     warnings: [enableWarning(stubs)],
-    hint: `${describeRule(parsed.rule)} from now on, on every page and background context of the ${browser} session, until extension_stop. A request made before this call was not covered: extension_reload replays the background's startup under the rule, and extension_open reopens a surface so its first fetch meets it. Then read the outcome with extension_dom_snapshot or extension_eval; extension_network {action: "requests"} says which requests hit the rule and which missed it.`,
+    hint: `${describeRule(parsed.rule)} from now on, on every page and background context of the ${browser} session, until extension_stop. A request made before this call was not covered: extension_reload replays the background's startup under the rule, and extension_open reopens a surface so its first fetch meets it. Then read the outcome with extension_dom_snapshot or extension_eval; extension_network_read {action: "requests"} says which requests hit the rule and which missed it.`,
   });
 }

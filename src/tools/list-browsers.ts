@@ -97,13 +97,13 @@ export async function listManagedBrowsers(): Promise<string> {
     ...(incomplete.length
       ? {
           warnings: incomplete.map(
-            (i) => `${i.browser}: ${i.path} holds ${i.sizeFormatted} but no ${i.browser} binary, which is what an interrupted download leaves; it is not installed. Reinstall it with extension_browsers action: "install", or remove it with action: "uninstall".`,
+            (i) => `${i.browser}: ${i.path} holds ${i.sizeFormatted} but no ${i.browser} binary, which is what an interrupted download leaves; it is not installed. Reinstall it with extension_browsers_install action: "install", or remove it with action: "uninstall".`,
           ),
         }
       : {}),
     hint:
       installed.length === 0
-        ? "No managed browsers found. Use extension_browsers with action: \"install\" to install one, or use a system-installed browser."
-        : `${installed.length} managed browser(s) found. Use extension_browsers with action: "detect" for a full system scan.`,
+        ? "No managed browsers found. Use extension_browsers_install with action: \"install\" to install one, or use a system-installed browser."
+        : `${installed.length} managed browser(s) found. Use extension_browsers_read with action: "detect" for a full system scan.`,
   });
 }

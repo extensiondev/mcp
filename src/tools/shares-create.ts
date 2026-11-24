@@ -91,7 +91,7 @@ export async function createShareFromBuild(args: {
     return failure(
       "bad-request",
       "SharesInputError",
-      'action:"create" needs a buildId, the build to share. extension_builds (action: "list") lists the recent builds. Nothing was uploaded.',
+      'action:"create" needs a buildId, the build to share. extension_builds_read (action: "list") lists the recent builds. Nothing was uploaded.',
       value,
       "E_BAD_REQUEST",
     );
@@ -184,7 +184,7 @@ export async function createShareFromBuild(args: {
         files: unpacked.files,
         allowance: spendNarration({ what: "This share upload", body: uploaded.body }),
       },
-      hint: `Anyone with previewUrl can open build ${buildId} for ${browser} in the emulator, with no install or sign-in, and download it as a zip from zipUrl, so the link hands over the built code. It stays live until expiresAt. Run extension_shares (action: "list") to find it again, or action:"revoke" with its artifactId to pull it back.${share.zipUrl ? ` ${ZIP_URL_REDIRECT_NOTE}` : ""}`,
+      hint: `Anyone with previewUrl can open build ${buildId} for ${browser} in the emulator, with no install or sign-in, and download it as a zip from zipUrl, so the link hands over the built code. It stays live until expiresAt. Run extension_shares_read (action: "list") to find it again, or action:"revoke" with its artifactId to pull it back.${share.zipUrl ? ` ${ZIP_URL_REDIRECT_NOTE}` : ""}`,
     });
   } finally {
     local.removeStagingDir(distDir);

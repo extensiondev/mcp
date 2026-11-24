@@ -288,7 +288,7 @@ function exchangeRefusal(command: string, api: string, project: string | null, r
   }
 
   if (refused.status === 401 || refused.status === 403) {
-    const login = `extension_auth (action: login${project ? `, project: "${project}"` : ""})`;
+    const login = `extension_auth_login (action: login${project ? `, project: "${project}"` : ""})`;
 
     return refusal(command, "auth-refused", "E_AUTH_DENIED", `extension.dev refused to exchange the stored login${project ? ` for ${project}` : ""} for a forward credential${said}.`, `Run ${login} on this machine to sign in again, then call ${command} again.`, { hosted: true });
   }

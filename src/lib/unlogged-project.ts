@@ -25,7 +25,7 @@ function text(value: unknown): string {
 }
 
 function loginStep(ref: string): string {
-  return `extension_auth (action: login, project: '${ref}')`;
+  return `extension_auth_login (action: login, project: '${ref}')`;
 }
 
 function clockOf(iso: string): string {

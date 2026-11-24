@@ -27,7 +27,7 @@ export interface ProductionLaunchEvidence {
 }
 
 export const PRODUCTION_SESSION_LIMITS =
-  "a production session has no hot reload and carries no dev bridge, so extension_logs has no console stream for it and the bridge verbs (extension_storage, extension_reload, extension_open with a surface, extension_dom_snapshot by tab and extension_eval) need allowControl: true";
+  "a production session has no hot reload and carries no dev bridge, so extension_logs has no console stream for it and the bridge verbs (extension_storage_read, extension_storage_write, extension_reload, extension_open with a surface, extension_dom_snapshot by tab and extension_eval) need allowControl: true";
 
 export const CONTROLLED_SESSION_LIMITS =
   "a production session has no hot reload and extension_logs has no console stream for it; this session carries the control channel, and its background connecting to it (the contract's executorAttachedAt, which extension_wait reads) proves the load as well";

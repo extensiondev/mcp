@@ -133,7 +133,7 @@ function pending(
   const complete = String(start.verificationUriComplete || "").trim();
   const hasCompleteLink =
     complete.length > 0 && complete !== start.verificationUri;
-  const resume = resumeWaitSentence("extension_auth (action: login)", start.expiresAt, " and the same project");
+  const resume = resumeWaitSentence("extension_auth_login (action: login)", start.expiresAt, " and the same project");
   const message = hasCompleteLink
     ? `Open value.verificationUriComplete and approve (value.userCode is pre-filled; a page that asks for it is value.verificationUri). ${resume}`
     : `Open value.verificationUri and enter value.userCode. ${resume}`;
@@ -155,7 +155,7 @@ function pending(
     hint: message,
     warnings: [
       ...(presence.warning ? [presence.warning] : []),
-      ...(asked.waiting ? [firstCallWaitWarning("extension_auth (action: login)", asked.bound)] : []),
+      ...(asked.waiting ? [firstCallWaitWarning("extension_auth_login (action: login)", asked.bound)] : []),
       pendingTtlNote(start.lifetime),
     ],
   });
@@ -163,8 +163,8 @@ function pending(
 
 function resumePending(deviceCode: string, verificationUri: string, wait: DeviceWait, expiresAt: string | null): string {
   const message = wait.waiting
-    ? `${waitRanOutSentence({ tool: "extension_auth (action: login)", wait, expiresAt, extra: " and the same project" })} The link and code from the first answer are still the ones to approve at value.verificationUri.`
-    : `Still waiting for authorization. The one-click link and code from the previous response are still valid: open that link (or enter the code at value.verificationUri). ${resumeWaitSentence("extension_auth (action: login)", expiresAt, " and the same project")}`;
+    ? `${waitRanOutSentence({ tool: "extension_auth_login (action: login)", wait, expiresAt, extra: " and the same project" })} The link and code from the first answer are still the ones to approve at value.verificationUri.`
+    : `Still waiting for authorization. The one-click link and code from the previous response are still valid: open that link (or enter the code at value.verificationUri). ${resumeWaitSentence("extension_auth_login (action: login)", expiresAt, " and the same project")}`;
 
   return envelope({
     ok: true,
@@ -211,7 +211,7 @@ function movedProjectRefusal(
         projectId: String(body.projectId ?? "") || null,
         movedTo: now,
       },
-      hint: `The project ${ctx.project} is now ${now}; every login already minted for it keeps working. Run extension_auth (action: "login", project: "${now}") and pass project: '${now}' from now on.`,
+      hint: `The project ${ctx.project} is now ${now}; every login already minted for it keeps working. Run extension_auth_login (action: "login", project: "${now}") and pass project: '${now}' from now on.`,
       ...(followed.length && move ? { warnings: [followSentence(move)] } : {}),
     },
   );
@@ -266,7 +266,7 @@ function pollRefusal(
   if (poll.reason === "expired") {
     return fail(
       "LoginExpired",
-      expiredSentence("extension_auth (action: login)", "The device code expired, and an approval given after that is dropped.", " and the same project"),
+      expiredSentence("extension_auth_login (action: login)", "The device code expired, and an approval given after that is dropped.", " and the same project"),
       "login-expired",
       "E_AUTH_EXPIRED",
     );
@@ -443,10 +443,10 @@ function batchPending(args: {
   const hasCompleteLink =
     complete.length > 0 && complete !== args.verificationUri;
   const again =
-    "then call extension_auth (action: login) again with this deviceCode and the same projects";
+    "then call extension_auth_login (action: login) again with this deviceCode and the same projects";
   const hint = !args.userCode
     ? args.wait.waiting
-      ? `${waitRanOutSentence({ tool: "extension_auth (action: login)", wait: args.wait, expiresAt: args.expiresAt, extra: " and the same projects" })} The link and code from the first answer are still the ones to approve at value.verificationUri.`
+      ? `${waitRanOutSentence({ tool: "extension_auth_login (action: login)", wait: args.wait, expiresAt: args.expiresAt, extra: " and the same projects" })} The link and code from the first answer are still the ones to approve at value.verificationUri.`
       : `Still waiting for authorization. The link and code from the previous response are still valid: approve at value.verificationUri, ${again}.`
     : hasCompleteLink
       ? `Open value.verificationUriComplete and approve (value.userCode is pre-filled; a page that asks for it is value.verificationUri). The page lists all ${args.projects.length} projects this one approval signs in to; ${again}.`
@@ -480,7 +480,7 @@ function batchRefusal(
   if (poll.reason === "expired") {
     return fail(
       "LoginExpired",
-      "The device code expired or was already spent. Run extension_auth (action: login) again with the same projects to restart.",
+      "The device code expired or was already spent. Run extension_auth_login (action: login) again with the same projects to restart.",
       "login-expired",
       "E_AUTH_EXPIRED",
     );
@@ -503,8 +503,8 @@ function batchRefusal(
         value: { code, missingProjects: missing, projects },
         hint: `A batch login is all or nothing and covers only projects that already exist. ${
           missing.length && projects !== WORKSPACE_WILDCARD
-            ? `Drop or fix ${missing.join(", ")} and run extension_auth (action: login) again with the rest`
-            : "Check each name against the console and run extension_auth (action: login) again"
+            ? `Drop or fix ${missing.join(", ")} and run extension_auth_login (action: login) again with the rest`
+            : "Check each name against the console and run extension_auth_login (action: login) again"
         }; create missing projects with extension_project_create (same api) or at ${consoleBase(apiBase)}.`,
       },
     );
@@ -537,7 +537,7 @@ function batchRefusal(
     "E_AUTH_FAILED",
     {
       value: { ...(code ? { code } : {}), projects },
-      hint: "No token from this batch was stored. Run extension_auth (action: login) again with the same projects; a batch that was refused or failed midway is closed on the platform and needs a fresh approval.",
+      hint: "No token from this batch was stored. Run extension_auth_login (action: login) again with the same projects; a batch that was refused or failed midway is closed on the platform and needs a fresh approval.",
     },
   );
 }
@@ -591,7 +591,7 @@ export async function loginToProjects(args: {
       "E_PLATFORM",
       {
         value: { projects },
-        hint: "Sign in to each project with its own extension_auth (action: login, project) call.",
+        hint: "Sign in to each project with its own extension_auth_login (action: login, project) call.",
       },
     );
   }
@@ -630,7 +630,7 @@ export async function loginToProjects(args: {
         "login-failed",
         "E_AUTH_FAILED",
         {
-          hint: "No device code was issued. Sign in to each project with its own extension_auth (action: login, project) call, or fix what the platform refused and try the list again.",
+          hint: "No device code was issued. Sign in to each project with its own extension_auth_login (action: login, project) call, or fix what the platform refused and try the list again.",
         },
       );
     }
@@ -698,7 +698,7 @@ export async function loginToProjects(args: {
     command: "extension_auth",
     status: "logged-in",
     value: { workspaceSlug: parsed.batch.workspace, logins },
-    hint: `Logged in to ${logins.length} project${logins.length === 1 ? "" : "s"} in ${parsed.batch.workspace}: ${logins.map((login) => login.projectSlug).join(", ")}. Each has its own stored token; token-scoped tools take \`project\` to pick one, and extension_auth (action: status) lists them. The default login was left as it was unless none existed. Every token ${endsSentence(logins[0]?.expiresAt)}, so one batch login renews them together.`,
+    hint: `Logged in to ${logins.length} project${logins.length === 1 ? "" : "s"} in ${parsed.batch.workspace}: ${logins.map((login) => login.projectSlug).join(", ")}. Each has its own stored token; token-scoped tools take \`project\` to pick one, and extension_auth_read (action: status) lists them. The default login was left as it was unless none existed. Every token ${endsSentence(logins[0]?.expiresAt)}, so one batch login renews them together.`,
     warnings: [tokenTtlNote(undefined, undefined, apiBase)],
   });
 }
@@ -716,11 +716,11 @@ function workspacePending(args: {
   const complete = String(args.verificationUriComplete || "").trim();
   const hasCompleteLink =
     complete.length > 0 && complete !== args.verificationUri;
-  const again = `then call extension_auth (action: "login", workspace: "${args.workspace}", projects: "*") again with this deviceCode`;
+  const again = `then call extension_auth_login (action: "login", workspace: "${args.workspace}", projects: "*") again with this deviceCode`;
   const shown = `The page lists every project ${args.workspace} has right now, and approving signs in to each of them (at most 20)`;
   const hint = !args.userCode
     ? args.wait.waiting
-      ? `${waitRanOutSentence({ tool: "extension_auth (action: login)", wait: args.wait, expiresAt: args.expiresAt, extra: `, workspace: "${args.workspace}" and projects: "*"` })} The link and code from the first answer are still the ones to approve at value.verificationUri.`
+      ? `${waitRanOutSentence({ tool: "extension_auth_login (action: login)", wait: args.wait, expiresAt: args.expiresAt, extra: `, workspace: "${args.workspace}" and projects: "*"` })} The link and code from the first answer are still the ones to approve at value.verificationUri.`
       : `Still waiting for authorization. The link and code from the previous response are still valid: approve at value.verificationUri, ${again}.`
     : hasCompleteLink
       ? `Open value.verificationUriComplete and approve (value.userCode is pre-filled; a page that asks for it is value.verificationUri). ${shown}; ${again}.`
@@ -791,8 +791,8 @@ export async function loginToWorkspace(args: {
       {
         value: { workspace, projects: WORKSPACE_WILDCARD },
         hint: config.batch
-          ? `Name the projects instead: extension_auth (action: "login", projects: ["${workspace}/<project>", ...]), up to ${config.batch.loginProjectsPerApproval} per approval.`
-          : "Sign in to each project with its own extension_auth (action: login, project) call.",
+          ? `Name the projects instead: extension_auth_login (action: "login", projects: ["${workspace}/<project>", ...]), up to ${config.batch.loginProjectsPerApproval} per approval.`
+          : "Sign in to each project with its own extension_auth_login (action: login, project) call.",
       },
     );
   }
@@ -889,7 +889,7 @@ export async function loginToWorkspace(args: {
         login: { kind: "member", project: memberLabel(member), projects: projects.map((project) => `${workspace}/${project}`), expiresAt },
         logins: [{ project: memberLabel(member), kind: "member", workspaceSlug: workspace, projects: projects.map((project) => `${workspace}/${project}`), expiresAt }],
       },
-      hint: `Logged in to ${workspace} as a member: one stored login reads its ${projects.length} project${projects.length === 1 ? "" : "s"} (${projects.join(", ")}), each call naming the project it is for with \`project\` (or projectPath), and extension_workspace reads the workspace with it. A project created later is not covered: run this login again to add it. The login ${endsSentence(expiresAt)}.`,
+      hint: `Logged in to ${workspace} as a member: one stored login reads its ${projects.length} project${projects.length === 1 ? "" : "s"} (${projects.join(", ")}), each call naming the project it is for with \`project\` (or projectPath), and extension_workspace_read reads the workspace with it. A project created later is not covered: run this login again to add it. The login ${endsSentence(expiresAt)}.`,
       warnings: [tokenTtlNote(undefined, undefined, apiBase)],
     });
   }
@@ -908,7 +908,7 @@ export async function loginToWorkspace(args: {
     command: "extension_auth",
     status: "logged-in",
     value: { workspaceSlug: workspace, projects: WORKSPACE_WILDCARD, logins },
-    hint: `Logged in to all ${logins.length} project${logins.length === 1 ? "" : "s"} of ${workspace} the approver saw: ${logins.map((login) => login.projectSlug).join(", ")}. Each has its own stored token; token-scoped tools take \`project\` to pick one, and extension_workspace reads the workspace with any of them. A project created later is not covered: run this login again to add it. Every token ${endsSentence(logins[0]?.expiresAt)}.`,
+    hint: `Logged in to all ${logins.length} project${logins.length === 1 ? "" : "s"} of ${workspace} the approver saw: ${logins.map((login) => login.projectSlug).join(", ")}. Each has its own stored token; token-scoped tools take \`project\` to pick one, and extension_workspace_read reads the workspace with any of them. A project created later is not covered: run this login again to add it. Every token ${endsSentence(logins[0]?.expiresAt)}.`,
     warnings: [tokenTtlNote(undefined, undefined, apiBase)],
   });
 }

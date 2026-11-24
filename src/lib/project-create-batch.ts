@@ -480,7 +480,7 @@ const GRANT_LEVEL_STOP_CODES = new Set([
 
 function refusalHint(code: string, ref: string, retryAfterSeconds?: number, grantSecondsLeft?: number): string | undefined {
   if (code === "PROJECT_EXISTS") {
-    return `${ref} already exists, so there was nothing to create and no token came back. Sign in to it with extension_auth (action: login).`;
+    return `${ref} already exists, so there was nothing to create and no token came back. Sign in to it with extension_auth_login (action: login).`;
   }
 
   if (code === "RATE_LIMITED") {
@@ -520,7 +520,7 @@ async function persist(session: Session, deviceCode: string, inFlight?: BatchEnt
       project: inFlight.ref,
       status: "unconfirmed",
       message: `The call that sent the create request for ${inFlight.ref} ended before its answer was read.`,
-      hint: `Whether ${inFlight.ref} now exists is unknown, so it is not sent again. Check the console at ${consoleBase(session.apiBase)}; if it exists, sign in with extension_auth (action: login).`,
+      hint: `Whether ${inFlight.ref} now exists is unknown, so it is not sent again. Check the console at ${consoleBase(session.apiBase)}; if it exists, sign in with extension_auth_login (action: login).`,
     });
   }
 
@@ -627,7 +627,7 @@ async function createOne(local: BatchCreateLocal, session: Session, entry: Batch
         project: entry.ref,
         status: "unconfirmed",
         message,
-        hint: `The request for ${entry.ref} left this machine and no answer came back, so the project may or may not exist. It is not retried, because a second create racing the first would be two builds claiming one name. Check the console at ${consoleBase(session.apiBase)}; if it exists, sign in with extension_auth (action: login).`,
+        hint: `The request for ${entry.ref} left this machine and no answer came back, so the project may or may not exist. It is not retried, because a second create racing the first would be two builds claiming one name. Check the console at ${consoleBase(session.apiBase)}; if it exists, sign in with extension_auth_login (action: login).`,
       },
       halt: true,
       ...(session.unanswered >= 2
@@ -644,7 +644,7 @@ async function createOne(local: BatchCreateLocal, session: Session, entry: Batch
         project: entry.ref,
         status: "unconfirmed",
         message,
-        hint: `Whether ${entry.ref} now exists is unknown. It is not retried, because a second create racing the first would be two builds claiming one name. Check the console at ${consoleBase(session.apiBase)}; if it exists, sign in with extension_auth (action: login).`,
+        hint: `Whether ${entry.ref} now exists is unknown. It is not retried, because a second create racing the first would be two builds claiming one name. Check the console at ${consoleBase(session.apiBase)}; if it exists, sign in with extension_auth_login (action: login).`,
       },
       halt: true,
       ...(session.unanswered >= 2
@@ -764,7 +764,7 @@ async function createOne(local: BatchCreateLocal, session: Session, entry: Batch
           firstBuild,
           ...installed,
           tokenCode: "TOKEN_NOT_STORED",
-          hint: `${entry.ref} was created, but its token could not be stored on this machine and was discarded: ${storeFailure} Sign in with extension_auth (action: login) once that is fixed.`,
+          hint: `${entry.ref} was created, but its token could not be stored on this machine and was discarded: ${storeFailure} Sign in with extension_auth_login (action: login) once that is fixed.`,
         },
       };
     }
@@ -799,8 +799,8 @@ async function createOne(local: BatchCreateLocal, session: Session, entry: Batch
       ...installed,
       tokenCode,
       hint: scoped
-        ? `${entry.ref} was created but the platform issued no token for it. Sign in with extension_auth (action: login).`
-        : `The platform registered this project as ${finalWorkspace}/${finalProject}, not the ${entry.ref} that was asked for, so no login was stored. Sign in to the name it has with extension_auth (action: login).`,
+        ? `${entry.ref} was created but the platform issued no token for it. Sign in with extension_auth_login (action: login).`
+        : `The platform registered this project as ${finalWorkspace}/${finalProject}, not the ${entry.ref} that was asked for, so no login was stored. Sign in to the name it has with extension_auth_login (action: login).`,
     },
   };
 }
@@ -833,8 +833,8 @@ function firstBuildReads(built: Row[]): string[] {
 
   return [...bySha].map(([sha, projects]) =>
     sha
-      ? `extension_builds (action: get, buildId: '${sha}') for each of ${quoteList(projects)} until it reads green`
-      : `extension_builds (action: list) for each of ${quoteList(projects)} until its first build reads green`,
+      ? `extension_builds_read (action: get, buildId: '${sha}') for each of ${quoteList(projects)} until it reads green`
+      : `extension_builds_read (action: list) for each of ${quoteList(projects)} until its first build reads green`,
   );
 }
 
@@ -910,7 +910,7 @@ function finalEnvelope(session: Session): string {
 
   const nextSteps = [
     ...(needLogin.length
-      ? [`extension_auth (action: login, projects: ${quoteList(needLogin)})`]
+      ? [`extension_auth_login (action: login, projects: ${quoteList(needLogin)})`]
       : []),
     ...(retry.length
       ? [
@@ -1299,7 +1299,7 @@ export async function createProjectBatch(args: BatchCreateArgs, local: BatchCrea
         "create-expired",
         "E_AUTH_EXPIRED",
         {
-          hint: `Check which of ${quoteList(refs)} exist in the console at ${consoleBase(apiBase)}. Sign in to those with extension_auth (action: login, projects), and start a new extension_project_create call naming only the ones that do not exist yet.`,
+          hint: `Check which of ${quoteList(refs)} exist in the console at ${consoleBase(apiBase)}. Sign in to those with extension_auth_login (action: login, projects), and start a new extension_project_create call naming only the ones that do not exist yet.`,
         },
       );
     }
@@ -1335,7 +1335,7 @@ export async function createProjectBatch(args: BatchCreateArgs, local: BatchCrea
       "create-failed",
       "E_AUTH_FAILED",
       {
-        hint: "If one of these projects already exists, a create list is refused: sign in to existing projects with extension_auth (action: login, projects) and list only new ones here.",
+        hint: "If one of these projects already exists, a create list is refused: sign in to existing projects with extension_auth_login (action: login, projects) and list only new ones here.",
       },
     );
   }

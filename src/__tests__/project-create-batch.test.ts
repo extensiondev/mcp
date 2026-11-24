@@ -727,7 +727,7 @@ describe("extension_project_create with projects: every project keeps its own an
     });
 
     expect(out.value.nextSteps[0]).toBe(
-      "extension_auth (action: login, projects: ['acme/beta'])",
+      "extension_auth_login (action: login, projects: ['acme/beta'])",
     );
 
     expect(out.warnings[0]).toContain("acme/beta");
@@ -761,7 +761,7 @@ describe("extension_project_create with projects: every project keeps its own an
     });
 
     expect(out.value.nextSteps[0]).toBe(
-      "extension_auth (action: login, projects: ['acme/alpha'])",
+      "extension_auth_login (action: login, projects: ['acme/alpha'])",
     );
 
     expect(out.error.message).toContain("2 of 3 projects were created");
@@ -1093,7 +1093,7 @@ describe("extension_project_create with projects: the grant and the list", () =>
     expect(out.ok).toBe(false);
     expect(out.status).toBe("create-expired");
     expect(out.error.message).toContain("the projects it created still exist");
-    expect(out.hint).toContain("extension_auth (action: login, projects)");
+    expect(out.hint).toContain("extension_auth_login (action: login, projects)");
     expect(h.to("/api/cli/projects/create")).toHaveLength(1);
   });
 
@@ -1217,7 +1217,7 @@ describe("extension_project_create with projects: the grant and the list", () =>
 
     expect("project" in h.to("/api/cli/projects/create")[0]!.body).toBe(false);
     expect(listCredentials()).toHaveLength(0);
-    expect(out.value.nextSteps[0]).toContain("extension_auth (action: login");
+    expect(out.value.nextSteps[0]).toContain("extension_auth_login (action: login");
   });
 });
 
@@ -1286,7 +1286,7 @@ describe("extension_project_create with projects: a first build is counted, neve
     const out = await run({ projects: THREE, deviceCode: "dev-code" });
 
     expect(out.value.nextSteps).toEqual([
-      `extension_builds (action: get, buildId: '${SHA}') for each of ['acme/alpha', 'acme/beta'] until it reads green`,
+      `extension_builds_read (action: get, buildId: '${SHA}') for each of ['acme/alpha', 'acme/beta'] until it reads green`,
     ]);
 
     expect(JSON.stringify(out.value.nextSteps)).not.toContain("extension_publish");
@@ -1295,7 +1295,7 @@ describe("extension_project_create with projects: a first build is counted, neve
     const plain = await run({ projects: THREE, deviceCode: "dev-code" });
 
     expect(plain.value.nextSteps).toEqual([
-      "extension_builds (action: list) for each of ['acme/alpha', 'acme/beta', 'acme/gamma'] until its first build reads green",
+      "extension_builds_read (action: list) for each of ['acme/alpha', 'acme/beta', 'acme/gamma'] until its first build reads green",
     ]);
 
     expect(plain.status).toBe("created");

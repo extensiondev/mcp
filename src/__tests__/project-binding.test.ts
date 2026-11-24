@@ -223,9 +223,9 @@ describe("ledger 940: an expired login is no choice", () => {
     expect(out.ok).toBe(false);
     expect(out.error.code).toBe("E_AUTH_EXPIRED");
     expect(out.status).toBe("not-signed-in");
-    expect(out.value.login).toMatchObject({ project: "cezaraugusto/leon", sent: false, renew: { tool: "extension_auth", args: { action: "login", project: "cezaraugusto/leon" } } });
+    expect(out.value.login).toMatchObject({ project: "cezaraugusto/leon", sent: false, renew: { tool: "extension_auth_login", args: { action: "login", project: "cezaraugusto/leon" } } });
     expect(out.error.message).toContain("The login for cezaraugusto/leon expired at");
-    expect(out.error.hint).toContain('Sign in again with extension_auth {action: "login", project: "cezaraugusto/leon"}');
+    expect(out.error.hint).toContain('Sign in again with extension_auth_login {action: "login", project: "cezaraugusto/leon"}');
     expect(lane.exchanged()).toEqual([]);
   });
 
@@ -369,7 +369,7 @@ describe("ledger 252: with several logins stored, an unpinned platform call neve
     expect(out.error.code).toBe("E_NO_LOGIN_FOR_PROJECT");
     expect(out.error.message).toContain("cezaraugusto/rebeccat or cezaraugusto/pii-shield");
     expect(out.error.message).toContain("The default login here is cezaraugusto/leon, and it was not used in its place.");
-    expect(out.hint).toContain("extension_auth (action: login, project: 'cezaraugusto/rebeccat')");
+    expect(out.hint).toContain("extension_auth_login (action: login, project: 'cezaraugusto/rebeccat')");
     expect(out.hint).not.toContain("'cezaraugusto/leon'");
     expect(out.value.logins).toBeUndefined();
     expect(lane.sentAnything()).toBe(false);
@@ -473,7 +473,7 @@ describe("ledger 252: with several logins stored, an unpinned platform call neve
     expect(out.error.code).toBe("E_NO_LOGIN_FOR_PROJECT");
     expect(out.error.message).toContain("cezaraugusto/visionario");
     expect(out.error.message).not.toContain("cezaraugusto/visionario or cezaraugusto/visionario");
-    expect(out.hint).toContain("extension_auth (action: login, project: 'cezaraugusto/visionario')");
+    expect(out.hint).toContain("extension_auth_login (action: login, project: 'cezaraugusto/visionario')");
     expect(JSON.stringify(out)).not.toContain("hands-free");
     expect(lane.sentAnything()).toBe(false);
   });
@@ -835,7 +835,7 @@ describe("the guided store connect opens the MCP's own browser with extension.de
     expect(out.value.signedIn).toBe(true);
     expect(JSON.stringify(out)).not.toContain("one-time-secret-code");
     expect(JSON.stringify(out)).not.toContain("auth/handoff");
-    expect(out.hint).toContain(`extension_workspace {action:"info", workspace:"cezaraugusto", include:["storeAccounts"]}`);
+    expect(out.hint).toContain(`extension_workspace_read {action:"info", workspace:"cezaraugusto", include:["storeAccounts"]}`);
   });
 
   it("launches a visible window in a headless environment, keeping every other browser flag", async () => {

@@ -161,7 +161,7 @@ export async function openProjectApi(args: {
       reason: "no-login",
       message: args.project
         ? noStoredLoginHint(args.project)
-        : credential.note ?? "No login for this server. Run extension_auth (action: login), or set EXTENSION_DEV_TOKEN.",
+        : credential.note ?? "No login for this server. Run extension_auth_login (action: login), or set EXTENSION_DEV_TOKEN.",
     };
   }
 
@@ -196,7 +196,7 @@ export async function openProjectApi(args: {
       return {
         ok: false,
         reason: "refused",
-        message: `${base} refused this login: it is expired, revoked, or minted on another server. Run extension_auth (action: login) again.`,
+        message: `${base} refused this login: it is expired, revoked, or minted on another server. Run extension_auth_login (action: login) again.`,
       };
     }
 
@@ -308,7 +308,7 @@ function projectMovedHint(
 function projectNotFoundHint(context: { workspace?: string; project?: string } | undefined): string {
   const workspace = context?.workspace || String(context?.project ?? "").split("/")[0] || "<workspace>";
 
-  return `A project that answers PROJECT_NOT_FOUND to its own login was most likely renamed in the console, which moved its slug; this platform cannot say where. List the workspace with extension_workspace (action: "projects", workspace: "${workspace}") through another login of that workspace to find the new slug, then log in to it with extension_auth (action: "login", project: "${workspace}/<new-slug>").`;
+  return `A project that answers PROJECT_NOT_FOUND to its own login was most likely renamed in the console, which moved its slug; this platform cannot say where. List the workspace with extension_workspace_read (action: "projects", workspace: "${workspace}") through another login of that workspace to find the new slug, then log in to it with extension_auth_login (action: "login", project: "${workspace}/<new-slug>").`;
 }
 
 function retryAfterOf(res: Response, body: unknown): number | undefined {

@@ -167,7 +167,7 @@ export function profileReusedAt(
 export function reusedProfileNote(profilePath?: unknown): string {
   const where = typeof profilePath === "string" && profilePath.trim() ? ` (${profilePath})` : "";
 
-  return `Not a fresh start: this session runs on a browser profile that already held state from an earlier run${where}. The extension's chrome.storage, the permissions it was granted and any restored tabs all come from that earlier run, so read storage with extension_storage before acting on a toggle, a setting or a first-run assumption (clicking a toggle that is already on turns it off). extension_inspect with no target ranks whatever is open and can land on a restored tab; it flags this session as profileReused for that reason. Pass url, or open the surface you mean with extension_open, before reading anything.`;
+  return `Not a fresh start: this session runs on a browser profile that already held state from an earlier run${where}. The extension's chrome.storage, the permissions it was granted and any restored tabs all come from that earlier run, so read storage with extension_storage_read before acting on a toggle, a setting or a first-run assumption (clicking a toggle that is already on turns it off). extension_inspect with no target ranks whatever is open and can land on a restored tab; it flags this session as profileReused for that reason. Pass url, or open the surface you mean with extension_open, before reading anything.`;
 }
 
 export function sessionProfileReused(

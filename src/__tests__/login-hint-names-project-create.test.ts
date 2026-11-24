@@ -83,8 +83,8 @@ describe("a missing login names extension_project_create, since an extension wit
 
     expect(result.status).toBe("auth-required");
     expect(result.error.message).toContain("No stored login for acme/beta");
-    expect(result.error.message).toContain('extension_auth (action: login, project: "acme/beta")');
-    expect(result.hint).toBe('Run extension_auth (action: login, project: "acme/beta").');
+    expect(result.error.message).toContain('extension_auth_login (action: login, project: "acme/beta")');
+    expect(result.hint).toBe('Run extension_auth_login (action: login, project: "acme/beta").');
     expect(fetchCalls).toEqual([]);
   });
 

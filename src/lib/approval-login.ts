@@ -91,7 +91,7 @@ export function bindApprovalLogin(
         name: "ApprovalLoginGone",
         message: `Approval ${approvalId} was requested for ${ref}${mintedWords(minted)}, and the login that requested this approval is no longer stored; sign in to ${ref} again and request a new approval. The platform was not asked and nothing was executed.`,
       },
-      hint: `Run extension_auth (action: login, project: "${ref}"), then call this tool again with the same arguments and no approvalId.`,
+      hint: `Run extension_auth_login (action: login, project: "${ref}"), then call this tool again with the same arguments and no approvalId.`,
     }),
   };
 }
@@ -150,8 +150,8 @@ export function loginRefusedBeforeApproval(
         message: `The platform did not recognize ${who} (${status}): ${reason || "no reason given"}. No approval was requested and nothing was executed.`,
       },
       hint: ref
-        ? `Call again once; if the platform still refuses the login, run extension_auth (action: login, project: "${ref}") and call again.`
-        : "Call again once; if the platform still refuses the login, run extension_auth (action: login) and call again.",
+        ? `Call again once; if the platform still refuses the login, run extension_auth_login (action: login, project: "${ref}") and call again.`
+        : "Call again once; if the platform still refuses the login, run extension_auth_login (action: login) and call again.",
     }),
   };
 }
@@ -187,7 +187,7 @@ export function loginRefusedOnApproval(args: {
         name: "ApprovalLoginRefused",
         message: `The platform did not recognize the login that requested approval ${approvalId}${ref ? ` for ${ref}` : ""} (${args.status}): ${args.reason || "no reason given"}. The approval itself was not consulted and nothing was executed; it stays as the owner left it${kept}.`,
       },
-      hint: `Call again with the same arguments and approvalId ${approvalId} once the platform recognizes the login; if it keeps refusing it, run extension_auth (action: login${ref ? `, project: "${ref}"` : ""}) and request a fresh approval by calling with no approvalId.`,
+      hint: `Call again with the same arguments and approvalId ${approvalId} once the platform recognizes the login; if it keeps refusing it, run extension_auth_login (action: login${ref ? `, project: "${ref}"` : ""}) and request a fresh approval by calling with no approvalId.`,
     }),
   };
 }

@@ -90,7 +90,7 @@ function backgroundAsleepHint(browser: string): string {
     ? ", or call extension_reload, which starts a fresh background"
     : "";
 
-  return `Wake it with an event it listens to: load or reload a page its content script matches (extension_open with that url), click its toolbar button, or send it a message from a page${reload}. When it connects, ready.json stamps the executor attached again and extension_wait answers ready; until then extension_storage and extension_eval context "background" have nothing to reach, while extension_logs keeps reading the session log.`;
+  return `Wake it with an event it listens to: load or reload a page its content script matches (extension_open with that url), click its toolbar button, or send it a message from a page${reload}. When it connects, ready.json stamps the executor attached again and extension_wait answers ready; until then extension_storage_read, extension_storage_write and extension_eval context "background" have nothing to reach, while extension_logs keeps reading the session log.`;
 }
 
 export function detachedVerdictFrame(

@@ -48,7 +48,8 @@ export interface ClientsDocsJson {
 }
 
 export function renderToolsJson(tools: ToolSchemaLike[], version: string): ToolsDocsJson {
-  const entries = [...tools]
+  const entries = tools
+    .filter((tool) => !TOOL_POLICY[tool.name]?.aliasOf)
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((tool): ToolDocsEntry => {
       const meta = TOOL_DOCS[tool.name];

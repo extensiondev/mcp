@@ -132,7 +132,7 @@ export async function download(args: DownloadArgs, local: DownloadLocal): Promis
           ...(fetched.code ? { platformCode: fetched.code } : {}),
           message: `Build ${sha} has no ${describe(browser)} on the platform: ${fetched.message}`,
         },
-        hint: `Read extension_builds (action: "get", buildId: "${sha}") for the browsers this build produced. The build page is ${buildPage}.`,
+        hint: `Read extension_builds_read (action: "get", buildId: "${sha}") for the browsers this build produced. The build page is ${buildPage}.`,
       });
     }
 

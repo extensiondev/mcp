@@ -157,7 +157,7 @@ export function persistTokenResponse(args: {
 
   if (!workspaceSlug || !projectSlug) {
     throw new Error(
-      `Login for ${args.project} returned a token without a workspace/project scope; nothing was stored. Run extension_auth (action: login) again.`,
+      `Login for ${args.project} returned a token without a workspace/project scope; nothing was stored. Run extension_auth_login (action: login) again.`,
     );
   }
 
@@ -168,7 +168,7 @@ export function persistTokenResponse(args: {
 
   if (!matches) {
     throw new Error(
-      `Login returned a token scoped to ${workspaceSlug}/${projectSlug}, not the requested ${args.project}; nothing was stored. Run extension_auth (action: login) again with the intended project.`,
+      `Login returned a token scoped to ${workspaceSlug}/${projectSlug}, not the requested ${args.project}; nothing was stored. Run extension_auth_login (action: login) again with the intended project.`,
     );
   }
 
@@ -196,7 +196,7 @@ function readTokenEntries(
 
   if (!raw) {
     throw new Error(
-      "The platform answered this batch login with a single token and no per-project list, so nothing was stored. It may predate batch login: sign in to each project with its own extension_auth (action: login, project) call.",
+      "The platform answered this batch login with a single token and no per-project list, so nothing was stored. It may predate batch login: sign in to each project with its own extension_auth_login (action: login, project) call.",
     );
   }
 
@@ -208,7 +208,7 @@ function readTokenEntries(
 
     if (!token || !workspaceSlug || !projectSlug) {
       throw new Error(
-        "The batch login returned an entry without a token or a workspace/project scope; nothing was stored. Run extension_auth (action: login) again.",
+        "The batch login returned an entry without a token or a workspace/project scope; nothing was stored. Run extension_auth_login (action: login) again.",
       );
     }
 
@@ -254,7 +254,7 @@ function readMemberLogin(apiBase: string, data: Record<string, unknown>): Stored
 
   if (!token || !workspaceSlug || memberProjects(member).length === 0) {
     throw new Error(
-      "The platform answered this login with a member token that names no workspace or no project; nothing was stored. Run extension_auth (action: login) again.",
+      "The platform answered this login with a member token that names no workspace or no project; nothing was stored. Run extension_auth_login (action: login) again.",
     );
   }
 
@@ -285,7 +285,7 @@ export function persistBatchTokenResponse(args: {
 
     if (!sameProjectSet(args.projects, listed)) {
       throw new Error(
-        `The batch login returned a member login for [${listed.join(", ")}], not the requested [${args.projects.join(", ")}]; nothing was stored. Run extension_auth (action: login) again with the intended projects.`,
+        `The batch login returned a member login for [${listed.join(", ")}], not the requested [${args.projects.join(", ")}]; nothing was stored. Run extension_auth_login (action: login) again with the intended projects.`,
       );
     }
 
@@ -299,7 +299,7 @@ export function persistBatchTokenResponse(args: {
 
   if (hasDuplicate(returned) || !sameProjectSet(args.projects, returned)) {
     throw new Error(
-      `The batch login returned tokens scoped to [${returned.join(", ")}], not the requested [${args.projects.join(", ")}]; nothing was stored. Run extension_auth (action: login) again with the intended projects.`,
+      `The batch login returned tokens scoped to [${returned.join(", ")}], not the requested [${args.projects.join(", ")}]; nothing was stored. Run extension_auth_login (action: login) again with the intended projects.`,
     );
   }
 
@@ -326,7 +326,7 @@ export function persistWorkspaceTokenResponse(args: {
   if (member) {
     if (member.workspaceSlug.toLowerCase() !== wanted) {
       throw new Error(
-        `The workspace login for ${args.workspace} returned a member login for ${member.workspaceSlug}, another workspace; nothing was stored. Run extension_auth (action: login, workspace, projects: "*") again.`,
+        `The workspace login for ${args.workspace} returned a member login for ${member.workspaceSlug}, another workspace; nothing was stored. Run extension_auth_login (action: login, workspace, projects: "*") again.`,
       );
     }
 
@@ -347,7 +347,7 @@ export function persistWorkspaceTokenResponse(args: {
           : foreign.length > 0
             ? `, and ${refsOf(foreign).join(", ")} is outside ${args.workspace}`
             : ", with a project named twice"
-      }; nothing was stored. Run extension_auth (action: login, workspace, projects: "*") again.`,
+      }; nothing was stored. Run extension_auth_login (action: login, workspace, projects: "*") again.`,
     );
   }
 

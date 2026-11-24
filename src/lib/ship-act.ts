@@ -308,7 +308,7 @@ function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string
       message: hand ? handSay : allowance ? allowance.message : before ? `${closed(read.message)} Nothing ran and no approval was requested.` : read.message,
     },
     ...(ownerOnly
-      ? { hint: "Only a login approved by a workspace owner may do this. Ask an owner to sign in with extension_auth and run it, or to do it in the console." }
+      ? { hint: "Only a login approved by a workspace owner may do this. Ask an owner to sign in with extension_auth_login and run it, or to do it in the console." }
       : refunded
         ? { hint: `${hint ? `${hint} ` : ""}Nothing ran and the approval was not spent: call again with the same arguments and approvalId ${act.approvalId}.` }
         : hint

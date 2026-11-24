@@ -327,7 +327,7 @@ export async function revokeArtifact(options: {
         ...(typeof data?.code === "string" ? { code: data.code } : {}),
         message: `The platform refused the token this revoke was sent with (${
           typeof data?.code === "string" ? data.code : "401"
-        }): it is expired, revoked, or not a project token. Sign in again with extension_auth (action: login).`,
+        }): it is expired, revoked, or not a project token. Sign in again with extension_auth_login (action: login).`,
       },
     };
   }

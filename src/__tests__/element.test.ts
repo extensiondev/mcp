@@ -189,7 +189,7 @@ describe("extension_element click", () => {
     expect(mouse.map((m) => m.type)).toEqual(["mouseMoved", "mousePressed", "mouseReleased"]);
     expect(mouse[1]).toMatchObject({ x: 50, y: 35, button: "left", clickCount: 1, sessionId: "session-pop" });
     expect(result.hint).toContain("user gesture");
-    expect(result.hint).toContain("extension_element action: \"text\"");
+    expect(result.hint).toContain("extension_element_read action: \"text\"");
     expect(disconnected).toBe(1);
   });
 

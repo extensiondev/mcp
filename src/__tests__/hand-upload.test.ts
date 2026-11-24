@@ -26,7 +26,7 @@ const JWT = `eyJ${"a".repeat(220)}.sig`;
 const REGISTRY = (browser: string) => `https://registry.extension.land/acme/widget/builds/${SHA}/${browser}.zip?t=${JWT}`;
 const ADDRESS = (browser: string) => `https://acme.extension.dev/widget/builds/${SHA}/${browser}.zip`;
 const SENTENCE = (browser: string) =>
-  `Download ${browser}.zip of build ${SHA} at ${ADDRESS(browser)}, or let me save it with extension_builds (action: "download", buildId: "${SHA}", browser: "${browser}"); upload it once as the item's first package.`;
+  `Download ${browser}.zip of build ${SHA} at ${ADDRESS(browser)}, or let me save it with extension_builds_download (action: "download", buildId: "${SHA}", browser: "${browser}"); upload it once as the item's first package.`;
 const VERSION_NOTE = "Every later platform upload carries the store version <manifest version>.<n>, numbered by the platform";
 
 function requirement(id: string, how: string): Row {
@@ -51,7 +51,7 @@ describe("the hand-upload sentence is one helper for every store that takes a fi
     expect(handUploadSentence(handUploadOf({ ...scope, browser: "chrome" }))).toBe(SENTENCE("chrome"));
     expect(handUploadSentence(handUploadOf({ ...scope, browser: "edge" }, REGISTRY("edge")))).toBe(SENTENCE("edge"));
     expect(handUploadSentence(handUploadOf({ ref: REF, api: PROD, browser: "edge" }))).toBe(
-      'Download edge.zip of a completed build from its extension.dev build page, or let me save it with extension_builds (action: "download", buildId, browser: "edge"); upload it once as the item\'s first package.',
+      'Download edge.zip of a completed build from its extension.dev build page, or let me save it with extension_builds_download (action: "download", buildId, browser: "edge"); upload it once as the item\'s first package.',
     );
   });
 

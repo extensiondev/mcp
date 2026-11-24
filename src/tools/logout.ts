@@ -75,7 +75,7 @@ export async function clearLocalCredentials(project?: string, api?: string): Pro
     hint: result.cleared
       ? `Removed ${scope} from this machine${result.remaining.length ? `; ${result.remaining.length} other login${result.remaining.length === 1 ? "" : "s"} stay (${result.remaining.join(", ")})` : ""}. The token stays valid server-side until it expires; ${revokeUrl ? `revoke it now at ${revokeUrl} (takes about a minute to propagate)` : "revoke it from the project's access-tokens page if needed"}.`
       : wanted
-        ? `No stored login matches ${wanted}. extension_auth (action: status) lists the logins on this machine.`
+        ? `No stored login matches ${wanted}. extension_auth_read (action: status) lists the logins on this machine.`
         : "No stored credentials to remove.",
   });
 }

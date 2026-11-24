@@ -131,7 +131,7 @@ export async function clickGeckoToolbarButton(
       warnings: [
         `Firefox gives extensions no API to replay a click on the ${label}, and the engine's own replay refused (${said}), so the server ran the browser's toolbar action for this add-on (the path the ${shortcut} shortcut takes) in Firefox's parent process over the debugger protocol. Firefox handles it as a click on the button in the front window, with that window's selected tab. Whether a listener ran, and what it did, is not read here.`,
       ],
-      hint: "Read what the listener did with extension_logs, or the state it changes (extension_storage, or extension_dom_snapshot with listTabs: true).",
+      hint: "Read what the listener did with extension_logs, or the state it changes (extension_storage_read, or extension_dom_snapshot with listTabs: true).",
     });
   }
 

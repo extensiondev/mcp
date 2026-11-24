@@ -155,7 +155,7 @@ describe("extension_network add installs Fetch interception on every attached co
     expect(frame.value.live).toBe(true);
     expect(frame.value.covers).toContain("startup included, were not covered");
     expect(frame.hint).toContain("extension_reload replays the background's startup");
-    expect(frame.hint).toContain('extension_network {action: "requests"}');
+    expect(frame.hint).toContain('extension_network_read {action: "requests"}');
     expect(opened).toEqual([9222]);
     expect(link.of("Target.setAutoAttach")[0]?.params).toEqual({ autoAttach: true, waitForDebuggerOnStart: true, flatten: true });
 
@@ -236,7 +236,7 @@ describe("extension_network answers matching requests and records hits and misse
 
     expect(frame.ok).toBe(true);
     expect(frame.status).toBe("no-rules");
-    expect(frame.hint).toContain('extension_network {action: "add"');
+    expect(frame.hint).toContain('extension_network_stub {action: "add"');
   });
 });
 
@@ -285,8 +285,8 @@ describe("a read made while rules are live says so", () => {
 
     const frame = JSON.parse((await dispatch({ name: "extension_dom_snapshot", arguments: { projectPath: project } })).content[0]!.text);
     expect(frame.warnings).toHaveLength(1);
-    expect(frame.warnings[0]).toContain("1 network stub rule(s) from extension_network are live on the chrome session");
-    expect(frame.warnings[0]).toContain('extension_network {action: "requests"}');
+    expect(frame.warnings[0]).toContain("1 network stub rule(s) from extension_network_stub are live on the chrome session");
+    expect(frame.warnings[0]).toContain('extension_network_read {action: "requests"}');
 
     expect(stubbedReadWarning("extension_build", { projectPath: project })).toBeUndefined();
     expect(stubbedReadWarning("extension_eval", { projectPath: project, browser: "firefox" })).toBeUndefined();

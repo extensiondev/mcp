@@ -239,8 +239,8 @@ describe("a platform refusal that names where the project went", () => {
     );
 
     expect(out.error.platformCode).toBe("PROJECT_NOT_FOUND");
-    expect(out.hint).toContain('extension_workspace (action: "projects", workspace: "cezaraugusto")');
-    expect(out.hint).toContain('extension_auth (action: "login", project: "cezaraugusto/<new-slug>")');
+    expect(out.hint).toContain('extension_workspace_read (action: "projects", workspace: "cezaraugusto")');
+    expect(out.hint).toContain('extension_auth_login (action: "login", project: "cezaraugusto/<new-slug>")');
   });
 
   it("names the new address when the device login is refused with PROJECT_MOVED", async () => {
@@ -285,6 +285,6 @@ describe("a platform refusal that names where the project went", () => {
     expect(out.status).toBe("project-moved");
     expect(out.error.name).toBe("LoginProjectMoved");
     expect(out.value).toMatchObject({ platformCode: "PROJECT_MOVED", projectId: PROJECT_ID, movedTo: "cezaraugusto/rebeccat" });
-    expect(out.hint).toContain('extension_auth (action: "login", project: "cezaraugusto/rebeccat")');
+    expect(out.hint).toContain('extension_auth_login (action: "login", project: "cezaraugusto/rebeccat")');
   });
 });

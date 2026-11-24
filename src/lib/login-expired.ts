@@ -28,7 +28,7 @@ export interface ProjectSlugs {
 }
 
 export interface RenewCall {
-  tool: "extension_auth";
+  tool: "extension_auth_login";
   args: { action: "login"; project: string; deviceCode?: string };
 }
 
@@ -62,7 +62,7 @@ export function expiredLoginFor(ref: ProjectSlugs, api?: string, nowSeconds: num
 }
 
 export function renewCall(project: string, deviceCode?: string): RenewCall {
-  return { tool: "extension_auth", args: { action: "login", project, ...(deviceCode ? { deviceCode } : {}) } };
+  return { tool: "extension_auth_login", args: { action: "login", project, ...(deviceCode ? { deviceCode } : {}) } };
 }
 
 function boundedFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
@@ -120,7 +120,7 @@ function ago(seconds: number): string {
 }
 
 export function loginCall(project: string): string {
-  return `extension_auth {action: "login", project: "${project}"}`;
+  return `extension_auth_login {action: "login", project: "${project}"}`;
 }
 
 export function expiredLoginDetail(expired: ExpiredLogin): string {
@@ -132,7 +132,7 @@ export function expiredLoginDetail(expired: ExpiredLogin): string {
 }
 
 export function workspaceLoginCall(workspace: string): string {
-  return `extension_auth {action: "login", workspace: "${workspace}", projects: "*"}`;
+  return `extension_auth_login {action: "login", workspace: "${workspace}", projects: "*"}`;
 }
 
 export function loginNeededDetail(ref: ProjectSlugs, api?: string): string {
@@ -158,7 +158,7 @@ export function loginNeededDetail(ref: ProjectSlugs, api?: string): string {
 
 function renewSentence(expired: ExpiredLogin, device: DeviceRenewal | null): string {
   if (device) {
-    const resume = `extension_auth {action: "login", project: "${expired.project}", deviceCode: "${device.then.args.deviceCode}"}`;
+    const resume = `extension_auth_login {action: "login", project: "${expired.project}", deviceCode: "${device.then.args.deviceCode}"}`;
 
     return `Open ${device.verificationUrl} and approve (code ${device.userCode}, valid until ${device.expiresAt}), then call ${resume} to store the renewed login`;
   }

@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { TOOL_POLICY } from "./tool-policy";
+
 export interface PropertySchema {
   type?: string | string[];
   description?: string;
@@ -36,7 +38,9 @@ export function tableCell(text: string): string {
   return text.replace(/[\\|]/g, "\\$&");
 }
 
-export function renderToolsDoc(tools: ToolSchemaLike[]): string {
+export function renderToolsDoc(registered: ToolSchemaLike[]): string {
+  const tools = registered.filter((tool) => !TOOL_POLICY[tool.name]?.aliasOf);
+  const aliases = registered.filter((tool) => TOOL_POLICY[tool.name]?.aliasOf).map((tool) => tool.name).sort();
   const lines: string[] = [];
   lines.push("# MCP tools");
   lines.push("");
@@ -68,6 +72,17 @@ export function renderToolsDoc(tools: ToolSchemaLike[]): string {
       }
     }
 
+    lines.push("");
+  }
+
+  if (aliases.length) {
+    lines.push("## Old names");
+    lines.push("");
+    lines.push("These names are not listed. A call to one still answers, with a warning that names the tools it became.");
+    lines.push("");
+    lines.push("| old name | now |");
+    lines.push("| --- | --- |");
+    for (const name of aliases) lines.push(`| \`${name}\` | ${TOOL_POLICY[name]!.aliasOf!.map((twin) => `\`${twin}\``).join(", ")} |`);
     lines.push("");
   }
 

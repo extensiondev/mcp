@@ -97,13 +97,13 @@ function unsupportedBrowser(browser: string): string {
     error: {
       code: "E_UNSUPPORTED_BROWSER",
       name: "Unsupported",
-      message: `extension_element acts over the browser's debug port (CDP), which ${browser} does not expose, and the dev session's control channel carries no element verb, so nothing was done.`,
+      message: `extension_element_act and extension_element_read work over the browser's debug port (CDP), which ${browser} does not expose, and the dev session's control channel carries no element verb, so nothing was done.`,
     },
     hint: 'Run the session in a Chromium browser (extension_dev with browser: "chrome") for these verbs, or on this browser start it with allowEval: true and use extension_eval with a document.querySelector expression; extension_dom_snapshot still reads the page here.',
   });
 }
 
-const NEXT_READ = "Read what changed with extension_element action: \"text\" on the element you expect to update, or extension_dom_snapshot on the same context.";
+const NEXT_READ = "Read what changed with extension_element_read action: \"text\" on the element you expect to update, or extension_dom_snapshot on the same context.";
 
 const TRUSTED_NOTE =
   "The events are trusted: they enter through the browser's input pipeline over the debug port (Input.dispatchMouseEvent, Input.dispatchKeyEvent), so page handlers see isTrusted: true and a user gesture, which nothing extension_eval dispatches can give.";
@@ -203,7 +203,7 @@ function answer(args: ElementArgs, picked: Picked, outcome: ElementOutcome): str
         },
         value: { ...base, matches: 0 },
         warnings,
-        hint: `extension_dom_snapshot (include: ["html"]) on the same context shows the markup to pick a selector from; if the element renders late, call extension_element with action: "wait" first.`,
+        hint: `extension_dom_snapshot (include: ["html"]) on the same context shows the markup to pick a selector from; if the element renders late, call extension_element_read with action: "wait" first.`,
       });
     case "ambiguous":
       return refuse({
@@ -231,7 +231,7 @@ function answer(args: ElementArgs, picked: Picked, outcome: ElementOutcome): str
           outcome.reason === "not-a-field"
             ? 'fill takes an input, textarea, select or contenteditable element; a button, checkbox or radio is acted on with action: "click".'
             : outcome.reason === "no-such-option"
-              ? "Pass an option's value or its visible label as value; extension_element action: \"text\" on the select reads its current value."
+              ? "Pass an option's value or its visible label as value; extension_element_read action: \"text\" on the select reads its current value."
               : "Enable the field first (the page's own logic does that), or pick the field the page lets the person type in.",
       });
     case "timeout":
@@ -249,7 +249,7 @@ function answer(args: ElementArgs, picked: Picked, outcome: ElementOutcome): str
         },
         value: { ...base, matches: outcome.matches, ...(outcome.element ? { element: outcome.element } : {}), polls: outcome.polls, elapsedMs: outcome.elapsedMs, budgetMs: waitBudget(args.timeout) },
         warnings,
-        hint: `Call extension_element with action: "wait" again to keep waiting (timeout up to ${WAIT_MAX_MS} ms), or read the page with extension_dom_snapshot to see what rendered instead. Never sleep in a shell to wait.`,
+        hint: `Call extension_element_read with action: "wait" again to keep waiting (timeout up to ${WAIT_MAX_MS} ms), or read the page with extension_dom_snapshot to see what rendered instead. Never sleep in a shell to wait.`,
       });
     case "bad-selector":
       return refuse({

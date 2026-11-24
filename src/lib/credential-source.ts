@@ -187,7 +187,7 @@ export function resolveCredential(options: { project?: string; api?: string } = 
         ref: wantedRef,
         refSource: "named",
         mismatch: null,
-        note: expired ? `The stored login for ${expired.project} expired at ${expired.expiresAt}.` : `No stored login for ${named}. Run extension_auth (action: login) for it.`,
+        note: expired ? `The stored login for ${expired.project} expired at ${expired.expiresAt}.` : `No stored login for ${named}. Run extension_auth_login (action: login) for it.`,
         expired,
       };
     }

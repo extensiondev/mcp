@@ -364,7 +364,7 @@ describe("the forwarder", () => {
 
     expect(out).toMatchObject({ ok: false, status: "auth-required", error: { code: "E_AUTH_REQUIRED", name: "ApprovalLoginGone" }, value: { approvalId: gone, mintedFor: "acme/blog" } });
     expect(out.error.message).toContain("the login that requested this approval is no longer stored; sign in to acme/blog again and request a new approval");
-    expect(out.hint).toContain('extension_auth (action: login, project: "acme/blog")');
+    expect(out.hint).toContain('extension_auth_login (action: login, project: "acme/blog")');
     expect(out.value.trackUrl).toContain("/blog");
     expect(lane()).toEqual([]);
   });

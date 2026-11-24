@@ -121,7 +121,7 @@ function bridgeLine(facts: StartFacts): string {
 
   const watched = facts.noBrowser || facts.headless ? "" : ` ${WATCHED_UI_LINE}`;
 
-  return `${channel} on a copy of the build at ${controlledCopy}, so extension_storage, extension_reload (a real reload of the installed extension under open tabs, as a store update does), extension_open and extension_dom_snapshot attach${evalWords}. extension_logs has no console stream for it. ${COPY_IS_FIXED_LINE}${watched}`;
+  return `${channel} on a copy of the build at ${controlledCopy}, so extension_storage_read, extension_storage_write, extension_reload (a real reload of the installed extension under open tabs, as a store update does), extension_open and extension_dom_snapshot attach${evalWords}. extension_logs has no console stream for it. ${COPY_IS_FIXED_LINE}${watched}`;
 }
 
 export const COPY_IS_FIXED_LINE =

@@ -163,7 +163,7 @@ describe("a create the platform keeps reporting as creating", () => {
       creatingForSeconds: 420,
     });
 
-    expect(stuck.value.nextSteps[0]).toContain("extension_auth (action: login, project: 'acme/widget')");
+    expect(stuck.value.nextSteps[0]).toContain("extension_auth_login (action: login, project: 'acme/widget')");
     expect(stuck.value.nextSteps[1]).toContain("/acme/widget");
     expect(stuck.hint).toContain("extension_auth");
     expect(fs.existsSync(heldBatchesPath())).toBe(true);
@@ -221,7 +221,7 @@ describe("a create the platform keeps reporting as creating", () => {
     expect(out.ok).toBe(true);
     expect(out.status).toBe("created");
     expect(out.value).toMatchObject({ workspaceSlug: "acme", projectSlug: "widget", projectId: "prj_widget" });
-    expect(out.value.nextSteps[0]).toContain("extension_auth (action: login, project: 'acme/widget')");
+    expect(out.value.nextSteps[0]).toContain("extension_auth_login (action: login, project: 'acme/widget')");
     expect(platform.to("/api/projects")).toHaveLength(1);
     expect(fs.existsSync(heldBatchesPath())).toBe(false);
     expect(JSON.stringify(out)).not.toContain(GRANT);

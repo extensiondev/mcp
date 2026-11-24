@@ -28,7 +28,7 @@ export function wantsCreateLogin(raw: unknown): boolean {
 }
 
 function loginCall(project: string): string {
-  return `extension_auth (action: login, project: '${project}')`;
+  return `extension_auth_login (action: login, project: '${project}')`;
 }
 
 function oneMoreApproval(project: string, why: string): string {
@@ -87,7 +87,7 @@ export function readCreateLogin(args: {
 
     return {
       login: { stored: true, project, ...(expiresAt ? { expiresAt } : {}) },
-      sentence: `The same approval signed this machine in to ${project}: the token the platform minted with the create is stored as its login${expiresAt ? ` until ${expiresAt}` : ""}, so no extension_auth call is needed and token-scoped tools can use it now.`,
+      sentence: `The same approval signed this machine in to ${project}: the token the platform minted with the create is stored as its login${expiresAt ? ` until ${expiresAt}` : ""}, so no extension_auth_login call is needed and token-scoped tools can use it now.`,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

@@ -65,7 +65,7 @@ describe("410: an approval names the call that spends it with its tool and the r
     );
     const out = JSON.parse((gate as { envelope: string }).envelope);
     const call = `extension_submit {action: "submit", dryRun: false, browsers: ["chrome","edge","firefox"], buildSha: "c2b67f5", approvalId: "${APPROVAL_ID}"}`;
-    const read = `extension_approvals {action: "status", approvalId: "${APPROVAL_ID}"} reads whether a workspace owner has approved it, and that extension_submit call with waitSeconds waits for the approval before it runs.`;
+    const read = `extension_approvals_read {action: "status", approvalId: "${APPROVAL_ID}"} reads whether a workspace owner has approved it, and that extension_submit call with waitSeconds waits for the approval before it runs.`;
 
     expect(out.error.message).toContain(`then call ${call}. ${read} Nothing was executed.`);
     expect(out.hint).toBe(`Approve at ${API}/device/approve/${APPROVAL_ID}; then ${call} runs it. ${read}`);
@@ -79,7 +79,7 @@ describe("410: an approval names the call that spends it with its tool and the r
     const gate = await evaluateApproval(input({ command: "extension_builds", action: "extension_settings.build", scope: { settingsDigest: "a".repeat(64) } }));
     const out = JSON.parse((gate as { envelope: string }).envelope);
 
-    expect(out.error.message).toContain(`then call extension_builds with the same arguments and approvalId ${APPROVAL_ID}. extension_approvals {action: "status", approvalId: "${APPROVAL_ID}"} reads whether a workspace owner has approved it. Nothing was executed.`);
+    expect(out.error.message).toContain(`then call extension_builds with the same arguments and approvalId ${APPROVAL_ID}. extension_approvals_read {action: "status", approvalId: "${APPROVAL_ID}"} reads whether a workspace owner has approved it. Nothing was executed.`);
     expect(out.error.message).not.toContain("waitSeconds");
   });
 
@@ -97,7 +97,7 @@ describe("410: an approval names the call that spends it with its tool and the r
       return JSON.parse((gate as { envelope: string }).envelope) as { error: { message: string }; hint: string };
     };
 
-    const read = `extension_approvals {action: "status", approvalId: "${APPROVAL_ID}"} reads whether`;
+    const read = `extension_approvals_read {action: "status", approvalId: "${APPROVAL_ID}"} reads whether`;
     const member = await answered({ approverRole: "member" });
     const unnamed = await answered({});
 

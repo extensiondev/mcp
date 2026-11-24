@@ -1,3 +1,7 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import { tools } from "../index";
@@ -142,5 +146,20 @@ describe("every tool carries a title a consent prompt can show", () => {
     }
 
     for (const [name, policy] of twins) expect(policy.annotations.readOnlyHint ? !policy.annotations.destructiveHint && !policy.ships : true, name).toBe(true);
+  });
+
+  it("1108: names the twins, never the old names, in every sentence an answer or description carries", () => {
+    const src = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+    const old = Object.keys(TOOL_POLICY).filter((name) => TOOL_POLICY[name]!.aliasOf);
+    const prose = new RegExp(`\\b(${old.join("|")})\\b[^_."':a-z]`);
+    const keyed = new Set(["tool-twins.ts", "tool-policy.ts", "tool-annotations.ts", "docs-meta.ts"]);
+    const named = ["tools", "lib"].flatMap((dir) =>
+      fs.readdirSync(path.join(src, dir)).filter((file) => file.endsWith(".ts") && !keyed.has(file)).flatMap((file) =>
+        fs.readFileSync(path.join(src, dir, file), "utf8").split("\n")
+          .filter((line) => !/^\s*(\*|\/\/|\/\*)/.test(line) && prose.test(line))
+          .map((line) => `${dir}/${file}: ${line.trim().slice(0, 120)}`)));
+
+    expect(old.length).toBe(9);
+    expect(named).toEqual([]);
   });
 });

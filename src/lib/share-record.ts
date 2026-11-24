@@ -16,7 +16,7 @@ export const SHARE_STATE_DIR = ".extension.dev";
 export const SHARE_RECORD_FILE = "shared-previews.json";
 
 const FILE_NOTE =
-  "Every preview link shared from this project. revokeUrl is the handle that kills a link before expiresAt. Losing it is recoverable: run extension_shares to list every share this token owns, each with its revokeUrl. Re-sharing an unchanged build returns the same link rather than a new one, and only a revoked link is replaced. Safe to delete once every link below has expired.";
+  "Every preview link shared from this project. revokeUrl is the handle that kills a link before expiresAt. Losing it is recoverable: run extension_shares_read to list every share this token owns, each with its revokeUrl. Re-sharing an unchanged build returns the same link rather than a new one, and only a revoked link is replaced. Safe to delete once every link below has expired.";
 
 const IGNORE_COMMENT =
   "# Extension.dev local state: revoke handles for shared previews, not part of your extension.";
@@ -135,7 +135,7 @@ export function recordSharedPreview(
       path: file,
       note: `Could not write the share record to ${file}: ${
         error instanceof Error ? error.message : String(error)
-      }. Keep the revokeUrl in this response, or run extension_shares later to list every share this token owns with its revokeUrl.`,
+      }. Keep the revokeUrl in this response, or run extension_shares_read later to list every share this token owns with its revokeUrl.`,
     };
   }
 

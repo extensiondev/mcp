@@ -66,7 +66,7 @@ describe("a production launch says the debug port will be read instead of claimi
     expect(out.extensionLoaded).toBeNull();
     expect(out.loadEvidence).not.toMatch(/opens no debug port/);
     expect(out.loadEvidence).toMatch(/the engine \(Extension\.js 4\.1\.36\) stamps the browser's debug port \(cdpPort\) in the contract once the browser binds it, and extension_wait reads the load off that port's target list/);
-    expect(out.loadEvidence).toMatch(/Beyond that, a production session has no hot reload and carries no dev bridge, so extension_logs has no console stream for it and the bridge verbs \(extension_storage, extension_reload, extension_open with a surface, extension_dom_snapshot by tab and extension_eval\) need allowControl: true\./);
+    expect(out.loadEvidence).toMatch(/Beyond that, a production session has no hot reload and carries no dev bridge, so extension_logs has no console stream for it and the bridge verbs \(extension_storage_read, extension_storage_write, extension_reload, extension_open with a surface, extension_dom_snapshot by tab and extension_eval\) need allowControl: true\./);
   });
 
   it("treats a run that asked for allowControl as an engine that opens the port, since older engines refuse the flag", () => {
