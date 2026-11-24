@@ -1,0 +1,56 @@
+name: Bug report
+description: A tool gave a wrong, empty or misleading answer, or the server failed.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The tool you called, the arguments, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: answer
+    attributes:
+      label: The answer
+      description: Paste the tool's answer, at least its status, error.code and hint. Remove tokens and private paths first.
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: From a fresh install, the shortest path to the problem.
+      placeholder: |
+        1. Start the server with --features=local
+        2. Call extension_build with { "browser": "firefox" }
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The output of `npx -y @extension.dev/mcp --version`.
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: MCP client
+      placeholder: Claude Code 2.1, Cursor 1.7, VS Code 1.105
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Browser and operating system
+      placeholder: Chrome 142 on macOS 15
+  - type: checkboxes
+    id: security
+    attributes:
+      label: Not a security report
+      options:
+        - label: This is not a vulnerability. Vulnerabilities go through SECURITY.md, never a public issue.
+          required: true
