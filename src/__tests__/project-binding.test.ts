@@ -929,6 +929,7 @@ describe("the guided store connect opens the MCP's own browser with extension.de
       expect(out.value.sayToPerson).toContain("shows the Edge Partner Center Publish API page");
       expect(out.value.sayToPerson).toContain("the extension.dev tools panel shows on that page");
       expect(out.value.sayToPerson).not.toContain("Allow");
+      expect(out.value.sayToPerson).toContain(`"Create a new API key and connect"`);
       expect(JSON.stringify(out)).not.toContain(launch.secret);
       expect(JSON.stringify(out)).not.toContain("c".repeat(43));
     });
