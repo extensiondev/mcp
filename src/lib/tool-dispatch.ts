@@ -17,7 +17,7 @@ import { answerOnceDecided } from "./approval-wait";
 import { bindApprovalProject } from "./approval-record";
 import { withAnsweredProject, withApprovalLogin } from "./approval-scope";
 import { withCallWaits } from "./call-waits";
-import { envelope } from "./envelope";
+import { ENVELOPE_OUTPUT_SCHEMA, envelope } from "./envelope";
 import { argumentFailure } from "./exec";
 import { kernelHook, registeredKernelHooks } from "./kernel-hooks";
 import { crashAnswerFields, watchCall } from "./server-crash-log";
@@ -46,7 +46,7 @@ import { markListStale, reloadedWarning, serverStamp, staleEnvelope, type Server
 import { markStaleLocal, noLocalCarryReason, predatedChecks, predatesCheckEnvelope, type HeldLocal } from "./stale-local";
 import { answeredAs } from "./submit-action-safety";
 import { withComposedRefusals } from "./composed-refusal";
-import { annotate, frameText, refusedFrame, toolResultFrame } from "./tool-frames";
+import { annotate, frameText, refusedFrame, toolResultFrame, withStructuredContent } from "./tool-frames";
 import { attachTrack } from "./track-url";
 import {
   inputValidationError,
@@ -124,13 +124,13 @@ export function listedTools(tools: ToolModule[], options: ServerOptions): Listed
     }));
 }
 
-/* @invariant EVERY LISTED TOOL CARRIES ITS TITLE ONCE AND ITS FOUR HINTS AS
- * BOOLEANS. The title is the tool's own `title` field (MCP 2025-06-18), the
- * one the connector directories read, and `annotations` never repeats it:
- * the second copy cost about 1,200 characters of a tool list that sat at
- * 65,882 of its 67,000 budget, room the split of extension_builds into a
- * read tool and an act tool needs (Cezar's ruling of 2026-11-14). A client
- * that reads only `annotations.title` shows the tool's name instead. And
+/* @invariant EVERY LISTED TOOL CARRIES ITS TITLE, ITS FOUR HINTS AS
+ * BOOLEANS AND THE ENVELOPE AS ITS outputSchema. The title is the tool's own
+ * `title` field (MCP 2025-06-18), the one the connector directories read,
+ * and since ledger 1107 `annotations.title` repeats it for the clients that
+ * read only that field (ledger 757 had dropped the copy to save about 1,200
+ * characters; the directory graders count it). Every answer carries the
+ * same envelope as structuredContent (tool-frames.ts). And
  * readOnlyHint, destructiveHint, idempotentHint and openWorldHint are
  * always explicit true or false, never left out for a reviewer to infer. A
  * projection that lists a tool with fewer actions than the module serves
@@ -143,7 +143,8 @@ export function listedToolEntry(tool: ListedTool): {
   title: string;
   description: string;
   inputSchema: Record<string, unknown>;
-  annotations: ToolAnnotations;
+  outputSchema: typeof ENVELOPE_OUTPUT_SCHEMA;
+  annotations: ToolAnnotations & { title: string };
 } {
   const title = tool.title ?? toolTitle(tool.name);
   const hints = tool.annotations ?? TOOL_POLICY[tool.name]?.annotations ?? {
@@ -153,7 +154,7 @@ export function listedToolEntry(tool: ListedTool): {
     openWorldHint: false,
   };
 
-  return { name: tool.name, title, description: tool.description, inputSchema: tool.inputSchema, annotations: hints };
+  return { name: tool.name, title, description: tool.description, inputSchema: tool.inputSchema, outputSchema: ENVELOPE_OUTPUT_SCHEMA, annotations: { title, ...hints } };
 }
 
 export function createToolDispatcher(setup: ToolHandlerOptions): (call: RebuiltCall) => Promise<ToolFrame> {
@@ -264,7 +265,7 @@ export function createToolSurface(setup: ToolHandlerOptions): {
       ? { rebuilt, reason: active.reloadError, version: null, assertChecks: null }
       : { rebuilt, reason: failure ?? noLocalCarryReason(rebuilt), version: active.version, assertChecks: active.assertChecks };
 
-  const dispatch = (call: RebuiltCall): Promise<ToolFrame> => withComposedRefusals(() => dispatched(call));
+  const dispatch = async (call: RebuiltCall): Promise<ToolFrame> => withStructuredContent(await withComposedRefusals(() => dispatched(call)), call.name);
 
   const dispatched = async ({ name, arguments: args }: RebuiltCall): Promise<ToolFrame> => {
     const tool = toolMap.get(name);
@@ -318,7 +319,7 @@ export function createToolSurface(setup: ToolHandlerOptions): {
 
       const acted = await runAskingOnly(() => dispatch({ name: actsAs.tool, arguments: aliasedArgs }));
 
-      return { ...acted, content: acted.content.map((part) => ({ ...part, text: answeredAs(part.text, name, actsAs.tool) })) };
+      return { isError: acted.isError, content: acted.content.map((part) => ({ ...part, text: answeredAs(part.text, name, actsAs.tool) })) };
     }
 
     const untrusted = TOOL_POLICY[name]?.untrusted === true;

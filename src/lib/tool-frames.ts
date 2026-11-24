@@ -78,6 +78,42 @@ export function toolResultFrame(answer: string, untrusted = false): ToolFrame {
   };
 }
 
+/* @invariant EVERY ANSWER CARRIES ITS ENVELOPE AS structuredContent TOO,
+ * AND NEVER UNFENCES WHAT THE TEXT FENCED. Each listed tool declares the
+ * shared envelope as its outputSchema (ledger 1107), and a client that reads
+ * structuredContent sees no more than the text shows: an envelope the text
+ * carries bare is the structured answer as it is; a fenced answer keeps
+ * only its trusted head (ok, command, status) and puts the whole fenced
+ * text in value.text, so a page's words stay between the fence markers; a
+ * payload outside the envelope is carried the same way.
+ */
+export function withStructuredContent(frame: ToolFrame, command: string): ToolFrame {
+  const text = frameText(frame);
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    parsed = undefined;
+  }
+
+  if (isEnvelope(parsed) && !("untrustedEnd" in (parsed as object))) {
+    return { ...frame, structuredContent: parsed as unknown as Record<string, unknown> };
+  }
+
+  const head = isEnvelope(parsed) ? (parsed as Envelope) : null;
+
+  return {
+    ...frame,
+    structuredContent: {
+      ok: head ? head.ok === true : frame.isError !== true,
+      command: head && typeof head.command === "string" ? head.command : command,
+      status: head && typeof head.status === "string" ? head.status : frame.isError ? "error" : "answered",
+      value: head ? { untrusted: true, text } : { text },
+    },
+  };
+}
+
 export function refusedFrame(text: string): ToolFrame {
   return { content: [{ type: "text" as const, text: hintedAnswer(text) }], isError: true };
 }

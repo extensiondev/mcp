@@ -16,6 +16,20 @@ export type { RetryVerdict } from "./retry";
 
 export const ENVELOPE_SCHEMA = 1 as const;
 
+export const ENVELOPE_OUTPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    ok: { type: "boolean" },
+    command: { type: "string" },
+    status: { type: "string" },
+    value: {},
+    hint: { type: "string" },
+    warnings: { type: "array", items: { type: "string" } },
+    error: { type: ["object", "null"] },
+  },
+  required: ["ok", "command", "status", "value"],
+} as const;
+
 
 export type ErrorCode =
   | "E_ACTION_NOT_REPLAYED"

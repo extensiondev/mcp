@@ -17,6 +17,7 @@ import { ASSERT_CHECKS } from "./verdict";
 export type ToolFrame = {
   content: Array<{ type: "text"; text: string }>;
   isError?: boolean;
+  structuredContent?: Record<string, unknown>;
 };
 
 export interface RebuiltCall {

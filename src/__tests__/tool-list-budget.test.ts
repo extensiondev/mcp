@@ -32,9 +32,12 @@ import { FEATURE_GROUPS } from "../lib/tool-policy";
  * check, the only way a connect can name a workspace's shared account.
  * Ledger 1106 raised it to 73,850 on 2026-11-24: every description now
  * says what the tool answers and which neighbor answers the rest, and the
- * parameters say what changes, which a grader and a first session read. */
+ * parameters say what changes, which a grader and a first session read.
+ * Ledger 1107 raised it to 87,300 the same day: every tool lists the shared
+ * envelope as its outputSchema and repeats its title in annotations, the
+ * fields the directory graders and spec-conformance checks read. */
 const PER_TOOL = 6_000;
-const WHOLE_LIST = 73_850;
+const WHOLE_LIST = 87_300;
 
 type Listed = Awaited<ReturnType<Client["listTools"]>>["tools"][number];
 
