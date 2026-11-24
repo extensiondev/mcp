@@ -547,6 +547,57 @@ describe("the forwarder", () => {
     }
   });
 
+  it("opens the workspace's guided connect for a project Edge connect the lane answers pending, and keeps the lane's pages otherwise", async () => {
+    const opened: string[] = [];
+    const restore = setApprovalOpener((url) => {
+      opened.push(url);
+
+      return true;
+    });
+    const connectUrl = "https://console.extension.dev/acme/web/submissions/edge/connect";
+    const keyPage = "https://partner.microsoft.com/dashboard/microsoftedge/publishapi";
+    const pending = (value: Record<string, unknown> = {}) =>
+      JSON.parse(envelopeOf({ ok: true, command: "extension_submit", status: "connect-pending", value: { store: "edge", project: "acme/web", connectSession: "cs_1", connectUrl, opened: true, openPages: [keyPage, connectUrl], ...value } }));
+
+    const guidedTo: Array<{ answer: any; args: Record<string, unknown> }> = [];
+
+    const guide = (status: string) => async (answer: string, args: Record<string, unknown>) => {
+      guidedTo.push({ answer: JSON.parse(answer), args });
+
+      return envelopeOf({ ok: true, command: "extension_submit", status, value: { workspace: "acme" } });
+    };
+
+    const connect = { action: "connect", store: "edge", project: "acme/web", waitSeconds: 60 };
+
+    try {
+      const { lane } = stubLane([pending(), pending(), pending({ keyOnFile: { kind: "project" } }), pending()]);
+      const local = vi.fn(async () => "local");
+      const out = JSON.parse(await forwardCall("extension_submit", connect, local, { ...FORWARDING, platform: "darwin", guideStoreConnect: guide("workspace-connect-guided") }));
+
+      expect(lane()[0]?.body.args.waitSeconds).toBe(0);
+      expect(out).toMatchObject({ status: "workspace-connect-guided", value: { workspace: "acme" } });
+      expect(guidedTo[0]?.answer).toMatchObject({ status: "workspace-connect-in-console", value: { workspace: "acme", project: "acme/web", storeAccountsUrl: expect.stringContaining("/acme/settings/store-accounts") } });
+      expect(guidedTo[0]?.args.browsers).toEqual(["edge"]);
+      expect(opened).toEqual([]);
+
+      for (const [args, status] of [
+        [connect, "workspace-connect-in-console"],
+        [connect, "workspace-connect-guided"],
+        [{ ...connect, replace: true }, "workspace-connect-guided"],
+      ] as const) {
+        const kept = JSON.parse(await forwardCall("extension_submit", args, local, { ...FORWARDING, platform: "darwin", guideStoreConnect: guide(status) }));
+
+        expect(kept.status).toBe("connect-pending");
+      }
+
+      expect(guidedTo).toHaveLength(2);
+      expect(lane()[3]?.body.args.waitSeconds).toBe(60);
+      expect(opened).toEqual([keyPage, connectUrl, keyPage, connectUrl, keyPage, connectUrl]);
+    } finally {
+      restore();
+    }
+  });
+
   it("732: asks the lane for the words of a page that did not open, as the session it began, when the open command does not start", async () => {
     const restore = setApprovalOpener(() => false);
     const connectUrl = "https://console.extension.dev/acme/web/submissions/firefox/connect";

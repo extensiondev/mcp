@@ -484,7 +484,7 @@ export function workspaceStoreAccountsUrl(ref: ProjectRef | null, api?: string):
  * here with that workspace's Store accounts page, sends nothing and lists no
  * login of any other workspace (ledger 1100).
  */
-export function workspaceConnectAnswer(command: string, workspace: string, stores: string[], api?: string): string {
+export function workspaceConnectAnswer(command: string, workspace: string, stores: string[], api?: string, project?: string): string {
   const url = workspaceStoreAccountsUrl({ workspace, project: "" }, api);
   const say = `A workspace owner connects ${storeNames(stores)} for ${workspace} at ${url}, once for every project of the workspace that has no key of its own.`;
 
@@ -492,7 +492,7 @@ export function workspaceConnectAnswer(command: string, workspace: string, store
     ok: true,
     command,
     status: "workspace-connect-in-console",
-    value: { workspace, storeAccountsUrl: url, sayToPerson: say, nextStep: nextStep("connect", say, url) },
+    value: { workspace, ...(project ? { project } : {}), storeAccountsUrl: url, sayToPerson: say, nextStep: nextStep("connect", say, url) },
     hint: say,
   });
 }

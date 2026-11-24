@@ -37,6 +37,10 @@ type Args = Record<string, unknown>;
 
 export const WORKSPACE_CONNECT_STATUS = "workspace-connect-in-console";
 
+export const GUIDED_STATUS = "workspace-connect-guided";
+
+export const GUIDED_CONNECT_STORES = new Set(["edge"]);
+
 export const HANDOFF_PATH = "/api/cli/console-handoff";
 
 export interface LaunchPlan {
@@ -348,6 +352,7 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
 
   const value = parsed.value;
   const workspace = text(value.workspace);
+  const project = text(value.project);
   const base = text(value.storeAccountsUrl);
   if (!workspace || !base) return result;
 
@@ -397,9 +402,10 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
   return envelope({
     ok: true,
     command: parsed.command,
-    status: "workspace-connect-guided",
+    status: GUIDED_STATUS,
     value: {
       workspace,
+      ...(project ? { project } : {}),
       ...(store ? { store } : {}),
       storeAccountsUrl: plainUrl,
       guidedBrowser: { opened: true, browser: choice.browser, why: choice.why, profile: profileDir, reused: launched.reused },
@@ -412,6 +418,7 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
       `${opened} ${choice.why} Profile: ${profileDir}.`,
       extension.source === "bundled" ? extension.note : "",
       landing.note,
+      project ? `${project} uses the workspace's ${storeName} account once it is connected, unless it holds a key of its own.` : "",
       `Tell the person: "${say}" When they say done, call ${readBack(workspace)} and report whether ${storeName} is connected.`,
     ].filter(Boolean).join(" "),
   });

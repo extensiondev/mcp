@@ -19,9 +19,11 @@ import { envelope, isEnvelope, reframed } from "./envelope";
 import { forwardSession, withForwardSession, type ForwardSession } from "./forward-approval-state";
 import { approvalHeldByPerson, forgetApprovalHolders } from "./forwarded-approval";
 import { forgetForwardCredential, forwardCredential, forwardUrlFor, type ExchangedCredential } from "./forward-credential";
+import { GUIDED_CONNECT_STORES, GUIDED_STATUS } from "./guided-connect";
 import { loadHeldBatch } from "./held-batches";
 import { ACT_SETTLE_WINDOW_MS, FORWARD_TIMEOUT_MS, IN_FLIGHT_RECHECK_MS, LOCAL_TOOLS_STILL_WORK, MEMORY_KEY, carriedMemory, hostedWaitOf, lostAnswer, readLane, takeMemory, unreadableAnswer, withOneNotice, withWholeWait, withoutHostedWait } from "./forward-lane-answer";
 import { CLOSED_STATUSES, readAnswer, readLanePreflight, withLanePreflight } from "./forward-lane-preflight";
+import { kernelHook, registeredKernelHooks } from "./kernel-hooks";
 import { expiredLoginRefusal } from "./login-expired";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { outcomeClock } from "./outcome-clock";
@@ -30,6 +32,7 @@ import { bearerFetch, unreachedBy } from "./platform-fetch";
 import { PROJECT_HEADER } from "./request-fetch";
 import { identityHeaders } from "./session-identity";
 import { readSharedPreviews } from "./share-record";
+import { workspaceConnectAnswer } from "./store-connection";
 import { forwardSubmitFacts, imagesTheLaneWants, labeledScreenshots, withProjectRoot, type ForwardFactsArgs, type WantedImage } from "./submit-facts-forward";
 import { storeMdSourceNote } from "./submit-facts-local";
 import { TOOL_POLICY } from "./tool-policy";
@@ -71,6 +74,7 @@ export interface ForwarderDeps {
   version?: string;
   resolveLogin?: (options: { project?: string; api?: string }) => StoredLogin;
   storedLogins?: (api?: string) => StoredLogin[];
+  guideStoreConnect?: (result: string, args: Args) => Promise<string>;
 }
 
 interface ForwardRule {
@@ -110,9 +114,49 @@ const SUBMIT_RULE: ForwardRule = {
     return { facts, ...(hold ? { [PACKAGE_HOLD_FACT]: hold } : {}), [PAGE_OPENING_FACT]: { block: autoOpenBlock({ noShip: false }, deps.env ?? process.env, deps.platform) } };
   },
   wants: imagesTheLaneWants,
-  sent: (args) => (args.screenshots === undefined ? args : { ...args, screenshots: labeledScreenshots(args as ForwardFactsArgs) }),
+  sent: (args) => {
+    const shaped = args.screenshots === undefined ? args : { ...args, screenshots: labeledScreenshots(args as ForwardFactsArgs) };
+
+    return guidedConnectStore(args) ? { ...shaped, waitSeconds: 0 } : shaped;
+  },
   answered: (args, body) => withStoreMdSource(withProjectRoot(body, args.projectPath), storeMdSourceNote(args)),
 };
+
+function guidedConnectStore(args: Args): string {
+  if (text(args.action) !== "connect" || text(args.connectSession) || args.replace === true || text(args.replace).toLowerCase() === "true") return "";
+
+  const named = text(args.store).toLowerCase();
+  const browsers = Array.isArray(args.browsers) ? args.browsers.map((entry) => text(entry).toLowerCase()).filter(Boolean) : [];
+  const store = named || (browsers.length === 1 ? (browsers[0] ?? "") : "");
+
+  return GUIDED_CONNECT_STORES.has(store) ? store : "";
+}
+
+/* @invariant A PROJECT CONNECT FOR A STORE THE GUIDED BROWSER CAPTURES ENDS
+ * IN THAT BROWSER. Store accounts are kept per workspace and every project
+ * without a key of its own uses the workspace's, and only the workspace's
+ * Store accounts page takes the one-time console sign-in and guides the
+ * person to the key page. So when the lane answers that the project has no
+ * working key and none on file, the pages it names stay closed and the
+ * workspace's guided connect opens instead, in the same call. A replace, a
+ * resumed session, a key of the project's own, or a guided browser that did
+ * not open keeps the lane's answer and its pages (ledger 1112).
+ */
+async function guidedProjectConnect(command: string, args: Args, shown: Args, deps: ForwarderDeps): Promise<string | null> {
+  const store = command === "extension_submit" ? guidedConnectStore(args) : "";
+  const value = shown.value && typeof shown.value === "object" ? (shown.value as Args) : null;
+  if (!store || !value || laneStatus(shown) !== "connect-pending" || value.storeRefusal || value.keyOnFile) return null;
+
+  const project = text(value.project);
+  const workspace = project.includes("/") ? (project.split("/")[0] ?? "") : "";
+  const guide = deps.guideStoreConnect ?? (registeredKernelHooks().includes("guideStoreConnect") ? kernelHook("guideStoreConnect") : undefined);
+  if (!workspace || !guide) return null;
+
+  const api = text(args.api) || undefined;
+  const answer = await guide(workspaceConnectAnswer(command, workspace, [store], api, project), { ...args, browsers: [store] });
+
+  return laneStatus(readAnswer(answer)) === GUIDED_STATUS ? answer : null;
+}
 
 /* @invariant AN ASK-ONLY CALL REACHES THE LANE UNDER THE ASK-ONLY TOOL'S NAME,
  * OR NOT AT ALL. The asking-only mark lives in this process and does not cross
@@ -694,6 +738,9 @@ async function forwardedAnswer(asked: { command: string; tool: string; rule: For
   body = withOneNotice(body);
 
   const shown = (rule.answered ? rule.answered(args, body) : body) as Args;
+  const guided = await guidedProjectConnect(command, args, shown, deps);
+  if (guided) return guided;
+
   const opening = openLanePages(shown, deps);
   const retold = opening.unopened ? await retoldUnopened(call, shaped, facts, shown, opening.unopened) : null;
 
