@@ -14,7 +14,7 @@ import { PACKAGE_HOLD_FACT } from "./build-inputs";
 import { localPackageHolds } from "./build-inputs-local";
 import { resolveCredential, type CredentialRef } from "./credential-source";
 import { composedRefusal, relayedAnswer } from "./composed-refusal";
-import { LOGIN_STEPS, NO_TOKEN_MESSAGE, noStoredLoginHint } from "./credentials";
+import { NO_TOKEN_MESSAGE, loginStep, noStoredLoginHint } from "./credentials";
 import { envelope, isEnvelope, reframed } from "./envelope";
 import { forwardSession, withForwardSession, type ForwardSession } from "./forward-approval-state";
 import { approvalHeldByPerson, forgetApprovalHolders } from "./forwarded-approval";
@@ -596,7 +596,7 @@ async function signedOutRefusal(command: string, args: Args, login: StoredLogin,
     status: "auth-required",
     value: { hosted: true },
     error: { code: "E_AUTH_REQUIRED", name: "PlatformAuthError", message: project ? noStoredLoginHint(project) : (login.note ?? NO_TOKEN_MESSAGE) },
-    hint: LOGIN_STEPS,
+    hint: loginStep(project || undefined),
   });
 }
 

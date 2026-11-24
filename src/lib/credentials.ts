@@ -797,6 +797,10 @@ export const LOGIN_STEPS =
 
 export const NO_TOKEN_MESSAGE = `No token. ${LOGIN_STEPS}`;
 
+export function loginStep(project?: string): string {
+  return `Run extension_auth (action: login${project ? `, project: "${project}"` : ""}).`;
+}
+
 export function noStoredLoginHint(project: string): string {
   if (requestCredential()) {
     const covered = coveredProjects();
