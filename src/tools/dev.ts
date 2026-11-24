@@ -182,7 +182,7 @@ export async function handler(
   if (args.noBrowser) cliArgs.push("--no-browser");
   if (args.polyfill !== undefined) cliArgs.push("--polyfill", String(args.polyfill));
 
-  cliArgs.push(...launchFlagArgs(args));
+  cliArgs.push(...launchFlagArgs(args, browser));
   cliArgs.push(...safariDevOptionArgs(args));
   if (allowControl) cliArgs.push("--allow-control");
   if (args.allowEval) cliArgs.push("--allow-eval");

@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { isChromiumFamily } from "./browser-family";
+import { isChromiumFamily, isGeckoFamily } from "./browser-family";
 
 export const LAUNCH_FLAG_SCHEMA = {
   profile: {
@@ -118,12 +118,12 @@ export function headlessHint(headless: boolean): string {
     : "The browser window is visible to the person.";
 }
 
-export function launchFlagArgs(args: LaunchFlagArgs): string[] {
+export function launchFlagArgs(args: LaunchFlagArgs, browser: string): string[] {
   const cli: string[] = [];
   if (args.profile !== undefined) cli.push("--profile", args.profile);
   if (args.startingUrl) cli.push("--starting-url", args.startingUrl);
-  if (args.chromiumBinary) cli.push("--chromium-binary", args.chromiumBinary);
-  if (args.geckoBinary) cli.push("--gecko-binary", args.geckoBinary);
+  if (args.chromiumBinary && isChromiumFamily(browser)) cli.push("--chromium-binary", args.chromiumBinary);
+  if (args.geckoBinary && isGeckoFamily(browser)) cli.push("--gecko-binary", args.geckoBinary);
   if (args.host) cli.push("--host", args.host);
   if (args.publicHost) cli.push("--public-host", args.publicHost);
 

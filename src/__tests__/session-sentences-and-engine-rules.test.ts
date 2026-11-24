@@ -10,7 +10,7 @@ import { processStartedAt } from "../lib/process-identity";
 import { handler as stop } from "../tools/stop";
 import { TOOL_POLICY } from "../lib/tool-policy";
 import { contractControlState } from "../lib/session-browser";
-import { LAUNCH_FLAG_SCHEMA } from "../lib/launch-flags";
+import { LAUNCH_FLAG_SCHEMA, launchFlagArgs } from "../lib/launch-flags";
 import { SERVER_INSTRUCTIONS } from "../index";
 import { schema as browsersSchema } from "../tools/browsers";
 import { detectSentences } from "../tools/detect-browsers";
@@ -118,6 +118,19 @@ describe("the control channel is read from the contract", () => {
     expect(contractControlState(project, "chrome", since)).toEqual({ read: true, port: null, unavailableReason: "EADDRINUSE 43210" });
     writeModernContract(project, "chrome", { controlPort: 43210 });
     expect(contractControlState(project, "chrome", since)).toEqual({ read: true, port: 43210, unavailableReason: null });
+  });
+});
+
+describe("binary flags reach the engine only for the browser picked", () => {
+  it("forwards one binary flag that matches the browser, never both and never a mismatched one", () => {
+    const both = { chromiumBinary: "/opt/chromium", geckoBinary: "/opt/firefox" };
+    expect(launchFlagArgs(both, "chrome")).toEqual(["--chromium-binary", "/opt/chromium"]);
+    expect(launchFlagArgs(both, "chromium-based")).toEqual(["--chromium-binary", "/opt/chromium"]);
+    expect(launchFlagArgs(both, "firefox")).toEqual(["--gecko-binary", "/opt/firefox"]);
+    expect(launchFlagArgs(both, "gecko-based")).toEqual(["--gecko-binary", "/opt/firefox"]);
+    expect(launchFlagArgs({ chromiumBinary: "/opt/chromium" }, "firefox")).toEqual([]);
+    expect(launchFlagArgs({ geckoBinary: "/opt/firefox" }, "edge")).toEqual([]);
+    expect(launchFlagArgs(both, "safari")).toEqual([]);
   });
 });
 

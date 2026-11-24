@@ -221,7 +221,7 @@ export async function handler(
     startingUrl: args.startingUrl,
   });
 
-  cliArgs.push(...launchFlagArgs(identity.startingUrl === args.startingUrl ? args : { ...args, startingUrl: identity.startingUrl }));
+  cliArgs.push(...launchFlagArgs(identity.startingUrl === args.startingUrl ? args : { ...args, startingUrl: identity.startingUrl }, browser));
 
   const stale = removeCarrier(args.projectPath);
 
