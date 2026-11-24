@@ -41,7 +41,7 @@ import { FEATURE_GROUPS, TOOL_POLICY } from "../lib/tool-policy";
  * Ledger 1108 raised it to 95,800 the same day, on Cezar's ruling: ten tools
  * that read and wrote are listed as a read twin and a write twin, each
  * carrying only the parameters its own actions take, and the old names
- * answer unlisted; the default list fell from 24 tools to 18 with it. */
+ * answer unlisted; the default list fell from 24 tools to 19 with it. */
 const PER_TOOL = 6_000;
 const WHOLE_LIST = 95_800;
 

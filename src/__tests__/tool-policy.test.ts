@@ -138,10 +138,10 @@ describe("resolveServerOptions", () => {
 describe("the default start stays under a directory's tool ceiling", () => {
   const MOVED = { extension_try: "platform", extension_theme_verify: "extras", extension_network: "extras" } as const;
 
-  it("lists exactly 18 tools on a bare start, none of the moved ones (ledgers 1106 and 1108)", async () => {
+  it("lists exactly 19 tools on a bare start, none of the moved ones (ledgers 1106 and 1108)", async () => {
     const listed = (await (await connected()).listTools()).tools.map((t) => t.name);
 
-    expect(listed).toHaveLength(18);
+    expect(listed).toHaveLength(19);
     for (const name of Object.keys(MOVED)) expect(listed, name).not.toContain(name);
   });
 
@@ -153,16 +153,16 @@ describe("the default start stays under a directory's tool ceiling", () => {
 
     const groups = Object.values(TOOL_POLICY).filter((policy) => !policy.aliasOf).map((policy) => policy.group);
 
-    expect(groups.filter((group) => group === "local")).toHaveLength(18);
+    expect(groups.filter((group) => group === "local")).toHaveLength(19);
     expect(groups.filter((group) => group === "platform")).toHaveLength(21);
-    expect(groups.filter((group) => group === "extras")).toHaveLength(12);
+    expect(groups.filter((group) => group === "extras")).toHaveLength(11);
   });
 
-  it("lists 39 with the platform group and all 51 once extras is named", async () => {
+  it("lists 40 with the platform group and all 51 once extras is named", async () => {
     const platform = (await (await connected({ features: ["local", "platform"], noShip: false })).listTools()).tools.map((t) => t.name);
     const everything = (await (await connected({ features: ["local", "platform", "extras"], noShip: false })).listTools()).tools.map((t) => t.name);
 
-    expect(platform).toHaveLength(39);
+    expect(platform).toHaveLength(40);
     expect(platform).toContain("extension_try");
     expect(platform).not.toContain("extension_network");
     expect(platform).not.toContain("extension_theme_verify");

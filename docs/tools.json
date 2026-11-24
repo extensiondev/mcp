@@ -1229,9 +1229,9 @@
     {
       "name": "extension_element_read",
       "tier": "act",
-      "group": "extras",
+      "group": "local",
       "description": "Read one element's text by CSS selector, or wait until it is visible, in a surface or page. Answers the text or the wait's outcome; extension_element_act clicks, fills and types. Chromium only.",
-      "gate": "the server started with extras in --features, as in --features=local,platform,extras; a live Chromium dev or start session with its debug port; no allowEval",
+      "gate": "a live Chromium dev or start session with its debug port; no allowEval",
       "samplePrompt": "Read the status line of the popup",
       "readOnly": true,
       "destructive": false,

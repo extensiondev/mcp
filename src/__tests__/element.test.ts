@@ -145,11 +145,12 @@ afterEach(() => {
 });
 
 describe("extension_element is registered as a local act that needs no eval gate", () => {
-  it("serves ten bounded actions behind an untrusted fence, listed as its act twin by default and its read twin in extras (ledger 1108)", () => {
+  it("serves ten bounded actions behind an untrusted fence, both twins listed by default (ledger 1108)", () => {
     expect(tools.map((t) => t.schema.name)).toContain("extension_element");
     expect(isToolListed("extension_element", DEFAULT_SERVER_OPTIONS)).toBe(false);
     expect(isToolListed("extension_element_act", DEFAULT_SERVER_OPTIONS)).toBe(true);
-    expect(TOOL_POLICY.extension_element_read).toMatchObject({ group: "extras", untrusted: true, annotations: { readOnlyHint: true } });
+    expect(TOOL_POLICY.extension_element_read).toMatchObject({ group: "local", untrusted: true, annotations: { readOnlyHint: true } });
+    expect(isToolListed("extension_element_read", DEFAULT_SERVER_OPTIONS)).toBe(true);
     expect(TOOL_POLICY.extension_element).toMatchObject({ group: "local", untrusted: true });
     expect(TOOL_POLICY.extension_element.annotations.readOnlyHint).toBe(false);
     expect(ELEMENT_ACTIONS).toEqual(["click", "fill", "text", "wait", "move", "press", "release", "type", "key", "scroll"]);

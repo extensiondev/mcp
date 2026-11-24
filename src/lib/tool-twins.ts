@@ -204,7 +204,7 @@ export const TOOL_TWINS: ToolTwin[] = [
     drop: ["value", "x", "y", "points", "button", "text", "key", "modifiers", "deltaX", "deltaY"],
     of: "extension_element",
     actions: ["text", "wait"],
-    group: "extras",
+    group: "local",
     title: "Read an element",
     annotations: reads(),
     description: "Read one element's text by CSS selector, or wait until it is visible, in a surface or page. Answers the text or the wait's outcome; extension_element_act clicks, fills and types. Chromium only.",
