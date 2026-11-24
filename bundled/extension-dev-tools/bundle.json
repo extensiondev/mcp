@@ -3,7 +3,7 @@
   "version": "0.1.2",
   "engine": "extension@4.1.38",
   "sha256": {
-    "chromium": "d8c61c2711c3c7639750d8880456c95132ea3cda1aac69a7176ea863300377c4",
-    "firefox": "b16477eecb5f438e55074b410bec26e6ef620261c7c2f10575f1cbf2446ed05e"
+    "chromium": "1b1e88e7aee3954b46d9205c18b8f184905fa8cee3186d02eb9410b5ab8c072a",
+    "firefox": "b15de06cb161ee2693b3c613557dfd4973ab6215a62cec25835e111755b8b336"
   }
 }
