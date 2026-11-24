@@ -2665,9 +2665,9 @@
       "description": "Check a store submission without sending it: preflight, status and a dry-run submit answer here; any other action records an approval request for the workspace owner and answers value.approvalUrl. extension_submit runs the call carrying that approvalId; extension_release_status answers review history, extension_release_promote releases a channel. Takes extension_submit's inputs.",
       "gate": "the server started with --features=local,platform, and a login; never sends: asking for the approval of a submit, publish, cancel, rollout, release, derived sync-listing or public configure-store executes nothing, and the approved call runs through extension_submit",
       "samplePrompt": "Is my extension ready for the Chrome Web Store?",
-      "readOnly": true,
+      "readOnly": false,
       "destructive": false,
-      "idempotent": true,
+      "idempotent": false,
       "openWorld": true,
       "untrusted": true,
       "inputs": [

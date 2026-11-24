@@ -101,4 +101,10 @@ describe("every tool carries a title a consent prompt can show", () => {
     expect(toolTitle("extension_submit")).toBe("Submit to a store");
     expect(toolTitle("nope")).toBe("nope");
   });
+
+  it("1108: names the write a tool can make in its title, so the title matches what it does", () => {
+    expect(toolTitle("extension_storage")).toMatch(/write/);
+    expect(toolTitle("extension_browsers")).toMatch(/Install/);
+    expect(TOOL_POLICY.extension_submit_check!.annotations.readOnlyHint).toBe(false);
+  });
 });

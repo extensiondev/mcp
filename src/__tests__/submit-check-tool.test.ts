@@ -29,11 +29,11 @@ async function listed(): Promise<Map<string, Record<string, unknown>>> {
   return new Map((await client.listTools()).tools.map((tool) => [tool.name, tool.annotations as Record<string, unknown>]));
 }
 
-describe("extension_submit_check takes the calls that only read or ask, under a read-only hint (ledger 365)", () => {
-  it("lists a read-only, non-destructive hint a client's permission layer reads, and extension_submit keeps its destructive one", async () => {
+describe("extension_submit_check takes the calls that only read or ask; an ask records an approval request, so its hint is not read-only (ledgers 365 and 1108)", () => {
+  it("lists a non-destructive hint that is not read-only, and extension_submit keeps its destructive one", async () => {
     const annotations = await listed();
 
-    expect(annotations.get("extension_submit_check")).toMatchObject({ readOnlyHint: true, destructiveHint: false, openWorldHint: true });
+    expect(annotations.get("extension_submit_check")).toMatchObject({ readOnlyHint: false, destructiveHint: false, openWorldHint: true });
     expect(annotations.get("extension_submit")).toMatchObject({ readOnlyHint: false, destructiveHint: true });
   });
 
