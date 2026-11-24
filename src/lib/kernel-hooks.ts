@@ -42,6 +42,7 @@ export interface KernelHooks {
   localPackageHold(projectPath: string, builds: string[], head: string): PackageHold | null;
   openPagesForPerson(urls: string[]): PageOpening;
   approvalState(): ApprovalState;
+  guideStoreConnect?(result: string, args: Args): Promise<string>;
 }
 
 let registered: Partial<KernelHooks> = {};

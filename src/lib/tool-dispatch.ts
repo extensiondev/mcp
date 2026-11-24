@@ -19,7 +19,7 @@ import { withAnsweredProject, withApprovalLogin } from "./approval-scope";
 import { withCallWaits } from "./call-waits";
 import { envelope } from "./envelope";
 import { argumentFailure } from "./exec";
-import { kernelHook } from "./kernel-hooks";
+import { kernelHook, registeredKernelHooks } from "./kernel-hooks";
 import { crashAnswerFields, watchCall } from "./server-crash-log";
 import { resolveApiBase } from "./login-flow";
 import { stubbedReadWarning } from "./network-stubs";
@@ -84,6 +84,12 @@ export interface ToolHandlerOptions {
   stamp?: ServerStampReader;
   importBuild?: BuildImporter;
   onToolsChanged?: () => void;
+}
+
+async function guidedConnect(answer: string, args: Record<string, unknown>): Promise<string> {
+  if (!registeredKernelHooks().includes("guideStoreConnect")) return answer;
+
+  return (await kernelHook("guideStoreConnect")?.(answer, args)) ?? answer;
 }
 
 /* @invariant A PLATFORM ANSWER THAT NAMES WHERE THE PROJECT WENT IS FOLLOWED
@@ -402,7 +408,7 @@ export function createToolSurface(setup: ToolHandlerOptions): {
 
             const scoped = bindCallProject(name, normalizedArgs, tool.schema.inputSchema, options);
 
-            if ("refused" in scoped) return stamp.apply(attachTrack(name, normalizedArgs, scoped.refused));
+            if ("refused" in scoped) return stamp.apply(attachTrack(name, normalizedArgs, await guidedConnect(scoped.refused, normalizedArgs)));
 
             const callArgs = scoped.args;
             const answered = await withAnsweredProject(scoped.answeredFor, () => answerOnceDecided(callArgs, tool.handler));

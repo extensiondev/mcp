@@ -315,7 +315,7 @@ export function findManagedBinaryIn(
   return searchNewestVersionFirst(browserDir, 0);
 }
 
-function findSystemBinary(browser: string): string | null {
+export function findSystemBinary(browser: string): string | null {
   const platform = process.platform;
   const paths = SYSTEM_PATHS[platform]?.[browser] ?? [];
 

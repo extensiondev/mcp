@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -22,6 +23,9 @@ import { storeMdFileOf } from "../lib/submit-facts";
 import { loginForPath, pathIdentity, serverLogins } from "../lib/path-project";
 import { PLATFORM_KERNEL_HOOKS, installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
 import { forwardable } from "../lib/hosted-forwarder";
+import { guideStoreConnect, type GuidedConnectRuntime, type LaunchPlan } from "../lib/guided-connect";
+import { workspaceConnectAnswer } from "../lib/store-connection";
+import { crxIdOf, readCrx3 } from "../lib/tools-extension";
 import { createToolDispatcher, type ToolModule } from "../lib/tool-dispatch";
 import * as builds from "../tools/builds";
 import * as releaseStatus from "../tools/release-status";
@@ -539,6 +543,160 @@ describe("ledger 252: with several logins stored, an unpinned platform call neve
     } finally {
       installPlatformKernelHooks();
     }
+  });
+});
+
+describe("the guided store connect opens the MCP's own browser with extension.dev tools", () => {
+  const STORE_CRX = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures", "extension-dev-tools-0.1.0.crx"));
+  const HANDOFF = "https://console.extension.dev/auth/handoff?code=one-time-secret-code";
+  const PAGE = "http://console.extension.localhost/cezaraugusto/settings/store-accounts?store=edge";
+  let launches: LaunchPlan[];
+  let asked: string[];
+
+  function runtime(browser: "edge" | "chromium", answer: (url: string) => Response | Promise<Response>): GuidedConnectRuntime {
+    return {
+      launchBlock: () => "",
+      probe: () => ({
+        platform: "darwin",
+        systemBinary: (name) => (name === browser ? `/Applications/${name}.app/Contents/MacOS/${name}` : null),
+        managedBinary: () => null,
+        lastUsed: () => 1,
+        defaultBrowser: () => null,
+      }),
+      fetch: (async (url: string) => {
+        asked.push(String(url));
+
+        return answer(String(url));
+      }) as unknown as typeof fetch,
+      stateDir: () => tmp,
+      cacheDir: () => path.join(tmp, "cache"),
+      headless: () => true,
+      launch: (plan) => {
+        launches.push(plan);
+
+        return { launched: true, reused: false };
+      },
+    };
+  }
+
+  function varint(value: number): Buffer {
+    const out: number[] = [];
+    for (let rest = value; rest >= 0x80; rest >>>= 7) out.push((rest & 0x7f) | 0x80);
+    out.push(value >>> (7 * out.length));
+
+    return Buffer.from(out);
+  }
+
+  function proto(field: number, bytes: Buffer): Buffer {
+    return Buffer.concat([varint(field * 8 + 2), varint(bytes.length), bytes]);
+  }
+
+  function signedCrx(zip: Buffer): { bytes: Buffer; id: string } {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const der = publicKey.export({ type: "spki", format: "der" });
+    const id = crxIdOf(der);
+    const signedHeader = proto(1, Buffer.from(crypto.createHash("sha256").update(der).digest().subarray(0, 16)));
+    const size = Buffer.alloc(4);
+    size.writeUInt32LE(signedHeader.length);
+    const signature = crypto.sign("sha256", Buffer.concat([Buffer.from("CRX3 SignedData\x00", "binary"), size, signedHeader, zip]), privateKey);
+    const header = Buffer.concat([proto(2, Buffer.concat([proto(1, der), proto(2, signature)])), proto(10000, signedHeader)]);
+    const prefix = Buffer.alloc(12);
+    prefix.write("Cr24", 0, "binary");
+    prefix.writeUInt32LE(3, 4);
+    prefix.writeUInt32LE(header.length, 8);
+
+    return { bytes: Buffer.concat([prefix, header, zip]), id };
+  }
+
+  async function guided(workspace: string, rt: GuidedConnectRuntime) {
+    return JSON.parse(await guideStoreConnect(workspaceConnectAnswer("extension_submit", workspace, ["edge"], API), { browsers: ["edge"], api: API }, rt));
+  }
+
+  beforeEach(() => {
+    launches = [];
+    asked = [];
+  });
+
+  it("verifies a CRX3 by its signed id and refuses another item, a tampered archive and a non-CRX", () => {
+    const crx = signedCrx(Buffer.from("PK zip bytes"));
+
+    expect(readCrx3(crx.bytes, crx.id)).toMatchObject({ ok: true });
+    expect(readCrx3(crx.bytes, "omndndgipeomhfdobfbhpfemempnnpjp")).toEqual({ ok: false, reason: `the CRX names item ${crx.id}, not omndndgipeomhfdobfbhpfemempnnpjp` });
+    expect(readCrx3(Buffer.concat([crx.bytes.subarray(0, -1), Buffer.from("X")]), crx.id)).toEqual({ ok: false, reason: "the CRX signature of the item does not verify" });
+    expect(readCrx3(Buffer.from("PK\x03\x04 not a crx"), crx.id)).toEqual({ ok: false, reason: "the download is not a CRX file" });
+    expect(readCrx3(STORE_CRX, "omndndgipeomhfdobfbhpfemempnnpjp")).toMatchObject({ ok: true });
+  });
+
+  it("refuses the Chrome Web Store item served for the Edge item and loads the bundled copy, saying so", async () => {
+    otherProcessesSignIn("rebeccat");
+
+    const out = await guided("cezaraugusto", runtime("edge", (url) => (url.includes("edge.microsoft.com") ? new Response(STORE_CRX) : new Response("", { status: 404 }))));
+
+    expect(asked[0]).toContain("edge.microsoft.com/extensionwebstorebase/v1/crx");
+    expect(out.value.toolsExtension).toMatchObject({ source: "bundled", version: "0.1.2" });
+    expect(out.hint).toContain("Edge Add-ons was not used because its download was refused: the CRX names item omndndgipeomhfdobfbhpfemempnnpjp, not pnijfgjkilbnmjiomlajfbmiccjejbpm");
+    expect(fs.existsSync(path.join(launches[0]!.extensionDir, "manifest.json"))).toBe(true);
+  });
+
+  it("loads the bundled copy when the store serves a version under the minimum, or cannot be reached", async () => {
+    otherProcessesSignIn("rebeccat");
+
+    const older = await guided("cezaraugusto", runtime("chromium", (url) => (url.includes("clients2.google.com") ? new Response(STORE_CRX) : new Response("", { status: 404 }))));
+
+    expect(older.value.toolsExtension.note).toBe("The Chrome Web Store serves 0.1.0, older than 0.1.2, so extension.dev tools 0.1.2 is the copy bundled with this MCP.");
+    expect(launches[0]!.extensionDir).toContain("bundled-chromium-0.1.2");
+
+    const offline = await guided("cezaraugusto", runtime("chromium", () => Promise.reject(new Error("getaddrinfo ENOTFOUND"))));
+
+    expect(offline.value.toolsExtension.source).toBe("bundled");
+    expect(offline.hint).toContain("could not be reached (getaddrinfo ENOTFOUND)");
+  });
+
+  it("opens the plain console page on a platform without the handoff door and says the person signs in once", async () => {
+    otherProcessesSignIn("rebeccat");
+
+    const out = await guided("cezaraugusto", runtime("edge", () => new Response("", { status: 404 })));
+
+    expect(asked).toContain(`${API}/api/cli/console-handoff`);
+    expect(launches[0]!.url).toBe(PAGE);
+    expect(out).toMatchObject({ ok: true, status: "workspace-connect-guided", value: { signedIn: false, storeAccountsUrl: PAGE, guidedBrowser: { browser: "edge", profile: path.join(tmp, "guided-browser", "edge", "profile") } } });
+    expect(out.hint).toContain("signs in to extension.dev there once");
+    expect(out.value.sayToPerson).toContain("sign in to extension.dev once, then follow the extension.dev tools panel");
+  });
+
+  it("opens the one-time handoff address signed in, and never puts it in the answer", async () => {
+    otherProcessesSignIn("rebeccat");
+    let body = "";
+    let auth = "";
+
+    const out = await guided("cezaraugusto", {
+      ...runtime("edge", () => new Response("", { status: 404 })),
+      fetch: (async (url: string, init?: RequestInit) => {
+        if (!String(url).endsWith("/api/cli/console-handoff")) return new Response("", { status: 404 });
+
+        body = String(init?.body);
+        auth = String((init?.headers as Record<string, string>).authorization);
+
+        return Response.json({ url: HANDOFF });
+      }) as unknown as typeof fetch,
+    });
+
+    expect(JSON.parse(body)).toEqual({ next: "/cezaraugusto/settings/store-accounts?store=edge" });
+    expect(auth).toBe("Bearer rebeccat.sig");
+    expect(launches[0]!.url).toBe(HANDOFF);
+    expect(out.value.signedIn).toBe(true);
+    expect(JSON.stringify(out)).not.toContain("one-time-secret-code");
+    expect(JSON.stringify(out)).not.toContain("auth/handoff");
+    expect(out.hint).toContain(`extension_workspace {action:"info", workspace:"cezaraugusto", include:["storeAccounts"]}`);
+  });
+
+  it("opens no browser where none may open, and answers the console page as before", async () => {
+    const out = await guided("extensiondev", { ...runtime("edge", () => new Response("")), launchBlock: () => "CI is set in this server's environment" });
+
+    expect(out).toMatchObject({ status: "workspace-connect-in-console", value: { guidedBrowser: { opened: false } } });
+    expect(out.hint).toMatch(/^No browser was opened: CI is set in this server's environment\. A workspace owner connects Edge Add-ons/);
+    expect(launches).toEqual([]);
+    expect(asked).toEqual([]);
   });
 });
 
