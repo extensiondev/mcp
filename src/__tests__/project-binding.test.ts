@@ -23,7 +23,8 @@ import { storeMdFileOf } from "../lib/submit-facts";
 import { loginForPath, pathIdentity, serverLogins } from "../lib/path-project";
 import { PLATFORM_KERNEL_HOOKS, installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
 import { forwardable } from "../lib/hosted-forwarder";
-import { GUIDED_KEY_PAGES, guideStoreConnect, guidedConnectRuntime, headlessFromProcesses, launchGuidedBrowser, type GuidedConnectRuntime, type LaunchPlan } from "../lib/guided-connect";
+import { GUIDED_KEY_PAGES, guideStoreConnect, guidedConnectRuntime, launchGuidedBrowser, type GuidedConnectRuntime, type LaunchPlan } from "../lib/guided-connect";
+import { headlessFromProcesses } from "../lib/guided-window";
 import { workspaceConnectAnswer } from "../lib/store-connection";
 import { AMO_ADDON_API, bundledToolsDir, crxIdOf, readBundleRecord, readCrx3, resolveToolsExtension, treeSha256 } from "../lib/tools-extension";
 import { createToolDispatcher, type ToolModule } from "../lib/tool-dispatch";
@@ -890,6 +891,7 @@ describe("the guided store connect opens the MCP's own browser with extension.de
     function binding(answer: Record<string, unknown>, bodies: string[], extra: Partial<GuidedConnectRuntime> = {}): GuidedConnectRuntime {
       return {
         ...runtime("edge", () => Promise.reject(new Error("offline"))),
+        schedule: () => undefined,
         fetch: (async (target: string, init?: RequestInit) => {
           if (!String(target).endsWith("/api/cli/console-handoff")) return Promise.reject(new Error("offline"));
 
@@ -932,6 +934,24 @@ describe("the guided store connect opens the MCP's own browser with extension.de
       expect(out.value.sayToPerson).toContain(`"Create a new API key and connect"`);
       expect(JSON.stringify(out)).not.toContain(launch.secret);
       expect(JSON.stringify(out)).not.toContain("c".repeat(43));
+    });
+
+    it("removes the launch file from disk within two minutes of the launch", async () => {
+      prodSignIn();
+      const later: Array<{ ms: number; run: () => void }> = [];
+
+      await prodGuided(
+        binding({ url: PROD_HANDOFF, launchBound: true, launchExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString() }, [], { schedule: (ms, run) => later.push({ ms, run }) }),
+      );
+
+      const file = path.join(launches[0]!.extensionDir, "launch.json");
+
+      expect(fs.existsSync(file)).toBe(true);
+      expect(later).toHaveLength(1);
+      expect(later[0]!.ms).toBeLessThanOrEqual(120_000);
+
+      later[0]!.run();
+      expect(fs.existsSync(file)).toBe(false);
     });
 
     it("keeps the handoff page and the confirm when the platform did not bind the launch, and removes a file an earlier launch left", async () => {

@@ -26,6 +26,7 @@ import {
   type GuidedBrowser,
   type GuidedBrowserChoice,
 } from "./guided-browser";
+import { windowCheck, type WindowCheck } from "./guided-window";
 import { headlessLaunch } from "./launch-flags";
 import { mcpOrigins } from "./origins";
 import { withoutRedirects } from "./platform-fetch";
@@ -54,6 +55,18 @@ const LAUNCH_SECONDS = 15 * 60;
 
 const LAUNCH_FILE = "launch.json";
 
+export const LAUNCH_FILE_KEEP_MS = 120_000;
+
+function scheduleLater(ms: number, run: () => void): void {
+  const timer = setTimeout(run, ms);
+
+  timer.unref();
+  process.once("exit", () => {
+    clearTimeout(timer);
+    run();
+  });
+}
+
 export interface LaunchPlan {
   choice: GuidedBrowserChoice;
   extensionDir: string;
@@ -77,9 +90,10 @@ export interface GuidedConnectRuntime {
   launchEnv(): Record<string, string>;
   launch(plan: LaunchPlan): LaunchResult;
   windowCheck?(profileDir: string): Promise<WindowCheck>;
+  schedule?(ms: number, run: () => void): void;
 }
 
-export type WindowCheck = "visible" | "headless" | "unknown";
+export type { WindowCheck } from "./guided-window";
 
 function quietRun(command: string, args: string[]): string | null {
   try {
@@ -230,33 +244,6 @@ export function visibleLaunchEnv(env: NodeJS.ProcessEnv | Record<string, string 
   return headlessLaunch({ headless: false }, env).env ?? {};
 }
 
-export function headlessFromProcesses(raw: string | null, profileDir: string): WindowCheck {
-  const lines = String(raw ?? "").split("\n").filter((line) => line.includes(profileDir) && !line.includes(" preview "));
-  if (!lines.length) return "unknown";
-
-  return lines.some((line) => /(?:^|\s)--?headless(?:[=\s]|$)/.test(line)) ? "headless" : "visible";
-}
-
-/* @invariant AN ANSWER NEVER CLAIMS A WINDOW THE MACHINE DID NOT SHOW. A
- * setup outside the MCP can add --headless to every browser it starts, so
- * after a launch the browser processes of the guided profile are read back
- * from the process table for a few seconds; one started with --headless turns
- * the answer into the console page with the reason. Where the table cannot be
- * read, nothing is claimed beyond the launch.
- */
-async function windowCheck(profileDir: string): Promise<WindowCheck> {
-  if (process.platform !== "darwin" && process.platform !== "linux") return "unknown";
-
-  for (let waited = 0; waited < 10_000; waited += 500) {
-    const seen = headlessFromProcesses(quietRun("ps", ["-axww", "-o", "args="]), profileDir);
-    if (seen !== "unknown") return seen;
-
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-
-  return "unknown";
-}
-
 export const guidedConnectRuntime: GuidedConnectRuntime = {
   launchBlock: () => {
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== "EXTENSION_HEADLESS" && key !== "EXTENSION_BROWSER_FLAGS"));
@@ -276,6 +263,7 @@ export const guidedConnectRuntime: GuidedConnectRuntime = {
   launchEnv: () => visibleLaunchEnv(process.env),
   launch: launchGuidedBrowser,
   windowCheck,
+  schedule: scheduleLater,
 };
 
 function workspaceToken(workspace: string, api?: string): string {
@@ -398,8 +386,9 @@ function launchExpiry(raw: string | undefined): string {
  * extension folder this MCP loads and nowhere else, never into argv, a log or
  * the answer. The extension takes them once, opens the handoff in a background
  * tab and gives the secret to that tab alone, so the confirm press is skipped
- * there and kept for any link opened anywhere else. A launch that does not
- * use them removes any file an earlier launch left.
+ * there and kept for any link opened anywhere else. The file is removed two
+ * minutes after the launch, when this process exits, and on the next guided
+ * connect, whichever comes first.
  */
 export function writeLaunchFile(extensionDir: string, launch: { handoff: string; secret: string; expiresAt: string }): void {
   const file = launchFile(extensionDir);
@@ -516,6 +505,8 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
 
     return plainAnswer(answer, `No browser was opened: ${label} did not start (${launched.reason ?? "no reason given"}).`);
   }
+
+  if (onKeyPage) (runtime.schedule ?? scheduleLater)(LAUNCH_FILE_KEEP_MS, () => clearLaunchFile(extensionDir));
 
   const shown = runtime.windowCheck ? await runtime.windowCheck(profileDir) : "unknown";
 
