@@ -123,7 +123,7 @@ export function connectedAnswer(command: string, connect: { workspace: string; p
       nextStep: nextStep(account.healthy === false ? "connect" : "done", say, url),
     },
     hint: [
-      `No window was opened: ${workspace} already holds a ${name} account.`,
+      `No window was opened: ${workspace} already holds an account for ${name}.`,
       project ? `${project} uses it unless it holds a key of its own.` : "",
       `Tell the person: "${say}" Only when they ask for a new key, call ${replaceCall(workspace, store)}.`,
     ].filter(Boolean).join(" "),
