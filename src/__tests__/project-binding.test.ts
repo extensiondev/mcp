@@ -788,7 +788,8 @@ describe("the guided store connect opens the MCP's own browser with extension.de
     const older = await guided("cezaraugusto", runtime("chromium", (url) => (url.includes("clients2.google.com") ? new Response(STORE_CRX) : new Response("", { status: 404 }))));
 
     expect(older.value.toolsExtension.note).toBe("The Chrome Web Store serves 0.1.0, older than 0.1.3, so extension.dev tools 0.1.3 is the copy bundled with this MCP.");
-    expect(launches[0]!.extensionDir).toContain("bundled-chromium-0.1.3");
+    expect(launches[0]!.extensionDir).toBe(path.join(tmp, "cache", "guided-chromium"));
+    expect(fs.existsSync(path.join(tmp, "cache", `bundled-chromium-0.1.3-${readBundleRecord(bundledToolsDir()!)!.sha256.chromium.slice(0, 12)}`))).toBe(true);
 
     const offline = await guided("cezaraugusto", runtime("chromium", () => Promise.reject(new Error("getaddrinfo ENOTFOUND"))));
 
@@ -917,10 +918,17 @@ describe("the guided store connect opens the MCP's own browser with extension.de
       expect(launch).toMatchObject({ handoff: PROD_HANDOFF, expiresAt: launchExpiresAt });
       expect(crypto.createHash("sha256").update(launch.secret).digest("hex")).toBe(minted.launchHash);
       expect(fs.statSync(file).mode & 0o777).toBe(0o600);
-      expect(treeSha256(launches[0]!.extensionDir)).toBe(readBundleRecord(bundledToolsDir()!)!.sha256.chromium);
+      const manifest = JSON.parse(fs.readFileSync(path.join(launches[0]!.extensionDir, "manifest.json"), "utf8"));
+      const verified = fs.readdirSync(path.join(tmp, "cache")).find((name) => name.startsWith("bundled-chromium-"))!;
+
+      expect(manifest.host_permissions).toEqual(expect.arrayContaining(["https://partner.microsoft.com/*", "https://*.extension.dev/*"]));
+      expect(manifest).not.toHaveProperty("optional_host_permissions");
+      expect(treeSha256(path.join(tmp, "cache", verified))).toBe(readBundleRecord(bundledToolsDir()!)!.sha256.chromium);
+      expect(JSON.parse(fs.readFileSync(path.join(tmp, "cache", verified, "manifest.json"), "utf8")).optional_host_permissions).toContain("https://partner.microsoft.com/*");
       expect(out).toMatchObject({ status: "workspace-connect-guided", value: { signedIn: true, landedOn: GUIDED_KEY_PAGES.edge!.url } });
       expect(out.value.sayToPerson).toContain("shows the Edge Partner Center Publish API page");
-      expect(out.value.sayToPerson).toContain("First press the extension.dev tools button");
+      expect(out.value.sayToPerson).toContain("the extension.dev tools panel shows on that page");
+      expect(out.value.sayToPerson).not.toContain("Allow");
       expect(JSON.stringify(out)).not.toContain(launch.secret);
       expect(JSON.stringify(out)).not.toContain("c".repeat(43));
     });

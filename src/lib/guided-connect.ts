@@ -31,7 +31,7 @@ import { mcpOrigins } from "./origins";
 import { withoutRedirects } from "./platform-fetch";
 import { isRow, text } from "./row";
 import { nextStep, storeLabel } from "./store-connection";
-import { LAUNCH_FILE, resolveToolsExtension, type ToolsExtension } from "./tools-extension";
+import { resolveToolsExtension, type ToolsExtension } from "./tools-extension";
 import { userCacheDir } from "./user-cache-dir";
 
 type Args = Record<string, unknown>;
@@ -51,6 +51,8 @@ export const GUIDED_KEY_PAGES: Record<string, { url: string; page: string }> = {
 };
 
 const LAUNCH_SECONDS = 15 * 60;
+
+const LAUNCH_FILE = "launch.json";
 
 export interface LaunchPlan {
   choice: GuidedBrowserChoice;
@@ -349,6 +351,36 @@ export async function consoleLanding(options: { workspace: string; next: string;
   return { openUrl: options.plainUrl, signedIn: false, note: SIGN_IN_ONCE };
 }
 
+export function guidedManifest(manifest: Record<string, unknown>): Record<string, unknown> {
+  const hosts = (value: unknown) => (Array.isArray(value) ? value.filter((host): host is string => typeof host === "string") : []);
+  const { optional_host_permissions: optional, ...rest } = manifest;
+
+  return { ...rest, host_permissions: [...new Set([...hosts(manifest.host_permissions), ...hosts(optional)])] };
+}
+
+/* @invariant THE GUIDED BROWSER LOADS ITS OWN COPY OF EXTENSION.DEV TOOLS
+ * WITH THE STORE HOSTS ALREADY GRANTED (MCP ledger 1116). That browser exists
+ * only for the store connect, so the copy it loads declares the store sites
+ * the store build keeps optional as host permissions, and the guide panel is
+ * on the key page without a toolbar grant. The copy is made from the folder
+ * that just passed its hash check, in the person's private cache, and the
+ * verified folder and every store build keep their optional permissions.
+ */
+export function guidedCopy(verifiedDir: string, cacheDir: string, engine: string): string {
+  const target = path.join(cacheDir, `guided-${engine}`);
+
+  fs.mkdirSync(cacheDir, { recursive: true, mode: 0o700 });
+  fs.rmSync(target, { recursive: true, force: true });
+  fs.cpSync(verifiedDir, target, { recursive: true });
+  fs.chmodSync(target, 0o700);
+
+  const manifestPath = path.join(target, "manifest.json");
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+  fs.writeFileSync(manifestPath, `${JSON.stringify(guidedManifest(manifest), null, 2)}\n`);
+
+  return target;
+}
+
 function launchFile(extensionDir: string): string {
   return path.join(extensionDir, LAUNCH_FILE);
 }
@@ -471,15 +503,16 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
   const landing = await consoleLanding({ workspace, next, plainUrl, api: text(args.api) || undefined, launchHash, fetchImpl: runtime.fetch });
   const onKeyPage = Boolean(keyPage && landing.launchBound && landing.openUrl.split("#")[0] === LAUNCH_HANDOFF_PAGE);
 
-  if (onKeyPage) writeLaunchFile(extension.dir, { handoff: landing.openUrl, secret, expiresAt: launchExpiry(landing.expiresAt) });
-  else clearLaunchFile(extension.dir);
+  const extensionDir = guidedCopy(extension.dir, runtime.cacheDir(), guidedEngine(choice.browser));
+
+  if (onKeyPage) writeLaunchFile(extensionDir, { handoff: landing.openUrl, secret, expiresAt: launchExpiry(landing.expiresAt) });
 
   const profileDir = guidedProfileDir(runtime.stateDir(), choice.browser as GuidedBrowser);
   const env = runtime.launchEnv();
-  const launched = runtime.launch({ choice, extensionDir: extension.dir, profileDir, url: onKeyPage && keyPage ? keyPage.url : landing.openUrl, env });
+  const launched = runtime.launch({ choice, extensionDir, profileDir, url: onKeyPage && keyPage ? keyPage.url : landing.openUrl, env });
 
   if (!launched.launched) {
-    clearLaunchFile(extension.dir);
+    clearLaunchFile(extensionDir);
 
     return plainAnswer(answer, `No browser was opened: ${label} did not start (${launched.reason ?? "no reason given"}).`);
   }
@@ -487,7 +520,7 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
   const shown = runtime.windowCheck ? await runtime.windowCheck(profileDir) : "unknown";
 
   if (shown === "headless") {
-    clearLaunchFile(extension.dir);
+    clearLaunchFile(extensionDir);
 
     return plainAnswer(answer, `No window is showing: ${label} started headless, since a --headless flag reached it from this machine's own browser setup, not from this MCP.`);
   }
@@ -495,7 +528,7 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
   const storeName = store ? storeLabel(store) : "the store";
   const signIn = landing.signedIn ? "" : "sign in to extension.dev once, then ";
   const say = onKeyPage && keyPage
-    ? `In front, the ${label} window shows the ${keyPage.page}; sign in to Partner Center there if it asks. First press the extension.dev tools button in the browser toolbar (inside the puzzle-piece Extensions menu when it is not pinned), then "Allow on ${storeName}" and accept the browser's prompt; skip this when the panel already shows on the page. The extension.dev tools panel on the page then names each press ("Turn on API" or "New API key") and sends the new key to the ${workspace} console, which signs in by itself in a background tab, so no key passes through this chat. Tell me when the panel says ${storeName} is connected.`
+    ? `In front, the ${label} window shows the ${keyPage.page}; sign in to Partner Center there if it asks. Within a few seconds the extension.dev tools panel shows on that page (the ${workspace} console signs in by itself in a background tab) and names the first press, "Turn on API" or "New API key". When the new key shows, check the Client ID in the panel and press Send; the key goes to the console, which checks it with ${storeName} before it keeps it, so no key passes through this chat. ${storeName} is connected only when the panel says so.`
     : `In the ${label} window that just opened on the ${workspace} Store accounts page, ${signIn}follow the extension.dev tools panel: it takes you to the ${storeName} key page, captures the values when you press it and hands them to the console, so no key passes through this chat. Tell me when the page says connected.`;
   const opened = launched.reused ? "The guided browser already running took the page:" : "Opened";
 
