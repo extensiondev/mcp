@@ -198,14 +198,15 @@ function repositoryAbove(root: string): string | null {
  */
 function storeMdRead(projectPath: string): { file: string; fromRepository: string | null } {
   const root = engineProjectRoot(projectPath);
-  const own = [path.resolve(projectPath), root].map((dir) => path.join(dir, STORE_MD_FILENAME));
+  const atRoot = path.join(root, STORE_MD_FILENAME);
+  const own = [path.join(path.resolve(projectPath), STORE_MD_FILENAME), atRoot];
   const found = own.find(isFile);
   if (found) return { file: found, fromRepository: null };
 
   const repository = repositoryAbove(root);
   const shared = repository ? path.join(repository, STORE_MD_FILENAME) : null;
 
-  return shared && isFile(shared) ? { file: shared, fromRepository: repository } : { file: own[1], fromRepository: null };
+  return shared && isFile(shared) ? { file: shared, fromRepository: repository } : { file: atRoot, fromRepository: null };
 }
 
 export function storeMdPath(projectPath: string): string {
