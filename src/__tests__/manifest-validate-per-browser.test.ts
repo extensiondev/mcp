@@ -83,7 +83,7 @@ describe("references are checked in each requested browser's view", () => {
 describe("an unknown browser is refused, an empty list is the default list", () => {
   const MV3 = { manifest_version: 3, name: "x", version: "1.0.0" };
 
-  it("refuses a capitalised or misspelled target instead of passing it unchecked", async () => {
+  it("refuses a capitalized or misspelled target instead of passing it unchecked", async () => {
     const dir = project(MV3);
     const out = await validate(dir, ["Chrome"]);
     expect(out.ok).toBe(false);

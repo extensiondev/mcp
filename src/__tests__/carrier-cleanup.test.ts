@@ -63,7 +63,7 @@ afterEach(() => {
   }
 });
 
-describe("a carrier an earlier server placed is still recognised and taken back", () => {
+describe("a carrier an earlier server placed is still recognized and taken back", () => {
   it("takes back a marked copy", () => {
     const dir = project();
     placedByAnEarlierServer(dir);

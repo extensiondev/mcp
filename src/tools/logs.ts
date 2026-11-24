@@ -392,7 +392,7 @@ export function controlRefusal(
   return {
     code: "E_CONTROL_CHANNEL",
     status: "control-channel-refused",
-    message: `${preamble} That code is an application-level refusal this MCP does not recognise, so the broker's own reason above is the whole diagnosis. It dialed as a consumer with control envelope version ${sentVersion}, the version its pinned Extension.js speaks; an engine newer than the pin can refuse for reasons this release has never seen.`,
+    message: `${preamble} That code is an application-level refusal this MCP does not recognize, so the broker's own reason above is the whole diagnosis. It dialed as a consumer with control envelope version ${sentVersion}, the version its pinned Extension.js speaks; an engine newer than the pin can refuse for reasons this release has never seen.`,
     hint: "Read the file instead by calling extension_logs without follow, and compare the engine versions with extension_doctor.",
   };
 }

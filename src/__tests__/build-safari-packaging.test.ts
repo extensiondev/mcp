@@ -825,7 +825,7 @@ describe("extension_build survives an engine that has no --output flag at all", 
     );
   });
 
-  it("recognises the redesigned wording of the refusal and still retries", async () => {
+  it("recognizes the redesigned wording of the refusal and still retries", async () => {
     const dir = project();
     distFor(dir, "chrome");
     cliResponse = { code: 1, stdout: "", stderr: UNKNOWN_OUTPUT_REDESIGNED };
@@ -840,7 +840,7 @@ describe("extension_build survives an engine that has no --output flag at all", 
   });
 });
 
-describe("extension_build refuses a Safari packaging option it cannot honour", () => {
+describe("extension_build refuses a Safari packaging option it cannot honor", () => {
   it("refuses the options on a non-Safari target instead of ignoring them", async () => {
     const dir = project();
     distFor(dir, "chrome");

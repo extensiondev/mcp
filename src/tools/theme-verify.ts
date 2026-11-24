@@ -399,7 +399,7 @@ export async function handler(args: {
           resolver: {
             status: "reported",
             detail:
-              `Headless proxy: the colours this resolver derives from the manifest, transcribed from Chromium main as fetched on 2026-07-04 (not a live Chrome read)${resolved.caveats.length ? "; the caveats name what it does not model" : ""}.`,
+              `Headless proxy: the colors this resolver derives from the manifest, transcribed from Chromium main as fetched on 2026-07-04 (not a live Chrome read)${resolved.caveats.length ? "; the caveats name what it does not model" : ""}.`,
             resolved,
           },
           realPaint: { status: "needs-attended", how: attended[1].how },

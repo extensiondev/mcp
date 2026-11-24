@@ -422,7 +422,7 @@ describe("extension_eval evaluates a web tab named by url over CDP, so Trusted T
   });
 });
 
-describe("the debug-port routes honour the session's eval gate", () => {
+describe("the debug-port routes honor the session's eval gate", () => {
   it.each([
     ["the background", { context: "background" }],
     ["a web tab named by url", { context: "page", url: "https://example.com" }],
@@ -452,7 +452,7 @@ describe("the debug-port routes honour the session's eval gate", () => {
   });
 });
 
-describe("the debug-port eval honours the caller's timeout and says when it ran out", () => {
+describe("the debug-port eval honors the caller's timeout and says when it ran out", () => {
   it("hands the caller's timeout to the evaluate instead of a fixed 15 s", async () => {
     const p = project(MV3);
     cdpTargets = [{ id: "sw", type: "service_worker", url: `chrome-extension://${p.id}/sw.js`, title: "" }];

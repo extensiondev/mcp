@@ -17,7 +17,7 @@ describe("the invocation cache key separator is written as an escape, never as a
   });
 });
 
-describe("the engine's refusal of --output json is recognised in both of its phrasings and never in a real failure", () => {
+describe("the engine's refusal of --output json is recognized in both of its phrasings and never in a real failure", () => {
   it("matches commander's lowercase refusal", () => {
     expect(refusedTheOutputFlag("error: unknown option '--output'")).toBe(true);
   });

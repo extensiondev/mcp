@@ -930,7 +930,7 @@ describe("console-errors-empty", () => {
     expect(check.detail).toMatch(/dropped 7 line/);
   });
 
-  it("passes on a live timeline with no error, and honours ignore", async () => {
+  it("passes on a live timeline with no error, and honors ignore", async () => {
     liveSession();
     writeLogs([
       logHeader("run-1"),

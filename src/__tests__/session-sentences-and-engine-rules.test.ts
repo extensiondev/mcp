@@ -212,7 +212,7 @@ describe("the engine's rules", () => {
     expect(candidates.some((c) => c.includes(path.join("dist", "firefox-based")))).toBe(false);
   });
 
-  it("does not call a theme with image-derived colours headless-clean", async () => {
+  it("does not call a theme with image-derived colors headless-clean", async () => {
     const out = JSON.parse(
       await themeVerify({ manifest: { manifest_version: 3, name: "T", version: "1.0", theme: { colors: { frame: [1, 2, 3] }, images: { theme_frame: "frame.png" } } } }),
     );

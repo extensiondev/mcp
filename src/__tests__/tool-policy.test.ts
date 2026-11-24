@@ -216,7 +216,7 @@ describe("the default start stays under a directory's tool ceiling", () => {
   });
 });
 
-describe("the server honours the options", () => {
+describe("the server honors the options", () => {
   it("lists every tool with its annotations when every group is named", async () => {
     const client = await connected({ features: [...FEATURE_GROUPS], noShip: false });
     const listed = (await client.listTools()).tools;

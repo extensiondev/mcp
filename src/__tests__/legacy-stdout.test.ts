@@ -50,7 +50,7 @@ describe("the deprecated stdout fallback", () => {
     expect(clean).toContain("ready in 300ms");
   });
 
-  it("still recognises a compile failure and a locked profile in raw output", () => {
+  it("still recognizes a compile failure and a locked profile in raw output", () => {
     expect(
       legacyCompileScrape("✖✖✖ Probe compiled with errors in 180 ms."),
     ).toBe(true);

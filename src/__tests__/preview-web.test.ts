@@ -151,7 +151,7 @@ describe("extension_preview_web", () => {
     }
   });
 
-  it("honours hostUrl and keeps preview as the only door", async () => {
+  it("honors hostUrl and keeps preview as the only door", async () => {
     const dir = tmpDist(MANIFEST);
 
     try {

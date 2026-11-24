@@ -38,7 +38,7 @@ function claimCarrier(target: string): CarrierClaim {
   return { ours: false, how: "foreign" };
 }
 
-const PAYLOAD_NOTE = `Its ${MARKER_FILE} marker was missing, but its manifest key derives the carrier's own extension id ${CARRIER_EXTENSION_ID}, which only the Live Preview carrier has, so it was recognised as one an earlier server placed and taken back.`;
+const PAYLOAD_NOTE = `Its ${MARKER_FILE} marker was missing, but its manifest key derives the carrier's own extension id ${CARRIER_EXTENSION_ID}, which only the Live Preview carrier has, so it was recognized as one an earlier server placed and taken back.`;
 
 const FOREIGN_NOTE = `extensions/${CARRIER_DIR_NAME} has no ${MARKER_FILE} marker and does not carry the carrier's own manifest key, so it is not a carrier this tool placed and was left untouched. Nothing here deletes a directory this tool did not write: rename it or move it out of ./extensions yourself.`;
 

@@ -132,7 +132,7 @@ describe("dom_snapshot targeting", () => {
     expect(calls[0][calls[0].indexOf("--url") + 1]).toBe("https://example.com");
   });
 
-  it("still honours an explicit tab id", async () => {
+  it("still honors an explicit tab id", async () => {
     await domSnapshot.handler({ projectPath: "/p", context: "page", tab: 7 });
 
     expect(calls[0][calls[0].indexOf("--tab") + 1]).toBe("7");

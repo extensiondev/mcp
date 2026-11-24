@@ -50,7 +50,7 @@ const sources = [
   text: fs.readFileSync(file, "utf8"),
 }));
 
-describe("no tool reads the CLI's human copy: each token above appears only in first-party CLI copy, so matching one couples agent behaviour to a copy edit in another repo", () => {
+describe("no tool reads the CLI's human copy: each token above appears only in first-party CLI copy, so matching one couples agent behavior to a copy edit in another repo", () => {
   it("has sources to check", () => {
     expect(sources.length).toBeGreaterThan(20);
   });

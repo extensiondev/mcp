@@ -82,7 +82,7 @@ describe("control-channel constants come from the engine, not from literals", ()
     for (const [name, value] of Object.entries(adopted)) {
       expect(
         published[name],
-        `extension-develop/bridge no longer exports ${name}: every refusal would read as an unrecognised close`,
+        `extension-develop/bridge no longer exports ${name}: every refusal would read as an unrecognized close`,
       ).toBeTypeOf("number");
 
       expect(value, `${name} is not the engine's own value`).toBe(
@@ -236,7 +236,7 @@ describe("older engine, different control envelope", () => {
     it("keeps an unknown 4xxx generic instead of guessing a remedy", () => {
       const refusal = controlRefusal(4099, "something new", url, 1);
       expect(refusal?.code).toBe("E_CONTROL_CHANNEL");
-      expect(refusal?.message).toMatch(/does not recognise/);
+      expect(refusal?.message).toMatch(/does not recognize/);
       expect(refusal?.message).toContain("something new");
     });
 

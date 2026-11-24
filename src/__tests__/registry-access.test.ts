@@ -372,7 +372,7 @@ describe("private projects", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  it("leaves the old behaviour untouched when no ref is given", async () => {
+  it("leaves the old behavior untouched when no ref is given", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({}, 401));
     const res = await fetchRegistryJson(URL_UNDER_TEST, fetchImpl as any);
     expect(res.ok).toBe(false);
