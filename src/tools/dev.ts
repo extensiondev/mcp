@@ -83,7 +83,7 @@ import {
 export const schema = {
   name: "extension_dev",
   description:
-    "Run the extension while you edit it (dev build, hot reload, browser): the first call for \"run my extension\". ready.status \"ready\" means nothing else to call. extension_start runs the production build.",
+    "Run the extension in a browser with a dev build and hot reload while it is edited. Answers ready.status; ready.status \"ready\" means nothing else to call. extension_start runs the production build instead; extension_open shows a surface, extension_reload forces a reload, extension_wait waits for a rebuild and extension_stop ends the session. Safari needs macOS.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -91,12 +91,12 @@ export const schema = {
       browser: LAUNCH_BROWSER,
       port: {
         type: "number",
-        description: "Port (0 picks one).",
+        description: "Dev server port; 0 picks a free one.",
       },
       noBrowser: {
         type: "boolean",
         default: false,
-        description: "No browser.",
+        description: "Start the dev server without launching a browser.",
       },
       polyfill: {
         type: "boolean",

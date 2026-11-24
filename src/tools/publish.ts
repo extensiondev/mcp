@@ -14,7 +14,7 @@ import { PUBLISH_LOCAL } from "./publish-local";
 
 export const schema = {
   name: "extension_publish",
-  description: "Publish a build on extension.dev: the link for testers, with a download and a run command for each browser; use it first to share or ship (no project yet: extension_project_create). On a public project, or a public channel, send testers the channel link (<workspace>.extension.dev/<project>/<channel>); a private build link expires.",
+  description: "Publish and share a build through extension.dev: answers the tester link, a page with a download and a run command for each browser (no project yet: extension_project_create). extension_preview_web: emulator links; extension_shares manages them. On a public project, or a public channel, send testers the channel link (<workspace>.extension.dev/<project>/<channel>); a private build link expires.",
   inputSchema: {
     type: "object" as const,
     properties: {

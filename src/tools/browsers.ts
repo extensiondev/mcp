@@ -16,7 +16,7 @@ import { uninstallManagedBrowser } from "./uninstall-browser";
 export const schema = {
   name: "extension_browsers",
   description:
-    "Find, install and remove browsers Extension.js launches. detect scans system and managed ones; install downloads hundreds of MB in one blocking call; uninstall never touches a system install.",
+    "Find, install and remove browsers Extension.js launches. detect scans system and managed ones; install downloads hundreds of MB in one blocking call; uninstall never touches a system install. Answers each browser found with its path and version, the ones extension_dev can launch.",
   inputSchema: {
     type: "object" as const,
     properties: {

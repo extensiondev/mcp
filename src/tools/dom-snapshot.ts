@@ -77,7 +77,7 @@ const READ_LESS = 'call extension_dom_snapshot with include: ["elements"] for th
 export const schema = {
   name: "extension_dom_snapshot",
   description:
-    "Take a shallow DOM snapshot of one open surface or targetId, or list what is open (listTargets on the debug port, listTabs). Pick it over extension_inspect for a named surface.",
+    "Take a DOM snapshot of one open extension surface or targetId, or list what is open (listTargets on the debug port, listTabs). Answers counts, html or the visible interactive elements with selectors; extension_inspect answers a web page in depth, extension_element acts, extension_eval runs code, extension_logs answers console history.",
   inputSchema: {
     type: "object" as const,
     properties: {

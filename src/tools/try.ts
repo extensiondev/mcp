@@ -41,7 +41,7 @@ const NO_SAMPLE_PAGE = "about:blank";
 export const schema = {
   name: COMMAND,
   description:
-    "Run a published extension.dev build in a fresh profile on this machine, no install, and screenshot it; warn the person about what it can reach. End with action:'close'; a local project is extension_dev.",
+    "Run a published extension.dev build in a fresh profile on this machine, no install, and screenshot it. Answers the opened page, its screenshot and the sites and permissions the extension can reach; extension_dev runs a local project. action:'close' ends it. Safari is refused.",
   inputSchema: {
     type: "object" as const,
     properties: {

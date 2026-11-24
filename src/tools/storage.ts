@@ -27,7 +27,7 @@ import {
 export const schema = {
   name: "extension_storage",
   description:
-    "Read or write the extension's chrome.storage from the background over the control channel, no eval.",
+    "Read or write the extension's storage (chrome.storage or browser.storage) from its background, with no eval. Answers a key's value or the whole area; a set reads the key back in value.readBack. extension_eval would need allowEval for the same. Needs the session's control channel (on by default in extension_dev).",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -41,9 +41,9 @@ export const schema = {
         type: "string",
         enum: ["local", "sync", "session", "managed"],
         default: "local",
-        description: "chrome.storage area.",
+        description: "local (this device), sync (the browser account), session (until restart) or managed (policy, read-only).",
       },
-      key: { type: "string", description: "Key to get or set." },
+      key: { type: "string", description: "Key to read or write; omitted with get, the whole area answers." },
       value: {
         description:
           "Value to set; for null or \"\" use valueJson.",

@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { serverInstructions, tools as ALL_TOOLS } from "../index";
+import { DEFAULT_SERVER_OPTIONS, isToolListed } from "../lib/tool-policy";
 
 const IMPERATIVE_VERBS = [
   "Analyze",
   "Browse",
   "Build",
+  "Check",
   "Click",
   "Create",
   "Diagnose",
@@ -19,9 +21,11 @@ const IMPERATIVE_VERBS = [
   "Promote",
   "Publish",
   "Read",
+  "Rebuild",
   "Release",
   "Reload",
   "Run",
+  "Search",
   "Sign",
   "Stop",
   "Stub",
@@ -230,7 +234,7 @@ describe("the link tools speak of a build link and a channel link, so an agent c
   });
 });
 
-describe("917: a description's first sentence says when to reach for the tool in place of the shell", () => {
+describe("917: a description's first sentence says what the tool does and what it answers", () => {
   const first = (name: string): string => {
     const text = ALL_TOOLS.find((tool) => tool.schema.name === name)!.schema.description;
 
@@ -238,20 +242,81 @@ describe("917: a description's first sentence says when to reach for the tool in
   };
 
   it.each([
-    ["extension_build", "Build an extension instead of a package script or bundler:"],
-    ["extension_manifest_validate", "Validate manifest.json after any edit, in place of jq or a linter:"],
-    ["extension_create", "Create any new extension, plain JavaScript too, from a template (extension_templates), never by hand;"],
+    ["extension_build", "Build an extension into dist/<browser>/ on this machine, one browser a call."],
+    ["extension_manifest_validate", "Validate manifest.json against each browser:"],
+    ["extension_create", "Create a new extension from a template (extension_templates), plain JavaScript too;"],
     ["extension_templates", "Browse the template catalog or read a template's files."],
   ])("%s opens with %s", (name, opening) => {
     expect(first(name)).toBe(opening);
   });
 
-  it("says what the build and the manifest check add over the shell, and names the plain JavaScript template", () => {
+  it("says what the build and the manifest check answer, and names the plain JavaScript template", () => {
     const text = (name: string): string => ALL_TOOLS.find((tool) => tool.schema.name === name)!.schema.description;
 
-    expect(text("extension_build")).toMatch(/one dist\/<browser>\/ a call, with store review risks/);
+    expect(text("extension_build")).toMatch(/Answers the output path, warnings and store review risks/);
     expect(text("extension_build")).toContain("Not for sharing (extension_builds)");
     expect(text("extension_manifest_validate")).toMatch(/per-browser errors, permissions the code calls but lacks, and buildBlocking errors/);
     expect(text("extension_templates")).toContain("'javascript' (plain)");
+  });
+});
+
+const ADJACENT_SETS = [
+  ["extension_inspect", "extension_dom_snapshot", "extension_element", "extension_eval", "extension_logs"],
+  ["extension_dev", "extension_start", "extension_open", "extension_reload", "extension_wait", "extension_stop"],
+  ["extension_build", "extension_builds", "extension_builds_act", "extension_analyze"],
+  ["extension_submit", "extension_submit_check", "extension_release_promote", "extension_release_status"],
+  ["extension_publish", "extension_shares", "extension_preview_web"],
+  ["extension_create", "extension_project_create", "extension_add_feature", "extension_templates"],
+  ["extension_auth", "extension_approvals", "extension_workspace"],
+];
+
+const DEFAULT_DESCRIPTION_CAP = 400;
+
+const STEERING = [
+  /instead of a package script or bundler/i,
+  /in place of jq or a linter/i,
+  /not jq or a linter/i,
+  /never by hand/i,
+  /use it first/i,
+  /memory is the fallback/i,
+  /search this server first/i,
+  /never hand the person a shell command/i,
+  /warn the person/i,
+  /\b(pick|use|call|run) it (first|last|over|in place of|only)\b/i,
+];
+
+describe("1106 and 1109: a description a grader reads cold says what the tool answers and which neighbor answers the rest, without steering", () => {
+  const description = (name: string): string => ALL_TOOLS.find((tool) => tool.schema.name === name)?.schema.description ?? "";
+  const names = (text: string): string[] => [...text.matchAll(/\bextension_[a-z_]+/g)].map((match) => match[0]);
+
+  it.each(ALL_TOOLS.filter((tool) => isToolListed(tool.schema.name, DEFAULT_SERVER_OPTIONS)).map((tool) => [tool.schema.name]))(
+    "%s, listed by default, stays under the length cap",
+    (name) => {
+      expect(description(name).length, name).toBeLessThanOrEqual(DEFAULT_DESCRIPTION_CAP);
+    },
+  );
+
+  it.each(ADJACENT_SETS.flatMap((set) => set.map((name) => [name, set] as const)))("%s names every other member of its adjacent set", (name, set) => {
+    const named = new Set(names(description(name)));
+
+    expect(set.filter((other) => other !== name && !named.has(other)), name).toEqual([]);
+  });
+
+  it("states what each tool answers, so the comparison is a fact about the result", () => {
+    const silent = ALL_TOOLS.map((tool) => tool.schema.name).filter((name) => !/\b(answers?|returns|lists|reads)\b/i.test(description(name)));
+
+    expect(silent).toEqual([]);
+  });
+
+  it.each([
+    ...ALL_TOOLS.map((tool) => [tool.schema.name, tool.schema.description] as const),
+    ["the local instructions", serverInstructions({ features: ["local"], noShip: false })] as const,
+    ["the platform instructions", serverInstructions({ features: ["local", "platform", "extras"], noShip: false })] as const,
+  ])("%s carries no steering phrase", (_where, text) => {
+    expect(STEERING.filter((phrase) => phrase.test(text)).map(String)).toEqual([]);
+  });
+
+  it("keeps extension_publish describing, as a fact, that it shares and publishes through extension.dev", () => {
+    expect(description("extension_publish")).toMatch(/^Publish and share a build through extension\.dev/);
   });
 });

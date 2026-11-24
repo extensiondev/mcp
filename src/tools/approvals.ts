@@ -12,7 +12,7 @@ import { hostedOnly } from "../lib/hosted-only";
 
 export const schema = {
   name: "extension_approvals",
-  description: "List the open approvals this login asked for, read one, or revoke one approved by mistake (owner token) on extension.dev.",
+  description: "List the open approvals this login asked for, read one, or revoke one approved by mistake (owner token) on extension.dev. Answers each approval with its id and status; extension_auth handles logins, extension_workspace the workspace and its settings.",
   inputSchema: {
     type: "object" as const,
     properties: {

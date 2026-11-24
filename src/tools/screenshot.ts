@@ -95,7 +95,7 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 export const schema = {
   name: COMMAND,
   description:
-    "Take a .png of one surface, page or targetId in a live session (Safari: pages only); a closed surface is opened first, answering opened: true.",
+    "Take a .png of one surface, page or targetId in a live session; a closed surface is opened first, answering opened: true. Answers the file path and pixel size; extension_dom_snapshot answers the same surface as text. Safari: pages only.",
   inputSchema: {
     type: "object" as const,
     properties: {

@@ -20,7 +20,7 @@ import { projectAtPath } from "./auth-local";
 export const schema = {
   name: "extension_auth",
   description:
-    "Sign in to an existing extension.dev project (a code for extension.dev/device, then deviceCode and waitSeconds), list stored logins, or clear them. Identity is the stored token, not the working directory; value.tokenCheck.verdict is confirmed, refused or unavailable. A login lasts a day, or what lifetime says (CI: Access tokens).",
+    "Sign in to an extension.dev project (a code at extension.dev/device, then deviceCode), list stored logins, or clear them. Workspace data: extension_workspace; approvals: extension_approvals. Answers the login; identity is the stored token, not the working directory, and value.tokenCheck.verdict is confirmed, refused or unavailable. A login lasts a day, or what lifetime says (CI: Access tokens).",
   inputSchema: {
     type: "object" as const,
     properties: {

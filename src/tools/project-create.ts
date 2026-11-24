@@ -115,7 +115,7 @@ function storedNotes(stored: unknown): string[] {
 export const schema = {
   name: "extension_project_create",
   description:
-    `Create an extension.dev project from a folder (projectPath, uploaded, no push; again: re-seed and rebuild) or a GitHub repo, BEFORE extension_auth. First call: a URL a signed-in workspace member approves; resume with deviceCode and waitSeconds, the login is stored too. The first build spends one build of the workspace's monthly allowance, build command exactly as stored. projects: up to ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} per approval, at most ${PLATFORM_CREATES_PER_HOUR} per hour, never split silently.`,
+    "Create an extension.dev project from a folder (projectPath, uploaded, no push; again: re-seed and rebuild) or a GitHub repo, BEFORE extension_auth. The first call answers a URL a signed-in workspace member approves; resume with deviceCode and waitSeconds, the login is stored too. The first build spends one build of the workspace's monthly allowance, build command exactly as stored. extension_create, extension_templates and extension_add_feature work on local folders.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -181,7 +181,7 @@ export const schema = {
       projects: {
         type: "array",
         items: { type: "object" },
-        description: `Instead of project and its source: 1 to ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} (max ${MAX_BATCH_PROJECTS}) { project, repo (and rootDirectory, workspaceRoot, ref) or projectPath } of one workspace, one approval.`,
+        description: `Instead of project and its source: 1 to ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} (max ${MAX_BATCH_PROJECTS}) { project, repo (and rootDirectory, workspaceRoot, ref) or projectPath } of one workspace, up to ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} per approval and at most ${PLATFORM_CREATES_PER_HOUR} per hour, never split silently.`,
       },
       deviceCode: {
         type: "string",

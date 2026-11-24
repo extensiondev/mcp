@@ -48,7 +48,7 @@ import { geckoSocketLaunch } from "../lib/gecko-socket-process";
 export const schema = {
   name: "extension_start",
   description:
-    "Run the PRODUCTION build in a browser (extension_dev is for writing code); no hot reload or extension_logs. Bridge verbs need allowControl:true (Extension.js 4.1.34 or later; older is refused as engine-unsupported).",
+    "Run the PRODUCTION build in a browser, as it ships; no hot reload or extension_logs. Bridge verbs need allowControl:true: extension_open, extension_reload and the readers (Extension.js 4.1.34 or later; older is refused as engine-unsupported). extension_dev runs the dev build; extension_wait follows wait:false; extension_stop ends it. Answers the session's ports.",
   inputSchema: {
     type: "object" as const,
     properties: {

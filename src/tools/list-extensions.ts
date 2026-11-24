@@ -35,7 +35,7 @@ import { listSafariExtensions } from "../lib/safari-enable-read";
 export const schema = {
   name: "extension_list_extensions",
   description:
-    "List the extensions installed in a session's browser, read-only; its own row has ownExtension:true.",
+    "List the extensions installed in a running session's browser, read-only; the project's own row has ownExtension:true. Answers id, name and version per row; extension_doctor diagnoses a session that fails.",
   inputSchema: {
     type: "object" as const,
     properties: {

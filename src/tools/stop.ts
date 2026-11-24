@@ -58,7 +58,7 @@ import type { ProcessInfo, ReadyContract } from "../lib/types";
 export const schema = {
   name: "extension_stop",
   description:
-    "Stop a dev or start session and its browser when done; answers the server and browser pid it ended.",
+    "Stop a dev or start session and its browser. Answers the server and browser pid it ended. extension_dev and extension_start launch sessions; extension_reload reloads without ending one; extension_open and extension_wait need one running. all:true stops every session; across projects it needs confirm.",
   inputSchema: {
     type: "object" as const,
     properties: {

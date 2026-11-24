@@ -15,7 +15,7 @@ import { SHARES_LOCAL, listRecordedShares } from "./shares-local";
 
 export const schema = {
   name: "extension_shares",
-  description: "List, create and revoke emulator preview links for a tester, and list and revoke build links (a build link or channel link comes from extension_publish). A revoke is permanent and needs a workspace member's approval.",
+  description: "List, create and revoke emulator preview links for a tester, and list and revoke build links. Answers each link and its status. Links come from extension_publish (a build link or channel link) and extension_preview_web (an emulator link). A revoke is permanent and needs a workspace member's approval.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -24,7 +24,7 @@ export const schema = {
         type: "string",
         enum: ["build-link", "preview", "both"],
         default: "both",
-        description: "Which kind of share.",
+        description: "build-link (extension_publish links), preview (emulator links) or both.",
       },
       tokenId: {
         type: "string",
@@ -64,7 +64,7 @@ export const schema = {
         type: "string",
         enum: ["all", "live"],
         default: "all",
-        description: "all or live.",
+        description: "list: all links, or live for only those still open.",
       },
       limit: {
         type: "number",

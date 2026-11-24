@@ -385,10 +385,10 @@ describe("extension_project_create with projects: refusals before a device code 
     expect(fn).not.toHaveBeenCalled();
   });
 
-  it("names the limit in the tool description and the projects input", () => {
-    expect(schema.description).toContain("projects: up to 10 per approval");
-    expect(schema.description).toContain("at most 10 per hour");
-    expect(schema.description).toContain("never split silently");
+  it("names the limit in the projects input", () => {
+    expect(schema.inputSchema.properties.projects.description).toContain("up to 10 per approval");
+    expect(schema.inputSchema.properties.projects.description).toContain("at most 10 per hour");
+    expect(schema.inputSchema.properties.projects.description).toContain("never split silently");
     expect(schema.inputSchema.properties.projects.description).toContain("1 to 10 (max 20)");
   });
 });

@@ -25,7 +25,7 @@ const EXAMPLES_TREE_BASE = `https://github.com/extension-js/examples/tree/${PINN
 export const schema = {
   name: "extension_add_feature",
   description:
-    "Plan the surface before adding an options page, a popup, a side panel, a content script, a devtools panel, a new tab page or a background script. It lists manifest additions and new files and changes nothing; then validate the manifest, extension_build, extension_dev. New project: extension_create.",
+    "Plan the surface before adding an options page, a popup, a side panel, a content script, a devtools panel, a new tab page or a background script. It lists manifest additions and new files and changes nothing; then validate the manifest, extension_build, extension_dev. New project: extension_create; templates: extension_templates; extension.dev: extension_project_create.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -41,13 +41,13 @@ export const schema = {
           "newtab",
           "devtools",
         ],
-        description: "Surface to add",
+        description: "Surface to plan; decides the manifest keys and files listed.",
       },
       framework: {
         type: "string",
         enum: ["react", "vue", "svelte", "preact", "vanilla"],
         default: "react",
-        description: "UI framework.",
+        description: "UI framework the planned files use.",
       },
     },
     required: ["projectPath", "feature"],

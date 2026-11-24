@@ -319,8 +319,8 @@ describe("next steps lead with the tool path, not a shell command", () => {
     expect(last).toMatch(/Want me to open it in Chrome so you can try it\?/);
   });
 
-  it("the server instructions tell every harness to open the browser itself", () => {
-    expect(SERVER_INSTRUCTIONS).toMatch(/never hand the person a shell command/);
+  it("the server instructions say extension_dev opens the browser the person tries the extension in", () => {
+    expect(SERVER_INSTRUCTIONS).toMatch(/extension_dev opens the extension in a browser for the person to try/);
     expect(SERVER_INSTRUCTIONS).toMatch(/headless: false/);
   });
 });

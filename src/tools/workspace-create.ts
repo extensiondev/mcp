@@ -45,7 +45,7 @@ export interface WorkspaceCreateLocal {
 export const schema = {
   name: COMMAND,
   description:
-    "Create a missing extension.dev workspace, before extension_project_create. The first call answers a code and URL, and whoever approves becomes its owner; call again with deviceCode.",
+    "Create a missing extension.dev workspace, before extension_project_create; the personal workspace always exists. The first call answers a code and URL, and whoever approves becomes its owner; a second call with deviceCode finishes it.",
   inputSchema: {
     type: "object" as const,
     properties: {

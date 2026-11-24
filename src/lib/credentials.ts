@@ -789,7 +789,7 @@ export function expiredStoredLogin(selector?: CredentialSelector, nowSeconds?: n
 export const PROJECT_TOKEN_INPUT = {
   type: "string",
   description:
-    "Stored login '<workspace>/<project>' when several exist.",
+    "'<workspace>/<project>' login to use when several are stored.",
 } as const;
 
 export const LOGIN_STEPS =

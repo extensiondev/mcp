@@ -29,7 +29,7 @@ const COMMAND = "extension_analyze";
 export const schema = {
   name: "extension_analyze",
   description:
-    "Analyze a BUILT extension in dist/<browser>: sizes, entries, permissions, store checks (not on a dev build).",
+    "Analyze a built extension in dist/<browser>: total and shippable size, entry points, permissions and store checks. Answers sizes, reviewRisks and storeReadiness for what extension_build wrote; extension_builds and extension_builds_act cover builds on extension.dev. On a dev build it adds a note to run extension_build first.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -44,7 +44,7 @@ export const schema = {
         type: "string",
         enum: ["summary", "tree", "json"],
         default: "summary",
-        description: "Answer shape.",
+        description: "Accepted for compatibility; every value answers the same.",
       },
     },
     required: ["projectPath"],

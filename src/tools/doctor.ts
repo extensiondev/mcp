@@ -111,7 +111,7 @@ function sightedContractBrowser(projectPath: string): string | null {
 export const schema = {
   name: "extension_doctor",
   description:
-    "Diagnose a dev session leg by leg, each with its remediation; run it first when an act tool errors unexpectedly. value.capabilities reads WebGPU and isolation; with no projectPath it checks node, the CLI and the template cache.",
+    "Diagnose a dev session leg by leg, each with its remediation. Answers each check and value.capabilities (WebGPU, cross-origin isolation); with no projectPath it checks Node.js, the Extension.js CLI and the template cache. extension_logs answers the extension's own console instead.",
   inputSchema: {
     type: "object" as const,
     properties: {

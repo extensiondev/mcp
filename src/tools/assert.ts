@@ -119,7 +119,7 @@ const STORAGE_CONTEXTS = [
 export const schema = {
   name: COMMAND,
   description:
-    "Run a test stage on an extension_dev or extension_start session: pass, fail, not ready (a precondition) or inconclusive per expectation. Debug-port checks: extension_start allowControl:true; content-script-injected and console-errors-empty: extension_dev only.",
+    "Run a test stage on an extension_dev or extension_start session: pass, fail, not ready (a precondition) or inconclusive per expectation, in one call; extension_dom_snapshot and extension_logs answer raw state instead. Debug-port checks: extension_start allowControl:true; content-script-injected and console-errors-empty: extension_dev only.",
   inputSchema: {
     type: "object" as const,
     properties: {

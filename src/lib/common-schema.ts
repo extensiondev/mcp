@@ -48,7 +48,7 @@ export const MANAGED_BROWSERS = ["chrome", "chromium", "edge", "firefox"] as con
 
 export const PROJECT_PATH = {
   type: "string",
-  description: "Extension project root",
+  description: "The extension's folder (manifest.json or package.json).",
 } as const;
 
 export const SESSION_PROJECT_PATH = {
@@ -59,7 +59,7 @@ export const SESSION_PROJECT_PATH = {
 
 export const SESSION_BROWSER = {
   type: "string",
-  description: "Session browser; required if several run.",
+  description: "Running session's browser; needed when several run.",
 } as const;
 
 export const CALL_TIMEOUT = {
@@ -72,7 +72,7 @@ export const HOSTED_ACT_WAIT_SECONDS = 45;
 export function waitSecondsInput(waitsFor: string, omitted: string): { type: "number"; description: string } {
   return {
     type: "number",
-    description: `${waitsFor}, 0 to ${WAIT_SECONDS_MAX} (omitted: ${omitted}); the hosted lane waits at most ${HOSTED_ACT_WAIT_SECONDS} and names a cut in warnings.`,
+    description: `${waitsFor}, 0 to ${WAIT_SECONDS_MAX} (omitted: ${omitted}); the hosted server waits at most ${HOSTED_ACT_WAIT_SECONDS} and says so in warnings.`,
   };
 }
 
@@ -86,7 +86,7 @@ export const SUBMIT_WAIT_SECONDS = waitSecondsInput(ACT_WAITS_FOR, `${ACT_OMITTE
 export const API_BASE = {
   type: "string",
   description:
-    "Platform URL; default from env.",
+    "Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev.",
 } as const;
 
 export const LAUNCH_BROWSER = {

@@ -1137,7 +1137,7 @@ async function confirmSurfaceTarget(
 export const schema = {
   name: "extension_open",
   description:
-    "Open an extension surface or a url, or replay the toolbar action, a context menu item or a shortcut, over the control channel (by hand: --allow-control). A url opens in a background tab and answers target.targetId for extension_screenshot and the readers. A replay carries no user gesture.",
+    "Open an extension surface or a url in a session, or replay the toolbar click, a menu item or a shortcut, over the control channel (by hand: --allow-control). A url opens in a background tab and answers target.targetId for extension_screenshot and readers. A replay carries no user gesture. extension_dev and extension_start launch, extension_reload reloads, extension_wait waits, extension_stop ends.",
   inputSchema: {
     type: "object" as const,
     properties: {

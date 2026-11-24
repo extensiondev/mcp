@@ -11,7 +11,7 @@ import { hostedOnly } from "../lib/hosted-only";
 
 export const schema = {
   name: "extension_workspace",
-  description: "Read the workspace; change a project's settings. configure-project renames a project (displayName; slug and URLs stay). set-visibility public or a public liveChannel needs approval. Builds spend only on build branch pushes that change the root directory; docs-only pushes spend nothing.",
+  description: "Read the workspace (projects, usage, settings) or change a project's settings. configure-project renames a project (displayName; slug and URLs stay). set-visibility public or a public liveChannel needs approval. Builds spend only on build branch pushes that change the root directory. extension_auth handles logins; extension_approvals lists and revokes approvals.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -32,7 +32,7 @@ export const schema = {
       },
       variables: {
         type: "array",
-        description: "set-environment: to set.",
+        description: "set-environment: build variables to add or change.",
         items: {
           type: "object",
           properties: {
@@ -63,7 +63,7 @@ export const schema = {
       },
       remove: {
         type: "array",
-        description: "set-environment: to remove.",
+        description: "set-environment: build variables to delete.",
         items: {
           type: "object",
           properties: {
@@ -90,7 +90,7 @@ export const schema = {
           type: "string",
           enum: ["team", "members", "tokens", "apps", "activity", "environment", "storeAccounts"],
         },
-        description: "Read-only sections to add.",
+        description: "Extra read-only sections to answer with the workspace.",
       },
       workspace: {
         type: "string",

@@ -25,7 +25,7 @@ import { ambiguousSessionRefusal, resolveSessionBrowser } from "../lib/session-b
 export const schema = {
   name: "extension_network",
   description:
-    "Stub a network response on a Chromium session: add a rule, list or clear the rules, or read which requests hit one or missed. Rules last until extension_stop. Firefox is refused.",
+    "Stub a network response in a Chromium session: add a rule, list or clear the rules, or read which requests hit one or missed. Answers the rules and the requests seen; extension_logs answers console errors. Rules last until extension_stop. Firefox is refused.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -33,7 +33,7 @@ export const schema = {
       action: {
         type: "string",
         enum: ["add", "list", "clear", "requests"],
-        description: "requests: the requests seen.",
+        description: "add a rule, list or clear the rules, or requests: which requests hit a rule or missed.",
       },
       method: { type: "string", description: "add: HTTP method; default ANY." },
       url: { type: "string", description: "add: exact URL, or a glob with * and ?." },

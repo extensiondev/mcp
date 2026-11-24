@@ -27,7 +27,7 @@ const MIN_POLL_TIMEOUT_MS = 300;
 export const EVAL_UNTIL_PROPERTY = {
   type: "object",
   description:
-    "Repeat until truthy ({} for defaults); never sleep in a shell.",
+    "Re-run until the value is truthy; {} for the default interval and limit.",
   properties: {
     timeoutMs: {
       type: "number",

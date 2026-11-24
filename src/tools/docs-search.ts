@@ -18,17 +18,17 @@ const NAMES_STORE_MD = /\bstore\.md\b/i;
 export const schema = {
   name: COMMAND,
   description:
-    "Find the docs page to cite before answering about a WebExtension API, a manifest key, a permission or a browser difference. It searches the Extension.js and extension.dev docs (free) and answers pages with URLs. Memory is the fallback only when it returns nothing.",
+    "Search the Extension.js and extension.dev docs (free) for a WebExtension API, a manifest key, a permission or a browser difference. Answers matching pages with URLs and snippets to cite; extension_templates answers code to start from. An empty answer means the docs hold no match.",
   inputSchema: {
     type: "object" as const,
     properties: {
-      query: { type: "string", description: "What to look up." },
+      query: { type: "string", description: "Words or a question; an API, manifest key or permission name matches best." },
       limit: {
         type: "number",
         minimum: 1,
         maximum: 8,
         default: 5,
-        description: "Pages to return.",
+        description: "Most pages to answer.",
       },
       api: API_BASE,
     },

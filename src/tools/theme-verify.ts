@@ -29,7 +29,7 @@ const COMMAND = "extension_theme_verify";
 export const schema = {
   name: "extension_theme_verify",
   description:
-    "Verify a Chrome theme manifest, not an extension's: the colors Chrome paints and the keys it drops.",
+    "Verify a Chrome theme manifest, not an extension's: the colors Chrome paints and the keys it drops. Answers the resolved colors, the discarded keys and the checks left for a person in a browser; extension_manifest_validate covers extension manifests. Static: no browser runs.",
   inputSchema: {
     type: "object" as const,
     properties: {

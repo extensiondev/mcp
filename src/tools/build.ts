@@ -604,7 +604,7 @@ function locateSourceZip(
 export const schema = {
   name: "extension_build",
   description:
-    "Build an extension instead of a package script or bundler: one dist/<browser>/ a call, with store review risks. Not for sharing (extension_builds).",
+    "Build an extension into dist/<browser>/ on this machine, one browser a call. Answers the output path, warnings and store review risks; extension_analyze reads what it wrote. Not for sharing (extension_builds): extension_builds answers builds made on extension.dev, extension_builds_act rebuilds there. Safari needs macOS with Xcode.",
   inputSchema: {
     type: "object" as const,
     properties: {

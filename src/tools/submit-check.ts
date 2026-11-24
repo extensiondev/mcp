@@ -10,7 +10,7 @@ import { hostedOnly } from "../lib/hosted-only";
 
 export const schema = {
   name: "extension_submit_check",
-  description: "Read a store's state or ask for an approval, with extension_submit's inputs: preflight, status and a dry-run submit answer here; any other action only asks the owner's approval and answers value.approvalUrl, and the call carrying that approvalId runs through extension_submit. It executes nothing.",
+  description: "Check a store submission without sending it: preflight, status and a dry-run submit answer here; any other action records an approval request for the workspace owner and answers value.approvalUrl. extension_submit runs the call carrying that approvalId; extension_release_status answers review history, extension_release_promote releases a channel. Takes extension_submit's inputs.",
   inputSchema: {
     type: "object" as const,
     properties: {

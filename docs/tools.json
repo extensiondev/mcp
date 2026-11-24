@@ -7,7 +7,7 @@
       "name": "extension_add_feature",
       "tier": "build",
       "group": "local",
-      "description": "Plan the surface before adding an options page, a popup, a side panel, a content script, a devtools panel, a new tab page or a background script. It lists manifest additions and new files and changes nothing; then validate the manifest, extension_build, extension_dev. New project: extension_create.",
+      "description": "Plan the surface before adding an options page, a popup, a side panel, a content script, a devtools panel, a new tab page or a background script. It lists manifest additions and new files and changes nothing; then validate the manifest, extension_build, extension_dev. New project: extension_create; templates: extension_templates; extension.dev: extension_project_create.",
       "gate": "none",
       "samplePrompt": "Add an options page to this extension",
       "readOnly": true,
@@ -20,20 +20,20 @@
           "name": "projectPath",
           "type": "string",
           "required": true,
-          "description": "Extension project root"
+          "description": "The extension's folder (manifest.json or package.json)."
         },
         {
           "name": "feature",
           "type": "\"sidebar\" | \"popup\" | \"options\" | \"content-script\" | \"background\" | \"newtab\" | \"devtools\"",
           "required": true,
-          "description": "Surface to add"
+          "description": "Surface to plan; decides the manifest keys and files listed."
         },
         {
           "name": "framework",
           "type": "\"react\" | \"vue\" | \"svelte\" | \"preact\" | \"vanilla\"",
           "required": false,
           "default": "react",
-          "description": "UI framework."
+          "description": "UI framework the planned files use."
         }
       ]
     },
@@ -41,7 +41,7 @@
       "name": "extension_analyze",
       "tier": "see",
       "group": "local",
-      "description": "Analyze a BUILT extension in dist/<browser>: sizes, entries, permissions, store checks (not on a dev build).",
+      "description": "Analyze a built extension in dist/<browser>: total and shippable size, entry points, permissions and store checks. Answers sizes, reviewRisks and storeReadiness for what extension_build wrote; extension_builds and extension_builds_act cover builds on extension.dev. On a dev build it adds a note to run extension_build first.",
       "gate": "none",
       "samplePrompt": "What is in the built extension and is anything too big for the store?",
       "readOnly": true,
@@ -54,7 +54,7 @@
           "name": "projectPath",
           "type": "string",
           "required": true,
-          "description": "Extension project root"
+          "description": "The extension's folder (manifest.json or package.json)."
         },
         {
           "name": "browser",
@@ -68,7 +68,7 @@
           "type": "\"summary\" | \"tree\" | \"json\"",
           "required": false,
           "default": "summary",
-          "description": "Answer shape."
+          "description": "Accepted for compatibility; every value answers the same."
         }
       ]
     },
@@ -76,7 +76,7 @@
       "name": "extension_approvals",
       "tier": "platform",
       "group": "platform",
-      "description": "List the open approvals this login asked for, read one, or revoke one approved by mistake (owner token) on extension.dev.",
+      "description": "List the open approvals this login asked for, read one, or revoke one approved by mistake (owner token) on extension.dev. Answers each approval with its id and status; extension_auth handles logins, extension_workspace the workspace and its settings.",
       "gate": "the server started with --features=local,platform, and a login; revoke needs a token a workspace owner minted",
       "samplePrompt": "I approved that App Review submission by mistake, revoke it",
       "readOnly": false,
@@ -101,13 +101,13 @@
           "name": "project",
           "type": "string",
           "required": false,
-          "description": "Stored login '<workspace>/<project>' when several exist."
+          "description": "'<workspace>/<project>' login to use when several are stored."
         },
         {
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default from env."
+          "description": "Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev."
         }
       ]
     },
@@ -115,7 +115,7 @@
       "name": "extension_assert",
       "tier": "test",
       "group": "local",
-      "description": "Run a test stage on an extension_dev or extension_start session: pass, fail, not ready (a precondition) or inconclusive per expectation. Debug-port checks: extension_start allowControl:true; content-script-injected and console-errors-empty: extension_dev only.",
+      "description": "Run a test stage on an extension_dev or extension_start session: pass, fail, not ready (a precondition) or inconclusive per expectation, in one call; extension_dom_snapshot and extension_logs answer raw state instead. Debug-port checks: extension_start allowControl:true; content-script-injected and console-errors-empty: extension_dev only.",
       "gate": "a live dev or start session",
       "samplePrompt": "Check that the worker booted, the popup rendered and the console is clean",
       "readOnly": false,
@@ -140,7 +140,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; required if several run."
+          "description": "Running session's browser; needed when several run."
         },
         {
           "name": "timeout",
@@ -154,7 +154,7 @@
       "name": "extension_auth",
       "tier": "platform",
       "group": "platform",
-      "description": "Sign in to an existing extension.dev project (a code for extension.dev/device, then deviceCode and waitSeconds), list stored logins, or clear them. Identity is the stored token, not the working directory; value.tokenCheck.verdict is confirmed, refused or unavailable. A login lasts a day, or what lifetime says (CI: Access tokens).",
+      "description": "Sign in to an extension.dev project (a code at extension.dev/device, then deviceCode), list stored logins, or clear them. Workspace data: extension_workspace; approvals: extension_approvals. Answers the login; identity is the stored token, not the working directory, and value.tokenCheck.verdict is confirmed, refused or unavailable. A login lasts a day, or what lifetime says (CI: Access tokens).",
       "gate": "the server started with --features=local,platform",
       "samplePrompt": "Log this machine in to the acme/newtab project on extension.dev",
       "readOnly": false,
@@ -217,7 +217,7 @@
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default from env."
+          "description": "Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev."
         }
       ]
     },
@@ -225,7 +225,7 @@
       "name": "extension_browsers",
       "tier": "browsers",
       "group": "local",
-      "description": "Find, install and remove browsers Extension.js launches. detect scans system and managed ones; install downloads hundreds of MB in one blocking call; uninstall never touches a system install.",
+      "description": "Find, install and remove browsers Extension.js launches. detect scans system and managed ones; install downloads hundreds of MB in one blocking call; uninstall never touches a system install. Answers each browser found with its path and version, the ones extension_dev can launch.",
       "gate": "none",
       "samplePrompt": "Which browsers are installed here? Install Firefox if it is missing",
       "readOnly": false,
@@ -266,7 +266,7 @@
       "name": "extension_build",
       "tier": "build",
       "group": "local",
-      "description": "Build an extension instead of a package script or bundler: one dist/<browser>/ a call, with store review risks. Not for sharing (extension_builds).",
+      "description": "Build an extension into dist/<browser>/ on this machine, one browser a call. Answers the output path, warnings and store review risks; extension_analyze reads what it wrote. Not for sharing (extension_builds): extension_builds answers builds made on extension.dev, extension_builds_act rebuilds there. Safari needs macOS with Xcode.",
       "gate": "none",
       "samplePrompt": "Build this extension for Chrome and Firefox",
       "readOnly": false,
@@ -279,7 +279,7 @@
           "name": "projectPath",
           "type": "string",
           "required": true,
-          "description": "Extension project root"
+          "description": "The extension's folder (manifest.json or package.json)."
         },
         {
           "name": "browser",
@@ -380,7 +380,7 @@
       "name": "extension_builds",
       "tier": "platform",
       "group": "platform",
-      "description": "Read and download platform builds. list/get rows: env is the build environment, channels the pins holding it now. To rebuild, recheck or configure, call extension_builds_act.",
+      "description": "Read and download builds made on extension.dev: list recent ones, get one, read its logs or download a verified package. Answers rows where env is the build environment and channels the pins holding it now. extension_build and extension_analyze work on this machine; extension_builds_act rebuilds, rechecks or configures.",
       "gate": "the server started with --features=local,platform, and a login",
       "samplePrompt": "Why did the last build fail? Show me the Firefox log",
       "readOnly": false,
@@ -430,19 +430,19 @@
           "name": "project",
           "type": "string",
           "required": false,
-          "description": "Stored login '<workspace>/<project>' when several exist."
+          "description": "'<workspace>/<project>' login to use when several are stored."
         },
         {
           "name": "waitSeconds",
           "type": "number",
           "required": false,
-          "description": "get: seconds to wait for a build's verdict (a rebuild or a push), 0 to 600 (omitted: 0); the hosted lane waits at most 45 and names a cut in warnings."
+          "description": "get: seconds to wait for a build's verdict (a rebuild or a push), 0 to 600 (omitted: 0); the hosted server waits at most 45 and says so in warnings."
         },
         {
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default from env."
+          "description": "Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev."
         }
       ]
     },
@@ -450,7 +450,7 @@
       "name": "extension_builds_act",
       "tier": "platform",
       "group": "platform",
-      "description": "Run a build act on the platform: rebuild, recheck, configure the build settings or a channel; read builds with extension_builds. A rebuild spends allowance; a push, only on the build branch when it changes the root directory ([skip build] pushes, docs-only, other branches spend nothing).",
+      "description": "Rebuild, recheck or configure builds on extension.dev, or create and configure a channel. Answers the act's outcome; extension_builds reads builds, extension_build and extension_analyze work on this machine. A rebuild spends allowance; a push, only on the build branch when it changes the root directory ([skip build] pushes, docs-only, other branches spend nothing).",
       "gate": "the server started with --features=local,platform, and a login; a public channel audience needs a workspace owner's approval; delete-channel stays in the console",
       "samplePrompt": "Rebuild the last commit for Stable",
       "readOnly": false,
@@ -529,19 +529,19 @@
           "name": "project",
           "type": "string",
           "required": false,
-          "description": "Stored login '<workspace>/<project>' when several exist."
+          "description": "'<workspace>/<project>' login to use when several are stored."
         },
         {
           "name": "waitSeconds",
           "type": "number",
           "required": false,
-          "description": "Seconds to wait for the result (with approvalId, the approval), 0 to 600 (omitted: 180, no wait for the approval); the hosted lane waits at most 45 and names a cut in warnings."
+          "description": "Seconds to wait for the result (with approvalId, the approval), 0 to 600 (omitted: 180, no wait for the approval); the hosted server waits at most 45 and says so in warnings."
         },
         {
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default from env."
+          "description": "Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev."
         }
       ]
     },
@@ -549,7 +549,7 @@
       "name": "extension_create",
       "tier": "build",
       "group": "local",
-      "description": "Create any new extension, plain JavaScript too, from a template (extension_templates), never by hand; it may init git. To add to one: extension_add_feature. It is verified, so the next step is extension_dev, not a build. Sends a draft_seeded event (off: readme Telemetry section).",
+      "description": "Create a new extension from a template (extension_templates), plain JavaScript too; it may init git. Answers the project path; it is verified, so the next step is extension_dev, not a build. extension_add_feature adds to an existing project; extension_project_create puts a folder on extension.dev. Sends a draft_seeded event (off: readme Telemetry section).",
       "gate": "none",
       "samplePrompt": "Create a new tab extension with React in ./my-newtab",
       "readOnly": false,
@@ -590,7 +590,7 @@
       "name": "extension_dev",
       "tier": "run",
       "group": "local",
-      "description": "Run the extension while you edit it (dev build, hot reload, browser): the first call for \"run my extension\". ready.status \"ready\" means nothing else to call. extension_start runs the production build.",
+      "description": "Run the extension in a browser with a dev build and hot reload while it is edited. Answers ready.status; ready.status \"ready\" means nothing else to call. extension_start runs the production build instead; extension_open shows a surface, extension_reload forces a reload, extension_wait waits for a rebuild and extension_stop ends the session. Safari needs macOS.",
       "gate": "none",
       "samplePrompt": "Run my extension in Chrome and let me act on it",
       "readOnly": false,
@@ -603,7 +603,7 @@
           "name": "projectPath",
           "type": "string",
           "required": true,
-          "description": "Extension project root"
+          "description": "The extension's folder (manifest.json or package.json)."
         },
         {
           "name": "browser",
@@ -616,14 +616,14 @@
           "name": "port",
           "type": "number",
           "required": false,
-          "description": "Port (0 picks one)."
+          "description": "Dev server port; 0 picks a free one."
         },
         {
           "name": "noBrowser",
           "type": "boolean",
           "required": false,
           "default": false,
-          "description": "No browser."
+          "description": "Start the dev server without launching a browser."
         },
         {
           "name": "polyfill",
@@ -759,7 +759,7 @@
       "name": "extension_docs_search",
       "tier": "build",
       "group": "local",
-      "description": "Find the docs page to cite before answering about a WebExtension API, a manifest key, a permission or a browser difference. It searches the Extension.js and extension.dev docs (free) and answers pages with URLs. Memory is the fallback only when it returns nothing.",
+      "description": "Search the Extension.js and extension.dev docs (free) for a WebExtension API, a manifest key, a permission or a browser difference. Answers matching pages with URLs and snippets to cite; extension_templates answers code to start from. An empty answer means the docs hold no match.",
       "gate": "none",
       "samplePrompt": "How does Firefox handle the sidebar API? Search the docs before you answer",
       "readOnly": true,
@@ -772,20 +772,20 @@
           "name": "query",
           "type": "string",
           "required": true,
-          "description": "What to look up."
+          "description": "Words or a question; an API, manifest key or permission name matches best."
         },
         {
           "name": "limit",
           "type": "number",
           "required": false,
           "default": 5,
-          "description": "Pages to return."
+          "description": "Most pages to answer."
         },
         {
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default from env."
+          "description": "Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev."
         }
       ]
     },
@@ -793,7 +793,7 @@
       "name": "extension_doctor",
       "tier": "see",
       "group": "local",
-      "description": "Diagnose a dev session leg by leg, each with its remediation; run it first when an act tool errors unexpectedly. value.capabilities reads WebGPU and isolation; with no projectPath it checks node, the CLI and the template cache.",
+      "description": "Diagnose a dev session leg by leg, each with its remediation. Answers each check and value.capabilities (WebGPU, cross-origin isolation); with no projectPath it checks Node.js, the Extension.js CLI and the template cache. extension_logs answers the extension's own console instead.",
       "gate": "a live dev or start session",
       "samplePrompt": "The session looks stuck. Diagnose it",
       "readOnly": true,
@@ -820,7 +820,7 @@
       "name": "extension_dom_snapshot",
       "tier": "see",
       "group": "local",
-      "description": "Take a shallow DOM snapshot of one open surface or targetId, or list what is open (listTargets on the debug port, listTabs). Pick it over extension_inspect for a named surface.",
+      "description": "Take a DOM snapshot of one open extension surface or targetId, or list what is open (listTargets on the debug port, listTabs). Answers counts, html or the visible interactive elements with selectors; extension_inspect answers a web page in depth, extension_element acts, extension_eval runs code, extension_logs answers console history.",
       "gate": "a dev session, which carries control unless started with allowControl: false",
       "samplePrompt": "Snapshot the popup and tell me what it rendered",
       "readOnly": true,
@@ -857,7 +857,7 @@
           "name": "targetId",
           "type": "string",
           "required": false,
-          "description": "From extension_open or dom_snapshot listTargets; overrides url."
+          "description": "Page targetId (extension_open, extension_dom_snapshot listTargets); wins over url."
         },
         {
           "name": "listTargets",
@@ -906,7 +906,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; required if several run."
+          "description": "Running session's browser; needed when several run."
         },
         {
           "name": "timeout",
@@ -920,7 +920,7 @@
       "name": "extension_element",
       "tier": "act",
       "group": "local",
-      "description": "Click, fill, read or wait for one element by CSS selector, or send trusted mouse and key input in a surface, page or targetId. Pick it over extension_eval: no caller code, no allowEval. Chromium only.",
+      "description": "Click, fill, read or wait for one element by CSS selector, or send trusted mouse and key input to a surface or page. Answers the element's state after the act, with no caller code and no allowEval; extension_eval runs arbitrary code, extension_dom_snapshot and extension_inspect only read, extension_logs answers console errors. Chromium only.",
       "gate": "a live Chromium dev or start session with its debug port; no allowEval",
       "samplePrompt": "Click the Save button in the popup, then read the status line",
       "readOnly": false,
@@ -1023,13 +1023,13 @@
           "name": "targetId",
           "type": "string",
           "required": false,
-          "description": "From extension_open or dom_snapshot listTargets; overrides url."
+          "description": "Page targetId (extension_open, extension_dom_snapshot listTargets); wins over url."
         },
         {
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; required if several run."
+          "description": "Running session's browser; needed when several run."
         },
         {
           "name": "timeout",
@@ -1043,7 +1043,7 @@
       "name": "extension_eval",
       "tier": "act",
       "group": "local",
-      "description": "Evaluate JavaScript in a running extension's background, surface, content script, page or targetId. Needs allowEval:true at start (by hand: --allow-eval) on every route, the debug port included, whose runs carry a user gesture. Safari: pages only; extension_logs reads the background. Pick it last.",
+      "description": "Evaluate JavaScript in an extension's background, surface, content script, page or targetId. Answers the value; extension_element acts, extension_dom_snapshot and extension_inspect read, without code; extension_logs answers logs. Needs allowEval:true at launch (by hand: --allow-eval), the debug port included; runs carry a user gesture. Safari: pages only; extension_logs reads the background.",
       "gate": "a session started with allowEval: true on extension_dev",
       "samplePrompt": "Evaluate chrome.runtime.id in the background and in the popup",
       "readOnly": false,
@@ -1062,7 +1062,7 @@
           "name": "expression",
           "type": "string",
           "required": true,
-          "description": "Expression to evaluate."
+          "description": "JavaScript expression; its value is the answer."
         },
         {
           "name": "context",
@@ -1086,7 +1086,7 @@
           "name": "targetId",
           "type": "string",
           "required": false,
-          "description": "From extension_open or dom_snapshot listTargets; overrides url."
+          "description": "Page targetId (extension_open, extension_dom_snapshot listTargets); wins over url."
         },
         {
           "name": "observe",
@@ -1099,7 +1099,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; required if several run."
+          "description": "Running session's browser; needed when several run."
         },
         {
           "name": "timeout",
@@ -1111,7 +1111,7 @@
           "name": "until",
           "type": "object",
           "required": false,
-          "description": "Repeat until truthy ({} for defaults); never sleep in a shell."
+          "description": "Re-run until the value is truthy; {} for the default interval and limit."
         }
       ]
     },
@@ -1119,7 +1119,7 @@
       "name": "extension_inspect",
       "tier": "see",
       "group": "local",
-      "description": "Inspect a web page or targetId over the debugger protocol: HTML, DOM, console, probes, closed shadow roots. Pick it over extension_dom_snapshot for a web page. Firefox: agent bridge, needs allowEval.",
+      "description": "Inspect a web page or targetId in a running session: its HTML, DOM, console and CSS selector counts, closed shadow roots included. Answers html, dom and console for a web page; extension_dom_snapshot answers an extension surface, extension_element acts on one element, extension_eval runs code, extension_logs answers console history. Firefox goes through the agent bridge and needs allowEval.",
       "gate": "a live dev or start session",
       "samplePrompt": "Read the DOM the content script injected on the cart page, shadow roots included",
       "readOnly": false,
@@ -1144,7 +1144,7 @@
           "name": "targetId",
           "type": "string",
           "required": false,
-          "description": "From extension_open or dom_snapshot listTargets; overrides url."
+          "description": "Page targetId (extension_open, extension_dom_snapshot listTargets); wins over url."
         },
         {
           "name": "probe",
@@ -1161,13 +1161,13 @@
             "meta",
             "console"
           ],
-          "description": "What to include"
+          "description": "Sections to answer; fewer sections, a smaller answer."
         },
         {
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; required if several run."
+          "description": "Running session's browser; needed when several run."
         },
         {
           "name": "maxBytes",
@@ -1189,7 +1189,7 @@
       "name": "extension_list_extensions",
       "tier": "see",
       "group": "local",
-      "description": "List the extensions installed in a session's browser, read-only; its own row has ownExtension:true.",
+      "description": "List the extensions installed in a running session's browser, read-only; the project's own row has ownExtension:true. Answers id, name and version per row; extension_doctor diagnoses a session that fails.",
       "gate": "a live dev or start session",
       "samplePrompt": "Which extensions are loaded in the dev browser right now?",
       "readOnly": true,
@@ -1208,7 +1208,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; required if several run."
+          "description": "Running session's browser; needed when several run."
         }
       ]
     },
@@ -1216,7 +1216,7 @@
       "name": "extension_logs",
       "tier": "see",
       "group": "local",
-      "description": "Read a dev session's logs from every context in one timeline, or follow:true for live frames after the replayed ring. Pick it for what happened. Works on a `npx extension dev` run by hand (follow needs --allow-control there); not on extension_start.",
+      "description": "Read a dev session's console from every context in one timeline, or follow:true for live lines after the replayed ones. Answers past events with a seq to poll from; extension_inspect and extension_dom_snapshot answer what shows now, extension_element acts, extension_eval runs code. Works on a `npx extension dev` run by hand (follow needs --allow-control there); not on extension_start.",
       "gate": "a live dev or start session",
       "samplePrompt": "Show me every log line since the session started, in order",
       "readOnly": true,
@@ -1286,7 +1286,7 @@
           "type": "boolean",
           "required": false,
           "default": false,
-          "description": "Collect live frames."
+          "description": "Also collect live lines for followMs after the replayed ones."
         },
         {
           "name": "followMs",
@@ -1308,7 +1308,7 @@
       "name": "extension_manifest_validate",
       "tier": "see",
       "group": "local",
-      "description": "Validate manifest.json after any edit, in place of jq or a linter: per-browser errors, permissions the code calls but lacks, and buildBlocking errors.",
+      "description": "Validate manifest.json against each browser: per-browser errors, permissions the code calls but lacks, and buildBlocking errors. Answers valid, errors, warnings and browserSupport; extension_build refuses the same errors, and a theme manifest is extension_theme_verify's. Reads files only.",
       "gate": "none",
       "samplePrompt": "Will this manifest load on Firefox and Safari?",
       "readOnly": true,
@@ -1358,7 +1358,7 @@
       "name": "extension_network",
       "tier": "test",
       "group": "extras",
-      "description": "Stub a network response on a Chromium session: add a rule, list or clear the rules, or read which requests hit one or missed. Rules last until extension_stop. Firefox is refused.",
+      "description": "Stub a network response in a Chromium session: add a rule, list or clear the rules, or read which requests hit one or missed. Answers the rules and the requests seen; extension_logs answers console errors. Rules last until extension_stop. Firefox is refused.",
       "gate": "the server started with extras in --features, as in --features=local,platform,extras; a live dev or start session on a Chromium browser",
       "samplePrompt": "Make the API answer 500 and show me what the popup renders",
       "readOnly": false,
@@ -1377,7 +1377,7 @@
           "name": "action",
           "type": "\"add\" | \"list\" | \"clear\" | \"requests\"",
           "required": true,
-          "description": "requests: the requests seen."
+          "description": "add a rule, list or clear the rules, or requests: which requests hit a rule or missed."
         },
         {
           "name": "method",
@@ -1420,7 +1420,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; required if several run."
+          "description": "Running session's browser; needed when several run."
         }
       ]
     },
@@ -1428,7 +1428,7 @@
       "name": "extension_open",
       "tier": "act",
       "group": "local",
-      "description": "Open an extension surface or a url, or replay the toolbar action, a context menu item or a shortcut, over the control channel (by hand: --allow-control). A url opens in a background tab and answers target.targetId for extension_screenshot and the readers. A replay carries no user gesture.",
+      "description": "Open an extension surface or a url in a session, or replay the toolbar click, a menu item or a shortcut, over the control channel (by hand: --allow-control). A url opens in a background tab and answers target.targetId for extension_screenshot and readers. A replay carries no user gesture. extension_dev and extension_start launch, extension_reload reloads, extension_wait waits, extension_stop ends.",
       "gate": "a dev session, which carries control unless started with allowControl: false",
       "samplePrompt": "Open the side panel, then trigger the action button",
       "readOnly": false,
@@ -1524,7 +1524,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; required if several run."
+          "description": "Running session's browser; needed when several run."
         },
         {
           "name": "timeout",
@@ -1538,7 +1538,7 @@
       "name": "extension_preview_web",
       "tier": "platform",
       "group": "platform",
-      "description": "Preview a build in the web emulator; share:true returns a link anyone opens with no install (the preview://build default is for developing extension.dev itself). Tester links: extension_publish. Content scripts run only on sample pages, a limit of the preview only.",
+      "description": "Preview a build in the web emulator; share:true returns a link anyone opens with no install. Answers share.previewUrl; extension_publish answers the tester link with real downloads, extension_shares lists and revokes links. Content scripts run only on sample pages, a limit of the preview only. The preview://build default is for developing extension.dev itself.",
       "gate": "the server started with --features=local,platform; sharing needs a login",
       "samplePrompt": "Share this build with my designer",
       "readOnly": false,
@@ -1551,13 +1551,13 @@
           "name": "projectPath",
           "type": "string",
           "required": true,
-          "description": "Extension project root"
+          "description": "The extension's folder (manifest.json or package.json)."
         },
         {
           "name": "project",
           "type": "string",
           "required": false,
-          "description": "Stored login '<workspace>/<project>' when several exist."
+          "description": "'<workspace>/<project>' login to use when several are stored."
         },
         {
           "name": "browser",
@@ -1618,7 +1618,7 @@
       "name": "extension_project_create",
       "tier": "platform",
       "group": "platform",
-      "description": "Create an extension.dev project from a folder (projectPath, uploaded, no push; again: re-seed and rebuild) or a GitHub repo, BEFORE extension_auth. First call: a URL a signed-in workspace member approves; resume with deviceCode and waitSeconds, the login is stored too. The first build spends one build of the workspace's monthly allowance, build command exactly as stored. projects: up to 10 per approval, at most 10 per hour, never split silently.",
+      "description": "Create an extension.dev project from a folder (projectPath, uploaded, no push; again: re-seed and rebuild) or a GitHub repo, BEFORE extension_auth. The first call answers a URL a signed-in workspace member approves; resume with deviceCode and waitSeconds, the login is stored too. The first build spends one build of the workspace's monthly allowance, build command exactly as stored. extension_create, extension_templates and extension_add_feature work on local folders.",
       "gate": "the server started with --features=local,platform",
       "samplePrompt": "Create the extension.dev project for this build under acme",
       "readOnly": false,
@@ -1719,7 +1719,7 @@
           "name": "projects",
           "type": "array of object",
           "required": false,
-          "description": "Instead of project and its source: 1 to 10 (max 20) { project, repo (and rootDirectory, workspaceRoot, ref) or projectPath } of one workspace, one approval."
+          "description": "Instead of project and its source: 1 to 10 (max 20) { project, repo (and rootDirectory, workspaceRoot, ref) or projectPath } of one workspace, up to 10 per approval and at most 10 per hour, never split silently."
         },
         {
           "name": "deviceCode",
@@ -1750,7 +1750,7 @@
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default from env."
+          "description": "Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev."
         }
       ]
     },
@@ -1758,7 +1758,7 @@
       "name": "extension_publish",
       "tier": "platform",
       "group": "platform",
-      "description": "Publish a build on extension.dev: the link for testers, with a download and a run command for each browser; use it first to share or ship (no project yet: extension_project_create). On a public project, or a public channel, send testers the channel link (<workspace>.extension.dev/<project>/<channel>); a private build link expires.",
+      "description": "Publish and share a build through extension.dev: answers the tester link, a page with a download and a run command for each browser (no project yet: extension_project_create). extension_preview_web: emulator links; extension_shares manages them. On a public project, or a public channel, send testers the channel link (<workspace>.extension.dev/<project>/<channel>); a private build link expires.",
       "gate": "the server started with --features=local,platform, and a login; sync-captures needs a workspace owner's approval, and a link to a private project a workspace member's",
       "samplePrompt": "Send the latest build to my testers",
       "readOnly": false,
@@ -1796,7 +1796,7 @@
           "name": "project",
           "type": "string",
           "required": false,
-          "description": "Stored login '<workspace>/<project>' when several exist."
+          "description": "'<workspace>/<project>' login to use when several are stored."
         },
         {
           "name": "ttlHours",
@@ -1826,13 +1826,13 @@
           "name": "waitSeconds",
           "type": "number",
           "required": false,
-          "description": "Seconds to wait for the result (with approvalId, the approval), 0 to 600 (omitted: 180, no wait for the approval); the hosted lane waits at most 45 and names a cut in warnings."
+          "description": "Seconds to wait for the result (with approvalId, the approval), 0 to 600 (omitted: 180, no wait for the approval); the hosted server waits at most 45 and says so in warnings."
         },
         {
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default from env."
+          "description": "Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev."
         }
       ]
     },
@@ -1840,7 +1840,7 @@
       "name": "extension_release_promote",
       "tier": "platform",
       "group": "platform",
-      "description": "Release a build to a channel on extension.dev. A release needs a workspace owner's token and approval of that exact release, every time (approval-required, then the same call with approvalId). Preview takes any build; Stable and every other channel take Stable builds. Tokens live 7 days.",
+      "description": "Release a build to a channel on extension.dev, cut a version-bump pull request, or roll a channel back. A release needs a workspace owner's token and approval of that exact release, every time. Preview takes any build; Stable and every other channel take Stable builds. Tokens live 7 days. Stores are extension_submit and extension_submit_check; extension_release_status answers where things stand.",
       "gate": "the server started with --features=local,platform, and a login; every release, cut and rollback needs a workspace owner's approval",
       "samplePrompt": "Release build 3f2a1c to Preview",
       "readOnly": false,
@@ -1860,7 +1860,7 @@
           "name": "project",
           "type": "string",
           "required": false,
-          "description": "Stored login '<workspace>/<project>' when several exist."
+          "description": "'<workspace>/<project>' login to use when several are stored."
         },
         {
           "name": "buildId",
@@ -1914,13 +1914,13 @@
           "name": "waitSeconds",
           "type": "number",
           "required": false,
-          "description": "Seconds to wait for the result (with approvalId, the approval), 0 to 600 (omitted: 180, no wait for the approval); the hosted lane waits at most 45 and names a cut in warnings."
+          "description": "Seconds to wait for the result (with approvalId, the approval), 0 to 600 (omitted: 180, no wait for the approval); the hosted server waits at most 45 and says so in warnings."
         },
         {
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default from env."
+          "description": "Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev."
         }
       ]
     },
@@ -1928,7 +1928,7 @@
       "name": "extension_release_status",
       "tier": "platform",
       "group": "platform",
-      "description": "Read where a project stands on extension.dev: channels, builds, store submissions and reviews, history, rollout, listings. Read-only.",
+      "description": "Read where a project stands on extension.dev: channels, builds, store submissions and reviews, history, rollout and listings. Answers only the sections include names. Read-only; extension_release_promote changes a channel, extension_submit and extension_submit_check act on stores.",
       "gate": "the server started with --features=local,platform, and a login",
       "samplePrompt": "Was the last Chrome submission approved?",
       "readOnly": true,
@@ -1963,7 +1963,7 @@
           "name": "waitSeconds",
           "type": "number",
           "required": false,
-          "description": "refresh: seconds to wait for the check, 0 to 600 (omitted: 0); the hosted lane waits at most 45 and names a cut in warnings."
+          "description": "refresh: seconds to wait for the check, 0 to 600 (omitted: 0); the hosted server waits at most 45 and says so in warnings."
         },
         {
           "name": "submissionId",
@@ -2005,7 +2005,7 @@
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default from env."
+          "description": "Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev."
         }
       ]
     },
@@ -2013,7 +2013,7 @@
       "name": "extension_reload",
       "tier": "act",
       "group": "local",
-      "description": "Reload a live session's background, or one tab, over the control channel (allowControl) when hot reload missed an edit; answers once it is back.",
+      "description": "Reload a running session's background, or one tab, through the control channel (allowControl); answers once it is back. extension_wait instead waits for the automatic rebuild after an edit; extension_dev and extension_start launch, extension_open opens a surface, extension_stop ends the session.",
       "gate": "a dev session, which carries control unless started with allowControl: false",
       "samplePrompt": "Reload the extension and confirm the worker came back",
       "readOnly": false,
@@ -2052,7 +2052,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; required if several run."
+          "description": "Running session's browser; needed when several run."
         },
         {
           "name": "timeout",
@@ -2066,7 +2066,7 @@
       "name": "extension_screenshot",
       "tier": "see",
       "group": "local",
-      "description": "Take a .png of one surface, page or targetId in a live session (Safari: pages only); a closed surface is opened first, answering opened: true.",
+      "description": "Take a .png of one surface, page or targetId in a live session; a closed surface is opened first, answering opened: true. Answers the file path and pixel size; extension_dom_snapshot answers the same surface as text. Safari: pages only.",
       "gate": "a live dev or start session",
       "samplePrompt": "Open the popup and take a screenshot of it for the store listing",
       "readOnly": false,
@@ -2085,7 +2085,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; required if several run."
+          "description": "Running session's browser; needed when several run."
         },
         {
           "name": "context",
@@ -2104,7 +2104,7 @@
           "name": "targetId",
           "type": "string",
           "required": false,
-          "description": "From extension_open or dom_snapshot listTargets; overrides url."
+          "description": "Page targetId (extension_open, extension_dom_snapshot listTargets); wins over url."
         },
         {
           "name": "width",
@@ -2154,7 +2154,7 @@
       "name": "extension_shares",
       "tier": "platform",
       "group": "platform",
-      "description": "List, create and revoke emulator preview links for a tester, and list and revoke build links (a build link or channel link comes from extension_publish). A revoke is permanent and needs a workspace member's approval.",
+      "description": "List, create and revoke emulator preview links for a tester, and list and revoke build links. Answers each link and its status. Links come from extension_publish (a build link or channel link) and extension_preview_web (an emulator link). A revoke is permanent and needs a workspace member's approval.",
       "gate": "the server started with --features=local,platform, and a login; a revoke waits for a workspace member's approval",
       "samplePrompt": "List every link I have shared and revoke the oldest one",
       "readOnly": false,
@@ -2167,14 +2167,14 @@
           "name": "project",
           "type": "string",
           "required": false,
-          "description": "Stored login '<workspace>/<project>' when several exist."
+          "description": "'<workspace>/<project>' login to use when several are stored."
         },
         {
           "name": "kind",
           "type": "\"build-link\" | \"preview\" | \"both\"",
           "required": false,
           "default": "both",
-          "description": "Which kind of share."
+          "description": "build-link (extension_publish links), preview (emulator links) or both."
         },
         {
           "name": "tokenId",
@@ -2230,7 +2230,7 @@
           "type": "\"all\" | \"live\"",
           "required": false,
           "default": "all",
-          "description": "all or live."
+          "description": "list: all links, or live for only those still open."
         },
         {
           "name": "limit",
@@ -2242,7 +2242,7 @@
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default from env."
+          "description": "Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev."
         }
       ]
     },
@@ -2250,7 +2250,7 @@
       "name": "extension_start",
       "tier": "run",
       "group": "local",
-      "description": "Run the PRODUCTION build in a browser (extension_dev is for writing code); no hot reload or extension_logs. Bridge verbs need allowControl:true (Extension.js 4.1.34 or later; older is refused as engine-unsupported).",
+      "description": "Run the PRODUCTION build in a browser, as it ships; no hot reload or extension_logs. Bridge verbs need allowControl:true: extension_open, extension_reload and the readers (Extension.js 4.1.34 or later; older is refused as engine-unsupported). extension_dev runs the dev build; extension_wait follows wait:false; extension_stop ends it. Answers the session's ports.",
       "gate": "none",
       "samplePrompt": "Launch the production build in Edge",
       "readOnly": false,
@@ -2263,7 +2263,7 @@
           "name": "projectPath",
           "type": "string",
           "required": true,
-          "description": "Extension project root"
+          "description": "The extension's folder (manifest.json or package.json)."
         },
         {
           "name": "browser",
@@ -2400,7 +2400,7 @@
       "name": "extension_stop",
       "tier": "run",
       "group": "local",
-      "description": "Stop a dev or start session and its browser when done; answers the server and browser pid it ended.",
+      "description": "Stop a dev or start session and its browser. Answers the server and browser pid it ended. extension_dev and extension_start launch sessions; extension_reload reloads without ending one; extension_open and extension_wait need one running. all:true stops every session; across projects it needs confirm.",
       "gate": "a live dev or start session",
       "samplePrompt": "Stop the running session and close its browser",
       "readOnly": false,
@@ -2448,7 +2448,7 @@
       "name": "extension_storage",
       "tier": "act",
       "group": "local",
-      "description": "Read or write the extension's chrome.storage from the background over the control channel, no eval.",
+      "description": "Read or write the extension's storage (chrome.storage or browser.storage) from its background, with no eval. Answers a key's value or the whole area; a set reads the key back in value.readBack. extension_eval would need allowEval for the same. Needs the session's control channel (on by default in extension_dev).",
       "gate": "a dev session, which carries control unless started with allowControl: false",
       "samplePrompt": "Read chrome.storage.local and set settings.theme to dark",
       "readOnly": false,
@@ -2474,13 +2474,13 @@
           "type": "\"local\" | \"sync\" | \"session\" | \"managed\"",
           "required": false,
           "default": "local",
-          "description": "chrome.storage area."
+          "description": "local (this device), sync (the browser account), session (until restart) or managed (policy, read-only)."
         },
         {
           "name": "key",
           "type": "string",
           "required": false,
-          "description": "Key to get or set."
+          "description": "Key to read or write; omitted with get, the whole area answers."
         },
         {
           "name": "value",
@@ -2505,7 +2505,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; required if several run."
+          "description": "Running session's browser; needed when several run."
         },
         {
           "name": "timeout",
@@ -2519,7 +2519,7 @@
       "name": "extension_submit",
       "tier": "platform",
       "group": "platform",
-      "description": "Submit a platform build to the Chrome, Firefox, Edge and Safari stores through extension.dev. Start with extension_submit_check action:'preflight' and follow value.nextStep. A real submit needs a workspace owner's token and approval of that exact submission, every time: extension_submit_check asks, and this tool runs the approvalId. Uploads land least public (Chrome and Edge drafts, Firefox unlisted, Safari TestFlight) unless a saved store mode says otherwise. For a link use extension_publish.",
+      "description": "Submit an extension.dev build to the Chrome, Firefox, Edge and Safari stores. It runs the call carrying an approvalId; extension_submit_check answers the preflight and asks the approval, extension_release_status answers reviews, extension_release_promote moves a channel. A real submit needs a workspace owner's token and approval of that exact submission, every time. Uploads land least public (Chrome and Edge drafts, Firefox unlisted, Safari TestFlight) unless a saved store mode says otherwise.",
       "gate": "the server started with --features=local,platform, and a login; dryRun: false, cancel, rollout, release, publish, sync-listing and configure-store need a workspace owner's approval",
       "samplePrompt": "Dry run a Chrome and Firefox store submission of the latest build",
       "readOnly": false,
@@ -2539,7 +2539,7 @@
           "name": "project",
           "type": "string",
           "required": false,
-          "description": "Stored login '<workspace>/<project>' when several exist."
+          "description": "'<workspace>/<project>' login to use when several are stored."
         },
         {
           "name": "workspace",
@@ -2606,7 +2606,7 @@
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default from env."
+          "description": "Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev."
         },
         {
           "name": "store",
@@ -2654,7 +2654,7 @@
           "name": "waitSeconds",
           "type": "number",
           "required": false,
-          "description": "Seconds to wait for the result (with approvalId, the approval), 0 to 600 (omitted: 180, no wait for the approval; status, connect, first-submission: 0); the hosted lane waits at most 45 and names a cut in warnings."
+          "description": "Seconds to wait for the result (with approvalId, the approval), 0 to 600 (omitted: 180, no wait for the approval; status, connect, first-submission: 0); the hosted server waits at most 45 and says so in warnings."
         }
       ]
     },
@@ -2662,7 +2662,7 @@
       "name": "extension_submit_check",
       "tier": "platform",
       "group": "platform",
-      "description": "Read a store's state or ask for an approval, with extension_submit's inputs: preflight, status and a dry-run submit answer here; any other action only asks the owner's approval and answers value.approvalUrl, and the call carrying that approvalId runs through extension_submit. It executes nothing.",
+      "description": "Check a store submission without sending it: preflight, status and a dry-run submit answer here; any other action records an approval request for the workspace owner and answers value.approvalUrl. extension_submit runs the call carrying that approvalId; extension_release_status answers review history, extension_release_promote releases a channel. Takes extension_submit's inputs.",
       "gate": "the server started with --features=local,platform, and a login; never sends: asking for the approval of a submit, publish, cancel, rollout, release, derived sync-listing or public configure-store executes nothing, and the approved call runs through extension_submit",
       "samplePrompt": "Is my extension ready for the Chrome Web Store?",
       "readOnly": true,
@@ -2799,7 +2799,7 @@
       "name": "extension_templates",
       "tier": "build",
       "group": "local",
-      "description": "Browse the template catalog or read a template's files. Slugs: 'javascript' (plain), 'typescript', shadcn 'sidebar-shadcn'; AI templates tag 'ai'.",
+      "description": "Browse the template catalog or read a template's files. Answers slugs with surfaces and framework, or file contents; extension_create makes a project from one, extension_add_feature plans a surface in an existing project, extension_project_create puts a folder on extension.dev. Slugs: 'javascript' (plain), 'typescript', shadcn 'sidebar-shadcn'; AI templates tag 'ai'.",
       "gate": "none",
       "samplePrompt": "Which templates have a side panel? Show me the source of the best one",
       "readOnly": true,
@@ -2869,7 +2869,7 @@
       "name": "extension_theme_verify",
       "tier": "see",
       "group": "extras",
-      "description": "Verify a Chrome theme manifest, not an extension's: the colors Chrome paints and the keys it drops.",
+      "description": "Verify a Chrome theme manifest, not an extension's: the colors Chrome paints and the keys it drops. Answers the resolved colors, the discarded keys and the checks left for a person in a browser; extension_manifest_validate covers extension manifests. Static: no browser runs.",
       "gate": "the server started with extras in --features, as in --features=local,platform,extras",
       "samplePrompt": "Does this theme manifest paint the colors it declares?",
       "readOnly": true,
@@ -2896,7 +2896,7 @@
       "name": "extension_try",
       "tier": "run",
       "group": "platform",
-      "description": "Run a published extension.dev build in a fresh profile on this machine, no install, and screenshot it; warn the person about what it can reach. End with action:'close'; a local project is extension_dev.",
+      "description": "Run a published extension.dev build in a fresh profile on this machine, no install, and screenshot it. Answers the opened page, its screenshot and the sites and permissions the extension can reach; extension_dev runs a local project. action:'close' ends it. Safari is refused.",
       "gate": "the server started with --features=local,platform; a public project needs no login, a private one a login for it",
       "samplePrompt": "Try cezaraugusto/rebeccat for me and show me what it does",
       "readOnly": false,
@@ -2956,7 +2956,7 @@
       "name": "extension_wait",
       "tier": "run",
       "group": "local",
-      "description": "Wait for a session to be ready (only after wait:false, a ready.status not \"ready\", or noBrowser) or for: \"rebuild\" after an edit. Answers port, controlPort and cdpPort or rdpPort. A page condition is extension_eval until; never sleep in a shell.",
+      "description": "Wait for a session to be ready, or for: \"rebuild\" for the next compile after an edit. Needed only after wait:false, a ready.status not \"ready\", or noBrowser from extension_dev or extension_start. Answers port, controlPort and the browser debugging port (cdpPort or rdpPort). extension_reload forces a reload, extension_open shows a surface, extension_stop ends the session.",
       "gate": "a live dev or start session",
       "samplePrompt": "Wait until the dev session is ready, then tell me the ports",
       "readOnly": true,
@@ -2969,13 +2969,13 @@
           "name": "projectPath",
           "type": "string",
           "required": true,
-          "description": "Extension project root"
+          "description": "The extension's folder (manifest.json or package.json)."
         },
         {
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; required if several run."
+          "description": "Running session's browser; needed when several run."
         },
         {
           "name": "timeoutMs",
@@ -3009,7 +3009,7 @@
       "name": "extension_workspace",
       "tier": "platform",
       "group": "platform",
-      "description": "Read the workspace; change a project's settings. configure-project renames a project (displayName; slug and URLs stay). set-visibility public or a public liveChannel needs approval. Builds spend only on build branch pushes that change the root directory; docs-only pushes spend nothing.",
+      "description": "Read the workspace (projects, usage, settings) or change a project's settings. configure-project renames a project (displayName; slug and URLs stay). set-visibility public or a public liveChannel needs approval. Builds spend only on build branch pushes that change the root directory. extension_auth handles logins; extension_approvals lists and revokes approvals.",
       "gate": "the server started with --features=local,platform, and a login of any project in the workspace; settings and set-visibility need that project's own login; a public visibility needs a workspace owner's approval",
       "samplePrompt": "How many builds has my workspace used this month, and which projects failed their last build?",
       "readOnly": false,
@@ -3041,13 +3041,13 @@
           "name": "variables",
           "type": "array of object",
           "required": false,
-          "description": "set-environment: to set."
+          "description": "set-environment: build variables to add or change."
         },
         {
           "name": "remove",
           "type": "array of object",
           "required": false,
-          "description": "set-environment: to remove."
+          "description": "set-environment: build variables to delete."
         },
         {
           "name": "approvalId",
@@ -3059,7 +3059,7 @@
           "name": "include",
           "type": "array of \"team\" | \"members\" | \"tokens\" | \"apps\" | \"activity\" | \"environment\" | \"storeAccounts\"",
           "required": false,
-          "description": "Read-only sections to add."
+          "description": "Extra read-only sections to answer with the workspace."
         },
         {
           "name": "workspace",
@@ -3077,7 +3077,7 @@
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default from env."
+          "description": "Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev."
         }
       ]
     },
@@ -3085,7 +3085,7 @@
       "name": "extension_workspace_create",
       "tier": "platform",
       "group": "platform",
-      "description": "Create a missing extension.dev workspace, before extension_project_create. The first call answers a code and URL, and whoever approves becomes its owner; call again with deviceCode.",
+      "description": "Create a missing extension.dev workspace, before extension_project_create; the personal workspace always exists. The first call answers a code and URL, and whoever approves becomes its owner; a second call with deviceCode finishes it.",
       "gate": "the server started with --features=local,platform",
       "samplePrompt": "Create a workspace called acme on extension.dev",
       "readOnly": false,
@@ -3128,7 +3128,7 @@
           "name": "api",
           "type": "string",
           "required": false,
-          "description": "Platform URL; default from env."
+          "description": "Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev."
         }
       ]
     }

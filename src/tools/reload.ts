@@ -28,7 +28,7 @@ import {
 export const schema = {
   name: "extension_reload",
   description:
-    "Reload a live session's background, or one tab, over the control channel (allowControl) when hot reload missed an edit; answers once it is back.",
+    "Reload a running session's background, or one tab, through the control channel (allowControl); answers once it is back. extension_wait instead waits for the automatic rebuild after an edit; extension_dev and extension_start launch, extension_open opens a surface, extension_stop ends the session.",
   inputSchema: {
     type: "object" as const,
     properties: {

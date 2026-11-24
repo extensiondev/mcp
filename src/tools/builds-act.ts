@@ -12,7 +12,7 @@ import { hostedOnly } from "../lib/hosted-only";
 
 export const schema = {
   name: "extension_builds_act",
-  description: "Run a build act on the platform: rebuild, recheck, configure the build settings or a channel; read builds with extension_builds. A rebuild spends allowance; a push, only on the build branch when it changes the root directory ([skip build] pushes, docs-only, other branches spend nothing).",
+  description: "Rebuild, recheck or configure builds on extension.dev, or create and configure a channel. Answers the act's outcome; extension_builds reads builds, extension_build and extension_analyze work on this machine. A rebuild spends allowance; a push, only on the build branch when it changes the root directory ([skip build] pushes, docs-only, other branches spend nothing).",
   inputSchema: {
     type: "object" as const,
     properties: {

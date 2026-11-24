@@ -9,7 +9,7 @@ describe("428: the brief a client shows before cutting the instructions carries 
   const shown = full.slice(0, INSTRUCTIONS_WINDOW);
 
   it.each([
-    "search this server first",
+    "These tools cover creating",
     "extension_dev runs the dev session",
     "Call a change done only after seeing it work in a real browser through extension_dev",
     "ps, curl",

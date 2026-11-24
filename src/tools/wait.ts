@@ -63,7 +63,7 @@ const MIN_TIMEOUT_MS = 1_000;
 export const schema = {
   name: "extension_wait",
   description:
-    "Wait for a session to be ready (only after wait:false, a ready.status not \"ready\", or noBrowser) or for: \"rebuild\" after an edit. Answers port, controlPort and cdpPort or rdpPort. A page condition is extension_eval until; never sleep in a shell.",
+    "Wait for a session to be ready, or for: \"rebuild\" for the next compile after an edit. Needed only after wait:false, a ready.status not \"ready\", or noBrowser from extension_dev or extension_start. Answers port, controlPort and the browser debugging port (cdpPort or rdpPort). extension_reload forces a reload, extension_open shows a surface, extension_stop ends the session.",
   inputSchema: {
     type: "object" as const,
     properties: {

@@ -34,13 +34,13 @@ describe("extension_docs_search", () => {
     expect(schema.description.split(/\s+/).length).toBeLessThan(60);
   });
 
-  it("tells an agent holding only the schema when to call it, what comes back, and when memory is allowed", () => {
+  it("tells an agent holding only the schema what it searches, what comes back, and what an empty answer means", () => {
     expect(schema.description).toMatch(
-      /before answering about a WebExtension API, a manifest key, a permission or a browser difference/,
+      /for a WebExtension API, a manifest key, a permission or a browser difference/,
     );
 
-    expect(schema.description).toMatch(/answers pages with URLs/);
-    expect(schema.description).toMatch(/Memory is the fallback only when it returns nothing\.$/);
+    expect(schema.description).toMatch(/Answers matching pages with URLs/);
+    expect(schema.description).toMatch(/An empty answer means the docs hold no match\.$/);
   });
 
   it("asks the public route and returns its results", async () => {

@@ -29,9 +29,12 @@ import { FEATURE_GROUPS } from "../lib/tool-policy";
  * from 67,000 to 67,300 for two arguments an agent could not do without:
  * lifetime on extension_auth and workspaceRoot on extension_project_create.
  * Ledger 1100 raised it to 67,450 for workspace on extension_submit and its
- * check, the only way a connect can name a workspace's shared account. */
+ * check, the only way a connect can name a workspace's shared account.
+ * Ledger 1106 raised it to 73,850 on 2026-11-24: every description now
+ * says what the tool answers and which neighbor answers the rest, and the
+ * parameters say what changes, which a grader and a first session read. */
 const PER_TOOL = 6_000;
-const WHOLE_LIST = 67_450;
+const WHOLE_LIST = 73_850;
 
 type Listed = Awaited<ReturnType<Client["listTools"]>>["tools"][number];
 

@@ -17,7 +17,7 @@ import type { InputIssue } from "../lib/validate-input";
 
 export const schema = {
   name: "extension_builds",
-  description: "Read and download platform builds. list/get rows: env is the build environment, channels the pins holding it now. To rebuild, recheck or configure, call extension_builds_act.",
+  description: "Read and download builds made on extension.dev: list recent ones, get one, read its logs or download a verified package. Answers rows where env is the build environment and channels the pins holding it now. extension_build and extension_analyze work on this machine; extension_builds_act rebuilds, rechecks or configures.",
   inputSchema: {
     type: "object" as const,
     properties: {

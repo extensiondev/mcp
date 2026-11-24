@@ -12,7 +12,7 @@ import { hostedOnly } from "../lib/hosted-only";
 
 export const schema = {
   name: "extension_release_promote",
-  description: "Release a build to a channel on extension.dev. A release needs a workspace owner's token and approval of that exact release, every time (approval-required, then the same call with approvalId). Preview takes any build; Stable and every other channel take Stable builds. Tokens live 7 days.",
+  description: "Release a build to a channel on extension.dev, cut a version-bump pull request, or roll a channel back. A release needs a workspace owner's token and approval of that exact release, every time. Preview takes any build; Stable and every other channel take Stable builds. Tokens live 7 days. Stores are extension_submit and extension_submit_check; extension_release_status answers where things stand.",
   inputSchema: {
     type: "object" as const,
     properties: {

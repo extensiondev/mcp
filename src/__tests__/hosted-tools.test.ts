@@ -871,7 +871,7 @@ describe("the forwarder gives the person the wait they asked for and keeps what 
     expect(deferred.map((tool) => tool.name)).toEqual(["extension_submit_check"]);
 
     for (const tool of stated) {
-      expect(tool.said, tool.name).toContain(`the hosted lane waits at most ${HOSTED_ACT_WAIT_SECONDS} and names a cut in warnings`);
+      expect(tool.said, tool.name).toContain(`the hosted server waits at most ${HOSTED_ACT_WAIT_SECONDS} and says so in warnings`);
       expect(tool.said, tool.name).not.toContain("value.hostedWait");
       expect(tool.said, tool.name).toMatch(/, 0 to 600 \(omitted: (0|180)\b/);
     }

@@ -30,7 +30,7 @@ describe("the initialize result carries instructions, the one field a search-fir
   });
 
   it("names the moments and the tools that replace hand-rolled session plumbing", () => {
-    expect(SERVER_INSTRUCTIONS).toMatch(/search this server first/);
+    expect(SERVER_INSTRUCTIONS).toMatch(/These tools cover creating/);
 
     for (const name of [
       "extension_create",
@@ -50,10 +50,10 @@ describe("the initialize result carries instructions, the one field a search-fir
     expect(SERVER_INSTRUCTIONS).toMatch(/CDP or Playwright/);
   });
 
-  it("915: names creating, scaffolding and starting from a template first among the asks to search this server for, at no cost to either budget", () => {
-    const sentence = SERVER_INSTRUCTIONS.split("\n").find((line) => line.includes("search this server first")) ?? "";
+  it("915: names creating and scaffolding first among the jobs these tools cover, at no cost to either budget", () => {
+    const sentence = SERVER_INSTRUCTIONS.split("\n").find((line) => line.includes("These tools cover creating")) ?? "";
 
-    expect(sentence).toMatch(/^When the ask is to create, scaffold, start from a template, edit, check, run, start, watch, inspect, drive, test, debug or build a browser extension, however small, search this server first and use its tools: extension_create /);
+    expect(sentence).toMatch(/^These tools cover creating, scaffolding, editing, checking, running, watching, inspecting, driving, testing, debugging and building a browser extension, however small: extension_create /);
     expect(tools.map((tool) => tool.schema.name)).toEqual(expect.arrayContaining(["extension_create", "extension_templates"]));
     expect(isToolListed("extension_create", DEFAULT_SERVER_OPTIONS) && isToolListed("extension_templates", DEFAULT_SERVER_OPTIONS)).toBe(true);
     expect(sentence.length).toBeLessThanOrEqual(770);
@@ -61,12 +61,12 @@ describe("the initialize result carries instructions, the one field a search-fir
     expect(serverInstructions({ features: ["local", "platform"], noShip: false }).length).toBeLessThan(3 * 4_096);
   });
 
-  it("917: says what the create, check and build tools stand in for, so a small job or an edit has a reason to reach for them", () => {
-    const sentence = SERVER_INSTRUCTIONS.split("\n").find((line) => line.includes("search this server first")) ?? "";
+  it("917 and 1109: says what the create, check and build tools do and answer, as facts and not as orders", () => {
+    const sentence = SERVER_INSTRUCTIONS.split("\n").find((line) => line.includes("These tools cover creating")) ?? "";
 
-    expect(sentence).toContain("extension_create starts every new extension, plain JavaScript too, never by hand;");
-    expect(sentence).toContain("extension_manifest_validate checks a manifest after any edit (each browser, permissions the code calls), not jq or a linter;");
-    expect(sentence).toContain("extension_build builds and answers the store review risks, not a package script or bundler;");
+    expect(sentence).toContain("extension_create starts a new extension from a template, plain JavaScript too;");
+    expect(sentence).toContain("extension_manifest_validate checks a manifest for each browser and the permissions the code calls;");
+    expect(sentence).toContain("extension_build builds and answers the store review risks;");
     expect(sentence.indexOf("extension_create")).toBeLessThan(sentence.indexOf("extension_dev runs the dev session"));
   });
 
@@ -87,7 +87,7 @@ describe("the initialize result carries instructions, the one field a search-fir
       "To package or zip an extension for a store: extension_manifest_validate, then extension_build with zip: true, never a hand-made zip of the source folder.",
     );
 
-    expect(lines[1]).toContain("search this server first");
+    expect(lines[1]).toContain("These tools cover creating");
     expect(SERVER_INSTRUCTIONS.length).toBeLessThanOrEqual(3_150);
     expect(SERVER_INSTRUCTIONS).not.toContain("Every platform act");
     expect(platform).not.toContain("To package or zip");
