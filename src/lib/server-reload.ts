@@ -36,6 +36,7 @@ export interface ListedTool {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
   title?: string;
   annotations?: ToolAnnotations;
 }

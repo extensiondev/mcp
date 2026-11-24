@@ -68,6 +68,7 @@ export interface ToolModule {
     name: string;
     description: string;
     inputSchema: Record<string, unknown>;
+    outputSchema?: Record<string, unknown>;
   };
   handler: (args: any) => Promise<string>;
   invalidArgumentsHint?: (issues: InputIssue[], args: Record<string, unknown>) => string | undefined;
@@ -120,6 +121,7 @@ export function listedTools(tools: ToolModule[], options: ServerOptions): Listed
       name: t.schema.name,
       description: t.schema.description,
       inputSchema: t.schema.inputSchema,
+      ...(t.schema.outputSchema ? { outputSchema: t.schema.outputSchema } : {}),
       ...(t.title ? { title: t.title } : {}),
       ...(t.annotations ? { annotations: t.annotations } : {}),
     }));
@@ -144,7 +146,7 @@ export function listedToolEntry(tool: ListedTool): {
   title: string;
   description: string;
   inputSchema: Record<string, unknown>;
-  outputSchema: typeof ENVELOPE_OUTPUT_SCHEMA;
+  outputSchema: Record<string, unknown>;
   annotations: ToolAnnotations & { title: string };
 } {
   const title = tool.title ?? toolTitle(tool.name);
@@ -155,7 +157,7 @@ export function listedToolEntry(tool: ListedTool): {
     openWorldHint: false,
   };
 
-  return { name: tool.name, title, description: tool.description, inputSchema: tool.inputSchema, outputSchema: ENVELOPE_OUTPUT_SCHEMA, annotations: { title, ...hints } };
+  return { name: tool.name, title, description: tool.description, inputSchema: tool.inputSchema, outputSchema: tool.outputSchema ?? ENVELOPE_OUTPUT_SCHEMA, annotations: { title, ...hints } };
 }
 
 function isFenced(text: string): boolean {

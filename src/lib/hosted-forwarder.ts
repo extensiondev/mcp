@@ -19,7 +19,7 @@ import { envelope, isEnvelope, reframed } from "./envelope";
 import { forwardSession, withForwardSession, type ForwardSession } from "./forward-approval-state";
 import { approvalHeldByPerson, forgetApprovalHolders } from "./forwarded-approval";
 import { forgetForwardCredential, forwardCredential, forwardUrlFor, type ExchangedCredential } from "./forward-credential";
-import { GUIDED_CONNECT_STORES, GUIDED_STATUS } from "./guided-connect";
+import { CONNECTED_STATUS, GUIDED_CONNECT_STORES, GUIDED_STATUS } from "./guided-connect";
 import { loadHeldBatch } from "./held-batches";
 import { ACT_SETTLE_WINDOW_MS, FORWARD_TIMEOUT_MS, IN_FLIGHT_RECHECK_MS, LOCAL_TOOLS_STILL_WORK, MEMORY_KEY, carriedMemory, hostedWaitOf, lostAnswer, readLane, takeMemory, unreadableAnswer, withOneNotice, withWholeWait, withoutHostedWait } from "./forward-lane-answer";
 import { CLOSED_STATUSES, readAnswer, readLanePreflight, withLanePreflight } from "./forward-lane-preflight";
@@ -138,7 +138,9 @@ function guidedConnectStore(args: Args): string {
  * Store accounts page takes the one-time console sign-in and guides the
  * person to the key page. So when the lane answers that the project has no
  * working key and none on file, the pages it names stay closed and the
- * workspace's guided connect opens instead, in the same call. A replace, a
+ * workspace's guided connect opens instead, in the same call, or, when the
+ * workspace already holds that store, the answer says so and opens nothing
+ * (ledger 1120). A replace, a
  * resumed session, a key of the project's own, or a guided browser that did
  * not open keeps the lane's answer and its pages (ledger 1112).
  */
@@ -155,7 +157,9 @@ async function guidedProjectConnect(command: string, args: Args, shown: Args, de
   const api = text(args.api) || undefined;
   const answer = await guide(workspaceConnectAnswer(command, workspace, [store], api, project), { ...args, browsers: [store] });
 
-  return laneStatus(readAnswer(answer)) === GUIDED_STATUS ? answer : null;
+  const status = laneStatus(readAnswer(answer));
+
+  return status === GUIDED_STATUS || status === CONNECTED_STATUS ? answer : null;
 }
 
 /* @invariant AN ASK-ONLY CALL REACHES THE LANE UNDER THE ASK-ONLY TOOL'S NAME,

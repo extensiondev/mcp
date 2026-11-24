@@ -13,9 +13,9 @@ import path from "node:path";
 
 import { findManagedBinary, findSystemBinary } from "../tools/detect-browsers";
 import { autoOpenBlock, openableUrl } from "./approval-open";
-import { credentialsPath, listCredentials, liveAt } from "./credentials";
-import { targetServer } from "./credential-server";
+import { credentialsPath } from "./credentials";
 import { envelope, isEnvelope } from "./envelope";
+import { connectedAnswer, readStoreAccount, replacing, workspaceToken } from "./guided-connect-account";
 import { spawnExtensionCli } from "./exec";
 import {
   chooseGuidedBrowser,
@@ -40,6 +40,8 @@ type Args = Record<string, unknown>;
 export const WORKSPACE_CONNECT_STATUS = "workspace-connect-in-console";
 
 export const GUIDED_STATUS = "workspace-connect-guided";
+
+export { CONNECTED_STATUS, readStoreAccount, replaceCall, type StoreAccountRead, type StoreAccountView } from "./guided-connect-account";
 
 export const GUIDED_CONNECT_STORES = new Set(["edge"]);
 
@@ -266,14 +268,6 @@ export const guidedConnectRuntime: GuidedConnectRuntime = {
   schedule: scheduleLater,
 };
 
-function workspaceToken(workspace: string, api?: string): string {
-  const server = targetServer(api);
-  const live = listCredentials().filter((entry) => entry.server === server && entry.workspaceSlug.toLowerCase() === workspace && liveAt(entry));
-  const member = live.find((entry) => entry.kind === "member");
-
-  return (member ?? live.sort((a, b) => b.expiresAt - a.expiresAt)[0])?.token ?? "";
-}
-
 export interface ConsoleLanding {
   openUrl: string;
   signedIn: boolean;
@@ -458,7 +452,13 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
   const store = Array.isArray(args.browsers) ? args.browsers.map(text).find(Boolean) ?? "" : "";
   const query = store ? `?store=${encodeURIComponent(store)}` : "";
   const plainUrl = `${base}${query}`;
-  const answer = { command: parsed.command, value, hint: text(parsed.hint) };
+  const read = store && !replacing(args) ? await readStoreAccount({ workspace, store, api: text(args.api) || undefined, fetchImpl: runtime.fetch }) : null;
+
+  if (read && "account" in read && read.account) return connectedAnswer(parsed.command, { workspace, project, store, url: plainUrl }, read.account);
+
+  const unread = read && "unread" in read ? `The ${storeLabel(store)} account of ${workspace} could not be read (${read.unread}), so this connect goes on as if it were not connected.` : "";
+  const accountState = unread ? { storeAccount: { read: false, reason: (read as { unread: string }).unread } } : {};
+  const answer = { command: parsed.command, value: { ...value, ...accountState }, hint: [unread, text(parsed.hint)].filter(Boolean).join(" ") };
 
   const block = runtime.launchBlock();
   if (block) return plainAnswer(answer, `No browser was opened: ${block}.`);
@@ -471,8 +471,8 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
       ok: true,
       command: parsed.command,
       status: WORKSPACE_CONNECT_STATUS,
-      value: { ...value, storeAccountsUrl: plainUrl, guidedBrowser: { opened: false, browser: choice.browser, why: choice.why, install: choice.install } },
-      hint: `${choice.why} It is not installed: install it with extension_browsers_install {action:"install", browser:"${choice.install}"}, then call this connect again to open it with extension.dev tools loaded.`,
+      value: { ...answer.value, storeAccountsUrl: plainUrl, guidedBrowser: { opened: false, browser: choice.browser, why: choice.why, install: choice.install } },
+      hint: `${unread ? `${unread} ` : ""}${choice.why} It is not installed: install it with extension_browsers_install {action:"install", browser:"${choice.install}"}, then call this connect again to open it with extension.dev tools loaded.`,
     });
   }
 
@@ -536,10 +536,12 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
       toolsExtension: { source: extension.source, version: extension.version, note: extension.note },
       signedIn: landing.signedIn,
       ...(onKeyPage && keyPage ? { landedOn: keyPage.url } : {}),
+      ...accountState,
       sayToPerson: say,
       nextStep: nextStep("connect", say, plainUrl),
     },
     hint: [
+      unread,
       `${opened} ${choice.why} Profile: ${profileDir}.`,
       extension.source === "bundled" ? extension.note : "",
       landing.note,

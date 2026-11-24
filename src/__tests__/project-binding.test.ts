@@ -777,7 +777,7 @@ describe("the guided store connect opens the MCP's own browser with extension.de
 
     const out = await guided("cezaraugusto", runtime("edge", (url) => (url.includes("edge.microsoft.com") ? new Response(STORE_CRX) : new Response("", { status: 404 }))));
 
-    expect(asked[0]).toContain("edge.microsoft.com/extensionwebstorebase/v1/crx");
+    expect(asked.find((url) => !url.includes("/store-accounts"))).toContain("edge.microsoft.com/extensionwebstorebase/v1/crx");
     expect(out.value.toolsExtension).toMatchObject({ source: "bundled", version: "0.1.3" });
     expect(out.hint).toContain("Edge Add-ons was not used because its download was refused: the CRX names item omndndgipeomhfdobfbhpfemempnnpjp, not pnijfgjkilbnmjiomlajfbmiccjejbpm");
     expect(fs.existsSync(path.join(launches[0]!.extensionDir, "manifest.json"))).toBe(true);
@@ -836,6 +836,52 @@ describe("the guided store connect opens the MCP's own browser with extension.de
     expect(JSON.stringify(out)).not.toContain("one-time-secret-code");
     expect(JSON.stringify(out)).not.toContain("auth/handoff");
     expect(out.hint).toContain(`extension_workspace_read {action:"info", workspace:"cezaraugusto", include:["storeAccounts"]}`);
+  });
+
+  it("reads the workspace's store accounts first: a connected store opens nothing, replace opens, an unread state is said", async () => {
+    otherProcessesSignIn("rebeccat");
+    const account = { kind: "keys", connectedAs: "Rebecca T", connectedAt: "2026-11-24T22:03:00.000Z", checkedAt: "2026-11-24T22:10:00.000Z", healthy: true };
+    let auth = "";
+    const accounts = (edge: unknown) =>
+      runtime("edge", (url) => (url === `${API}/api/workspaces/cezaraugusto/store-accounts` ? Response.json({ workspace: "cezaraugusto", storeAccounts: { chrome: null, edge } }) : new Response("", { status: 404 })));
+    const reading = accounts(account);
+    const out = await guided("cezaraugusto", {
+      ...reading,
+      fetch: (async (url: string, init?: RequestInit) => {
+        auth = String((init?.headers as Record<string, string> | undefined)?.authorization ?? auth);
+
+        return reading.fetch(url, init);
+      }) as unknown as typeof fetch,
+    });
+
+    expect(auth).toBe("Bearer rebeccat.sig");
+    expect(launches).toEqual([]);
+    expect(out).toMatchObject({
+      ok: true,
+      status: "workspace-store-connected",
+      value: { workspace: "cezaraugusto", store: "edge", account: { connectedAs: "Rebecca T", connectedAt: account.connectedAt, checkedAt: account.checkedAt, healthy: true }, guidedBrowser: { opened: false }, nextStep: { kind: "done" } },
+    });
+
+    expect(out.value.sayToPerson).toContain("Edge Add-ons is already connected for cezaraugusto as Rebecca T since");
+    expect(out.value.sayToPerson).toContain("To use a new key instead, ask to replace it");
+    expect(out.hint).toContain(`call extension_submit {action:"connect", workspace:"cezaraugusto", browsers:["edge"], replace:true}`);
+
+    const failing = await guided("cezaraugusto", accounts({ ...account, healthy: false, reason: "Partner Center refused the key" }));
+    expect(failing).toMatchObject({ status: "workspace-store-connected", value: { account: { healthy: false }, nextStep: { kind: "connect" } } });
+    expect(failing.value.sayToPerson).toContain("failed: Partner Center refused the key");
+
+    const replaced = JSON.parse(await guideStoreConnect(workspaceConnectAnswer("extension_submit", "cezaraugusto", ["edge"], API), { browsers: ["edge"], api: API, replace: true }, accounts(account)));
+    expect(replaced.status).toBe("workspace-connect-guided");
+    expect(launches).toHaveLength(1);
+    expect(asked.filter((url) => url.includes("/store-accounts"))).toHaveLength(2);
+
+    const free = await guided("cezaraugusto", accounts(null));
+    expect(free.status).toBe("workspace-connect-guided");
+    expect(free.value).not.toHaveProperty("storeAccount");
+
+    const unread = await guided("cezaraugusto", runtime("edge", () => new Response("", { status: 503 })));
+    expect(unread).toMatchObject({ status: "workspace-connect-guided", value: { storeAccount: { read: false, reason: "the platform answered 503" } } });
+    expect(unread.hint).toContain("The Edge Add-ons account of cezaraugusto could not be read (the platform answered 503), so this connect goes on as if it were not connected.");
   });
 
   it("launches a visible window in a headless environment, keeping every other browser flag", async () => {
@@ -998,7 +1044,7 @@ describe("the guided store connect opens the MCP's own browser with extension.de
     const out = await guided("extensiondev", { ...runtime("edge", () => new Response("")), launchBlock: () => "CI is set in this server's environment" });
 
     expect(out).toMatchObject({ status: "workspace-connect-in-console", value: { guidedBrowser: { opened: false } } });
-    expect(out.hint).toMatch(/^No browser was opened: CI is set in this server's environment\. A workspace owner connects Edge Add-ons/);
+    expect(out.hint).toMatch(/^No browser was opened: CI is set in this server's environment\. The Edge Add-ons account of extensiondev could not be read \(no login for extensiondev is on this machine\), so this connect goes on as if it were not connected\. A workspace owner connects Edge Add-ons/);
     expect(launches).toEqual([]);
     expect(asked).toEqual([]);
   });

@@ -3060,7 +3060,7 @@
           "name": "replace",
           "type": "boolean",
           "required": false,
-          "description": "connect: true replaces a working key; only when asked."
+          "description": "connect: true replaces a working key; only if asked."
         },
         {
           "name": "waitSeconds",

@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { API_BASE, SUBMIT_WAIT_SECONDS } from "../lib/common-schema";
+import { ENVELOPE_OUTPUT_SCHEMA } from "../lib/envelope";
 import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
 import { hostedOnly } from "../lib/hosted-only";
 
@@ -175,11 +176,21 @@ export const schema = {
       },
       replace: {
         type: "boolean",
-        description: "connect: true replaces a working key; only when asked.",
+        description: "connect: true replaces a working key; only if asked.",
       },
       waitSeconds: SUBMIT_WAIT_SECONDS,
     },
     required: [],
+  },
+  outputSchema: {
+    ...ENVELOPE_OUTPUT_SCHEMA,
+    properties: {
+      ...ENVELOPE_OUTPUT_SCHEMA.properties,
+      status: {
+        type: "string",
+        description: "connect: workspace-store-connected opens nothing (value.account).",
+      },
+    },
   },
 };
 

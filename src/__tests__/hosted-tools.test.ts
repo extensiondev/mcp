@@ -570,7 +570,7 @@ describe("the forwarder", () => {
     const connect = { action: "connect", store: "edge", project: "acme/web", waitSeconds: 60 };
 
     try {
-      const { lane } = stubLane([pending(), pending(), pending({ keyOnFile: { kind: "project" } }), pending()]);
+      const { lane } = stubLane([pending(), pending(), pending(), pending({ keyOnFile: { kind: "project" } }), pending()]);
       const local = vi.fn(async () => "local");
       const out = JSON.parse(await forwardCall("extension_submit", connect, local, { ...FORWARDING, platform: "darwin", guideStoreConnect: guide("workspace-connect-guided") }));
 
@@ -578,6 +578,11 @@ describe("the forwarder", () => {
       expect(out).toMatchObject({ status: "workspace-connect-guided", value: { workspace: "acme" } });
       expect(guidedTo[0]?.answer).toMatchObject({ status: "workspace-connect-in-console", value: { workspace: "acme", project: "acme/web", storeAccountsUrl: expect.stringContaining("/acme/settings/store-accounts") } });
       expect(guidedTo[0]?.args.browsers).toEqual(["edge"]);
+      expect(opened).toEqual([]);
+
+      const held = JSON.parse(await forwardCall("extension_submit", connect, local, { ...FORWARDING, platform: "darwin", guideStoreConnect: guide("workspace-store-connected") }));
+
+      expect(held.status).toBe("workspace-store-connected");
       expect(opened).toEqual([]);
 
       for (const [args, status] of [
@@ -590,8 +595,8 @@ describe("the forwarder", () => {
         expect(kept.status).toBe("connect-pending");
       }
 
-      expect(guidedTo).toHaveLength(2);
-      expect(lane()[3]?.body.args.waitSeconds).toBe(60);
+      expect(guidedTo).toHaveLength(3);
+      expect(lane()[4]?.body.args.waitSeconds).toBe(60);
       expect(opened).toEqual([keyPage, connectUrl, keyPage, connectUrl, keyPage, connectUrl]);
     } finally {
       restore();
