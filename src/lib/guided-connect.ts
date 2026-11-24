@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { execFileSync, spawn } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -30,7 +31,7 @@ import { mcpOrigins } from "./origins";
 import { withoutRedirects } from "./platform-fetch";
 import { isRow, text } from "./row";
 import { nextStep, storeLabel } from "./store-connection";
-import { resolveToolsExtension, type ToolsExtension } from "./tools-extension";
+import { LAUNCH_FILE, resolveToolsExtension, type ToolsExtension } from "./tools-extension";
 import { userCacheDir } from "./user-cache-dir";
 
 type Args = Record<string, unknown>;
@@ -42,6 +43,14 @@ export const GUIDED_STATUS = "workspace-connect-guided";
 export const GUIDED_CONNECT_STORES = new Set(["edge"]);
 
 export const HANDOFF_PATH = "/api/cli/console-handoff";
+
+export const LAUNCH_HANDOFF_PAGE = "https://www.extension.dev/device/handoff";
+
+export const GUIDED_KEY_PAGES: Record<string, { url: string; page: string }> = {
+  edge: { url: "https://partner.microsoft.com/dashboard/microsoftedge/publishapi", page: "Edge Partner Center Publish API page" },
+};
+
+const LAUNCH_SECONDS = 15 * 60;
 
 export interface LaunchPlan {
   choice: GuidedBrowserChoice;
@@ -65,7 +74,10 @@ export interface GuidedConnectRuntime {
   cacheDir(): string;
   launchEnv(): Record<string, string>;
   launch(plan: LaunchPlan): LaunchResult;
+  windowCheck?(profileDir: string): Promise<WindowCheck>;
 }
+
+export type WindowCheck = "visible" | "headless" | "unknown";
 
 function quietRun(command: string, args: string[]): string | null {
   try {
@@ -216,6 +228,33 @@ export function visibleLaunchEnv(env: NodeJS.ProcessEnv | Record<string, string 
   return headlessLaunch({ headless: false }, env).env ?? {};
 }
 
+export function headlessFromProcesses(raw: string | null, profileDir: string): WindowCheck {
+  const lines = String(raw ?? "").split("\n").filter((line) => line.includes(profileDir) && !line.includes(" preview "));
+  if (!lines.length) return "unknown";
+
+  return lines.some((line) => /(?:^|\s)--?headless(?:[=\s]|$)/.test(line)) ? "headless" : "visible";
+}
+
+/* @invariant AN ANSWER NEVER CLAIMS A WINDOW THE MACHINE DID NOT SHOW. A
+ * setup outside the MCP can add --headless to every browser it starts, so
+ * after a launch the browser processes of the guided profile are read back
+ * from the process table for a few seconds; one started with --headless turns
+ * the answer into the console page with the reason. Where the table cannot be
+ * read, nothing is claimed beyond the launch.
+ */
+async function windowCheck(profileDir: string): Promise<WindowCheck> {
+  if (process.platform !== "darwin" && process.platform !== "linux") return "unknown";
+
+  for (let waited = 0; waited < 10_000; waited += 500) {
+    const seen = headlessFromProcesses(quietRun("ps", ["-axww", "-o", "args="]), profileDir);
+    if (seen !== "unknown") return seen;
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+
+  return "unknown";
+}
+
 export const guidedConnectRuntime: GuidedConnectRuntime = {
   launchBlock: () => {
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== "EXTENSION_HEADLESS" && key !== "EXTENSION_BROWSER_FLAGS"));
@@ -234,6 +273,7 @@ export const guidedConnectRuntime: GuidedConnectRuntime = {
   cacheDir: () => path.join(userCacheDir(), "extension-dev-tools"),
   launchEnv: () => visibleLaunchEnv(process.env),
   launch: launchGuidedBrowser,
+  windowCheck,
 };
 
 function workspaceToken(workspace: string, api?: string): string {
@@ -248,6 +288,8 @@ export interface ConsoleLanding {
   openUrl: string;
   signedIn: boolean;
   note: string;
+  launchBound?: boolean;
+  expiresAt?: string;
 }
 
 const SIGN_IN_ONCE = "The console opens signed out, so the person signs in to extension.dev there once; the profile keeps that sign-in.";
@@ -282,7 +324,7 @@ export function handoffNext(workspace: string, store: string): string {
  * door (404), any other answer or any other origin opens the plain console
  * page, and the answer says the person signs in there once.
  */
-export async function consoleLanding(options: { workspace: string; next: string; plainUrl: string; api?: string; fetchImpl: typeof fetch }): Promise<ConsoleLanding> {
+export async function consoleLanding(options: { workspace: string; next: string; plainUrl: string; api?: string; launchHash?: string; fetchImpl: typeof fetch }): Promise<ConsoleLanding> {
   const token = workspaceToken(options.workspace, options.api);
   if (!token) return { openUrl: options.plainUrl, signedIn: false, note: SIGN_IN_ONCE };
 
@@ -290,19 +332,55 @@ export async function consoleLanding(options: { workspace: string; next: string;
     const res = await withoutRedirects(options.fetchImpl)(`${mcpOrigins(options.api).www}${HANDOFF_PATH}`, {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: JSON.stringify({ next: options.next }),
+      body: JSON.stringify({ next: options.next, ...(options.launchHash ? { launchHash: options.launchHash } : {}) }),
       signal: AbortSignal.timeout(10_000),
     });
 
     if (res.status === 200) {
       const body: unknown = await res.json().catch(() => null);
       const url = isRow(body) ? handoffUrl(text(body.url), options.api) : "";
-      if (url) return { openUrl: url, signedIn: true, note: "" };
+      const row = isRow(body) ? body : {};
+      const launchBound = Boolean(options.launchHash && row.launchBound === true);
+      if (url) return { openUrl: url, signedIn: true, note: "", ...(launchBound ? { launchBound, expiresAt: text(row.launchExpiresAt) } : {}) };
     }
   } catch {
   }
 
   return { openUrl: options.plainUrl, signedIn: false, note: SIGN_IN_ONCE };
+}
+
+function launchFile(extensionDir: string): string {
+  return path.join(extensionDir, LAUNCH_FILE);
+}
+
+function launchExpiry(raw: string | undefined): string {
+  const now = Date.now();
+  const at = Date.parse(String(raw ?? ""));
+
+  return new Date(Number.isFinite(at) && at > now && at <= now + LAUNCH_SECONDS * 1000 ? at : now + 60_000).toISOString();
+}
+
+/* @invariant THE LAUNCH SECRET REACHES ONLY THE BROWSER THIS MCP OPENS (MCP
+ * ledger 1114). Its sha256 goes to the platform with the handoff mint; the
+ * secret itself and the one-time handoff address are written 0600 into the
+ * extension folder this MCP loads and nowhere else, never into argv, a log or
+ * the answer. The extension takes them once, opens the handoff in a background
+ * tab and gives the secret to that tab alone, so the confirm press is skipped
+ * there and kept for any link opened anywhere else. A launch that does not
+ * use them removes any file an earlier launch left.
+ */
+export function writeLaunchFile(extensionDir: string, launch: { handoff: string; secret: string; expiresAt: string }): void {
+  const file = launchFile(extensionDir);
+  const staging = `${file}.${process.pid}.${Date.now()}`;
+  const body = { id: crypto.randomBytes(12).toString("base64url"), ...launch };
+
+  fs.writeFileSync(staging, JSON.stringify(body), { mode: 0o600 });
+  fs.chmodSync(staging, 0o600);
+  fs.renameSync(staging, file);
+}
+
+export function clearLaunchFile(extensionDir: string): void {
+  fs.rmSync(launchFile(extensionDir), { force: true });
 }
 
 function readBack(workspace: string): string {
@@ -387,16 +465,38 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
   if ("failed" in extension) return plainAnswer(answer, `No browser was opened: ${extension.failed}.`);
 
   const next = handoffNext(workspace, store);
-  const landing = await consoleLanding({ workspace, next, plainUrl, api: text(args.api) || undefined, fetchImpl: runtime.fetch });
+  const keyPage = GUIDED_KEY_PAGES[store];
+  const secret = keyPage ? crypto.randomBytes(32).toString("base64url") : "";
+  const launchHash = secret ? crypto.createHash("sha256").update(secret).digest("hex") : undefined;
+  const landing = await consoleLanding({ workspace, next, plainUrl, api: text(args.api) || undefined, launchHash, fetchImpl: runtime.fetch });
+  const onKeyPage = Boolean(keyPage && landing.launchBound && landing.openUrl.split("#")[0] === LAUNCH_HANDOFF_PAGE);
+
+  if (onKeyPage) writeLaunchFile(extension.dir, { handoff: landing.openUrl, secret, expiresAt: launchExpiry(landing.expiresAt) });
+  else clearLaunchFile(extension.dir);
+
   const profileDir = guidedProfileDir(runtime.stateDir(), choice.browser as GuidedBrowser);
   const env = runtime.launchEnv();
-  const launched = runtime.launch({ choice, extensionDir: extension.dir, profileDir, url: landing.openUrl, env });
+  const launched = runtime.launch({ choice, extensionDir: extension.dir, profileDir, url: onKeyPage && keyPage ? keyPage.url : landing.openUrl, env });
 
-  if (!launched.launched) return plainAnswer(answer, `No browser was opened: ${label} did not start (${launched.reason ?? "no reason given"}).`);
+  if (!launched.launched) {
+    clearLaunchFile(extension.dir);
+
+    return plainAnswer(answer, `No browser was opened: ${label} did not start (${launched.reason ?? "no reason given"}).`);
+  }
+
+  const shown = runtime.windowCheck ? await runtime.windowCheck(profileDir) : "unknown";
+
+  if (shown === "headless") {
+    clearLaunchFile(extension.dir);
+
+    return plainAnswer(answer, `No window is showing: ${label} started headless, since a --headless flag reached it from this machine's own browser setup, not from this MCP.`);
+  }
 
   const storeName = store ? storeLabel(store) : "the store";
   const signIn = landing.signedIn ? "" : "sign in to extension.dev once, then ";
-  const say = `In the ${label} window that just opened on the ${workspace} Store accounts page, ${signIn}follow the extension.dev tools panel: it takes you to the ${storeName} key page, captures the values when you press it and hands them to the console, so no key passes through this chat. Tell me when the page says connected.`;
+  const say = onKeyPage && keyPage
+    ? `In front, the ${label} window shows the ${keyPage.page}; sign in to Partner Center there if it asks. First press the extension.dev tools button in the browser toolbar (inside the puzzle-piece Extensions menu when it is not pinned), then "Allow on ${storeName}" and accept the browser's prompt; skip this when the panel already shows on the page. The extension.dev tools panel on the page then names each press ("Turn on API" or "New API key") and sends the new key to the ${workspace} console, which signs in by itself in a background tab, so no key passes through this chat. Tell me when the panel says ${storeName} is connected.`
+    : `In the ${label} window that just opened on the ${workspace} Store accounts page, ${signIn}follow the extension.dev tools panel: it takes you to the ${storeName} key page, captures the values when you press it and hands them to the console, so no key passes through this chat. Tell me when the page says connected.`;
   const opened = launched.reused ? "The guided browser already running took the page:" : "Opened";
 
   return envelope({
@@ -411,6 +511,7 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
       guidedBrowser: { opened: true, browser: choice.browser, why: choice.why, profile: profileDir, reused: launched.reused },
       toolsExtension: { source: extension.source, version: extension.version, note: extension.note },
       signedIn: landing.signedIn,
+      ...(onKeyPage && keyPage ? { landedOn: keyPage.url } : {}),
       sayToPerson: say,
       nextStep: nextStep("connect", say, plainUrl),
     },

@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "version": "0.1.2",
+  "version": "0.1.3",
   "name": "extension.dev tools",
   "author": "extension.dev",
   "description": "Tools from extension.dev for browser extension developers. Today: store submission tooling. More on the way.",
@@ -26,11 +26,6 @@
     "https://*.extension.dev/*",
     "https://*.extension.land/*"
   ],
-  "optional_host_permissions": [
-    "https://partner.microsoft.com/*",
-    "https://addons.mozilla.org/*",
-    "https://appstoreconnect.apple.com/*"
-  ],
   "content_scripts": [
     {
       "matches": [
@@ -41,6 +36,16 @@
       ],
       "run_at": "document_start",
       "css": []
+    },
+    {
+      "matches": [
+        "https://www.extension.dev/device/handoff*"
+      ],
+      "js": [
+        "content_scripts/content-1.js"
+      ],
+      "run_at": "document_start",
+      "css": []
     }
   ],
   "background": {
@@ -48,6 +53,10 @@
       "background/scripts.js"
     ]
   },
+  "optional_host_permissions": [
+    "https://partner.microsoft.com/*",
+    "https://appstoreconnect.apple.com/*"
+  ],
   "browser_specific_settings": {
     "gecko": {
       "id": "sidekick@extension.dev",

@@ -13,7 +13,9 @@ import { fileURLToPath } from "node:url";
 
 import { readZipEntry, unpackZip } from "./zip-entries";
 
-export const MIN_TOOLS_VERSION = "0.1.2";
+export const MIN_TOOLS_VERSION = "0.1.3";
+
+export const LAUNCH_FILE = "launch.json";
 
 export const TOOLS_ITEMS = {
   chrome: { id: "omndndgipeomhfdobfbhpfemempnnpjp", publisher: "lfoeajgcchlidpicbabpmckkejpckcfb", store: "the Chrome Web Store" },
@@ -228,6 +230,7 @@ function filesUnder(root: string, dir = root): string[] {
 
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
+    if (dir === root && entry.name === LAUNCH_FILE) continue;
 
     if (entry.isDirectory()) out.push(...filesUnder(root, full));
     else if (entry.isFile()) out.push(path.relative(root, full).split(path.sep).join("/"));

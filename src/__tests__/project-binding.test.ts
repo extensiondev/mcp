@@ -23,7 +23,7 @@ import { storeMdFileOf } from "../lib/submit-facts";
 import { loginForPath, pathIdentity, serverLogins } from "../lib/path-project";
 import { PLATFORM_KERNEL_HOOKS, installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
 import { forwardable } from "../lib/hosted-forwarder";
-import { guideStoreConnect, guidedConnectRuntime, launchGuidedBrowser, type GuidedConnectRuntime, type LaunchPlan } from "../lib/guided-connect";
+import { GUIDED_KEY_PAGES, guideStoreConnect, guidedConnectRuntime, headlessFromProcesses, launchGuidedBrowser, type GuidedConnectRuntime, type LaunchPlan } from "../lib/guided-connect";
 import { workspaceConnectAnswer } from "../lib/store-connection";
 import { AMO_ADDON_API, bundledToolsDir, crxIdOf, readBundleRecord, readCrx3, resolveToolsExtension, treeSha256 } from "../lib/tools-extension";
 import { createToolDispatcher, type ToolModule } from "../lib/tool-dispatch";
@@ -722,7 +722,7 @@ describe("the guided store connect opens the MCP's own browser with extension.de
     it.each([
       ["not listed yet", { status: 404 }, "it does not list the add-on yet"],
       ["an unlisted add-on, which AMO answers 401", { status: 401 }, "it does not list the add-on yet"],
-      ["a version under the minimum", { version: "0.1.0", bytes: xpi(undefined, "0.1.0") }, "it serves 0.1.0, older than 0.1.2"],
+      ["a version under the minimum", { version: "0.1.0", bytes: xpi(undefined, "0.1.0") }, "it serves 0.1.0, older than 0.1.3"],
       ["a file on another host", { url: "https://evil.test/extension_dev_tools-0.1.3.xpi" }, "its file address is not an https address on addons.mozilla.org or mozilla.net"],
       ["a file over http", { url: "http://addons.mozilla.org/file.xpi" }, "its file address is not an https address on addons.mozilla.org or mozilla.net"],
       ["a host that only ends like mozilla.net", { url: "https://evilmozilla.net/file.xpi" }, "its file address is not an https address on addons.mozilla.org or mozilla.net"],
@@ -732,7 +732,7 @@ describe("the guided store connect opens the MCP's own browser with extension.de
       const { fetchImpl, files } = amo(options);
       const out = await resolveToolsExtension({ engine: "gecko", edge: false, cacheDir: path.join(tmp, "amo-cache"), fetchImpl });
 
-      expect(out).toMatchObject({ source: "bundled", note: `Firefox Add-ons was not used because ${reason}, so extension.dev tools 0.1.2 is the copy bundled with this MCP.` });
+      expect(out).toMatchObject({ source: "bundled", note: `Firefox Add-ons was not used because ${reason}, so extension.dev tools 0.1.3 is the copy bundled with this MCP.` });
       if (String((options as { url?: string }).url ?? "").includes("evil")) expect(files).toEqual([]);
     });
   });
@@ -777,7 +777,7 @@ describe("the guided store connect opens the MCP's own browser with extension.de
     const out = await guided("cezaraugusto", runtime("edge", (url) => (url.includes("edge.microsoft.com") ? new Response(STORE_CRX) : new Response("", { status: 404 }))));
 
     expect(asked[0]).toContain("edge.microsoft.com/extensionwebstorebase/v1/crx");
-    expect(out.value.toolsExtension).toMatchObject({ source: "bundled", version: "0.1.2" });
+    expect(out.value.toolsExtension).toMatchObject({ source: "bundled", version: "0.1.3" });
     expect(out.hint).toContain("Edge Add-ons was not used because its download was refused: the CRX names item omndndgipeomhfdobfbhpfemempnnpjp, not pnijfgjkilbnmjiomlajfbmiccjejbpm");
     expect(fs.existsSync(path.join(launches[0]!.extensionDir, "manifest.json"))).toBe(true);
   });
@@ -787,8 +787,8 @@ describe("the guided store connect opens the MCP's own browser with extension.de
 
     const older = await guided("cezaraugusto", runtime("chromium", (url) => (url.includes("clients2.google.com") ? new Response(STORE_CRX) : new Response("", { status: 404 }))));
 
-    expect(older.value.toolsExtension.note).toBe("The Chrome Web Store serves 0.1.0, older than 0.1.2, so extension.dev tools 0.1.2 is the copy bundled with this MCP.");
-    expect(launches[0]!.extensionDir).toContain("bundled-chromium-0.1.2");
+    expect(older.value.toolsExtension.note).toBe("The Chrome Web Store serves 0.1.0, older than 0.1.3, so extension.dev tools 0.1.3 is the copy bundled with this MCP.");
+    expect(launches[0]!.extensionDir).toContain("bundled-chromium-0.1.3");
 
     const offline = await guided("cezaraugusto", runtime("chromium", () => Promise.reject(new Error("getaddrinfo ENOTFOUND"))));
 
@@ -825,9 +825,10 @@ describe("the guided store connect opens the MCP's own browser with extension.de
       }) as unknown as typeof fetch,
     });
 
-    expect(JSON.parse(body)).toEqual({ next: "/cezaraugusto/settings/store-accounts?store=edge" });
+    expect(JSON.parse(body)).toEqual({ next: "/cezaraugusto/settings/store-accounts?store=edge", launchHash: expect.stringMatching(/^[0-9a-f]{64}$/) });
     expect(auth).toBe("Bearer rebeccat.sig");
     expect(launches[0]!.url).toBe(HANDOFF);
+    expect(fs.existsSync(path.join(launches[0]!.extensionDir, "launch.json"))).toBe(false);
     expect(JSON.stringify(out)).not.toContain("device/handoff");
     expect(out.value.signedIn).toBe(true);
     expect(JSON.stringify(out)).not.toContain("one-time-secret-code");
@@ -872,7 +873,96 @@ describe("the guided store connect opens the MCP's own browser with extension.de
 
     await guided("cezaraugusto", handing(HANDOFF, bodies), "safari");
     expect(JSON.parse(bodies[bodies.length - 1]!)).toEqual({ next: "/cezaraugusto/settings/store-accounts" });
-    expect(JSON.parse(bodies[0]!)).toEqual({ next: "/cezaraugusto/settings/store-accounts?store=edge" });
+    expect(JSON.parse(bodies[0]!)).toMatchObject({ next: "/cezaraugusto/settings/store-accounts?store=edge" });
+  });
+
+  describe("on the production platform with a launch-bound handoff", () => {
+    const PROD = "https://www.extension.dev";
+    const PROD_HANDOFF = `${PROD}/device/handoff#${"c".repeat(43)}`;
+
+    function prodSignIn(): void {
+      const file = credentialsPath();
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, JSON.stringify({ version: 2, active: credentialKey(WORKSPACE, "rebeccat", PROD), entries: { [credentialKey(WORKSPACE, "rebeccat", PROD)]: { ...entry("rebeccat"), api: PROD } } }));
+    }
+
+    function binding(answer: Record<string, unknown>, bodies: string[], extra: Partial<GuidedConnectRuntime> = {}): GuidedConnectRuntime {
+      return {
+        ...runtime("edge", () => Promise.reject(new Error("offline"))),
+        fetch: (async (target: string, init?: RequestInit) => {
+          if (!String(target).endsWith("/api/cli/console-handoff")) return Promise.reject(new Error("offline"));
+
+          bodies.push(String(init?.body));
+
+          return Response.json(answer);
+        }) as unknown as typeof fetch,
+        ...extra,
+      };
+    }
+
+    async function prodGuided(rt: GuidedConnectRuntime) {
+      return JSON.parse(await guideStoreConnect(workspaceConnectAnswer("extension_submit", WORKSPACE, ["edge"], PROD), { browsers: ["edge"], api: PROD }, rt));
+    }
+
+    it("opens the Edge key page in front and leaves the handoff and its secret only in the extension's own folder", async () => {
+      prodSignIn();
+      const bodies: string[] = [];
+      const launchExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      const out = await prodGuided(binding({ url: PROD_HANDOFF, launchBound: true, launchExpiresAt }, bodies));
+      const file = path.join(launches[0]!.extensionDir, "launch.json");
+      const launch = JSON.parse(fs.readFileSync(file, "utf8"));
+      const minted = JSON.parse(bodies[0]!);
+
+      expect(launches[0]!.url).toBe(GUIDED_KEY_PAGES.edge!.url);
+      expect(launch).toMatchObject({ handoff: PROD_HANDOFF, expiresAt: launchExpiresAt });
+      expect(crypto.createHash("sha256").update(launch.secret).digest("hex")).toBe(minted.launchHash);
+      expect(fs.statSync(file).mode & 0o777).toBe(0o600);
+      expect(treeSha256(launches[0]!.extensionDir)).toBe(readBundleRecord(bundledToolsDir()!)!.sha256.chromium);
+      expect(out).toMatchObject({ status: "workspace-connect-guided", value: { signedIn: true, landedOn: GUIDED_KEY_PAGES.edge!.url } });
+      expect(out.value.sayToPerson).toContain("shows the Edge Partner Center Publish API page");
+      expect(out.value.sayToPerson).toContain("First press the extension.dev tools button");
+      expect(JSON.stringify(out)).not.toContain(launch.secret);
+      expect(JSON.stringify(out)).not.toContain("c".repeat(43));
+    });
+
+    it("keeps the handoff page and the confirm when the platform did not bind the launch, and removes a file an earlier launch left", async () => {
+      prodSignIn();
+      const bodies: string[] = [];
+
+      await prodGuided(binding({ url: PROD_HANDOFF, launchBound: true, launchExpiresAt: new Date(Date.now() + 60_000).toISOString() }, bodies));
+      expect(fs.existsSync(path.join(launches[0]!.extensionDir, "launch.json"))).toBe(true);
+
+      const out = await prodGuided(binding({ url: PROD_HANDOFF }, bodies));
+
+      expect(launches[1]!.url).toBe(PROD_HANDOFF);
+      expect(fs.existsSync(path.join(launches[1]!.extensionDir, "launch.json"))).toBe(false);
+      expect(out.value).not.toHaveProperty("landedOn");
+    });
+
+    it("never claims a window that started headless, and says why", async () => {
+      prodSignIn();
+      const out = await prodGuided(
+        binding({ url: PROD_HANDOFF, launchBound: true, launchExpiresAt: new Date(Date.now() + 60_000).toISOString() }, [], { windowCheck: async () => "headless" }),
+      );
+
+      expect(out).toMatchObject({ status: "workspace-connect-in-console", value: { guidedBrowser: { opened: false } } });
+      expect(out.hint).toMatch(/^No window is showing: Edge started headless/);
+      expect(fs.existsSync(path.join(launches[0]!.extensionDir, "launch.json"))).toBe(false);
+    });
+
+    it("reads headless from the guided profile's browser processes only", () => {
+      const profile = "/state/guided-browser/edge/profile";
+      const table = [
+        `node /x/extension preview /cache/ext --browser edge --profile ${profile} --headless`,
+        `/Applications/Edge.app/Contents/MacOS/Edge --user-data-dir=${profile} --load-extension=/cache/ext`,
+        "/Applications/Edge.app/Contents/MacOS/Edge --user-data-dir=/other --headless=new",
+      ].join("\n");
+
+      expect(headlessFromProcesses(table, profile)).toBe("visible");
+      expect(headlessFromProcesses(`${table}\n/Edge Helper --user-data-dir=${profile} --headless=new`, profile)).toBe("headless");
+      expect(headlessFromProcesses("/Edge --user-data-dir=/other", profile)).toBe("unknown");
+      expect(headlessFromProcesses(null, profile)).toBe("unknown");
+    });
   });
 
   it("opens no browser where none may open, and answers the console page as before", async () => {
