@@ -1,0 +1,65 @@
+{
+  "manifest_version": 3,
+  "version": "0.1.2",
+  "name": "extension.dev tools",
+  "author": "extension.dev",
+  "description": "Tools from extension.dev for browser extension developers. Today: store submission tooling. More on the way.",
+  "icons": {
+    "16": "images/icon-16.png",
+    "32": "images/icon-32.png",
+    "48": "images/icon-48.png",
+    "128": "images/icon-128.png"
+  },
+  "action": {
+    "default_title": "extension.dev tools: no session, so it does nothing.",
+    "default_popup": "action/index.html",
+    "default_icon": {
+      "16": "images/icon-16.png",
+      "32": "images/icon-32.png"
+    }
+  },
+  "permissions": [
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.extension.dev/*",
+    "https://*.extension.land/*"
+  ],
+  "optional_host_permissions": [
+    "https://partner.microsoft.com/*",
+    "https://addons.mozilla.org/*",
+    "https://appstoreconnect.apple.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://console.extension.dev/*"
+      ],
+      "js": [
+        "content_scripts/content-0.js"
+      ],
+      "run_at": "document_start",
+      "css": []
+    }
+  ],
+  "background": {
+    "scripts": [
+      "background/scripts.js"
+    ]
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "sidekick@extension.dev",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": [
+          "authenticationInfo"
+        ]
+      }
+    },
+    "gecko_android": {
+      "strict_min_version": "142.0"
+    }
+  }
+}

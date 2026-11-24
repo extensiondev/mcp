@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { ENVELOPE_SCHEMA, ERROR_CODES, envelopeObject } from "../lib/envelope";
+import { MIN_TOOLS_VERSION, bundledToolsDir, compareVersions, readBundleRecord, treeSha256 } from "../lib/tools-extension";
 import { validateAgainstSchema } from "./envelope-validate";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -211,5 +212,24 @@ describe("this package produces what the copied schema describes, checked by a h
         schema,
       ).length,
     ).toBeGreaterThan(0);
+  });
+});
+
+describe("the bundled extension.dev tools is the build its record names", () => {
+  it("carries the recorded sha256 and version for each engine, at the protocol minimum or above, and ships in the package", () => {
+    const dir = bundledToolsDir();
+    const record = dir ? readBundleRecord(dir) : null;
+    const pkg = JSON.parse(fs.readFileSync(path.join(here, "..", "..", "package.json"), "utf8"));
+
+    expect(record, "bundled/extension-dev-tools/bundle.json is missing; run scripts/sync-tools-extension.mjs").not.toBeNull();
+    expect(compareVersions(record!.version, MIN_TOOLS_VERSION)).toBeGreaterThanOrEqual(0);
+    expect(pkg.files).toContain("bundled");
+
+    for (const folder of ["chromium", "firefox"] as const) {
+      const built = path.join(dir!, folder);
+
+      expect(treeSha256(built), `${folder} was edited by hand; re-run scripts/sync-tools-extension.mjs`).toBe(record!.sha256[folder]);
+      expect(JSON.parse(fs.readFileSync(path.join(built, "manifest.json"), "utf8")).version).toBe(record!.version);
+    }
   });
 });

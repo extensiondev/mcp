@@ -73,6 +73,7 @@ export default [
       "dist/",
       "coverage/",
       "node_modules/",
+      "bundled/",
       "extensions/live-preview/**",
       "**/.turbo/**",
     ],
