@@ -8,6 +8,8 @@
 
 import { spawn } from "node:child_process";
 
+import { isLocalOrigin } from "@extension.dev/urls/origins";
+
 import { dashboardStoreOf } from "./dashboard-url-meter";
 import { isEnvelope, reframed } from "./envelope";
 import { envIsHeadless } from "./launch-flags";
@@ -56,7 +58,16 @@ export function openableUrl(raw: string): string {
   if (parsed.username || parsed.password || !parsed.hostname) return "";
   if (parsed.protocol === "https:") return parsed.href;
 
-  return parsed.protocol === "http:" && LOOPBACK_HOSTS.has(parsed.hostname.toLowerCase()) ? parsed.href : "";
+  const host = parsed.hostname.toLowerCase();
+
+  return parsed.protocol === "http:" && (LOOPBACK_HOSTS.has(host) || localPlatformHosts().has(host)) ? parsed.href : "";
+}
+
+function localPlatformHosts(): Set<string> {
+  const origins = mcpOrigins();
+  if (!isLocalOrigin(origins.www)) return new Set();
+
+  return new Set([hostOf(origins.www), hostOf(origins.console)].filter((host) => host && isLocalOrigin(`http://${host}`)));
 }
 
 function hostOf(origin: string | undefined): string {

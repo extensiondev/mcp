@@ -223,6 +223,23 @@ describe("an approval page opens itself once in the person's browser", () => {
     }
   });
 
+  it("opens a local dev console or www host over http only when the configured platform origin is that local host", () => {
+    const saved = process.env.EXTENSION_DEV_API_URL;
+
+    try {
+      process.env.EXTENSION_DEV_API_URL = "https://www.extension.dev";
+      expect(openableUrl("http://console.extension.localhost/a")).toBe("");
+
+      process.env.EXTENSION_DEV_API_URL = "http://localhost:3100";
+      expect(openableUrl("http://console.extension.localhost/a")).toBe("http://console.extension.localhost/a");
+      expect(openableUrl("http://docs.extension.localhost/a")).toBe("");
+      expect(openableUrl("http://console.extension.localhost.evil.test/a")).toBe("");
+    } finally {
+      if (saved === undefined) delete process.env.EXTENSION_DEV_API_URL;
+      else process.env.EXTENSION_DEV_API_URL = saved;
+    }
+  });
+
   it("897: does not open an approval page on a host that is neither extension.dev nor the configured platform", () => {
     const answer = (approvalId: string, approvalUrl: string) => envelope({ ok: false, command: "extension_submit", status: "approval-required", error: { code: "E_APPROVAL_REQUIRED", message: "x" }, value: { approvalId, approvalUrl } });
 

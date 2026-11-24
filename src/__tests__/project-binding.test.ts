@@ -548,7 +548,7 @@ describe("ledger 252: with several logins stored, an unpinned platform call neve
 
 describe("the guided store connect opens the MCP's own browser with extension.dev tools", () => {
   const STORE_CRX = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures", "extension-dev-tools-0.1.0.crx"));
-  const HANDOFF = "https://console.extension.dev/auth/handoff?code=one-time-secret-code";
+  const HANDOFF = `${API}/device/handoff#one-time-secret-code`;
   const PAGE = "http://console.extension.localhost/cezaraugusto/settings/store-accounts?store=edge";
   let launches: LaunchPlan[];
   let asked: string[];
@@ -608,8 +608,21 @@ describe("the guided store connect opens the MCP's own browser with extension.de
     return { bytes: Buffer.concat([prefix, header, zip]), id };
   }
 
-  async function guided(workspace: string, rt: GuidedConnectRuntime) {
-    return JSON.parse(await guideStoreConnect(workspaceConnectAnswer("extension_submit", workspace, ["edge"], API), { browsers: ["edge"], api: API }, rt));
+  async function guided(workspace: string, rt: GuidedConnectRuntime, store = "edge") {
+    return JSON.parse(await guideStoreConnect(workspaceConnectAnswer("extension_submit", workspace, [store], API), { browsers: [store], api: API }, rt));
+  }
+
+  function handing(url: string, bodies: string[] = []): GuidedConnectRuntime {
+    return {
+      ...runtime("edge", () => new Response("", { status: 404 })),
+      fetch: (async (target: string, init?: RequestInit) => {
+        if (!String(target).endsWith("/api/cli/console-handoff")) return new Response("", { status: 404 });
+
+        bodies.push(String(init?.body));
+
+        return Response.json({ url });
+      }) as unknown as typeof fetch,
+    };
   }
 
   beforeEach(() => {
@@ -684,10 +697,30 @@ describe("the guided store connect opens the MCP's own browser with extension.de
     expect(JSON.parse(body)).toEqual({ next: "/cezaraugusto/settings/store-accounts?store=edge" });
     expect(auth).toBe("Bearer rebeccat.sig");
     expect(launches[0]!.url).toBe(HANDOFF);
+    expect(JSON.stringify(out)).not.toContain("device/handoff");
     expect(out.value.signedIn).toBe(true);
     expect(JSON.stringify(out)).not.toContain("one-time-secret-code");
     expect(JSON.stringify(out)).not.toContain("auth/handoff");
     expect(out.hint).toContain(`extension_workspace {action:"info", workspace:"cezaraugusto", include:["storeAccounts"]}`);
+  });
+
+  it("opens a handoff only on the platform origin it calls or on its console, and sends next in the one shape the door takes", async () => {
+    otherProcessesSignIn("rebeccat");
+    const bodies: string[] = [];
+
+    for (const foreign of ["https://docs.extension.dev/device/handoff#c", "https://www.extension.dev/device/handoff#c", "https://evil.test/device/handoff#c", "http://inspect.extension.localhost/x#c"]) {
+      const out = await guided("cezaraugusto", handing(foreign, bodies));
+
+      expect(launches[launches.length - 1]!.url, foreign).toBe(PAGE);
+      expect(out.value.signedIn, foreign).toBe(false);
+    }
+
+    await guided("cezaraugusto", handing("http://console.extension.localhost/cezaraugusto/settings/store-accounts#c", bodies));
+    expect(launches[launches.length - 1]!.url).toBe("http://console.extension.localhost/cezaraugusto/settings/store-accounts#c");
+
+    await guided("cezaraugusto", handing(HANDOFF, bodies), "safari");
+    expect(JSON.parse(bodies[bodies.length - 1]!)).toEqual({ next: "/cezaraugusto/settings/store-accounts" });
+    expect(JSON.parse(bodies[0]!)).toEqual({ next: "/cezaraugusto/settings/store-accounts?store=edge" });
   });
 
   it("opens no browser where none may open, and answers the console page as before", async () => {

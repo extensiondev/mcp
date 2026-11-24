@@ -11,7 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { findManagedBinary, findSystemBinary } from "../tools/detect-browsers";
-import { approvalPageUrl, autoOpenBlock } from "./approval-open";
+import { autoOpenBlock, openableUrl } from "./approval-open";
 import { credentialsPath, listCredentials, liveAt } from "./credentials";
 import { targetServer } from "./credential-server";
 import { envelope, isEnvelope } from "./envelope";
@@ -224,12 +224,35 @@ export interface ConsoleLanding {
 
 const SIGN_IN_ONCE = "The console opens signed out, so the person signs in to extension.dev there once; the profile keeps that sign-in.";
 
+function originOf(raw: string): string {
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return "";
+  }
+}
+
+export function handoffUrl(raw: string, api?: string): string {
+  const href = openableUrl(raw);
+  const origins = mcpOrigins(api);
+  const origin = originOf(href);
+
+  return origin && (origin === originOf(origins.www) || origin === originOf(origins.console)) ? href : "";
+}
+
+export const HANDOFF_STORES = new Set(["chrome", "edge", "firefox"]);
+
+export function handoffNext(workspace: string, store: string): string {
+  return `/${workspace}/settings/store-accounts${HANDOFF_STORES.has(store) ? `?store=${store}` : ""}`;
+}
+
 /* @invariant THE ONE-TIME CONSOLE HANDOFF NEVER LEAVES THIS PROCESS EXCEPT
  * INTO THE BROWSER IT OPENS. The platform answers POST /api/cli/console-handoff
  * with a single-use address that signs the profile in; it is opened and
- * forgotten, never logged and never put in the answer. A platform without the
- * door (404), a refusal or an address off the platform opens the plain
- * console page, and the answer says the person signs in there once.
+ * forgotten, never logged and never put in the answer. It opens only on the
+ * platform origin this MCP calls or on its console. A platform without the
+ * door (404), any other answer or any other origin opens the plain console
+ * page, and the answer says the person signs in there once.
  */
 export async function consoleLanding(options: { workspace: string; next: string; plainUrl: string; api?: string; fetchImpl: typeof fetch }): Promise<ConsoleLanding> {
   const token = workspaceToken(options.workspace, options.api);
@@ -245,7 +268,7 @@ export async function consoleLanding(options: { workspace: string; next: string;
 
     if (res.status === 200) {
       const body: unknown = await res.json().catch(() => null);
-      const url = isRow(body) ? approvalPageUrl(text(body.url)) : "";
+      const url = isRow(body) ? handoffUrl(text(body.url), options.api) : "";
       if (url) return { openUrl: url, signedIn: true, note: "" };
     }
   } catch {
@@ -334,7 +357,7 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
 
   if ("failed" in extension) return plainAnswer(answer, `No browser was opened: ${extension.failed}.`);
 
-  const next = `${new URL(base).pathname}${query}`;
+  const next = handoffNext(workspace, store);
   const landing = await consoleLanding({ workspace, next, plainUrl, api: text(args.api) || undefined, fetchImpl: runtime.fetch });
   const profileDir = guidedProfileDir(runtime.stateDir(), choice.browser as GuidedBrowser);
   const headless = runtime.headless();
