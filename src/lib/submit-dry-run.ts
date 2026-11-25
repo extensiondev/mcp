@@ -110,7 +110,7 @@ function heldAct(action: string): string {
     command: COMMAND,
     status: "dry-run-held",
     value: { action, dryRun: true, written: false },
-    hint: `${NOTHING_SENT} ${action} with dryRun: true runs nothing. extension_submit_check with the same arguments asks a workspace owner's approval of it, and extension_submit with dryRun omitted runs it.`,
+    hint: `${NOTHING_SENT} ${action} with dryRun: true runs nothing. extension_approvals_request {act: "extension_submit", args} with the same arguments asks a workspace owner's approval of it, and extension_submit with dryRun omitted runs it.`,
   });
 }
 

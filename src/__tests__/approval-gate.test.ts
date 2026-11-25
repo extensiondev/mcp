@@ -5,6 +5,8 @@ import fs from "node:fs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { actionFingerprint, evaluateApproval, requestApprovalAfterRefusal } from "../lib/approval-gate";
+import { runAsAct, runWithInlineAsk, withRunWhenApproved } from "../lib/approvals-request";
+import { runAskingOnly } from "../lib/ask-only";
 import { handler as promoteHandler, schema as promoteSchema } from "../tools/release-promote";
 import { handler as sharesHandler } from "../tools/shares";
 import { approvalRecord, promoteAnswer, submitAnswer } from "./fixtures/platform-answers";
@@ -148,6 +150,40 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       });
       expect(result.blocked).toBe(true);
       expect(hit("POST /api/cli/approvals")).toBe(true);
+    });
+
+    it("1193: a first act call asks nothing and names extension_approvals_request; the request asks, answers the call to run, and refuses an act that needs no page", async () => {
+      global.fetch = router(calls, {
+        "POST /api/cli/approvals": () => jsonResponse({ approvalId: "apr_x", approvalUrl: "https://www.extension.dev/a" }),
+      });
+
+      const input = { command: "extension_release_promote", action: "extension_release_promote", scope: { buildId: "abc" }, description: "x", token: "tok", enabled: true };
+      const act = { act: "extension_release_promote", args: { buildId: "abc", channel: "stable" } };
+
+      const direct = await runAsAct({ ...act, requested: false }, () => evaluateApproval(input));
+      const body = JSON.parse(direct.blocked ? direct.envelope : "{}");
+
+      expect(body.status).toBe("approval-not-requested");
+      expect(body.value.requestWith).toEqual({ tool: "extension_approvals_request", arguments: act });
+      expect(hit("POST /api/cli/approvals")).toBe(false);
+      expect((await runWithInlineAsk(() => evaluateApproval(input))).blocked).toBe(true);
+      expect(hit("POST /api/cli/approvals")).toBe(true);
+      calls.length = 0;
+
+      const asked = await runAsAct({ ...act, requested: true }, () => runAskingOnly(() => evaluateApproval(input)));
+
+      expect(asked.blocked).toBe(true);
+      expect(hit("POST /api/cli/approvals")).toBe(true);
+
+      const answer = JSON.parse(withRunWhenApproved(JSON.stringify({ schema: 1, ok: false, command: "extension_approvals_request", status: "approval-required", value: { approvalId: "apr_x" } }), act.act, act.args));
+
+      expect(answer.value.runWhenApproved).toEqual({ tool: "extension_release_promote", arguments: { ...act.args, approvalId: "apr_x" } });
+
+      const plain = await runAsAct({ act: "extension_workspace_configure", args: {}, requested: true }, () =>
+        runAskingOnly(() => evaluateApproval({ ...input, command: "extension_workspace", action: "extension_settings.build", scope: { buildCommand: "pnpm build" } })),
+      );
+
+      expect(plain.blocked && JSON.parse(plain.envelope).status).toBe("request-refused");
     });
   });
 });

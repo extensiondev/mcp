@@ -31,6 +31,7 @@ export interface ToolTwin {
   annotations: ToolAnnotations;
   description: string;
   drop?: string[];
+  rewrites?: Record<string, Record<string, unknown>>;
   params: Record<string, Record<string, unknown>>;
 }
 
@@ -99,7 +100,7 @@ export const TOOL_TWINS: ToolTwin[] = [
     group: "platform",
     title: "Create or revoke share links",
     annotations: writes({ destructiveHint: true, openWorldHint: true }),
-    description: "Create an emulator preview link for a tester, or revoke a preview or build link, on extension.dev. Answers the link made or revoked; extension_shares_read lists them, extension_publish and extension_preview_web make them. A revoke is permanent and needs a workspace member's approval.",
+    description: "Create an emulator preview link, or revoke a preview or build link, on extension.dev. Answers the link made or revoked; extension_shares_read lists them, extension_publish and extension_preview_web make them. A revoke is permanent; extension_approvals_request asks a member to approve it.",
     params: { action: { description: "create: share a build; revoke: one share, for good." }, kind: { description: "revoke: build-link (extension_publish links), preview (emulator links) or both." } },
   },
   {
@@ -141,7 +142,7 @@ export const TOOL_TWINS: ToolTwin[] = [
     group: "platform",
     title: "Configure a project",
     annotations: writes({ destructiveHint: true, openWorldHint: true }),
-    description: "Change a project's settings, visibility or build environment on extension.dev. configure-project sets displayName; rename-slug moves the slug, old URLs redirect. set-visibility public, public liveChannel or rename-slug needs approval. extension_workspace_read reads.",
+    description: "Change a project's settings, visibility or build environment. configure-project sets displayName; rename-slug moves the slug, old URLs redirect. A public visibility or liveChannel and rename-slug wait on extension_approvals_request. extension_workspace_read reads.",
     params: { action: { description: "configure-project: project fields; rename-slug: a new slug; set-visibility: private or public; set-environment: build variables." }, project: { description: "Stored login; the project to change." } },
   },
   {
@@ -191,12 +192,13 @@ export const TOOL_TWINS: ToolTwin[] = [
     name: "extension_submit_read",
     drop: ["dryRun", "approvalId", "screenshots", "storeSettings", "buildNumber", "deployPercentage", "connectSession", "replace", "waitSeconds", "workspace", "projectPath", "useBuild", "store", "submissionId"],
     of: "extension_submit",
-    actions: ["preflight", "status"],
+    actions: ["preflight", "status", "dry-run"],
+    rewrites: { "dry-run": { action: "submit", dryRun: true } },
     group: "platform",
     title: "Read a store submission",
     annotations: reads(true),
-    description: "Read a project's store state through extension.dev: preflight answers what each store still needs, status the submissions. extension_submit_check asks approvals and extension_submit runs them.",
-    params: { action: { description: "preflight: what each store still needs; status: each store's word on the submissions." }, browsers: { description: "The stores to read." } },
+    description: "Read a project's store state: preflight answers what each store needs, status the submissions, dry-run a rehearsed submit. extension_approvals_request asks approvals; extension_submit runs them.",
+    params: { action: { description: "preflight: what each store still needs; status: each store's word on the submissions; dry-run: buildSha's store send rehearsed." }, browsers: { description: "The stores to read." } },
   },
   {
     name: "extension_builds_read",
@@ -273,7 +275,10 @@ export function twinRefusal(twin: ToolTwin): (args: Record<string, unknown>) => 
 }
 
 export function twinArgs(twin: ToolTwin, args: Record<string, unknown>): Record<string, unknown> {
-  return typeof args.action === "string" ? args : { ...args, action: twin.actions[0] };
+  const named = typeof args.action === "string" ? args : { ...args, action: twin.actions[0] };
+  const rewrite = twin.rewrites?.[named.action as string];
+
+  return rewrite ? { ...named, ...rewrite } : named;
 }
 
 export function twinSchema(twin: ToolTwin, of: { inputSchema: Record<string, unknown> }): { name: string; description: string; inputSchema: Record<string, unknown> } {
@@ -295,9 +300,9 @@ export function twinSchema(twin: ToolTwin, of: { inputSchema: Record<string, unk
 }
 
 /* @invariant A LISTED WRITE TOOL NEVER ADVERTISES A READ ITS TWIN OWNS.
- * extension_submit and extension_submit_check stay listed, so they cannot
- * become unlisted aliases, yet their reads moved to extension_submit_read
- * and the dry run to extension_submit_check (ledger 1139). Their listed
+ * extension_submit stays listed, so it cannot become an unlisted alias, yet
+ * its reads moved to extension_submit_read (ledger 1139), the dry run with
+ * them once extension_approvals_request took the asks (ledger 1193). Their listed
  * schemas name only acts; a saved call that still sends a moved read keeps
  * its answer, validated against the action enum widened here, and every
  * such answer names the tool that owns the read now, as an old name's does.
@@ -311,7 +316,7 @@ export interface MovedRead {
 export const MOVED_READS: Record<string, MovedRead[]> = {
   extension_submit: [
     { actions: ["preflight", "status"], to: "extension_submit_read" },
-    { actions: ["submit"], to: "extension_submit_check", dryRun: true },
+    { actions: ["submit"], to: "extension_submit_read", dryRun: true },
   ],
   extension_submit_check: [{ actions: ["preflight", "status"], to: "extension_submit_read" }],
 };

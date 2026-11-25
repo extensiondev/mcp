@@ -113,6 +113,33 @@
       ]
     },
     {
+      "name": "extension_approvals_request",
+      "tier": "platform",
+      "group": "platform",
+      "description": "Request a workspace owner's approval of one act on extension.dev: a store submit, a release, a public visibility or channel, a slug rename or a share revoke. Nothing runs until the owner approves it. Answers value.approvalId, value.approvalUrl and value.runWhenApproved, the call to make once approved; extension_submit and extension_release_promote run acts, extension_release_status reads.",
+      "gate": "the server started with --features=local,platform, and a login; never runs the act: it asks a workspace owner (a member for a share revoke) to approve a submit, release, public visibility or channel, slug rename or share revoke, and the approved call runs through the act tool",
+      "samplePrompt": "Ask the owner to approve submitting the latest build to Chrome",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": true,
+      "untrusted": true,
+      "inputs": [
+        {
+          "name": "act",
+          "type": "\"extension_submit\" | \"extension_release_promote\" | \"extension_workspace_configure\" | \"extension_shares_manage\" | \"extension_builds_act\"",
+          "required": true,
+          "description": "The tool that runs the act once approved."
+        },
+        {
+          "name": "args",
+          "type": "object",
+          "required": true,
+          "description": "That tool's arguments for the act, without approvalId."
+        }
+      ]
+    },
+    {
       "name": "extension_approvals_revoke",
       "tier": "platform",
       "group": "platform",
@@ -484,7 +511,7 @@
       "name": "extension_builds_act",
       "tier": "platform",
       "group": "platform",
-      "description": "Rebuild, recheck or configure builds on extension.dev, or create or configure a channel. Answers the outcome; extension_builds_read reads builds, extension_build and extension_analyze work on this machine. A rebuild spends allowance; a push, only on the build branch when it changes the root directory ([skip build] pushes, docs-only, other branches spend nothing).",
+      "description": "Rebuild, recheck or configure builds on extension.dev, or create or configure a channel. Answers the outcome; extension_builds_read reads builds, extension_build and extension_analyze work on this machine. A public channel waits on extension_approvals_request. A rebuild spends allowance, a push only on the build branch when it changes the root directory.",
       "gate": "the server started with --features=local,platform, and a login; a public channel audience needs a workspace owner's approval; delete-channel stays in the console",
       "samplePrompt": "Rebuild the last commit for Stable",
       "readOnly": false,
@@ -2121,7 +2148,7 @@
       "name": "extension_release_promote",
       "tier": "platform",
       "group": "platform",
-      "description": "Release a build to a channel on extension.dev, cut a version-bump pull request, or roll a channel back. A release needs a workspace owner's token and approval of that exact release, every time. Preview takes any build; Stable and every other channel take Stable builds. Tokens live 7 days. Stores are extension_submit and extension_submit_check; extension_release_status answers where things stand.",
+      "description": "Release a build to a channel on extension.dev, cut a version-bump pull request, or roll a channel back. Each needs a workspace owner's approval of that exact act every time, asked with extension_approvals_request. Preview takes any build; Stable and every other channel take Stable builds. Tokens live 7 days. Stores are extension_submit; extension_release_status answers where things stand.",
       "gate": "the server started with --features=local,platform, and a login; every release, cut and rollback needs a workspace owner's approval",
       "samplePrompt": "Release build 3f2a1c to Preview",
       "readOnly": false,
@@ -2209,7 +2236,7 @@
       "name": "extension_release_status",
       "tier": "platform",
       "group": "platform",
-      "description": "Read where a project stands on extension.dev: channels, builds, store submissions and reviews, history, rollout and listings. Answers only the sections include names. Read-only; extension_release_promote changes a channel, extension_submit and extension_submit_check act on stores.",
+      "description": "Read where a project stands on extension.dev: channels, builds, store submissions and reviews, history, rollout and listings. Answers the sections include names. Read-only; extension_release_promote moves a channel, extension_submit acts on stores, extension_approvals_request asks.",
       "gate": "the server started with --features=local,platform, and a login",
       "samplePrompt": "Was the last Chrome submission approved?",
       "readOnly": true,
@@ -2435,7 +2462,7 @@
       "name": "extension_shares_manage",
       "tier": "platform",
       "group": "platform",
-      "description": "Create an emulator preview link for a tester, or revoke a preview or build link, on extension.dev. Answers the link made or revoked; extension_shares_read lists them, extension_publish and extension_preview_web make them. A revoke is permanent and needs a workspace member's approval.",
+      "description": "Create an emulator preview link, or revoke a preview or build link, on extension.dev. Answers the link made or revoked; extension_shares_read lists them, extension_publish and extension_preview_web make them. A revoke is permanent; extension_approvals_request asks a member to approve it.",
       "gate": "the server started with --features=local,platform, and a login; a revoke waits for a workspace member's approval",
       "samplePrompt": "Revoke the oldest link I shared",
       "readOnly": false,
@@ -2908,7 +2935,7 @@
       "name": "extension_submit",
       "tier": "platform",
       "group": "platform",
-      "description": "Submit an extension.dev build to the Chrome, Firefox, Edge and Safari stores. It runs a call carrying an approvalId; extension_submit_read answers the preflight, extension_submit_check dry runs and asks, extension_release_status reviews, extension_release_promote channels. A real submit needs a workspace owner's token and approval of that exact submission, every time. Uploads land least public (Chrome and Edge drafts, Firefox unlisted, Safari TestFlight) unless a saved store mode says otherwise.",
+      "description": "Submit an extension.dev build to the Chrome, Firefox, Edge and Safari stores. It runs a call carrying the approvalId of that exact act, which extension_approvals_request asks a workspace owner for, every time; extension_submit_read answers the preflight and dry runs, extension_release_status reviews, extension_release_promote channels. Uploads land least public (Chrome and Edge drafts, Firefox unlisted, Safari TestFlight) unless a saved store mode says otherwise.",
       "gate": "the server started with --features=local,platform, and a login; dryRun: false, cancel, rollout, release, publish, sync-listing and configure-store need a workspace owner's approval",
       "samplePrompt": "Dry run a Chrome and Firefox store submission of the latest build",
       "readOnly": false,
@@ -2922,7 +2949,7 @@
           "type": "\"submit\" | \"sync-listing\" | \"cancel\" | \"rollout\" | \"release\" | \"publish\" | \"review\" | \"configure-store\" | \"connect\" | \"first-submission\" | \"mint-signing\"",
           "required": false,
           "default": "submit",
-          "description": "submit with dryRun:false and no approvalId executes nothing, it only asks the owner's approval, as does the first call of any store act; extension_submit_read answers 'preflight', 'status' and extension_submit_check a dry run. submit: buildSha to the stores. sync-listing: listing from STORE.md. publish (alias review): draft to review. release (Safari): approved version on sale. cancel: withdraw from review. rollout: raise Chrome's staged rollout. configure-store: storeSettings. connect: page where the person gives the platform the key. first-submission: a first Chrome, Edge or Firefox listing. mint-signing (Safari): register the bundle id, mint certificates and profiles."
+          "description": "An act with no approvalId runs nothing and names extension_approvals_request, which asks the owner's approval; submit with dryRun true rehearses and extension_submit_read answers 'preflight', 'status'. submit: buildSha to the stores. sync-listing: listing from STORE.md. publish (alias review): draft to review. release (Safari): approved version on sale. cancel: withdraw from review. rollout: raise Chrome's staged rollout. configure-store: storeSettings. connect: page where the person gives the platform the key. first-submission: a first Chrome, Edge or Firefox listing. mint-signing (Safari): register the bundle id, mint certificates and profiles."
         },
         {
           "name": "project",
@@ -3047,147 +3074,10 @@
       ]
     },
     {
-      "name": "extension_submit_check",
-      "tier": "platform",
-      "group": "platform",
-      "description": "Check a store submission without sending it: a dry-run submit answers here; any other action records an approval request for the workspace owner and answers value.approvalUrl. extension_submit runs the call carrying that approvalId; extension_submit_read answers the preflight, extension_release_status review history, extension_release_promote channels. Takes extension_submit's inputs.",
-      "gate": "the server started with --features=local,platform, and a login; never sends: asking for the approval of a submit, publish, cancel, rollout, release, derived sync-listing or public configure-store executes nothing, and the approved call runs through extension_submit",
-      "samplePrompt": "Is my extension ready for the Chrome Web Store?",
-      "readOnly": false,
-      "destructive": false,
-      "idempotent": false,
-      "openWorld": true,
-      "untrusted": true,
-      "inputs": [
-        {
-          "name": "action",
-          "type": "\"submit\" | \"publish\" | \"review\" | \"cancel\" | \"rollout\" | \"release\" | \"sync-listing\" | \"mint-signing\" | \"configure-store\" | \"connect\" | \"first-submission\"",
-          "required": false,
-          "default": "submit",
-          "description": "The act to ask approval for, or submit with dryRun true."
-        },
-        {
-          "name": "dryRun",
-          "type": "boolean",
-          "required": false,
-          "default": true,
-          "description": "true sends nothing; false only asks the owner's approval of the real submit."
-        },
-        {
-          "name": "project",
-          "type": "string",
-          "required": false,
-          "description": "As in extension_submit."
-        },
-        {
-          "name": "workspace",
-          "type": "string",
-          "required": false,
-          "description": "As in extension_submit."
-        },
-        {
-          "name": "browsers",
-          "type": "array of \"chrome\" | \"firefox\" | \"edge\" | \"safari\"",
-          "required": false,
-          "description": "As in extension_submit."
-        },
-        {
-          "name": "buildSha",
-          "type": "string",
-          "required": false,
-          "description": "As in extension_submit."
-        },
-        {
-          "name": "version",
-          "type": "string",
-          "required": false,
-          "description": "As in extension_submit."
-        },
-        {
-          "name": "projectPath",
-          "type": "string",
-          "required": false,
-          "description": "As in extension_submit."
-        },
-        {
-          "name": "screenshots",
-          "type": "array of string",
-          "required": false,
-          "description": "As in extension_submit."
-        },
-        {
-          "name": "useBuild",
-          "type": "string",
-          "required": false,
-          "description": "As in extension_submit."
-        },
-        {
-          "name": "detail",
-          "type": "boolean | array",
-          "required": false,
-          "description": "As in extension_submit."
-        },
-        {
-          "name": "api",
-          "type": "string",
-          "required": false,
-          "description": "As in extension_submit."
-        },
-        {
-          "name": "store",
-          "type": "\"chrome\" | \"firefox\" | \"edge\" | \"safari\"",
-          "required": false,
-          "description": "As in extension_submit."
-        },
-        {
-          "name": "storeSettings",
-          "type": "object",
-          "required": false,
-          "description": "As in extension_submit."
-        },
-        {
-          "name": "submissionId",
-          "type": "string",
-          "required": false,
-          "description": "As in extension_submit."
-        },
-        {
-          "name": "buildNumber",
-          "type": "integer",
-          "required": false,
-          "description": "As in extension_submit."
-        },
-        {
-          "name": "deployPercentage",
-          "type": "number",
-          "required": false,
-          "description": "As in extension_submit."
-        },
-        {
-          "name": "connectSession",
-          "type": "string",
-          "required": false,
-          "description": "As in extension_submit."
-        },
-        {
-          "name": "replace",
-          "type": "boolean",
-          "required": false,
-          "description": "As in extension_submit."
-        },
-        {
-          "name": "waitSeconds",
-          "type": "number",
-          "required": false,
-          "description": "As in extension_submit."
-        }
-      ]
-    },
-    {
       "name": "extension_submit_read",
       "tier": "platform",
       "group": "platform",
-      "description": "Read a project's store state through extension.dev: preflight answers what each store still needs, status the submissions. extension_submit_check asks approvals and extension_submit runs them.",
+      "description": "Read a project's store state: preflight answers what each store needs, status the submissions, dry-run a rehearsed submit. extension_approvals_request asks approvals; extension_submit runs them.",
       "gate": "the server started with --features=local,platform, and a login; dryRun: false, cancel, rollout, release, publish, sync-listing and configure-store need a workspace owner's approval",
       "samplePrompt": "Is my extension ready for the Chrome Web Store?",
       "readOnly": true,
@@ -3198,10 +3088,10 @@
       "inputs": [
         {
           "name": "action",
-          "type": "\"preflight\" | \"status\"",
+          "type": "\"preflight\" | \"status\" | \"dry-run\"",
           "required": false,
           "default": "preflight",
-          "description": "preflight: what each store still needs; status: each store's word on the submissions."
+          "description": "preflight: what each store still needs; status: each store's word on the submissions; dry-run: buildSha's store send rehearsed."
         },
         {
           "name": "project",
@@ -3461,7 +3351,7 @@
       "name": "extension_workspace_configure",
       "tier": "platform",
       "group": "platform",
-      "description": "Change a project's settings, visibility or build environment on extension.dev. configure-project sets displayName; rename-slug moves the slug, old URLs redirect. set-visibility public, public liveChannel or rename-slug needs approval. extension_workspace_read reads.",
+      "description": "Change a project's settings, visibility or build environment. configure-project sets displayName; rename-slug moves the slug, old URLs redirect. A public visibility or liveChannel and rename-slug wait on extension_approvals_request. extension_workspace_read reads.",
       "gate": "the server started with --features=local,platform, and a login of any project in the workspace; settings and set-visibility need that project's own login; a public visibility needs a workspace owner's approval, and so does a slug rename",
       "samplePrompt": "Make the newtab project public",
       "readOnly": false,

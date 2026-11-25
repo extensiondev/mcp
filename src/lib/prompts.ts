@@ -137,7 +137,7 @@ export const PROMPTS: ServerPrompt[] = [
       const head = `Prepare ${project(args)} for these stores: ${stores.join(", ")}. Nothing goes to review in this task.`;
       const validate = `extension_manifest_validate with projectPath, browsers: ${list} and include: ["storeReadiness"]. Fix every buildBlocking error and report each store readiness line.`;
 
-      if (!isToolListed("extension_submit_check", options)) {
+      if (!isToolListed("extension_approvals_request", options)) {
         return [
           head,
           "Use the extension-dev tools in this order:",
@@ -158,7 +158,7 @@ export const PROMPTS: ServerPrompt[] = [
           validate,
           `extension_submit_read with action: "preflight", browsers: ${list} and projectPath. Follow value.nextStep: when a store is not connected, give the person value.connectUrl and stop until their next message.`,
           `When the preflight says STORE.md covers a failing listing check, extension_submit with action: "sync-listing", browsers: ${list} and projectPath.`,
-          `extension_submit_check with browsers: ${list} and the buildSha extension_builds_read lists, leaving dryRun at its default: it rehearses the submit and sends nothing.`,
+          `extension_submit with browsers: ${list}, the buildSha extension_builds_read lists and dryRun: true: it rehearses the submit and sends nothing.`,
         ]),
         `${READ_EVERY_ANSWER} A real submit needs the person's clear yes and a workspace owner's approval, and it lands as the least public outcome each store offers unless the project's store settings say otherwise.`,
         "Report what each store still needs and give value.trackUrl, then name one next step: the one value.nextStep says.",

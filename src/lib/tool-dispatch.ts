@@ -13,6 +13,7 @@ import {
 
 import { bindApprovalLogin } from "./approval-login";
 import { askingOnly, runAskingOnly } from "./ask-only";
+import { APPROVALS_REQUEST_TOOL, actCall, requestableAct, requestedArgs, runAsAct, shownArgs, withRunWhenApproved } from "./approvals-request";
 import { answerOnceDecided } from "./approval-wait";
 import { bindApprovalProject } from "./approval-record";
 import { withAnsweredProject, withApprovalLogin } from "./approval-scope";
@@ -50,7 +51,7 @@ import { markListStale, reloadedWarning, serverStamp, staleEnvelope, type Server
 import { markStaleLocal, noLocalCarryReason, predatedChecks, predatesCheckEnvelope, type HeldLocal } from "./stale-local";
 import { answeredAs } from "./submit-action-safety";
 import { bulkDeleteRefusal } from "./bulk-delete";
-import { acceptedSchema, movedReadSentence } from "./tool-twins";
+import { TOOL_TWINS, acceptedSchema, movedReadSentence, twinArgs } from "./tool-twins";
 import { withComposedRefusals } from "./composed-refusal";
 import { annotate, frameText, refusedFrame, toolResultFrame, withStructuredContent } from "./tool-frames";
 import { attachTrack } from "./track-url";
@@ -311,7 +312,17 @@ export function createToolSurface(setup: ToolHandlerOptions): {
 
   const served = (name: string): boolean => toolMap.has(name) && isToolListed(name, options);
 
-  const dispatch = async (call: RebuiltCall): Promise<ToolFrame> => withStructuredContent(aliasNoted(await withComposedRefusals(() => dispatched(call)), call, served, toolMap.get(call.name)?.schema.inputSchema), call.name);
+  const dispatchOnce = async (call: RebuiltCall): Promise<ToolFrame> => withStructuredContent(aliasNoted(await withComposedRefusals(() => dispatched(call)), call, served, toolMap.get(call.name)?.schema.inputSchema), call.name);
+
+  const dispatch = async (call: RebuiltCall): Promise<ToolFrame> => {
+    const args = (call.arguments ?? {}) as Record<string, unknown>;
+    const act = askingOnly() || actCall() ? null : requestableAct(call.name, args);
+    if (!act) return dispatchOnce(call);
+
+    const properties = (toolMap.get(act)?.schema.inputSchema as { properties?: Record<string, unknown> } | undefined)?.properties;
+
+    return runAsAct({ act, args: shownArgs(args, properties), requested: false }, () => dispatchOnce(call));
+  };
 
   const dispatched = async ({ name, arguments: args }: RebuiltCall): Promise<ToolFrame> => {
     const tool = toolMap.get(name);
@@ -365,10 +376,16 @@ export function createToolSurface(setup: ToolHandlerOptions): {
 
       if (refusal) return refused(refusal);
 
-      const inner = { name: actsAs.tool, arguments: actsAs.args ? actsAs.args(aliasedArgs) : aliasedArgs, internal: true };
-      const acted = actsAs.askingOnly ? await runAskingOnly(() => dispatch(inner)) : await dispatch(inner);
+      const actTool = actsAs.route ? actsAs.route(aliasedArgs) : actsAs.tool;
+      const innerArgs = actsAs.args ? actsAs.args(aliasedArgs) : aliasedArgs;
+      const hostOf = TOOL_TWINS.find((twin) => twin.name === actTool && !toolMap.has(actTool));
+      const inner = hostOf ? { name: hostOf.of, arguments: twinArgs(hostOf, innerArgs), internal: true } : { name: actTool, arguments: innerArgs, internal: true };
+      const requesting = name === APPROVALS_REQUEST_TOOL;
+      const actInner = () => (actsAs.askingOnly ? runAskingOnly(() => dispatch(inner)) : dispatch(inner));
+      const acted = requesting ? await runAsAct({ act: actTool, args: innerArgs, requested: true }, actInner) : await actInner();
+      const shown = (text: string): string => (requesting ? withRunWhenApproved(answeredAs(text, name, actTool), actTool, requestedArgs(aliasedArgs)) : answeredAs(text, name, actTool));
 
-      return { isError: acted.isError, content: acted.content.map((part) => ({ ...part, text: answeredAs(part.text, name, actsAs.tool) })) };
+      return { isError: acted.isError, content: acted.content.map((part) => ({ ...part, text: shown(part.text) })) };
     }
 
     const untrusted = TOOL_POLICY[name]?.untrusted === true;

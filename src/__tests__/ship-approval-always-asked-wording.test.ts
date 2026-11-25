@@ -16,7 +16,7 @@ describe("a token promote and a real submission always ask a human", () => {
   });
 
   it("says a release needs an owner's token and an owner's approval every time", () => {
-    expect(promote.description).toContain("A release needs a workspace owner's token and approval of that exact release, every time");
+    expect(promote.description).toContain("Each needs a workspace owner's approval of that exact act every time, asked with extension_approvals_request");
     expect(approvalIdOf(promote)).toContain("every release needs a workspace owner's approval");
   });
 
@@ -27,7 +27,7 @@ describe("a token promote and a real submission always ask a human", () => {
   });
 
   it("says a real submission needs an owner's approval every time", () => {
-    expect(submit.description).toContain("a workspace owner's token and approval of that exact submission, every time");
+    expect(submit.description).toContain("the approvalId of that exact act, which extension_approvals_request asks a workspace owner for, every time");
     expect(approvalIdOf(submit)).toContain("needs a workspace owner's approval every time");
   });
 

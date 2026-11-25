@@ -10,6 +10,7 @@ import crypto from "node:crypto";
 
 import { autoOpenBlock, lanePageUrl, notOpenedNote, openCommandBlock, openPagesForPerson } from "./approval-open";
 import { askingOnly } from "./ask-only";
+import { APPROVALS_REQUEST_TOOL, actCall } from "./approvals-request";
 import { PACKAGE_HOLD_FACT } from "./build-inputs";
 import { localPackageHolds } from "./build-inputs-local";
 import { resolveCredential, type CredentialRef } from "./credential-source";
@@ -183,6 +184,7 @@ async function guidedFirstListing(command: string, args: Args, shown: Args, deps
  */
 function laneToolOf(command: string): string | null {
   if (!askingOnly() || TOOL_POLICY[command]?.actsAs) return command;
+  if (actCall()?.requested) return APPROVALS_REQUEST_TOOL;
 
   return Object.keys(TOOL_POLICY).find((name) => TOOL_POLICY[name]?.actsAs?.askingOnly && TOOL_POLICY[name]?.actsAs?.tool === command) ?? null;
 }
@@ -380,7 +382,8 @@ async function sendOnce(call: LaneCall, fresh: boolean): Promise<LaneAnswer> {
   const exchanged = await forwardCredential({ ...session, fresh });
   if (!exchanged.ok) return { kind: "refused", text: exchangeRefusal(command, session.api, session.project, exchanged) };
 
-  const sentBody = JSON.stringify({ tool, args: call.sent });
+  const requested = tool === APPROVALS_REQUEST_TOOL ? actCall() : undefined;
+  const sentBody = JSON.stringify({ tool, args: requested?.requested ? requestBody(requested.act, call.sent) : call.sent });
   let res: Response;
 
   try {
@@ -468,6 +471,12 @@ function hostedArgs(args: Args, facts: Args | null, resource: string): Args {
   const local = Object.keys(memory).length ? { ...facts, [MEMORY_KEY]: memory } : facts;
 
   return local ? { ...kept, [LOCAL_FACTS_KEY]: local } : kept;
+}
+
+function requestBody(act: string, sent: Args): Args {
+  const { [LOCAL_FACTS_KEY]: local, ...args } = sent;
+
+  return local === undefined ? { act, args } : { act, args, [LOCAL_FACTS_KEY]: local };
 }
 
 function refOf(ref: CredentialRef | null): string | null {

@@ -53,7 +53,7 @@ describe("extension_submit says per action which calls only read (ledger 360)", 
     expect(described).toContain("extension_submit_read answers 'preflight', 'status'");
     expect(schema.inputSchema.properties.dryRun).not.toHaveProperty("default");
     expect(schema.inputSchema.properties.dryRun.description).toMatch(/^Omitted: submit dry runs, other actions run\. true sends nothing/);
-    expect(described).toContain("submit with dryRun:false and no approvalId executes nothing");
+    expect(described).toContain("An act with no approvalId runs nothing and names extension_approvals_request");
     expect(TOOL_POLICY.extension_submit.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, openWorldHint: true });
   });
 });

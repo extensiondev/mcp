@@ -375,6 +375,7 @@ describe("the server honors the options", () => {
 
     expect(checked.body.command).toBe("extension_submit_check");
     expect(checked.body.error?.code).not.toBe("E_TOOL_DISABLED");
+    expect((await call(client, "extension_approvals_request", { act: "extension_submit", args: act })).body.error?.code).not.toBe("E_TOOL_DISABLED");
     expect((await call(client, "extension_submit", act)).body.error?.code).toBe("E_TOOL_DISABLED");
   });
 
@@ -461,10 +462,10 @@ describe("1108: a tool that read and wrote answers as a read twin and a write tw
     const actions = (name: string): string[] => (listed.find((tool) => tool.name === name)!.inputSchema.properties as Record<string, { enum: string[] }>).action.enum;
 
     expect(actions("extension_submit")).not.toEqual(expect.arrayContaining(["preflight"]));
-    expect([...actions("extension_submit"), ...actions("extension_submit_check")].filter((action) => action === "preflight" || action === "status")).toEqual([]);
-    expect(actions("extension_submit_read")).toEqual(["preflight", "status"]);
+    expect(actions("extension_submit").filter((action) => action === "preflight" || action === "status")).toEqual([]);
+    expect(actions("extension_submit_read")).toEqual(["preflight", "status", "dry-run"]);
 
-    for (const name of ["extension_submit", "extension_submit_check"]) {
+    for (const name of ["extension_submit"]) {
       const out = await call(client, name, { action: "preflight", browsers: ["chrome"] });
 
       expect(out.body.error?.code, name).not.toBe("E_INPUT_VALIDATION");
@@ -474,7 +475,7 @@ describe("1108: a tool that read and wrote answers as a read twin and a write tw
     const dry = await call(client, "extension_submit", { buildSha: "abc", browsers: ["chrome"] });
     const read = await call(client, "extension_submit_read", { action: "status" });
 
-    expect(dry.body.warnings).toContain("extension_submit with dryRun true is now extension_submit_check; it still answers here.");
+    expect(dry.body.warnings).toContain("extension_submit with dryRun true is now extension_submit_read; it still answers here.");
     expect(JSON.stringify(read.body.warnings ?? [])).not.toContain("still answers here");
   });
 

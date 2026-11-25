@@ -17,7 +17,7 @@ import type { InputIssue } from "../lib/validate-input";
 
 export const schema = {
   name: "extension_submit",
-  description: "Submit an extension.dev build to the Chrome, Firefox, Edge and Safari stores. It runs a call carrying an approvalId; extension_submit_read answers the preflight, extension_submit_check dry runs and asks, extension_release_status reviews, extension_release_promote channels. A real submit needs a workspace owner's token and approval of that exact submission, every time. Uploads land least public (Chrome and Edge drafts, Firefox unlisted, Safari TestFlight) unless a saved store mode says otherwise.",
+  description: "Submit an extension.dev build to the Chrome, Firefox, Edge and Safari stores. It runs a call carrying the approvalId of that exact act, which extension_approvals_request asks a workspace owner for, every time; extension_submit_read answers the preflight and dry runs, extension_release_status reviews, extension_release_promote channels. Uploads land least public (Chrome and Edge drafts, Firefox unlisted, Safari TestFlight) unless a saved store mode says otherwise.",
   inputSchema: {
     type: "object" as const,
     properties: {

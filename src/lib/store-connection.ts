@@ -269,7 +269,7 @@ export function doneStep(stores: string[], itemUrl: string, taken: string[] = []
   return nextStep(
     "done",
     drafts
-      ? `${uploaded} To send the next upload on to review, set the store's submission mode: extension_submit_check action:"configure-store" asks for the one owner approval and extension_submit with that approvalId saves it; or save it in the project's store settings on extension.dev.`
+      ? `${uploaded} To send the next upload on to review, set the store's submission mode: extension_approvals_request {act: "extension_submit", args: {action: "configure-store", ...}} asks for the one owner approval and extension_submit with that approvalId saves it; or save it in the project's store settings on extension.dev.`
       : `The platform recorded the submission for ${storeNames(stores)}; each store's own review comes after this.`,
     drafts ? undefined : itemUrl || undefined,
   );
@@ -284,7 +284,7 @@ export function doneStep(stores: string[], itemUrl: string, taken: string[] = []
  * one stands.
  */
 export function afterApprovalSentence(command: string, approvalId: string): string {
-  const tool = command === "extension_submit_check" ? "extension_submit" : command;
+  const tool = command === "extension_submit_check" || command === "extension_approvals_request" ? "extension_submit" : command;
 
   return `Once approved, call ${tool} again with the same arguments plus approvalId "${approvalId}"; never request a fresh approval while this one stands.`;
 }

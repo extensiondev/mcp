@@ -35,6 +35,15 @@ List the open approvals this login asked for on extension.dev, or read one. Answ
 | `project` | string | no |  | '<workspace>/<project>' login to use when several are stored. |
 | `api` | string | no |  | Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev. |
 
+## extension_approvals_request
+
+Request a workspace owner's approval of one act on extension.dev: a store submit, a release, a public visibility or channel, a slug rename or a share revoke. Nothing runs until the owner approves it. Answers value.approvalId, value.approvalUrl and value.runWhenApproved, the call to make once approved; extension_submit and extension_release_promote run acts, extension_release_status reads.
+
+| input | type | required | default | description |
+| --- | --- | --- | --- | --- |
+| `act` | "extension_submit" \| "extension_release_promote" \| "extension_workspace_configure" \| "extension_shares_manage" \| "extension_builds_act" | yes |  | The tool that runs the act once approved. |
+| `args` | object | yes |  | That tool's arguments for the act, without approvalId. |
+
 ## extension_approvals_revoke
 
 Revoke an approval granted by mistake on extension.dev (owner token). Answers the revoked approval; extension_approvals_read lists them.
@@ -127,7 +136,7 @@ Build an extension into dist/<browser>/ on this machine, one browser a call. Ans
 
 ## extension_builds_act
 
-Rebuild, recheck or configure builds on extension.dev, or create or configure a channel. Answers the outcome; extension_builds_read reads builds, extension_build and extension_analyze work on this machine. A rebuild spends allowance; a push, only on the build branch when it changes the root directory ([skip build] pushes, docs-only, other branches spend nothing).
+Rebuild, recheck or configure builds on extension.dev, or create or configure a channel. Answers the outcome; extension_builds_read reads builds, extension_build and extension_analyze work on this machine. A public channel waits on extension_approvals_request. A rebuild spends allowance, a push only on the build branch when it changes the root directory.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -484,7 +493,7 @@ Publish and share a build through extension.dev: answers the tester link, a page
 
 ## extension_release_promote
 
-Release a build to a channel on extension.dev, cut a version-bump pull request, or roll a channel back. A release needs a workspace owner's token and approval of that exact release, every time. Preview takes any build; Stable and every other channel take Stable builds. Tokens live 7 days. Stores are extension_submit and extension_submit_check; extension_release_status answers where things stand.
+Release a build to a channel on extension.dev, cut a version-bump pull request, or roll a channel back. Each needs a workspace owner's approval of that exact act every time, asked with extension_approvals_request. Preview takes any build; Stable and every other channel take Stable builds. Tokens live 7 days. Stores are extension_submit; extension_release_status answers where things stand.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -503,7 +512,7 @@ Release a build to a channel on extension.dev, cut a version-bump pull request, 
 
 ## extension_release_status
 
-Read where a project stands on extension.dev: channels, builds, store submissions and reviews, history, rollout and listings. Answers only the sections include names. Read-only; extension_release_promote changes a channel, extension_submit and extension_submit_check act on stores.
+Read where a project stands on extension.dev: channels, builds, store submissions and reviews, history, rollout and listings. Answers the sections include names. Read-only; extension_release_promote moves a channel, extension_submit acts on stores, extension_approvals_request asks.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -553,7 +562,7 @@ Take a .png of one surface, page or targetId in a live session; a closed surface
 
 ## extension_shares_manage
 
-Create an emulator preview link for a tester, or revoke a preview or build link, on extension.dev. Answers the link made or revoked; extension_shares_read lists them, extension_publish and extension_preview_web make them. A revoke is permanent and needs a workspace member's approval.
+Create an emulator preview link, or revoke a preview or build link, on extension.dev. Answers the link made or revoked; extension_shares_read lists them, extension_publish and extension_preview_web make them. A revoke is permanent; extension_approvals_request asks a member to approve it.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -655,11 +664,11 @@ Write one key of the extension's storage (chrome.storage or browser.storage) fro
 
 ## extension_submit
 
-Submit an extension.dev build to the Chrome, Firefox, Edge and Safari stores. It runs a call carrying an approvalId; extension_submit_read answers the preflight, extension_submit_check dry runs and asks, extension_release_status reviews, extension_release_promote channels. A real submit needs a workspace owner's token and approval of that exact submission, every time. Uploads land least public (Chrome and Edge drafts, Firefox unlisted, Safari TestFlight) unless a saved store mode says otherwise.
+Submit an extension.dev build to the Chrome, Firefox, Edge and Safari stores. It runs a call carrying the approvalId of that exact act, which extension_approvals_request asks a workspace owner for, every time; extension_submit_read answers the preflight and dry runs, extension_release_status reviews, extension_release_promote channels. Uploads land least public (Chrome and Edge drafts, Firefox unlisted, Safari TestFlight) unless a saved store mode says otherwise.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "submit" \| "sync-listing" \| "cancel" \| "rollout" \| "release" \| "publish" \| "review" \| "configure-store" \| "connect" \| "first-submission" \| "mint-signing" | no | `"submit"` | submit with dryRun:false and no approvalId executes nothing, it only asks the owner's approval, as does the first call of any store act; extension_submit_read answers 'preflight', 'status' and extension_submit_check a dry run. submit: buildSha to the stores. sync-listing: listing from STORE.md. publish (alias review): draft to review. release (Safari): approved version on sale. cancel: withdraw from review. rollout: raise Chrome's staged rollout. configure-store: storeSettings. connect: page where the person gives the platform the key. first-submission: a first Chrome, Edge or Firefox listing. mint-signing (Safari): register the bundle id, mint certificates and profiles. |
+| `action` | "submit" \| "sync-listing" \| "cancel" \| "rollout" \| "release" \| "publish" \| "review" \| "configure-store" \| "connect" \| "first-submission" \| "mint-signing" | no | `"submit"` | An act with no approvalId runs nothing and names extension_approvals_request, which asks the owner's approval; submit with dryRun true rehearses and extension_submit_read answers 'preflight', 'status'. submit: buildSha to the stores. sync-listing: listing from STORE.md. publish (alias review): draft to review. release (Safari): approved version on sale. cancel: withdraw from review. rollout: raise Chrome's staged rollout. configure-store: storeSettings. connect: page where the person gives the platform the key. first-submission: a first Chrome, Edge or Firefox listing. mint-signing (Safari): register the bundle id, mint certificates and profiles. |
 | `project` | string | no |  | '<workspace>/<project>' login to use when several are stored. |
 | `workspace` | string | no |  | connect: a workspace, for its shared account. |
 | `browsers` | array of "chrome" \| "firefox" \| "edge" \| "safari" | no |  | Stores; submit, publish and sync-listing take several under one approval. |
@@ -681,40 +690,13 @@ Submit an extension.dev build to the Chrome, Firefox, Edge and Safari stores. It
 | `replace` | boolean | no |  | connect: true replaces a working key; only if asked. |
 | `waitSeconds` | number | no |  | Seconds to wait for the result (with approvalId, the approval), 0 to 600 (omitted: 180, no wait for the approval; status, connect, first-submission: 0); the hosted server waits at most 45 and says so in warnings. |
 
-## extension_submit_check
-
-Check a store submission without sending it: a dry-run submit answers here; any other action records an approval request for the workspace owner and answers value.approvalUrl. extension_submit runs the call carrying that approvalId; extension_submit_read answers the preflight, extension_release_status review history, extension_release_promote channels. Takes extension_submit's inputs.
-
-| input | type | required | default | description |
-| --- | --- | --- | --- | --- |
-| `action` | "submit" \| "publish" \| "review" \| "cancel" \| "rollout" \| "release" \| "sync-listing" \| "mint-signing" \| "configure-store" \| "connect" \| "first-submission" | no | `"submit"` | The act to ask approval for, or submit with dryRun true. |
-| `dryRun` | boolean | no | `true` | true sends nothing; false only asks the owner's approval of the real submit. |
-| `project` | string | no |  | As in extension_submit. |
-| `workspace` | string | no |  | As in extension_submit. |
-| `browsers` | array of "chrome" \| "firefox" \| "edge" \| "safari" | no |  | As in extension_submit. |
-| `buildSha` | string | no |  | As in extension_submit. |
-| `version` | string | no |  | As in extension_submit. |
-| `projectPath` | string | no |  | As in extension_submit. |
-| `screenshots` | array of string | no |  | As in extension_submit. |
-| `useBuild` | string | no |  | As in extension_submit. |
-| `detail` | boolean \| array | no |  | As in extension_submit. |
-| `api` | string | no |  | As in extension_submit. |
-| `store` | "chrome" \| "firefox" \| "edge" \| "safari" | no |  | As in extension_submit. |
-| `storeSettings` | object | no |  | As in extension_submit. |
-| `submissionId` | string | no |  | As in extension_submit. |
-| `buildNumber` | integer | no |  | As in extension_submit. |
-| `deployPercentage` | number | no |  | As in extension_submit. |
-| `connectSession` | string | no |  | As in extension_submit. |
-| `replace` | boolean | no |  | As in extension_submit. |
-| `waitSeconds` | number | no |  | As in extension_submit. |
-
 ## extension_submit_read
 
-Read a project's store state through extension.dev: preflight answers what each store still needs, status the submissions. extension_submit_check asks approvals and extension_submit runs them.
+Read a project's store state: preflight answers what each store needs, status the submissions, dry-run a rehearsed submit. extension_approvals_request asks approvals; extension_submit runs them.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "preflight" \| "status" | no | `"preflight"` | preflight: what each store still needs; status: each store's word on the submissions. |
+| `action` | "preflight" \| "status" \| "dry-run" | no | `"preflight"` | preflight: what each store still needs; status: each store's word on the submissions; dry-run: buildSha's store send rehearsed. |
 | `project` | string | no |  | '<workspace>/<project>' login to use when several are stored. |
 | `browsers` | array of "chrome" \| "firefox" \| "edge" \| "safari" | no |  | The stores to read. |
 | `buildSha` | string | no |  | Commit sha of a completed platform build (extension_builds_read). |
@@ -777,7 +759,7 @@ Wait for a session to be ready, or for: "rebuild" for the next compile after an 
 
 ## extension_workspace_configure
 
-Change a project's settings, visibility or build environment on extension.dev. configure-project sets displayName; rename-slug moves the slug, old URLs redirect. set-visibility public, public liveChannel or rename-slug needs approval. extension_workspace_read reads.
+Change a project's settings, visibility or build environment. configure-project sets displayName; rename-slug moves the slug, old URLs redirect. A public visibility or liveChannel and rename-slug wait on extension_approvals_request. extension_workspace_read reads.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -832,5 +814,6 @@ These names are not listed. A call to one still answers, with a warning that nam
 | `extension_network` | `extension_network_read`, `extension_network_stub` |
 | `extension_shares` | `extension_shares_read`, `extension_shares_manage` |
 | `extension_storage` | `extension_storage_read`, `extension_storage_write` |
+| `extension_submit_check` | `extension_approvals_request` |
 | `extension_workspace` | `extension_workspace_read`, `extension_workspace_configure` |
 

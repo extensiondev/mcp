@@ -11,6 +11,7 @@ import { envelope } from "./envelope";
 import { sameStoredProject } from "./project-identity";
 import { submitCheckRefused, submitShips } from "./submit-action-safety";
 import { TOOL_ANNOTATIONS, type ToolAnnotations } from "./tool-annotations";
+import { APPROVALS_REQUEST_TOOL, approvalsRequestRefused, requestedArgs } from "./approvals-request";
 import { TOOL_TWINS, TWIN_ALIASES, twinArgs, twinRefusal } from "./tool-twins";
 
 export type { ToolAnnotations } from "./tool-annotations";
@@ -36,7 +37,7 @@ export interface ToolPolicy {
   untrusted?: true;
   onThisMachine?: true;
   liveSession?: true;
-  actsAs?: { tool: string; refuse: (args: Args) => string | null; args?: (args: Args) => Args; askingOnly?: true };
+  actsAs?: { tool: string; route?: (args: Args) => string; refuse: (args: Args) => string | null; args?: (args: Args) => Args; askingOnly?: true };
   aliasOf?: string[];
 }
 
@@ -87,6 +88,7 @@ export const TOOL_TITLES: Record<string, string> = {
   extension_release_promote: "Promote a release",
   extension_submit: "Submit to a store",
   extension_submit_check: "Check a store submission",
+  extension_approvals_request: "Request an owner's approval",
   extension_source_read: "Read the stored source",
   extension_source_write: "Change the stored source",
 };
@@ -270,6 +272,13 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
     annotations: TOOL_ANNOTATIONS.extension_submit_check,
     untrusted: true,
     actsAs: { tool: "extension_submit", refuse: submitCheckRefused, askingOnly: true },
+    aliasOf: [APPROVALS_REQUEST_TOOL],
+  },
+  extension_approvals_request: {
+    group: "platform",
+    annotations: TOOL_ANNOTATIONS.extension_approvals_request,
+    untrusted: true,
+    actsAs: { tool: "extension_submit", route: (args) => String(args.act), refuse: approvalsRequestRefused, args: requestedArgs, askingOnly: true },
   },
   extension_source_read: { group: HOSTED_FEATURE_GROUP, annotations: TOOL_ANNOTATIONS.extension_source_read, untrusted: true },
   extension_source_write: { group: HOSTED_FEATURE_GROUP, annotations: TOOL_ANNOTATIONS.extension_source_write, untrusted: true },

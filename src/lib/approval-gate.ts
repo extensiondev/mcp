@@ -13,6 +13,8 @@ import { readLines } from "./approval-lines";
 import { loginRefusedBeforeApproval } from "./approval-login";
 import { approvalUrlFor } from "./approval-outcome";
 import { verdictOfAction } from "./approval-policy";
+import { actCall, requestFirst } from "./approvals-request";
+import { askingOnly } from "./ask-only";
 import { readApprovalSubject } from "./approval-subject";
 import { envelope } from "./envelope";
 import { kernelHook } from "./kernel-hooks";
@@ -395,7 +397,18 @@ export async function evaluateApproval(
       );
     }
 
-    if (verdict === "plain" && !input.platformAsked) return { blocked: false };
+    if (verdict === "plain" && !input.platformAsked) {
+      if (!askingOnly() || !actCall()?.requested) return { blocked: false };
+
+      return block(
+        input.command,
+        "request-refused",
+        "E_BAD_REQUEST",
+        "NoApprovalNeeded",
+        `${input.description} This act runs without an approval page, so no approval was asked and nothing ran. Call ${actCall()!.act} with the same arguments to run it.`,
+        { action: input.action, useTool: actCall()!.act },
+      );
+    }
 
     const standing = await kernelHook("approvalState")().standingApprovalForAct({ api: input.api, token: input.token, action: input.action, fingerprint, now: input.now });
 
@@ -404,6 +417,10 @@ export async function evaluateApproval(
       if (!held.blocked) return { blocked: false, approvalId: standing.approvalId };
       if (statusOf(held.envelope) === APPROVAL_PENDING_STATUS) return held;
     }
+
+    const direct = actCall();
+
+    if (direct && !direct.requested && !askingOnly()) return requestFirst(input.command, direct);
 
     return requestApproval({ base: apiCheck.base, fingerprint, input, doFetch });
   }

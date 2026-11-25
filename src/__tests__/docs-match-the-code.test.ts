@@ -88,7 +88,7 @@ describe("the docs say what the code does", () => {
     }
 
     expect([read("claude/reference/mcp-tools.md") === rendered, /^## extension_storage$/m.test(rendered), rendered.includes("| `extension_storage` | `extension_storage_read`, `extension_storage_write` |")]).toEqual([true, false, true]);
-    for (const tool of tools) expect(read("claude/reference/mcp-tools.md")).toContain(`## ${tool.schema.name}`);
+    for (const tool of tools.filter((listed) => !TOOL_POLICY[listed.schema.name]?.aliasOf)) expect(read("claude/reference/mcp-tools.md")).toContain(`## ${tool.schema.name}`);
   });
 
   it("897: writes a backslash and a pipe into a table cell so that both read back as themselves", () => {

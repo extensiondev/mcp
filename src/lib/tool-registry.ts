@@ -40,6 +40,7 @@ import * as buildsTool from "../tools/builds";
 import * as buildsAct from "../tools/builds-act";
 import * as workspaceTool from "../tools/workspace";
 import * as submitTool from "../tools/submit";
+import * as approvalsRequest from "../tools/approvals-request";
 import * as submitCheck from "../tools/submit-check";
 import * as wait from "../tools/wait";
 import * as addFeature from "../tools/add-feature";
@@ -86,6 +87,7 @@ const baseTools: ToolModule[] = [
   forwardable(releasePromote),
   forwardable(submitTool),
   forwardable(submitCheck),
+  approvalsRequest,
   wait,
   addFeature,
   forwardable(auth),

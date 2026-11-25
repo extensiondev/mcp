@@ -11,7 +11,7 @@ import { hostedOnly } from "../lib/hosted-only";
 
 export const schema = {
   name: "extension_release_status",
-  description: "Read where a project stands on extension.dev: channels, builds, store submissions and reviews, history, rollout and listings. Answers only the sections include names. Read-only; extension_release_promote changes a channel, extension_submit and extension_submit_check act on stores.",
+  description: "Read where a project stands on extension.dev: channels, builds, store submissions and reviews, history, rollout and listings. Answers the sections include names. Read-only; extension_release_promote moves a channel, extension_submit acts on stores, extension_approvals_request asks.",
   inputSchema: {
     type: "object" as const,
     properties: {

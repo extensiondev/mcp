@@ -73,6 +73,7 @@ const CEILINGS: Record<string, number> = {
   extension_storage_write: 260,
   extension_submit: 500,
   extension_submit_check: 390,
+  extension_approvals_request: 395,
   extension_submit_read: 200,
   extension_templates: 370,
   extension_theme_verify: 280,
@@ -159,7 +160,7 @@ describe("every tool carries a title a consent prompt can show", () => {
           .filter((line) => !/^\s*(\*|\/\/|\/\*)/.test(line) && prose.test(line))
           .map((line) => `${dir}/${file}: ${line.trim().slice(0, 120)}`)));
 
-    expect(old.length).toBe(9);
+    expect(old.length).toBe(10);
     expect(named).toEqual([]);
   });
 });

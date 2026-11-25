@@ -46,7 +46,7 @@ const quoted = (actions: readonly string[]): string => actions.map((action) => `
 
 export const SUBMIT_READ_TOOL = "extension_submit_read";
 
-export const SUBMIT_WRITE_SAFETY = `submit with dryRun:false and no approvalId executes nothing, it only asks the owner's approval, as does the first call of any store act; ${SUBMIT_READ_TOOL} answers ${quoted(SUBMIT_READ_ACTIONS)} and ${SUBMIT_CHECK_TOOL} a dry run.`;
+export const SUBMIT_WRITE_SAFETY = `An act with no approvalId runs nothing and names extension_approvals_request, which asks the owner's approval; submit with dryRun true rehearses and ${SUBMIT_READ_TOOL} answers ${quoted(SUBMIT_READ_ACTIONS)}.`;
 
 export const SUBMIT_ACTION_SAFETY = `${quoted(SUBMIT_READ_ACTIONS)} and submit with dryRun true are read-only; submit with dryRun:false and no approvalId executes nothing either, it only asks the owner's approval, as does the first call of any store act.`;
 

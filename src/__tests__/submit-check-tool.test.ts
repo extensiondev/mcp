@@ -30,11 +30,27 @@ async function listed(): Promise<Map<string, Record<string, unknown>>> {
 }
 
 describe("extension_submit_check takes the calls that only read or ask; an ask records an approval request, so its hint is not read-only (ledgers 365 and 1108)", () => {
-  it("lists a non-destructive hint that is not read-only, and extension_submit keeps its destructive one", async () => {
+  it("1193: lists extension_approvals_request non-destructive in extension_submit_check's place, and extension_submit keeps its destructive hint", async () => {
     const annotations = await listed();
 
-    expect(annotations.get("extension_submit_check")).toMatchObject({ readOnlyHint: false, destructiveHint: false, openWorldHint: true });
+    expect(annotations.get("extension_approvals_request")).toMatchObject({ readOnlyHint: false, destructiveHint: false, openWorldHint: true });
+    expect(annotations.has("extension_submit_check")).toBe(false);
     expect(annotations.get("extension_submit")).toMatchObject({ readOnlyHint: false, destructiveHint: true });
+  });
+
+  it("1193: refuses a request that names no requestable act, carries an approvalId or names a plain action, before anything leaves the machine", async () => {
+    world.login();
+    const args = { browsers: ["chrome"], buildSha: "603fc8a", dryRun: false, ...api };
+
+    for (const request of [
+      { act: "extension_submit", args: { ...args, approvalId: "apr_world" } },
+      { act: "extension_shares_manage", args: { action: "create" } },
+      { act: "extension_storage", args: {} },
+    ]) {
+      expect((await world.call("extension_approvals_request", request)).status, JSON.stringify(request)).toBe("request-refused");
+    }
+
+    expect(sent()).toEqual([]);
   });
 
   it("answers a preflight from extension_submit's own handler, reading the same routes", async () => {

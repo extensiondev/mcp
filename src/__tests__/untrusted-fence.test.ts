@@ -255,7 +255,7 @@ describe("the server fences tools that read a page or an extension", () => {
       };
     };
 
-    const twins = Object.entries(TOOL_POLICY).filter(([, policy]) => policy.actsAs);
+    const twins = Object.entries(TOOL_POLICY).filter(([, policy]) => policy.actsAs && !policy.actsAs.route);
     const fenced: string[] = [];
 
     expect(twins.length).toBeGreaterThan(10);

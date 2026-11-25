@@ -336,7 +336,7 @@ export async function platformApiGet<T = unknown>(
   const url = `${api.base}${path}${qs ? `?${qs}` : ""}`;
 
   if (send && askOnlyBlocks(send.method, send.body, path)) {
-    return { ok: false, status: 0, code: ASK_ONLY_CODE, message: `extension_submit_check only reads and asks for approvals, so the ${send.method} to ${url.split("?")[0]} was not sent. Nothing was executed.`, held: false, body: null };
+    return { ok: false, status: 0, code: ASK_ONLY_CODE, message: `A call that only asks for approvals never writes, so the ${send.method} to ${url.split("?")[0]} was not sent. Nothing was executed.`, held: false, body: null };
   }
 
   const { res, body, error } = await getJson(url, api.token, api.command, send, api.ref);
