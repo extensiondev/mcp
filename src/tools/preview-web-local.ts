@@ -116,7 +116,7 @@ export const PREVIEW_WEB_LOCAL: PreviewWebLocal = {
   manifestExists: (manifestPath) => fs.existsSync(manifestPath),
   readManifest: (manifestPath) => JSON.parse(fs.readFileSync(manifestPath, "utf8")),
   distPaths: (distDir) => reservedNamePaths(distDir, ""),
-  devCheckout: (projectPath, label) => previewDevCheckout([projectPath, process.cwd()], label),
+  devCheckout: (projectPath, label) => previewDevCheckout([projectPath], label),
   navigate: (projectPath, browser, url) => navigateToUrl(projectPath, browser, url),
   serveLocal: serveLocalBuild,
   uploadPreview,

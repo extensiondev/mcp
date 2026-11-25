@@ -1429,6 +1429,25 @@ describe("extension_preview_web", () => {
       }
     });
 
+    it("1216: finds the preview dev checkout from the project folder only, never from the server's working directory", () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-checkout-"));
+      const app = path.join(root, "checkout", "apps", "web", "preview.extension.dev");
+      const project = path.join(root, "elsewhere", "widget");
+
+      fs.mkdirSync(app, { recursive: true });
+      fs.mkdirSync(project, { recursive: true });
+      fs.writeFileSync(path.join(app, "package.json"), JSON.stringify({ name: "preview.extension.dev" }));
+      const cwd = vi.spyOn(process, "cwd").mockReturnValue(path.join(root, "checkout"));
+
+      try {
+        expect(PREVIEW_WEB_LOCAL.devCheckout(project, "preview.extension.dev")).toBeNull();
+        expect(PREVIEW_WEB_LOCAL.devCheckout(path.join(root, "checkout", "packages", "widget"), "preview.extension.dev")).toBe(path.join(root, "checkout"));
+      } finally {
+        cwd.mockRestore();
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    });
+
     it("keeps the local preview working when the upload fails", async () => {
       const dir = tmpDist(MANIFEST);
       process.env.EXTENSION_DEV_TOKEN = "tok_test";
