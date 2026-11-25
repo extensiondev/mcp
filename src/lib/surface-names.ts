@@ -6,7 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-
 export const SURFACE_NAME_ALIASES: Readonly<Record<string, string>> = { sidebar: "side-panel" };
 
 export function canonicalSurfaceName(name: string): string {

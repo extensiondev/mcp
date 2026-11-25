@@ -121,6 +121,7 @@ export { STORE_LABELS as STORE_TEXT_LIMIT_LABELS } from "./lib/store-text-limits
 export { SUBMIT_ACTION_SAFETY, SUBMIT_CHECK_ACTIONS, SUBMIT_CHECK_TOOL, answeredAs, checkRefused, plainListingAsk, plainSettingAsk, submitCheckRefused } from "./lib/submit-action-safety";
 export { factOf, staleSentence, storeMdFileOf } from "./lib/submit-facts";
 export type { DraftFacts, GalleryFacts, IconOrigin, IconPick, IconStale, LocalIcon, ProjectFacts, SafariDescriptionRead, StoreMdRead, SubmitFacts } from "./lib/submit-facts";
+export { renderableContentScripts, renderableSurfaces } from "./lib/surface-names";
 export { trackFields, trackUrl } from "./lib/track-url";
 export type { InputIssue } from "./lib/validate-input";
 export { readZipEntry, unpackZip } from "./lib/zip-entries";
