@@ -11,13 +11,14 @@ import fs from "node:fs";
 import { CDPConnection } from "./cdp-connection";
 import { AGENT_GLOBAL, CHROME_PAGE_AGENT, DASHBOARD_HOME } from "./chrome-dashboard-agent";
 import { chromePlan, type ChromePlan, type FetchBytes } from "./chrome-listing-plan";
-import { chromeStep, itemUrl, newRun, openRows, SIGN_IN_LINE, type ChromePage, type ChromeRun } from "./chrome-listing-run";
+import { chromeStep, itemUrl, newRun, openRows, saveNewItem, SIGN_IN_LINE, type ChromePage, type ChromeRun, type ItemSave } from "./chrome-listing-run";
 import { envelope } from "./envelope";
 import { guidedEngine } from "./guided-browser";
 import { guidedConnectRuntime, openGuided, type GuidedConnectRuntime } from "./guided-connect";
 import { guidedProcess, launchWord, type GuidedProcess } from "./guided-window-end";
 import { projectApiBytes } from "./project-api-bytes";
-import { openProjectApi, projectApiGet, type ProjectApi } from "./project-api";
+import { openProjectApi, projectApiGet, projectApiSend, type ProjectApi } from "./project-api";
+import { readStoreSettingsChange } from "./store-settings";
 import { isRow, text } from "./row";
 import { nextStep } from "./store-connection";
 
@@ -41,7 +42,7 @@ export interface ChromeDriver {
 
 export interface ChromeListingDeps {
   plan(slug: string, api: string | undefined): Promise<{ plan: ChromePlan } | { refused: string }>;
-  watch(args: { slug: string; plan: ChromePlan; profileDir: string }): ChromeRun;
+  watch(args: { slug: string; plan: ChromePlan; profileDir: string; api: string | undefined }): ChromeRun;
 }
 
 const DASHBOARD_PAGE = /^https:\/\/chrome\.google\.com\/(?:u\/\d+\/)?webstore\/devconsole(?:[/?#]|$)/i;
@@ -179,7 +180,7 @@ export function liveRun(slug: string): ChromeRun | null {
   return runs.get(slug)?.run ?? null;
 }
 
-export function watchChromeListing(args: { slug: string; plan: ChromePlan; profileDir: string; minutes?: number; driver?: ChromeDriver; proc?: GuidedProcess }): ChromeRun {
+export function watchChromeListing(args: { slug: string; plan: ChromePlan; profileDir: string; save?: ItemSave; minutes?: number; driver?: ChromeDriver; proc?: GuidedProcess }): ChromeRun {
   runs.get(args.slug)?.stop();
 
   const driver = args.driver ?? cdpChromeDriver;
@@ -205,6 +206,7 @@ export function watchChromeListing(args: { slug: string; plan: ChromePlan; profi
     busy = true;
     chromeTick(run, { port, driver })
       .catch(() => "idle")
+      .then(() => (args.save ? saveNewItem(run, args.save) : undefined))
       .finally(() => {
         busy = false;
       });
@@ -247,9 +249,23 @@ export async function platformPlan(slug: string, apiBase: string | undefined): P
   return { plan: await chromePlan(read.json, fetchBytes) };
 }
 
+export function platformSave(slug: string, apiBase: string | undefined): ItemSave {
+  return async (ids) => {
+    const read = readStoreSettingsChange("chrome", { chromeItemId: ids.itemId, publisherId: ids.publisherId });
+    if (!("patch" in read)) return { ok: false, message: "problem" in read ? read.problem : "the ids were not read as Chrome store settings" };
+
+    const opened = await openProjectApi({ command: "extension_submit", project: slug, api: apiBase });
+    if (!opened.ok) return { ok: false, message: opened.message };
+
+    const sent = await projectApiSend(opened.api, "PUT", "stores/config", { chrome: read.patch });
+
+    return sent.ok ? { ok: true } : { ok: false, message: sent.message };
+  };
+}
+
 export const chromeListingDeps: ChromeListingDeps = {
   plan: platformPlan,
-  watch: (args) => watchChromeListing(args),
+  watch: (args) => watchChromeListing({ ...args, save: platformSave(args.slug, args.api) }),
 };
 
 function chromeOnly(runtime: GuidedConnectRuntime): GuidedConnectRuntime {
@@ -266,7 +282,7 @@ function chromeOnly(runtime: GuidedConnectRuntime): GuidedConnectRuntime {
 export function chromeListingSay(args: { label: string; itemId: string; slug: string }): string {
   const start = args.itemId ? `item ${args.itemId}` : "the dashboard home";
 
-  return `The ${args.label} window opened on the Chrome Web Store developer dashboard (${start}) for ${args.slug}. ${SIGN_IN_LINE} Then it ${args.itemId ? "" : "presses \"New item\" once and uploads the platform's verified package (its SHA-256 checked), which makes a draft item; it "}fills Store listing (description, category, language, homepage, icon and screenshots), Privacy (single purpose, permission justifications, privacy policy) and Distribution (Unlisted, the least public option), pressing only "Save draft" on each. It stops with a checklist: the remote code answer and the data usage certifications are yours to tick, and Submit for review stays with you.`;
+  return `The ${args.label} window opened on the Chrome Web Store developer dashboard (${start}) for ${args.slug}. ${SIGN_IN_LINE} Then it ${args.itemId ? "" : "presses \"New item\" once and uploads the platform's verified package (its SHA-256 checked), which makes a draft item and saves its ID on the project; it "}fills Store listing (description, category, language, homepage, icon and screenshots), Privacy (single purpose, permission justifications, privacy policy) and Distribution (Unlisted, the least public option), pressing only "Save draft" on each. It stops with a checklist: the remote code answer and the data usage certifications are yours to tick, and Submit for review stays with you.`;
 }
 
 function progressOf(run: ChromeRun): Record<string, unknown> {
@@ -274,6 +290,7 @@ function progressOf(run: ChromeRun): Record<string, unknown> {
     itemId: run.itemId || null,
     publisherId: run.publisherId || null,
     created: run.created,
+    ...(run.created ? { itemSaved: run.itemSaved === "saved" ? true : run.itemSaved || "saving" } : {}),
     done: run.done,
     filled: run.filled,
     line: run.line,
@@ -284,7 +301,7 @@ function progressOf(run: ChromeRun): Record<string, unknown> {
 }
 
 function saveItemStep(run: ChromeRun, slug: string): string {
-  return run.created && run.itemId ? ` Save the new item on the project: call extension_submit {action: "configure-store", store: "chrome", project: "${slug}", storeSettings: {chromeItemId: "${run.itemId}", publisherId: "${run.publisherId}"}}.` : "";
+  return run.created && run.itemId && run.itemSaved && run.itemSaved !== "saved" ? ` The new item was not saved on the project (${run.itemSaved}); call extension_submit {action: "configure-store", store: "chrome", project: "${slug}", storeSettings: {chromeItemId: "${run.itemId}", publisherId: "${run.publisherId}"}}.` : "";
 }
 
 /* @invariant A FIRST CHROME LISTING IS FILLED BY THE MCP OVER ITS GUIDED
@@ -352,7 +369,7 @@ export async function guideChromeListing(result: string, args: Args, runtime: Gu
     return envelope({ ok: true, command, status, value: { ...kept, opened: false, guidedBrowser: { opened: false, note } }, hint: [note, text(parsed.hint)].filter(Boolean).join(" ") });
   }
 
-  const run = deps.watch({ slug, plan, profileDir: opened.profileDir });
+  const run = deps.watch({ slug, plan, profileDir: opened.profileDir, api: text(args.api) || undefined });
   const say = chromeListingSay({ label: opened.label, itemId: plan.item?.itemId ?? "", slug });
 
   return envelope({
@@ -371,7 +388,7 @@ export async function guideChromeListing(result: string, args: Args, runtime: Gu
     hint: [
       `${launchWord(opened.launched)} ${opened.choice.why} Profile: ${opened.profileDir}.`,
       plan.notes.length ? `Left out: ${plan.notes.join("; ")}.` : "",
-      `Tell the person: "${say}" Call extension_submit {action: "first-submission", store: "chrome", project: "${slug}"} again to read the run's progress and checklist; when it made a new item, that answer names the configure-store call that saves the item on the project.`,
+      `Tell the person: "${say}" Call extension_submit {action: "first-submission", store: "chrome", project: "${slug}"} again to read the run's progress and checklist; a new item is saved on the project by itself, as its Edge product is.`,
     ].filter(Boolean).join(" "),
   });
 }

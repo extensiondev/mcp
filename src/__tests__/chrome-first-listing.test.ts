@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { DASHBOARD_HOME } from "../lib/chrome-dashboard-agent";
 import { chromePlan, type ChromePlan } from "../lib/chrome-listing-plan";
-import { chromeStep, newRun, openRows, SIGN_IN_LINE, type ChromePage, type Where } from "../lib/chrome-listing-run";
+import { chromeStep, newRun, openRows, saveNewItem, SIGN_IN_LINE, type ChromePage, type Where } from "../lib/chrome-listing-run";
 import { guidedConnectRuntime, type GuidedConnectRuntime, type LaunchPlan } from "../lib/guided-connect";
 import { guideChromeListing, watchChromeListing, type ChromeListingDeps } from "../lib/guided-chrome-listing";
 
@@ -177,6 +177,37 @@ describe("one step of the guided Chrome first listing", () => {
     expect(await chromeStep(run, { page: fake.page, sleep: async () => undefined, now: () => 0 })).toBe("stopped");
     expect(run.itemId).toBe("");
     expect(fake.clicks).toBe(0);
+  });
+
+  it("saves only an item the run made on the project, once, and reports a refused save after a few tries", async () => {
+    const asked: Array<{ itemId: string; publisherId: string }> = [];
+
+    const saving = (answer: { ok: true } | { ok: false; message: string }) => async (ids: { itemId: string; publisherId: string }) => {
+      asked.push(ids);
+
+      return answer;
+    };
+
+    const run = newRun("ws/p", await planned(), 0);
+
+    await saveNewItem(run, saving({ ok: true }));
+    expect(asked).toEqual([]);
+
+    Object.assign(run, { created: true, itemId: "abcdefghijklmnopabcdefghijklmnop", publisherId: "pub-1" });
+    await saveNewItem(run, saving({ ok: true }));
+    await saveNewItem(run, saving({ ok: true }));
+
+    expect(asked).toEqual([{ itemId: "abcdefghijklmnopabcdefghijklmnop", publisherId: "pub-1" }]);
+    expect(run.itemSaved).toBe("saved");
+
+    const refused = newRun("ws/q", await planned(), 0);
+
+    Object.assign(refused, { created: true, itemId: "abcdefghijklmnopabcdefghijklmnop", publisherId: "pub-1" });
+
+    for (let i = 0; i < 7; i += 1) await saveNewItem(refused, saving({ ok: false, message: "403 not an owner" }));
+
+    expect(asked).toHaveLength(6);
+    expect(refused.itemSaved).toBe("403 not an owner");
   });
 
   it("drops a checklist line once the dashboard marks its tab complete and always leaves Submit for review", async () => {

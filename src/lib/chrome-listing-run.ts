@@ -40,6 +40,8 @@ export type ChromeRun = {
   publisherId: string;
   itemId: string;
   created: boolean;
+  itemSaved: string;
+  saveTries: number;
   newPressed: boolean;
   createPressedAt: number;
   zipSet: boolean;
@@ -78,6 +80,8 @@ export function newRun(slug: string, plan: ChromePlan, now: number): ChromeRun {
     publisherId: plan.item?.publisherId ?? "",
     itemId: plan.item?.itemId ?? "",
     created: false,
+    itemSaved: "",
+    saveTries: 0,
     newPressed: false,
     createPressedAt: 0,
     zipSet: false,
@@ -456,4 +460,23 @@ export async function chromeStep(run: ChromeRun, deps: StepDeps): Promise<string
   await fillTab(run, deps, tab);
 
   return save(run, deps, tab);
+}
+
+export type ItemSave = (ids: { itemId: string; publisherId: string }) => Promise<{ ok: true } | { ok: false; message: string }>;
+
+const SAVE_TRIES = 5;
+
+/* @invariant A NEW CHROME ITEM IS SAVED ON THE PROJECT ONCE, AS EDGE SAVES
+ * ITS NEW PRODUCT. Only an item this run made is written, as the item id and
+ * the publisher id the dashboard address showed, and a refused write is tried
+ * again a few times and then reported, never written under another id.
+ */
+export async function saveNewItem(run: ChromeRun, save: ItemSave): Promise<void> {
+  if (!run.created || !run.itemId || !run.publisherId || run.itemSaved === "saved" || run.saveTries >= SAVE_TRIES) return;
+
+  run.saveTries += 1;
+
+  const saved = await save({ itemId: run.itemId, publisherId: run.publisherId }).catch((err: unknown) => ({ ok: false as const, message: err instanceof Error ? err.message : String(err) }));
+
+  run.itemSaved = saved.ok ? "saved" : saved.message || "the platform did not answer";
 }
