@@ -182,6 +182,16 @@ claude mcp add --transport http extension-dev https://mcp.extension.dev/mcp
 | none | `EXTENSION_DEV_NO_TELEMETRY=1` or `DO_NOT_TRACK=1` | off | Turns off the `draft_seeded` event and the per-install id header |
 | none | `EXTENSION_MCP_CLI_VERSION` | this release's pin | The engine version run when the project has none of its own |
 | none | `EXTENSION_MCP_ENGINE_DIR` or `EXTENSION_MCP_ENGINE_BIN` | unset | Runs every engine command from a compiled engine checkout or one bin file |
+| none | `EXTENSION_DEV_API_URL` | `https://www.extension.dev` | The extension.dev platform the platform tools and docs search call, an extension.dev host or a local development server |
+| none | `EXTENSION_HEADLESS=1` | off | Launches every browser headless unless a call passes `headless: false` |
+| none | `EXTENSION_BROWSER_FLAGS` | unset | Extra flags for every browser the engine starts; a `--headless` here counts as `EXTENSION_HEADLESS=1` |
+| none | `EXT_BROWSERS_CACHE_DIR` | per-user cache | The folder that holds the managed browsers |
+| none | `EXTENSION_MCP_SESSION_DIR` | system temporary folder | The folder for the running sessions' state files |
+| none | `EXTENSION_TRY_DIR` | system temporary folder | The folder where `extension_try` unpacks a published build |
+| none | `EXTENSION_ISOLATED_DIR` | system temporary folder | The folder for isolated runs |
+| none | `EXTENSION_KEEP_SOCKET_PROCESS=1` | off | On Linux, keeps Firefox's socket process with an engine older than 4.3.0 |
+
+Internal overrides for development and tests, not for normal use: `EXTENSION_DEV_CONSOLE_URL`, `EXTENSION_DEV_INSPECT_URL`, `EXTENSION_DEV_PREVIEW_URL`, `EXTENSION_DEV_USERLAND_URL`, `EXTENSION_DEV_REGISTRY_URL`, `EXTENSION_DEV_FORWARD_URL`, `EXTENSION_MEDIA_ORIGIN`, `EXTENSION_DEV_POSTHOG_HOST`, `EXTENSION_DEV_POSTHOG_KEY`, `EXTENSION_DEV_POSTHOG_KEY_NONPRODUCTION`, `EXTENSION_TEMPLATES_CATALOG_URL`, `EXTENSION_TEMPLATES_COMMIT`, `EXTENSION_DEV_APPROVAL_GATE`, `EXTENSION_MCP_BUILD_ID`, `EXTENSION_OUTPUT`, `EXTENSION_CREATE_TEMPLATE_REF`.
 
 `login`, `logout`, `whoami` and `release promote` run headless; see [Server flags](https://docs.extension.dev/tools/mcp/flags).
 

@@ -18,9 +18,9 @@ import { LISTING_STORES, STORE_FIELDS } from "../lib/store-md-listing";
 import { TOOL_DOCS } from "../lib/docs-meta";
 import { validateToolInput } from "../lib/validate-input";
 import { DEFAULT_SERVER_OPTIONS, FEATURES_ENV, NO_SHIP_ENV, TOOL_POLICY, isServerFlag, resolveServerOptions, runsOnPlatform } from "../lib/tool-policy";
-import { PROJECT_PIN_ENV } from "../lib/credentials";
 import { NO_AUTO_OPEN_ENV } from "../lib/approval-open";
 import { NO_TELEMETRY_ENV } from "../lib/session-identity";
+import { registryEnvironmentVariables } from "../lib/environment-variables";
 
 const require = createRequire(import.meta.url);
 const read = (rel: string) => fs.readFileSync(fileURLToPath(new URL(`../../${rel}`, import.meta.url)), "utf8");
@@ -317,9 +317,8 @@ describe("the docs say what the code does", () => {
     }
 
     const env = pkg.environmentVariables ?? [];
-    expect(env.map((v) => v.name).sort()).toEqual(
-      [FEATURES_ENV, NO_SHIP_ENV, PROJECT_PIN_ENV, NO_AUTO_OPEN_ENV, NO_TELEMETRY_ENV].sort(),
-    );
+    expect(env).toEqual(registryEnvironmentVariables());
+    expect(env.filter((v) => (v as { isSecret?: boolean }).isSecret).map((v) => v.name)).toEqual(["EXTENSION_DEV_TOKEN"]);
 
     expect(env.find((v) => v.name === FEATURES_ENV)?.choices).toEqual(features.choices);
 

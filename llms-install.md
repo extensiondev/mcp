@@ -77,6 +77,18 @@ All are optional.
 | `EXTENSION_DEV_TOKEN` | An access token in place of the device login, for CI |
 | `EXTENSION_DEV_NO_AUTO_OPEN` | `1` never opens the approval page in the default browser |
 | `EXTENSION_DEV_NO_TELEMETRY` | `1` sends no telemetry; `DO_NOT_TRACK=1` does the same |
+| `DO_NOT_TRACK` | `1` sends no telemetry, the same as `EXTENSION_DEV_NO_TELEMETRY=1` |
+| `EXTENSION_DEV_API_URL` | The extension.dev platform the platform tools and docs search call; unset is `https://www.extension.dev` |
+| `EXTENSION_MCP_CLI_VERSION` | The engine version to run when the project has none of its own |
+| `EXTENSION_MCP_ENGINE_DIR` | Runs every engine command from a compiled engine checkout |
+| `EXTENSION_MCP_ENGINE_BIN` | Runs every engine command from one engine bin file |
+| `EXTENSION_HEADLESS` | `1` launches every browser headless |
+| `EXTENSION_BROWSER_FLAGS` | Extra flags for every browser the engine starts |
+| `EXT_BROWSERS_CACHE_DIR` | The folder that holds the managed browsers |
+| `EXTENSION_MCP_SESSION_DIR` | The folder for the running sessions' state files |
+| `EXTENSION_TRY_DIR` | The folder where `extension_try` unpacks a published build |
+| `EXTENSION_ISOLATED_DIR` | The folder for isolated runs |
+| `EXTENSION_KEEP_SOCKET_PROCESS` | `1` keeps Firefox's socket process on Linux with an engine older than 4.3.0 |
 
 ## Troubleshooting
 

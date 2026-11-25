@@ -77,6 +77,16 @@
           "placeholder": "<workspace>/<project>"
         },
         {
+          "name": "EXTENSION_DEV_TOKEN",
+          "description": "An extension.dev access token the platform tools send in place of the device login, for CI.",
+          "isSecret": true
+        },
+        {
+          "name": "EXTENSION_DEV_API_URL",
+          "description": "Base URL of the extension.dev platform the platform tools and docs search call, an extension.dev host or a local development server. Unset: https://www.extension.dev.",
+          "placeholder": "https://www.extension.dev"
+        },
+        {
           "name": "EXTENSION_DEV_NO_AUTO_OPEN",
           "description": "Set to 1 to stop the server from opening the approval page in the default browser when a platform act needs a human approval.",
           "format": "boolean"
@@ -84,6 +94,61 @@
         {
           "name": "EXTENSION_DEV_NO_TELEMETRY",
           "description": "Set to 1 to send no telemetry (the one scaffold event and the per-install id header). DO_NOT_TRACK=1 does the same.",
+          "format": "boolean"
+        },
+        {
+          "name": "DO_NOT_TRACK",
+          "description": "Set to 1 to send no telemetry, the same as EXTENSION_DEV_NO_TELEMETRY=1.",
+          "format": "boolean"
+        },
+        {
+          "name": "EXTENSION_MCP_CLI_VERSION",
+          "description": "The Extension.js engine version to run when the project has none of its own. Unset: the version this release pins.",
+          "placeholder": "<version>"
+        },
+        {
+          "name": "EXTENSION_MCP_ENGINE_DIR",
+          "description": "Run every engine command from this compiled Extension.js checkout instead of the published engine.",
+          "format": "filepath"
+        },
+        {
+          "name": "EXTENSION_MCP_ENGINE_BIN",
+          "description": "Run every engine command from this one engine bin file instead of the published engine.",
+          "format": "filepath"
+        },
+        {
+          "name": "EXTENSION_HEADLESS",
+          "description": "Set to 1 to launch every browser the server starts headless, unless a call passes headless: false.",
+          "format": "boolean"
+        },
+        {
+          "name": "EXTENSION_BROWSER_FLAGS",
+          "description": "Extra command line flags for every browser the engine starts, separated by spaces. A --headless flag here counts as EXTENSION_HEADLESS=1.",
+          "placeholder": "--lang=en-US"
+        },
+        {
+          "name": "EXT_BROWSERS_CACHE_DIR",
+          "description": "Folder that holds the managed browsers extension_browsers installs. Unset: the per-user extension.js browsers cache.",
+          "format": "filepath"
+        },
+        {
+          "name": "EXTENSION_MCP_SESSION_DIR",
+          "description": "Folder for the running sessions' state files. Unset: extension-dev-mcp-sessions in the system temporary folder.",
+          "format": "filepath"
+        },
+        {
+          "name": "EXTENSION_TRY_DIR",
+          "description": "Folder where extension_try unpacks a published build. Unset: extension-try in the system temporary folder.",
+          "format": "filepath"
+        },
+        {
+          "name": "EXTENSION_ISOLATED_DIR",
+          "description": "Folder for isolated runs, which build and open a copy of the project. Unset: extension-isolated in the system temporary folder.",
+          "format": "filepath"
+        },
+        {
+          "name": "EXTENSION_KEEP_SOCKET_PROCESS",
+          "description": "Set to 1 on Linux to keep Firefox's socket process when the engine is older than 4.3.0, where the server turns it off by default.",
           "format": "boolean"
         }
       ]
