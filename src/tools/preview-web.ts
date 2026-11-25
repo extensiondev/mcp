@@ -299,7 +299,7 @@ function leftOutNote(secrets: string[]): string {
 }
 
 function localLinkOf(address: string, fragment: string, options: PreviewLinkOptions): string {
-  const view = options.engine === "firefox" ? "/firefox" : options.surface === undefined ? "/chromium" : "/chromium/surface";
+  const view = options.surface !== undefined ? "/chromium/surface" : options.engine === "firefox" ? "/firefox" : "/chromium";
 
   return `${LOCAL_BUILD_ORIGIN}${view}${previewLocalPath(address, options).slice(1)}#${fragment}`;
 }

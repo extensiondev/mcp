@@ -693,8 +693,14 @@ describe("extension_preview_web", () => {
 
         expect(surfaceLink.pathname).toBe("/chromium/surface");
         expect(surfaceLink.searchParams.get("surface")).toBe("popup");
+
+        const firefoxSurface = new URL(JSON.parse(await handler({ projectPath: dir, build: false, distPath: dir, browser: "firefox", surface: "popup" })).value.localLink);
+        const firefoxWhole = new URL(JSON.parse(await handler({ projectPath: dir, build: false, distPath: dir, browser: "firefox" })).value.localLink);
+
+        expect([firefoxSurface.pathname, firefoxSurface.searchParams.get("engine"), firefoxSurface.searchParams.get("surface")]).toEqual(["/chromium/surface", "firefox", "popup"]);
+        expect([firefoxWhole.pathname, firefoxWhole.searchParams.get("engine")]).toEqual(["/firefox", "firefox"]);
         await expect(fetch(`${address}v1/build`, { headers })).rejects.toThrow();
-        expect((await fetch(`${surfaceLink.searchParams.get("url")}v1/build`)).status).toBe(403);
+        expect((await fetch(`${firefoxWhole.searchParams.get("url")}v1/build`)).status).toBe(403);
       } finally {
         global.fetch = realFetch;
         fs.rmSync(dir, { recursive: true, force: true });
