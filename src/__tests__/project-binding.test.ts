@@ -794,6 +794,49 @@ describe("the guided store connect opens the MCP's own browser with extension.de
     expect(JSON.parse(fs.readFileSync(path.join(verified, "manifest.json"), "utf8")).version).toBe("0.1.3");
   });
 
+  it.skipIf(process.platform === "win32")("clears the profile's stored tools background before a new build starts, and refuses to hand a page to an open window that runs the old one", async () => {
+    const unpacked = path.join(tmp, "ext-build");
+    const bin = path.join(tmp, "bin-build");
+    const profileDir = path.join(tmp, "state", "guided-browser", "chrome", "profile");
+    const workers = path.join(profileDir, "Default", "Service Worker");
+    const marker = path.join(path.dirname(profileDir), "tools-build");
+    const plan = { choice: { browser: "chrome" as const, binary: null, install: null, why: "" }, extensionDir: unpacked, profileDir, url: PAGE, env: guidedConnectRuntime.launchEnv() };
+    fs.mkdirSync(unpacked, { recursive: true });
+    fs.mkdirSync(bin, { recursive: true });
+    fs.mkdirSync(path.join(workers, "ScriptCache"), { recursive: true });
+    fs.writeFileSync(path.join(workers, "ScriptCache", "old_0"), "the 0.1.3 background");
+    fs.writeFileSync(path.join(unpacked, "manifest.json"), JSON.stringify({ version: "0.1.3.782" }));
+    fs.writeFileSync(path.join(bin, "npx"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    const before = process.env.PATH;
+    process.env.PATH = `${bin}${path.delimiter}${before}`;
+
+    try {
+      fs.writeFileSync(path.join(path.dirname(profileDir), "running.json"), JSON.stringify({ pid: process.pid, browser: "chrome" }));
+
+      const refused = launchGuidedBrowser(plan);
+
+      expect(refused).toMatchObject({ launched: false, reused: false });
+      expect(refused.reason).toContain("close that window");
+      expect(fs.existsSync(path.join(workers, "ScriptCache", "old_0"))).toBe(true);
+
+      fs.rmSync(path.join(path.dirname(profileDir), "running.json"));
+
+      expect(launchGuidedBrowser(plan)).toEqual({ launched: true, reused: false });
+      expect(fs.existsSync(workers)).toBe(false);
+      expect(fs.readFileSync(marker, "utf8").trim()).toBe("0.1.3.782");
+
+      fs.mkdirSync(workers, { recursive: true });
+      fs.writeFileSync(path.join(workers, "kept"), "the same build's worker");
+      fs.rmSync(path.join(path.dirname(profileDir), "running.json"), { force: true });
+
+      expect(launchGuidedBrowser(plan)).toEqual({ launched: true, reused: false });
+      expect(fs.existsSync(path.join(workers, "kept"))).toBe(true);
+    } finally {
+      process.env.PATH = before;
+      fs.rmSync(path.join(path.dirname(profileDir), "running.json"), { force: true });
+    }
+  });
+
   it("refuses the Chrome Web Store item served for the Edge item and loads the bundled copy, saying so", async () => {
     otherProcessesSignIn("rebeccat");
 

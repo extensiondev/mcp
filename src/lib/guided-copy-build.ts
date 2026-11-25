@@ -81,3 +81,46 @@ export function guidedCopy(verifiedDir: string, cacheDir: string, engine: string
 
   return target;
 }
+
+const WORKER_STORE = ["Default", "Service Worker"];
+
+function builtFile(profileDir: string): string {
+  return path.join(path.dirname(profileDir), "tools-build");
+}
+
+export function copiedBuild(extensionDir: string): string {
+  try {
+    const manifest = JSON.parse(fs.readFileSync(path.join(extensionDir, "manifest.json"), "utf8")) as { version?: unknown };
+
+    return typeof manifest.version === "string" ? manifest.version : "";
+  } catch {
+    return "";
+  }
+}
+
+export function profileRanOtherBuild(profileDir: string, build: string): boolean {
+  if (!build) return false;
+
+  try {
+    return fs.readFileSync(builtFile(profileDir), "utf8").trim() !== build;
+  } catch {
+    return fs.existsSync(path.join(profileDir, ...WORKER_STORE));
+  }
+}
+
+/* @invariant A GUIDED PROFILE NEVER RUNS AN OLDER TOOLS BACKGROUND THAN THE
+ * COPY IT LOADS. Chromium keeps the extension's service worker script in the
+ * profile's own worker store and keeps running it after the unpacked copy
+ * changed, even across a version bump, while content scripts load from disk,
+ * so the console bridge and the store panel speak to a background that
+ * predates them. Before a browser starts on a profile that last ran another
+ * build, that profile's worker store is cleared so the background is
+ * registered again from the copy; the build it starts with is recorded.
+ */
+export function startBuild(profileDir: string, build: string, stale: boolean): void {
+  if (!build) return;
+
+  if (stale) fs.rmSync(path.join(profileDir, ...WORKER_STORE), { recursive: true, force: true });
+
+  fs.writeFileSync(builtFile(profileDir), `${build}\n`, { mode: 0o600 });
+}

@@ -27,7 +27,7 @@ import {
   type GuidedBrowserChoice,
 } from "./guided-browser";
 import { windowCheck, type WindowCheck } from "./guided-window";
-import { guidedCopy } from "./guided-copy-build";
+import { copiedBuild, guidedCopy, profileRanOtherBuild, startBuild } from "./guided-copy-build";
 import { headlessLaunch } from "./launch-flags";
 import { mcpOrigins } from "./origins";
 import { withoutRedirects } from "./platform-fetch";
@@ -206,6 +206,13 @@ export function launchGuidedBrowser(plan: LaunchPlan): LaunchResult {
   } catch {
   }
 
+  const build = copiedBuild(plan.extensionDir);
+  const stale = profileRanOtherBuild(plan.profileDir, build);
+
+  if (typeof running.pid === "number" && processAlive(running.pid) && stale) {
+    return { launched: false, reused: false, reason: "the guided browser that is open still runs an older extension.dev tools; close that window, then ask again so it starts with the current one" };
+  }
+
   if (typeof running.pid === "number" && processAlive(running.pid) && plan.choice.binary) {
     try {
       const child = spawn(plan.choice.binary, reuseArgs(plan), { detached: true, stdio: "ignore" });
@@ -219,6 +226,8 @@ export function launchGuidedBrowser(plan: LaunchPlan): LaunchResult {
   }
 
   try {
+    startBuild(plan.profileDir, build, stale);
+
     const spawned = spawnExtensionCli(previewArgs(plan), {
       cwd: path.dirname(plan.profileDir),
       ownEngine: true,
