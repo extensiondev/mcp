@@ -9,6 +9,9 @@ import * as auth from "../tools/auth";
 import * as templates from "../tools/templates";
 import * as releaseStatus from "../tools/release-status";
 import { tools as ALL_TOOLS } from "../index";
+import { browserToolSchemas, servedTools } from "../tool-exports";
+
+import type * as ToolExports from "../tool-exports";
 
 describe("v9 tool surface", () => {
   it("registers the merged tools", () => {
@@ -45,6 +48,24 @@ describe("v9 tool surface", () => {
 
     expect(actions("extension_auth")).toEqual(["status", "login", "logout"]);
     expect(actions("extension_templates")).toEqual(["list", "source"]);
+  });
+
+  it("exports the served tools and the browser tool schemas as @extension.dev/mcp/tools, the same definitions the server lists", async () => {
+    const built = (await import("@extension.dev/mcp/tools")) as typeof ToolExports;
+    const listed = (name: string) => ALL_TOOLS.find((tool) => tool.schema.name === name)!.schema;
+
+    expect(Object.keys(built.servedTools)).toEqual(Object.keys(servedTools));
+    expect(Object.keys(built.browserToolSchemas)).toEqual(Object.keys(browserToolSchemas));
+    expect(Object.keys(servedTools)).toHaveLength(11);
+    expect(Object.keys(browserToolSchemas)).toHaveLength(19);
+
+    for (const exported of [...Object.values(servedTools), ...Object.values(browserToolSchemas)]) {
+      expect(exported.definition, exported.name).toBe(listed(exported.name));
+      expect(exported.inputSchema, exported.name).toBe(listed(exported.name).inputSchema);
+      expect(built.servedTools[exported.name as keyof typeof servedTools]?.definition ?? built.browserToolSchemas[exported.name as keyof typeof browserToolSchemas].definition, exported.name).toEqual(listed(exported.name));
+    }
+
+    for (const exported of Object.values(built.servedTools)) expect(typeof exported.handler, exported.name).toBe("function");
   });
 });
 

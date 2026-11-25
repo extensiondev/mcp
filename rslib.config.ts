@@ -63,6 +63,7 @@ export default defineConfig({
         entry: {
           clients: path.resolve(__dirname, "./src/clients/index.ts"),
           kernel: path.resolve(__dirname, "./src/kernel.ts"),
+          tools: path.resolve(__dirname, "./src/tool-exports.ts"),
         },
       },
     },
