@@ -12,7 +12,7 @@ import { resolveCredential } from "./credential-source";
 import { pinnedProject, readCredentials } from "./credentials";
 import { composedRefusal } from "./composed-refusal";
 import { isEnvelope, reframed } from "./envelope";
-import { kernelHook } from "./kernel-hooks";
+import { kernelHook, registeredKernelHooks } from "./kernel-hooks";
 import { noLoginForProjectRefusal } from "./no-login-for-project";
 import { clientProjectDir } from "./client-roots";
 import { workspaceConnectAnswer } from "./store-connection";
@@ -83,6 +83,15 @@ function refusal(name: string, status: string, message: string, hint: string, va
   });
 }
 
+function repositoryProject(named: string, args: Args, inputSchema: Record<string, unknown>, api?: string): { project: string; dir: string } | null {
+  if (!named.includes("/") || requestCredential() || envToken() || readCredentials({ project: named, api })) return null;
+  if (!registeredKernelHooks().includes("loginForRepository")) return null;
+
+  const dir = (takesPath(inputSchema) ? text(args.projectPath) : "") || clientProjectDir();
+
+  return dir ? (kernelHook("loginForRepository")?.(named, dir, api) ?? null) : null;
+}
+
 export type CallProject = { args: Args; answeredFor: string | null; note?: string } | { refused: string };
 
 /* @invariant A PLATFORM CALL KNOWS WHICH PROJECT IT ANSWERS FOR BEFORE IT IS
@@ -113,6 +122,17 @@ export function bindCallProject(
   const held = approvalLogin();
 
   if (held) return { args, answeredFor: refOf(held) };
+
+  const viaRepository = named ? repositoryProject(named, args, inputSchema, api) : null;
+
+  if (viaRepository) {
+    return {
+      args: { ...args, project: viaRepository.project },
+      answeredFor: viaRepository.project,
+      note: `Answered for ${viaRepository.project}: ${named.toLowerCase()} is the GitHub repository of ${viaRepository.dir}, and that folder builds ${viaRepository.project}.`,
+    };
+  }
+
   if (named) return { args, answeredFor: namedRef(named, text(args.workspace), api) };
 
   if (isConnect(name, args) && args.workspace !== undefined && args.workspace !== "") {

@@ -152,6 +152,15 @@ export function loginForPath(projectPath: string, api?: string): PathLogin {
   return { state: "unmatched", named: slugs.map((slug) => (owner ? `${owner}/${slug}` : slug)) };
 }
 
+export function loginForRepository(named: string, dir: string, api?: string): { project: string; dir: string } | null {
+  const { owner, repo } = pathIdentity(dir);
+  if (!owner || !repo || `${owner}/${repo}` !== named.trim().toLowerCase()) return null;
+
+  const found = loginForPath(dir, api);
+
+  return found.state === "match" && found.project !== `${owner}/${repo}` ? { project: found.project, dir } : null;
+}
+
 export function loginForOrigin(dir: string, api?: string): { project: string; owner: string; repo: string } | null {
   const { owner, repo } = pathIdentity(dir);
   if (!owner || !repo) return null;

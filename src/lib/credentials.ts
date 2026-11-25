@@ -828,5 +828,5 @@ export function noStoredLoginHint(project: string, expired: ExpiredLogin[] = [])
     return `This connection's token does not cover ${project}${covered.length ? `; it covers ${covered.join(", ")}` : ""}. Sign in again from the MCP client and approve ${project} to use it.`;
   }
 
-  return `No stored login for ${project}. extension_auth_read (action: status) lists the logins on this machine; extension_auth_login (action: login, project: "${project}") adds one. Logging in to another project no longer replaces this one.`;
+  return `No stored login for ${project}. extension_auth_read (action: status) lists the logins on this machine; extension_auth_login (action: login, project: "${project}") adds one. Logging in to another project no longer replaces this one. If ${project} is a GitHub repository, its project may have another name: pass that project, or projectPath for the repository's folder.`;
 }

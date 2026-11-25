@@ -11,7 +11,7 @@ import { openApprovalOnce } from "./approval-open";
 import { carriedRow } from "./forward-lane-answer";
 import { registerKernelHooks, type KernelHooks } from "./kernel-hooks";
 import { LOCAL_KERNEL_HOOKS } from "./local-kernel-hooks";
-import { loginForOrigin, loginForPath, serverLogins } from "./path-project";
+import { loginForOrigin, loginForPath, loginForRepository, serverLogins } from "./path-project";
 import { localPreflightHalf, nextStepForUnloggedProject } from "./unlogged-project";
 
 export const CONNECT_SESSIONS_SHELF = "connect-sessions";
@@ -34,6 +34,7 @@ export const PLATFORM_KERNEL_HOOKS: KernelHooks = {
   serverLogins,
   loginForPath,
   loginForOrigin,
+  loginForRepository,
   unloggedProjectStep: nextStepForUnloggedProject,
   localPreflightHalf,
   platformFirefoxChannel,

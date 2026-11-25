@@ -425,6 +425,19 @@ describe("ledger 252: with several logins stored, an unpinned platform call neve
     boundTo("soccer-analysis");
   });
 
+  it("ledger 1218: a builds list named by the GitHub repository answers for the project that repository's folder builds, and says so", async () => {
+    otherProcessesSignIn("hands-free", "rebeccat", "soccer-analysis");
+    const dir = extensionDir("rebeccat", "pii-shield");
+    clientDirs.cwd = () => dir;
+
+    const out = await call("extension_builds", { limit: 3, project: `${WORKSPACE}/pii-shield`, api: API });
+
+    expect(out.error?.code).not.toBe("E_AUTH_REQUIRED");
+    expect(out.value.answeredFor).toBe("cezaraugusto/rebeccat");
+    expect(out.value.note).toContain(`${WORKSPACE}/pii-shield is the GitHub repository of ${dir}, and that folder builds cezaraugusto/rebeccat`);
+    boundTo("rebeccat");
+  });
+
   it("ledger 391: takes projectPath on a builds list the same way, and never sends the path", async () => {
     otherProcessesSignIn("hands-free", "soccer-analysis");
     const dir = extensionDir("lance", "soccer-analysis");

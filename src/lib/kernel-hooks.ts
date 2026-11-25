@@ -34,6 +34,7 @@ export interface KernelHooks {
   serverLogins(api?: string): { live: string[]; kept: string | null; expired?: string[] };
   loginForPath(projectPath: string, api?: string): PathLoginRead;
   loginForOrigin(dir: string, api?: string): { project: string; owner: string; repo: string } | null;
+  loginForRepository?(named: string, dir: string, api?: string): { project: string; dir: string } | null;
   unloggedProjectStep(ref: string, projectPath: string, api?: string): UnloggedProjectStep;
   localPreflightHalf(name: string, args: Args, projectPath: string): Args;
   platformFirefoxChannel(): Promise<AmoChannel | null>;
