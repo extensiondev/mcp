@@ -159,10 +159,10 @@ describe("resolveServerOptions", () => {
 describe("the default start stays under a directory's tool ceiling", () => {
   const MOVED = { extension_try: "platform", extension_theme_verify: "extras", extension_network: "extras" } as const;
 
-  it("lists exactly 19 tools on a bare start, none of the moved ones (ledgers 1106 and 1108)", async () => {
+  it("lists exactly 20 tools on a bare start, none of the moved ones (ledgers 1106 and 1108)", async () => {
     const listed = (await (await connected()).listTools()).tools.map((t) => t.name);
 
-    expect(listed).toHaveLength(19);
+    expect(listed).toHaveLength(20);
     for (const name of Object.keys(MOVED)) expect(listed, name).not.toContain(name);
   });
 
@@ -174,8 +174,8 @@ describe("the default start stays under a directory's tool ceiling", () => {
 
     const groups = Object.values(TOOL_POLICY).filter((policy) => !policy.aliasOf).map((policy) => policy.group);
 
-    expect(groups.filter((group) => group === "local")).toHaveLength(19);
-    expect(groups.filter((group) => group === "platform")).toHaveLength(21);
+    expect(groups.filter((group) => group === "local")).toHaveLength(20);
+    expect(groups.filter((group) => group === "platform")).toHaveLength(20);
     expect(groups.filter((group) => group === "extras")).toHaveLength(11);
   });
 
@@ -189,6 +189,17 @@ describe("the default start stays under a directory's tool ceiling", () => {
     expect(platform).not.toContain("extension_theme_verify");
     expect(everything.sort()).toEqual(registered.filter((name) => !TOOL_POLICY[name]!.aliasOf));
     expect(everything).toHaveLength(51);
+  });
+
+  it("runs a local web preview on the default start and keeps its upload behind the platform group", () => {
+    const local = { features: ["local"], noShip: false } as ServerOptions;
+
+    expect(disabledToolEnvelope("extension_preview_web", { projectPath: "/p" }, local)).toBeNull();
+
+    const refused = JSON.parse(String(disabledToolEnvelope("extension_preview_web", { projectPath: "/p", share: true }, local)));
+
+    expect(refused).toMatchObject({ ok: false, error: { code: "E_TOOL_DISABLED" }, value: { group: "platform", add: "--features=local,platform" } });
+    expect(disabledToolEnvelope("extension_preview_web", { projectPath: "/p", share: true }, { features: ["local", "platform"], noShip: false })).toBeNull();
   });
 
   it("reads extras from the flag and the environment, in the table's order", () => {

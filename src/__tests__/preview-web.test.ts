@@ -68,7 +68,7 @@ describe("extension_preview_web", () => {
       manifestExists: vi.fn(() => true),
       readManifest: vi.fn(() => ({ ...MANIFEST })),
       distPaths: vi.fn(() => []),
-      devCheckout: vi.fn(() => null),
+      devCheckout: vi.fn(() => "/elsewhere"),
       navigate: vi.fn(async () => JSON.stringify({ ok: true })),
       uploadPreview: vi.fn(async () => ({ ok: true as const, data: { artifactId: "gen_probe", previewUrl: "http://preview.extension.localhost/?preview=gen_probe", leftOut: { secrets: [] } }, body: {} })),
       recordSharedPreview: vi.fn(() => ({ recorded: true, path: "/elsewhere/widget/.extension.dev/shared-previews.json", entries: 1, note: "recorded" })),
@@ -166,20 +166,20 @@ describe("extension_preview_web", () => {
 
       expect(uploaded).not.toHaveBeenCalled();
       expect(read).not.toHaveBeenCalled();
-      expect(JSON.parse(await handler({ projectPath: project, distPath: path.join(project, "inner"), probe: false })).status).not.toBe("dist-path-refused");
-      expect(JSON.parse(await handler({ projectPath: project, distPath: path.join(project, "missing"), probe: false })).status).toBe("no-dist");
+      expect(JSON.parse(await handler({ projectPath: project, distPath: path.join(project, "inner"), probe: false, hostUrl: "http://localhost:3110" })).status).not.toBe("dist-path-refused");
+      expect(JSON.parse(await handler({ projectPath: project, distPath: path.join(project, "missing"), probe: false, hostUrl: "http://localhost:3110" })).status).toBe("no-dist");
     } finally {
       fs.rmSync(project, { recursive: true, force: true });
       fs.rmSync(outside, { recursive: true, force: true });
     }
   });
 
-  it("defaults to preview and emits a base64url-round-tripping preview://build deep link (probe off)", async () => {
+  it("emits a base64url-round-tripping preview://build deep link (probe off)", async () => {
     const dir = tmpDist(MANIFEST);
 
     try {
       const out = JSON.parse(
-        await handler({ projectPath: dir, build: false, distPath: dir, probe: false }),
+        await handler({ projectPath: dir, build: false, distPath: dir, probe: false, hostUrl: "http://localhost:3110" }),
       );
       expect(out.ok).toBe(true);
       expect(out.value.built).toBe(false);
@@ -225,6 +225,7 @@ describe("extension_preview_web", () => {
         build: false,
         distPath: dir,
         probe: false,
+        hostUrl: "http://localhost:3110",
         inspectUrl: "http://localhost:3106",
       };
       const stale = JSON.parse(await handler(staleArgs));
@@ -245,7 +246,7 @@ describe("extension_preview_web", () => {
         manifestExists: vi.fn(() => true),
         readManifest: vi.fn(() => ({ ...MANIFEST })),
         distPaths: vi.fn(() => []),
-        devCheckout: vi.fn(() => null),
+        devCheckout: vi.fn(() => "/work/extension-dev"),
         navigate: vi.fn(async () => JSON.stringify({ ok: true })),
         uploadPreview: vi.fn(async () => ({ ok: true as const, data: { artifactId: "gen_link", previewUrl: "https://preview.extension.dev/?preview=gen_link", leftOut: { secrets: [] } }, body: {} })),
         recordSharedPreview: vi.fn(() => ({ recorded: true, path: "/work/widget/.extension.dev/shared-previews.json", entries: 1, note: "recorded" })),
@@ -358,7 +359,7 @@ describe("extension_preview_web", () => {
 
     try {
       const out = JSON.parse(
-        await handler({ projectPath: dir, build: false, distPath: dir }),
+        await handler({ projectPath: dir, build: false, distPath: dir, hostUrl: "http://localhost:3110" }),
       );
       expect(out.ok).toBe(true);
       expect(out.status).toBe("host-serving-different-artifact");
@@ -387,7 +388,7 @@ describe("extension_preview_web", () => {
 
     try {
       const out = JSON.parse(
-        await handler({ projectPath: dir, build: false, distPath: dir }),
+        await handler({ projectPath: dir, build: false, distPath: dir, hostUrl: "http://localhost:3110" }),
       );
       expect(out.value.probe.hostReported.name.length).toBeLessThanOrEqual(120);
       expect(
@@ -404,7 +405,7 @@ describe("extension_preview_web", () => {
 
     try {
       const out = JSON.parse(
-        await handler({ projectPath: dir, build: false, distPath: dir }),
+        await handler({ projectPath: dir, build: false, distPath: dir, hostUrl: "http://localhost:3110" }),
       );
       expect(out.ok).toBe(true);
       expect(out.status).toBe("host-not-serving-preview");
@@ -425,14 +426,14 @@ describe("extension_preview_web", () => {
     try {
       process.chdir(os.tmpdir());
       const out = JSON.parse(
-        await handler({ projectPath: dir, build: false, distPath: dir }),
+        await handler({ projectPath: dir, build: false, distPath: dir, hostUrl: "http://localhost:3110" }),
       );
       expect(out.ok).toBe(false);
       expect(out.error.code).toBe("E_PREVIEW_HOST_UNREACHABLE");
       expect(out.value.hostReachable).toBe(false);
       expect(out.value.previewLoadable).toBe(false);
       expect(out.error.message).toMatch(/share:true/);
-      expect(out.warnings.join(" ")).toMatch(/no npm install of this server/);
+      expect(out.warnings.join(" ")).toMatch(/pass hostUrl/);
     } finally {
       process.chdir(cwd);
       fs.rmSync(dir, { recursive: true, force: true });
@@ -461,6 +462,7 @@ describe("extension_preview_web", () => {
         await handler({ projectPath: nested, build: false, distPath: path.join(nested, "out") }),
       );
       expect(out.ok).toBe(false);
+      expect(new URL(out.value.deepLink).port).toBe("3110");
       expect(out.warnings.join(" ")).toMatch(/Start it/);
       expect(out.warnings.join(" ")).toContain(checkout);
     } finally {
@@ -528,7 +530,7 @@ describe("extension_preview_web", () => {
 
     try {
       const out = JSON.parse(
-        await handler({ projectPath: dir, build: false, distPath: dir }),
+        await handler({ projectPath: dir, build: false, distPath: dir, hostUrl: "http://localhost:3110" }),
       );
       expect(out.value.hostReachable).toBe(true);
       expect(out.value.previewLoadable).toBe(false);
@@ -543,7 +545,7 @@ describe("extension_preview_web", () => {
 
     try {
       const out = JSON.parse(
-        await handler({ projectPath: dir, build: false, distPath: dir, probe: false }),
+        await handler({ projectPath: dir, build: false, distPath: dir, probe: false, hostUrl: "http://localhost:3110" }),
       );
       expect(out.ok).toBe(false);
       expect(out.status).toBe("bad-dist-manifest");
@@ -563,7 +565,7 @@ describe("extension_preview_web", () => {
 
     try {
       const out = JSON.parse(
-        await handler({ projectPath: dir, build: false, distPath: dir, probe: false }),
+        await handler({ projectPath: dir, build: false, distPath: dir, probe: false, hostUrl: "http://localhost:3110" }),
       );
       expect(out.ok).toBe(false);
       expect(out.status).toBe("bad-dist-manifest");
@@ -578,7 +580,7 @@ describe("extension_preview_web", () => {
 
     try {
       const out = JSON.parse(
-        await handler({ projectPath: dir, build: false, distPath: dir, probe: false }),
+        await handler({ projectPath: dir, build: false, distPath: dir, probe: false, hostUrl: "http://localhost:3110" }),
       );
       expect(out.ok).toBe(false);
       expect(out.status).toBe("no-dist");
@@ -598,6 +600,7 @@ describe("extension_preview_web", () => {
           build: false,
           distPath: dir,
           probe: false,
+          hostUrl: "http://localhost:3110",
           open: true,
         }),
       );
@@ -629,6 +632,34 @@ describe("extension_preview_web", () => {
       return root;
     }
 
+    it("answers what to pass when no preview server address is known, before building or probing", async () => {
+      const dir = tmpDist(MANIFEST);
+      const built = vi.spyOn(PREVIEW_WEB_LOCAL, "build");
+      let reached = false;
+      vi.spyOn(process, "cwd").mockReturnValue(os.tmpdir());
+      global.fetch = (async () => {
+        reached = true;
+
+        throw new Error("fetch failed");
+      }) as unknown as typeof fetch;
+
+      try {
+        const out = JSON.parse(await handler({ projectPath: dir }));
+
+        expect(out).toMatchObject({ ok: false, status: "no-preview-host", error: { code: "E_NO_PREVIEW_HOST" }, value: { stage: "resolve-host" } });
+        expect(out.error.hint).toContain("pass hostUrl");
+        expect(out.error.hint).toContain("share:true");
+        expect(JSON.stringify(out)).not.toContain("3110");
+        expect(out.value.deepLink).toBeUndefined();
+        expect(reached).toBe(false);
+        expect(built).not.toHaveBeenCalled();
+        expect(JSON.parse(out.value.share.shareCall.slice(out.value.share.shareCall.indexOf("{")))).toEqual({ projectPath: dir, share: true });
+        expect(out.value.share.shareSpends).toContain("metered against the workspace's build allowance");
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
     it("sends an npm install to share:true and never to a pnpm filter", async () => {
       const dir = tmpDist(MANIFEST);
       vi.spyOn(process, "cwd").mockReturnValue(dir);
@@ -636,7 +667,7 @@ describe("extension_preview_web", () => {
 
       try {
         const out = JSON.parse(
-          await handler({ projectPath: dir, build: false, distPath: dir }),
+          await handler({ projectPath: dir, build: false, distPath: dir, hostUrl: "http://localhost:3110" }),
         );
         const everything = [
           out.error.message,
@@ -700,7 +731,7 @@ describe("extension_preview_web", () => {
 
       try {
         const out = JSON.parse(
-          await handler({ projectPath: dir, build: false, distPath: dir, probe: false }),
+          await handler({ projectPath: dir, build: false, distPath: dir, probe: false, hostUrl: "http://localhost:3110" }),
         );
         expect(out.ok).toBe(true);
         expect(reached).toBe(false);
@@ -720,32 +751,6 @@ describe("extension_preview_web", () => {
           distPath: dir,
           share: true,
         });
-      } finally {
-        fs.rmSync(dir, { recursive: true, force: true });
-      }
-    });
-
-    it("still explains the next step when a stranger's first call finds no local host", async () => {
-      const dir = tmpDist(MANIFEST);
-      vi.spyOn(process, "cwd").mockReturnValue(os.tmpdir());
-      global.fetch = (async () => {
-        throw new Error("fetch failed");
-      }) as unknown as typeof fetch;
-
-      try {
-        const out = JSON.parse(
-          await handler({ projectPath: dir, build: false, distPath: dir }),
-        );
-        expect(out.ok).toBe(false);
-        expect(out.error.code).toBe("E_PREVIEW_HOST_UNREACHABLE");
-        const share = out.value.share;
-        expect(share.requested).toBe(false);
-        expect(share.shareSpends).toContain("metered against the workspace's build allowance");
-        const call = JSON.parse(
-          share.shareCall.slice(share.shareCall.indexOf("{")),
-        );
-        expect(call.projectPath).toBe(dir);
-        expect(call.share).toBe(true);
       } finally {
         fs.rmSync(dir, { recursive: true, force: true });
       }
@@ -795,7 +800,7 @@ describe("extension_preview_web", () => {
 
       try {
         const out = JSON.parse(
-          await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
+          await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true, hostUrl: "http://localhost:3110" }),
         );
         expect(out.ok).toBe(true);
         expect(out.value.deepLink).toBeTruthy();
@@ -1350,13 +1355,18 @@ describe("extension_preview_web", () => {
 
       try {
         const out = JSON.parse(
-          await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
+          await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true, hostUrl: "http://localhost:3110" }),
         );
         expect(out.ok).toBe(true);
         expect(out.value.deepLink).toBeTruthy();
         expect(out.value.share.ok).toBe(false);
         expect(out.value.share.supported).toBe(true);
         expect(String(out.value.share.reason)).toMatch(/too large/i);
+
+        const hostless = JSON.parse(await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }));
+
+        expect(hostless).toMatchObject({ ok: false, status: "no-preview-host", error: { code: "E_NO_PREVIEW_HOST" }, value: { share: { ok: false } } });
+        expect(hostless.value.deepLink).toBeUndefined();
       } finally {
         fs.rmSync(dir, { recursive: true, force: true });
       }

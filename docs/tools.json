@@ -1812,9 +1812,9 @@
     {
       "name": "extension_preview_web",
       "tier": "platform",
-      "group": "platform",
+      "group": "local",
       "description": "Preview a build in the web emulator; share:true returns a link that needs no install. Answers share.previewUrl; extension_publish answers a tester link with downloads, extension_shares_read lists, extension_shares_manage revokes. Content scripts run only on sample pages, a limit of the preview only. The preview://build default is for developing extension.dev itself.",
-      "gate": "the server started with --features=local,platform; sharing needs a login",
+      "gate": "none for the local preview; share:true needs the server started with --features=local,platform, and a login",
       "samplePrompt": "Share this build with my designer",
       "readOnly": false,
       "destructive": false,
@@ -1858,7 +1858,7 @@
           "name": "hostUrl",
           "type": "string",
           "required": false,
-          "description": "Local preview server origin."
+          "description": "Local preview server origin; needed without share outside an extension.dev checkout."
         },
         {
           "name": "probe",

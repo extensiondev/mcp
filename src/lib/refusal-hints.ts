@@ -103,6 +103,7 @@ export const REFUSAL_HINTS: Record<ErrorCode, string> = {
   E_PARSE: "The file or answer error.message names is not valid JSON. Fix it, then call {command} again.",
   E_PLATFORM: "The platform refused or failed the request, for the reason in error.message. Read the state this call changes before repeating it.",
   E_PREFLIGHT_FAILED: "Nothing was sent. Fix each failing check this answer lists, then call {command} again.",
+  E_NO_PREVIEW_HOST: "Pass hostUrl with the origin of a preview server running on this machine, or share:true for a link that needs none, then call {command} again.",
   E_PREVIEW_HOST_UNREACHABLE: "Start the host error.message names, or pass a host that is serving, then call {command} again.",
   E_PROFILE_LOCKED: "Another browser holds this profile. Call extension_stop with the same projectPath and browser, then extension_dev again.",
   E_PROJECT_AMBIGUOUS: 'Pass project as "<workspace>/<project>" to name the one you mean; extension_auth_read (action: "status") lists the logins.',

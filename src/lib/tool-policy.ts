@@ -26,6 +26,7 @@ type Args = Record<string, unknown>;
 
 export interface ToolPolicy {
   group: FeatureGroup;
+  platformWhen?: (args: Args) => boolean;
   annotations: ToolAnnotations;
   ships?: "always" | ((args: Args) => boolean);
   untrusted?: true;
@@ -207,7 +208,8 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
     untrusted: true,
   },
   extension_preview_web: {
-    group: "platform",
+    group: "local",
+    platformWhen: (args) => args.share === true,
     annotations: TOOL_ANNOTATIONS.extension_preview_web,
     untrusted: true,
     ships: (args) => args.share === true,
@@ -291,7 +293,7 @@ for (const [name, twins] of Object.entries(TWIN_ALIASES)) {
 export function runsOnPlatform(name: string): boolean {
   const policy = TOOL_POLICY[name];
 
-  return policy?.group === "platform" && policy.onThisMachine !== true;
+  return (policy?.group === "platform" || policy?.platformWhen !== undefined) && policy.onThisMachine !== true;
 }
 
 export interface ServerOptions {
@@ -413,8 +415,10 @@ export function disabledToolEnvelope(
   const policy = TOOL_POLICY[name];
   if (!policy) return null;
 
-  if (!options.features.includes(policy.group)) {
-    const add = `--features=${FEATURE_GROUPS.filter((group) => group === policy.group || options.features.includes(group)).join(",")}`;
+  const needs: FeatureGroup = policy.platformWhen?.(args) ? "platform" : policy.group;
+
+  if (!options.features.includes(needs)) {
+    const add = `--features=${FEATURE_GROUPS.filter((group) => group === needs || options.features.includes(group)).join(",")}`;
 
     return envelope({
       ok: false,
@@ -422,10 +426,10 @@ export function disabledToolEnvelope(
       status: "tool-disabled",
       error: {
         code: "E_TOOL_DISABLED",
-        message: `${name} is in the "${policy.group}" feature group, which this server was started without.`,
+        message: policy.group === needs ? `${name} is in the "${needs}" feature group, which this server was started without.` : `${name} with these arguments acts on extension.dev, which needs the "${needs}" feature group this server was started without; the local call runs without it.`,
       },
-      value: { group: policy.group, features: options.features, add },
-      hint: `Add ${policy.group} to --features (or ${FEATURES_ENV}) in this server's MCP config, so it reads ${add}, or ask the user to.`,
+      value: { group: needs, features: options.features, add },
+      hint: `Add ${needs} to --features (or ${FEATURES_ENV}) in this server's MCP config, so it reads ${add}, or ask the user to.`,
     });
   }
 

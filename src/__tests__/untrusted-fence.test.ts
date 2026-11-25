@@ -237,13 +237,14 @@ describe("the server fences tools that read a page or an extension", () => {
   });
 
   it("fences exactly the tools that read runtime page or extension text, and every platform tool, whose answers relay text the platform or its lane wrote", () => {
-    const platform = Object.entries(TOOL_POLICY).filter(([, policy]) => policy.group === "platform");
+    const reachesPlatform = (policy: (typeof TOOL_POLICY)[string]): boolean => policy.group === "platform" || policy.platformWhen !== undefined;
+    const platform = Object.entries(TOOL_POLICY).filter(([, policy]) => reachesPlatform(policy));
 
     expect(platform.length).toBeGreaterThan(10);
     expect(platform.filter(([, policy]) => !policy.untrusted).map(([name]) => name)).toEqual([]);
 
     const fenced = Object.entries(TOOL_POLICY)
-      .filter(([, policy]) => policy.untrusted && policy.group !== "platform")
+      .filter(([, policy]) => policy.untrusted && !reachesPlatform(policy))
       .map(([name]) => name)
       .sort();
     expect(fenced).toEqual([

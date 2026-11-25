@@ -94,7 +94,7 @@ stored login existed and nothing was sent to the lane.
   `status: "auth-refused"`, `error.code: "E_AUTH_DENIED"` and the message "extension.dev refused
   this login: it was revoked, it expired, or it belongs to another environment. Call
   extension_auth_login with action login to sign in again."
-- The local server lists its 19 local tools as installed; the platform group adds 21 platform
+- The local server lists its 20 local tools as installed; the platform group adds 20 platform
   tools and the extras group 11 extras tools. With the platform group off, each tool of the eight cases answers `status: "tool-disabled"`,
   `error.code: "E_TOOL_DISABLED"` and the hint "Add platform to --features (or
   EXTENSION_DEV_FEATURES) in this server's MCP config, or ask the user to."

@@ -61,7 +61,7 @@ function safeHostBase(
   } catch {
     return {
       ok: false,
-      message: `hostUrl is not a URL: ${raw}. Leave it unset to use ${DEFAULT_PREVIEW_DEV_URL}.`,
+      message: `hostUrl is not a URL: ${raw}. Pass the origin of a running preview server, such as ${DEFAULT_PREVIEW_DEV_URL}.`,
     };
   }
 
@@ -73,7 +73,7 @@ function safeHostBase(
   if (!isLocal) {
     return {
       ok: false,
-      message: `Refusing to use ${raw} as the preview host: hostUrl may only name a local preview dev server. Leave it unset to use ${DEFAULT_PREVIEW_DEV_URL}, or pass share:true for a link that needs no local server.`,
+      message: `Refusing to use ${raw} as the preview host: hostUrl may only name a local preview dev server, such as ${DEFAULT_PREVIEW_DEV_URL}. Pass one, or pass share:true for a link that needs no local server.`,
     };
   }
 
@@ -104,7 +104,36 @@ function localLaneRemedy(checkout: string | null): string {
 
   return checkout
     ? `Start it with '${SURFACE.devCommand}' in ${checkout}. ${shareOut}`
-    : `${SURFACE.label} is a private app of the extension.dev monorepo and no npm install of this server can start it, so the default lane cannot resolve on this machine. ${shareOut}`;
+    : `No ${SURFACE.label} checkout was found near this project to start a preview server from, so pass hostUrl with the origin of one running on this machine. ${shareOut}`;
+}
+
+function shareOnlyFailed(result: Record<string, unknown>, warnings: string[]): string {
+  return envelope({
+    ok: false,
+    command: COMMAND,
+    status: "no-preview-host",
+    error: {
+      code: "E_NO_PREVIEW_HOST",
+      message: `share:true produced no working link, and with no hostUrl and no ${SURFACE.label} checkout near this project there is no local preview to fall back to.`,
+      hint: "Read share for why the upload failed, or pass hostUrl with the origin of a preview server running on this machine.",
+    },
+    value: { ...result, hostReachable: false, previewLoadable: false },
+    warnings,
+  });
+}
+
+function noPreviewHost(args: PreviewWebArgs, read: Record<string, unknown> = {}): string {
+  return envelope({
+    ok: false,
+    command: COMMAND,
+    status: "no-preview-host",
+    error: {
+      code: "E_NO_PREVIEW_HOST",
+      message: `There is no preview server to link to: hostUrl was not passed and no ${SURFACE.label} checkout was found near ${args.projectPath}, so nothing was built or probed.`,
+      hint: localLaneRemedy(null),
+    },
+    value: { stage: "resolve-host", ...read, share: unrequestedShare(args) },
+  });
 }
 
 function unrequestedShare(args: {
@@ -296,7 +325,7 @@ export const schema = {
       hostUrl: {
         type: "string",
         description:
-          "Local preview server origin.",
+          "Local preview server origin; needed without share outside an extension.dev checkout.",
       },
       probe: {
         type: "boolean",
@@ -351,9 +380,14 @@ export async function handler(args: PreviewWebArgs): Promise<string> {
 
 export async function previewWebWith(args: PreviewWebArgs, local: PreviewWebLocal): Promise<string> {
   const browser = args.browser ?? "chrome";
-  const host = safeHostBase(args.hostUrl ?? SURFACE.defaultOrigin);
+  const checkout = local.devCheckout(args.projectPath, SURFACE.label);
+  const host = args.hostUrl ? safeHostBase(args.hostUrl) : checkout ? { ok: true as const, base: SURFACE.defaultOrigin } : null;
 
-  if (!host.ok) {
+  const shouldBuild = args.distPath ? false : args.build !== false;
+
+  if (!host && !args.share && shouldBuild) return noPreviewHost(args);
+
+  if (host && !host.ok) {
     return envelope({
       ok: false,
       command: COMMAND,
@@ -393,9 +427,7 @@ export async function previewWebWith(args: PreviewWebArgs, local: PreviewWebLoca
     });
   }
 
-  const hostBase = host.base;
-  const shouldBuild = args.distPath ? false : args.build !== false;
-
+  const hostBase = host ? host.base : null;
   let buildResult: Record<string, unknown> | null = null;
 
   if (shouldBuild) {
@@ -457,12 +489,12 @@ export async function previewWebWith(args: PreviewWebArgs, local: PreviewWebLoca
 
   const encoded = Buffer.from(distDir).toString("base64url");
   const internalUrl = SURFACE.scheme(encoded);
-  const deepLink = `${hostBase}${previewLocalPath(internalUrl, links.options)}`;
+  const deepLink = hostBase ? `${hostBase}${previewLocalPath(internalUrl, links.options)}` : null;
 
   const distPaths = local.distPaths(distDir);
   const contentScripts = renderableContentScripts(manifest, distPaths);
   const result: Record<string, unknown> = {
-    deepLink,
+    ...(deepLink ? { deepLink } : {}),
     distDir,
     manifest: {
       name: manifest.name ?? path.basename(distDir),
@@ -474,16 +506,23 @@ export async function previewWebWith(args: PreviewWebArgs, local: PreviewWebLoca
     ...(buildResult ? { built: true } : { built: false }),
   };
 
+  if (!host && !args.share) return noPreviewHost(args, result);
+
   if (!args.share) {
     result.share = unrequestedShare(args);
   }
 
-  const checkout = local.devCheckout(args.projectPath, SURFACE.label);
   const remedy = localLaneRemedy(checkout);
-  const hint = `Open deepLink in a browser to see the extension render in ${SURFACE.label}'s emulator, where the Trace tab shows every chrome.* call it makes and the lane toggle switches between the emulated backend and a real carrier-equipped browser. It needs that surface's dev server running on this machine. ${remedy}`;
+  const hint = !deepLink
+    ? `share.previewUrl opens for anyone and needs no local server. This answer carries no deepLink: hostUrl was not passed and no ${SURFACE.label} checkout was found near this project.`
+    : `Open deepLink in a browser to see the extension render in ${SURFACE.label}'s emulator, where the Trace tab shows every chrome.* call it makes and the lane toggle switches between the emulated backend and a real carrier-equipped browser. It needs that surface's dev server running on this machine. ${remedy}`;
   const previewWarnings: string[] = [];
 
-  if (args.open) {
+  if (args.open && !deepLink) {
+    previewWarnings.push("open:true needs a local preview server, so nothing was opened. Pass hostUrl to open the preview in the live session, or open share.previewUrl yourself.");
+  }
+
+  if (args.open && deepLink) {
     const sessionBrowser = args.openIn ?? browser;
     const navRaw = await local.navigate(args.projectPath, sessionBrowser, deepLink);
     let opened: Record<string, unknown>;
@@ -535,6 +574,8 @@ export async function previewWebWith(args: PreviewWebArgs, local: PreviewWebLoca
     }
   }
 
+  if (!hostBase && (result.share as { ok?: unknown } | undefined)?.ok !== true) return shareOnlyFailed(result, previewWarnings);
+
   if (args.probe === false) {
     return envelope({
       ok: true,
@@ -551,6 +592,8 @@ export async function previewWebWith(args: PreviewWebArgs, local: PreviewWebLoca
   )}`;
 
   try {
+    if (!hostBase) throw new Error("no local preview server address was passed or found");
+
     const res = await fetch(probeUrl, {
       headers: { accept: "application/json" },
     });
@@ -702,7 +745,9 @@ export async function previewWebWith(args: PreviewWebArgs, local: PreviewWebLoca
           : shared.browserLoadable === false
             ? "The share uploaded, but the probe could not read its zip the way a browser would, so the link will not render for anyone until that is fixed; see share.loadCheck."
             : shared.browserLoadable === true
-              ? `The share link works; only the local ${SURFACE.label} dev lane at ${hostBase} is unreachable, which is expected outside the extension.dev monorepo.`
+              ? hostBase
+                ? `The share link works; only the local ${SURFACE.label} dev lane at ${hostBase} is unreachable, which is expected outside the extension.dev monorepo.`
+                : "The share link works and needs no local server."
               : "The share uploaded, but whether its link renders was not checked (no probe verdict).";
 
       return envelope({
@@ -723,6 +768,8 @@ export async function previewWebWith(args: PreviewWebArgs, local: PreviewWebLoca
         warnings: [...previewWarnings, linkNote],
       });
     }
+
+    if (!hostBase) return shareOnlyFailed(result, previewWarnings);
 
     return envelope({
       ok: false,

@@ -430,7 +430,7 @@ Preview a build in the web emulator; share:true returns a link that needs no ins
 | `browser` | "chrome" \| "chromium" \| "edge" \| "brave" \| "opera" \| "vivaldi" \| "yandex" \| "firefox" \| "waterfox" \| "librewolf" \| "zen" \| "floorp" \| "safari" | no | `"chrome"` | dist/<browser> to preview; Firefox view for Firefox. |
 | `build` | boolean | no | `true` | Build first. |
 | `distPath` | string | no |  | Preview this directory; implies build:false. |
-| `hostUrl` | string | no |  | Local preview server origin. |
+| `hostUrl` | string | no |  | Local preview server origin; needed without share outside an extension.dev checkout. |
 | `probe` | boolean | no | `true` | Check the artifact loads. |
 | `open` | boolean | no | `false` | Also open it in a live session. |
 | `openIn` | "chrome" \| "chromium" \| "edge" \| "brave" \| "opera" \| "vivaldi" \| "yandex" \| "firefox" \| "waterfox" \| "librewolf" \| "zen" \| "floorp" \| "safari" | no |  | Session browser to open in. |
