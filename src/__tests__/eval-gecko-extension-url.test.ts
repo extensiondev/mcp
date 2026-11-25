@@ -81,9 +81,9 @@ describe("extension_eval on Gecko maps a moz-extension:// url in context page to
     expect(result.ok).toBe(true);
     expect(result.value).toBe("panel");
     expect(calls).toHaveLength(1);
-    expect(contextOf(calls[0])).toBe("sidebar");
+    expect(contextOf(calls[0])).toBe("side-panel");
     expect(calls[0]).not.toContain("--url");
-    expect(result.warnings[0]).toContain('context: "sidebar"');
+    expect(result.warnings[0]).toContain('context: "side-panel"');
     expect(JSON.stringify(result)).not.toMatch(/chrome\.scripting/);
   });
 
@@ -102,8 +102,8 @@ describe("extension_eval on Gecko maps a moz-extension:// url in context page to
 
     expect(result.ok).toBe(false);
     expect(result.error.code).toBe("E_NO_SURFACE_DOCUMENT");
-    expect(result.error.message).toContain("sidebar, newtab");
-    expect(result.hint).toContain('context: "sidebar"');
+    expect(result.error.message).toContain("side-panel, newtab");
+    expect(result.hint).toContain('context: "side-panel"');
     expect(calls).toEqual([]);
   });
 

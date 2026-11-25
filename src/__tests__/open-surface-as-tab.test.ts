@@ -284,8 +284,8 @@ describe("open surface asTab", () => {
     );
 
     expect(result.ok).toBe(false);
-    expect(result.value.declaredSurfaces).toEqual(["options", "sidebar"]);
-    expect(result.hint).toContain("options, sidebar");
+    expect(result.value.declaredSurfaces).toEqual(["options", "side-panel"]);
+    expect(result.hint).toContain("options, side-panel");
   });
 
   it("falls back to the single live extension when there is no ready contract", async () => {

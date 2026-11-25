@@ -50,7 +50,7 @@ export async function clickToolbarWithUserInput(
       warnings: [
         `This extension declares a sidebar_action, and ${GESTURE_GATED_APIS}. The engine's own onClicked replay carries no user input, so the server clicked the toolbar button through the browser's own toolbar action in Firefox's parent process over the debugger protocol instead, which Firefox delivers to onClicked as user input, the way a person's click is. Whether the listener ran, and what it did, is not read here.`,
       ],
-      hint: "Check what the click did with extension_screenshot or extension_eval context: 'sidebar' (the panel), or extension_logs for the listener's own output.",
+      hint: "Check what the click did with extension_screenshot or extension_eval context: 'side-panel' (the panel), or extension_logs for the listener's own output.",
     }),
   };
 }
@@ -61,7 +61,7 @@ export function noteReplayWithoutGesture(raw: string, sidebarDeclared: boolean, 
 
   const failed = clickFailure ? ` The server's click through the browser's toolbar action, which does carry user input, did not run: ${clickFailure}.` : "";
   const route = sidebarDeclared
-    ? ' To open the panel, extension_open surface: "sidebar" opens the real one through the browser\'s sidebar controller; to exercise the listener\'s own sidebarAction call, a person clicks the toolbar button in a headed session (extension_dev with headless: false).'
+    ? ' To open the panel, extension_open surface: "side-panel" opens the real one through the browser\'s sidebar controller; to exercise the listener\'s own sidebarAction call, a person clicks the toolbar button in a headed session (extension_dev with headless: false).'
     : " To exercise such a call, a person clicks the toolbar button in a headed session (extension_dev with headless: false).";
 
   addWarning(frame, `The engine replayed action.onClicked without user input (gesture: false), and ${GESTURE_GATED_APIS}.${failed}${route}`);

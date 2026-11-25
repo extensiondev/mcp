@@ -129,7 +129,7 @@ export function sidebarOpenedAnswer(tool: string, document: string, panel: Gecko
     command: tool,
     status: "opened",
     value: {
-      surface: "sidebar",
+      surface: "side-panel",
       document,
       via: "browser-sidebar-controller",
       ...(panel.url ? { url: panel.url } : {}),
@@ -138,6 +138,6 @@ export function sidebarOpenedAnswer(tool: string, document: string, panel: Gecko
     warnings: [
       "Firefox opens a sidebar_action panel from an extension only inside a user gesture, so the server opened the real panel through the browser's own sidebar controller in Firefox's parent process over the debugger protocol (the path View > Sidebar takes). The panel is the real one; the extension's own open path (a sidebarAction.open or toggle call in a listener) was not exercised.",
     ],
-    hint: "Read the panel with extension_dom_snapshot context: 'sidebar', run code in it with extension_eval context: 'sidebar', or capture it with extension_screenshot context: 'sidebar'.",
+    hint: "Read the panel with extension_dom_snapshot context: 'side-panel', run code in it with extension_eval context: 'side-panel', or capture it with extension_screenshot context: 'side-panel'.",
   });
 }

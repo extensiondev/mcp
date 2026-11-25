@@ -249,7 +249,7 @@ Take a DOM snapshot of one open extension surface or targetId, or list what is o
 | `targetId` | string | no |  | Page targetId (extension_open, extension_dom_snapshot listTargets); wins over url. |
 | `listTargets` | boolean | no | `false` | List page targets and return. |
 | `listTabs` | boolean | no | `false` | List tabs with ids and return. |
-| `context` | "content" \| "page" \| "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" | no | `"content"` | A closed surface is opened first (as extension_open does); the answer then says opened: true. |
+| `context` | "content" \| "page" \| "popup" \| "options" \| "side-panel" \| "devtools" \| "newtab" \| "history" \| "bookmarks" | no | `"content"` | A closed surface is opened first (as extension_open does); the answer then says opened: true. |
 | `include` | array of "summary" \| "html" \| "elements" | no | `["summary"]` | summary: counts. html: markup to maxBytes. elements: visible interactive elements with role, name, unique selector and state. |
 | `maxBytes` | number | no | `32768` | Byte cap on the html. |
 | `withConsole` | number \| boolean | no |  | Console lines: a count, or true for 50. |
@@ -275,7 +275,7 @@ Click or fill one element by CSS selector, or send trusted mouse and key input t
 | `modifiers` | array of "Alt" \| "Control" \| "Meta" \| "Shift" | no |  | Modifiers held during the input. |
 | `deltaX` | number | no |  | scroll: wheel delta in CSS pixels (positive scrolls right). |
 | `deltaY` | number | no |  | scroll: wheel delta in CSS pixels (positive scrolls down). |
-| `context` | "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" | no |  | An open surface (extension_open first). |
+| `context` | "popup" \| "options" \| "side-panel" \| "devtools" \| "newtab" \| "history" \| "bookmarks" | no |  | An open surface (extension_open first). |
 | `url` | string | no |  | A web page's tab by url. |
 | `targetId` | string | no |  | Page targetId (extension_open, extension_dom_snapshot listTargets); wins over url. |
 | `browser` | string | no |  | Running session's browser; needed when several run. |
@@ -290,7 +290,7 @@ Read one element's text by CSS selector, or wait until it is visible, in a surfa
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
 | `action` | "text" \| "wait" | no | `"text"` | text: the element's text; wait: until it is visible. |
 | `selector` | string | no |  | CSS selector matching exactly one element (the point for input actions; focused before type and key). |
-| `context` | "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" | no |  | An open surface (extension_open first). |
+| `context` | "popup" \| "options" \| "side-panel" \| "devtools" \| "newtab" \| "history" \| "bookmarks" | no |  | An open surface (extension_open first). |
 | `url` | string | no |  | A web page's tab by url. |
 | `targetId` | string | no |  | Page targetId (extension_open, extension_dom_snapshot listTargets); wins over url. |
 | `browser` | string | no |  | Running session's browser; needed when several run. |
@@ -304,7 +304,7 @@ Evaluate JavaScript in an extension's background, surface, content script, page 
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
 | `expression` | string | yes |  | JavaScript expression; its value is the answer. |
-| `context` | "background" \| "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" \| "content" \| "page" | no |  | Default page on a Chromium MV3 session, else background; a closed surface is opened first (as extension_open does). |
+| `context` | "background" \| "popup" \| "options" \| "side-panel" \| "devtools" \| "newtab" \| "history" \| "bookmarks" \| "content" \| "page" | no |  | Default page on a Chromium MV3 session, else background; a closed surface is opened first (as extension_open does). |
 | `url` | string | no |  | content/page: the tab by url. |
 | `tab` | number | no |  | chrome.tabs id to break a url tie. |
 | `targetId` | string | no |  | Page targetId (extension_open, extension_dom_snapshot listTargets); wins over url. |
@@ -403,7 +403,7 @@ Open an extension surface or a url in a session, or replay the toolbar click, a 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
-| `surface` | "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" \| "action" \| "command" | no |  | Surface to open; action and command replay; devtools is Chromium only. |
+| `surface` | "popup" \| "options" \| "side-panel" \| "devtools" \| "newtab" \| "history" \| "bookmarks" \| "action" \| "command" | no |  | Surface to open; action and command replay; devtools is Chromium only. |
 | `name` | string | no |  | command: the chrome.commands name. |
 | `menuItemId` | string | no |  | action: replay contextMenus.onClicked for this menu item id instead of the toolbar click (Chromium, over the debug port). |
 | `panel` | string | no |  | devtools: panel title. |
@@ -538,7 +538,7 @@ Take a .png of one surface, page or targetId in a live session; a closed surface
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
 | `browser` | string | no |  | Running session's browser; needed when several run. |
-| `context` | "page" \| "popup" \| "options" \| "sidebar" \| "newtab" \| "history" \| "bookmarks" | no | `"page"` | page: the tab url picks; else that open surface. |
+| `context` | "page" \| "popup" \| "options" \| "side-panel" \| "newtab" \| "history" \| "bookmarks" | no | `"page"` | page: the tab url picks; else that open surface. |
 | `url` | string | no |  | page: tab url substring. |
 | `targetId` | string | no |  | Page targetId (extension_open, extension_dom_snapshot listTargets); wins over url. |
 | `width` | number | no |  | Viewport width (CSS px). |

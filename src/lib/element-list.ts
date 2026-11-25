@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-export const SURFACE_CONTEXTS = ["popup", "options", "sidebar", "devtools", "newtab", "history", "bookmarks"];
+export const SURFACE_CONTEXTS = ["popup", "options", "side-panel", "devtools", "newtab", "history", "bookmarks"];
 
 export const ELEMENT_LIST_CAP = 200;
 export const ELEMENT_NAME_MAX = 80;

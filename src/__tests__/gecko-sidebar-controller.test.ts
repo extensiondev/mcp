@@ -26,7 +26,7 @@ const gestureRefusal = () =>
   );
 const panelClosed = () =>
   actVerbAnswer(
-    actFailure("open", { code: "E_TARGET_NOT_FOUND", name: "Unsupported", message: "surface 'sidebar' is not open", engine: "firefox" }, "not-found"),
+    actFailure("open", { code: "E_TARGET_NOT_FOUND", name: "Unsupported", message: "surface 'side-panel' is not open", engine: "firefox" }, "not-found"),
     "extension_open",
   );
 const replayedWithoutGesture = () =>
@@ -99,11 +99,11 @@ describe("extension_open surface sidebar on Firefox opens the real panel through
     const fake = await firefox();
     const dir = project(MV2, fake.port);
 
-    const result = JSON.parse(await open.handler({ projectPath: dir, browser: "firefox", surface: "sidebar", timeout: 15000 }));
+    const result = JSON.parse(await open.handler({ projectPath: dir, browser: "firefox", surface: "side-panel", timeout: 15000 }));
 
     expect(result.ok).toBe(true);
     expect(result.status).toBe("opened");
-    expect(result.value).toMatchObject({ surface: "sidebar", via: "browser-sidebar-controller", url: SIDEBAR_URL, panel: { width: 360, height: 700 } });
+    expect(result.value).toMatchObject({ surface: "side-panel", via: "browser-sidebar-controller", url: SIDEBAR_URL, panel: { width: 360, height: 700 } });
     expect(fake.opens).toBe(1);
     expect(fake.sidebarOpen()).toBe(true);
     expect(JSON.stringify(result)).not.toContain("rendered as a tab");
@@ -115,7 +115,7 @@ describe("extension_screenshot context sidebar on Firefox captures the open pane
     const fake = await firefox({ open: true });
     const dir = project(MV2, fake.port);
 
-    const out = JSON.parse(await screenshot.handler({ projectPath: dir, browser: "firefox", context: "sidebar", timeout: 15000 }));
+    const out = JSON.parse(await screenshot.handler({ projectPath: dir, browser: "firefox", context: "side-panel", timeout: 15000 }));
 
     expect(out.ok).toBe(true);
     expect(fake.captures).toHaveLength(1);
@@ -127,16 +127,16 @@ describe("extension_screenshot context sidebar on Firefox captures the open pane
     const fake = await firefox();
     const dir = project(MV2, fake.port);
 
-    const out = JSON.parse(await screenshot.handler({ projectPath: dir, browser: "firefox", context: "sidebar", timeout: 15000 }));
+    const out = JSON.parse(await screenshot.handler({ projectPath: dir, browser: "firefox", context: "side-panel", timeout: 15000 }));
 
     expect(out.ok).toBe(true);
-    expect(out.value).toMatchObject({ context: "sidebar", url: SIDEBAR_URL, transport: "rdp", opened: true });
+    expect(out.value).toMatchObject({ context: "side-panel", url: SIDEBAR_URL, transport: "rdp", opened: true });
     expect(calls.map((cli) => cli[0])).toEqual(["open", "inspect"]);
     expect(fake.opens).toBe(1);
     expect(fake.sidebarOpen()).toBe(true);
     expect(fake.captures).toHaveLength(1);
     expect(out.warnings.join("\n")).toMatch(/opened the real panel through the browser's own sidebar controller/);
-    expect(out.warnings.join("\n")).toContain('The sidebar was closed, so this call opened it the way extension_open surface: "sidebar" does, then read it');
+    expect(out.warnings.join("\n")).toContain('The side panel was closed, so this call opened it the way extension_open surface: "side-panel" does, then read it');
   }, 20_000);
 });
 
@@ -166,7 +166,7 @@ describe("extension_open surface action on Firefox and the user gesture its list
     expect(result.value.gesture).toBe(false);
     expect(warnings).toContain("without user input");
     expect(warnings).toContain("sidebarAction.toggle");
-    expect(warnings).toContain('extension_open surface: "sidebar"');
+    expect(warnings).toContain('extension_open surface: "side-panel"');
     expect(warnings).toContain("did not run");
   }, 20_000);
 
@@ -198,6 +198,6 @@ describe("extension_open surface action on Firefox and the user gesture its list
 
     expect(fake.clicks).toHaveLength(0);
     expect(warnings).toContain("without user input");
-    expect(warnings).not.toContain('extension_open surface: "sidebar"');
+    expect(warnings).not.toContain('extension_open surface: "side-panel"');
   }, 20_000);
 });

@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { runExtensionCli } from "./exec";
+import { canonicalSurfaceName } from "./surface-names";
 import { nameRefusedInjection } from "./injection-refusal";
 import {
   outputFlagRefusalMessage,
@@ -49,7 +50,7 @@ export function toMcpSpeak(text: string): string {
       )
       .replace(
         /--context[= ](background|popup|options|sidebar|devtools|newtab|history|bookmarks|content|page)\b/g,
-        'context: "$1"',
+        (_, context: string) => `context: "${canonicalSurfaceName(context)}"`,
       )
       .replace(/--tab[= ](\d+|<[\w-]+>)/g, "tab: $1")
       .replace(/--url[= ]"([^"]+)"/g, 'url: "$1"')
@@ -61,7 +62,7 @@ export function toMcpSpeak(text: string): string {
       .replace(/--timeout[= ](\d+)/g, "timeout: $1")
       .replace(
         /\bextension open (popup|options|sidebar|newtab|history|bookmarks)\b/g,
-        'extension_open with surface: "$1"',
+        (_, surface: string) => `extension_open with surface: "${canonicalSurfaceName(surface)}"`,
       )
       .replace(/`?extension inspect --list-tabs`?/g, "extension_dom_snapshot with listTabs: true")
       .replace(/`?extension inspect\b`?/g, "extension_inspect")

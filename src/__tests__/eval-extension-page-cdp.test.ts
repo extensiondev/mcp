@@ -335,7 +335,7 @@ describe("extension_eval reaches an MV3 extension page over CDP, which the page 
       await evalTool.handler({
         projectPath: p.dir,
         expression: "1",
-        context: "sidebar",
+        context: "side-panel",
         browser: "chrome",
       }),
     );
@@ -395,7 +395,7 @@ describe("extension_eval reaches an MV3 extension page over CDP, which the page 
     await evalTool.handler({
       projectPath: p.dir,
       expression: "1",
-      context: "sidebar",
+      context: "side-panel",
       browser: "firefox",
     });
 

@@ -17,7 +17,7 @@ export const SAFARI_EVAL_LIMIT =
 
 export type SafariPageRoute = "window" | "no-window" | "no-session";
 
-const NEVER_REACHED = new Set(["popup", "options", "sidebar"]);
+const NEVER_REACHED = new Set(["popup", "options", "side-panel"]);
 
 function refusedByCsp(parsed: Record<string, any>): boolean {
   if (parsed.ok !== false) return false;

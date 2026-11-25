@@ -1014,7 +1014,7 @@ export async function handler(args: {
   if (chromiumManifest.content_scripts) surfaces.push("content");
 
   if (chromiumManifest.side_panel || manifest["firefox:sidebar_action"])
-    {surfaces.push("sidebar");}
+    {surfaces.push("side-panel");}
 
   if (chromiumManifest.action || manifest["firefox:browser_action"])
     {surfaces.push("action");}

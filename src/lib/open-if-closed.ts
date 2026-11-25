@@ -13,7 +13,7 @@ import { envelope } from "./envelope";
 import { parseFrameObject } from "./frame-json";
 import { resolveSessionBrowser } from "./session-browser";
 
-export const OPENABLE_SURFACES: readonly string[] = ["popup", "options", "sidebar", "newtab", "history", "bookmarks"];
+export const OPENABLE_SURFACES: readonly string[] = ["popup", "options", "side-panel", "newtab", "history", "bookmarks"];
 
 export interface OpenRequest {
   command: string;
@@ -104,7 +104,7 @@ function openFailedRefusal(request: OpenRequest, read: Record<string, any> | nul
     error: {
       code: typeof answer.error?.code === "string" ? answer.error.code : "E_SURFACE_DID_NOT_OPEN",
       name: typeof answer.error?.name === "string" ? answer.error.name : "SurfaceDidNotOpen",
-      message: `The ${request.surface} was not open${readWords}, and opening it the way ${openCall(request)} does did not land it: ${String(answer.error?.message ?? "no reason was given")}`,
+      message: `The ${request.surface.replace("-", " ")} was not open${readWords}, and opening it the way ${openCall(request)} does did not land it: ${String(answer.error?.message ?? "no reason was given")}`,
       ...(typeof answer.error?.engine === "string" ? { engine: answer.error.engine } : {}),
     },
     value: {
@@ -119,7 +119,7 @@ function openFailedRefusal(request: OpenRequest, read: Record<string, any> | nul
 }
 
 function stillClosedHint(request: OpenRequest, answer: Record<string, any>): string {
-  return `This call opened the ${request.surface} (extension_open answered ${String(answer.status ?? "ok")}) and the read that followed still found it closed; a popup window closes when focus leaves it. Open it as a tab with extension_open surface: "${request.surface}", asTab: true and pass the targetId it answers.`;
+  return `This call opened the ${request.surface.replace("-", " ")} (extension_open answered ${String(answer.status ?? "ok")}) and the read that followed still found it closed; a popup window closes when focus leaves it. Open it as a tab with extension_open surface: "${request.surface}", asTab: true and pass the targetId it answers.`;
 }
 
 export async function readOpeningIfClosed(read: () => Promise<string>, request: OpenRequest | null): Promise<string> {
@@ -143,7 +143,7 @@ export async function readOpeningIfClosed(read: () => Promise<string>, request: 
 
   addWarning(
     frame,
-    `The ${request.surface} was closed, so this call opened it the way ${openCall(request)} does, then read it; value.opened says so${wrapped ? " and value.result holds what the read answered" : ""}.`,
+    `The ${request.surface.replace("-", " ")} was closed, so this call opened it the way ${openCall(request)} does, then read it; value.opened says so${wrapped ? " and value.result holds what the read answered" : ""}.`,
   );
 
   if (surfaceClosed(frame)) frame.hint = stillClosedHint(request, open.answer);

@@ -129,7 +129,7 @@ describe("extension_inspect on Gecko reads a page inside the extension through i
     });
 
     expect(gecko.surfaceForExtensionUrl(dir, "firefox", "sidebar/index.html")).toEqual({
-      context: "sidebar",
+      context: "side-panel",
       document: "sidebar/index.html",
     });
 
@@ -150,7 +150,7 @@ describe("extension_inspect on Gecko reads a page inside the extension through i
 
     expect(result.ok).toBe(false);
     expect(result.error.code).toBe("E_NO_SURFACE_DOCUMENT");
-    expect(result.error.message).toContain("sidebar, newtab");
+    expect(result.error.message).toContain("side-panel, newtab");
     expect(result.error.message).toContain("Script injection cannot reach");
     expect(calls).toEqual([]);
   });

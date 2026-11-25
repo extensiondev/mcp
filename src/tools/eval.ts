@@ -143,7 +143,7 @@ export const schema = {
       },
       context: {
         type: "string",
-        enum: ["background", "popup", "options", "sidebar", "devtools", "newtab", "history", "bookmarks", "content", "page"],
+        enum: ["background", "popup", "options", "side-panel", "devtools", "newtab", "history", "bookmarks", "content", "page"],
         description:
           "Default page on a Chromium MV3 session, else background; a closed surface is opened first (as extension_open does).",
       },
@@ -422,7 +422,7 @@ async function evaluateOnChromiumExtensionPage(
         ? " The extension has no page open at all right now."
         : "";
     const sidebarWords =
-      context === "sidebar" && openPages.length
+      context === "side-panel" && openPages.length
         ? " A side panel that the extension points at another document per tab (chrome.sidePanel.setOptions with a path other than side_panel.default_path) is one of those pages: pass context: \"page\" with its url."
         : "";
 

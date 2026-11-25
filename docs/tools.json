@@ -1031,7 +1031,7 @@
         },
         {
           "name": "context",
-          "type": "\"content\" | \"page\" | \"popup\" | \"options\" | \"sidebar\" | \"devtools\" | \"newtab\" | \"history\" | \"bookmarks\"",
+          "type": "\"content\" | \"page\" | \"popup\" | \"options\" | \"side-panel\" | \"devtools\" | \"newtab\" | \"history\" | \"bookmarks\"",
           "required": false,
           "default": "content",
           "description": "A closed surface is opened first (as extension_open does); the answer then says opened: true."
@@ -1166,7 +1166,7 @@
         },
         {
           "name": "context",
-          "type": "\"popup\" | \"options\" | \"sidebar\" | \"devtools\" | \"newtab\" | \"history\" | \"bookmarks\"",
+          "type": "\"popup\" | \"options\" | \"side-panel\" | \"devtools\" | \"newtab\" | \"history\" | \"bookmarks\"",
           "required": false,
           "description": "An open surface (extension_open first)."
         },
@@ -1230,7 +1230,7 @@
         },
         {
           "name": "context",
-          "type": "\"popup\" | \"options\" | \"sidebar\" | \"devtools\" | \"newtab\" | \"history\" | \"bookmarks\"",
+          "type": "\"popup\" | \"options\" | \"side-panel\" | \"devtools\" | \"newtab\" | \"history\" | \"bookmarks\"",
           "required": false,
           "description": "An open surface (extension_open first)."
         },
@@ -1287,7 +1287,7 @@
         },
         {
           "name": "context",
-          "type": "\"background\" | \"popup\" | \"options\" | \"sidebar\" | \"devtools\" | \"newtab\" | \"history\" | \"bookmarks\" | \"content\" | \"page\"",
+          "type": "\"background\" | \"popup\" | \"options\" | \"side-panel\" | \"devtools\" | \"newtab\" | \"history\" | \"bookmarks\" | \"content\" | \"page\"",
           "required": false,
           "description": "Default page on a Chromium MV3 session, else background; a closed surface is opened first (as extension_open does)."
         },
@@ -1714,7 +1714,7 @@
         },
         {
           "name": "surface",
-          "type": "\"popup\" | \"options\" | \"sidebar\" | \"devtools\" | \"newtab\" | \"history\" | \"bookmarks\" | \"action\" | \"command\"",
+          "type": "\"popup\" | \"options\" | \"side-panel\" | \"devtools\" | \"newtab\" | \"history\" | \"bookmarks\" | \"action\" | \"command\"",
           "required": false,
           "description": "Surface to open; action and command replay; devtools is Chromium only."
         },
@@ -2358,7 +2358,7 @@
         },
         {
           "name": "context",
-          "type": "\"page\" | \"popup\" | \"options\" | \"sidebar\" | \"newtab\" | \"history\" | \"bookmarks\"",
+          "type": "\"page\" | \"popup\" | \"options\" | \"side-panel\" | \"newtab\" | \"history\" | \"bookmarks\"",
           "required": false,
           "default": "page",
           "description": "page: the tab url picks; else that open surface."

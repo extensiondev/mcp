@@ -211,7 +211,7 @@ describe("extension_eval context page on a Firefox tab that shows the extension'
 
     expect(result.ok).toBe(false);
     expect(result.error.message).toBe("Missing host permission for the tab");
-    expect(result.hint).toContain('context: "sidebar"');
+    expect(result.hint).toContain('context: "side-panel"');
     expect(result.hint).toContain("url");
   });
 });

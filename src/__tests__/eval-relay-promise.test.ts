@@ -147,7 +147,7 @@ describe("extension_eval on a relay surface never hands the relay a promise", ()
       await evalTool.handler({
         projectPath: dir,
         browser: "firefox",
-        context: "sidebar",
+        context: "side-panel",
         expression: "document.title",
       }),
     );

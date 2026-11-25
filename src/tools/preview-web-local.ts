@@ -64,6 +64,23 @@ function previewDevCheckout(startPaths: string[], label: string): string | null 
   return null;
 }
 
+function reservedNamePaths(dir: string, prefix: string): string[] {
+  let entries: fs.Dirent[];
+
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  return entries.flatMap((entry) => {
+    const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+    const descend = entry.isDirectory() && (prefix !== "" || entry.name.startsWith("_"));
+
+    return descend ? reservedNamePaths(path.join(dir, entry.name), relative) : [relative];
+  });
+}
+
 export const PREVIEW_WEB_LOCAL: PreviewWebLocal = {
   build: (projectPath, browser) => build.handler({ projectPath, browser }),
   distDirOf: (args, browser) =>
@@ -76,6 +93,7 @@ export const PREVIEW_WEB_LOCAL: PreviewWebLocal = {
     [args.projectPath, engineProjectRoot(args.projectPath)].every((root) => realPathInside(root, args.distPath as string) === null),
   manifestExists: (manifestPath) => fs.existsSync(manifestPath),
   readManifest: (manifestPath) => JSON.parse(fs.readFileSync(manifestPath, "utf8")),
+  distPaths: (distDir) => reservedNamePaths(distDir, ""),
   devCheckout: (projectPath, label) => previewDevCheckout([projectPath, process.cwd()], label),
   navigate: (projectPath, browser, url) => navigateToUrl(projectPath, browser, url),
   uploadPreview,

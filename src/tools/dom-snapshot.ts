@@ -104,7 +104,7 @@ export const schema = {
       },
       context: {
         type: "string",
-        enum: ["content", "page", "popup", "options", "sidebar", "devtools", "newtab", "history", "bookmarks"],
+        enum: ["content", "page", "popup", "options", "side-panel", "devtools", "newtab", "history", "bookmarks"],
         default: "content",
         description:
           "A closed surface is opened first (as extension_open does); the answer then says opened: true.",

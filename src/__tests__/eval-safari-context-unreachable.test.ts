@@ -104,7 +104,7 @@ describe("extension_eval on Safari names the contexts it cannot reach", () => {
       throw new Error("the engine must not be asked");
     };
 
-    for (const context of ["popup", "options", "sidebar"]) {
+    for (const context of ["popup", "options", "side-panel"]) {
       const result = JSON.parse(await evalTool.handler({ projectPath: dir, browser: "safari", context, expression: "1" }));
 
       expect(result.status).toBe("safari-context-unreachable");

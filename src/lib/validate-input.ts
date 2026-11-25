@@ -10,6 +10,7 @@ import { statSync } from "node:fs";
 import { resolve as resolveFolder } from "node:path";
 
 import { composedRefusal } from "./composed-refusal";
+import { SURFACE_NAME_ALIASES } from "./surface-names";
 
 export interface InputIssue {
   path: string;
@@ -314,6 +315,28 @@ const ARG_ALIASES: Record<string, string[]> = {
   to: ["outDir", "outputDir", "dest", "destination"],
 };
 
+function canonicalEnumValue(value: unknown, schema: PropertySchema | undefined): unknown {
+  if (!schema) return value;
+
+  if (Array.isArray(value)) return schema.items ? value.map((item) => canonicalEnumValue(item, schema.items)) : value;
+
+  if (value && typeof value === "object" && schema.properties) {
+    const out: Record<string, unknown> = { ...(value as Record<string, unknown>) };
+
+    for (const [key, prop] of Object.entries(schema.properties)) {
+      if (out[key] !== undefined) out[key] = canonicalEnumValue(out[key], prop);
+    }
+
+    return out;
+  }
+
+  if (typeof value !== "string" || !schema.enum || schema.enum.includes(value)) return value;
+
+  const canonical = SURFACE_NAME_ALIASES[value];
+
+  return canonical !== undefined && schema.enum.includes(canonical) ? canonical : value;
+}
+
 export function normalizeArgAliases(
   inputSchema: Record<string, unknown>,
   args: Record<string, unknown>,
@@ -335,6 +358,10 @@ export function normalizeArgAliases(
         break;
       }
     }
+  }
+
+  for (const [key, prop] of Object.entries(props)) {
+    if (out[key] !== undefined) out[key] = canonicalEnumValue(out[key], prop);
   }
 
   return out;

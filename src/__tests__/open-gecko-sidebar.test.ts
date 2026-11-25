@@ -42,7 +42,7 @@ vi.mock("../lib/act", async (importOriginal) => {
               command: "extension_open",
               status: "ok",
               value: {
-                context: "sidebar",
+                context: "side-panel",
                 url: "moz-extension://abc/sidebar/index.html",
                 title: "Sidebar",
                 summary: { bodyChildCount: 2 },
@@ -51,7 +51,7 @@ vi.mock("../lib/act", async (importOriginal) => {
           : actVerbAnswer(
               actFailure(
                 "open",
-                { code: "E_TARGET_NOT_FOUND", name: "Unsupported", message: "surface 'sidebar' is not open", engine: "firefox" },
+                { code: "E_TARGET_NOT_FOUND", name: "Unsupported", message: "surface 'side-panel' is not open", engine: "firefox" },
                 "not-found",
               ),
               "extension_open",
@@ -115,24 +115,24 @@ describe("extension_open sidebar on Gecko when the engine names a Chromium API i
     const dir = project(MANIFEST);
 
     const result = JSON.parse(
-      await open.handler({ projectPath: dir, browser: "firefox", surface: "sidebar" }),
+      await open.handler({ projectPath: dir, browser: "firefox", surface: "side-panel" }),
     );
 
     expect(result.ok).toBe(true);
     expect(result.status).toBe("already-open");
     expect(result.value).toMatchObject({
-      surface: "sidebar",
+      surface: "side-panel",
       document: "sidebar/index.html",
       alreadyOpen: true,
       url: "moz-extension://abc/sidebar/index.html",
     });
 
-    expect(result.hint).toContain("context: 'sidebar'");
+    expect(result.hint).toContain("context: 'side-panel'");
     expect(result.hint).toContain("user gesture");
     expect(JSON.stringify(result)).not.toContain("sidePanel");
     const probe = calls.find((c) => c[0] === "inspect");
     expect(probe).toBeDefined();
-    expect(probe?.[probe.indexOf("--context") + 1]).toBe("sidebar");
+    expect(probe?.[probe.indexOf("--context") + 1]).toBe("side-panel");
     expect(navigations).toEqual([]);
   });
 
@@ -141,14 +141,14 @@ describe("extension_open sidebar on Gecko when the engine names a Chromium API i
     panelOpen = false;
 
     const result = JSON.parse(
-      await open.handler({ projectPath: dir, browser: "firefox", surface: "sidebar" }),
+      await open.handler({ projectPath: dir, browser: "firefox", surface: "side-panel" }),
     );
 
     expect(result.ok).toBe(true);
     expect(result.status).toBe("navigated");
     expect(navigations).toEqual(["moz-extension://abc/sidebar/index.html"]);
     expect(result.value.renderedAsTab).toMatchObject({
-      surface: "sidebar",
+      surface: "side-panel",
       document: "sidebar/index.html",
     });
 
@@ -169,7 +169,7 @@ describe("extension_open sidebar on Gecko when the engine names a Chromium API i
       );
 
     const result = JSON.parse(
-      await open.handler({ projectPath: dir, browser: "firefox", surface: "sidebar" }),
+      await open.handler({ projectPath: dir, browser: "firefox", surface: "side-panel" }),
     );
 
     expect(result.ok).toBe(true);
@@ -182,12 +182,12 @@ describe("extension_open sidebar on Gecko when the engine names a Chromium API i
   it("calls the panel unverified when a tab it rendered earlier shows the same document", async () => {
     const dir = project(MANIFEST);
     panelOpen = false;
-    const first = JSON.parse(await open.handler({ projectPath: dir, browser: "firefox", surface: "sidebar" }));
+    const first = JSON.parse(await open.handler({ projectPath: dir, browser: "firefox", surface: "side-panel" }));
     expect(first.value.renderedAsTab).toBeDefined();
     bridgeTabs = [{ tabId: 3, url: "moz-extension://abc/sidebar/index.html", title: "Sidebar" }];
     panelOpen = true;
 
-    const second = JSON.parse(await open.handler({ projectPath: dir, browser: "firefox", surface: "sidebar" }));
+    const second = JSON.parse(await open.handler({ projectPath: dir, browser: "firefox", surface: "side-panel" }));
 
     expect(second.ok).toBe(true);
     expect(second.status).toBe("already-open-unverified");
@@ -199,7 +199,7 @@ describe("extension_open sidebar on Gecko when the engine names a Chromium API i
     const dir = project({ manifest_version: 2, name: "F", browser_action: {} });
 
     const result = JSON.parse(
-      await open.handler({ projectPath: dir, browser: "firefox", surface: "sidebar" }),
+      await open.handler({ projectPath: dir, browser: "firefox", surface: "side-panel" }),
     );
 
     expect(result.ok).toBe(false);
@@ -210,12 +210,12 @@ describe("extension_open sidebar on Gecko when the engine names a Chromium API i
   it("passes an engine success and unrelated failures through untouched", async () => {
     const dir = project(MANIFEST);
     openResult = () =>
-      envelope({ ok: true, command: "extension_open", status: "ok", value: { opened: "sidebar" } });
+      envelope({ ok: true, command: "extension_open", status: "ok", value: { opened: "side-panel" } });
 
     const opened = JSON.parse(
-      await open.handler({ projectPath: dir, browser: "firefox", surface: "sidebar" }),
+      await open.handler({ projectPath: dir, browser: "firefox", surface: "side-panel" }),
     );
-    expect(opened.value.opened).toBe("sidebar");
+    expect(opened.value.opened).toBe("side-panel");
 
     openResult = () =>
       actVerbAnswer(
@@ -228,7 +228,7 @@ describe("extension_open sidebar on Gecko when the engine names a Chromium API i
       );
 
     const failed = JSON.parse(
-      await open.handler({ projectPath: dir, browser: "firefox", surface: "sidebar" }),
+      await open.handler({ projectPath: dir, browser: "firefox", surface: "side-panel" }),
     );
     expect(failed.error.code).toBe("E_SESSION_NOT_FOUND");
     expect(failed.value?.renderedAsTab).toBeUndefined();

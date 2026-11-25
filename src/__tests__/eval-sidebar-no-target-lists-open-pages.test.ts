@@ -97,7 +97,7 @@ describe("404: a Chrome side panel is a page target at its document url, and a c
       { id: "panel", type: "page", url: panel, title: "Panel" },
     ];
 
-    const result = JSON.parse(await evalTool.handler({ projectPath: p.dir, browser: "chrome", context: "sidebar", expression: "location.href" }));
+    const result = JSON.parse(await evalTool.handler({ projectPath: p.dir, browser: "chrome", context: "side-panel", expression: "location.href" }));
 
     expect(result.ok).toBe(true);
     expect(result.status).toBe("evaluated");
@@ -125,12 +125,12 @@ describe("404: a Chrome side panel is a page target at its document url, and a c
     openReply = () => {
       cdpTargets = [...cdpTargets, { id: "panel", type: "page", url: panel, title: "Panel" }];
 
-      return JSON.stringify({ ok: true, command: "extension_open", status: "ok", value: { surface: "sidebar", opened: true } });
+      return JSON.stringify({ ok: true, command: "extension_open", status: "ok", value: { surface: "side-panel", opened: true } });
     };
 
-    const result = JSON.parse(await evalTool.handler({ projectPath: p.dir, browser: "chrome", context: "sidebar", expression: "location.href" }));
+    const result = JSON.parse(await evalTool.handler({ projectPath: p.dir, browser: "chrome", context: "side-panel", expression: "location.href" }));
 
-    expect(opens).toEqual([{ projectPath: p.dir, browser: "chrome", surface: "sidebar", timeout: undefined }]);
+    expect(opens).toEqual([{ projectPath: p.dir, browser: "chrome", surface: "side-panel", timeout: undefined }]);
     expect(result.ok).toBe(true);
     expect(result.status).toBe("evaluated");
     expect(result.value).toEqual({ result: "panel", opened: true });
@@ -155,7 +155,7 @@ describe("404: a Chrome side panel is a page target at its document url, and a c
         hint: "Retry with asTab: true to render the surface document in a tab instead.",
       });
 
-    const result = JSON.parse(await evalTool.handler({ projectPath: p.dir, browser: "chrome", context: "sidebar", expression: "1" }));
+    const result = JSON.parse(await evalTool.handler({ projectPath: p.dir, browser: "chrome", context: "side-panel", expression: "1" }));
 
     expect(opens).toHaveLength(1);
     expect(result.ok).toBe(false);
@@ -175,7 +175,7 @@ describe("404: a Chrome side panel is a page target at its document url, and a c
       { id: "tab", type: "page", url: "https://www.youtube.com/", title: "YouTube" },
     ];
 
-    const result = JSON.parse(await evalTool.handler({ projectPath: p.dir, browser: "chrome", context: "sidebar", expression: "1" }));
+    const result = JSON.parse(await evalTool.handler({ projectPath: p.dir, browser: "chrome", context: "side-panel", expression: "1" }));
 
     expect(result.ok).toBe(false);
     expect(result.error.message).toContain("no page open at all");

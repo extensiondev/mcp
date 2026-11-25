@@ -41,12 +41,12 @@ export function nameRefusedInjection(frame: any, target: InjectionTarget): void 
   if (namesExtensionPage(target.url, message)) {
     frame.status = "extension-page-unreachable";
     frame.error.code = "E_EXTENSION_PAGE_UNREACHABLE";
-    frame.hint = `The tab is open, but ${browser} refuses script injection into the extension's own pages, so nothing ran there. Reach the page through its surface instead: context: "options", "popup", "sidebar" or "newtab" on an extension_dev session, whose pages carry the relay; extension_dom_snapshot with the same context reads its DOM.`;
+    frame.hint = `The tab is open, but ${browser} refuses script injection into the extension's own pages, so nothing ran there. Reach the page through its surface instead: context: "options", "popup", "side-panel" or "newtab" on an extension_dev session, whose pages carry the relay; extension_dom_snapshot with the same context reads its DOM.`;
 
     return;
   }
 
   frame.status = "page-not-scriptable";
   frame.error.code = "E_PAGE_NOT_SCRIPTABLE";
-  frame.hint = `The tab is open, but ${browser} refused to script it, so nothing ran there. A browser page (chrome://, about:) is never scriptable. Any other web page, the extension store included, is scripted through the extension only with host access to it (host_permissions, or activeTab after a click on the extension), and the store refuses injection even then, but a debug read needs neither: extension_eval with context: "page" and url reads a web page over the debugger protocol whenever the session records a debugger port, so keep the manifest as it is. If the tab shows one of the extension's own pages, which injection never enters either, use its surface context instead (context: "options", "popup", "sidebar" or "newtab"). Otherwise pick a page the extension may script (extension_dom_snapshot with listTabs: true lists the open tabs).`;
+  frame.hint = `The tab is open, but ${browser} refused to script it, so nothing ran there. A browser page (chrome://, about:) is never scriptable. Any other web page, the extension store included, is scripted through the extension only with host access to it (host_permissions, or activeTab after a click on the extension), and the store refuses injection even then, but a debug read needs neither: extension_eval with context: "page" and url reads a web page over the debugger protocol whenever the session records a debugger port, so keep the manifest as it is. If the tab shows one of the extension's own pages, which injection never enters either, use its surface context instead (context: "options", "popup", "side-panel" or "newtab"). Otherwise pick a page the extension may script (extension_dom_snapshot with listTabs: true lists the open tabs).`;
 }

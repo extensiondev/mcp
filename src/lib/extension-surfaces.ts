@@ -20,7 +20,7 @@ import { cutAt } from "./linear-text";
 export const EXTENSION_PAGE_CONTEXTS = [
   "popup",
   "options",
-  "sidebar",
+  "side-panel",
   "devtools",
   "newtab",
   "history",

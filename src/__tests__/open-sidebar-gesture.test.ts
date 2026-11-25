@@ -260,7 +260,7 @@ describe("extension_open sidebar on Chromium when Chrome demands a user gesture"
     );
 
     const result = JSON.parse(
-      await open.handler({ projectPath: p.dir, surface: "sidebar" }),
+      await open.handler({ projectPath: p.dir, surface: "side-panel" }),
     );
 
     expect(result.ok).toBe(false);
@@ -274,15 +274,15 @@ describe("extension_open sidebar on Chromium when Chrome demands a user gesture"
     const p = project();
 
     const result = JSON.parse(
-      await open.handler({ projectPath: p.dir, surface: "sidebar" }),
+      await open.handler({ projectPath: p.dir, surface: "side-panel" }),
     );
 
     expect(cliCalls).toHaveLength(1);
-    expect(cliCalls[0].slice(0, 2)).toEqual(["open", "sidebar"]);
+    expect(cliCalls[0].slice(0, 2)).toEqual(["open", "side-panel"]);
     expect(result.ok).toBe(true);
     expect(result.status).toBe("opened");
     expect(result.value).toEqual({
-      surface: "sidebar",
+      surface: "side-panel",
       gesture: "synthetic-click",
       surfaceTarget: { targetId: "panel", url: p.url },
     });
@@ -290,13 +290,13 @@ describe("extension_open sidebar on Chromium when Chrome demands a user gesture"
     expect(result.warnings[0]).toContain("synthetic");
     expect(result.warnings[0]).toContain("toolbar wiring");
     expect(result.warnings[0]).toContain("not exercised");
-    expect(result.hint).toContain("context: 'sidebar'");
+    expect(result.hint).toContain("context: 'side-panel'");
   });
 
   it("hosts the gesture in a tab at the sidebar document, clicks it over CDP, then closes that tab", async () => {
     const p = project();
 
-    await open.handler({ projectPath: p.dir, surface: "sidebar" });
+    await open.handler({ projectPath: p.dir, surface: "side-panel" });
 
     const created = commands.find((c) => c.method === "Target.createTarget");
     expect(created?.params.url).toBe(p.url);
@@ -321,13 +321,13 @@ describe("extension_open sidebar on Chromium when Chrome demands a user gesture"
 
   it("never mistakes a tab this server rendered earlier for the panel", async () => {
     const p = project();
-    const rendered = JSON.parse(await open.handler({ projectPath: p.dir, surface: "sidebar", asTab: true }));
+    const rendered = JSON.parse(await open.handler({ projectPath: p.dir, surface: "side-panel", asTab: true }));
     expect(rendered.ok).toBe(true);
     const renderedId = rendered.value.target.targetId;
     expect(open.renderedTabTargets.has(renderedId)).toBe(true);
     panelAppears = false;
 
-    const result = JSON.parse(await open.handler({ projectPath: p.dir, surface: "sidebar" }));
+    const result = JSON.parse(await open.handler({ projectPath: p.dir, surface: "side-panel" }));
 
     expect(result.value?.gesture).toBeUndefined();
     expect(result.value?.surfaceTarget?.targetId).not.toBe(renderedId);
@@ -339,7 +339,7 @@ describe("extension_open sidebar on Chromium when Chrome demands a user gesture"
     hostStaysListedAfterClose = true;
 
     const result = JSON.parse(
-      await open.handler({ projectPath: p.dir, surface: "sidebar" }),
+      await open.handler({ projectPath: p.dir, surface: "side-panel" }),
     );
 
     expect(result.ok).toBe(true);
@@ -351,13 +351,13 @@ describe("extension_open sidebar on Chromium when Chrome demands a user gesture"
     panelRejects = "No active side panel for windowId: 7";
 
     const result = JSON.parse(
-      await open.handler({ projectPath: p.dir, surface: "sidebar" }),
+      await open.handler({ projectPath: p.dir, surface: "side-panel" }),
     );
 
     expect(result.ok).toBe(true);
     expect(result.status).toBe("navigated");
     expect(result.value.renderedAsTab).toMatchObject({
-      surface: "sidebar",
+      surface: "side-panel",
       extensionId: p.id,
     });
 
@@ -376,11 +376,11 @@ describe("extension_open sidebar on Chromium when Chrome demands a user gesture"
     process.env.EXTENSION_HEADLESS = "1";
 
     const result = JSON.parse(
-      await open.handler({ projectPath: p.dir, surface: "sidebar" }),
+      await open.handler({ projectPath: p.dir, surface: "side-panel" }),
     );
 
     expect(result.ok).toBe(true);
-    expect(result.value.renderedAsTab.surface).toBe("sidebar");
+    expect(result.value.renderedAsTab.surface).toBe("side-panel");
     expect(clicks()).toEqual([]);
     expect(result.warnings.join("\n")).toContain("headless");
   });
@@ -395,7 +395,7 @@ describe("extension_open sidebar on Chromium when Chrome demands a user gesture"
     });
 
     const result = JSON.parse(
-      await open.handler({ projectPath: p.dir, surface: "sidebar" }),
+      await open.handler({ projectPath: p.dir, surface: "side-panel" }),
     );
 
     expect(result.error.code).toBe("E_SESSION_NOT_FOUND");
@@ -410,7 +410,7 @@ describe("extension_open sidebar on Chromium when Chrome demands a user gesture"
     const result = JSON.parse(
       await open.handler({
         projectPath: p.dir,
-        surface: "sidebar",
+        surface: "side-panel",
         browser: "firefox",
       }),
     );
@@ -436,9 +436,9 @@ describe("extension_open action on Chromium when the click has no popup and no l
 
     const result = JSON.parse(await open.handler({ projectPath: p.dir, surface: "action" }));
 
-    expect(cliCalls.map((cli) => cli[1])).toEqual(["action", "sidebar"]);
+    expect(cliCalls.map((cli) => cli[1])).toEqual(["action", "side-panel"]);
     expect(result.ok).toBe(true);
-    expect(result.value).toMatchObject({ surface: "sidebar", gesture: "synthetic-click", triggered: "sidePanel", openPanelOnActionClick: read, surfaceTarget: { targetId: "panel" } });
+    expect(result.value).toMatchObject({ surface: "side-panel", gesture: "synthetic-click", triggered: "sidePanel", openPanelOnActionClick: read, surfaceTarget: { targetId: "panel" } });
     expect(result.warnings.join("\n")).toContain(said);
     expect(result.warnings.join("\n")).toContain("toolbar click cannot be replayed");
   });
@@ -454,7 +454,7 @@ describe("extension_open action on Chromium when the click has no popup and no l
     expect(result.ok).toBe(false);
     expect(result.error.code).toBe("E_NOT_IMPLEMENTED");
     expect(result.error.hint).toContain("openPanelOnActionClick: false");
-    expect(result.error.hint).toMatch(/extension_open surface: "sidebar"\.$/);
+    expect(result.error.hint).toMatch(/extension_open surface: "side-panel"\.$/);
     expect(cliCalls.map((cli) => cli[1])).toEqual(["action"]);
     expect(clicks()).toEqual([]);
   });

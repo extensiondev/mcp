@@ -21,6 +21,7 @@ import {
   templatesOrigin,
 } from "../lib/platform-hold";
 import { PREVIEW_WEB_LOCAL } from "./preview-web-local";
+import { renderableSurfaces } from "../lib/surface-names";
 import { dropTrailing } from "../lib/linear-text";
 import { jsonReadFailure } from "../lib/manifest-path";
 
@@ -33,6 +34,7 @@ export interface PreviewWebLocal {
   distOutsideProject(args: { projectPath: string; distPath?: string }): boolean;
   manifestExists(manifestPath: string): boolean;
   readManifest(manifestPath: string): Record<string, any>;
+  distPaths(distDir: string): string[];
   devCheckout(projectPath: string, label: string): string | null;
   navigate(projectPath: string, browser: string, url: string): Promise<string>;
   uploadPreview: typeof uploadPreview;
@@ -235,32 +237,6 @@ function leftOutNote(secrets: string[]): string {
   return ` ${secrets.length === 1 ? "One credential file stayed" : `${secrets.length} credential files stayed`} on this machine and are not in the link: ${secrets.join(", ")} (leftOut.secrets).`;
 }
 
-function detectSurfaces(manifest: Record<string, any>): string[] {
-  const surfaces: string[] = [];
-
-  const push = (surface: string, condition: unknown) => {
-    if (condition) surfaces.push(surface);
-  };
-
-  const action = manifest.action ?? manifest.browser_action;
-  push("popup", action?.default_popup);
-  push("newtab", manifest.chrome_url_overrides?.newtab);
-  push("history", manifest.chrome_url_overrides?.history);
-  push("bookmarks", manifest.chrome_url_overrides?.bookmarks);
-  push("options", manifest.options_ui?.page || manifest.options_page);
-  push("background-page", manifest.background?.page);
-  push("background-worker", manifest.background?.service_worker);
-  push(
-    "side-panel",
-    manifest.side_panel?.default_path || manifest.sidebar_action?.default_panel,
-  );
-
-  push("devtools", manifest.devtools_page);
-  push("sandbox-page", manifest.sandbox?.pages?.[0]);
-
-  return surfaces;
-}
-
 export const schema = {
   name: "extension_preview_web",
   description:
@@ -441,7 +417,7 @@ export async function previewWebWith(args: PreviewWebArgs, local: PreviewWebLoca
       version: manifest.version ?? "0.0.0",
       manifestVersion: manifest.manifest_version === 2 ? 2 : 3,
     },
-    surfaces: detectSurfaces(manifest),
+    surfaces: renderableSurfaces(manifest, local.distPaths(distDir)),
     ...(buildResult ? { built: true } : { built: false }),
   };
 

@@ -67,6 +67,7 @@ describe("extension_preview_web", () => {
       distOutsideProject: vi.fn(() => false),
       manifestExists: vi.fn(() => true),
       readManifest: vi.fn(() => ({ ...MANIFEST })),
+      distPaths: vi.fn(() => []),
       devCheckout: vi.fn(() => null),
       navigate: vi.fn(async () => JSON.stringify({ ok: true })),
       uploadPreview: vi.fn(async () => ({ ok: true as const, data: { artifactId: "gen_probe", previewUrl: "http://preview.extension.localhost/?preview=gen_probe", leftOut: { secrets: [] } }, body: {} })),
@@ -90,6 +91,38 @@ describe("extension_preview_web", () => {
     expect(local.devCheckout).toHaveBeenCalledWith("/elsewhere/widget", "preview.extension.dev");
     expect(local.recordSharedPreview).toHaveBeenCalledWith("/elsewhere/widget", expect.objectContaining({ artifactId: "gen_probe", browser: "chrome" }));
     expect(JSON.parse(out)).toMatchObject({ ok: true, status: "previewed", value: { built: true, share: { ok: true, artifactId: "gen_probe" } } });
+  });
+
+  it.each([
+    { name: "an empty action beside a browser_action popup", manifest: { action: {}, browser_action: { default_popup: "p.html" } }, files: [], surfaces: ["popup"] },
+    { name: "an empty options_ui.page beside options_page", manifest: { options_ui: { page: "" }, options_page: "o.html" }, files: [], surfaces: [] },
+    { name: "an empty side_panel path beside a sidebar_action panel", manifest: { side_panel: { default_path: "" }, sidebar_action: { default_panel: "s.html" } }, files: [], surfaces: [] },
+    { name: "a sidebar_action panel", manifest: { sidebar_action: { default_panel: "s.html" } }, files: [], surfaces: ["side-panel"] },
+    { name: "a sandbox list whose first page is empty", manifest: { sandbox: { pages: [""] } }, files: [], surfaces: ["sandbox-page"] },
+    { name: "two url overrides Chrome refuses to install", manifest: { action: { default_popup: "p.html" }, chrome_url_overrides: { newtab: "n.html", history: "h.html" } }, files: [], surfaces: [] },
+    { name: "a reserved root name Chrome refuses to install", manifest: { action: { default_popup: "p.html" } }, files: ["_private/x.js"], surfaces: [] },
+    { name: "the exempt and cleaned underscore names", manifest: { action: { default_popup: "p.html" } }, files: ["_locales/en/messages.json", "_metadata/verified_contents.json"], surfaces: ["popup"] },
+    {
+      name: "every surface in the emulator's order",
+      manifest: { devtools_page: "d.html", side_panel: { default_path: "s.html" }, sandbox: { pages: ["x.html"] }, background: { service_worker: "w.js", page: "b.html" }, options_ui: { page: "o.html" }, chrome_url_overrides: { bookmarks: "k.html" }, action: { default_popup: "p.html" } },
+      files: [],
+      surfaces: ["popup", "bookmarks", "options", "background-page", "background-worker", "sandbox-page", "side-panel", "devtools"],
+    },
+  ])("1160: answers the surfaces the emulator's deriveRenderableSurfaces renders for $name", async ({ manifest, files, surfaces }) => {
+    const dir = tmpDist({ manifest_version: 3, name: "Parity", version: "1.0.0", ...manifest });
+
+    for (const file of files) {
+      fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+      fs.writeFileSync(path.join(dir, file), "{}");
+    }
+
+    try {
+      const out = JSON.parse(await handler({ projectPath: dir, build: false, distPath: dir, probe: false }));
+
+      expect(out.value.surfaces).toEqual(surfaces);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it.skipIf(process.platform === "win32")("1058: refuses a distPath outside the project, a link out of it included, before anything is read or uploaded", async () => {

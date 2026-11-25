@@ -289,16 +289,16 @@ describe("extension_screenshot on Chromium captures the page over CDP", () => {
     opens.answer = () => {
       targets.push({ id: "S1", type: "page", url: `chrome-extension://${id}/sidebar/index.html` });
 
-      return JSON.stringify({ ok: true, command: "extension_open", status: "ok", value: { surface: "sidebar", opened: true } });
+      return JSON.stringify({ ok: true, command: "extension_open", status: "ok", value: { surface: "side-panel", opened: true } });
     };
 
-    const out = await run({ projectPath: dir, browser: "chrome", context: "sidebar" });
+    const out = await run({ projectPath: dir, browser: "chrome", context: "side-panel" });
 
-    expect(opens.calls).toEqual([{ projectPath: dir, browser: "chrome", surface: "sidebar", timeout: undefined }]);
+    expect(opens.calls).toEqual([{ projectPath: dir, browser: "chrome", surface: "side-panel", timeout: undefined }]);
     expect(out.ok).toBe(true);
     expect(out.value.opened).toBe(true);
     expect(out.value.url).toBe(`chrome-extension://${id}/sidebar/index.html`);
-    expect(out.warnings.join(" ")).toContain('opened it the way extension_open surface: "sidebar" does');
+    expect(out.warnings.join(" ")).toContain('opened it the way extension_open surface: "side-panel" does');
   });
 
   it("518: refuses with the open's own reason when the closed sidebar does not open, writing nothing", async () => {
@@ -308,15 +308,15 @@ describe("extension_screenshot on Chromium captures the page over CDP", () => {
     opens.answer = () =>
       openRefusal("surface-did-not-open", "E_SURFACE_DID_NOT_OPEN", "The engine reported the sidebar as opened, but no document for it appeared within 3s.", "Retry with asTab: true to render the surface document in a tab instead.");
 
-    const out = await run({ projectPath: dir, browser: "chrome", context: "sidebar" });
+    const out = await run({ projectPath: dir, browser: "chrome", context: "side-panel" });
 
     expect(out.ok).toBe(false);
     expect(out.status).toBe("surface-did-not-open");
     expect(out.error.code).toBe("E_SURFACE_DID_NOT_OPEN");
-    expect(out.error.message).toContain("The sidebar was not open (No open page at");
+    expect(out.error.message).toContain("The side panel was not open (No open page at");
     expect(out.error.message).toContain("no document for it appeared within 3s");
     expect(out.hint).toBe("Retry with asTab: true to render the surface document in a tab instead.");
-    expect(out.value).toMatchObject({ surface: "sidebar", opened: false });
+    expect(out.value).toMatchObject({ surface: "side-panel", opened: false });
     expect(chrome.methods).not.toContain("Page.captureScreenshot");
     expect(fs.existsSync(path.join(browserArtifactsDir(dir, "chrome"), "screenshots"))).toBe(false);
   });
@@ -385,9 +385,9 @@ describe("extension_screenshot on Firefox captures the tab over the debugger pro
     const firefox = await fakeFirefox([{ url: "https://example.com/", selected: true }]);
     const dir = project("firefox", readyContract("dev", "firefox", { rdpPort: firefox.port }));
 
-    const out = await run({ projectPath: dir, browser: "firefox", context: "sidebar" });
+    const out = await run({ projectPath: dir, browser: "firefox", context: "side-panel" });
 
-    expect(opens.calls).toEqual([{ projectPath: dir, browser: "firefox", surface: "sidebar", timeout: undefined }]);
+    expect(opens.calls).toEqual([{ projectPath: dir, browser: "firefox", surface: "side-panel", timeout: undefined }]);
     expect(out.ok).toBe(false);
     expect(out.error.code).toBe("E_NO_SESSION");
     expect(out.error.message).toContain("sidebar/index.html");

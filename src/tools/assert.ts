@@ -86,6 +86,7 @@ import { serverVersion } from "../lib/producer-version";
 import { openCall, openClosedSurface, openFailedSentence } from "../lib/open-if-closed";
 import { notReadyCheck } from "../lib/verdict-not-ready";
 import { dropTrailing } from "../lib/linear-text";
+import { canonicalSurfaceName } from "../lib/surface-names";
 
 const COMMAND = "extension_assert";
 
@@ -100,7 +101,7 @@ const CONSOLE = "console-errors-empty";
 const SURFACES = [
   "popup",
   "options",
-  "sidebar",
+  "side-panel",
   "newtab",
   "history",
   "bookmarks",
@@ -112,7 +113,7 @@ const STORAGE_CONTEXTS = [
   "background",
   "popup",
   "options",
-  "sidebar",
+  "side-panel",
   "content",
 ] as const;
 
@@ -228,7 +229,7 @@ export function parseClauses(raw: unknown): ParseResult {
     }
 
     if (kind === SURFACE) {
-      const surface = String(clause.surface ?? "");
+      const surface = canonicalSurfaceName(String(clause.surface ?? ""));
 
       if (!(SURFACES as readonly string[]).includes(surface)) {
         issues.push(
@@ -303,7 +304,7 @@ export function parseClauses(raw: unknown): ParseResult {
       }
 
       const context =
-        clause.context === undefined ? undefined : String(clause.context);
+        clause.context === undefined ? undefined : canonicalSurfaceName(String(clause.context));
 
       if (
         context !== undefined &&

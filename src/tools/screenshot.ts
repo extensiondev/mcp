@@ -89,7 +89,7 @@ import { resolveExtensionId, surfaceDocument, SURFACE_MANIFEST_KEYS } from "./op
 import type { ListingStore } from "../lib/store-md-declarations";
 
 const COMMAND = "extension_screenshot";
-const SURFACES = ["popup", "options", "sidebar", "newtab", "history", "bookmarks"];
+const SURFACES = ["popup", "options", "side-panel", "newtab", "history", "bookmarks"];
 const DEFAULT_TIMEOUT_MS = 15_000;
 
 export const schema = {
@@ -582,7 +582,7 @@ async function onGecko(args: Args, browser: string, context: string, timeoutMs: 
     const doc = surfaceDocumentOrRefusal(args, browser, context);
     if ("refusal" in doc) return doc.refusal;
 
-    const panel = context === "sidebar" ? await captureGeckoSidebarPanel(args.projectPath, browser, resolved.port, args, timeoutMs) : null;
+    const panel = context === "side-panel" ? await captureGeckoSidebarPanel(args.projectPath, browser, resolved.port, args, timeoutMs) : null;
     if (panel && "outcome" in panel) return captured(args, browser, context, panel.outcome, panel.url, "rdp", [panel.note], undefined, undefined, undefined, capturedIn);
 
     tab =
@@ -591,7 +591,7 @@ async function onGecko(args: Args, browser: string, context: string, timeoutMs: 
         "no-target",
         "E_NO_TARGET",
         `No ${browser} tab shows ${doc.document}${panel ? `, and ${panel.closed}` : ""}. The debugger protocol captures pages shown in tabs${panel ? " and the open sidebar panel" : ""}; a popup in its own window is not a tab.`,
-        context === "sidebar" ? 'This call opens a closed panel before capturing; if it closed again first, open it with extension_open surface: "sidebar" and retry.' : `This call opens a closed ${context} in a tab before capturing; if that tab closed again first, open it with extension_open surface: "${context}", asTab: true and retry.`,
+        context === "side-panel" ? 'This call opens a closed panel before capturing; if it closed again first, open it with extension_open surface: "side-panel" and retry.' : `This call opens a closed ${context} in a tab before capturing; if that tab closed again first, open it with extension_open surface: "${context}", asTab: true and retry.`,
       );
   } else if (args.url && /^moz-extension:\/\//.test(args.url)) {
     tab = choose(geckoExtensionTabsByUrl(tabs, args.url), args.url);
@@ -726,7 +726,7 @@ export async function handler(args: Args): Promise<string> {
 
   const timeoutMs = args.timeout ?? DEFAULT_TIMEOUT_MS;
 
-  const opening = surfaceOpening(COMMAND, { ...args, browser, context }, (surface, family) => isGeckoFamily(family) && surface !== "sidebar");
+  const opening = surfaceOpening(COMMAND, { ...args, browser, context }, (surface, family) => isGeckoFamily(family) && surface !== "side-panel");
 
   if (WEBKIT_FAMILY.has(browser)) return onWebKit(args, browser, context, timeoutMs);
   if (isGeckoFamily(browser)) return readOpeningIfClosed(() => onGecko(args, browser, context, timeoutMs), opening);

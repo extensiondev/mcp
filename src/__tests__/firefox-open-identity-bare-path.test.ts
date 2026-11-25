@@ -76,7 +76,7 @@ function project(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-ff-open-identity-"));
   dirs.push(dir);
   const dist = path.join(dir, "dist", "firefox");
-  fs.mkdirSync(path.join(dist, "sidebar"), { recursive: true });
+  fs.mkdirSync(path.join(dist, "side-panel"), { recursive: true });
   fs.writeFileSync(
     path.join(dist, "manifest.json"),
     JSON.stringify({
@@ -88,7 +88,7 @@ function project(): string {
     }),
   );
 
-  fs.writeFileSync(path.join(dist, "sidebar", "index.html"), "<!doctype html>");
+  fs.writeFileSync(path.join(dist, "side-panel", "index.html"), "<!doctype html>");
   const contract = readyContractPath(dir, "firefox");
   fs.mkdirSync(path.dirname(contract), { recursive: true });
   fs.writeFileSync(contract, JSON.stringify({ schema: 1, status: "ready", command: "dev", browser: "firefox", rdpPort: 9222, pid: process.pid }));
@@ -172,7 +172,7 @@ describe("extension_eval page accepts the bare extension path extension_open acc
       }
 
       if (context === "background") return envelope({ ok: true, command: "extension_eval", status: "ok", value: BASE });
-      if (context === "sidebar") return envelope({ ok: true, command: "extension_eval", status: "ok", value: "Sidebar" });
+      if (context === "side-panel") return envelope({ ok: true, command: "extension_eval", status: "ok", value: "Sidebar" });
 
       return envelope({ ok: true, command: "x", status: "ok", value: null });
     };
@@ -183,7 +183,7 @@ describe("extension_eval page accepts the bare extension path extension_open acc
 
     expect(result.ok).toBe(true);
     expect(result.value).toBe("Sidebar");
-    expect(calls.some((cli) => contextOf(cli) === "sidebar")).toBe(true);
+    expect(calls.some((cli) => contextOf(cli) === "side-panel")).toBe(true);
     expect(JSON.stringify(result)).not.toContain("no open tab matches");
   });
 

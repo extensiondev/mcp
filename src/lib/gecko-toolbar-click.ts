@@ -145,6 +145,6 @@ export async function clickGeckoToolbarButton(
       message: `This extension declares a ${label} with no popup, so clicking it runs its onClicked listener. Firefox gives extensions no API to replay that click, the engine's own replay refused (${said}), and the server's route through the browser's toolbar action did not run: ${why}.`,
     },
     value: { manifestKey: button.key },
-    hint: `${declared.includes("sidebar") ? 'extension_open with surface: "sidebar" reaches the sidebar panel, and ' : ""}extension_eval with context: "background" runs the code the listener calls.`,
+    hint: `${declared.includes("side-panel") ? 'extension_open with surface: "side-panel" reaches the sidebar panel, and ' : ""}extension_eval with context: "background" runs the code the listener calls.`,
   });
 }

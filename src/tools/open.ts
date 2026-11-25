@@ -85,7 +85,7 @@ export const OVERRIDE_SURFACES = ["newtab", "history", "bookmarks"];
 
 export const renderedTabTargets = new Set<string>();
 export const renderedGeckoSurfaces = new Map<string, string>();
-const PERSISTENT_WINDOW_SURFACES = ["sidebar"];
+const PERSISTENT_WINDOW_SURFACES = ["side-panel"];
 
 type SettledTarget = {
   id: string;
@@ -690,7 +690,7 @@ export function surfaceDocument(
         ? action?.default_popup
         : surface === "options"
           ? (manifest.options_ui?.page ?? manifest.options_page)
-          : surface === "sidebar"
+          : surface === "side-panel"
             ? (manifest.side_panel?.default_path ??
               manifest.sidebar_action?.default_panel)
             : surface === "devtools"
@@ -708,7 +708,7 @@ export const SURFACE_MANIFEST_KEYS: Record<string, string> = {
   popup: "action.default_popup (or browser_action.default_popup, page_action.default_popup)",
   action: "action (or browser_action, page_action)",
   options: "options_ui.page (or options_page)",
-  sidebar: "side_panel.default_path (or sidebar_action.default_panel)",
+  "side-panel": "side_panel.default_path (or sidebar_action.default_panel)",
   devtools: "devtools_page",
   newtab: "chrome_url_overrides.newtab",
   history: "chrome_url_overrides.history",
@@ -1144,7 +1144,7 @@ export const schema = {
       projectPath: SESSION_PROJECT_PATH,
       surface: {
         type: "string",
-        enum: ["popup", "options", "sidebar", "devtools", "newtab", "history", "bookmarks", "action", "command"],
+        enum: ["popup", "options", "side-panel", "devtools", "newtab", "history", "bookmarks", "action", "command"],
         description:
           "Surface to open; action and command replay; devtools is Chromium only.",
       },
@@ -1363,7 +1363,7 @@ async function observeOpened(raw: string, args: OpenArgs, browser: string): Prom
   const landed = value.surfaceTarget ?? value.target ?? null;
   const targetId = isChromiumFamily(browser) && typeof landed?.targetId === "string" ? landed.targetId : undefined;
   const url = typeof landed?.url === "string" ? landed.url : args.url;
-  const context = value.triggered === "sidePanel" ? "sidebar" : observedSurface(args.surface);
+  const context = value.triggered === "sidePanel" ? "side-panel" : observedSurface(args.surface);
 
   await observeAfterAct(
     frame,
@@ -1421,7 +1421,7 @@ async function openOnce(args: OpenArgs): Promise<string> {
     return args.foreground === true ? withForegroundRefusal(opened, args.projectPath, browser, args.tab) : opened;
   }
 
-  const AS_TAB_SURFACES = ["popup", "options", "sidebar", ...OVERRIDE_SURFACES];
+  const AS_TAB_SURFACES = ["popup", "options", "side-panel", ...OVERRIDE_SURFACES];
 
   if (args.surface && OVERRIDE_SURFACES.includes(args.surface)) {
     return openSurfaceAsTab(args.projectPath, browser, args.surface);
@@ -1440,7 +1440,7 @@ async function openOnce(args: OpenArgs): Promise<string> {
         code: "E_BAD_REQUEST",
         name: "BadRequest",
         message:
-          "Pass `surface` (popup/options/sidebar/action/command) to open a surface, or `url` to navigate a tab.",
+          "Pass `surface` (popup/options/side-panel/action/command) to open a surface, or `url` to navigate a tab.",
       },
     });
   }
@@ -1466,7 +1466,7 @@ async function openOnce(args: OpenArgs): Promise<string> {
     }
   }
 
-  if (["popup", "options", "sidebar"].includes(args.surface)) {
+  if (["popup", "options", "side-panel"].includes(args.surface)) {
     const declared = declaredSurfaces(args.projectPath, browser);
 
     if (declared && !declared.includes(args.surface)) {
@@ -1484,8 +1484,8 @@ async function openOnce(args: OpenArgs): Promise<string> {
   }
 
   if (
-    ["popup", "options", "sidebar"].includes(args.surface) &&
-    !(args.surface === "sidebar" && isGeckoFamily(browser)) &&
+    ["popup", "options", "side-panel"].includes(args.surface) &&
+    !(args.surface === "side-panel" && isGeckoFamily(browser)) &&
     !sessionIsHeadless(args.projectPath, browser) &&
     (await browserRunsHeadless(args.projectPath, browser))
   ) {
@@ -1536,7 +1536,7 @@ async function openOnce(args: OpenArgs): Promise<string> {
 
   if (refusal) {
     if (
-      args.surface === "sidebar" &&
+      args.surface === "side-panel" &&
       isChromiumFamily(browser) &&
       refusal.kind === "gesture" &&
       !sessionIsHeadless(args.projectPath, browser) &&
@@ -1545,7 +1545,7 @@ async function openOnce(args: OpenArgs): Promise<string> {
       return openSidebarThroughGesture(args.projectPath, browser, refusal.frame);
     }
 
-    if (args.surface === "sidebar" && isGeckoFamily(browser)) {
+    if (args.surface === "side-panel" && isGeckoFamily(browser)) {
       return openGeckoSidebar(args.projectPath, browser, refusal.frame, args.timeout);
     }
 
@@ -1625,7 +1625,7 @@ async function openOnce(args: OpenArgs): Promise<string> {
 }
 
 async function clickWithNothingToReplay(args: OpenArgs, browser: string, refusal: Record<string, any>): Promise<string> {
-  if (!surfaceDocument(args.projectPath, browser, "sidebar")) {
+  if (!surfaceDocument(args.projectPath, browser, "side-panel")) {
     refusal.error.hint =
       "A click on this toolbar button does nothing as the extension is built: no popup, no onClicked listener and no side panel. Register an action.onClicked listener at the top level of the background script, then call extension_open again.";
 
@@ -1636,15 +1636,15 @@ async function clickWithNothingToReplay(args: OpenArgs, browser: string, refusal
 
   if (behavior.read && !behavior.opensOnClick) {
     refusal.error.hint =
-      'chrome.sidePanel.getPanelBehavior() reads openPanelOnActionClick: false in the service worker, so a click on this toolbar button does nothing. Open the side panel itself with extension_open surface: "sidebar".';
+      'chrome.sidePanel.getPanelBehavior() reads openPanelOnActionClick: false in the service worker, so a click on this toolbar button does nothing. Open the side panel itself with extension_open surface: "side-panel".';
 
     return actFrameJson(refusal);
   }
 
-  const opened = parseFrameObject(await openOnce({ ...args, surface: "sidebar" }));
+  const opened = parseFrameObject(await openOnce({ ...args, surface: "side-panel" }));
 
   if (!opened) {
-    refusal.error.hint = 'The click opens the side panel, which could not be opened from here. Call extension_open with surface: "sidebar".';
+    refusal.error.hint = 'The click opens the side panel, which could not be opened from here. Call extension_open with surface: "side-panel".';
 
     return actFrameJson(refusal);
   }
@@ -1655,7 +1655,7 @@ async function clickWithNothingToReplay(args: OpenArgs, browser: string, refusal
 
   addWarning(
     opened,
-    `The toolbar button has no popup and no onClicked listener, and ${why}. The browser's own toolbar click cannot be replayed, so the server opened the side panel the way surface: "sidebar" does.`,
+    `The toolbar button has no popup and no onClicked listener, and ${why}. The browser's own toolbar click cannot be replayed, so the server opened the side panel the way surface: "side-panel" does.`,
   );
 
   if (opened.ok === true) patchValue(opened, { triggered: "sidePanel", openPanelOnActionClick: behavior.read ? true : "unread" });
@@ -1673,7 +1673,7 @@ function readWindowRefusal(
   surface: string,
   browser: string,
 ): WindowRefusal | null {
-  if (!["popup", "action", "sidebar", "options"].includes(surface)) return null;
+  if (!["popup", "action", "side-panel", "options"].includes(surface)) return null;
 
   const gesture = readGestureRefusal(raw);
   if (gesture) return { kind: "gesture", frame: gesture };
@@ -1713,7 +1713,7 @@ function windowRefusalWarning(
   surface: string,
   browser: string,
 ): string {
-  const noun = surface === "sidebar" ? "sidebar" : surface === "options" ? "options page" : "popup";
+  const noun = surface === "side-panel" ? "side-panel" : surface === "options" ? "options page" : "popup";
   const said = String(refusal.frame.error?.message ?? "").replace(/\s+/g, " ").trim();
 
   if (isGeckoFamily(browser)) {
@@ -1976,13 +1976,13 @@ async function openGeckoSidebar(
   refusal: Record<string, any>,
   timeout?: number,
 ): Promise<string> {
-  const doc = surfaceDocument(projectPath, browser, "sidebar");
+  const doc = surfaceDocument(projectPath, browser, "side-panel");
 
   if (!doc) {
     return missingSurfaceError(
       projectPath,
       browser,
-      "sidebar",
+      "side-panel",
       "so there is no sidebar panel to open",
     );
   }
@@ -1992,7 +1992,7 @@ async function openGeckoSidebar(
       "inspect",
       projectPath,
       "--context",
-      "sidebar",
+      "side-panel",
       "--include",
       "summary",
       "--browser",
@@ -2028,7 +2028,7 @@ async function openGeckoSidebar(
         : typeof open.value?.meta?.url === "string"
           ? open.value.meta.url
           : undefined;
-    const renderedUrl = renderedGeckoSurfaces.get(`${path.resolve(projectPath)}::${browser}::sidebar`);
+    const renderedUrl = renderedGeckoSurfaces.get(`${path.resolve(projectPath)}::${browser}::side-panel`);
     let renderedTabListed = false;
 
     if (renderedUrl) {
@@ -2042,7 +2042,7 @@ async function openGeckoSidebar(
       command: schema.name,
       status: renderedTabListed ? "already-open-unverified" : "already-open",
       value: {
-        surface: "sidebar",
+        surface: "side-panel",
         document: doc,
         alreadyOpen: renderedTabListed ? "unverified" : true,
         ...(url ? { url } : {}),
@@ -2055,8 +2055,8 @@ async function openGeckoSidebar(
           }
         : {}),
       hint: renderedTabListed
-        ? `The sidebar document answered the probe, from the panel or from the tab rendered earlier. Read it with extension_dom_snapshot context: 'sidebar'; ${GECKO_SIDEBAR_GESTURE}.`
-        : `The sidebar panel is open in the ${browser} window already: read it with extension_dom_snapshot context: 'sidebar' or run code in it with extension_eval context: 'sidebar'. ${GECKO_SIDEBAR_GESTURE}, and it did not need to.`,
+        ? `The sidebar document answered the probe, from the panel or from the tab rendered earlier. Read it with extension_dom_snapshot context: 'side-panel'; ${GECKO_SIDEBAR_GESTURE}.`
+        : `The sidebar panel is open in the ${browser} window already: read it with extension_dom_snapshot context: 'side-panel' or run code in it with extension_eval context: 'side-panel'. ${GECKO_SIDEBAR_GESTURE}, and it did not need to.`,
     });
   }
 
@@ -2064,7 +2064,7 @@ async function openGeckoSidebar(
   if ("panel" in opened && opened.panel.open) return sidebarOpenedAnswer(schema.name, doc, opened.panel);
 
   const controllerFailure = `opening it through the browser's sidebar controller over the debugger protocol did not work either (${"reason" in opened ? opened.reason : "the panel still read closed afterwards"})`;
-  const fallback = await openSurfaceAsTab(projectPath, browser, "sidebar");
+  const fallback = await openSurfaceAsTab(projectPath, browser, "side-panel");
 
   try {
     const parsedFallback = JSON.parse(fallback);
@@ -2088,7 +2088,7 @@ async function openGeckoSidebar(
   };
 
   refusal.hint =
-    "Start the session with allowEval: true so the document can be opened by url through the bridge, or open the panel from the toolbar button in the dev browser and read it with extension_dom_snapshot context: 'sidebar'.";
+    "Start the session with allowEval: true so the document can be opened by url through the bridge, or open the panel from the toolbar button in the dev browser and read it with extension_dom_snapshot context: 'side-panel'.";
 
   return actFrameJson(refusal);
 }
@@ -2101,13 +2101,13 @@ async function openSidebarThroughGesture(
   browser: string,
   refusal: Record<string, any>,
 ): Promise<string> {
-  const doc = surfaceDocument(projectPath, browser, "sidebar");
+  const doc = surfaceDocument(projectPath, browser, "side-panel");
 
   if (!doc) {
     return missingSurfaceError(
       projectPath,
       browser,
-      "sidebar",
+      "side-panel",
       "so there is no sidebar panel to open",
     );
   }
@@ -2133,20 +2133,20 @@ async function openSidebarThroughGesture(
         command: schema.name,
         status: "opened",
         value: {
-          surface: "sidebar",
+          surface: "side-panel",
           gesture: "synthetic-click",
           surfaceTarget: { targetId: outcome.targetId, url: outcome.url },
         },
         warnings: [SIDEBAR_GESTURE_WARNING],
         hint:
-          "Read the panel with extension_dom_snapshot context: 'sidebar' (include: ['html']) or run code in it with extension_eval context: 'sidebar'. To exercise the toolbar path itself, a person must click the toolbar icon in the dev browser.",
+          "Read the panel with extension_dom_snapshot context: 'side-panel' (include: ['html']) or run code in it with extension_eval context: 'side-panel'. To exercise the toolbar path itself, a person must click the toolbar icon in the dev browser.",
       });
     }
 
     reason = outcome.reason;
   }
 
-  const fallback = await openSurfaceAsTab(projectPath, browser, "sidebar");
+  const fallback = await openSurfaceAsTab(projectPath, browser, "side-panel");
 
   try {
     const parsedFallback = JSON.parse(fallback);
@@ -2165,8 +2165,8 @@ async function openSidebarThroughGesture(
   refusal.hint =
     `Chrome opens the side panel only from a user gesture, which the engine's open verb cannot carry, and the server's synthetic click did not open it either (${reason}). ${ 
     doc && extensionId
-      ? `To read the panel page anyway, call extension_open with url: "chrome-extension://${extensionId}/${doc}" and then extension_dom_snapshot context: 'sidebar' on it. `
-      : "To read the panel page anyway, open its document by url with extension_open and read it with extension_dom_snapshot context: 'sidebar'. " 
+      ? `To read the panel page anyway, call extension_open with url: "chrome-extension://${extensionId}/${doc}" and then extension_dom_snapshot context: 'side-panel' on it. `
+      : "To read the panel page anyway, open its document by url with extension_open and read it with extension_dom_snapshot context: 'side-panel'. " 
     }Opening the real panel needs a toolbar click from a person in the dev browser.`;
 
   return actFrameJson(refusal);

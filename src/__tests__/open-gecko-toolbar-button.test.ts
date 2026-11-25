@@ -185,7 +185,7 @@ describe("extension_open surface action on a Firefox MV2 build with a popup-less
     expect(result.error.message).toContain("browser_action");
     expect(said).not.toContain("declares no action");
     expect(said).not.toContain("how the extension is built");
-    expect(result.hint).toContain('surface: "sidebar"');
+    expect(result.hint).toContain('surface: "side-panel"');
     expect(result.hint).toContain('context: "background"');
     expect(said).not.toContain("asTab");
     expect(said).not.toContain("headless: false");

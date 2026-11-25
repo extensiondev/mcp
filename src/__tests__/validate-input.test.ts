@@ -266,6 +266,22 @@ describe("validateToolInput", () => {
 });
 
 describe("normalizeArgAliases", () => {
+  it("1160: takes sidebar as the side-panel surface on every tool that names one", () => {
+    const named = tools.filter((tool) => JSON.stringify(tool.schema.inputSchema).includes('"side-panel"'));
+    expect(named.map((tool) => tool.schema.name)).toEqual(expect.arrayContaining(["extension_open", "extension_eval", "extension_dom_snapshot", "extension_screenshot"]));
+
+    expect(named.filter((tool) => JSON.stringify(tool.schema.inputSchema).includes('"sidebar"')).map((tool) => tool.schema.name)).toEqual([]);
+
+    for (const tool of named) {
+      const props = (tool.schema.inputSchema as { properties: Record<string, { enum?: string[] }> }).properties;
+      const key = Object.keys(props).find((name) => props[name]?.enum?.includes("side-panel"));
+      if (!key) continue;
+
+      expect(normalizeArgAliases(tool.schema.inputSchema, { [key]: "sidebar" })[key], tool.schema.name).toBe("side-panel");
+      expect(validateToolInput(tool.schema.inputSchema, normalizeArgAliases(tool.schema.inputSchema, { [key]: "sidebar" })).filter((issue) => issue.path === key)).toEqual([]);
+    }
+  });
+
   it("folds a soft alias to the canonical arg when the tool has it", () => {
     const out = normalizeArgAliases(devSchema.inputSchema, {
       path: "/tmp/x",
