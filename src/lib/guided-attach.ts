@@ -78,8 +78,8 @@ export function debugPortOf(profileDir: string, proc: GuidedProcess = guidedProc
  * a plain .png name, its bytes are a PNG under 4 MB and their SHA-256 is the
  * one the panel checked, so a request can neither name a path on this
  * machine nor swap the bytes between the panel and the slot. A file the
- * slot already shows by name is counted as attached and never set again, so
- * a second press never uploads the same image twice.
+ * slot already shows, by its bytes or its exact name, is counted as attached
+ * and never set again, so a second press never uploads the same image twice.
  */
 export function checkRequest(raw: unknown): CheckedRequest | null {
   if (!isRow(raw) || !Array.isArray(raw.slots)) return null;
@@ -112,41 +112,152 @@ export function checkRequest(raw: unknown): CheckedRequest | null {
   return { nonce, url, slots };
 }
 
-function slotScript(pattern: RegExp, read: boolean): string {
-  return `(() => {
-  const re = new RegExp(${JSON.stringify(pattern.source)}, "i");
-  const scopeOf = (input) => { let at = input; for (let i = 0; i < 6 && at.parentElement && at.parentElement !== document.body && at.parentElement.querySelectorAll("input[type=file]").length <= 1; i += 1) at = at.parentElement; return at; };
+const SCOPE_JS = `const scopeOf = (input) => { let at = input; for (let i = 0; i < 6 && at.parentElement && at.parentElement !== document.body && at.parentElement.querySelectorAll("input[type=file]").length <= 1; i += 1) at = at.parentElement; return at; };
   const words = (scope) => [scope.textContent || "", ...Array.from(scope.querySelectorAll("[aria-label]")).map((node) => node.getAttribute("aria-label") || "")].join(" ");
+  const shownOf = (scope) => Array.from(scope.querySelectorAll("img")).filter((img) => img.getAttribute("src") && !/uploadPlaceholder/i.test(img.getAttribute("src")) && !img.closest("[hidden], [aria-hidden=true], [aria-label*=uploading i]"));`;
+
+function slotScript(pattern: RegExp, read: boolean): string {
+  return `(async () => {
+  const re = new RegExp(${JSON.stringify(pattern.source)}, "i");
+  ${SCOPE_JS}
   const hits = Array.from(document.querySelectorAll("input[type=file]")).filter((input) => re.test(words(scopeOf(input))));
   if (hits.length !== 1) return null;
   if (!${read}) return hits[0];
-  const shown = Array.from(scopeOf(hits[0]).querySelectorAll("img")).filter((img) => img.getAttribute("src") && !/uploadPlaceholder/i.test(img.getAttribute("src")) && !img.closest("[hidden], [aria-hidden=true], [aria-label*=uploading i]"));
-  return { count: shown.length, alts: shown.map((img) => img.alt || ""), adds: Boolean(scopeOf(hits[0]).querySelector("[aria-label^='Add image for' i]")) };
+  const shown = shownOf(scopeOf(hits[0]));
+  const hashOf = async (img) => { try { const res = await fetch(img.currentSrc || img.src, { credentials: "omit" }); if (!res.ok) return ""; const digest = await crypto.subtle.digest("SHA-256", await res.arrayBuffer()); return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join(""); } catch { return ""; } };
+  return { count: shown.length, alts: shown.map((img) => img.alt || ""), hashes: await Promise.all(shown.map(hashOf)), adds: Boolean(scopeOf(hits[0]).querySelector("[aria-label^='Add image for' i]")) };
 })()`;
 }
 
-async function shownIn(page: CdpSession, pattern: RegExp): Promise<{ count: number; alts: string[]; adds: boolean } | null> {
-  const answer = (await page.send("Runtime.evaluate", { expression: slotScript(pattern, true), returnByValue: true })) as { result?: { value?: unknown } };
+function removeScript(pattern: RegExp, index: number, alt: string): string {
+  return `(() => {
+  const re = new RegExp(${JSON.stringify(pattern.source)}, "i");
+  ${SCOPE_JS}
+  const hits = Array.from(document.querySelectorAll("input[type=file]")).filter((input) => re.test(words(scopeOf(input))));
+  if (hits.length !== 1) return "no slot";
+  const shown = shownOf(scopeOf(hits[0]));
+  const img = shown[${index}];
+  if (!img || (img.alt || "") !== ${JSON.stringify(alt)}) return "moved";
+  let box = img;
+  for (let i = 0; i < 5 && box.parentElement && shown.filter((other) => box.parentElement.contains(other)).length === 1; i += 1) box = box.parentElement;
+  const label = (node) => (node.getAttribute("aria-label") || node.textContent || "").trim();
+  const deletes = Array.from(box.querySelectorAll("button, [role=button]")).filter((node) => /^delete\\b/i.test(label(node)));
+  if (deletes.length !== 1) return "no delete";
+  deletes[0].click();
+  return "pressed";
+})()`;
+}
+
+const CONFIRM_SCRIPT = `(() => {
+  const open = Array.from(document.querySelectorAll("[role=dialog], [role=alertdialog], dialog[open]")).filter((node) => node.getBoundingClientRect().width > 0);
+  if (open.length === 0) return "none";
+  if (open.length > 1) return "unsure";
+  const words = (open[0].textContent || "").replace(/\\s+/g, " ");
+  if (/\\ball\\b|listing|language|package|submission|publish|discard|draft/i.test(words) || !/image|screenshot|logo|delete|remove/i.test(words)) return "unsure";
+  const said = (node) => /^(ok|yes|delete|confirm)$/i.test((node.textContent || "").trim());
+  const oks = Array.from(open[0].querySelectorAll("button, [role=button], v6_he-button")).filter((node) => said(node) && !Array.from(node.querySelectorAll("button, [role=button], v6_he-button")).some(said));
+  if (oks.length !== 1) return "unsure";
+  oks[0].click();
+  return "confirmed";
+})()`;
+
+type Shown = { count: number; alts: string[]; hashes: string[]; adds: boolean };
+
+async function shownIn(page: CdpSession, pattern: RegExp): Promise<Shown | null> {
+  const answer = (await page.send("Runtime.evaluate", { expression: slotScript(pattern, true), returnByValue: true, awaitPromise: true })) as { result?: { value?: unknown } };
   const value = answer?.result?.value;
 
-  return isRow(value) && Array.isArray(value.alts) ? { count: Number(value.count) || 0, alts: value.alts.map((alt) => text(alt)), adds: value.adds !== false } : null;
+  if (!isRow(value) || !Array.isArray(value.alts)) return null;
+
+  const alts = value.alts.map((alt) => text(alt));
+  const hashes = Array.isArray(value.hashes) ? value.hashes.map((hash) => text(hash).toLowerCase()) : [];
+
+  return { count: Number(value.count) || 0, alts, hashes: alts.map((_, at) => hashes[at] ?? ""), adds: value.adds !== false };
+}
+
+function shownName(shown: Shown, at: number, files: CheckedSlot["files"]): string {
+  const hash = shown.hashes[at];
+  const byHash = hash ? files.find((file) => crypto.createHash("sha256").update(file.bytes).digest("hex") === hash) : undefined;
+  if (byHash) return byHash.name;
+
+  const alt = shown.alts[at] ?? "";
+
+  return files.find((file) => alt === file.name || alt.endsWith(` ${file.name}`))?.name ?? "";
+}
+
+/* @invariant THE MCP REMOVES ONLY A SECOND COPY OF AN IMAGE IT IS ATTACHING
+ * (Cezar's ruling, MCP ledger 1171). A shown image is named by the SHA-256 of
+ * its bytes or, when the page does not hand the bytes over, by a thumbnail
+ * text that ends in the file's exact name. The first copy of each file
+ * stays; only later copies of that same file are removed, through that one
+ * image's own Delete button, and a confirm is answered only when it is the
+ * single open dialog and speaks of that image alone. Images that match no
+ * file, and every other button on the page, are never touched.
+ */
+async function removeDuplicates(args: { page: CdpSession; pattern: RegExp; files: CheckedSlot["files"]; sleep: (ms: number) => Promise<void> }): Promise<{ removed: number; note?: string }> {
+  let removed = 0;
+
+  for (let round = 0; round < MAX_FILES; round += 1) {
+    const shown = await shownIn(args.page, args.pattern);
+    if (!shown) return { removed };
+
+    const seen = new Set<string>();
+    const extra = shown.alts.findIndex((_, at) => {
+      const name = shownName(shown, at, args.files);
+      if (!name) return false;
+      if (seen.has(name)) return true;
+
+      seen.add(name);
+
+      return false;
+    });
+
+    if (extra < 0) return { removed };
+
+    const pressed = await evaluate(args.page, removeScript(args.pattern, extra, shown.alts[extra] ?? ""));
+    if (pressed !== "pressed") return { removed, note: `a second copy of ${shownName(shown, extra, args.files)} has no Delete button of its own, so it was left on the page` };
+
+    let gone = false;
+
+    for (let waited = 0; waited < 15_000 && !gone; waited += 500) {
+      await args.sleep(500);
+
+      const confirm = await evaluate(args.page, CONFIRM_SCRIPT);
+      if (confirm === "unsure") return { removed, note: "Partner Center asked a confirm that does not speak of that one image, so it was left open for you" };
+
+      gone = (await shownIn(args.page, args.pattern))?.count === shown.count - 1;
+    }
+
+    if (!gone) return { removed, note: "a second copy did not leave the slot after its Delete was pressed" };
+
+    removed += 1;
+  }
+
+  return { removed };
 }
 
 export async function attachSlot(args: { page: CdpSession; slot: CheckedSlot; dir: string; sleep: (ms: number) => Promise<void>; waitMs?: number }): Promise<SlotResult> {
   const pattern = ATTACH_SLOTS[args.slot.id]!;
   const names = args.slot.files.map((file) => file.name);
-  const before = await shownIn(args.page, pattern);
+  const first = await shownIn(args.page, pattern);
 
-  if (!before) return { attached: [], missing: names, note: [...args.slot.refused, "Partner Center shows no single slot for these images on this page"].join("; ") };
-  if (args.slot.id === "edge.store_logo" && before.count > 0) return { attached: [], missing: [], note: [...args.slot.refused, "the slot already shows a logo, so it was left as it is"].join("; ") };
+  if (!first) return { attached: [], missing: names, note: [...args.slot.refused, "Partner Center shows no single slot for these images on this page"].join("; ") };
+  if (args.slot.id === "edge.store_logo" && first.count > 0) return { attached: [], missing: [], note: [...args.slot.refused, "the slot already shows a logo, so it was left as it is"].join("; ") };
 
   const attached: string[] = [];
   const missing: string[] = [];
   const notes: string[] = [...args.slot.refused];
+  const cleaned = await removeDuplicates({ page: args.page, pattern, files: args.slot.files, sleep: args.sleep });
+
+  if (cleaned.removed > 0) notes.push(`removed ${cleaned.removed} second ${cleaned.removed === 1 ? "copy" : "copies"} of the same image`);
+  if (cleaned.note) notes.push(cleaned.note);
+
+  const before = cleaned.removed > 0 ? ((await shownIn(args.page, pattern)) ?? first) : first;
+  const has = (shown: Shown, name: string) => shown.alts.some((_, at) => shownName(shown, at, args.slot.files) === name);
   let count = before.count;
 
   for (const file of args.slot.files) {
-    if (before.alts.some((alt) => alt.includes(file.name))) {
+    if (has(before, file.name)) {
       attached.push(file.name);
       continue;
     }
@@ -161,7 +272,7 @@ export async function attachSlot(args: { page: CdpSession; slot: CheckedSlot; di
 
     fs.writeFileSync(target, file.bytes, { mode: 0o600 });
 
-    const located = (await args.page.send("Runtime.evaluate", { expression: slotScript(pattern, false), returnByValue: false })) as { result?: { objectId?: string; subtype?: string } };
+    const located = (await args.page.send("Runtime.evaluate", { expression: slotScript(pattern, false), returnByValue: false, awaitPromise: true })) as { result?: { objectId?: string; subtype?: string } };
     const objectId = located?.result?.subtype === "node" ? located.result.objectId : undefined;
 
     if (!objectId) {
@@ -177,12 +288,17 @@ export async function attachSlot(args: { page: CdpSession; slot: CheckedSlot; di
       await args.sleep(1000);
 
       const now = await shownIn(args.page, pattern);
-      landed = Boolean(now && (now.alts.some((alt) => alt.includes(file.name)) || now.count > count));
+      landed = Boolean(now && (has(now, file.name) || now.count > count));
       if (landed && now) count = now.count;
     }
 
     (landed ? attached : missing).push(file.name);
   }
+
+  const after = attached.length > 1 ? await shownIn(args.page, pattern) : null;
+  const order = after ? after.alts.map((_, at) => shownName(after, at, args.slot.files)).filter((name) => attached.includes(name)) : [];
+
+  if (order.length === attached.length && order.some((name, at) => name !== names.filter((one) => attached.includes(one))[at])) notes.push(`the slot shows them in this order: ${order.join(", ")}`);
 
   const note = [...new Set(notes)].join("; ");
 

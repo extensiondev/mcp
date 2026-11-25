@@ -1496,4 +1496,75 @@ describe("ledger 1171: the MCP sets the Partner Center image slots of its own gu
     expect(calls).not.toContain("DOM.setFileInputFiles");
     expect(answer).toEqual({ attached: ["edge-screenshot-1-1280x800.png"], missing: ["edge-screenshot-4-1280x800.png"], note: "the slot takes no more images (it shows 6); remove the extra ones on the page, then press again" });
   });
+
+  it("removes only later copies of the images it attaches, by their bytes or exact name, through a redraw, then fills the slot in order", async () => {
+    const shot = (n: number) => ({ name: `edge-screenshot-${n}-1280x800.png`, bytes: png(`shot-${n}`) });
+    const sha = (bytes: Buffer) => crypto.createHash("sha256").update(bytes).digest("hex");
+    const files = [1, 2, 3, 4, 5].map(shot);
+    const stranger = { alt: "Screenshot someone-else.png", hash: sha(png("other")) };
+    let shown = [
+      { alt: "Screenshot uploaded.png", hash: sha(files[0]!.bytes) },
+      { alt: "Screenshot uploaded.png", hash: sha(files[0]!.bytes) },
+      { alt: `Screenshot ${files[1]!.name}`, hash: "" },
+      stranger,
+      { alt: `Screenshot ${files[1]!.name}`, hash: "" },
+      { alt: `Screenshot ${files[2]!.name}`, hash: sha(files[2]!.bytes) },
+    ];
+    let dialog: number | null = null;
+    let redrawing = 0;
+    const pressed: string[] = [];
+    const set: string[] = [];
+
+    const page: CdpSession = {
+      close: () => undefined,
+      send: async (method, params = {}) => {
+        const expression = String(params.expression ?? "");
+
+        if (method === "DOM.setFileInputFiles") {
+          const name = path.basename((params.files as string[])[0]!);
+
+          set.push(name);
+          shown.push({ alt: `Screenshot ${name}`, hash: "" });
+
+          return {};
+        }
+
+        if (expression.includes("deletes")) {
+          const at = Number(/shown\[(\d+)\]/.exec(expression)![1]);
+
+          pressed.push(shown[at]!.alt);
+          dialog = at;
+
+          return { result: { value: "pressed" } };
+        }
+
+        if (expression.includes("alertdialog")) {
+          if (dialog === null) return { result: { value: "none" } };
+
+          shown = shown.filter((_, at) => at !== dialog);
+          dialog = null;
+          redrawing = 2;
+
+          return { result: { value: "confirmed" } };
+        }
+
+        if (!params.returnByValue) return { result: { subtype: "node", objectId: "input-shots" } };
+
+        if (redrawing > 0) {
+          redrawing -= 1;
+
+          return { result: { value: { count: 0, alts: [], hashes: [], adds: true } } };
+        }
+
+        return { result: { value: { count: shown.length, alts: shown.map((row) => row.alt), hashes: shown.map((row) => row.hash), adds: shown.length < 6 } } };
+      },
+    };
+
+    const answer = await attachSlot({ page, slot: { id: "edge.screenshots", files, refused: [] }, dir: fs.mkdtempSync(path.join(os.tmpdir(), "attach-dupes-")), sleep: async () => undefined, waitMs: 3000 });
+
+    expect(pressed).toEqual(["Screenshot uploaded.png", `Screenshot ${files[1]!.name}`]);
+    expect(shown).toContainEqual(stranger);
+    expect(set).toEqual([files[3]!.name, files[4]!.name]);
+    expect(answer).toEqual({ attached: files.map((file) => file.name), missing: [], note: "removed 2 second copies of the same image" });
+  });
 });
