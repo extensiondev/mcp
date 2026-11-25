@@ -110,7 +110,7 @@ export const ENVIRONMENT_VARIABLES: EnvironmentVariable[] = [
   },
   {
     name: "EXT_BROWSERS_CACHE_DIR",
-    description: "Folder that holds the managed browsers extension_browsers installs. Unset: the per-user extension.js browsers cache.",
+    description: "Folder that holds the managed browsers extension_browsers_install installs. Unset: the per-user extension.js browsers cache.",
     format: "filepath",
   },
   {
