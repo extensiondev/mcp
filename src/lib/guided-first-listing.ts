@@ -39,8 +39,10 @@ export function firstListingSay(args: { label: string; productId: string; slug: 
  * SIGN-IN. That handoff session reaches store-account connects only, so the
  * project page that offers the guided session refuses it. The MCP's own
  * browser opens the project's guided Edge page plainly, the person signs in
- * fully there, and the page opens Partner Center with the panel. Anything
- * that keeps the window from opening leaves the platform's answer as it was.
+ * fully there, and the page opens Partner Center with the panel, whatever
+ * listing text is still missing, since the panel fills what it can and lists
+ * the rest. When the window cannot open, the answer says so and why (MCP
+ * ledger 1151), and no default browser opens in its place.
  */
 export async function guideFirstListing(result: string, args: Args, runtime: GuidedConnectRuntime = guidedConnectRuntime): Promise<string | null> {
   let parsed: unknown;
@@ -66,7 +68,20 @@ export async function guideFirstListing(result: string, args: Args, runtime: Gui
   const guideQuery = `?guide=${FIRST_LISTING_GUIDE}`;
   const opened = await openGuided({ workspace, next: null, plainUrl: `${pageUrl.split("?")[0]}${guideQuery}`, storePage: null, api: text(args.api) || undefined, runtime });
 
-  if ("install" in opened || !opened.opened) return null;
+  if ("install" in opened || !opened.opened) {
+    const note = "install" in opened
+      ? `No guided window was opened: ${opened.install.why} It is not installed; install it with extension_browsers_install {action: "install", browser: "${opened.install.install}"}, then call this again.`
+      : `No guided window was opened, so nothing on Partner Center was filled: ${opened.note.replace(/^No (?:browser was opened|window is showing): /, "")}`;
+    const left = Object.fromEntries(Object.entries(value).filter(([key]) => !["opened", "openedNote", "openPages"].includes(key)));
+
+    return envelope({
+      ok: true,
+      command: text(parsed.command) || "extension_submit",
+      status,
+      value: { ...left, opened: false, guidedBrowser: { opened: false, note } },
+      hint: [note, text(parsed.hint)].filter(Boolean).join(" "),
+    });
+  }
 
   const say = firstListingSay({ label: opened.label, productId: start.productId, slug });
   const consolePage = `${pageUrl.split("?")[0]}${guideQuery}`;

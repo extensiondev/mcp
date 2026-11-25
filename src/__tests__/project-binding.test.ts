@@ -1205,8 +1205,18 @@ describe("the guided store connect opens the MCP's own browser with extension.de
           expect(await guideFirstListing(answer, { api: PROD }, bound([])), answer).toBeNull();
         }
 
-        expect(await guideFirstListing(firstSubmission("first-submission-to-do"), { api: PROD }, bound([], { windowCheck: async () => "headless" }))).toBeNull();
-        expect(launches).toHaveLength(1);
+        expect(launches).toHaveLength(0);
+      });
+
+      it("says the guided window did not open and why, with the missing listing text kept, instead of answering the plain to-do", async () => {
+        prodSignIn();
+        const todo = firstSubmission("first-submission-to-do", { dashboardUrl: `https://partner.microsoft.com/dashboard/microsoftedge/${PRODUCT}/packages/dashboard`, left: [{ id: "edge.description", label: "Description" }] });
+        const out = JSON.parse((await guideFirstListing(todo, { api: PROD }, bound([], { windowCheck: async () => "headless" })))!);
+
+        expect(out).toMatchObject({ status: "first-submission-to-do", value: { opened: false, left: [{ label: "Description" }], guidedBrowser: { opened: false } } });
+        expect(out.value).not.toHaveProperty("openPages");
+        expect(out.hint).toMatch(/^No guided window was opened, so nothing on Partner Center was filled: Edge started headless/);
+        expect(out.hint).toContain("lane words");
       });
     });
 
