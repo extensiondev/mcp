@@ -2922,7 +2922,7 @@
           "type": "\"submit\" | \"sync-listing\" | \"cancel\" | \"rollout\" | \"release\" | \"publish\" | \"review\" | \"configure-store\" | \"connect\" | \"first-submission\" | \"mint-signing\"",
           "required": false,
           "default": "submit",
-          "description": "submit with dryRun:false and no approvalId executes nothing, it only asks the owner's approval, as does the first call of any store act; extension_submit_read answers 'preflight', 'status' and extension_submit_check a dry run. submit: buildSha to the stores. sync-listing: listing from STORE.md. publish (alias review): draft to review. release (Safari): approved version on sale. cancel: withdraw from review. rollout: raise Chrome's staged rollout. configure-store: storeSettings. connect: page where the person gives the platform the key. first-submission: page for a first Chrome or Edge upload. mint-signing (Safari): register the bundle id, mint certificates and profiles."
+          "description": "submit with dryRun:false and no approvalId executes nothing, it only asks the owner's approval, as does the first call of any store act; extension_submit_read answers 'preflight', 'status' and extension_submit_check a dry run. submit: buildSha to the stores. sync-listing: listing from STORE.md. publish (alias review): draft to review. release (Safari): approved version on sale. cancel: withdraw from review. rollout: raise Chrome's staged rollout. configure-store: storeSettings. connect: page where the person gives the platform the key. first-submission: a first Chrome, Edge or Firefox listing. mint-signing (Safari): register the bundle id, mint certificates and profiles."
         },
         {
           "name": "project",
