@@ -22,7 +22,7 @@ import { forgetForwardCredentials } from "../lib/forward-credential";
 import { saveHeldBatch } from "../lib/held-batches";
 import { runAskingOnly } from "../lib/ask-only";
 import { forgetCarriedMemory } from "../lib/forward-lane-answer";
-import { forgetApprovalHolders, forwardCall } from "../lib/hosted-forwarder";
+import { FORWARDED_TOOLS, forgetApprovalHolders, forwardCall } from "../lib/hosted-forwarder";
 import { outcomeClock } from "../lib/outcome-clock";
 import { createToolDispatcher } from "../lib/tool-dispatch";
 import { tools } from "../index";
@@ -763,6 +763,18 @@ describe("the forwarder", () => {
     await forwardCall("extension_submit", syncArgs, async () => "local", login);
 
     expect(uploads.slice(before).map((hit) => hit.body.kind)).toEqual(["icons"]);
+  });
+
+  it("1155: passes confirm through to the lane for every forwarded tool that takes it", async () => {
+    writeCredentials({ version: 1, token: "disk-token", workspaceSlug: "acme", projectSlug: "web", expiresAt: 4102444800, api: WWW });
+    const taking = tools.filter((tool) => FORWARDED_TOOLS[tool.schema.name] && "confirm" in ((tool.schema.inputSchema.properties ?? {}) as Record<string, unknown>));
+    const { lane } = stubLane(taking.map(() => LISTED));
+
+    expect(taking.map((tool) => tool.schema.name)).toContain("extension_workspace");
+
+    for (const tool of taking) await tool.handler({ action: "set-environment", project: "acme/web", remove: [{ key: "A" }, { key: "B" }], confirm: true });
+
+    expect(lane().map((hit) => [hit.body.tool, hit.body.args.confirm])).toEqual(taking.map((tool) => [tool.schema.name, true]));
   });
 
   it("1153: a write action that says dryRun: true sends nothing and stages no image, and sync-listing answers the listing it would write", async () => {

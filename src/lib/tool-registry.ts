@@ -47,7 +47,6 @@ import * as auth from "../tools/auth";
 import * as browsers from "../tools/browsers";
 import * as doctor from "../tools/doctor";
 import * as docsSearch from "../tools/docs-search";
-import { withoutConfirm } from "./bulk-delete";
 import { forwardable } from "./hosted-forwarder";
 import { TOOL_TWINS, twinSchema } from "./tool-twins";
 
@@ -83,7 +82,7 @@ const baseTools: ToolModule[] = [
   forwardable(approvals),
   forwardable(buildsTool),
   forwardable(buildsAct),
-  withoutConfirm(forwardable(workspaceTool)),
+  forwardable(workspaceTool),
   forwardable(releasePromote),
   forwardable(submitTool),
   forwardable(submitCheck),

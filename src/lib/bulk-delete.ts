@@ -8,8 +8,6 @@
 
 import { envelope } from "./envelope";
 
-import type { ToolModule } from "./tool-dispatch";
-
 type Args = Record<string, unknown>;
 
 /* @invariant A CALL THAT DELETES MORE THAN ONE THING SAYS confirm: true.
@@ -58,14 +56,3 @@ export const CONFIRM_INPUT = {
   default: false,
   description: "true confirms a delete of more than one item in one call.",
 } as const;
-
-export function withoutConfirm<T extends ToolModule>(module: T): T {
-  const strip = (args: Args): Args => Object.fromEntries(Object.entries(args).filter(([key]) => key !== "confirm"));
-  const { approvalRecord } = module;
-
-  return {
-    ...module,
-    handler: (args: Args) => module.handler(strip(args)),
-    ...(approvalRecord ? { approvalRecord: (args: Args) => approvalRecord(strip(args)) } : {}),
-  };
-}
