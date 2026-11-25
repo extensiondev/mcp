@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-export type ClientId = "claude-code" | "cursor" | "vscode" | "codex" | "json";
+export type ClientId = "claude-code" | "cursor" | "vscode" | "codex" | "antigravity" | "json";
 
 export type Reach = "everything" | "no-ship" | "local";
 
@@ -21,6 +21,7 @@ export const CLIENTS: readonly ClientInfo[] = [
   { id: "cursor", label: "Cursor" },
   { id: "vscode", label: "VS Code" },
   { id: "codex", label: "Codex" },
+  { id: "antigravity", label: "Antigravity" },
   { id: "json", label: "Other clients", subtitle: "Claude Desktop and .mcp.json" },
 ];
 
@@ -40,6 +41,7 @@ export interface RecipeInput {
 
 export const SERVER_NAME = "extension-dev";
 export const PACKAGE = "@extension.dev/mcp";
+export const ANTIGRAVITY_TIMEOUT_SECONDS = 1260;
 
 export function serverArgs(input: Omit<RecipeInput, "client">): string[] {
   const args = ["-y", PACKAGE];
@@ -140,6 +142,17 @@ export function buildRecipe(input: RecipeInput): Recipe {
         login,
       };
     }
+
+    case "antigravity":
+      return {
+        client: "antigravity",
+        config: {
+          language: "json",
+          path: "~/.gemini/config/mcp_config.json",
+          text: JSON.stringify({ mcpServers: { [SERVER_NAME]: { ...stdio, timeoutSeconds: ANTIGRAVITY_TIMEOUT_SECONDS } } }, null, 2),
+        },
+        login,
+      };
 
     case "json":
       return {

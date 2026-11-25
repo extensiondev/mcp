@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { CLIENTS, buildRecipe, type ClientId, type Reach } from "../clients";
+import { SAFARI_BUILD_BUDGET_MS } from "../lib/safari-build-options";
 import { resolveServerOptions } from "../lib/tool-policy";
 
 const project = "acme/app";
@@ -9,7 +10,7 @@ const recipe = (client: ClientId, reach: Reach = "everything") =>
 
 describe("buildRecipe", () => {
   it("covers every listed client", () => {
-    expect(CLIENTS.map((c) => c.id)).toEqual(["claude-code", "cursor", "vscode", "codex", "json"]);
+    expect(CLIENTS.map((c) => c.id)).toEqual(["claude-code", "cursor", "vscode", "codex", "antigravity", "json"]);
 
     for (const client of CLIENTS) {
       expect(recipe(client.id).login).toBe("npx -y @extension.dev/mcp login --project acme/app");
@@ -43,6 +44,15 @@ describe("buildRecipe", () => {
         expect(JSON.stringify(recipe(client.id, reach)), `${client.id} ${reach}`).not.toMatch(/APPROVAL_GATE|\benv\b/);
       }
     }
+  });
+
+  it("gives Antigravity a tool timeout longer than the slowest build budget, so its 180 second default never cuts a Safari build", () => {
+    const antigravity = recipe("antigravity");
+    const server = JSON.parse(antigravity.config!.text).mcpServers["extension-dev"];
+
+    expect(antigravity.config!.path).toBe("~/.gemini/config/mcp_config.json");
+    expect(server.args).toEqual(["-y", "@extension.dev/mcp", "--features=local,platform", "--project", "acme/app"]);
+    expect(server.timeoutSeconds * 1000).toBeGreaterThan(SAFARI_BUILD_BUDGET_MS);
   });
 
   it("builds install links that decode to the same server", () => {

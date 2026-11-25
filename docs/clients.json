@@ -99,6 +99,30 @@
       }
     },
     {
+      "id": "antigravity",
+      "label": "Antigravity",
+      "recipes": {
+        "everything": {
+          "client": "antigravity",
+          "config": {
+            "language": "json",
+            "path": "~/.gemini/config/mcp_config.json",
+            "text": "{\n  \"mcpServers\": {\n    \"extension-dev\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@extension.dev/mcp\",\n        \"--features=local,platform\"\n      ],\n      \"timeoutSeconds\": 1260\n    }\n  }\n}"
+          },
+          "login": "npx -y @extension.dev/mcp login --project ''"
+        },
+        "local": {
+          "client": "antigravity",
+          "config": {
+            "language": "json",
+            "path": "~/.gemini/config/mcp_config.json",
+            "text": "{\n  \"mcpServers\": {\n    \"extension-dev\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@extension.dev/mcp\",\n        \"--features=local\"\n      ],\n      \"timeoutSeconds\": 1260\n    }\n  }\n}"
+          },
+          "login": "npx -y @extension.dev/mcp login --project ''"
+        }
+      }
+    },
+    {
       "id": "json",
       "label": "Other clients",
       "recipes": {
