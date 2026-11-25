@@ -14,6 +14,8 @@ import { isGeckoFamily } from "../lib/browser-family";
 import { PROJECT_PATH, REAL_BROWSERS } from "../lib/common-schema";
 import { ZIP_URL_REDIRECT_NOTE } from "../lib/artifacts-api";
 import { resolveCredential } from "../lib/credential-source";
+import { requestCredential } from "../lib/credential-scope";
+import { LOCAL_BUILD_LIMITS, LOCAL_BUILD_ORIGIN, type LocalBuildStart } from "../lib/local-build-server";
 import { LOGIN_STEPS, PROJECT_TOKEN_INPUT } from "../lib/credentials";
 import { spendNarration, ALLOWANCE_PHRASE  } from "../lib/allowance";
 import { probeShareCors } from "../lib/share-cors-probe";
@@ -40,6 +42,7 @@ export interface PreviewWebLocal {
   distPaths(distDir: string): string[];
   devCheckout(projectPath: string, label: string): string | null;
   navigate(projectPath: string, browser: string, url: string): Promise<string>;
+  serveLocal?(distDir: string, name: string): Promise<LocalBuildStart>;
   uploadPreview: typeof uploadPreview;
   recordSharedPreview: typeof recordSharedPreview;
 }
@@ -295,6 +298,76 @@ function leftOutNote(secrets: string[]): string {
   return ` ${secrets.length === 1 ? "One credential file stayed" : `${secrets.length} credential files stayed`} on this machine and are not in the link: ${secrets.join(", ")} (leftOut.secrets).`;
 }
 
+function localLinkOf(address: string, fragment: string, options: PreviewLinkOptions): string {
+  const view = options.engine === "firefox" ? "/firefox" : options.surface === undefined ? "/chromium" : "/chromium/surface";
+
+  return `${LOCAL_BUILD_ORIGIN}${view}${previewLocalPath(address, options).slice(1)}#${fragment}`;
+}
+
+function minutes(ms: number): number {
+  return Math.round(ms / 60_000);
+}
+
+async function servedLocally(
+  args: PreviewWebArgs,
+  local: PreviewWebLocal,
+  distDir: string,
+  manifest: Record<string, any>,
+  result: Record<string, unknown>,
+  options: PreviewLinkOptions,
+): Promise<string> {
+  const name = typeof manifest.name === "string" && manifest.name.trim() ? manifest.name.trim() : path.basename(distDir);
+  const started = await (local.serveLocal as NonNullable<PreviewWebLocal["serveLocal"]>)(distDir, name);
+
+  if (!started.ok && started.stage === "bind") {
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "local-server-failed",
+      error: {
+        code: "E_LOCAL_SERVER",
+        message: `The build is ready, but no local preview server could start on 127.0.0.1 (${started.code}), so there is no link to open. Nothing was uploaded.`,
+        hint: "Call again in a moment, or pass share:true for a link that needs no local server.",
+      },
+      value: { stage: "serve-local", ...result, share: unrequestedShare(args) },
+    });
+  }
+
+  if (!started.ok) {
+    return noPreviewHost(args, { ...result, localLink: { started: false, reason: started.message } });
+  }
+
+  const server = started.server;
+  const warnings = args.open
+    ? ["open:true was not acted on: localLink opens once, so opening it in the live session would spend it. Open localLink yourself."]
+    : [];
+
+  return envelope({
+    ok: true,
+    command: COMMAND,
+    status: "previewed-local",
+    value: {
+      ...result,
+      localLink: localLinkOf(server.address, server.fragment(), options),
+      localServer: {
+        address: server.address,
+        files: server.files,
+        bytes: server.bytes,
+        opensOnce: true,
+        linkExpiresAt: new Date(server.keyExpiresAt).toISOString(),
+        closesBy: new Date(server.closesBy).toISOString(),
+        ...(server.leftOut.length ? { leftOut: { secrets: server.leftOut } } : {}),
+      },
+      share: {
+        ...unrequestedShare(args),
+        localLinkNeeds: "localLink opens once, in a browser on this machine, so to anyone else it is a dead link.",
+      },
+    },
+    hint: `Open localLink in a browser on this machine. ${SURFACE.label} reads this build from a server on 127.0.0.1 that answers only that page; nothing is uploaded. The link opens once and goes dead after ${minutes(LOCAL_BUILD_LIMITS.keyMs)} minutes unused, and the server stops ${minutes(LOCAL_BUILD_LIMITS.idleMs)} minutes after the page stops reading or ${minutes(LOCAL_BUILD_LIMITS.lifeMs)} minutes after it started. For a fresh link call again; for a link anyone can open pass share:true.${leftOutNote(server.leftOut)}`,
+    warnings,
+  });
+}
+
 export const schema = {
   name: "extension_preview_web",
   description:
@@ -385,7 +458,9 @@ export async function previewWebWith(args: PreviewWebArgs, local: PreviewWebLoca
 
   const shouldBuild = args.distPath ? false : args.build !== false;
 
-  if (!host && !args.share && shouldBuild) return noPreviewHost(args);
+  const fastPath = !host && !args.share && !requestCredential() && typeof local.serveLocal === "function";
+
+  if (!host && !args.share && shouldBuild && !fastPath) return noPreviewHost(args);
 
   if (host && !host.ok) {
     return envelope({
@@ -506,7 +581,9 @@ export async function previewWebWith(args: PreviewWebArgs, local: PreviewWebLoca
     ...(buildResult ? { built: true } : { built: false }),
   };
 
-  if (!host && !args.share) return noPreviewHost(args, result);
+  if (!host && !args.share) {
+    return fastPath ? servedLocally(args, local, distDir, manifest, result, links.options) : noPreviewHost(args, result);
+  }
 
   if (!args.share) {
     result.share = unrequestedShare(args);

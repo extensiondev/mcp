@@ -15,6 +15,7 @@ import { engineBrowserName } from "../lib/browser-family";
 import { realPathInside } from "../lib/manifest-path";
 import { uploadPreview } from "../lib/preview-upload";
 import { engineProjectRoot } from "../lib/session-paths";
+import { startLocalBuildServer, type LocalBuildServer } from "../lib/local-build-server";
 import { recordSharedPreview } from "../lib/share-record";
 
 import type { PreviewWebLocal } from "./preview-web";
@@ -81,6 +82,27 @@ function reservedNamePaths(dir: string, prefix: string): string[] {
   });
 }
 
+let liveLocalBuild: LocalBuildServer | null = null;
+
+async function serveLocalBuild(distDir: string, name: string) {
+  if (liveLocalBuild) {
+    const previous = liveLocalBuild;
+    liveLocalBuild = null;
+    await previous.close();
+  }
+
+  const started = await startLocalBuildServer({ distDir, name });
+
+  if (started.ok) {
+    liveLocalBuild = started.server;
+    void started.server.closed.then(() => {
+      if (liveLocalBuild === started.server) liveLocalBuild = null;
+    });
+  }
+
+  return started;
+}
+
 export const PREVIEW_WEB_LOCAL: PreviewWebLocal = {
   build: (projectPath, browser) => build.handler({ projectPath, browser }),
   distDirOf: (args, browser) =>
@@ -96,6 +118,7 @@ export const PREVIEW_WEB_LOCAL: PreviewWebLocal = {
   distPaths: (distDir) => reservedNamePaths(distDir, ""),
   devCheckout: (projectPath, label) => previewDevCheckout([projectPath, process.cwd()], label),
   navigate: (projectPath, browser, url) => navigateToUrl(projectPath, browser, url),
+  serveLocal: serveLocalBuild,
   uploadPreview,
   recordSharedPreview,
 };

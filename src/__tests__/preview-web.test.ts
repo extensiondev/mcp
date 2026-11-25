@@ -1,5 +1,6 @@
 import childProcess from "node:child_process";
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 
@@ -632,29 +633,107 @@ describe("extension_preview_web", () => {
       return root;
     }
 
-    it("answers what to pass when no preview server address is known, before building or probing", async () => {
+    it("1182: with no preview server known, builds and answers a one-use loopback link whose key rides only the fragment", async () => {
       const dir = tmpDist(MANIFEST);
-      const built = vi.spyOn(PREVIEW_WEB_LOCAL, "build");
-      let reached = false;
+      const built = vi.spyOn(PREVIEW_WEB_LOCAL, "build").mockResolvedValue(JSON.stringify({ ok: true }));
+      vi.spyOn(PREVIEW_WEB_LOCAL, "distDirOf").mockReturnValue(dir);
       vi.spyOn(process, "cwd").mockReturnValue(os.tmpdir());
-      global.fetch = (async () => {
-        reached = true;
+      const logged: string[] = [];
+
+      const capture = (...parts: unknown[]) => {
+        logged.push(parts.map(String).join(" "));
+
+        return true;
+      };
+
+      for (const name of ["log", "info", "warn", "error", "debug"] as const) vi.spyOn(console, name).mockImplementation(capture);
+      vi.spyOn(process.stderr, "write").mockImplementation(capture as never);
+      vi.spyOn(process.stdout, "write").mockImplementation(capture as never);
+      const realFetch = global.fetch;
+      let probed = false;
+      global.fetch = (async (...a: Parameters<typeof fetch>) => {
+        if (String(a[0]).startsWith("http://127.0.0.1:")) return realFetch(...a);
+
+        probed = true;
 
         throw new Error("fetch failed");
-      }) as unknown as typeof fetch;
+      }) as typeof fetch;
 
       try {
-        const out = JSON.parse(await handler({ projectPath: dir }));
+        const text = await handler({ projectPath: dir, open: true });
+        const out = JSON.parse(text);
+        const link = new URL(out.value.localLink);
+        const key = new URLSearchParams(link.hash.slice(1)).get("k") ?? "";
+        const address = link.searchParams.get("url") ?? "";
 
-        expect(out).toMatchObject({ ok: false, status: "no-preview-host", error: { code: "E_NO_PREVIEW_HOST" }, value: { stage: "resolve-host" } });
-        expect(out.error.hint).toContain("pass hostUrl");
-        expect(out.error.hint).toContain("share:true");
-        expect(JSON.stringify(out)).not.toContain("3110");
-        expect(out.value.deepLink).toBeUndefined();
-        expect(reached).toBe(false);
+        expect(built).toHaveBeenCalled();
+        expect(probed).toBe(false);
+        expect(out).toMatchObject({ ok: true, status: "previewed-local", value: { localServer: { opensOnce: true, files: 1 } } });
+        expect(`${link.origin}${link.pathname}`).toBe("https://preview.extension.dev/chromium");
+        expect(link.searchParams.get("engine")).toBe("chromium");
+        expect(address).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/$/);
+        expect(key).toMatch(/^[A-Za-z0-9_-]{43}$/);
+        expect(link.search).not.toContain(key);
+        expect(text.split(key).length).toBe(2);
+        expect(out.value.opened).toBeUndefined();
+        expect(out.warnings.join(" ")).toMatch(/opens once/);
+
+        const headers = { origin: "https://preview.extension.dev" };
+        const listing = (await (await fetch(`${address}v1/build`, { headers: { ...headers, "x-extension-dev-local-key": key } })).json()) as { token: string };
+        const manifest = await fetch(`${address}v1/files/manifest.json`, { headers: { ...headers, "x-extension-dev-local-token": listing.token } });
+
+        expect(manifest.status).toBe(200);
+        expect(JSON.parse(await manifest.text())).toMatchObject({ name: "Probe Ext" });
+        expect(text).not.toContain(listing.token);
+        expect(logged.join("\n")).not.toContain(key);
+        expect(logged.join("\n")).not.toContain(listing.token);
+
+        const surface = JSON.parse(await handler({ projectPath: dir, build: false, distPath: dir, surface: "popup" }));
+        const surfaceLink = new URL(surface.value.localLink);
+
+        expect(surfaceLink.pathname).toBe("/chromium/surface");
+        expect(surfaceLink.searchParams.get("surface")).toBe("popup");
+        await expect(fetch(`${address}v1/build`, { headers })).rejects.toThrow();
+        expect((await fetch(`${surfaceLink.searchParams.get("url")}v1/build`)).status).toBe(403);
+      } finally {
+        global.fetch = realFetch;
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("1182: answers one plain refusal when the loopback port will not bind, and the old no-host answer when the build is over the caps or the call is hosted", async () => {
+      const dir = tmpDist(MANIFEST);
+      vi.spyOn(process, "cwd").mockReturnValue(os.tmpdir());
+
+      try {
+        const listen = vi.spyOn(http.Server.prototype, "listen").mockImplementation(function failing(this: http.Server) {
+          process.nextTick(() => this.emit("error", Object.assign(new Error("listen EADDRNOTAVAIL"), { code: "EADDRNOTAVAIL" })));
+
+          return this;
+        });
+        const bind = JSON.parse(await handler({ projectPath: dir, build: false, distPath: dir }));
+
+        expect(bind).toMatchObject({ ok: false, status: "local-server-failed", error: { code: "E_LOCAL_SERVER" } });
+        expect(bind.error.message).toContain("EADDRNOTAVAIL");
+        expect(bind.value.localLink).toBeUndefined();
+        listen.mockRestore();
+
+        fs.writeFileSync(path.join(dir, "big.bin"), Buffer.alloc(25 * 1024 * 1024 + 1));
+        const capped = JSON.parse(await handler({ projectPath: dir, build: false, distPath: dir }));
+
+        expect(capped).toMatchObject({ ok: false, status: "no-preview-host", error: { code: "E_NO_PREVIEW_HOST" }, value: { localLink: { started: false } } });
+        expect(capped.value.localLink.reason).toMatch(/25 MB/);
+        fs.rmSync(path.join(dir, "big.bin"));
+
+        const built = vi.spyOn(PREVIEW_WEB_LOCAL, "build");
+        const hosted = JSON.parse(await withRequestCredential(
+          { token: "claims.sig", api: "http://localhost:3100", projects: [], expiresAt: null },
+          () => handler({ projectPath: dir }),
+        ));
+
+        expect(hosted).toMatchObject({ ok: false, status: "no-preview-host", value: { stage: "resolve-host" } });
         expect(built).not.toHaveBeenCalled();
-        expect(JSON.parse(out.value.share.shareCall.slice(out.value.share.shareCall.indexOf("{")))).toEqual({ projectPath: dir, share: true });
-        expect(out.value.share.shareSpends).toContain("metered against the workspace's build allowance");
+        expect(JSON.parse(hosted.value.share.shareCall.slice(hosted.value.share.shareCall.indexOf("{")))).toEqual({ projectPath: dir, share: true });
       } finally {
         fs.rmSync(dir, { recursive: true, force: true });
       }
