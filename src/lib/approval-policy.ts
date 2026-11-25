@@ -86,6 +86,7 @@ export const APPROVAL_POLICY = {
   "extension_project.visibility-public": "approval",
   "extension_store.listing-derived": "approval",
   "extension_project.source": "approval",
+  "extension_project.slug": "approval",
   "extension_browsers.captures": "approval",
   "extension_store.mint": "approval",
   "extension_browser.start": "approval",

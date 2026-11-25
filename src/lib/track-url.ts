@@ -298,7 +298,7 @@ export const TRACK_ACTS: Record<string, (call: TrackCall) => TrackPlan | null> =
     const included = include.map((section) => WORKSPACE_INCLUDE_PAGES[section]).find(Boolean);
 
     if (included) return { track: { page: included } };
-    if (action === "configure-project") return { track: { page: "project-settings" } };
+    if (action === "configure-project" || action === "rename-slug") return { track: { page: "project-settings" } };
     if (action === "set-environment") return { track: { page: "environment" } };
 
     return action === "settings" ? { track: { page: "build-settings" } } : { track: { page: "workspace" } };

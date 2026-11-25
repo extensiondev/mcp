@@ -15,7 +15,8 @@ describe("an existing project is renamed through extension_workspace_configure c
     const props = schema.inputSchema.properties as unknown as Record<string, { description?: string }>;
     const createProps = createSchema.inputSchema.properties as unknown as Record<string, { description?: string }>;
 
-    expect(schema.description).toContain("renames a project (displayName; slug and URLs stay)");
+    expect(schema.description).toContain("configure-project sets displayName; rename-slug moves the slug, old URLs redirect");
+    expect(props.slug.description).toBe("rename-slug: the new slug.");
     expect(props.settings.description).toContain("displayName renames the project");
     expect(createProps.displayName.description).toContain("extension_workspace_configure configure-project");
   });

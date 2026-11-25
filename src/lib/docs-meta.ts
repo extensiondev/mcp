@@ -66,7 +66,7 @@ export const TOOL_DOCS: Record<string, ToolDocsMeta> = {
   extension_builds_act: { tier: "platform", gate: `${LOGIN}; a public channel audience needs a workspace owner's approval; delete-channel stays in the console`, samplePrompt: "Rebuild the last commit for Stable" },
   extension_release_status: { tier: "platform", gate: LOGIN, samplePrompt: "Was the last Chrome submission approved?" },
   extension_approvals: { tier: "platform", gate: `${LOGIN}; revoke needs a token a workspace owner minted`, samplePrompt: "I approved that App Review submission by mistake, revoke it" },
-  extension_workspace: { tier: "platform", gate: `${LOGIN} of any project in the workspace; settings and set-visibility need that project's own login; a public visibility needs a workspace owner's approval`, samplePrompt: "How many builds has my workspace used this month, and which projects failed their last build?" },
+  extension_workspace: { tier: "platform", gate: `${LOGIN} of any project in the workspace; settings and set-visibility need that project's own login; a public visibility needs a workspace owner's approval, and so does a slug rename`, samplePrompt: "How many builds has my workspace used this month, and which projects failed their last build?" },
 };
 
 const TWIN_PROMPTS: Record<string, string> = {

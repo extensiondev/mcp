@@ -777,17 +777,18 @@ Wait for a session to be ready, or for: "rebuild" for the next compile after an 
 
 ## extension_workspace_configure
 
-Change a project's settings, visibility or build environment on extension.dev. configure-project renames a project (displayName; slug and URLs stay). set-visibility public or a public liveChannel needs approval. Answers what changed; extension_workspace_read reads.
+Change a project's settings, visibility or build environment on extension.dev. configure-project sets displayName; rename-slug moves the slug, old URLs redirect. set-visibility public, public liveChannel or rename-slug needs approval. extension_workspace_read reads.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "set-visibility" \| "configure-project" \| "set-environment" | no | `"set-visibility"` | configure-project: project fields; set-visibility: private or public; set-environment: build variables. |
+| `action` | "set-visibility" \| "configure-project" \| "rename-slug" \| "set-environment" | no | `"set-visibility"` | configure-project: project fields; rename-slug: a new slug; set-visibility: private or public; set-environment: build variables. |
 | `visibility` | "private" \| "public" | no |  | private: plain call under the owner's own token; public: approve page. |
 | `settings` | object | no |  | configure-project: changed fields only (displayName, description, url, supportUrl, branch, rootDirectory, workspaceRoot, buildPullRequests, runWhatsNew, runExtensionExecutables, pullRequestComments, commitComments, autoCreateGitHubRelease, liveChannel); displayName renames the project. |
+| `slug` | string | no |  | rename-slug: the new slug. |
 | `variables` | array of object | no |  | set-environment: build variables to add or change. |
 | `remove` | array of object | no |  | set-environment: build variables to delete; more than one takes confirm. |
 | `confirm` | boolean | no | `false` | true confirms a delete of more than one item in one call. |
-| `approvalId` | string | no |  | For set-visibility public. |
+| `approvalId` | string | no |  | For set-visibility public and rename-slug. |
 | `workspace` | string | no |  | Slug. |
 | `project` | string | no |  | Stored login; the project to change. |
 | `api` | string | no |  | Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev. |

@@ -12,15 +12,15 @@ import { hostedOnly } from "../lib/hosted-only";
 
 export const schema = {
   name: "extension_workspace",
-  description: "Read the workspace (projects, usage, settings) or change a project's settings. configure-project renames a project (displayName; slug and URLs stay). set-visibility public or a public liveChannel needs approval. Builds spend only on build branch pushes that change the root directory. extension_auth_login: logins; extension_approvals_read lists approvals.",
+  description: "Read the workspace (projects, usage, settings) or change a project. configure-project sets displayName; rename-slug moves the slug, old URLs redirect. set-visibility public, public liveChannel or rename-slug needs approval. Builds spend only on build branch pushes that change the root directory. extension_auth_login: logins; extension_approvals_read lists approvals.",
   inputSchema: {
     type: "object" as const,
     properties: {
       action: {
         type: "string",
-        enum: ["info", "projects", "usage", "settings", "set-visibility", "configure-project", "set-environment"],
+        enum: ["info", "projects", "usage", "settings", "set-visibility", "configure-project", "rename-slug", "set-environment"],
         default: "info",
-        description: "set-* and configure-project write.",
+        description: "set-*, configure-project and rename-slug write.",
       },
       visibility: {
         type: "string",
@@ -30,6 +30,10 @@ export const schema = {
       settings: {
         type: "object",
         description: "configure-project: changed fields only (displayName, description, url, supportUrl, branch, rootDirectory, workspaceRoot, buildPullRequests, runWhatsNew, runExtensionExecutables, pullRequestComments, commitComments, autoCreateGitHubRelease, liveChannel); displayName renames the project.",
+      },
+      slug: {
+        type: "string",
+        description: "rename-slug: the new slug.",
       },
       variables: {
         type: "array",
@@ -84,7 +88,7 @@ export const schema = {
       confirm: CONFIRM_INPUT,
       approvalId: {
         type: "string",
-        description: "For set-visibility public.",
+        description: "For set-visibility public and rename-slug.",
       },
       include: {
         type: "array",

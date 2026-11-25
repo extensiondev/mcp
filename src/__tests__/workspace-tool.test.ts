@@ -239,6 +239,6 @@ describe("extension_workspace reads a workspace with any project login it holds"
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     });
 
-    expect(schema.inputSchema.properties.action.enum).toEqual(["info", "projects", "usage", "settings", "set-visibility", "configure-project", "set-environment"]);
+    expect(schema.inputSchema.properties.action.enum).toEqual(["info", "projects", "usage", "settings", "set-visibility", "configure-project", "rename-slug", "set-environment"]);
   });
 });
