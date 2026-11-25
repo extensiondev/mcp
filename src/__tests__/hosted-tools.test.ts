@@ -764,6 +764,28 @@ describe("the forwarder", () => {
 
     expect(uploads.slice(before).map((hit) => hit.body.kind)).toEqual(["icons"]);
   });
+
+  it("1153: a write action that says dryRun: true sends nothing and stages no image, and sync-listing answers the listing it would write", async () => {
+    const root = path.join(tmp, "proj");
+    fs.mkdirSync(path.join(root, "dist", "edge", "icons"), { recursive: true });
+    fs.mkdirSync(path.join(root, "store", "screenshots", "edge"), { recursive: true });
+    fs.writeFileSync(path.join(root, "dist", "edge", "manifest.json"), JSON.stringify({ manifest_version: 3, name: "x", version: "1.0.0", icons: { "128": "icons/128.png" } }));
+    fs.writeFileSync(path.join(root, "dist", "edge", "icons", "128.png"), solidPng(128, 128));
+    fs.writeFileSync(path.join(root, "store", "screenshots", "edge", "1.png"), solidPng(1280, 800));
+    fs.writeFileSync(path.join(root, "STORE.md"), "# Store\n\n## Listing\n\n- Summary: hello\n");
+    const { seen } = stubLane([]);
+    const args = { action: "sync-listing", browsers: ["edge"], project: "acme/web", projectPath: root, dryRun: true };
+    const out = JSON.parse(await forwardCall("extension_submit", args, async () => "local", FORWARDING));
+
+    expect(out).toMatchObject({ ok: true, status: "sync-listing-preview", value: { dryRun: true, written: false, stores: { edge: { listing: { shortDescription: "hello" }, icon: { width: 128 }, screenshots: [{ name: path.join("store", "screenshots", "edge", "1.png"), width: 1280 }] } } } });
+    expect(out.hint).toContain("nothing was written");
+
+    for (const action of ["publish", "cancel", "rollout", "release", "configure-store", "mint-signing"]) {
+      expect(JSON.parse(await forwardCall("extension_submit", { action, project: "acme/web", dryRun: true }, async () => "local", FORWARDING))).toMatchObject({ status: "dry-run-held", value: { action, written: false } });
+    }
+
+    expect(seen).toHaveLength(0);
+  });
 });
 
 const PROMOTE = { project: "acme/web", buildId: "abc1234", channel: "stable" };

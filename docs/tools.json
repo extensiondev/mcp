@@ -2946,8 +2946,7 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "default": true,
-          "description": "false submits once approved and stops at the draft under the default modes; true sends nothing, a dry run extension_submit_check answers."
+          "description": "Omitted: submit dry runs, other actions run. true sends nothing: sync-listing answers what it would write, other acts run nothing. false submits once approved and stops at the draft under the default modes."
         },
         {
           "name": "projectPath",

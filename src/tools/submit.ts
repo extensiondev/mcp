@@ -11,6 +11,7 @@ import { ENVELOPE_OUTPUT_SCHEMA } from "../lib/envelope";
 import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
 import { hostedOnly } from "../lib/hosted-only";
 import { SUBMIT_READ_ACTIONS, SUBMIT_WRITE_SAFETY } from "../lib/submit-action-safety";
+import { SUBMIT_DRY_RUN_TEXT } from "../lib/submit-dry-run";
 
 import type { InputIssue } from "../lib/validate-input";
 
@@ -61,8 +62,7 @@ export const schema = {
       },
       dryRun: {
         type: "boolean",
-        default: true,
-        description: "false submits once approved and stops at the draft under the default modes; true sends nothing, a dry run extension_submit_check answers.",
+        description: SUBMIT_DRY_RUN_TEXT,
       },
       projectPath: {
         type: "string",

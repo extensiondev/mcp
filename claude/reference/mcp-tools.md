@@ -663,7 +663,7 @@ Submit an extension.dev build to the Chrome, Firefox, Edge and Safari stores. It
 | `browsers` | array of "chrome" \| "firefox" \| "edge" \| "safari" | no |  | Stores; submit, publish and sync-listing take several under one approval. |
 | `buildSha` | string | no |  | Commit sha of a completed platform build (extension_builds_read). |
 | `version` | string | no |  | Label; default the built manifest's version. |
-| `dryRun` | boolean | no | `true` | false submits once approved and stops at the draft under the default modes; true sends nothing, a dry run extension_submit_check answers. |
+| `dryRun` | boolean | no |  | Omitted: submit dry runs, other actions run. true sends nothing: sync-listing answers what it would write, other acts run nothing. false submits once approved and stops at the draft under the default modes. |
 | `projectPath` | string | no |  | Project root, for sync-listing; nothing local is uploaded. |
 | `approvalId` | string | no |  | Once approved, with the same arguments; a real submission needs a workspace owner's approval every time. |
 | `screenshots` | array of string | no |  | sync-listing: PNG screenshots in projectPath. |

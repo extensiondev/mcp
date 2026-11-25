@@ -35,6 +35,7 @@ import { readSharedPreviews } from "./share-record";
 import { workspaceConnectAnswer } from "./store-connection";
 import { forwardSubmitFacts, imagesTheLaneWants, labeledScreenshots, withProjectRoot, type ForwardFactsArgs, type WantedImage } from "./submit-facts-forward";
 import { storeMdSourceNote } from "./submit-facts-local";
+import { submitDryRunAnswer } from "./submit-dry-run";
 import { TOOL_POLICY } from "./tool-policy";
 import { reportProgress } from "./call-progress";
 
@@ -584,6 +585,9 @@ async function retoldUnopened(call: LaneCall, shaped: Args, facts: Args | null, 
 export async function forwardCall(command: string, args: Args, local: (args: Args) => Promise<string>, deps: ForwarderDeps = {}): Promise<string> {
   const rule = FORWARDED_TOOLS[command];
   if (!rule || forwardSession()) return local(args);
+
+  const held = submitDryRunAnswer(command, args);
+  if (held) return held;
 
   const tool = laneToolOf(command);
   const here = rule.local?.(args) === true;
