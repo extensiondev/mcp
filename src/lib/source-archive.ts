@@ -138,8 +138,8 @@ const SECRET_CONTENT_MAX_BYTES = 1024 * 1024;
  * `.gnupg` folders are held back and named in `leftOut.secrets`, because a
  * value in them is a
  * secret the moment it leaves the machine. The three example forms of `.env`
- * ship. The platform holds the same list in www
- * src/services/projects/source-archive.ts and refuses an archive that
+ * ship. The platform holds the same list in
+ * @extensiondev/contracts/artifact-files and refuses an archive that
  * carries one; a name added on one side is added on both. A shared preview
  * walks a build with the same list, and drops `.npmrc` and `.yarnrc.yml` by
  * name, because a built extension never installs.
