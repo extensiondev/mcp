@@ -252,3 +252,66 @@ export function takeMemory(resource: string, body: Args): Args {
 export function forgetCarriedMemory(): void {
   carried.clear();
 }
+
+const ACTIVE_BUILD_WORDS = new Set(["building", "pending", "queued", "in_progress", "running", "requested", "waiting"]);
+const FAILED_BUILD_WORDS = /fail|error|cancel|timed_out/;
+
+export const FOLLOW_READ_TOOL = "extension_builds";
+
+/* @invariant A BUILD ACT THE LANE CUT IS FOLLOWED HERE BY READS, NEVER BY
+ * SENDING THE ACT AGAIN. The hosted lane ends every wait within its
+ * function's limit, but this process has no limit of its own: a build act
+ * that came back dispatched, its run still going, its wait cut, and the get
+ * it names to follow it, is followed here. The get goes out as a read with
+ * the seconds still owed until the build settles or the asked wait ends,
+ * and the act answers once with what the record reads (ledger 1201).
+ */
+export function buildFollowOf(body: Args): Args | null {
+  if (body.ok !== true || !text(body.status).endsWith("-dispatched") || !hostedWaitOf(body) || !isRow(body.value)) return null;
+
+  const follow = isRow(body.value.follow) ? body.value.follow : null;
+  const get = follow && isRow(follow.get) ? follow.get : null;
+  const outcome = isRow(body.value.outcome) ? body.value.outcome : null;
+
+  if (!get || text(get.action) !== "get" || !text(get.buildId) || !ACTIVE_BUILD_WORDS.has(text(outcome?.status).toLowerCase())) return null;
+
+  return get;
+}
+
+export function followSettled(read: Args | null): boolean {
+  const value = read && isRow(read.value) ? read.value : null;
+
+  return read?.ok === true && text(read.status) === "read" && isRow(value?.waited) && value.waited.settled === true;
+}
+
+export function followedBuildAnswer(act: Args, read: Args | null, waitedSeconds: number): Args {
+  const asked = hostedWaitOf(act)?.askedSeconds ?? waitedSeconds;
+  const cutless = withoutHostedWait(act);
+  const value = isRow(cutless.value) ? cutless.value : {};
+  const outcome = isRow(value.outcome) ? value.outcome : {};
+  const readValue = read && isRow(read.value) ? read.value : {};
+  const build = isRow(readValue.build) ? readValue.build : null;
+  const recordSays = text(build?.status);
+  const kept = `This server kept waiting on the build here, past the hosted lane's limit, for ${waitedSeconds} s of the ${asked} s asked.`;
+
+  if (!followSettled(read)) {
+    return {
+      ...cutless,
+      value: { ...value, outcome: { ...outcome, ...(recordSays ? { status: recordSays } : {}), waitedSeconds }, waited: { seconds: waitedSeconds, settled: false } },
+      hint: `${kept}${recordSays ? ` Its record still reads ${recordSays}.` : ""} ${text(act.hint)}`.trim(),
+    };
+  }
+
+  const failed = Boolean(readValue.failures) || FAILED_BUILD_WORDS.test(`${recordSays} ${text(build?.conclusion)}`.toLowerCase());
+  const status = recordSays || (failed ? "failed" : "success");
+  const named = text(build?.buildId) || "this build";
+
+  return {
+    ...cutless,
+    ok: !failed,
+    status: failed ? "build-failed" : "built",
+    value: { ...value, outcome: { ...outcome, status, recorded: true, waitedSeconds }, waited: { seconds: waitedSeconds, settled: true }, ...(build ? { build } : {}) },
+    ...(failed ? { error: { code: "E_PLATFORM", name: "BuildFailed", message: `The platform's record of ${named} reads ${status} after this act.` } } : {}),
+    hint: `${kept} The build settled and its record reads ${status}. ${text(read?.hint)}`.trim(),
+  };
+}

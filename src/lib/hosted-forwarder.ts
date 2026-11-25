@@ -21,7 +21,7 @@ import { approvalHeldByPerson, forgetApprovalHolders } from "./forwarded-approva
 import { forgetForwardCredential, forwardCredential, forwardUrlFor, type ExchangedCredential } from "./forward-credential";
 import { CONNECTED_STATUS, GUIDED_CONNECT_STORES, GUIDED_STATUS } from "./guided-connect";
 import { loadHeldBatch } from "./held-batches";
-import { ACT_SETTLE_WINDOW_MS, FORWARD_TIMEOUT_MS, IN_FLIGHT_RECHECK_MS, LOCAL_TOOLS_STILL_WORK, MEMORY_KEY, carriedMemory, hostedWaitOf, lostAnswer, readLane, takeMemory, unreadableAnswer, withOneNotice, withWholeWait, withoutHostedWait } from "./forward-lane-answer";
+import { ACT_SETTLE_WINDOW_MS, FOLLOW_READ_TOOL, FORWARD_TIMEOUT_MS, IN_FLIGHT_RECHECK_MS, LOCAL_TOOLS_STILL_WORK, MEMORY_KEY, buildFollowOf, carriedMemory, followSettled, followedBuildAnswer, hostedWaitOf, lostAnswer, readLane, takeMemory, unreadableAnswer, withOneNotice, withWholeWait, withoutHostedWait } from "./forward-lane-answer";
 import { CLOSED_STATUSES, readAnswer, readLanePreflight, withLanePreflight } from "./forward-lane-preflight";
 import { kernelHook, registeredKernelHooks } from "./kernel-hooks";
 import { expiredLoginRefusal } from "./login-expired";
@@ -699,6 +699,34 @@ const RESUME_UNKNOWN_STATUS = "nothing-to-resume";
 const RESUME_ACT_FACT = "resumeAct";
 const SUBMIT_DISPATCHES_SHELF = "submit-dispatches";
 
+async function followedBuild(call: LaneCall, get: Args, act: Args, startedAt: number): Promise<Args> {
+  const askedSeconds = hostedWaitOf(act)?.askedSeconds ?? 0;
+  const project = text(call.sent.project);
+  let read: Args | null = null;
+
+  for (;;) {
+    const left = askedSeconds - Math.round((outcomeClock.now() - startedAt) / 1000);
+    if (left <= 0) break;
+
+    reportProgress(`Following ${call.command} on extension.dev (${askedSeconds - left} of ${askedSeconds} s)`);
+    const leg: LaneCall = {
+      ...call,
+      command: FOLLOW_READ_TOOL,
+      tool: FOLLOW_READ_TOOL,
+      key: crypto.randomBytes(24).toString("base64url"),
+      reads: true,
+      sent: hostedArgs({ ...(project ? { project } : {}), ...get, waitSeconds: left }, null, call.session.resource),
+    };
+    const answer = await askLane(leg);
+    if (answer.kind !== "answer") break;
+
+    read = takeMemory(call.session.resource, answer.body);
+    if (followSettled(read) || !hostedWaitOf(read)) break;
+  }
+
+  return followedBuildAnswer(act, read, Math.round((outcomeClock.now() - startedAt) / 1000));
+}
+
 async function forwardedAnswer(asked: { command: string; tool: string; rule: ForwardRule; args: Args; session: ForwardSession }, local: (args: Args) => Promise<string>, deps: ForwarderDeps): Promise<string> {
   const { command, tool, rule, args, session } = asked;
   const resource = session.resource;
@@ -755,7 +783,10 @@ async function forwardedAnswer(asked: { command: string; tool: string; rule: For
     cut = !resumes || rule.resumes?.(body) === true ? hostedWaitOf(body) : null;
   }
 
-  if (legs > 1) body = withWholeWait(body, Math.round((outcomeClock.now() - startedAt) / 1000));
+  const follow = !call.reads && !resumes ? buildFollowOf(body) : null;
+
+  if (follow) body = await followedBuild(call, follow, body, startedAt);
+  else if (legs > 1) body = withWholeWait(body, Math.round((outcomeClock.now() - startedAt) / 1000));
 
   body = withOneNotice(body);
 

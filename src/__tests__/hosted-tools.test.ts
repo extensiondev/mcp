@@ -1011,6 +1011,42 @@ describe("the forwarder gives the person the wait they asked for and keeps what 
     expect(once).toMatchObject({ status: "submit-dispatched", value: { hostedWait: { grantedSeconds: 29 } } });
   });
 
+  it("1201: follows a cut rebuild wait here with get reads for the seconds still owed, never sends the rebuild again, and answers the build's verdict once", async () => {
+    const notice = "The hosted lane ends every wait within 46 s, so this wait ran 39 s of the 420 s asked.";
+    const rebuilt = {
+      ok: true,
+      command: "extension_builds_act",
+      status: "rebuild-dispatched",
+      value: { action: "rebuild", commit: "c5c0007", outcome: { status: "building", recorded: true, waitedSeconds: 39 }, follow: { get: { action: "get", buildId: "c5c0007", project: "acme/web" } }, hostedWait: { askedSeconds: 420, grantedSeconds: 39, notice } },
+      warnings: [notice],
+      hint: `Rebuild dispatched. ${notice}`,
+    };
+    const running = { ok: true, command: "extension_builds", status: "read", value: { build: { buildId: "c5c0007", status: "in_progress" }, waited: { seconds: 39, settled: false }, hostedWait: { askedSeconds: 380, grantedSeconds: 39, notice } }, warnings: [notice] };
+    const done = { ok: true, command: "extension_builds", status: "read", value: { build: { buildId: "c5c0007", status: "success" }, waited: { seconds: 12, settled: true } }, hint: "Build c5c0007 succeeded." };
+    const { lane } = stubLane([rebuilt, running, done]);
+    const stubbed = globalThis.fetch;
+
+    vi.stubGlobal("fetch", async (input: unknown, init?: RequestInit) => {
+      if (String(input) === LANE) await outcomeClock.sleep(40_000);
+
+      return stubbed(input as string, init);
+    });
+
+    const out = await forwarded("extension_builds_act", { action: "rebuild", buildId: "c5c0007", buildEnv: "production", project: "acme/web", waitSeconds: 420 });
+
+    expect(lane().map((hit) => hit.body.tool)).toEqual(["extension_builds_act", "extension_builds", "extension_builds"]);
+    expect(lane().slice(1).map((hit) => hit.body.args)).toEqual([
+      { project: "acme/web", action: "get", buildId: "c5c0007", waitSeconds: 380 },
+      { project: "acme/web", action: "get", buildId: "c5c0007", waitSeconds: 340 },
+    ]);
+
+    expect(out).toMatchObject({ ok: true, status: "built", value: { outcome: { status: "success", recorded: true, waitedSeconds: 120 }, waited: { seconds: 120, settled: true } } });
+    expect(out.value).not.toHaveProperty("hostedWait");
+    expect(JSON.stringify(out)).not.toContain(notice);
+    expect(out.hint).toContain("kept waiting on the build here, past the hosted lane's limit, for 120 s of the 420 s asked");
+    expect(out.hint).toContain("Build c5c0007 succeeded.");
+  });
+
   it("carries what the lane's tools remembered into the next call and never shows it to the agent", async () => {
     const memory = { "build-dispatches": [["https://www.extension.dev\nprj_1", [{ sha: "abc1234", dispatchedAt: "2026-11-14T12:00:00Z" }]]] };
     const { lane } = stubLane([{ ...LISTED, memory }, { ...LISTED, memory: {} }, LISTED]);
