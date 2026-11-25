@@ -26,7 +26,9 @@ export const APPROVALS_REQUEST_TOOL = "extension_approvals_request";
  * what it is, and the act tool runs only the call that carries the approved
  * id. Each act lists the actions that wait on an approval page; every other
  * action is refused here before anything runs, so a request never performs a
- * plain write.
+ * plain write. A write the platform asks an approval for that the server did
+ * not foresee (a plain verdict, or a gate marked unforeseen) still mints on
+ * the act's call, since no request could have known to ask for it.
  */
 export const REQUESTABLE_ACTS: Readonly<Record<string, readonly string[]>> = {
   extension_submit: ["submit", ...SUBMIT_SHIP_ACTIONS, ...SUBMIT_SETTING_ACTIONS],

@@ -184,6 +184,14 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       );
 
       expect(plain.blocked && JSON.parse(plain.envelope).status).toBe("request-refused");
+
+      calls.length = 0;
+      const platformAsked = await runAsAct({ act: "extension_workspace_configure", args: {}, requested: false }, () =>
+        evaluateApproval({ ...input, command: "extension_workspace", action: "extension_settings.build", scope: { buildCommand: "pnpm build" }, platformAsked: true }),
+      );
+
+      expect(platformAsked.blocked && JSON.parse(platformAsked.envelope).status).not.toBe("approval-not-requested");
+      expect(hit("POST /api/cli/approvals")).toBe(true);
     });
   });
 });

@@ -67,6 +67,7 @@ export interface ApprovalGateInput {
   irreversible?: boolean;
   write?: PolicyWrite;
   platformAsked?: boolean;
+  unforeseen?: boolean;
 }
 
 export type ApprovalGateResult =

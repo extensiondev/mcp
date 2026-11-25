@@ -419,8 +419,9 @@ export async function evaluateApproval(
     }
 
     const direct = actCall();
+    const plainAsked = input.platformAsked === true && (verdict === "plain" || input.unforeseen === true);
 
-    if (direct && !direct.requested && !askingOnly()) return requestFirst(input.command, direct);
+    if (direct && !direct.requested && !askingOnly() && !plainAsked) return requestFirst(input.command, direct);
 
     return requestApproval({ base: apiCheck.base, fingerprint, input, doFetch });
   }
