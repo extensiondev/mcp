@@ -14,6 +14,7 @@ import {
   templateFileUrls,
   resolvedTemplateCommit,
 } from "../lib/template-artifact-source";
+import { ANSWER_VALUE_CHAR_LIMIT } from "../lib/answer-cap";
 import { envelope, okOrRefusal } from "../lib/envelope";
 
 const COMMAND = "extension_templates";
@@ -138,9 +139,32 @@ export async function readTemplateSource(args: {
     }),
   );
 
+  const filesNotSent: string[] = [];
+  let size = JSON.stringify({ ...meta, fileContents: {}, fileEncodings: {} }).length;
+  let sent = 0;
+
+  for (const filePath of [...new Set(args.files)]) {
+    if (!(filePath in fileContents)) continue;
+
+    const fileSize = JSON.stringify(filePath).length * 2 + JSON.stringify(fileContents[filePath]).length + 16;
+
+    if (sent > 0 && size + fileSize > ANSWER_VALUE_CHAR_LIMIT) {
+      filesNotSent.push(filePath);
+      delete fileContents[filePath];
+      delete fileEncodings[filePath];
+      continue;
+    }
+
+    size += fileSize;
+    sent += 1;
+  }
+
   const encodedFiles = Object.keys(fileEncodings)
     .filter((filePath) => fileEncodings[filePath] === "base64")
     .sort();
+  const notSentHint = filesNotSent.length
+    ? `${filesNotSent.length} file(s) did not fit in one answer and are in filesNotSent; call extension_templates with action: "source", the same slug and files: ${JSON.stringify(filesNotSent)} to read them.`
+    : undefined;
 
   return envelope({
     ...okOrRefusal(errors.length === 0, () => ({
@@ -154,10 +178,15 @@ export async function readTemplateSource(args: {
       ...meta,
       fileContents,
       fileEncodings,
+      ...(filesNotSent.length ? { filesNotSent } : {}),
     },
-    hint: encodedFiles.length
-      ? `Base64-encoded, not text: ${encodedFiles.join(", ")}. Decode before writing to disk. fileEncodings names the encoding of every file read.`
-      : undefined,
+    ...(filesNotSent.length ? { truncated: true } : {}),
+    hint: [
+      notSentHint,
+      encodedFiles.length
+        ? `Base64-encoded, not text: ${encodedFiles.join(", ")}. Decode before writing to disk. fileEncodings names the encoding of every file read.`
+        : undefined,
+    ].filter(Boolean).join(" ") || undefined,
     warnings: errors,
   });
 }

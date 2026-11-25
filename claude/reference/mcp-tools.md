@@ -745,7 +745,8 @@ Browse the template catalog or read a template's files. Answers slugs with surfa
 | `framework` | "react" \| "vue" \| "svelte" \| "preact" \| "" | no |  | list: UI framework; empty string is vanilla. |
 | `tags` | array of string | no |  | list: tags, e.g. ['ai']. |
 | `featured` | boolean | no |  | list: featured only. |
-| `include` | array of "details" \| "urls" | no |  | list: details adds each row's tags, difficulty, featured and useCases; urls its repositoryUrl, catalogUrl and downloads. |
+| `include` | array of "details" \| "urls" | no |  | list: details adds tags, difficulty, featured, useCases; urls adds repositoryUrl, catalogUrl, downloads. |
+| `offset` | integer | no |  | list: a cut answer's nextOffset. |
 
 ## extension_theme_verify
 

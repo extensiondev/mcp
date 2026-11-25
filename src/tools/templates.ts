@@ -62,7 +62,11 @@ export const schema = {
       include: {
         type: "array",
         items: { type: "string", enum: ["details", "urls"] },
-        description: "list: details adds each row's tags, difficulty, featured and useCases; urls its repositoryUrl, catalogUrl and downloads.",
+        description: "list: details adds tags, difficulty, featured, useCases; urls adds repositoryUrl, catalogUrl, downloads.",
+      },
+      offset: {
+        type: "integer",
+        description: "list: a cut answer's nextOffset.",
       },
     },
     required: [],
@@ -79,6 +83,7 @@ export async function handler(args: {
   framework?: string;
   tags?: string[];
   featured?: boolean;
+  offset?: number;
 }): Promise<string> {
   if ((args.action ?? "list") === "source" || (!args.action && args.slug)) {
     if (!args.slug) {
@@ -104,5 +109,6 @@ export async function handler(args: {
     featured: args.featured,
     query: args.query,
     include: args.include,
+    offset: args.offset,
   });
 }

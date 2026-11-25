@@ -3361,7 +3361,13 @@
           "name": "include",
           "type": "array of \"details\" | \"urls\"",
           "required": false,
-          "description": "list: details adds each row's tags, difficulty, featured and useCases; urls its repositoryUrl, catalogUrl and downloads."
+          "description": "list: details adds tags, difficulty, featured, useCases; urls adds repositoryUrl, catalogUrl, downloads."
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "list: a cut answer's nextOffset."
         }
       ]
     },

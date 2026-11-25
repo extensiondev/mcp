@@ -151,3 +151,23 @@ describe("a template icon reaches the agent as an image, not as mojibake", () =>
     expect(frame.hint).toBeUndefined();
   });
 });
+
+describe("1143: a source read over the answer cap sends what fits and names the rest", () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, arrayBuffer: async () => bytesOf(Buffer.from("x".repeat(9_000))) })));
+  });
+
+  it("keeps whole files under 40,000 characters and lists the others in filesNotSent", async () => {
+    const files = Array.from({ length: 8 }, (_, index) => `src/file${index}.js`);
+    const frame = JSON.parse(await readTemplateSource({ slug: "action", files }));
+    const sent = Object.keys(frame.value.fileContents);
+
+    expect(JSON.stringify(frame.value).length).toBeLessThanOrEqual(40_000);
+    expect(frame.truncated).toBe(true);
+    expect(sent.length).toBeGreaterThan(0);
+    expect([...sent, ...frame.value.filesNotSent]).toEqual(files);
+    expect(sent.every((file) => frame.value.fileContents[file].length === 9_000)).toBe(true);
+    expect(frame.hint).toContain(JSON.stringify(frame.value.filesNotSent));
+  });
+});

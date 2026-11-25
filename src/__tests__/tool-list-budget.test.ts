@@ -41,9 +41,12 @@ import { FEATURE_GROUPS, TOOL_POLICY } from "../lib/tool-policy";
  * Ledger 1108 raised it to 95,800 the same day, on Cezar's ruling: ten tools
  * that read and wrote are listed as a read twin and a write twin, each
  * carrying only the parameters its own actions take, and the old names
- * answer unlisted; the default list fell from 24 tools to 19 with it. */
+ * answer unlisted; the default list fell from 24 tools to 19 with it.
+ * Ledger 1143 raised it to 95,900 on 2026-11-25 for offset on
+ * extension_templates, the only way to read the rows past a list cut at
+ * the 40,000 character answer cap. */
 const PER_TOOL = 6_000;
-const WHOLE_LIST = 95_800;
+const WHOLE_LIST = 95_900;
 
 type Listed = Awaited<ReturnType<Client["listTools"]>>["tools"][number];
 

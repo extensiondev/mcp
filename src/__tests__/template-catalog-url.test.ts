@@ -95,4 +95,37 @@ describe("extension_templates list emission", () => {
     expect(refused.error.hint).toContain('"details"');
     expect(refused.value.issues[0].path).toMatch(/^include/);
   });
+
+  it("1143: a list longer than the answer cap pages with nextOffset and the next call reads the rest", async () => {
+    const many = Array.from({ length: 200 }, (_, index) => ({ ...ROWS[0]!, slug: `t${index}`, description: "d".repeat(150) }));
+    ROWS.push(...many);
+
+    try {
+      const dispatch = createToolDispatcher({ tools: [templatesTool as unknown as ToolModule], options: { features: ["local"], noShip: true } });
+      const call = async (args: Record<string, unknown>) => JSON.parse((await dispatch({ name: "extension_templates", arguments: { include: ["details", "urls"], ...args } })).content[0]!.text);
+      const seen: string[] = [];
+      let offset: number | undefined;
+
+      for (let page = 0; page < 10; page += 1) {
+        const frame = await call(offset === undefined ? {} : { offset });
+
+        expect(JSON.stringify(frame.value).length).toBeLessThanOrEqual(40_000);
+        expect(frame.value.count).toBe(201);
+        seen.push(...frame.value.templates.map((t: { slug: string }) => t.slug));
+
+        if (frame.value.nextOffset === undefined) {
+          expect(frame.truncated).toBeUndefined();
+          break;
+        }
+
+        expect(frame.truncated).toBe(true);
+        expect(frame.hint).toContain(`offset: ${frame.value.nextOffset}`);
+        offset = frame.value.nextOffset;
+      }
+
+      expect(seen).toEqual(ROWS.map((row) => row.slug));
+    } finally {
+      ROWS.splice(1);
+    }
+  });
 });
