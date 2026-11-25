@@ -713,7 +713,7 @@ async function awaitReadyAndFirstLogs(projectPath: string, browser: string, budg
   return {
     readiness: {
       ready: { status: ready.status, ...readyValue },
-      ...(ready.status === "contract-error" && ready.error ? { readyError: ready.error } : {}),
+      ...(ready.status === "contract-error" ? { readyError: ready.error ?? unnamedReadyError(readyValue) } : {}),
       firstLogs: logs.ok ? (logs.value ?? {}) : { status: logs.status },
       ...(firstLogsNote ? { firstLogsNote } : {}),
     },
@@ -726,4 +726,10 @@ async function awaitReadyAndFirstLogs(projectPath: string, browser: string, budg
 
 function engineGone(child: { exitCode: number | null; signalCode: NodeJS.Signals | null }): boolean {
   return child.exitCode !== null || child.signalCode !== null;
+}
+
+function unnamedReadyError(readyValue: Record<string, unknown>): { code: string; message: string } {
+  const listed = Array.isArray(readyValue.errors) ? readyValue.errors.map(String).filter(Boolean) : [];
+
+  return { code: "E_CONTRACT_ERROR", message: listed.join("; ") || "the ready contract reads contract-error with no error named" };
 }

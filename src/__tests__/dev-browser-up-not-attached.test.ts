@@ -340,6 +340,20 @@ describe("extension_dev never answers started when the ready contract says the b
     expect(result.hint).not.toMatch(/extension_wait|extension_stop/);
   }, 15_000);
 
+  it("never answers ok beside a contract-error ready state, even when the wait names no error object", async () => {
+    const project = tmpProject();
+
+    waitAnswer = () => JSON.stringify({ ok: false, status: "contract-error", value: { errors: ["the profile is in use by another browser"], browser: "chrome" } });
+
+    const result = JSON.parse(await dev.handler({ projectPath: project }));
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("contract-error");
+    expect(result.error.code).toBe("E_CONTRACT_ERROR");
+    expect(result.error.message).toContain("the profile is in use by another browser");
+    expect(result.hint).toContain("extension_dev with replace: true");
+  }, 15_000);
+
   it("says nothing is running when the dev server exited on an error it would otherwise keep", async () => {
     const project = tmpProject();
 
