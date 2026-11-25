@@ -23,13 +23,13 @@ describe("the shipped Claude commands send a share ask to extension.dev first", 
     expect(start).toBeGreaterThan(-1);
     expect(action).toMatch(/"publish", "deploy" or "send to testers"/);
 
-    const order = ["extension_auth", "extension_project_create", "extension_publish", "extension_preview_web", "extension_submit"].map(
+    const order = ["extension_auth_read", "extension_project_create", "extension_publish", "extension_preview_web", "extension_submit"].map(
       (name) => action.indexOf(`\`${name}\``),
     );
 
     expect(order.every((at) => at > -1), order.join(",")).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
-    expect(action).toContain("`extension_shares`");
+    expect(action).toContain("`extension_shares_manage`");
     expect(action).not.toMatch(/GitHub Release|email|Load unpacked/i);
   });
 

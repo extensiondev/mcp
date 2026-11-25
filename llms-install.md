@@ -60,7 +60,7 @@ Sharing a preview, releasing and submitting to the Chrome Web Store, Firefox Add
 To turn them on, add `"--features=local,platform"` to `args`, restart the server, then call:
 
 ```
-extension_auth({ action: "login", project: "<workspace>/<project>" })
+extension_auth_login({ project: "<workspace>/<project>" })
 ```
 
 The person approves a code at https://extension.dev/device. The token stays on the machine and is never returned to the agent.
@@ -93,7 +93,7 @@ All are optional.
 ## Troubleshooting
 
 - The client lists no `extension_` tools: confirm `node --version` is 22.12 or newer, then restart the client.
-- `E_AUTH_REQUIRED` or `E_AUTH_EXPIRED` on a platform tool: run the `extension_auth` login above and call again.
+- `E_AUTH_REQUIRED` or `E_AUTH_EXPIRED` on a platform tool: run the `extension_auth_login` call above and call again.
 - Anything else: `extension_doctor({})` names the broken leg and how to fix it.
 
 Full reference: https://docs.extension.dev/tools/mcp

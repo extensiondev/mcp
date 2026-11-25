@@ -1,8 +1,10 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import { serverInstructions, tools as ALL_TOOLS } from "../index";
 import { renderPrompt } from "../lib/prompts";
-import { DEFAULT_SERVER_OPTIONS, isToolListed } from "../lib/tool-policy";
+import { DEFAULT_SERVER_OPTIONS, TOOL_POLICY, isToolListed } from "../lib/tool-policy";
 import { TOOL_TWINS } from "../lib/tool-twins";
 
 const IMPERATIVE_VERBS = [
@@ -346,5 +348,33 @@ describe("1106 and 1109: a description a grader reads cold says what the tool an
 
   it("keeps extension_publish describing, as a fact, that it shares and publishes through extension.dev", () => {
     expect(description("extension_publish")).toMatch(/^Publish and share a build through extension\.dev/);
+  });
+});
+
+describe("1138: a twin's parameters describe only the actions it takes", () => {
+  type Property = { description?: string; enum?: string[] };
+  const schemaOf = (name: string) => ALL_TOOLS.find((tool) => tool.schema.name === name)!.schema.inputSchema as { properties: Record<string, Property> };
+  const word = (actions: string[]): RegExp => new RegExp(`(?<![\\w-])(${actions.map((action) => action.replace(/[-*]/g, "\\$&")).join("|")})(?![\\w-])`, "i");
+
+  it.each(TOOL_TWINS.map((twin) => [twin.name, twin] as const))("%s names no action outside its enum", (name, twin) => {
+    const universe = (schemaOf(twin.of).properties.action?.enum ?? []).filter((action) => !twin.actions.includes(action));
+    const properties = schemaOf(name).properties;
+    const outside = word(universe);
+    const scoped = new RegExp(`${word(universe).source}\\s*(:|needs|requires|polls)|\\b(with|for) ${word(universe).source}`, "i");
+    const named = Object.entries(properties).flatMap(([param, property]) => {
+      const text = property.description ?? "";
+      const hit = param === "action" ? outside.exec(text) : scoped.exec(text);
+
+      return hit ? [`${param}: ${hit[0]}`] : [];
+    });
+
+    expect(properties.action?.enum).toEqual(twin.actions);
+    expect(named, name).toEqual([]);
+  });
+
+  it.each(["README.md", "llms-install.md", "claude/CLAUDE.md", "claude/commands/extension.md", "claude/commands/extension-debug.md"])("%s names only tools a server lists, never an old name", (rel) => {
+    const text = readFileSync(new URL(`../../${rel}`, import.meta.url), "utf8");
+
+    expect([...text.matchAll(/\b(extension_[a-z_]+)(?=`|\()/g)].map((match) => match[1]!).filter((name) => TOOL_POLICY[name]?.aliasOf)).toEqual([]);
   });
 });

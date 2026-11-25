@@ -30,8 +30,8 @@ List the open approvals this login asked for on extension.dev, or read one. Answ
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "list" \| "status" | no | `"list"` | List (the default with no approvalId), read or revoke. |
-| `approvalId` | string | no |  | The apr_ id; status and revoke need it. |
+| `action` | "list" \| "status" | no | `"list"` | list: the open approvals (the default with no approvalId); status: one approval. |
+| `approvalId` | string | no |  | The apr_ id; status needs it. |
 | `project` | string | no |  | '<workspace>/<project>' login to use when several are stored. |
 | `api` | string | no |  | Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev. |
 
@@ -41,8 +41,8 @@ Revoke an approval granted by mistake on extension.dev (owner token). Answers th
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "revoke" | no | `"revoke"` | List (the default with no approvalId), read or revoke. |
-| `approvalId` | string | no |  | The apr_ id; status and revoke need it. |
+| `action` | "revoke" | no | `"revoke"` | revoke: one approval granted by mistake. |
+| `approvalId` | string | no |  | The apr_ id to revoke. |
 | `project` | string | no |  | '<workspace>/<project>' login to use when several are stored. |
 | `api` | string | no |  | Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev. |
 
@@ -63,7 +63,7 @@ Sign in to an extension.dev project (a code at extension.dev/device, then device
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "login" \| "logout" | no | `"login"` | logout deletes only the local login. |
+| `action` | "login" \| "logout" | no | `"login"` | login signs in; logout deletes only the local login. |
 | `project` | string | no |  | '<workspace>/<project>' from console.extension.dev (new: extension.dev/new). |
 | `projectPath` | string | no |  | login: the directory whose GitHub origin names the project. |
 | `projects` | array \| string | no |  | login: 1 to 20 existing projects of one workspace, at most 48 characters each, or "*" with workspace. |
@@ -79,10 +79,8 @@ List the extension.dev logins stored on this machine. Answers each login; value.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "status" | no | `"status"` | logout deletes only the local login. |
-| `project` | string | no |  | '<workspace>/<project>' from console.extension.dev (new: extension.dev/new). |
-| `projectPath` | string | no |  | login: the directory whose GitHub origin names the project. |
-| `workspace` | string | no |  | login with projects: "*": the workspace. |
+| `action` | "status" | no | `"status"` | status: the stored logins. |
+| `project` | string | no |  | '<workspace>/<project>': that login only. |
 | `api` | string | no |  | Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev. |
 
 ## extension_browsers_install
@@ -91,9 +89,8 @@ Install or remove a managed browser Extension.js launches; install downloads hun
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "install" \| "uninstall" | no | `"install"` | list reads the managed cache. |
-| `browsers` | array of "chrome" \| "chromium" \| "edge" \| "brave" \| "opera" \| "vivaldi" \| "yandex" \| "firefox" \| "waterfox" \| "librewolf" \| "zen" \| "floorp" \| "safari" | no |  | detect: only these. |
-| `browser` | "chrome" \| "chromium" \| "edge" \| "firefox" | no |  | install or uninstall: the managed binary. |
+| `action` | "install" \| "uninstall" | no | `"install"` | install downloads a managed browser; uninstall removes one. |
+| `browser` | "chrome" \| "chromium" \| "edge" \| "firefox" | no |  | The managed binary. |
 | `all` | boolean | no | `false` | uninstall: every managed binary. |
 
 ## extension_browsers_read
@@ -102,10 +99,8 @@ Find the browsers Extension.js launches: detect scans system and managed ones, l
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "detect" \| "list" | no | `"detect"` | list reads the managed cache. |
+| `action` | "detect" \| "list" | no | `"detect"` | detect scans system and managed browsers; list reads the managed cache. |
 | `browsers` | array of "chrome" \| "chromium" \| "edge" \| "brave" \| "opera" \| "vivaldi" \| "yandex" \| "firefox" \| "waterfox" \| "librewolf" \| "zen" \| "floorp" \| "safari" | no |  | detect: only these. |
-| `browser` | "chrome" \| "chromium" \| "edge" \| "firefox" | no |  | install or uninstall: the managed binary. |
-| `all` | boolean | no | `false` | uninstall: every managed binary. |
 
 ## extension_build
 
@@ -156,13 +151,12 @@ Download a verified package of an extension.dev build to this machine. Answers t
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "download" | no | `"download"` | list: recent builds, lastPush; get: one build; logs; download: a verified package. |
-| `buildId` | string | no |  | Commit sha, never the build number; required for get, logs, download. |
-| `browser` | string | no |  | chrome, edge, firefox, safari; download requires it and takes source. |
+| `action` | "download" | no | `"download"` | download: a verified package. |
+| `buildId` | string | no |  | Commit sha, never the build number. |
+| `browser` | string | no |  | chrome, edge, firefox, safari, or source; required. |
 | `projectPath` | string | no |  | Project directory; picks its login. |
 | `to` | string | no |  | download: directory (default the cache). |
 | `project` | string | no |  | '<workspace>/<project>' login to use when several are stored. |
-| `waitSeconds` | number | no |  | get: seconds to wait for a build's verdict (a rebuild or a push), 0 to 600 (omitted: 0); the hosted server waits at most 45 and says so in warnings. |
 | `api` | string | no |  | Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev. |
 
 ## extension_builds_read
@@ -171,9 +165,9 @@ Read builds made on extension.dev: list recent ones, get one, or read its logs. 
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "list" \| "get" \| "logs" | no | `"list"` | list: recent builds, lastPush; get: one build; logs; download: a verified package. |
-| `buildId` | string | no |  | Commit sha, never the build number; required for get, logs, download. |
-| `browser` | string | no |  | chrome, edge, firefox, safari; download requires it and takes source. |
+| `action` | "list" \| "get" \| "logs" | no | `"list"` | list: recent builds, lastPush; get: one build; logs: its log lines. |
+| `buildId` | string | no |  | Commit sha, never the build number; required for get and logs. |
+| `browser` | string | no |  | chrome, edge, firefox or safari. |
 | `projectPath` | string | no |  | Project directory; picks its login. |
 | `limit` | number | no |  | list: 1 to 50 (default 10). |
 | `project` | string | no |  | '<workspace>/<project>' login to use when several are stored. |
@@ -268,7 +262,7 @@ Click or fill one element by CSS selector, or send trusted mouse and key input t
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
-| `action` | "click" \| "fill" \| "move" \| "press" \| "release" \| "type" \| "key" \| "scroll" | no | `"click"` | click (a real mouse press), fill, text, wait (until visible); move, press, release, type, key, scroll send trusted input. |
+| `action` | "click" \| "fill" \| "move" \| "press" \| "release" \| "type" \| "key" \| "scroll" | no | `"click"` | click (a real mouse press) and fill; move, press, release, type, key and scroll send trusted input. |
 | `selector` | string | no |  | CSS selector matching exactly one element (the point for input actions; focused before type and key). |
 | `value` | string | no |  | fill: the value to set. |
 | `x` | number | no |  | press, release, scroll: the point's x in CSS pixels of the viewport, when no selector. |
@@ -284,7 +278,7 @@ Click or fill one element by CSS selector, or send trusted mouse and key input t
 | `url` | string | no |  | A web page's tab by url. |
 | `targetId` | string | no |  | Page targetId (extension_open, extension_dom_snapshot listTargets); wins over url. |
 | `browser` | string | no |  | Running session's browser; needed when several run. |
-| `timeout` | number | no |  | Timeout ms; wait polls until it (default 10000, max 30000). |
+| `timeout` | number | no |  | Timeout ms (default 10000, max 30000). |
 
 ## extension_element_read
 
@@ -293,7 +287,7 @@ Read one element's text by CSS selector, or wait until it is visible, in a surfa
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
-| `action` | "text" \| "wait" | no | `"text"` | click (a real mouse press), fill, text, wait (until visible); move, press, release, type, key, scroll send trusted input. |
+| `action` | "text" \| "wait" | no | `"text"` | text: the element's text; wait: until it is visible. |
 | `selector` | string | no |  | CSS selector matching exactly one element (the point for input actions; focused before type and key). |
 | `context` | "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" | no |  | An open surface (extension_open first). |
 | `url` | string | no |  | A web page's tab by url. |
@@ -380,8 +374,7 @@ List the network stub rules of a Chromium session, or read which requests hit on
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
-| `action` | "list" \| "requests" | no | `"list"` | add a rule, list or clear the rules, or requests: which requests hit a rule or missed. |
-| `url` | string | no |  | add: exact URL, or a glob with * and ?. |
+| `action` | "list" \| "requests" | no | `"list"` | list: the rules in force; requests: which requests hit a rule or missed. |
 | `browser` | string | no |  | Running session's browser; needed when several run. |
 
 ## extension_network_stub
@@ -391,7 +384,7 @@ Add a network stub rule to a Chromium session, or clear the rules. Answers the r
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
-| `action` | "add" \| "clear" | no | `"add"` | add a rule, list or clear the rules, or requests: which requests hit a rule or missed. |
+| `action` | "add" \| "clear" | no | `"add"` | add: install a rule; clear: take the rules down. |
 | `method` | string | no |  | add: HTTP method; default ANY. |
 | `url` | string | no |  | add: exact URL, or a glob with * and ?. |
 | `status` | number | no | `200` | add: HTTP status to answer. |
@@ -560,7 +553,7 @@ Create an emulator preview link for a tester, or revoke a preview or build link,
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `project` | string | no |  | '<workspace>/<project>' login to use when several are stored. |
-| `kind` | "build-link" \| "preview" \| "both" | no | `"both"` | build-link (extension_publish links), preview (emulator links) or both. |
+| `kind` | "build-link" \| "preview" \| "both" | no | `"both"` | revoke: build-link (extension_publish links), preview (emulator links) or both. |
 | `tokenId` | string | no |  | revoke: a build link's tokenId. |
 | `action` | "create" \| "revoke" | no | `"create"` | create: share a build; revoke: one share, for good. |
 | `buildId` | string | no |  | create: build commit sha. |
@@ -579,9 +572,7 @@ List a project's emulator preview links and build links on extension.dev. Answer
 | --- | --- | --- | --- | --- |
 | `project` | string | no |  | '<workspace>/<project>' login to use when several are stored. |
 | `kind` | "build-link" \| "preview" \| "both" | no | `"both"` | build-link (extension_publish links), preview (emulator links) or both. |
-| `action` | "list" | no | `"list"` | create: share a build; revoke: one share, for good. |
-| `buildId` | string | no |  | create: build commit sha. |
-| `browser` | string | no |  | create: browser (default chrome). |
+| `action` | "list" | no | `"list"` | list: the project's links and their status. |
 | `projectPath` | string | no |  | Project root. |
 | `status` | "all" \| "live" | no | `"all"` | list: all links, or live for only those still open. |
 | `limit` | number | no |  | 1 to 200 (default 100). |
@@ -634,9 +625,9 @@ Read the extension's storage (chrome.storage or browser.storage) from its backgr
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
-| `action` | "get" | no | `"get"` | get: a key, or the whole area; set: one key, read back in value.readBack. |
+| `action` | "get" | no | `"get"` | get: a key's value, or the whole area with no key. |
 | `area` | "local" \| "sync" \| "session" \| "managed" | no | `"local"` | local (this device), sync (the browser account), session (until restart) or managed (policy, read-only). |
-| `key` | string | no |  | Key to read or write; omitted with get, the whole area answers. |
+| `key` | string | no |  | Key to read; omitted, the whole area answers. |
 | `observe` | boolean \| string | no | `false` | true adds value.observation, the settled surface's elements; a surface name (e.g. popup) reads that one. |
 | `browser` | string | no |  | Running session's browser; needed when several run. |
 | `timeout` | number | no |  | Timeout ms (default 30000; Firefox 10000; debug port 15000). |
@@ -648,9 +639,9 @@ Write one key of the extension's storage (chrome.storage or browser.storage) fro
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
-| `action` | "set" | no | `"set"` | get: a key, or the whole area; set: one key, read back in value.readBack. |
-| `area` | "local" \| "sync" \| "session" \| "managed" | no | `"local"` | local (this device), sync (the browser account), session (until restart) or managed (policy, read-only). |
-| `key` | string | no |  | Key to read or write; omitted with get, the whole area answers. |
+| `action` | "set" | no | `"set"` | set: one key, read back in value.readBack. |
+| `area` | "local" \| "sync" \| "session" | no | `"local"` | local (this device), sync (the browser account) or session (until restart); managed is policy and read-only. |
+| `key` | string | no |  | Key to write. |
 | `value` | any | no |  | Value to set; for null or "" use valueJson. |
 | `valueJson` | string | no |  | Value as JSON text; not with value. |
 | `observe` | boolean \| string | no | `false` | true adds value.observation, the settled surface's elements; a surface name (e.g. popup) reads that one. |
@@ -718,18 +709,13 @@ Read a project's store state through extension.dev: preflight answers what each 
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "preflight" \| "status" | no | `"preflight"` | 'preflight', 'status' and submit with dryRun true are read-only; submit with dryRun:false and no approvalId executes nothing either, it only asks the owner's approval, as does the first call of any store act. submit: buildSha to the stores. preflight: readiness checks. status: each store's word. sync-listing: listing from STORE.md. publish (alias review): draft to review. release (Safari): approved version on sale. cancel: withdraw from review. rollout: raise Chrome's staged rollout. configure-store: storeSettings. connect: page where the person gives the platform the key. first-submission: page for a first Chrome or Edge upload. mint-signing (Safari): register the bundle id, mint certificates and profiles. |
+| `action` | "preflight" \| "status" | no | `"preflight"` | preflight: what each store still needs; status: each store's word on the submissions. |
 | `project` | string | no |  | '<workspace>/<project>' login to use when several are stored. |
-| `workspace` | string | no |  | connect: a workspace, for its shared account. |
-| `browsers` | array of "chrome" \| "firefox" \| "edge" \| "safari" | no |  | Stores; submit, publish and sync-listing take several under one approval. |
+| `browsers` | array of "chrome" \| "firefox" \| "edge" \| "safari" | no |  | The stores to read. |
 | `buildSha` | string | no |  | Commit sha of a completed platform build (extension_builds_read). |
 | `version` | string | no |  | Label; default the built manifest's version. |
-| `projectPath` | string | no |  | Project root, for sync-listing; nothing local is uploaded. |
-| `useBuild` | string | no |  | sync-listing: a completed build's sha for icons. |
 | `detail` | boolean \| array | no |  | preflight: true, or ["chrome", "safari.subtitle"], answers those rows in full. |
 | `api` | string | no |  | Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev. |
-| `store` | "chrome" \| "firefox" \| "edge" \| "safari" | no |  | cancel, rollout (default chrome), release (safari), configure-store (required). |
-| `submissionId` | string | no |  | cancel, publish, release: the submission; default newest. |
 
 ## extension_templates
 
@@ -790,14 +776,14 @@ Change a project's settings, visibility or build environment on extension.dev. c
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "set-visibility" \| "configure-project" \| "set-environment" | no | `"set-visibility"` | set-* and configure-project write. |
+| `action` | "set-visibility" \| "configure-project" \| "set-environment" | no | `"set-visibility"` | configure-project: project fields; set-visibility: private or public; set-environment: build variables. |
 | `visibility` | "private" \| "public" | no |  | private: plain call under the owner's own token; public: approve page. |
 | `settings` | object | no |  | configure-project: changed fields only (displayName, description, url, supportUrl, branch, rootDirectory, workspaceRoot, buildPullRequests, runWhatsNew, runExtensionExecutables, pullRequestComments, commitComments, autoCreateGitHubRelease, liveChannel); displayName renames the project. |
 | `variables` | array of object | no |  | set-environment: build variables to add or change. |
 | `remove` | array of object | no |  | set-environment: build variables to delete. |
 | `approvalId` | string | no |  | For set-visibility public. |
 | `workspace` | string | no |  | Slug. |
-| `project` | string | no |  | Stored login; for settings, the project. |
+| `project` | string | no |  | Stored login; the project to change. |
 | `api` | string | no |  | Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev. |
 
 ## extension_workspace_create
@@ -819,7 +805,7 @@ Read the extension.dev workspace: info, projects, usage and settings. Answers th
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "info" \| "projects" \| "usage" \| "settings" | no | `"info"` | set-* and configure-project write. |
+| `action` | "info" \| "projects" \| "usage" \| "settings" | no | `"info"` | info, projects, usage or settings: the section to answer. |
 | `include` | array of "team" \| "members" \| "tokens" \| "apps" \| "activity" \| "environment" \| "storeAccounts" | no |  | Extra read-only sections to answer with the workspace. |
 | `workspace` | string | no |  | Slug. |
 | `project` | string | no |  | Stored login; for settings, the project. |

@@ -51,7 +51,7 @@ Other clients take the same server as `.mcp.json`; every client's block, with a 
 
 <!-- setup:end -->
 
-The local tools need no account; the platform tools, on with `--features=local,platform`, ask for a login the first time they reach extension.dev. Add `extras` (`--features=local,platform,extras`) to list `extension_theme_verify` and `extension_network`.
+The local tools need no account; the platform tools, on with `--features=local,platform`, ask for a login the first time they reach extension.dev. Add `extras` (`--features=local,platform,extras`) to list `extension_theme_verify`, `extension_network_read` and `extension_network_stub`.
 
 ## Your first prompt
 
@@ -125,7 +125,7 @@ Every template builds for Chrome, Edge and Firefox, and the same project ships t
 ## Requirements
 
 - Node 22.12 or later.
-- A Chromium or Firefox browser, or `extension_browsers` installs one.
+- A Chromium or Firefox browser, or `extension_browsers_install` installs one.
 - macOS with Xcode only for a local Safari session; the App Store lane needs no Mac.
 - An extension.dev login only for the platform tools.
 
@@ -137,12 +137,12 @@ Every template builds for Chrome, Edge and Firefox, and the same project ships t
 
 ## Security
 
-- **Local by default.** Every local tool runs on your machine. The control channel (`extension_storage`, `extension_reload`, `extension_open`, `extension_dom_snapshot`) is same machine, same user, on unless `extension_dev` is called with `allowControl: false`.
+- **Local by default.** Every local tool runs on your machine. The control channel (`extension_storage_read`, `extension_storage_write`, `extension_reload`, `extension_open`, `extension_dom_snapshot`) is same machine, same user, on unless `extension_dev` is called with `allowControl: false`.
 - **The eval gate.** `extension_eval` stays off until `extension_dev` is called with `allowEval: true`. A session never grows a gate on a second call: call `extension_dev` again with `replace: true` ([Session gates](https://docs.extension.dev/tools/mcp#session-gates)).
 
   <details><summary>Input that needs no gate</summary>
 
-  `extension_element` clicks, fills, reads and waits for one element, and sends trusted mouse and keyboard input (move, press, release, type, key, scroll) that pages read as `isTrusted: true`, over the debug port with no gate, since it runs no caller code.
+  `extension_element_act` clicks and fills one element and sends trusted mouse and keyboard input (move, press, release, type, key, scroll) that pages read as `isTrusted: true`, over the debug port with no gate, since it runs no caller code; `extension_element_read` reads one element's text or waits until it is visible.
 
   </details>
 
@@ -164,7 +164,7 @@ Every template builds for Chrome, Edge and Firefox, and the same project ships t
 
 ## Hosted server
 
-`https://mcp.extension.dev/mcp` serves the platform reads and promotions over Streamable HTTP: a client connects with the URL alone, signs in at www.extension.dev through OAuth, and gets `extension_workspace`, `extension_project_create`, `extension_builds` (reads), `extension_builds_act`, `extension_release_status`, `extension_release_promote` and `extension_auth` (status only). Local tools, publish, submit and share links stay on the stdio server.
+`https://mcp.extension.dev/mcp` serves the platform reads and promotions over Streamable HTTP: a client connects with the URL alone, signs in at www.extension.dev through OAuth, and gets `extension_workspace_read`, `extension_project_create`, `extension_builds_read`, `extension_builds_act`, `extension_release_status`, `extension_release_promote` and `extension_auth_read`. Local tools, publish, submit and share links stay on the stdio server.
 
 ```bash
 claude mcp add --transport http extension-dev https://mcp.extension.dev/mcp
@@ -247,7 +247,7 @@ Every refusal carries an error code and a hint (`error.hint`) naming what to cha
 
 - **`E_TOOL_DISABLED`**: the tool's group is off, or the call reaches outside this machine in no-ship mode. Add the group the hint names (`platform` or `extras`) to `--features`, or drop `--no-ship`, in the client's config, then call again.
 - **`approval-required`**: have a workspace owner approve the act at the link, then repeat the call with the same arguments and the returned `approvalId`.
-- **`E_AUTH_REQUIRED`** or **`E_AUTH_EXPIRED`**: the login lives at most 7 days. Run `extension_auth` (`action: "login"`, `project: "<workspace>/<project>"`), then call again.
+- **`E_AUTH_REQUIRED`** or **`E_AUTH_EXPIRED`**: the login lives at most 7 days. Run `extension_auth_login` (`project: "<workspace>/<project>"`), then call again.
 - **`E_NO_SESSION`**: nothing is running. Start `extension_dev`, then `extension_wait` for ready.
 - **`extension_eval` refused**: the session started without the gate. Call `extension_dev` again with `allowEval: true` and `replace: true`; reads need no eval.
 

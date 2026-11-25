@@ -90,13 +90,13 @@
           "type": "\"list\" | \"status\"",
           "required": false,
           "default": "list",
-          "description": "List (the default with no approvalId), read or revoke."
+          "description": "list: the open approvals (the default with no approvalId); status: one approval."
         },
         {
           "name": "approvalId",
           "type": "string",
           "required": false,
-          "description": "The apr_ id; status and revoke need it."
+          "description": "The apr_ id; status needs it."
         },
         {
           "name": "project",
@@ -130,13 +130,13 @@
           "type": "\"revoke\"",
           "required": false,
           "default": "revoke",
-          "description": "List (the default with no approvalId), read or revoke."
+          "description": "revoke: one approval granted by mistake."
         },
         {
           "name": "approvalId",
           "type": "string",
           "required": false,
-          "description": "The apr_ id; status and revoke need it."
+          "description": "The apr_ id to revoke."
         },
         {
           "name": "project",
@@ -209,7 +209,7 @@
           "type": "\"login\" | \"logout\"",
           "required": false,
           "default": "login",
-          "description": "logout deletes only the local login."
+          "description": "login signs in; logout deletes only the local login."
         },
         {
           "name": "project",
@@ -280,25 +280,13 @@
           "type": "\"status\"",
           "required": false,
           "default": "status",
-          "description": "logout deletes only the local login."
+          "description": "status: the stored logins."
         },
         {
           "name": "project",
           "type": "string",
           "required": false,
-          "description": "'<workspace>/<project>' from console.extension.dev (new: extension.dev/new)."
-        },
-        {
-          "name": "projectPath",
-          "type": "string",
-          "required": false,
-          "description": "login: the directory whose GitHub origin names the project."
-        },
-        {
-          "name": "workspace",
-          "type": "string",
-          "required": false,
-          "description": "login with projects: \"*\": the workspace."
+          "description": "'<workspace>/<project>': that login only."
         },
         {
           "name": "api",
@@ -326,19 +314,13 @@
           "type": "\"install\" | \"uninstall\"",
           "required": false,
           "default": "install",
-          "description": "list reads the managed cache."
-        },
-        {
-          "name": "browsers",
-          "type": "array of \"chrome\" | \"chromium\" | \"edge\" | \"brave\" | \"opera\" | \"vivaldi\" | \"yandex\" | \"firefox\" | \"waterfox\" | \"librewolf\" | \"zen\" | \"floorp\" | \"safari\"",
-          "required": false,
-          "description": "detect: only these."
+          "description": "install downloads a managed browser; uninstall removes one."
         },
         {
           "name": "browser",
           "type": "\"chrome\" | \"chromium\" | \"edge\" | \"firefox\"",
           "required": false,
-          "description": "install or uninstall: the managed binary."
+          "description": "The managed binary."
         },
         {
           "name": "all",
@@ -367,26 +349,13 @@
           "type": "\"detect\" | \"list\"",
           "required": false,
           "default": "detect",
-          "description": "list reads the managed cache."
+          "description": "detect scans system and managed browsers; list reads the managed cache."
         },
         {
           "name": "browsers",
           "type": "array of \"chrome\" | \"chromium\" | \"edge\" | \"brave\" | \"opera\" | \"vivaldi\" | \"yandex\" | \"firefox\" | \"waterfox\" | \"librewolf\" | \"zen\" | \"floorp\" | \"safari\"",
           "required": false,
           "description": "detect: only these."
-        },
-        {
-          "name": "browser",
-          "type": "\"chrome\" | \"chromium\" | \"edge\" | \"firefox\"",
-          "required": false,
-          "description": "install or uninstall: the managed binary."
-        },
-        {
-          "name": "all",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "description": "uninstall: every managed binary."
         }
       ]
     },
@@ -621,19 +590,19 @@
           "type": "\"download\"",
           "required": false,
           "default": "download",
-          "description": "list: recent builds, lastPush; get: one build; logs; download: a verified package."
+          "description": "download: a verified package."
         },
         {
           "name": "buildId",
           "type": "string",
           "required": false,
-          "description": "Commit sha, never the build number; required for get, logs, download."
+          "description": "Commit sha, never the build number."
         },
         {
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "chrome, edge, firefox, safari; download requires it and takes source."
+          "description": "chrome, edge, firefox, safari, or source; required."
         },
         {
           "name": "projectPath",
@@ -652,12 +621,6 @@
           "type": "string",
           "required": false,
           "description": "'<workspace>/<project>' login to use when several are stored."
-        },
-        {
-          "name": "waitSeconds",
-          "type": "number",
-          "required": false,
-          "description": "get: seconds to wait for a build's verdict (a rebuild or a push), 0 to 600 (omitted: 0); the hosted server waits at most 45 and says so in warnings."
         },
         {
           "name": "api",
@@ -685,19 +648,19 @@
           "type": "\"list\" | \"get\" | \"logs\"",
           "required": false,
           "default": "list",
-          "description": "list: recent builds, lastPush; get: one build; logs; download: a verified package."
+          "description": "list: recent builds, lastPush; get: one build; logs: its log lines."
         },
         {
           "name": "buildId",
           "type": "string",
           "required": false,
-          "description": "Commit sha, never the build number; required for get, logs, download."
+          "description": "Commit sha, never the build number; required for get and logs."
         },
         {
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "chrome, edge, firefox, safari; download requires it and takes source."
+          "description": "chrome, edge, firefox or safari."
         },
         {
           "name": "projectPath",
@@ -1126,7 +1089,7 @@
           "type": "\"click\" | \"fill\" | \"move\" | \"press\" | \"release\" | \"type\" | \"key\" | \"scroll\"",
           "required": false,
           "default": "click",
-          "description": "click (a real mouse press), fill, text, wait (until visible); move, press, release, type, key, scroll send trusted input."
+          "description": "click (a real mouse press) and fill; move, press, release, type, key and scroll send trusted input."
         },
         {
           "name": "selector",
@@ -1222,7 +1185,7 @@
           "name": "timeout",
           "type": "number",
           "required": false,
-          "description": "Timeout ms; wait polls until it (default 10000, max 30000)."
+          "description": "Timeout ms (default 10000, max 30000)."
         }
       ]
     },
@@ -1250,7 +1213,7 @@
           "type": "\"text\" | \"wait\"",
           "required": false,
           "default": "text",
-          "description": "click (a real mouse press), fill, text, wait (until visible); move, press, release, type, key, scroll send trusted input."
+          "description": "text: the element's text; wait: until it is visible."
         },
         {
           "name": "selector",
@@ -1629,13 +1592,7 @@
           "type": "\"list\" | \"requests\"",
           "required": false,
           "default": "list",
-          "description": "add a rule, list or clear the rules, or requests: which requests hit a rule or missed."
-        },
-        {
-          "name": "url",
-          "type": "string",
-          "required": false,
-          "description": "add: exact URL, or a glob with * and ?."
+          "description": "list: the rules in force; requests: which requests hit a rule or missed."
         },
         {
           "name": "browser",
@@ -1669,7 +1626,7 @@
           "type": "\"add\" | \"clear\"",
           "required": false,
           "default": "add",
-          "description": "add a rule, list or clear the rules, or requests: which requests hit a rule or missed."
+          "description": "add: install a rule; clear: take the rules down."
         },
         {
           "name": "method",
@@ -2466,7 +2423,7 @@
           "type": "\"build-link\" | \"preview\" | \"both\"",
           "required": false,
           "default": "both",
-          "description": "build-link (extension_publish links), preview (emulator links) or both."
+          "description": "revoke: build-link (extension_publish links), preview (emulator links) or both."
         },
         {
           "name": "tokenId",
@@ -2556,19 +2513,7 @@
           "type": "\"list\"",
           "required": false,
           "default": "list",
-          "description": "create: share a build; revoke: one share, for good."
-        },
-        {
-          "name": "buildId",
-          "type": "string",
-          "required": false,
-          "description": "create: build commit sha."
-        },
-        {
-          "name": "browser",
-          "type": "string",
-          "required": false,
-          "description": "create: browser (default chrome)."
+          "description": "list: the project's links and their status."
         },
         {
           "name": "projectPath",
@@ -2819,7 +2764,7 @@
           "type": "\"get\"",
           "required": false,
           "default": "get",
-          "description": "get: a key, or the whole area; set: one key, read back in value.readBack."
+          "description": "get: a key's value, or the whole area with no key."
         },
         {
           "name": "area",
@@ -2832,7 +2777,7 @@
           "name": "key",
           "type": "string",
           "required": false,
-          "description": "Key to read or write; omitted with get, the whole area answers."
+          "description": "Key to read; omitted, the whole area answers."
         },
         {
           "name": "observe",
@@ -2879,20 +2824,20 @@
           "type": "\"set\"",
           "required": false,
           "default": "set",
-          "description": "get: a key, or the whole area; set: one key, read back in value.readBack."
+          "description": "set: one key, read back in value.readBack."
         },
         {
           "name": "area",
-          "type": "\"local\" | \"sync\" | \"session\" | \"managed\"",
+          "type": "\"local\" | \"sync\" | \"session\"",
           "required": false,
           "default": "local",
-          "description": "local (this device), sync (the browser account), session (until restart) or managed (policy, read-only)."
+          "description": "local (this device), sync (the browser account) or session (until restart); managed is policy and read-only."
         },
         {
           "name": "key",
           "type": "string",
           "required": false,
-          "description": "Key to read or write; omitted with get, the whole area answers."
+          "description": "Key to write."
         },
         {
           "name": "value",
@@ -3225,7 +3170,7 @@
           "type": "\"preflight\" | \"status\"",
           "required": false,
           "default": "preflight",
-          "description": "'preflight', 'status' and submit with dryRun true are read-only; submit with dryRun:false and no approvalId executes nothing either, it only asks the owner's approval, as does the first call of any store act. submit: buildSha to the stores. preflight: readiness checks. status: each store's word. sync-listing: listing from STORE.md. publish (alias review): draft to review. release (Safari): approved version on sale. cancel: withdraw from review. rollout: raise Chrome's staged rollout. configure-store: storeSettings. connect: page where the person gives the platform the key. first-submission: page for a first Chrome or Edge upload. mint-signing (Safari): register the bundle id, mint certificates and profiles."
+          "description": "preflight: what each store still needs; status: each store's word on the submissions."
         },
         {
           "name": "project",
@@ -3234,16 +3179,10 @@
           "description": "'<workspace>/<project>' login to use when several are stored."
         },
         {
-          "name": "workspace",
-          "type": "string",
-          "required": false,
-          "description": "connect: a workspace, for its shared account."
-        },
-        {
           "name": "browsers",
           "type": "array of \"chrome\" | \"firefox\" | \"edge\" | \"safari\"",
           "required": false,
-          "description": "Stores; submit, publish and sync-listing take several under one approval."
+          "description": "The stores to read."
         },
         {
           "name": "buildSha",
@@ -3258,18 +3197,6 @@
           "description": "Label; default the built manifest's version."
         },
         {
-          "name": "projectPath",
-          "type": "string",
-          "required": false,
-          "description": "Project root, for sync-listing; nothing local is uploaded."
-        },
-        {
-          "name": "useBuild",
-          "type": "string",
-          "required": false,
-          "description": "sync-listing: a completed build's sha for icons."
-        },
-        {
           "name": "detail",
           "type": "boolean | array",
           "required": false,
@@ -3280,18 +3207,6 @@
           "type": "string",
           "required": false,
           "description": "Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev."
-        },
-        {
-          "name": "store",
-          "type": "\"chrome\" | \"firefox\" | \"edge\" | \"safari\"",
-          "required": false,
-          "description": "cancel, rollout (default chrome), release (safari), configure-store (required)."
-        },
-        {
-          "name": "submissionId",
-          "type": "string",
-          "required": false,
-          "description": "cancel, publish, release: the submission; default newest."
         }
       ]
     },
@@ -3529,7 +3444,7 @@
           "type": "\"set-visibility\" | \"configure-project\" | \"set-environment\"",
           "required": false,
           "default": "set-visibility",
-          "description": "set-* and configure-project write."
+          "description": "configure-project: project fields; set-visibility: private or public; set-environment: build variables."
         },
         {
           "name": "visibility",
@@ -3571,7 +3486,7 @@
           "name": "project",
           "type": "string",
           "required": false,
-          "description": "Stored login; for settings, the project."
+          "description": "Stored login; the project to change."
         },
         {
           "name": "api",
@@ -3650,7 +3565,7 @@
           "type": "\"info\" | \"projects\" | \"usage\" | \"settings\"",
           "required": false,
           "default": "info",
-          "description": "set-* and configure-project write."
+          "description": "info, projects, usage or settings: the section to answer."
         },
         {
           "name": "include",

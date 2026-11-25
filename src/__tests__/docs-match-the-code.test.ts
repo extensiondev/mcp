@@ -366,7 +366,7 @@ describe("the docs say what the code does", () => {
 
     expect(install).toMatch(/extension_doctor\(\{\}\)/);
     expect(install).toContain('"status": "healthy"');
-    expect(install).toMatch(/extension_auth\(\{ action: "login", project: "<workspace>\/<project>" \}\)/);
+    expect(install).toMatch(/extension_auth_login\(\{ project: "<workspace>\/<project>" \}\)/);
     expect(install).not.toMatch(/extension_login/);
 
     for (const { name } of server.packages[0].environmentVariables) expect(install, name).toContain(`\`${name}\``);
