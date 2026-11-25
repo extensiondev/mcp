@@ -24,6 +24,7 @@ import { loginForPath, pathIdentity, serverLogins } from "../lib/path-project";
 import { PLATFORM_KERNEL_HOOKS, installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
 import { forwardable } from "../lib/hosted-forwarder";
 import { GUIDED_KEY_PAGES, guideStoreConnect, guidedConnectRuntime, launchGuidedBrowser, type GuidedConnectRuntime, type LaunchPlan } from "../lib/guided-connect";
+import { guidedCopy } from "../lib/guided-copy-build";
 import { PARTNER_CENTER_OVERVIEW, guideFirstListing } from "../lib/guided-first-listing";
 import { headlessFromProcesses } from "../lib/guided-window";
 import { workspaceConnectAnswer } from "../lib/store-connection";
@@ -771,6 +772,26 @@ describe("the guided store connect opens the MCP's own browser with extension.de
 
     for (const dir of [path.join(tmp, "state", "guided-browser"), path.dirname(profileDir), profileDir]) expect(fs.statSync(dir).mode & 0o777, dir).toBe(0o700);
     expect(fs.statSync(path.join(path.dirname(profileDir), "running.json")).mode & 0o777).toBe(0o600);
+  });
+
+  it("loads changed tools bytes as a new version so a profile that ran the old background registers the new one", () => {
+    const verified = path.join(tmp, "verified");
+    const cache = path.join(tmp, "copies");
+    const versionOf = () => JSON.parse(fs.readFileSync(path.join(guidedCopy(verified, cache, "chromium"), "manifest.json"), "utf8")).version as string;
+
+    fs.mkdirSync(path.join(verified, "background"), { recursive: true });
+    fs.writeFileSync(path.join(verified, "manifest.json"), JSON.stringify({ manifest_version: 3, version: "0.1.3", optional_host_permissions: ["https://partner.microsoft.com/*"] }));
+    fs.writeFileSync(path.join(verified, "background", "service_worker.js"), "old");
+
+    const first = versionOf();
+
+    expect(first).toMatch(/^0\.1\.3\.\d{1,5}$/);
+    expect(versionOf()).toBe(first);
+
+    fs.writeFileSync(path.join(verified, "background", "service_worker.js"), "new");
+
+    expect(versionOf()).not.toBe(first);
+    expect(JSON.parse(fs.readFileSync(path.join(verified, "manifest.json"), "utf8")).version).toBe("0.1.3");
   });
 
   it("refuses the Chrome Web Store item served for the Edge item and loads the bundled copy, saying so", async () => {
