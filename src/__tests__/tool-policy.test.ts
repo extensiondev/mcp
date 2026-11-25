@@ -357,6 +357,29 @@ describe("1108: a tool that read and wrote answers as a read twin and a write tw
     expect(body.warnings).toContain("extension_storage is now extension_storage_read; it still answers under the old name.");
   });
 
+  it("1139: lists the submit write tools with acts only, and answers a saved read call there with a warning naming the read twin", async () => {
+    const client = await connected(ALL);
+    const listed = (await client.listTools()).tools;
+    const actions = (name: string): string[] => (listed.find((tool) => tool.name === name)!.inputSchema.properties as Record<string, { enum: string[] }>).action.enum;
+
+    expect(actions("extension_submit")).not.toEqual(expect.arrayContaining(["preflight"]));
+    expect([...actions("extension_submit"), ...actions("extension_submit_check")].filter((action) => action === "preflight" || action === "status")).toEqual([]);
+    expect(actions("extension_submit_read")).toEqual(["preflight", "status"]);
+
+    for (const name of ["extension_submit", "extension_submit_check"]) {
+      const out = await call(client, name, { action: "preflight", browsers: ["chrome"] });
+
+      expect(out.body.error?.code, name).not.toBe("E_INPUT_VALIDATION");
+      expect(out.body.warnings, name).toContain(`${name} action preflight is now extension_submit_read; it still answers here.`);
+    }
+
+    const dry = await call(client, "extension_submit", { buildSha: "abc", browsers: ["chrome"] });
+    const read = await call(client, "extension_submit_read", { action: "status" });
+
+    expect(dry.body.warnings).toContain("extension_submit with dryRun true is now extension_submit_check; it still answers here.");
+    expect(JSON.stringify(read.body.warnings ?? [])).not.toContain("still answers here");
+  });
+
   it("points a build act sent to the read twin at the act tool, not at the old name", async () => {
     const client = await connected(ALL);
     const refused = await call(client, "extension_builds_read", { action: "rebuild", buildId: "603fc8a" });

@@ -47,6 +47,7 @@ import { createReloader, handoverState, type ActiveBuild, type BuildImporter, ty
 import { markListStale, reloadedWarning, serverStamp, staleEnvelope, type ServerStampReader } from "./server-stamp";
 import { markStaleLocal, noLocalCarryReason, predatedChecks, predatesCheckEnvelope, type HeldLocal } from "./stale-local";
 import { answeredAs } from "./submit-action-safety";
+import { acceptedSchema, movedReadSentence } from "./tool-twins";
 import { withComposedRefusals } from "./composed-refusal";
 import { annotate, frameText, refusedFrame, toolResultFrame, withStructuredContent } from "./tool-frames";
 import { attachTrack } from "./track-url";
@@ -171,12 +172,21 @@ function isFenced(text: string): boolean {
   }
 }
 
-function aliasNoted(frame: ToolFrame, call: RebuiltCall, served: (name: string) => boolean): ToolFrame {
+function movedSentence(call: RebuiltCall, served: (name: string) => boolean, schema: Record<string, unknown> | undefined): string | null {
   const aliasOf = TOOL_POLICY[call.name]?.aliasOf?.filter(served);
 
-  if (!aliasOf?.length || call.internal) return frame;
+  if (aliasOf?.length) return `${call.name} is now ${aliasOf.join(" and ")}; it still answers under the old name.`;
 
-  const sentence = `${call.name} is now ${aliasOf.join(" and ")}; it still answers under the old name.`;
+  const moved = schema ? movedReadSentence(call.name, (call.arguments ?? {}) as Record<string, unknown>, schema) : null;
+
+  return moved && served(moved.to) ? moved.sentence : null;
+}
+
+function aliasNoted(frame: ToolFrame, call: RebuiltCall, served: (name: string) => boolean, schema: Record<string, unknown> | undefined): ToolFrame {
+  const sentence = call.internal ? null : movedSentence(call, served, schema);
+
+  if (!sentence) return frame;
+
   let noted = false;
   const content = frame.content.map((part) => {
     const text = isFenced(part.text) ? part.text : appendWarnings(part.text, [sentence]);
@@ -298,7 +308,7 @@ export function createToolSurface(setup: ToolHandlerOptions): {
 
   const served = (name: string): boolean => toolMap.has(name) && isToolListed(name, options);
 
-  const dispatch = async (call: RebuiltCall): Promise<ToolFrame> => withStructuredContent(aliasNoted(await withComposedRefusals(() => dispatched(call)), call, served), call.name);
+  const dispatch = async (call: RebuiltCall): Promise<ToolFrame> => withStructuredContent(aliasNoted(await withComposedRefusals(() => dispatched(call)), call, served, toolMap.get(call.name)?.schema.inputSchema), call.name);
 
   const dispatched = async ({ name, arguments: args }: RebuiltCall): Promise<ToolFrame> => {
     const tool = toolMap.get(name);
@@ -392,7 +402,7 @@ export function createToolSurface(setup: ToolHandlerOptions): {
     if ("refused" in bound) return refusedAct(bound.refused, pinned.args);
 
     const normalizedArgs = bound.args;
-    const argumentIssues = validateToolInput(tool.schema.inputSchema, normalizedArgs);
+    const argumentIssues = validateToolInput(acceptedSchema(name, tool.schema.inputSchema), normalizedArgs);
     const issues = argumentIssues.some((issue) => issue.path === "projectPath")
       ? argumentIssues
       : [...argumentIssues, ...projectFolderIssues(name, tool.schema.inputSchema, normalizedArgs)];

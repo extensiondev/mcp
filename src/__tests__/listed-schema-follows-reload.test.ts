@@ -111,7 +111,7 @@ describe("the listed tool schema is the one the answering build validates agains
     const { changed, listed, call } = await connect(file);
 
     const loadedSubmit = await listed("extension_submit");
-    expect((loadedSubmit?.inputSchema.properties as Record<string, { enum?: string[] }>).action.enum).toEqual([...SUBMIT_ACTIONS]);
+    expect((loadedSubmit?.inputSchema.properties as Record<string, { enum?: string[] }>).action.enum).toEqual(SUBMIT_ACTIONS.filter((action) => action !== "preflight" && action !== "status"));
 
     writeBuild(file, fixtureBuild(true), REBUILT);
 
@@ -197,7 +197,7 @@ describe("the listed tool schema is the one the answering build validates agains
     const props = submit?.inputSchema.properties as Record<string, { enum?: string[] }>;
 
     expect(props.action.enum).toContain("release");
-    expect(props.action.enum).toContain("status");
+    expect(props.action.enum).toContain("sync-listing");
     expect(props.buildNumber).toBeDefined();
     expect(props.action.enum).toContain("publish");
   });

@@ -10,12 +10,13 @@ import { API_BASE, SUBMIT_WAIT_SECONDS } from "../lib/common-schema";
 import { ENVELOPE_OUTPUT_SCHEMA } from "../lib/envelope";
 import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
 import { hostedOnly } from "../lib/hosted-only";
+import { SUBMIT_READ_ACTIONS, SUBMIT_WRITE_SAFETY } from "../lib/submit-action-safety";
 
 import type { InputIssue } from "../lib/validate-input";
 
 export const schema = {
   name: "extension_submit",
-  description: "Submit an extension.dev build to the Chrome, Firefox, Edge and Safari stores. It runs the call carrying an approvalId; extension_submit_check answers the preflight and asks the approval, extension_release_status answers reviews, extension_release_promote moves a channel. A real submit needs a workspace owner's token and approval of that exact submission, every time. Uploads land least public (Chrome and Edge drafts, Firefox unlisted, Safari TestFlight) unless a saved store mode says otherwise.",
+  description: "Submit an extension.dev build to the Chrome, Firefox, Edge and Safari stores. It runs a call carrying an approvalId; extension_submit_read answers the preflight, extension_submit_check dry runs and asks, extension_release_status reviews, extension_release_promote channels. A real submit needs a workspace owner's token and approval of that exact submission, every time. Uploads land least public (Chrome and Edge drafts, Firefox unlisted, Safari TestFlight) unless a saved store mode says otherwise.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -23,8 +24,6 @@ export const schema = {
         type: "string",
         enum: [
           "submit",
-          "status",
-          "preflight",
           "sync-listing",
           "cancel",
           "rollout",
@@ -37,7 +36,7 @@ export const schema = {
           "mint-signing",
         ],
         default: "submit",
-        description: "'preflight', 'status' and submit with dryRun true are read-only; submit with dryRun:false and no approvalId executes nothing either, it only asks the owner's approval, as does the first call of any store act. submit: buildSha to the stores. preflight: readiness checks. status: each store's word. sync-listing: listing from STORE.md. publish (alias review): draft to review. release (Safari): approved version on sale. cancel: withdraw from review. rollout: raise Chrome's staged rollout. configure-store: storeSettings. connect: page where the person gives the platform the key. first-submission: page for a first Chrome or Edge upload. mint-signing (Safari): register the bundle id, mint certificates and profiles.",
+        description: `${SUBMIT_WRITE_SAFETY} submit: buildSha to the stores. sync-listing: listing from STORE.md. publish (alias review): draft to review. release (Safari): approved version on sale. cancel: withdraw from review. rollout: raise Chrome's staged rollout. configure-store: storeSettings. connect: page where the person gives the platform the key. first-submission: page for a first Chrome or Edge upload. mint-signing (Safari): register the bundle id, mint certificates and profiles.`,
       },
       project: PROJECT_TOKEN_INPUT,
       workspace: {
@@ -63,7 +62,7 @@ export const schema = {
       dryRun: {
         type: "boolean",
         default: true,
-        description: "true sends nothing and spends no approval or quota; false submits once approved and stops at the draft under the default modes.",
+        description: "false submits once approved and stops at the draft under the default modes; true sends nothing, a dry run extension_submit_check answers.",
       },
       projectPath: {
         type: "string",
@@ -89,7 +88,7 @@ export const schema = {
         items: {
           type: "string",
         },
-        description: "preflight: true, or [\"chrome\", \"safari.subtitle\"], answers those rows in full.",
+        description: "true, or [\"chrome\", \"safari.subtitle\"], answers those readiness rows in full.",
       },
       api: API_BASE,
       store: {
@@ -194,12 +193,12 @@ export const schema = {
   },
 };
 
-export const SUBMIT_ACTIONS = schema.inputSchema.properties.action.enum;
+export const SUBMIT_ACTIONS = [...schema.inputSchema.properties.action.enum, ...SUBMIT_READ_ACTIONS];
 
 export function invalidArgumentsHint(issues: InputIssue[]): string | undefined {
   if (!issues.some((issue) => issue.path === "action")) return undefined;
 
-  return "The store's own state for the newest version is extension_submit_check {action: \"status\", browsers: [<store>]}, and the full store picture is extension_release_status {include: [\"stores\"]}.";
+  return "The store's own state for the newest version is extension_submit_read {action: \"status\", browsers: [<store>]}, and the full store picture is extension_release_status {include: [\"stores\"]}.";
 }
 
 export const handler = hostedOnly(schema.name);

@@ -98,7 +98,7 @@ describe("the server instructions carry the Chrome Web Store goal playbook in or
     );
     const playbook = lines.slice(start, start + 8);
     const steps = [
-      "1. Call extension_submit_check {action:'preflight', browsers:['chrome']} first, every time, even on a retry.",
+      "1. Call extension_submit_read {action:'preflight', browsers:['chrome']} first, every time, even on a retry.",
       "2. On store-not-connected or store-connection-failed",
       "3. On store-item-not-linked",
       "4. On preflight-read whose value.stores.chrome.storeMd says the privacy policy URL is not in STORE.md, say that line as it is and stop",

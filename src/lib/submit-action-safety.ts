@@ -43,9 +43,15 @@ export function submitAsks(args: Args): boolean {
 
 const quoted = (actions: readonly string[]): string => actions.map((action) => `'${action}'`).join(", ");
 
+export const SUBMIT_READ_TOOL = "extension_submit_read";
+
+export const SUBMIT_WRITE_SAFETY = `submit with dryRun:false and no approvalId executes nothing, it only asks the owner's approval, as does the first call of any store act; ${SUBMIT_READ_TOOL} answers ${quoted(SUBMIT_READ_ACTIONS)} and ${SUBMIT_CHECK_TOOL} a dry run.`;
+
 export const SUBMIT_ACTION_SAFETY = `${quoted(SUBMIT_READ_ACTIONS)} and submit with dryRun true are read-only; submit with dryRun:false and no approvalId executes nothing either, it only asks the owner's approval, as does the first call of any store act.`;
 
 export const SUBMIT_CHECK_ACTIONS = [...SUBMIT_READ_ACTIONS, "submit", ...SUBMIT_SHIP_ACTIONS, ...SUBMIT_SETTING_ACTIONS, ...SUBMIT_CONNECT_ACTIONS] as const;
+
+export const SUBMIT_CHECK_LISTED_ACTIONS = SUBMIT_CHECK_ACTIONS.filter((action) => !(SUBMIT_READ_ACTIONS as readonly string[]).includes(action));
 
 const CHECKS = new Set<string>(SUBMIT_CHECK_ACTIONS);
 

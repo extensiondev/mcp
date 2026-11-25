@@ -80,7 +80,7 @@ export function renderStoreMdFieldsDoc(): string {
 export const STORE_MD_FORMAT_URL = "https://extension.js.org/docs/workflows/store-metadata";
 
 const FORMAT_INTRO =
-  'STORE.md is one file in the project root; extension_submit preflight and sync-listing read it. A "##" heading opens a section, and a line is a "- Key: value" bullet or a "###" sub-heading with its text below; a value that starts with TODO counts as absent. Each line names the stores that read it and its limit. A store\'s own section may repeat a "## Listing" line for that store alone. The data-use and privacy answers are the owner\'s to give.';
+  'STORE.md is one file in the project root; extension_submit_read preflight and extension_submit sync-listing read it. A "##" heading opens a section, and a line is a "- Key: value" bullet or a "###" sub-heading with its text below; a value that starts with TODO counts as absent. Each line names the stores that read it and its limit. A store\'s own section may repeat a "## Listing" line for that store alone. The data-use and privacy answers are the owner\'s to give.';
 
 export function renderStoreMdFormat(): string {
   const sections = [LISTING_SECTION, PRIVACY_SECTION, ...LISTING_STORES.map((store) => STORE_SECTIONS[store])];

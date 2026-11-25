@@ -293,3 +293,52 @@ export function twinSchema(twin: ToolTwin, of: { inputSchema: Record<string, unk
     inputSchema: { ...of.inputSchema, properties, ...(required.length ? { required } : { required: [] }) },
   };
 }
+
+/* @invariant A LISTED WRITE TOOL NEVER ADVERTISES A READ ITS TWIN OWNS.
+ * extension_submit and extension_submit_check stay listed, so they cannot
+ * become unlisted aliases, yet their reads moved to extension_submit_read
+ * and the dry run to extension_submit_check (ledger 1139). Their listed
+ * schemas name only acts; a saved call that still sends a moved read keeps
+ * its answer, validated against the action enum widened here, and every
+ * such answer names the tool that owns the read now, as an old name's does.
+ */
+export interface MovedRead {
+  actions: string[];
+  to: string;
+  dryRun?: true;
+}
+
+export const MOVED_READS: Record<string, MovedRead[]> = {
+  extension_submit: [
+    { actions: ["preflight", "status"], to: "extension_submit_read" },
+    { actions: ["submit"], to: "extension_submit_check", dryRun: true },
+  ],
+  extension_submit_check: [{ actions: ["preflight", "status"], to: "extension_submit_read" }],
+};
+
+const defaultAction = (schema: Record<string, unknown>): string | undefined => {
+  const action = (schema.properties as Record<string, { default?: unknown }> | undefined)?.action?.default;
+
+  return typeof action === "string" ? action : undefined;
+};
+
+export function movedReadSentence(name: string, args: Record<string, unknown>, schema: Record<string, unknown>): { sentence: string; to: string } | null {
+  const action = typeof args.action === "string" && args.action ? args.action : defaultAction(schema);
+  const moved = (MOVED_READS[name] ?? []).find((read) => read.actions.includes(String(action)) && (!read.dryRun || args.dryRun !== false));
+
+  if (!moved) return null;
+
+  const what = moved.dryRun ? `${name} with dryRun true` : `${name} action ${String(action)}`;
+
+  return { sentence: `${what} is now ${moved.to}; it still answers here.`, to: moved.to };
+}
+
+export function acceptedSchema(name: string, schema: Record<string, unknown>): Record<string, unknown> {
+  const moved = (MOVED_READS[name] ?? []).flatMap((read) => (read.dryRun ? [] : read.actions));
+  const properties = schema.properties as Record<string, { enum?: unknown[] }> | undefined;
+  const action = properties?.action;
+
+  if (!moved.length || !action?.enum) return schema;
+
+  return { ...schema, properties: { ...properties, action: { ...action, enum: [...action.enum, ...moved.filter((read) => !action.enum!.includes(read))] } } };
+}

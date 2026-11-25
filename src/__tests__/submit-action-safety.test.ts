@@ -8,7 +8,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SUBMIT_ACTION_SAFETY, SUBMIT_CONNECT_ACTIONS, SUBMIT_READ_ACTIONS, SUBMIT_SETTING_ACTIONS, SUBMIT_SHIP_ACTIONS } from "../lib/submit-action-safety";
+import { SUBMIT_WRITE_SAFETY, SUBMIT_CONNECT_ACTIONS, SUBMIT_READ_ACTIONS, SUBMIT_SETTING_ACTIONS, SUBMIT_SHIP_ACTIONS } from "../lib/submit-action-safety";
 import { TOOL_POLICY } from "../lib/tool-policy";
 import { schema, SUBMIT_ACTIONS } from "../tools/submit";
 
@@ -43,13 +43,16 @@ describe("extension_submit says per action which calls only read (ledger 360)", 
     expect(ships({ dryRun: false })).toBe(true);
   });
 
-  it("the action input tells a client first which actions are read-only and that the approval request executes nothing", () => {
+  it("1139: the action input lists only acts, says the approval request executes nothing and names the tools that own the reads", () => {
     const described = schema.inputSchema.properties.action.description;
 
-    expect(described.startsWith(SUBMIT_ACTION_SAFETY)).toBe(true);
-    expect(described).toContain("'preflight', 'status' and submit with dryRun true are read-only");
+    expect(described.startsWith(SUBMIT_WRITE_SAFETY)).toBe(true);
+    expect(schema.inputSchema.properties.action.enum).not.toContain("preflight");
+    expect(schema.inputSchema.properties.action.enum).not.toContain("status");
+    expect(described).not.toMatch(/\b(preflight|status):/);
+    expect(described).toContain("extension_submit_read answers 'preflight', 'status'");
     expect(schema.inputSchema.properties.dryRun.default).toBe(true);
-    expect(described).toContain("submit with dryRun:false and no approvalId executes nothing either");
+    expect(described).toContain("submit with dryRun:false and no approvalId executes nothing");
     expect(TOOL_POLICY.extension_submit.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, openWorldHint: true });
   });
 });

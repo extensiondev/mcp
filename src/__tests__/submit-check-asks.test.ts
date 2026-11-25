@@ -82,7 +82,7 @@ describe("extension_submit_check asks for the approval of every store act and ex
   it("takes every action of extension_submit, derived from the safety lists, and every input but approvalId", () => {
     expect([...SUBMIT_CHECK_ACTIONS].sort()).toEqual([...SUBMIT_READ_ACTIONS, "submit", ...SUBMIT_SHIP_ACTIONS, ...SUBMIT_SETTING_ACTIONS, ...SUBMIT_CONNECT_ACTIONS].sort());
     expect([...SUBMIT_CHECK_ACTIONS].sort()).toEqual([...SUBMIT_ACTIONS].sort());
-    expect(checkSchema.inputSchema.properties.action.enum).toEqual([...SUBMIT_CHECK_ACTIONS]);
+    expect(checkSchema.inputSchema.properties.action.enum).toEqual(SUBMIT_CHECK_ACTIONS.filter((action) => !(SUBMIT_READ_ACTIONS as readonly string[]).includes(action)));
 
     const inputs = Object.keys(submitSchema.inputSchema.properties).filter((key) => key !== "approvalId").sort();
 

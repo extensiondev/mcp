@@ -7,37 +7,24 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { hostedOnly } from "../lib/hosted-only";
+import { SUBMIT_CHECK_LISTED_ACTIONS } from "../lib/submit-action-safety";
 
 export const schema = {
   name: "extension_submit_check",
-  description: "Check a store submission without sending it: preflight, status and a dry-run submit answer here; any other action records an approval request for the workspace owner and answers value.approvalUrl. extension_submit runs the call carrying that approvalId; extension_release_status answers review history, extension_release_promote releases a channel. Takes extension_submit's inputs.",
+  description: "Check a store submission without sending it: a dry-run submit answers here; any other action records an approval request for the workspace owner and answers value.approvalUrl. extension_submit runs the call carrying that approvalId; extension_submit_read answers the preflight, extension_release_status review history, extension_release_promote channels. Takes extension_submit's inputs.",
   inputSchema: {
     type: "object" as const,
     properties: {
       action: {
         type: "string",
-        enum: [
-          "preflight",
-          "status",
-          "submit",
-          "publish",
-          "review",
-          "cancel",
-          "rollout",
-          "release",
-          "sync-listing",
-          "mint-signing",
-          "configure-store",
-          "connect",
-          "first-submission",
-        ],
+        enum: [...SUBMIT_CHECK_LISTED_ACTIONS],
         default: "submit",
-        description: "The read, or the act to ask approval for.",
+        description: "The act to ask approval for, or submit with dryRun true.",
       },
       dryRun: {
         type: "boolean",
         default: true,
-        description: "true reads only; false only asks the owner's approval of the real submit.",
+        description: "true sends nothing; false only asks the owner's approval of the real submit.",
       },
       project: {
         type: "string",

@@ -300,7 +300,7 @@ describe("the server offers prompts to start from and its own reference to read"
     expect(off).toContain("zip: true");
     expect(off).toContain("--features=local,platform");
     expect(off).not.toContain("extension_submit");
-    expect(on).toContain('extension_submit_check with action: "preflight"');
+    expect(on).toContain('extension_submit_read with action: "preflight"');
     expect(on).toContain("leaving dryRun at its default");
     expect(on).toContain("Nothing goes to review in this task.");
   });

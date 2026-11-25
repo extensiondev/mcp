@@ -156,7 +156,7 @@ export const PROMPTS: ServerPrompt[] = [
         "Use the extension-dev tools in this order:",
         numbered([
           validate,
-          `extension_submit_check with action: "preflight", browsers: ${list} and projectPath. Follow value.nextStep: when a store is not connected, give the person value.connectUrl and stop until their next message.`,
+          `extension_submit_read with action: "preflight", browsers: ${list} and projectPath. Follow value.nextStep: when a store is not connected, give the person value.connectUrl and stop until their next message.`,
           `When the preflight says STORE.md covers a failing listing check, extension_submit with action: "sync-listing", browsers: ${list} and projectPath.`,
           `extension_submit_check with browsers: ${list} and the buildSha extension_builds_read lists, leaving dryRun at its default: it rehearses the submit and sends nothing.`,
         ]),

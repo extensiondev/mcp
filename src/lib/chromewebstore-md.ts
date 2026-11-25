@@ -22,7 +22,7 @@ export { CHROMEWEBSTORE_MD_FILENAME };
 
 export const CHROMEWEBSTORE_MD_CHECK = "listing.chromewebstore_md";
 
-export const CHROMEWEBSTORE_MD_PREFILL_CALL = 'extension_submit_check {action: "preflight", browsers: ["chrome"], projectPath: "<project root>"}';
+export const CHROMEWEBSTORE_MD_PREFILL_CALL = 'extension_submit_read {action: "preflight", browsers: ["chrome"], projectPath: "<project root>"}';
 
 export const CHROMEWEBSTORE_MD_PREFILL_ANSWER = "value.readiness.listingDraft";
 

@@ -86,7 +86,7 @@ export function recordToRead(command: string, args: Args): string {
   const project = text(args.project);
   const named = project ? `, project: '${project}'` : "";
 
-  if (command === "extension_submit" || command === "extension_submit_check" || command === "extension_publish") return `extension_submit_check (action: 'status'${named})`;
+  if (command === "extension_submit" || command === "extension_submit_check" || command === "extension_publish") return `extension_submit_read (action: 'status'${named})`;
   if (command === "extension_builds") return `extension_builds_read (action: 'list'${named})`;
   if (command === "extension_shares") return `extension_shares_read (action: 'list'${named})`;
   if (command === "extension_approvals") return `extension_approvals_read (action: 'status'${named})`;

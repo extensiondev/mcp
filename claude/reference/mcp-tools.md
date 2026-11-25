@@ -650,22 +650,22 @@ Write one key of the extension's storage (chrome.storage or browser.storage) fro
 
 ## extension_submit
 
-Submit an extension.dev build to the Chrome, Firefox, Edge and Safari stores. It runs the call carrying an approvalId; extension_submit_check answers the preflight and asks the approval, extension_release_status answers reviews, extension_release_promote moves a channel. A real submit needs a workspace owner's token and approval of that exact submission, every time. Uploads land least public (Chrome and Edge drafts, Firefox unlisted, Safari TestFlight) unless a saved store mode says otherwise.
+Submit an extension.dev build to the Chrome, Firefox, Edge and Safari stores. It runs a call carrying an approvalId; extension_submit_read answers the preflight, extension_submit_check dry runs and asks, extension_release_status reviews, extension_release_promote channels. A real submit needs a workspace owner's token and approval of that exact submission, every time. Uploads land least public (Chrome and Edge drafts, Firefox unlisted, Safari TestFlight) unless a saved store mode says otherwise.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "submit" \| "status" \| "preflight" \| "sync-listing" \| "cancel" \| "rollout" \| "release" \| "publish" \| "review" \| "configure-store" \| "connect" \| "first-submission" \| "mint-signing" | no | `"submit"` | 'preflight', 'status' and submit with dryRun true are read-only; submit with dryRun:false and no approvalId executes nothing either, it only asks the owner's approval, as does the first call of any store act. submit: buildSha to the stores. preflight: readiness checks. status: each store's word. sync-listing: listing from STORE.md. publish (alias review): draft to review. release (Safari): approved version on sale. cancel: withdraw from review. rollout: raise Chrome's staged rollout. configure-store: storeSettings. connect: page where the person gives the platform the key. first-submission: page for a first Chrome or Edge upload. mint-signing (Safari): register the bundle id, mint certificates and profiles. |
+| `action` | "submit" \| "sync-listing" \| "cancel" \| "rollout" \| "release" \| "publish" \| "review" \| "configure-store" \| "connect" \| "first-submission" \| "mint-signing" | no | `"submit"` | submit with dryRun:false and no approvalId executes nothing, it only asks the owner's approval, as does the first call of any store act; extension_submit_read answers 'preflight', 'status' and extension_submit_check a dry run. submit: buildSha to the stores. sync-listing: listing from STORE.md. publish (alias review): draft to review. release (Safari): approved version on sale. cancel: withdraw from review. rollout: raise Chrome's staged rollout. configure-store: storeSettings. connect: page where the person gives the platform the key. first-submission: page for a first Chrome or Edge upload. mint-signing (Safari): register the bundle id, mint certificates and profiles. |
 | `project` | string | no |  | '<workspace>/<project>' login to use when several are stored. |
 | `workspace` | string | no |  | connect: a workspace, for its shared account. |
 | `browsers` | array of "chrome" \| "firefox" \| "edge" \| "safari" | no |  | Stores; submit, publish and sync-listing take several under one approval. |
 | `buildSha` | string | no |  | Commit sha of a completed platform build (extension_builds_read). |
 | `version` | string | no |  | Label; default the built manifest's version. |
-| `dryRun` | boolean | no | `true` | true sends nothing and spends no approval or quota; false submits once approved and stops at the draft under the default modes. |
+| `dryRun` | boolean | no | `true` | false submits once approved and stops at the draft under the default modes; true sends nothing, a dry run extension_submit_check answers. |
 | `projectPath` | string | no |  | Project root, for sync-listing; nothing local is uploaded. |
 | `approvalId` | string | no |  | Once approved, with the same arguments; a real submission needs a workspace owner's approval every time. |
 | `screenshots` | array of string | no |  | sync-listing: PNG screenshots in projectPath. |
 | `useBuild` | string | no |  | sync-listing: a completed build's sha for icons. |
-| `detail` | boolean \| array | no |  | preflight: true, or ["chrome", "safari.subtitle"], answers those rows in full. |
+| `detail` | boolean \| array | no |  | true, or ["chrome", "safari.subtitle"], answers those readiness rows in full. |
 | `api` | string | no |  | Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev. |
 | `store` | "chrome" \| "firefox" \| "edge" \| "safari" | no |  | cancel, rollout (default chrome), release (safari), configure-store (required). |
 | `storeSettings` | object | no |  | configure-store: only what changes; a publishing mode asks approval; no credentials; Safari release mode is STORE.md's `- Release:` line. |
@@ -678,12 +678,12 @@ Submit an extension.dev build to the Chrome, Firefox, Edge and Safari stores. It
 
 ## extension_submit_check
 
-Check a store submission without sending it: preflight, status and a dry-run submit answer here; any other action records an approval request for the workspace owner and answers value.approvalUrl. extension_submit runs the call carrying that approvalId; extension_release_status answers review history, extension_release_promote releases a channel. Takes extension_submit's inputs.
+Check a store submission without sending it: a dry-run submit answers here; any other action records an approval request for the workspace owner and answers value.approvalUrl. extension_submit runs the call carrying that approvalId; extension_submit_read answers the preflight, extension_release_status review history, extension_release_promote channels. Takes extension_submit's inputs.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "preflight" \| "status" \| "submit" \| "publish" \| "review" \| "cancel" \| "rollout" \| "release" \| "sync-listing" \| "mint-signing" \| "configure-store" \| "connect" \| "first-submission" | no | `"submit"` | The read, or the act to ask approval for. |
-| `dryRun` | boolean | no | `true` | true reads only; false only asks the owner's approval of the real submit. |
+| `action` | "submit" \| "publish" \| "review" \| "cancel" \| "rollout" \| "release" \| "sync-listing" \| "mint-signing" \| "configure-store" \| "connect" \| "first-submission" | no | `"submit"` | The act to ask approval for, or submit with dryRun true. |
+| `dryRun` | boolean | no | `true` | true sends nothing; false only asks the owner's approval of the real submit. |
 | `project` | string | no |  | As in extension_submit. |
 | `workspace` | string | no |  | As in extension_submit. |
 | `browsers` | array of "chrome" \| "firefox" \| "edge" \| "safari" | no |  | As in extension_submit. |
@@ -714,7 +714,7 @@ Read a project's store state through extension.dev: preflight answers what each 
 | `browsers` | array of "chrome" \| "firefox" \| "edge" \| "safari" | no |  | The stores to read. |
 | `buildSha` | string | no |  | Commit sha of a completed platform build (extension_builds_read). |
 | `version` | string | no |  | Label; default the built manifest's version. |
-| `detail` | boolean \| array | no |  | preflight: true, or ["chrome", "safari.subtitle"], answers those rows in full. |
+| `detail` | boolean \| array | no |  | true, or ["chrome", "safari.subtitle"], answers those readiness rows in full. |
 | `api` | string | no |  | Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev. |
 
 ## extension_templates

@@ -98,7 +98,7 @@ describe("the deployment doctrine sits in the server instructions, in order, bes
     const resume = lines.find((line) => line.startsWith(ORDER[3])) ?? "";
 
     expect(version).toMatch(/a new platform build and a resubmit, as value\.nextStep says; a local rebuild does not change the platform build/);
-    expect(resume).toMatch(/the next message re-runs extension_submit_check action:'preflight' without being told/);
+    expect(resume).toMatch(/the next message re-runs extension_submit_read action:'preflight' without being told/);
   });
 
   it("is absent when the platform tools are off", () => {
