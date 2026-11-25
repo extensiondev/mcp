@@ -36,3 +36,14 @@ export function hostedServerOnly(command: string): string {
     value: { hosted: true },
   });
 }
+
+export function storedSourceClosed(command: string): string {
+  return composedRefusal({
+    ok: false,
+    command,
+    status: "hosted-unavailable",
+    error: { code: "E_TOOL_DISABLED", message: `${command} reads or changes the source extension.dev stores, and stored project source is not open on this server yet. Nothing was read or changed.` },
+    hint: "To work on a project folder on the person's machine, use the local server (npx @extension.dev/mcp) and read or edit its files there.",
+    value: { hosted: true },
+  });
+}

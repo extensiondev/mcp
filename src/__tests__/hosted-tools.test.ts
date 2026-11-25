@@ -1122,4 +1122,22 @@ describe("1175: the stored source tools reach /mcp through the tools entry and n
 
     expect(seen).toEqual([]);
   });
+
+  it("1178: answers on the hosted server with the group off that stored source is not open there yet, and names the local server", async () => {
+    const { seen } = stubLane([]);
+    const dispatch = createToolDispatcher({ tools, options: { features: ["platform"], noShip: false }, refuse: () => null, openApprovals: false });
+
+    for (const name of HOSTED_ONLY_TOOL_NAMES) {
+      const frame = await dispatch({ name, arguments: { project: "acme/web", files: [{ path: "a.js", content: "x" }] } });
+      const body = JSON.parse(frame.content[0]?.text ?? "{}");
+
+      expect(frame.isError, name).toBe(true);
+      expect(body, name).toMatchObject({ ok: false, command: name, status: "hosted-unavailable", error: { code: "E_TOOL_DISABLED" }, value: { hosted: true } });
+      expect(body.error.message, name).toContain("not open on this server yet");
+      expect(body.error.message, name).not.toContain("https://mcp.extension.dev/mcp");
+      expect(body.hint, name).toContain("npx @extension.dev/mcp");
+    }
+
+    expect(seen).toEqual([]);
+  });
 });
