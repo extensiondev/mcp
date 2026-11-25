@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { envelope } from "./envelope";
+import { guidedEngine } from "./guided-browser";
 import { guidedConnectRuntime, openGuided, type GuidedConnectRuntime } from "./guided-connect";
 import { launchWord } from "./guided-window-end";
 import { isRow, text } from "./row";
@@ -82,6 +83,8 @@ export async function guideFirstListing(result: string, args: Args, runtime: Gui
       hint: [note, text(parsed.hint)].filter(Boolean).join(" "),
     });
   }
+
+  if (guidedEngine(opened.choice.browser) === "chromium") runtime.watchAttach?.({ profileDir: opened.profileDir, extensionDir: opened.extensionDir });
 
   const say = firstListingSay({ label: opened.label, productId: start.productId, slug });
   const consolePage = `${pageUrl.split("?")[0]}${guideQuery}`;

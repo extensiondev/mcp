@@ -27,6 +27,7 @@ import {
   type GuidedBrowser,
   type GuidedBrowserChoice,
 } from "./guided-browser";
+import { watchGuidedAttach } from "./guided-attach";
 import { windowCheck, type WindowCheck } from "./guided-window";
 import { copiedBuild, guidedCopy, profileRanOtherBuild, startBuild } from "./guided-copy-build";
 import { endGuidedWindow, launchWord, runningOwner } from "./guided-window-end";
@@ -98,6 +99,7 @@ export interface GuidedConnectRuntime {
   install?(browser: string): Promise<string | null>;
   windowCheck?(profileDir: string): Promise<WindowCheck>;
   schedule?(ms: number, run: () => void): void;
+  watchAttach?(args: { profileDir: string; extensionDir: string }): void;
 }
 
 export type { WindowCheck } from "./guided-window";
@@ -275,6 +277,9 @@ export const guidedConnectRuntime: GuidedConnectRuntime = {
   launch: launchGuidedBrowser,
   windowCheck,
   schedule: scheduleLater,
+  watchAttach: (args) => {
+    watchGuidedAttach(args);
+  },
 };
 
 export interface ConsoleLanding {
@@ -414,7 +419,7 @@ export async function guideStoreConnect(result: string, args: Args, runtime: Gui
 export type GuidedOpen =
   | { install: GuidedBrowserChoice & { install: string } }
   | { opened: false; note: string }
-  | { opened: true; choice: GuidedBrowserChoice; label: string; extension: ToolsExtension; landing: ConsoleLanding; launched: LaunchResult; profileDir: string; onStorePage: boolean };
+  | { opened: true; choice: GuidedBrowserChoice; label: string; extension: ToolsExtension; extensionDir: string; landing: ConsoleLanding; launched: LaunchResult; profileDir: string; onStorePage: boolean };
 
 export async function openGuided(options: { workspace: string; next: string | null; plainUrl: string; storePage: string | null; api?: string; runtime: GuidedConnectRuntime }): Promise<GuidedOpen> {
   const { runtime } = options;
@@ -459,7 +464,7 @@ export async function openGuided(options: { workspace: string; next: string | nu
     return { opened: false, note: `No window is showing: ${label} started headless, since a --headless flag reached it from this machine's own browser setup, not from this MCP.` };
   }
 
-  return { opened: true, choice, label, extension, landing, launched, profileDir, onStorePage };
+  return { opened: true, choice, label, extension, extensionDir, landing, launched, profileDir, onStorePage };
 }
 
 async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRuntime): Promise<string> {

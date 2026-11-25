@@ -27,6 +27,7 @@ import { GUIDED_KEY_PAGES, guideStoreConnect, guidedConnectRuntime, launchGuided
 import { guidedCopy } from "../lib/guided-copy-build";
 import { endGuidedWindow, runningOwner, type GuidedProcess } from "../lib/guided-window-end";
 import { PARTNER_CENTER_OVERVIEW, guideFirstListing } from "../lib/guided-first-listing";
+import { ATTACH_SLOTS, attachSlot, checkRequest, debugPortOf, serveAttachOnce, unpackedExtensionId, type AttachDriver, type CdpSession } from "../lib/guided-attach";
 import { headlessFromProcesses } from "../lib/guided-window";
 import { workspaceConnectAnswer } from "../lib/store-connection";
 import { AMO_ADDON_API, bundledToolsDir, crxIdOf, readBundleRecord, readCrx3, resolveToolsExtension, treeSha256 } from "../lib/tools-extension";
@@ -1213,6 +1214,15 @@ describe("the guided store connect opens the MCP's own browser with extension.de
         expect(out.value.sayToPerson).toContain("Hidden");
       });
 
+      it("watches its own guided window for the panel's image request once the window opens (ledger 1171)", async () => {
+        prodSignIn();
+        const watched: Array<{ profileDir: string; extensionDir: string }> = [];
+
+        await guideFirstListing(firstSubmission("first-submission-to-do"), { api: PROD }, bound([], { watchAttach: (args) => watched.push(args) }));
+
+        expect(watched).toEqual([{ profileDir: launches[0]!.profileDir, extensionDir: launches[0]!.extensionDir }]);
+      });
+
       it("names the project's own product when Partner Center already holds one, and never presses Create for it", async () => {
         prodSignIn();
         const out = JSON.parse((await guideFirstListing(firstSubmission("first-submission-waiting", { dashboardUrl: `https://partner.microsoft.com/dashboard/microsoftedge/${PRODUCT}/packages/dashboard` }), { api: PROD }, bound([])))!);
@@ -1365,3 +1375,125 @@ function resolveImport(from: string, specifier: string): string {
 
   return hit ?? base;
 }
+
+describe("ledger 1171: the MCP sets the Partner Center image slots of its own guided window", () => {
+  const LISTING = "https://partner.microsoft.com/en-us/dashboard/microsoftedge/71e8b15d-c121-4613-8782-7f14d53c73c3/listings";
+  const png = (seed: string) => Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from(seed)]);
+  const relayed = (name: string, bytes: Buffer, sha = crypto.createHash("sha256").update(bytes).digest("hex")) => ({ name, base64: bytes.toString("base64"), sha256: sha });
+
+  it("derives the unpacked extension id Chrome gives the folder it loaded, and reads the debug port only from the browser of this profile", () => {
+    expect(unpackedExtensionId("/nonexistent/guided-chromium")).toMatch(/^[a-p]{32}$/);
+    expect(unpackedExtensionId("/nonexistent/guided-chromium")).toBe(unpackedExtensionId("/nonexistent/guided-chromium"));
+    expect(unpackedExtensionId("/nonexistent/guided-chromium")).not.toBe(unpackedExtensionId("/nonexistent/other"));
+
+    const proc: GuidedProcess = {
+      platform: "darwin",
+      table: () => null,
+      signal: () => true,
+      wait: () => undefined,
+      list: () => ["  11 11 /chrome --user-data-dir=/elsewhere --remote-debugging-port=9333", "  12 12 /chrome --user-data-dir=/p/profile --remote-debugging-port=9222 --no-first-run"].join("\n"),
+    };
+
+    expect(debugPortOf("/p/profile", proc)).toBe(9222);
+    expect(debugPortOf("/p/other", proc)).toBeNull();
+  });
+
+  it("refuses a request off the listing page, a path for a name, bytes that are not PNG, and bytes whose SHA-256 the panel did not check", () => {
+    const good = png("shot");
+
+    expect(checkRequest({ nonce: "nonce-0001", url: "https://partner.microsoft.com.evil.example/dashboard/microsoftedge/71e8b15d-c121-4613-8782-7f14d53c73c3/listings", slots: [] })).toBeNull();
+    expect(checkRequest({ nonce: "nonce-0001", url: LISTING, slots: [{ id: "edge.promo_tile_large", files: [] }] })).toBeNull();
+
+    const checked = checkRequest({
+      nonce: "nonce-0001",
+      url: LISTING,
+      slots: [{ id: "edge.screenshots", files: [relayed("../../.ssh/id.png", good), relayed("plain.png", Buffer.from("GIF89a")), relayed("swapped.png", good, "0".repeat(64)), relayed("edge-screenshot-1-1280x800.png", good)] }],
+    });
+
+    expect(checked?.slots[0]?.files.map((file) => file.name)).toEqual(["edge-screenshot-1-1280x800.png"]);
+    expect(checked?.slots[0]?.refused).toEqual(["a file without a plain .png name was refused", "plain.png is not a PNG under 4 MB", "swapped.png does not match the SHA-256 the panel checked"]);
+  });
+
+  it("takes the panel's request from its own extension's worker, sets each file on the slot input over the debug port, reads the thumbnail back, never sets a file the slot already shows, and answers the panel", async () => {
+    const ownId = unpackedExtensionId("/nonexistent/guided-chromium");
+    const shot = png("shot-1");
+    const request = { nonce: "nonce-0001", url: LISTING, slots: [{ id: "edge.screenshots", files: [relayed("edge-screenshot-2-1280x800.png", png("shot-2")), relayed("edge-screenshot-1-1280x800.png", shot)] }, { id: "edge.store_logo", files: [relayed("edge-icon-128x128.png", png("logo"))] }] };
+    const thumbs: Record<string, string[]> = { screenshot: ["Screenshot edge-screenshot-2-1280x800.png"], logo: ["Extension Store logo earlier.png"] };
+    const set: Array<{ file: string; bytes: string }> = [];
+    let answered: unknown = null;
+    let otherRead = false;
+
+    const session = (url: string): CdpSession => ({
+      close: () => undefined,
+      send: async (method, params = {}) => {
+        const expression = String(params.expression ?? "");
+
+        if (url === "other-worker") otherRead = true;
+        if (url === "worker" && expression.includes(".take()")) return { result: { value: request } };
+
+        if (url === "worker" && expression.includes(".done(")) {
+          answered = JSON.parse(expression.slice(expression.indexOf(".done(") + 6, expression.lastIndexOf(") ??")));
+
+          return { result: { value: true } };
+        }
+
+        const slot = expression.includes("screenshot") ? "screenshot" : "logo";
+
+        if (method === "Runtime.evaluate" && params.returnByValue) return { result: { value: { count: thumbs[slot]!.length, alts: thumbs[slot] } } };
+        if (method === "Runtime.evaluate") return { result: { subtype: "node", objectId: `input-${slot}` } };
+
+        if (method === "DOM.setFileInputFiles") {
+          const file = (params.files as string[])[0]!;
+
+          set.push({ file, bytes: fs.readFileSync(file).toString("base64") });
+          thumbs[String(params.objectId).replace("input-", "")]!.push(`Extension screenshot ${path.basename(file)}`);
+        }
+
+        return {};
+      },
+    });
+
+    const driver: AttachDriver = {
+      targets: async () => [
+        { type: "service_worker", url: "chrome-extension://abcdefghabcdefghabcdefghabcdefgh/background/service_worker.js", webSocketDebuggerUrl: "other-worker" },
+        { type: "service_worker", url: `chrome-extension://${ownId}/background/service_worker.js`, webSocketDebuggerUrl: "worker" },
+        { type: "page", url: LISTING, webSocketDebuggerUrl: "page" },
+      ],
+      open: async (wsUrl) => session(wsUrl),
+      sleep: async () => undefined,
+    };
+
+    expect(await serveAttachOnce({ port: 9222, extensionId: ownId, driver, tempRoot: fs.mkdtempSync(path.join(os.tmpdir(), "attach-test-")), waitMs: 3000 })).toBe("served");
+    expect(otherRead).toBe(false);
+    expect(set.map((row) => path.basename(row.file))).toEqual(["edge-screenshot-1-1280x800.png"]);
+    expect(set[0]!.bytes).toBe(shot.toString("base64"));
+    expect(fs.existsSync(set[0]!.file)).toBe(false);
+    expect(answered).toEqual({
+      nonce: "nonce-0001",
+      slots: {
+        "edge.screenshots": { attached: ["edge-screenshot-2-1280x800.png", "edge-screenshot-1-1280x800.png"], missing: [] },
+        "edge.store_logo": { attached: [], missing: [], note: "the slot already shows a logo, so it was left as it is" },
+      },
+    });
+  });
+
+  it("tells the screenshots slot from the promotional tiles' shared uploading label, and never sets a file on a full slot", async () => {
+    expect(ATTACH_SLOTS["edge.screenshots"]!.test("Screenshot/sUpto 6 images showing how your extension works")).toBe(true);
+    expect(ATTACH_SLOTS["edge.screenshots"]!.test("Size: 440 x 280 pixels Small promotional tile Screenshot image is uploading")).toBe(false);
+
+    const calls: string[] = [];
+    const full: CdpSession = {
+      close: () => undefined,
+      send: async (method, params = {}) => {
+        calls.push(method);
+
+        return method === "Runtime.evaluate" && params.returnByValue ? { result: { value: { count: 6, alts: ["Screenshot edge-screenshot-1-1280x800.png"], adds: false } } } : {};
+      },
+    };
+    const slot = { id: "edge.screenshots", files: [{ name: "edge-screenshot-1-1280x800.png", bytes: png("1") }, { name: "edge-screenshot-4-1280x800.png", bytes: png("4") }], refused: [] };
+    const answer = await attachSlot({ page: full, slot, dir: fs.mkdtempSync(path.join(os.tmpdir(), "attach-full-")), sleep: async () => undefined });
+
+    expect(calls).not.toContain("DOM.setFileInputFiles");
+    expect(answer).toEqual({ attached: ["edge-screenshot-1-1280x800.png"], missing: ["edge-screenshot-4-1280x800.png"], note: "the slot takes no more images (it shows 6); remove the extra ones on the page, then press again" });
+  });
+});
