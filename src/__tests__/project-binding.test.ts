@@ -25,6 +25,7 @@ import { PLATFORM_KERNEL_HOOKS, installPlatformKernelHooks } from "../lib/platfo
 import { forwardable } from "../lib/hosted-forwarder";
 import { GUIDED_KEY_PAGES, guideStoreConnect, guidedConnectRuntime, launchGuidedBrowser, type GuidedConnectRuntime, type LaunchPlan } from "../lib/guided-connect";
 import { guidedCopy } from "../lib/guided-copy-build";
+import { endGuidedWindow, type GuidedProcess } from "../lib/guided-window-end";
 import { PARTNER_CENTER_OVERVIEW, guideFirstListing } from "../lib/guided-first-listing";
 import { headlessFromProcesses } from "../lib/guided-window";
 import { workspaceConnectAnswer } from "../lib/store-connection";
@@ -835,6 +836,52 @@ describe("the guided store connect opens the MCP's own browser with extension.de
       process.env.PATH = before;
       fs.rmSync(path.join(path.dirname(profileDir), "running.json"), { force: true });
     }
+  });
+
+  it("ends only its own guided window, the preview of that profile and its browser, and drops the restored tabs but keeps the sign-ins", () => {
+    const profileDir = path.join(tmp, "state", "guided-browser", "chrome", "profile");
+    const sessions = path.join(profileDir, "Default", "Sessions");
+    fs.mkdirSync(sessions, { recursive: true });
+    fs.writeFileSync(path.join(sessions, "Tabs_1"), "three console tabs");
+    fs.writeFileSync(path.join(profileDir, "Default", "Cookies"), "sign-ins");
+
+    const proc = (row: string | null, platform: NodeJS.Platform = "darwin") => {
+      const signals: string[] = [];
+      let alive = true;
+      const fake: GuidedProcess = {
+        table: () => row,
+        signal: (pid, signal) => {
+          signals.push(`${pid} ${signal}`);
+          if (signal === "SIGTERM") alive = false;
+
+          return signal === 0 ? alive : true;
+        },
+        wait: () => undefined,
+        platform,
+      };
+
+      return { fake, signals };
+    };
+
+    const foreign = proc(`4242 /usr/bin/vim notes.txt`);
+    const follower = proc(`100 node extension preview ext --profile ${profileDir}`);
+    const otherProfile = proc(`4242 node extension preview ext --profile ${profileDir}-other`);
+    const windows = proc(`4242 node extension preview ext --profile ${profileDir}`, "win32");
+
+    for (const refused of [foreign, follower, otherProfile, windows]) {
+      expect(endGuidedWindow(profileDir, 4242, refused.fake)).toBe(false);
+      expect(refused.signals).toEqual([]);
+    }
+
+    expect(fs.existsSync(path.join(sessions, "Tabs_1"))).toBe(true);
+
+    const own = proc(`4242 /usr/local/bin/node /x/extension/dist/cli.cjs preview /x/tools --browser chrome --profile ${profileDir} --starting-url https://console.extension.dev/`);
+
+    expect(endGuidedWindow(profileDir, 4242, own.fake)).toBe(true);
+    expect(own.signals[0]).toBe("-4242 SIGTERM");
+    expect(own.signals.slice(1).every((row) => row === "-4242 0")).toBe(true);
+    expect(fs.existsSync(sessions)).toBe(false);
+    expect(fs.readFileSync(path.join(profileDir, "Default", "Cookies"), "utf8")).toBe("sign-ins");
   });
 
   it("refuses the Chrome Web Store item served for the Edge item and loads the bundled copy, saying so", async () => {

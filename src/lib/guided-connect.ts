@@ -28,6 +28,7 @@ import {
 } from "./guided-browser";
 import { windowCheck, type WindowCheck } from "./guided-window";
 import { copiedBuild, guidedCopy, profileRanOtherBuild, startBuild } from "./guided-copy-build";
+import { endGuidedWindow, launchWord } from "./guided-window-end";
 import { headlessLaunch } from "./launch-flags";
 import { mcpOrigins } from "./origins";
 import { withoutRedirects } from "./platform-fetch";
@@ -81,6 +82,7 @@ export interface LaunchPlan {
 export interface LaunchResult {
   launched: boolean;
   reused: boolean;
+  replaced?: true;
   reason?: string;
 }
 
@@ -209,11 +211,17 @@ export function launchGuidedBrowser(plan: LaunchPlan): LaunchResult {
   const build = copiedBuild(plan.extensionDir);
   const stale = profileRanOtherBuild(plan.profileDir, build);
 
+  let replaced = false;
+
   if (typeof running.pid === "number" && processAlive(running.pid) && stale) {
-    return { launched: false, reused: false, reason: "the guided browser that is open still runs an older extension.dev tools; close that window, then ask again so it starts with the current one" };
+    if (!endGuidedWindow(plan.profileDir, running.pid)) {
+      return { launched: false, reused: false, reason: "the guided browser that is open still runs an older extension.dev tools and could not be closed from here; close that window, then ask again so it starts with the current one" };
+    }
+
+    replaced = true;
   }
 
-  if (typeof running.pid === "number" && processAlive(running.pid) && plan.choice.binary) {
+  if (!replaced && typeof running.pid === "number" && processAlive(running.pid) && plan.choice.binary) {
     try {
       const child = spawn(plan.choice.binary, reuseArgs(plan), { detached: true, stdio: "ignore" });
       child.on("error", () => undefined);
@@ -240,7 +248,7 @@ export function launchGuidedBrowser(plan: LaunchPlan): LaunchResult {
     fs.writeFileSync(marker, JSON.stringify({ pid, browser: plan.choice.browser }), { mode: 0o600 });
     fs.chmodSync(marker, 0o600);
 
-    return { launched: true, reused: false };
+    return { launched: true, reused: false, ...(replaced ? { replaced: true } : {}) };
   } catch (err) {
     return { launched: false, reused: false, reason: err instanceof Error ? err.message : String(err) };
   }
@@ -512,7 +520,7 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
   const say = onKeyPage && keyPage
     ? `In front, the ${label} window shows the ${keyPage.page}; sign in to Partner Center there if it asks. Within a few seconds the extension.dev tools panel shows on that page (the ${workspace} console signs in by itself in a background tab) with one button to press, "Create a new API key and connect": it presses Partner Center's "New API key" for you, names the key extension.dev if asked, and sends the Client ID and the new key to the console, which checks them with ${storeName} before it keeps them, so no key passes through this chat. If the panel asks for "Turn on API" first, press that on the page. ${storeName} is connected only when the panel says so.`
     : `In the ${label} window that just opened on the ${workspace} Store accounts page, ${signIn}follow the extension.dev tools panel: it takes you to the ${storeName} key page, captures the values when you press it and hands them to the console, so no key passes through this chat. Tell me when the page says connected.`;
-  const openedWord = launched.reused ? "The guided browser already running took the page:" : "Opened";
+  const openedWord = launchWord(launched);
 
   return envelope({
     ok: true,
@@ -523,7 +531,7 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
       ...(project ? { project } : {}),
       ...(store ? { store } : {}),
       storeAccountsUrl: plainUrl,
-      guidedBrowser: { opened: true, browser: choice.browser, why: choice.why, profile: profileDir, reused: launched.reused },
+      guidedBrowser: { opened: true, browser: choice.browser, why: choice.why, profile: profileDir, reused: launched.reused, ...(launched.replaced ? { replaced: true } : {}) },
       toolsExtension: { source: extension.source, version: extension.version, note: extension.note },
       signedIn: landing.signedIn,
       ...(onKeyPage && keyPage ? { landedOn: keyPage.url } : {}),
