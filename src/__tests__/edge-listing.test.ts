@@ -24,6 +24,18 @@ describe("Edge listing links", () => {
     );
   });
 
+  it("1196: a Safari key the store holds needs no signing secret, because the submit mints them; a missing key is still named", () => {
+    const signing = ["STORE_SAFARI_APP_CERT_P12_BASE64", "STORE_SAFARI_APP_CERT_PASSWORD", "STORE_SAFARI_PROVISIONING_PROFILE_BASE64"];
+
+    expect(storeConfigView({ configured: true, credentialsConfigured: false, missingSecrets: signing }, "safari")).toMatchObject({ credentialsConfigured: true, missingCredentials: [] });
+    expect(storeConfigView({ configured: true, credentialsConfigured: false, missingSecrets: ["STORE_SAFARI_ASC_KEY_ID", ...signing] }, "safari")).toMatchObject({
+      credentialsConfigured: false,
+      missingCredentials: ["STORE_SAFARI_ASC_KEY_ID", ...signing],
+    });
+
+    expect(storeConfigView({ credentialsConfigured: false, missingSecrets: ["STORE_EDGE_API_KEY"] }, "edge")).toMatchObject({ credentialsConfigured: false, missingCredentials: ["STORE_EDGE_API_KEY"] });
+  });
+
   it("859: a submission read by id says whether its upload was signed, a boolean and the record's sentence, nothing else under that name", () => {
     const sentence = "This upload was signed with the project's Verified uploads key.";
     const row = { id: "c3151505", status: "draft", version: "0.1.0" };

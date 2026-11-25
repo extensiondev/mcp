@@ -15,6 +15,13 @@ import type { StoreReview } from "./review-beside-submission";
 const HISTORY_PER_STORE = 5;
 
 const CREDENTIAL_NAME = /^[A-Z][A-Z0-9_]{0,63}$/;
+const SAFARI_ASC_KEY = ["STORE_SAFARI_ASC_KEY_ID", "STORE_SAFARI_ASC_ISSUER_ID", "STORE_SAFARI_ASC_KEY_BASE64"];
+
+function neededCredentials(store: string | undefined, missing: string[]): string[] {
+  if (store !== "safari" || missing.some((name) => SAFARI_ASC_KEY.includes(name))) return missing;
+
+  return missing.filter((name) => !name.startsWith("STORE_SAFARI_"));
+}
 
 export interface StoreConfigView {
   enabled: boolean;
@@ -78,13 +85,15 @@ function str(value: unknown): string | undefined {
 export function storeConfigView(raw: unknown, store?: string): StoreConfigView | null {
   if (!isRow(raw)) return null;
 
+  const missing = (Array.isArray(raw.missingSecrets) ? raw.missingSecrets : [])
+    .map((name) => String(name ?? "").trim())
+    .filter((name) => CREDENTIAL_NAME.test(name));
+  const needed = neededCredentials(store, missing);
   const view: StoreConfigView = {
     enabled: raw.enabled === true,
     configured: raw.configured === true,
-    credentialsConfigured: raw.credentialsConfigured === true,
-    missingCredentials: (Array.isArray(raw.missingSecrets) ? raw.missingSecrets : [])
-      .map((name) => String(name ?? "").trim())
-      .filter((name) => CREDENTIAL_NAME.test(name)),
+    credentialsConfigured: raw.credentialsConfigured === true || (missing.length > 0 && needed.length === 0),
+    missingCredentials: needed,
   };
 
   for (const key of ["storeUrl", "storeId", "bundleId", "releaseChannel"] as const) {

@@ -216,6 +216,18 @@ describe("a token-scoped tool under an expired login names the expiry and starts
     expect(seen.urls).toEqual([]);
   });
 
+  it("a project named under a slug no login carries names the expired login in its workspace and the one login call (ledger 1183)", async () => {
+    if (process.platform === "win32") return;
+
+    const out = JSON.parse(await builds({ action: "list", project: "acme/gadget" }));
+
+    expect(out.error.code).toBe("E_AUTH_REQUIRED");
+    expect(out.error.message).toContain(`the stored login for acme/widget expired at ${EXPIRED_ISO}`);
+    expect(out.error.message).toContain('extension_auth_login {action: "login", project: "acme/gadget"}');
+    expect(out.error.message).not.toContain("extension_auth_read (action: status)");
+    expect(seen.urls).toEqual([]);
+  });
+
   it("extension_auth status lists the expired login and never starts a device flow", async () => {
     if (process.platform === "win32") return;
 

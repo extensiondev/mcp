@@ -786,6 +786,20 @@ export function expiredStoredLogin(selector?: CredentialSelector, nowSeconds?: n
   return expiredLoginOf(readCredentials(selector), nowSeconds);
 }
 
+export function expiredLoginsInWorkspace(project: string, api?: string, nowSeconds: number = Math.floor(Date.now() / 1000)): ExpiredLogin[] {
+  const [workspace = ""] = project.trim().toLowerCase().split("/");
+  const store = workspace && project.includes("/") ? readCredentialStore() : null;
+  if (!store) return [];
+
+  const server = targetServer(api);
+
+  return Object.values(store.entries)
+    .filter((entry) => !entry.movedTo && !isMemberLogin(entry) && serverOf(entry.api) === server)
+    .filter((entry) => entry.workspaceSlug.toLowerCase() === workspace && !liveAt(entry, nowSeconds))
+    .map((entry) => expiredLoginOf(entry, nowSeconds))
+    .filter((login): login is ExpiredLogin => Boolean(login) && login?.project !== project.trim().toLowerCase());
+}
+
 export const PROJECT_TOKEN_INPUT = {
   type: "string",
   description:
@@ -801,7 +815,13 @@ export function loginStep(project?: string): string {
   return `Run extension_auth_login (action: login${project ? `, project: "${project}"` : ""}).`;
 }
 
-export function noStoredLoginHint(project: string): string {
+export function noStoredLoginHint(project: string, expired: ExpiredLogin[] = []): string {
+  if (expired.length && !requestCredential()) {
+    const named = expired.map((login) => `${login.project} expired at ${login.expiresAt}`).join("; ");
+
+    return `No stored login for ${project}. In its workspace the stored login${expired.length === 1 ? "" : "s"} for ${named}; if ${project} is ${expired.length === 1 ? "that project" : "one of them"} under a new name, the same call renews it. Run extension_auth_login {action: "login", project: "${project}"} either way.`;
+  }
+
   if (requestCredential()) {
     const covered = coveredProjects();
 
