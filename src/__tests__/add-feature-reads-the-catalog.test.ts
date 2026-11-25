@@ -142,6 +142,21 @@ describe("the plan ends at a build and follows the project", () => {
     }
   });
 
+  it("plans a manifest.json at the project root beside it, not under src/", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-addfeat-catalog-"));
+    tmpDirs.push(root);
+    fs.writeFileSync(path.join(root, "manifest.json"), JSON.stringify({ ...plain, permissions: ["storage"] }));
+    fs.writeFileSync(path.join(root, "bg.js"), "");
+
+    const out = JSON.parse(await addFeature.handler({ projectPath: root, feature: "sidebar", framework: "react" }));
+
+    expect(out.ok).toBe(true);
+    expect(paths(out)).toEqual(expect.arrayContaining(["sidebar/index.html", "sidebar/scripts.jsx", "sidebar/SidebarApp.jsx"]));
+    expect(paths(out).some((p) => p.startsWith("src/"))).toBe(false);
+    expect(out.value.manifestUpdates["chromium:permissions"]).toEqual(["storage", "sidePanel"]);
+    expect(out.value.instructions[0]).toMatch(/^1\. Add these fields to your manifest\.json:/);
+  });
+
   it("numbers the steps from 1 with no gap for every feature", async () => {
     for (const feature of ["sidebar", "popup", "options", "content-script", "background", "newtab", "devtools"]) {
       const out = JSON.parse(await addFeature.handler({ projectPath: project(plain), feature, framework: "vanilla" }));

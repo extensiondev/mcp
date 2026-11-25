@@ -47,6 +47,15 @@ export type ManifestFileRead =
   | { ok: true; path: string; root: string; manifest: unknown }
   | { ok: false; kind: "refused" | "unreadable" | "not-json"; path: string; message: string; hint: string };
 
+export function findProjectManifest(projectPath: string): string | null {
+  for (const rel of [MANIFEST_FILE_NAME, path.join("src", MANIFEST_FILE_NAME)]) {
+    const candidate = path.resolve(projectPath, rel);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+
+  return null;
+}
+
 export function jsonReadFailure(err: unknown, file: string): string {
   return jsonReadFailureWith(err, file, (target) => fs.readFileSync(target, "utf8"));
 }

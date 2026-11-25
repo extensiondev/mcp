@@ -16,7 +16,7 @@ import {
   templateCatalogUrl,
 } from "../lib/template-artifact-source";
 import { envelope } from "../lib/envelope";
-import { jsonReadFailure } from "../lib/manifest-path";
+import { findProjectManifest, jsonReadFailure } from "../lib/manifest-path";
 
 const COMMAND = "extension_add_feature";
 
@@ -169,22 +169,25 @@ export async function handler(args: {
 }): Promise<string> {
   const framework = args.framework ?? "react";
   const projectPath = path.resolve(args.projectPath);
-  const srcDir = path.join(projectPath, "src");
+  const manifestPath = findProjectManifest(projectPath);
 
-  const manifestPath = path.join(srcDir, "manifest.json");
-
-  if (!fs.existsSync(manifestPath)) {
+  if (!manifestPath) {
     return envelope({
       ok: false,
       command: COMMAND,
       status: "manifest-not-found",
       error: {
         code: "E_MANIFEST_NOT_FOUND",
-        message: `No manifest.json found at ${manifestPath}`,
+        message: `No manifest.json found under ${projectPath} (looked in the root and src/)`,
       },
-      hint: "Ensure projectPath points to an extension project root with src/manifest.json",
+      hint: "Ensure projectPath points to an extension project with manifest.json at its root or in src/",
     });
   }
+
+  const srcDir = path.dirname(manifestPath);
+  const srcRel = path.relative(projectPath, srcDir).split(path.sep).join("/");
+  const at = (rel: string): string => (srcRel ? `${srcRel}/${rel}` : rel);
+  const manifestRel = at("manifest.json");
 
   const FEATURE_DIR: Record<string, string> = {
     "content-script": "content",
@@ -247,26 +250,26 @@ export async function handler(args: {
     ["sidebar", "popup", "newtab", "options", "devtools"].includes(args.feature)
   ) {
     filesToCreate.push(
-      { path: `src/${featureDir}/index.html`, hint: "HTML entry point" },
+      { path: at(`${featureDir}/index.html`), hint: "HTML entry point" },
       {
-        path: `src/${featureDir}/scripts.${scriptExt}`,
+        path: at(`${featureDir}/scripts.${scriptExt}`),
         hint:
           framework === "vanilla"
             ? "Script entry point"
             : `${framework} mount point`,
       },
-      { path: `src/${featureDir}/styles.css`, hint: "Stylesheet" },
+      { path: at(`${featureDir}/styles.css`), hint: "Stylesheet" },
     );
 
     if (framework !== "vanilla") {
       filesToCreate.push({
-        path: `src/${featureDir}/${componentBase}App.${componentExt}`,
+        path: at(`${featureDir}/${componentBase}App.${componentExt}`),
         hint: `Main ${framework} component`,
       });
 
       if (framework === "vue" && typed) {
         filesToCreate.push({
-          path: `src/${featureDir}/shims-vue.d.ts`,
+          path: at(`${featureDir}/shims-vue.d.ts`),
           hint: "Vue SFC type shim (lets TS import .vue components)",
         });
       }
@@ -276,24 +279,24 @@ export async function handler(args: {
   if (args.feature === "content-script") {
     filesToCreate.push(
       {
-        path: `src/content/scripts.${plainExt}`,
+        path: at(`content/scripts.${plainExt}`),
         hint:
           framework === "vanilla"
             ? "Content script entry point"
             : `${framework} content-script mount point`,
       },
-      { path: "src/content/styles.css", hint: "Content script styles" },
+      { path: at("content/styles.css"), hint: "Content script styles" },
     );
 
     if (framework !== "vanilla") {
       filesToCreate.push({
-        path: `src/content/ContentApp.${componentExt}`,
+        path: at(`content/ContentApp.${componentExt}`),
         hint: `Main ${framework} component mounted by the content script`,
       });
 
       if (framework === "vue" && typed) {
         filesToCreate.push({
-          path: "src/content/shims-vue.d.ts",
+          path: at("content/shims-vue.d.ts"),
           hint: "Vue SFC type shim (lets TS import .vue components)",
         });
       }
@@ -302,7 +305,7 @@ export async function handler(args: {
 
   if (args.feature === "background") {
     filesToCreate.push({
-      path: `src/background.${plainExt}`,
+      path: at(`background.${plainExt}`),
       hint: "Background service worker / script",
     });
   }
@@ -349,11 +352,11 @@ export async function handler(args: {
   const safe = conflicts.length === 0 && manifestConflicts.length === 0 && !manifestUnreadable;
 
   const conflictHint = `Warning: ${conflicts.length} file(s) already exist and would be overwritten.`;
-  const manifestConflictHint = `Warning: src/manifest.json already declares ${manifestConflicts.join(", ")}; the manifest additions above would replace ${manifestConflicts.length === 1 ? "it" : "them"}, so merge by hand instead of pasting.`;
-  const manifestUnreadableHint = `src/manifest.json could not be parsed (${manifestUnreadable}), so which keys the additions would replace is unknown.`;
+  const manifestConflictHint = `Warning: ${manifestRel} already declares ${manifestConflicts.join(", ")}; the manifest additions above would replace ${manifestConflicts.length === 1 ? "it" : "them"}, so merge by hand instead of pasting.`;
+  const manifestUnreadableHint = `${manifestRel} could not be parsed (${manifestUnreadable}), so which keys the additions would replace is unknown.`;
 
   const steps: string[][] = [
-    [`Add these fields to your src/manifest.json:\n${JSON.stringify(manifestUpdates, null, 2)}`],
+    [`Add these fields to your ${manifestRel}:\n${JSON.stringify(manifestUpdates, null, 2)}`],
     ["Create the following files in your project:", ...filesToCreate.map((f) => `   - ${f.path} (${f.hint})`)],
     ...(args.feature === "sidebar"
       ? [[`Add background.${plainExt} to handle sidebar open: chromium uses chrome.sidePanel.setPanelBehavior, firefox uses browser.sidebarAction.open()`]]

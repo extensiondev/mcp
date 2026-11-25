@@ -19,7 +19,7 @@ import { icon128Fix } from "../lib/store-review";
 import { geckoIdWarning, proposedGeckoId } from "../lib/firefox-addon-id";
 import { chromeThemeRefusalLines } from "../lib/theme-manifest-discards";
 import { chromiumRefusedKeys } from "../lib/chromium-manifest-load";
-import { readManifestFile } from "../lib/manifest-path";
+import { findProjectManifest, readManifestFile } from "../lib/manifest-path";
 import { toolListed } from "../lib/tool-policy";
 import { CONTENT_SCRIPT_SENTENCE, UNSAFE_EVAL_PHRASE, WASM_GRANT, WASM_POLICY, WASM_POLICY_BLOCK, WASM_POLICY_KEY, WASM_WARNING_PREFIX, needsWasmGrant, wasmEvidence, wasmPolicyOf, wasmSignIn, type WasmSeen } from "../lib/wasm-policy";
 import { ADMIN_INSTALL_ONLY_KEY, ENTERPRISE_CHANNEL_SENTENCE, adminInstallOnlyOf, adminInstallOnlyTypeIssue } from "../lib/firefox-enterprise";
@@ -209,15 +209,6 @@ function fileResolvesSomewhere(ref: string, roots: string[]): boolean {
       return false;
     }
   });
-}
-
-function findManifest(projectPath: string): string | null {
-  for (const rel of ["manifest.json", path.join("src", "manifest.json")]) {
-    const candidate = path.resolve(projectPath, rel);
-    if (fs.existsSync(candidate)) return candidate;
-  }
-
-  return null;
 }
 
 /* @invariant A KEY CHROMIUM REFUSES TO LOAD IS AN ERROR HERE, BEFORE ANY
@@ -460,7 +451,7 @@ export async function handler(args: {
 
   const manifestPath =
     args.manifestPath ??
-    (args.projectPath ? findManifest(args.projectPath) : null);
+    (args.projectPath ? findProjectManifest(args.projectPath) : null);
 
   if (!manifestPath) {
     const errors = [
