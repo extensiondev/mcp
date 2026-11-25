@@ -231,7 +231,7 @@ function releaseStatusPlan(call: TrackCall): TrackPlan {
 }
 
 function batchWorkspace(entries: unknown[]): string {
-  const workspaces = new Set(entries.map((entry) => (isRow(entry) ? text(entry.project).split("/")[0]?.toLowerCase() ?? "" : "")));
+  const workspaces = new Set(entries.map((entry) => (isRow(entry) ? text(entry.project) : text(entry)).split("/")[0]?.toLowerCase() ?? ""));
   const [only] = [...workspaces];
 
   return workspaces.size === 1 && only ? only : "";
@@ -308,6 +308,17 @@ export const TRACK_ACTS: Record<string, (call: TrackCall) => TrackPlan | null> =
 
     if (action === "logout") return { track: { page: "access-tokens" } };
     if (call.status === "logged-out") return { track: { page: "console" } };
+
+    if (Array.isArray(call.args.projects) && call.args.projects.length) {
+      const named = call.args.projects.map((entry) => splitPair(text(entry).toLowerCase()));
+      const [one] = named;
+      if (named.length === 1 && one) return { track: { page: "project", target: one } };
+
+      const workspace = batchWorkspace(call.args.projects);
+
+      return { track: workspace ? { page: "workspace", target: { workspace } } : { page: "console" } };
+    }
+
     if (Array.isArray(call.value.logins) && !text(call.value.projectSlug)) return { track: { page: "workspace" } };
 
     return { track: { page: "project" } };

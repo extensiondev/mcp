@@ -203,6 +203,20 @@ describe("every platform act answers the console page that tracks it", () => {
     expect(mixed?.trackUrl).toBe(CONSOLE);
   });
 
+  it("1214: a pending batch login checks the workspace or the one project it signs in to, never the stored default login's", () => {
+    if (process.platform === "win32") return;
+
+    world.login();
+    const pending = { verificationUriComplete: "https://extension.dev/device?code=ABCD-1234", verificationUri: "https://extension.dev/device" };
+    const batch = trackFields("extension_auth", { args: { action: "login", projects: ["globex/one", "Globex/two"], api: WORLD_API }, status: "authorization-pending", value: pending });
+    const single = trackFields("extension_auth", { args: { action: "login", projects: ["globex/one"], api: WORLD_API }, status: "authorization-pending", value: pending });
+    const mixed = trackFields("extension_auth", { args: { action: "login", projects: ["globex/one", "initech/two"], api: WORLD_API }, status: "authorization-pending", value: pending });
+
+    expect(batch?.checkUrl).toBe(`${CONSOLE}/globex`);
+    expect(single?.checkUrl).toBe(`${CONSOLE}/globex/one`);
+    expect(mixed?.checkUrl).toBe(CONSOLE);
+  });
+
   it("tracks a channel change on the channel's releases and a channel delete on the Channels settings, never the builds list", () => {
     const configured = envelope({ ok: true, command: "extension_builds_act", status: "channel-configured", value: { project: "acme/widget", channel: { name: "beta" } } });
     const asked = envelope({ ok: false, command: "extension_builds_act", status: "approval-required", value: { project: "acme/widget", approvalUrl: `${WORLD_API}/device/approve/apr_1` }, error: { code: "E_APPROVAL_REQUIRED", message: "ask" } });
