@@ -40,6 +40,7 @@ export interface StoreMdListing {
   stores: Partial<Record<ListingStore, ListingText>>;
   privacy: StoreMdPrivacy;
   lines: Partial<Record<ListingField, string>>;
+  placeholders?: Partial<Record<ListingField, string>>;
   screenshotsLine?: string;
   screenshotFiles?: number;
   screenshotPaths?: string[];
@@ -153,10 +154,16 @@ function bullets(body: string): Array<{ key: string; value: string }> {
   return out;
 }
 
+const PLACEHOLDER = /^(?:TODO|TBD)(?![\p{L}\p{N}])/u;
+
+export const PLACEHOLDER_REASON = "starts with the placeholder word TODO or TBD";
+
+const isPlaceholder = (value: string): boolean => PLACEHOLDER.test(value.trim());
+
 const usable = (value: string): string => {
   const text = value.trim();
 
-  return !text || /^todo\b/i.test(text) ? "" : text;
+  return !text || isPlaceholder(text) ? "" : text;
 };
 
 const unwrap = (value: string): string =>
@@ -354,6 +361,8 @@ function readBullets(result: StoreMdListing, body: string, into: ListingText, ow
 
     const field = BULLET_KEYS.find(({ pattern }) => pattern.test(key.toLowerCase()))?.field;
     const text = usable(value);
+
+    if (field && !text && isPlaceholder(value)) result.placeholders = { ...result.placeholders, [field]: key };
     if (!field || !text) continue;
 
     result.lines[field] = key;
@@ -540,6 +549,13 @@ export function listingForStore(parsed: StoreMdListing, store: ListingStore): St
     } else if (read.value !== undefined) {
       (listing as Record<string, unknown>)[field] = read.value;
     }
+  }
+
+  for (const [field, key] of Object.entries(parsed.placeholders ?? {}) as Array<[ListingField, string]>) {
+    if (!STORE_FIELDS[store].includes(field) || merged[field] !== undefined || unread[field]) continue;
+
+    skipped.push(`${field} in STORE.md ${PLACEHOLDER_REASON}, so it was left out`);
+    unread[field] = { line: `- ${key}:`, reason: PLACEHOLDER_REASON };
   }
 
   if (store === "safari") safariTitle(listing, skipped, unread, parsed.lines.title);

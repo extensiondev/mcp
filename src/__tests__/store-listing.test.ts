@@ -198,6 +198,21 @@ describe("STORE.md fills the store listing", () => {
     expect(firefox.releaseNotes).toBeUndefined();
   });
 
+  it("takes localized copy that opens with the word todo and names a TODO or TBD line it left out", () => {
+    const store = (description: string, summary: string) =>
+      ["## Listing", "", `- Summary: ${summary}`, "- Description:", `  ${description}`, ""].join("\n");
+    const pt = listingForStore(parseStoreMdListing(store("Todo jogo conta. Acompanhe o placar ao vivo.", "Toda partida no navegador.")), "firefox");
+    const es = listingForStore(parseStoreMdListing(store("Todo lo que pasa en el partido.", "TBD")), "firefox");
+
+    expect(pt.listing).toMatchObject({ fullDescription: "Todo jogo conta. Acompanhe o placar ao vivo.", shortDescription: "Toda partida no navegador." });
+    expect(pt.unread).toEqual({});
+    expect(es.listing.fullDescription).toBe("Todo lo que pasa en el partido.");
+    expect(es.listing.shortDescription).toBeUndefined();
+    expect(es.unread.shortDescription).toEqual({ line: "- Summary:", reason: "starts with the placeholder word TODO or TBD" });
+    expect(es.skipped).toContain("shortDescription in STORE.md starts with the placeholder word TODO or TBD, so it was left out");
+    expect(listingForStore(parseStoreMdListing(store("TODO: write the description.", "TODOS os jogos.")), "firefox").listing).toEqual({ shortDescription: "TODOS os jogos." });
+  });
+
   it("takes one category up to its store note for every store and keeps the note out", () => {
     const parsed = parseStoreMdListing(
       STORE_MD.replace(

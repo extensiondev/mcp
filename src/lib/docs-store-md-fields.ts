@@ -24,7 +24,7 @@ const GENERATED_FROM = "src/lib/store-md-declarations.ts";
 
 const RULES = [
   `A \`##\` heading is matched by prefix, case aside: \`${LISTING_SECTION}\`, \`${PRIVACY_SECTION}\`, and a store section by the store its heading names (chrome or chrome-web-store, firefox or amo, edge, safari or app store), so \`## Firefox Add-ons\`, \`## firefox-amo\` and \`## AMO\` are one section; the first section for a store wins. A \`###\` heading inside a store section is matched by prefix the same way.`,
-  "A line is a `- Key: value` bullet; the key is case-insensitive, and the value may continue on the indented lines below it. A value that starts with TODO counts as absent. HTML comments are skipped.",
+  "A line is a `- Key: value` bullet; the key is case-insensitive, and the value may continue on the indented lines below it. A value whose first word is TODO or TBD, in capitals, counts as absent, and the answer names the line it left out. HTML comments are skipped.",
   `The section column is the line's home. A line is also read from the sections in the also-read-from column, and the home wins when both carry one; a store section's own \`- Key:\` lines, at the top of the section or under any of its \`###\` sub-headings (the \`### Permissions justification\` bullets aside), are read with the same keys as \`${LISTING_SECTION}\` and win for that store alone.`,
   "A single-value line is read up to a trailing parenthetical that names a store. `- Category: Productivity (Chrome: Productivity, Safari: Utilities)` reads `Productivity` for every store and the named store's own value where the note gives one, with a colon; the same `(Store: value)` note works on the name, subtitle, summary, license, support email, homepage and review contact lines. A `- Category:` line of several categories reads a plain `(Chrome Web Store)` note as the stores that category is for. A parenthetical that names no store is a remark: kept out of the license, support email and homepage, left in the prose lines.",
   PER_STORE_CATEGORY_RULE,
@@ -80,7 +80,7 @@ export function renderStoreMdFieldsDoc(): string {
 export const STORE_MD_FORMAT_URL = "https://extension.js.org/docs/workflows/store-metadata";
 
 const FORMAT_INTRO =
-  'STORE.md is one file in the project root; extension_submit_read preflight and extension_submit sync-listing read it. A "##" heading opens a section, and a line is a "- Key: value" bullet or a "###" sub-heading with its text below; a value that starts with TODO counts as absent. Each line names the stores that read it and its limit. A store\'s own section may repeat a "## Listing" line for that store alone. The data-use and privacy answers are the owner\'s to give.';
+  'STORE.md is one file in the project root; extension_submit_read preflight and extension_submit sync-listing read it. A "##" heading opens a section, and a line is a "- Key: value" bullet or a "###" sub-heading with its text below; a value whose first word is TODO or TBD, in capitals, counts as absent and is named in the answer. Each line names the stores that read it and its limit. A store\'s own section may repeat a "## Listing" line for that store alone. The data-use and privacy answers are the owner\'s to give.';
 
 export function renderStoreMdFormat(): string {
   const sections = [LISTING_SECTION, PRIVACY_SECTION, ...LISTING_STORES.map((store) => STORE_SECTIONS[store])];
