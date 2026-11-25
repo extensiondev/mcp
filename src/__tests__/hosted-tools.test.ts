@@ -1047,6 +1047,21 @@ describe("the forwarder gives the person the wait they asked for and keeps what 
     expect(out.hint).toContain("Build c5c0007 succeeded.");
   });
 
+  it("1202: sends a submit the lane held before its upload once more, in a fresh call under a new key with the checked mark", async () => {
+    const SUBMIT = { browsers: ["firefox"], buildSha: "701792e", dryRun: false, approvalId: "apr_1202", project: "acme/web", waitSeconds: 300 };
+    const memory = { "submit-prechecked": [["https://www.extension.dev\nfirefox\n701792e", { modes: { firefox: "listed" }, warnings: [] }]] };
+    const held = { ok: true, command: "extension_submit", status: "submit-held", value: { dispatched: false }, memory };
+    const done = { ok: true, command: "extension_submit", status: "submitted", value: { submittedStores: ["firefox"] }, memory: {} };
+    const { lane } = stubLane([held, done]);
+    const out = await forwarded("extension_submit", SUBMIT);
+
+    expect(out).toMatchObject({ ok: true, status: "submitted" });
+    expect(lane().map((hit) => [hit.body.args.local?.resendsHeldSubmit, hit.body.args.local?.precheckedAct])).toEqual([[true, undefined], [true, true]]);
+    expect(lane()[1]?.body.args.local?.memory).toEqual(memory);
+    expect(lane()[1]?.body.args.approvalId).toBe("apr_1202");
+    expect(new Set(lane().map((hit) => hit.headers["idempotency-key"])).size).toBe(2);
+  });
+
   it("carries what the lane's tools remembered into the next call and never shows it to the agent", async () => {
     const memory = { "build-dispatches": [["https://www.extension.dev\nprj_1", [{ sha: "abc1234", dispatchedAt: "2026-11-14T12:00:00Z" }]]] };
     const { lane } = stubLane([{ ...LISTED, memory }, { ...LISTED, memory: {} }, LISTED]);

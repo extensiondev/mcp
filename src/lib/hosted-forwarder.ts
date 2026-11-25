@@ -53,6 +53,7 @@ export const LOCAL_FACTS_KEY = "local";
 export { FORWARD_TIMEOUT_MS };
 export const HOSTED_DROPPED_ARGS = ["api", "projectPath"] as const;
 export const PAGE_OPENING_FACT = "pageOpening";
+export const RESENDS_HELD_FACT = "resendsHeldSubmit";
 export const OPEN_PAGES_KEY = "openPages";
 export const OPEN_PAGES_MAX = 4;
 export const PAGES_NOT_OPENED_KEY = "pagesNotOpened";
@@ -114,7 +115,7 @@ const SUBMIT_RULE: ForwardRule = {
     const facts = await forwardSubmitFacts(args as ForwardFactsArgs, wanted ? { wanted } : null);
     const hold = localPackageHolds(text(args.projectPath), facts.project.gitHead);
 
-    return { facts, ...(hold ? { [PACKAGE_HOLD_FACT]: hold } : {}), [PAGE_OPENING_FACT]: { block: autoOpenBlock({ noShip: false }, deps.env ?? process.env, deps.platform) } };
+    return { facts, ...(hold ? { [PACKAGE_HOLD_FACT]: hold } : {}), [RESENDS_HELD_FACT]: true, [PAGE_OPENING_FACT]: { block: autoOpenBlock({ noShip: false }, deps.env ?? process.env, deps.platform) } };
   },
   wants: imagesTheLaneWants,
   sent: (args) => {
@@ -698,6 +699,28 @@ const SUBMIT_DISPATCHED_STATUS = "submit-dispatched";
 const RESUME_UNKNOWN_STATUS = "nothing-to-resume";
 const RESUME_ACT_FACT = "resumeAct";
 const SUBMIT_DISPATCHES_SHELF = "submit-dispatches";
+const SUBMIT_HELD_STATUS = "submit-held";
+const PRECHECKED_ACT_FACT = "precheckedAct";
+const SUBMIT_PRECHECKED_SHELF = "submit-prechecked";
+
+const freshKey = (): string => crypto.randomBytes(24).toString("base64url");
+
+/* @invariant A SUBMIT THE LANE HELD BEFORE ITS UPLOAD IS SENT ONCE MORE IN A
+ * FRESH CALL. The lane checks the stores and the approval first, and when
+ * too little of its function's time is left for the upload request it
+ * sends nothing and keeps those checks on a shelf. Nothing reached www, so
+ * the same act goes out again under a new key with the checked mark, and
+ * the upload gets the fresh call's whole budget (ledger 1202).
+ */
+async function sentAfterHold(call: LaneCall, shaped: Args, facts: Args | null, body: Args): Promise<{ call: LaneCall; answer: LaneAnswer } | null> {
+  const resource = call.session.resource;
+  if (laneStatus(body) !== SUBMIT_HELD_STATUS || !(carriedMemory(resource)[SUBMIT_PRECHECKED_SHELF] ?? []).length) return null;
+
+  reportProgress(`Sending ${call.command} on extension.dev in a fresh call`);
+  const fresh = { ...call, key: freshKey(), sent: hostedArgs(shaped, { ...(facts ?? {}), [PRECHECKED_ACT_FACT]: true }, resource) };
+
+  return { call: fresh, answer: await askLane(fresh) };
+}
 
 async function followedBuild(call: LaneCall, get: Args, act: Args, startedAt: number): Promise<Args> {
   const askedSeconds = hostedWaitOf(act)?.askedSeconds ?? 0;
@@ -753,6 +776,15 @@ async function forwardedAnswer(asked: { command: string; tool: string; rule: For
   }
 
   if (laneStatus(body) === "local-half") return withForwardSession(session, () => local(args));
+
+  const held = await sentAfterHold(call, shaped, facts, body);
+
+  if (held) {
+    call = held.call;
+    if (held.answer.kind !== "answer") return answerText(call, held.answer);
+
+    body = takeMemory(resource, held.answer.body);
+  }
 
   const resumes = !call.reads && rule.resumes?.(body) === true && (carriedMemory(resource)[SUBMIT_DISPATCHES_SHELF] ?? []).length > 0;
   let cut = call.reads || resumes ? hostedWaitOf(body) : null;
