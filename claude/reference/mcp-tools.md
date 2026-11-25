@@ -314,7 +314,7 @@ Evaluate JavaScript in an extension's background, surface, content script, page 
 
 ## extension_inspect
 
-Inspect a web page or targetId in a running session: its HTML, DOM, console and CSS selector counts, closed shadow roots included. Answers html, dom and console for a web page; extension_dom_snapshot answers an extension surface, extension_element_act acts on one element, extension_eval runs code, extension_logs answers console history. Firefox goes through the agent bridge and needs allowEval.
+Inspect a web page or targetId in a running session, first navigating a tab to url when given: its HTML, DOM, console and CSS selector counts, closed shadow roots included. Answers html, dom and console; extension_dom_snapshot answers an extension surface, extension_element_act acts on one element, extension_eval runs code, extension_logs answers console history. Firefox: agent bridge, allowEval.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |

@@ -232,11 +232,11 @@ describe("extension_workspace reads a workspace with any project login it holds"
     });
   });
 
-  it("is a platform tool fenced as untrusted, since names and build commands are user-written, and no longer read-only since it writes visibility and project settings", () => {
+  it("is a platform tool fenced as untrusted, since names and build commands are user-written, and destructive since it writes visibility and project settings and deletes build variables", () => {
     expect(TOOL_POLICY.extension_workspace).toMatchObject({
       group: "platform",
       untrusted: true,
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     });
 
     expect(schema.inputSchema.properties.action.enum).toEqual(["info", "projects", "usage", "settings", "set-visibility", "configure-project", "set-environment"]);

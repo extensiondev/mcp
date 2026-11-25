@@ -70,6 +70,26 @@ describe("the tool policy table", () => {
     }
   });
 
+  it("1140: marks destructive every tool that takes a delete, remove, clear or uninstall, and the three hints match what each tool does", async () => {
+    const client = await connected({ features: [...FEATURE_GROUPS], noShip: false });
+    const listed = (await client.listTools()).tools;
+    const deletes = listed.filter((tool) => {
+      const properties = tool.inputSchema.properties as Record<string, { enum?: string[] }>;
+
+      return ["delete", "remove", "clear"].some((key) => key in properties) || (properties.action?.enum ?? []).some((action) => /^(delete|remove|clear|uninstall|revoke|logout)$/.test(action));
+    });
+
+    expect(deletes.filter((tool) => tool.annotations?.destructiveHint !== true).map((tool) => tool.name)).toEqual([]);
+    expect(deletes.map((tool) => tool.name)).toEqual(expect.arrayContaining(["extension_workspace_configure", "extension_network_stub"]));
+
+    const hints = (name: string) => listed.find((tool) => tool.name === name)!.annotations;
+
+    expect(hints("extension_workspace_configure")).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: false });
+    expect(hints("extension_network_stub")).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: false });
+    expect(hints("extension_inspect")).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true });
+    expect(listed.find((tool) => tool.name === "extension_inspect")!.description).toMatch(/navigating a tab to url/);
+  });
+
   it("marks every tool that can ship as open-world", () => {
     for (const [name, policy] of Object.entries(TOOL_POLICY)) {
       if (policy.ships) expect(policy.annotations.openWorldHint, name).toBe(true);
