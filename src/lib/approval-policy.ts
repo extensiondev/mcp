@@ -53,6 +53,8 @@ export type ApprovalVerdict = "plain" | "approval" | "console";
  * (Cezar, 2026-11-06): it registers the app id and its .extension id with
  * Apple under the team, an act outside extension.dev that a later mint
  * cannot undo.
+ * A connected app starting a real browser session (extension_browser.start,
+ * scope {browser}) keeps the page.
  * The platform holds the same table in www src/services/registry/approval-policy.ts;
  * a row changed on one side is changed on both.
  */
@@ -86,6 +88,7 @@ export const APPROVAL_POLICY = {
   "extension_project.source": "approval",
   "extension_browsers.captures": "approval",
   "extension_store.mint": "approval",
+  "extension_browser.start": "approval",
   "extension_store.disconnect": "console",
   "extension_builds.delete-channel": "console",
   "extension_project.delete": "console",

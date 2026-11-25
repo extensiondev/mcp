@@ -33,6 +33,7 @@ const RULED_TABLE: Array<[keyof typeof APPROVAL_POLICY, "plain" | "approval" | "
   ["extension_store.listing-derived", "approval"],
   ["extension_browsers.captures", "approval"],
   ["extension_store.mint", "approval"],
+  ["extension_browser.start", "approval"],
   ["extension_store.disconnect", "console"],
   ["extension_builds.delete-channel", "console"],
   ["extension_project.delete", "console"],
