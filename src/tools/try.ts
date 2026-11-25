@@ -123,12 +123,12 @@ function refusalEnvelope(refusal: TryRefusal, project: string, part: string, val
         message: `${project} is not open to everyone on extension.dev (its ${part} answered ${Number(refusal.httpStatus) || "a refusal"}), so there is nothing to run without signing in. Nothing was downloaded.`,
       },
       value: { project: value.project, browser: value.browser },
-      hint: "Tell the person this project is private or its builds are not public yet. A member of its workspace reaches it once this server holds a login for it; a public project needs nothing.",
+      hint: "This project is private or its builds are not public yet. A member of its workspace reaches it once this server holds a login for it; a public project needs nothing.",
     });
   }
 
   if (refusal.kind === "held") {
-    return refuse("platform-held", "E_PLATFORM", refusal.heldMessage || "extension.dev is not open to the public yet.", "Say so plainly; nothing was downloaded.", value);
+    return refuse("platform-held", "E_PLATFORM", refusal.heldMessage || "extension.dev is not open to the public yet.", "Nothing was downloaded.", value);
   }
 
   if (refusal.kind === "not-found") {
@@ -275,7 +275,7 @@ export async function handler(args: Args): Promise<string> {
   const packageFacts = { packageBytes: download.bytes.length, sha256: download.integrity.sha256, integrity: download.integrity.verdict };
 
   if (download.integrity.verdict === "mismatch") {
-    return refuse("integrity-mismatch", "E_ARTIFACTS_UNVERIFIED", `The downloaded ${browser} package of build ${buildId} is not the file the platform recorded (sha256 ${download.integrity.sha256}, recorded ${download.integrity.expectedSha256}). It was not unpacked or launched, and nothing was kept.`, "Do not run it. Tell the person the download did not match and to try again later.", { ...value, ...packageFacts });
+    return refuse("integrity-mismatch", "E_ARTIFACTS_UNVERIFIED", `The downloaded ${browser} package of build ${buildId} is not the file the platform recorded (sha256 ${download.integrity.sha256}, recorded ${download.integrity.expectedSha256}). It was not unpacked or launched, and nothing was kept.`, "Nothing ran; the download did not match, so a later try is the step.", { ...value, ...packageFacts });
   }
 
   const run = openTryRun({ project, browser, buildId, version: build.version ?? null });
@@ -284,7 +284,7 @@ export async function handler(args: Args): Promise<string> {
   if (!unpacked.ok) {
     removeTryRun(run.dir);
 
-    return refuse("package-refused", "E_BAD_MANIFEST", `The ${browser} package of build ${buildId} was refused: ${unpacked.message}. Nothing was launched or kept.`, "Tell the person this build cannot be tried; nothing stays on the machine.", { ...value, ...packageFacts });
+    return refuse("package-refused", "E_BAD_MANIFEST", `The ${browser} package of build ${buildId} was refused: ${unpacked.message}. Nothing was launched or kept.`, "This build cannot be tried; nothing stays on the machine.", { ...value, ...packageFacts });
   }
 
   const facts = readTryPermissions(unpacked.manifest);

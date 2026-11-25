@@ -28,7 +28,7 @@ describe("428: the brief a client shows before cutting the instructions carries 
     const pointer = shown.indexOf("What follows is the deployment doctrine and the store playbook");
 
     expect(pointer).toBeGreaterThan(-1);
-    expect(full.indexOf("Anything that leaves the person's machine")).toBeGreaterThan(pointer);
+    expect(full.indexOf("Builds for anyone else come from the platform build")).toBeGreaterThan(pointer);
     expect(full.indexOf("Chrome Web Store goal:")).toBeGreaterThan(pointer);
   });
 

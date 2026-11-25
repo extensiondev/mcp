@@ -109,7 +109,7 @@ Find the browsers Extension.js launches: detect scans system and managed ones, l
 
 ## extension_build
 
-Build an extension into dist/<browser>/ on this machine, one browser a call. Answers the output path, warnings and store review risks; extension_analyze reads what it wrote. Not for sharing: extension_builds_read answers builds made on extension.dev, extension_builds_act rebuilds there. Safari needs macOS with Xcode.
+Build an extension into dist/<browser>/ on this machine, one browser a call. Answers the output path, warnings and store review risks; extension_analyze reads what it wrote. Local only: extension_builds_read answers builds made on extension.dev, extension_builds_act rebuilds there. Safari needs macOS with Xcode.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |

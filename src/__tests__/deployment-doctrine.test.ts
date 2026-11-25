@@ -20,7 +20,7 @@ const SUBMIT = /^POST \/api\/cli\/stores\/submit$/;
 const SUBMIT_ARGS = { action: "submit", browsers: ["chrome"], buildSha: "603fc8a", dryRun: false, api: WORLD_API };
 const DESKTOP = { HOME: "/Users/person" };
 const ORDER = [
-  "Anything that leaves the person's machine goes through extension.dev",
+  "Builds for anyone else come from the platform build",
   "extension_build output stays on the person's machine",
   "A store's version refusal is resolved on the platform",
   "After any stop that asked the person for one action (connect, link, approve)",

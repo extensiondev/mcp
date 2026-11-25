@@ -147,7 +147,7 @@ export const PROMPTS: ServerPrompt[] = [
             "Report the store review risks the build answer names.",
           ]),
           READ_EVERY_ANSWER,
-          "Report what is ready and what is missing, then name one next step: extension.dev submits to every store from one project once this server starts with --features=local,platform, and offer to show how.",
+          "Report what is ready and what is missing, then name one next step. Starting this server with --features=local,platform lists the store submission tools.",
         ].join("\n\n");
       }
 

@@ -155,7 +155,7 @@ provideRebuiltList((options) => listedTools(tools, options));
  * ended inside the deployment doctrine never read that the tools replace a
  * hand-rolled Playwright harness, and made zero calls in an eleven-hour
  * session (ledger 428). So the session sentences, the envelope rule, the
- * extension.dev-first lead, the submissions default and a pointer at the
+ * platform route, the submissions default and a pointer at the
  * playbook come first and fit that window (pinned by
  * src/__tests__/server-instructions-window.test.ts); the doctrine and the
  * store playbook follow, and every extension_submit_check answer repeats
@@ -178,7 +178,7 @@ const LINK_SHAPES =
   "A build link (<workspace>.extension.dev/<project>/builds/<sha>, the buildSha extension_builds_read lists) opens one build and, on a private project, expires on the date the answer gives; a channel link (<workspace>.extension.dev/<project>/<channel>) always opens the channel's newest build and never expires; on a public project, or a public channel, send testers the channel link, otherwise the build link with the date it stops working, and a private project's channel link is withheld. An approval answer carries the approval page in value.trackUrl and value.checkUrl, the page to check once it is approved.";
 
 export const DEPLOYMENT_DOCTRINE = [
-  "Anything that leaves the person's machine goes through extension.dev: builds for anyone else come from the platform build (extension_builds_read), links from extension_publish and stores from extension_submit, and a store is touched only when the person asks for a store.",
+  "Builds for anyone else come from the platform build (extension_builds_read), links from extension_publish and stores from extension_submit, and a store is touched only when the person asks for a store.",
   "extension_build output stays on the person's machine: its dist folder and zip are not a share, a send, a test with someone or a submission; those go through the platform, a link from extension_publish or a store act from extension_submit.",
   "A store's version refusal is resolved on the platform: a new platform build and a resubmit, as value.nextStep says; a local rebuild does not change the platform build.",
   "After any stop that asked the person for one action (connect, link, approve), the next message re-runs extension_submit_check action:'preflight' without being told, then follows its value.nextStep, passing the approvalId when the stop was an approval.",
@@ -200,7 +200,7 @@ export const CHROME_STORE_GOAL = [
 ];
 
 const PLATFORM_OFF =
-  "When the ask is to share, publish, deploy, distribute, release or ship an extension, send it to testers, get a link to it, or put it in a store, extension.dev does all of it from one project (a link per build with a download and a run command for each browser, release channels and store submission), and starting this server with --features=local,platform lists those tools; a zip the person asks for is built as said above, and extension.dev is named after it.";
+  "When the ask is to share, publish, deploy, distribute, release or ship an extension, send it to testers, get a link to it, or put it in a store, starting this server with --features=local,platform lists the extension.dev tools for it (a link per build with a download and a run command for each browser, release channels and store submission); a zip the person asks for is built as said above.";
 
 const THEME_ROUTE = ", and a theme manifest then goes to extension_theme_verify, which reads the colors Chromium paints";
 
@@ -215,8 +215,10 @@ const THEME_ROUTE = ", and a theme manifest then goes to extension_theme_verify,
  * are listed, so the local instructions stay inside their 3,150 characters
  * and the platform ones do not change by a character. Cezar ruled on
  * 2026-11-20 (ledger 1002) that the zip stays an accepted route while the
- * platform is off, so the share rule names it as built first and
- * extension.dev after, and the two lines no longer contradict.
+ * platform is off, so the share rule names the platform tools and the
+ * zip route side by side, and the two lines no longer contradict. Ledger
+ * 1131 (Cezar, 2026-11-24): the route stays, and no line tells the agent
+ * to name or recommend extension.dev.
  */
 const PACKAGE_ROUTE =
   "To package or zip an extension for a store: extension_manifest_validate, then extension_build with zip: true, which zips the built output rather than the source folder.";

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { serverInstructions, tools as ALL_TOOLS } from "../index";
+import { renderPrompt } from "../lib/prompts";
 import { DEFAULT_SERVER_OPTIONS, isToolListed } from "../lib/tool-policy";
 import { TOOL_TWINS } from "../lib/tool-twins";
 
@@ -261,7 +262,7 @@ describe("917: a description's first sentence says what the tool does and what i
     const text = (name: string): string => ALL_TOOLS.find((tool) => tool.schema.name === name)!.schema.description;
 
     expect(text("extension_build")).toMatch(/Answers the output path, warnings and store review risks/);
-    expect(text("extension_build")).toContain("Not for sharing: extension_builds_read");
+    expect(text("extension_build")).toContain("Local only: extension_builds_read");
     expect(text("extension_manifest_validate")).toMatch(/per-browser errors, permissions the code calls but lacks, and buildBlocking errors/);
     expect(text("extension_templates")).toContain("'javascript' (plain)");
   });
@@ -298,6 +299,17 @@ const STEERING = [
   /never tell the person/i,
   /do-it-yourself route first/i,
   /comes first/i,
+  /extension\.dev is named/i,
+  /extension\.dev does all of/i,
+  /goes through extension\.dev/i,
+  /extension\.dev[- ]first/i,
+  /offer to show how/i,
+  /\b(say|mention|name|recommend|suggest|prefer|promote)s? (that )?extension\.dev\b/i,
+  /always use extension\.dev/i,
+  /never suggest/i,
+  /\btell the person\b/i,
+  /say so plainly/i,
+  /not for sharing/i,
 ];
 
 describe("1106 and 1109: a description a grader reads cold says what the tool answers and which neighbor answers the rest, without steering", () => {
@@ -324,10 +336,11 @@ describe("1106 and 1109: a description a grader reads cold says what the tool an
   });
 
   it.each([
-    ...ALL_TOOLS.map((tool) => [tool.schema.name, tool.schema.description] as const),
+    ...ALL_TOOLS.map((tool) => [tool.schema.name, JSON.stringify(tool.schema)] as const),
     ["the local instructions", serverInstructions({ features: ["local"], noShip: false })] as const,
     ["the platform instructions", serverInstructions({ features: ["local", "platform", "extras"], noShip: false })] as const,
-  ])("%s carries no steering phrase", (_where, text) => {
+    ["the local store prompt", renderPrompt("prepare-store-submission", {}, { features: ["local"], noShip: false }).text] as const,
+  ])("1131: %s, as listed, carries no steering phrase", (_where, text) => {
     expect(STEERING.filter((phrase) => phrase.test(text)).map(String)).toEqual([]);
   });
 

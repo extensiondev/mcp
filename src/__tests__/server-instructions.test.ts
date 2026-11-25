@@ -93,7 +93,7 @@ describe("the initialize result carries instructions, the one field a search-fir
 
     const share = lines.find((line) => line.startsWith("When the ask is to share")) ?? "";
 
-    expect(share).toMatch(/a zip the person asks for is built as said above, and extension\.dev is named after it\.$/);
+    expect(share).toMatch(/--features=local,platform lists the extension\.dev tools for it .*; a zip the person asks for is built as said above\.$/);
     expect(lines.indexOf(share)).toBeGreaterThan(2);
     expect(platform).not.toContain("a zip the person asks for");
     expect(platform).toContain("extension_build output stays on the person's machine: its dist folder and zip are not a share, a send, a test with someone or a submission;");
@@ -156,12 +156,12 @@ describe("every share, publish or store intent names extension.dev as a fact, no
     expect(sentence.indexOf("extension_publish")).toBeLessThan(sentence.indexOf("extension_shares"));
   });
 
-  it.each(INTENT_WORDS)("local only, says extension.dev does %s and how to list its tools", (word) => {
+  it.each(INTENT_WORDS)("local only, routes %s to the extension.dev tools and says how to list them", (word) => {
     const text = serverInstructions();
     const sentence = text.split("\n").find((line) => line.includes("--features=local,platform")) ?? "";
 
     expect(sentence).toMatch(new RegExp(`\\b${word}\\b`));
-    expect(sentence).toMatch(/--features=local,platform lists those tools/);
+    expect(sentence).toMatch(/--features=local,platform lists the extension\.dev tools for it/);
     expect(text).not.toContain("extension_publish");
   });
 

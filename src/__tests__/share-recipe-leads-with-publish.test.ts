@@ -33,10 +33,11 @@ describe("the shipped Claude commands send a share ask to extension.dev first", 
     expect(action).not.toMatch(/GitHub Release|email|Load unpacked/i);
   });
 
-  it("the store command offers extension.dev when its tools are missing and keeps zips as checklist attachments", () => {
+  it("the store command names the platform flag when its tools are missing and keeps zips as checklist attachments", () => {
     const doc = read("claude/commands/extension-publish.md");
 
-    expect(doc).toMatch(/--features=local,platform`, and offer to show how/);
+    expect(doc).toMatch(/stop here: starting the server with `--features=local,platform` lists them\./);
+    expect(doc).not.toMatch(/offer to show how/);
     expect(doc).toMatch(/only the attachments of that store checklist/);
     expect(doc).not.toMatch(/hand the user the zips/);
   });
