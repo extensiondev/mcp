@@ -1066,7 +1066,7 @@ describe("the guided store connect opens the MCP's own browser with extension.de
         expect(out).toMatchObject({ status: "first-listing-guided", value: { opened: true, landedOn: consolePage, partnerCenterPage: PARTNER_CENTER_OVERVIEW, guidedBrowser: { opened: true }, nextStep: { kind: "dashboard", url: consolePage } } });
         expect(out.value).not.toHaveProperty("openPages");
         expect(out.value.sayToPerson).toContain("full extension.dev sign-in");
-        expect(out.value.sayToPerson).toContain("press End session");
+        expect(out.value.sayToPerson).toContain("press \"Sign in to continue\"");
         expect(out.value.sayToPerson).toContain("presses \"Create new extension\" once");
         expect(out.value.sayToPerson).toContain("stops before Publish");
         expect(out.value.sayToPerson).toContain("Hidden");
