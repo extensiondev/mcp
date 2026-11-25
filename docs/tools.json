@@ -1166,7 +1166,7 @@
         },
         {
           "name": "context",
-          "type": "\"popup\" | \"options\" | \"side-panel\" | \"devtools\" | \"newtab\" | \"history\" | \"bookmarks\"",
+          "type": "\"popup\" | \"options\" | \"side-panel\" | \"newtab\" | \"devtools\" | \"history\" | \"bookmarks\"",
           "required": false,
           "description": "An open surface (extension_open first)."
         },
@@ -1230,7 +1230,7 @@
         },
         {
           "name": "context",
-          "type": "\"popup\" | \"options\" | \"side-panel\" | \"devtools\" | \"newtab\" | \"history\" | \"bookmarks\"",
+          "type": "\"popup\" | \"options\" | \"side-panel\" | \"newtab\" | \"devtools\" | \"history\" | \"bookmarks\"",
           "required": false,
           "description": "An open surface (extension_open first)."
         },
@@ -1879,6 +1879,12 @@
           "type": "\"chrome\" | \"chromium\" | \"edge\" | \"brave\" | \"opera\" | \"vivaldi\" | \"yandex\" | \"firefox\" | \"waterfox\" | \"librewolf\" | \"zen\" | \"floorp\" | \"safari\"",
           "required": false,
           "description": "Session browser to open in."
+        },
+        {
+          "name": "surface",
+          "type": "string",
+          "required": false,
+          "description": "Page the link opens on: popup, options, side-panel, newtab, devtools, history, bookmarks."
         },
         {
           "name": "share",

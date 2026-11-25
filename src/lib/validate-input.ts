@@ -10,7 +10,7 @@ import { statSync } from "node:fs";
 import { resolve as resolveFolder } from "node:path";
 
 import { composedRefusal } from "./composed-refusal";
-import { SURFACE_NAME_ALIASES } from "./surface-names";
+import { canonicalSurfaceName } from "./surface-names";
 
 export interface InputIssue {
   path: string;
@@ -332,9 +332,9 @@ function canonicalEnumValue(value: unknown, schema: PropertySchema | undefined):
 
   if (typeof value !== "string" || !schema.enum || schema.enum.includes(value)) return value;
 
-  const canonical = SURFACE_NAME_ALIASES[value];
+  const canonical = canonicalSurfaceName(value);
 
-  return canonical !== undefined && schema.enum.includes(canonical) ? canonical : value;
+  return schema.enum.includes(canonical) ? canonical : value;
 }
 
 export function normalizeArgAliases(

@@ -275,7 +275,7 @@ Click or fill one element by CSS selector, or send trusted mouse and key input t
 | `modifiers` | array of "Alt" \| "Control" \| "Meta" \| "Shift" | no |  | Modifiers held during the input. |
 | `deltaX` | number | no |  | scroll: wheel delta in CSS pixels (positive scrolls right). |
 | `deltaY` | number | no |  | scroll: wheel delta in CSS pixels (positive scrolls down). |
-| `context` | "popup" \| "options" \| "side-panel" \| "devtools" \| "newtab" \| "history" \| "bookmarks" | no |  | An open surface (extension_open first). |
+| `context` | "popup" \| "options" \| "side-panel" \| "newtab" \| "devtools" \| "history" \| "bookmarks" | no |  | An open surface (extension_open first). |
 | `url` | string | no |  | A web page's tab by url. |
 | `targetId` | string | no |  | Page targetId (extension_open, extension_dom_snapshot listTargets); wins over url. |
 | `browser` | string | no |  | Running session's browser; needed when several run. |
@@ -290,7 +290,7 @@ Read one element's text by CSS selector, or wait until it is visible, in a surfa
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
 | `action` | "text" \| "wait" | no | `"text"` | text: the element's text; wait: until it is visible. |
 | `selector` | string | no |  | CSS selector matching exactly one element (the point for input actions; focused before type and key). |
-| `context` | "popup" \| "options" \| "side-panel" \| "devtools" \| "newtab" \| "history" \| "bookmarks" | no |  | An open surface (extension_open first). |
+| `context` | "popup" \| "options" \| "side-panel" \| "newtab" \| "devtools" \| "history" \| "bookmarks" | no |  | An open surface (extension_open first). |
 | `url` | string | no |  | A web page's tab by url. |
 | `targetId` | string | no |  | Page targetId (extension_open, extension_dom_snapshot listTargets); wins over url. |
 | `browser` | string | no |  | Running session's browser; needed when several run. |
@@ -434,6 +434,7 @@ Preview a build in the web emulator; share:true returns a link that needs no ins
 | `probe` | boolean | no | `true` | Check the artifact loads. |
 | `open` | boolean | no | `false` | Also open it in a live session. |
 | `openIn` | "chrome" \| "chromium" \| "edge" \| "brave" \| "opera" \| "vivaldi" \| "yandex" \| "firefox" \| "waterfox" \| "librewolf" \| "zen" \| "floorp" \| "safari" | no |  | Session browser to open in. |
+| `surface` | string | no |  | Page the link opens on: popup, options, side-panel, newtab, devtools, history, bookmarks. |
 | `share` | boolean | no | `false` | Upload for share.previewUrl; metered against the workspace's allowance, and hands over the code. |
 
 ## extension_project_create

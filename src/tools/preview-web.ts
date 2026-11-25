@@ -8,6 +8,9 @@
 
 import path from "node:path";
 
+import { PREVIEW_SURFACES, previewLocalPath, previewSharePath, type PreviewLinkOptions } from "@extension.dev/urls/paths";
+
+import { isGeckoFamily } from "../lib/browser-family";
 import { PROJECT_PATH, REAL_BROWSERS } from "../lib/common-schema";
 import { ZIP_URL_REDIRECT_NOTE } from "../lib/artifacts-api";
 import { resolveCredential } from "../lib/credential-source";
@@ -126,6 +129,30 @@ function unrequestedShare(args: {
   };
 }
 
+function previewLinkOptions(
+  browser: string,
+  surface: string | undefined,
+): { ok: true; options: PreviewLinkOptions } | { ok: false; message: string } {
+  const options: PreviewLinkOptions = {
+    engine: isGeckoFamily(browser) ? "firefox" : "chromium",
+    ...(surface === undefined ? {} : { surface }),
+  };
+
+  try {
+    previewLocalPath("", options);
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : String(err) };
+  }
+
+  return { ok: true, options };
+}
+
+function sharedPreviewUrl(previewUrl: string, artifactId: string, options: PreviewLinkOptions): string {
+  const origin = previewOriginOf(previewUrl);
+
+  return origin ? `${origin}${previewSharePath(artifactId, options)}` : previewUrl;
+}
+
 function previewOriginOf(previewUrl: string): string | null {
   try {
     return new URL(previewUrl).origin;
@@ -141,6 +168,7 @@ async function buildShare(
   manifest: Record<string, any>,
   browser: string,
   verifyInBrowserTerms: boolean,
+  linkOptions: PreviewLinkOptions,
   project?: string,
 ): Promise<Record<string, unknown>> {
   const credential = resolveCredential({ ...(project ? { project } : {}) });
@@ -177,7 +205,8 @@ async function buildShare(
     };
   }
 
-  const origin = previewOriginOf(result.data.previewUrl);
+  const previewUrl = sharedPreviewUrl(result.data.previewUrl, result.data.artifactId, linkOptions);
+  const origin = previewOriginOf(previewUrl);
   const browserCheck =
     verifyInBrowserTerms && result.data.zipUrl && origin
       ? await probeShareCors({ zipUrl: result.data.zipUrl, origin })
@@ -187,7 +216,7 @@ async function buildShare(
   const sharedAtFrom = "this machine's clock at the moment the platform answered, not the platform's record";
   const record = local.recordSharedPreview(projectPath, {
     sharedAt,
-    previewUrl: result.data.previewUrl,
+    previewUrl,
     artifactId: result.data.artifactId,
     ...(result.data.revokeUrl ? { revokeUrl: result.data.revokeUrl } : {}),
     ...(result.data.expiresAt ? { expiresAt: result.data.expiresAt } : {}),
@@ -203,7 +232,7 @@ async function buildShare(
   return {
     requested: true,
     ok: true,
-    previewUrl: result.data.previewUrl,
+    previewUrl,
     artifactId: result.data.artifactId,
     sharedAt,
     ...(result.data.expiresAt ? { expiresAt: result.data.expiresAt } : {}),
@@ -287,6 +316,10 @@ export const schema = {
         description:
           "Session browser to open in.",
       },
+      surface: {
+        type: "string",
+        description: `Page the link opens on: ${PREVIEW_SURFACES.join(", ")}.`,
+      },
       share: {
         type: "boolean",
         default: false,
@@ -308,6 +341,7 @@ interface PreviewWebArgs {
   open?: boolean;
   openIn?: string;
   share?: boolean;
+  surface?: string;
   project?: string;
 }
 
@@ -326,6 +360,22 @@ export async function previewWebWith(args: PreviewWebArgs, local: PreviewWebLoca
       status: "bad-host-url",
       error: { code: "E_BAD_HOST_URL", message: host.message },
       value: { stage: "resolve-host", hostUrl: args.hostUrl },
+    });
+  }
+
+  const links = previewLinkOptions(browser, args.surface);
+
+  if (!links.ok) {
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "unknown-surface",
+      error: {
+        code: "E_BAD_REQUEST",
+        message: `${links.message} Nothing was built or uploaded.`,
+        hint: "Pass one of those surfaces, or leave surface out for the preview's default page, and call again.",
+      },
+      value: { stage: "resolve-surface", surface: args.surface },
     });
   }
 
@@ -407,7 +457,7 @@ export async function previewWebWith(args: PreviewWebArgs, local: PreviewWebLoca
 
   const encoded = Buffer.from(distDir).toString("base64url");
   const internalUrl = SURFACE.scheme(encoded);
-  const deepLink = `${hostBase}/?url=${encodeURIComponent(internalUrl)}`;
+  const deepLink = `${hostBase}${previewLocalPath(internalUrl, links.options)}`;
 
   const distPaths = local.distPaths(distDir);
   const contentScripts = renderableContentScripts(manifest, distPaths);
@@ -462,6 +512,7 @@ export async function previewWebWith(args: PreviewWebArgs, local: PreviewWebLoca
       manifest,
       browser,
       args.probe !== false,
+      links.options,
       args.project,
     );
     result.share = share;

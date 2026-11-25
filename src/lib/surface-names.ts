@@ -6,10 +6,10 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-export const SURFACE_NAME_ALIASES: Readonly<Record<string, string>> = { sidebar: "side-panel" };
+import { canonicalPreviewSurface } from "@extension.dev/urls/paths";
 
 export function canonicalSurfaceName(name: string): string {
-  return SURFACE_NAME_ALIASES[name] ?? name;
+  return canonicalPreviewSurface(name) ?? name;
 }
 
 const URL_OVERRIDE_KEYS = ["newtab", "history", "bookmarks"] as const;

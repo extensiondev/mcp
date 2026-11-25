@@ -282,6 +282,19 @@ describe("normalizeArgAliases", () => {
     }
   });
 
+  it.each([
+    ["sidepanel", "side-panel"],
+    ["side_panel", "side-panel"],
+    ["new-tab", "newtab"],
+    ["devtools_page", "devtools"],
+  ])("folds the shared preview surface alias %s to %s on a surface enum", (alias, canonical) => {
+    const props = (elementSchema.inputSchema as { properties: Record<string, { enum?: string[] }> }).properties;
+    const key = Object.keys(props).find((name) => props[name]?.enum?.includes(canonical));
+
+    expect(key).toBeDefined();
+    expect(normalizeArgAliases(elementSchema.inputSchema, { [key!]: alias })[key!]).toBe(canonical);
+  });
+
   it("folds a soft alias to the canonical arg when the tool has it", () => {
     const out = normalizeArgAliases(devSchema.inputSchema, {
       path: "/tmp/x",

@@ -225,7 +225,6 @@ describe("extension_preview_web", () => {
         build: false,
         distPath: dir,
         probe: false,
-        surface: "inspect",
         inspectUrl: "http://localhost:3106",
       };
       const stale = JSON.parse(await handler(staleArgs));
@@ -235,6 +234,59 @@ describe("extension_preview_web", () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  describe("links on the shared preview contract", () => {
+    function linkLocal() {
+      return {
+        build: vi.fn(async () => JSON.stringify({ ok: true })),
+        distDirOf: vi.fn(() => "/work/widget/dist/firefox"),
+        distOutsideProject: vi.fn(() => false),
+        manifestExists: vi.fn(() => true),
+        readManifest: vi.fn(() => ({ ...MANIFEST })),
+        distPaths: vi.fn(() => []),
+        devCheckout: vi.fn(() => null),
+        navigate: vi.fn(async () => JSON.stringify({ ok: true })),
+        uploadPreview: vi.fn(async () => ({ ok: true as const, data: { artifactId: "gen_link", previewUrl: "https://preview.extension.dev/?preview=gen_link", leftOut: { secrets: [] } }, body: {} })),
+        recordSharedPreview: vi.fn(() => ({ recorded: true, path: "/work/widget/.extension.dev/shared-previews.json", entries: 1, note: "recorded" })),
+      };
+    }
+
+    it.each([
+      { browser: "chrome", surface: undefined, engine: "chromium", landed: null },
+      { browser: "firefox", surface: "sidebar", engine: "firefox", landed: "side-panel" },
+      { browser: "edge", surface: "popup", engine: "chromium", landed: "popup" },
+    ])("names engine $engine and surface $landed on both links for a $browser build asking for $surface", async ({ browser, surface, engine, landed }) => {
+      const local = linkLocal();
+      const out = JSON.parse(
+        await withRequestCredential(
+          { token: "claims.sig", api: "http://localhost:3100", projects: [{ workspace: "acme", project: "widget" }], expiresAt: null },
+          () => previewWebWith({ projectPath: "/work/widget", browser, ...(surface ? { surface } : {}), share: true, probe: false }, local),
+        ),
+      );
+      const deep = new URL(out.value.deepLink);
+      const shared = new URL(out.value.share.previewUrl);
+
+      expect(deep.searchParams.get("url")).toBe(`preview://build/${Buffer.from("/work/widget/dist/firefox").toString("base64url")}`);
+      expect(deep.searchParams.get("engine")).toBe(engine);
+      expect(deep.searchParams.get("surface")).toBe(landed);
+      expect(shared.origin).toBe("https://preview.extension.dev");
+      expect(shared.searchParams.get("preview")).toBe("gen_link");
+      expect(shared.searchParams.get("engine")).toBe(engine);
+      expect(shared.searchParams.get("surface")).toBe(landed);
+      expect(local.recordSharedPreview).toHaveBeenCalledWith("/work/widget", expect.objectContaining({ previewUrl: out.value.share.previewUrl }));
+    });
+
+    it("answers an unknown surface plainly before it builds or uploads anything", async () => {
+      const local = linkLocal();
+      const out = JSON.parse(await previewWebWith({ projectPath: "/work/widget", surface: "inspect", share: true }, local));
+
+      expect(out).toMatchObject({ ok: false, status: "unknown-surface", error: { code: "E_BAD_REQUEST" } });
+      expect(out.error.message).toContain('"inspect"');
+      expect(out.error.message).toContain("side-panel");
+      expect(local.build).not.toHaveBeenCalled();
+      expect(local.uploadPreview).not.toHaveBeenCalled();
+    });
   });
 
   it("reports previewLoadable when the middleware answers with the minted build", async () => {
@@ -869,7 +921,7 @@ describe("extension_preview_web", () => {
           await handler({ projectPath: dir, build: false, distPath: dir, share: true }),
         );
         expect(out.value.share.ok).toBe(true);
-        expect(out.value.share.previewUrl).toBe(uploaded.previewUrl);
+        expect(out.value.share.previewUrl).toBe(`${uploaded.previewUrl}&engine=chromium`);
         expect(out.value.share.browserLoadable).toBe(false);
         expect(out.value.share.browserCheck.finalUrl).toBe(signed);
         expect(out.value.share.browserCheck.finalStatus).toBe(200);
@@ -994,7 +1046,7 @@ describe("extension_preview_web", () => {
         );
         expect(out.value.share.ok).toBe(true);
         expect(out.value.share.previewUrl).toBe(
-          "https://preview.extension.dev/?preview=gen_abc123",
+          "https://preview.extension.dev/?preview=gen_abc123&engine=chromium",
         );
 
         expect(out.value.share.serves).toBe("uploaded-local-build");
@@ -1057,7 +1109,7 @@ describe("extension_preview_web", () => {
         expect(out.status).toBe("shared");
         expect(out.value.share.ok).toBe(true);
         expect(out.value.share.previewUrl).toBe(
-          "https://preview.extension.dev/?preview=gen_abc123",
+          "https://preview.extension.dev/?preview=gen_abc123&engine=chromium",
         );
 
         expect(out.value.hostReachable).toBe(false);
@@ -1139,7 +1191,7 @@ describe("extension_preview_web", () => {
         expect(afterFirst.shares).toHaveLength(1);
         expect(afterFirst.shares[0]).toMatchObject({
           artifactId: "gen_share1",
-          previewUrl: "https://preview.extension.dev/?preview=gen_share1",
+          previewUrl: "https://preview.extension.dev/?preview=gen_share1&engine=chromium",
           revokeUrl: "https://www.extension.dev/api/artifacts/gen_share1",
           expiresAt: "2026-08-23T00:00:00.000Z",
           name: MANIFEST.name,

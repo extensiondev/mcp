@@ -9,6 +9,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { PREVIEW_SURFACES } from "@extension.dev/urls/paths";
+
 import { surfaceDocument } from "../tools/open";
 import { controlledCopyPath } from "./controlled-identity";
 import { envelope } from "./envelope";
@@ -17,15 +19,7 @@ import { readyContractPath } from "./session-paths";
 import { geckoRecency } from "./target-pick";
 import { cutAt } from "./linear-text";
 
-export const EXTENSION_PAGE_CONTEXTS = [
-  "popup",
-  "options",
-  "side-panel",
-  "devtools",
-  "newtab",
-  "history",
-  "bookmarks",
-];
+export const EXTENSION_PAGE_CONTEXTS: readonly string[] = PREVIEW_SURFACES;
 
 export const EXTENSION_ORIGIN = /^(moz|chrome|safari-web)-extension:\/\//;
 
