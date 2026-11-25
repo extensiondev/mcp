@@ -362,6 +362,7 @@ Validate manifest.json against each browser: per-browser errors, permissions the
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
+| `manifest` | object \| string | no |  | The manifest itself, as an object or JSON text; skips the checks that read files. |
 | `manifestPath` | string | no |  | Path to manifest.json; or projectPath. |
 | `projectPath` | string | no |  | Project root (manifest at root or src/). |
 | `browsers` | array of string | no | `["chrome","firefox","edge"]` | Browsers to validate against. |

@@ -78,6 +78,42 @@ describe("extension_manifest_validate reads the tree the engine builds from", ()
   });
 });
 
+describe("a manifest passed inline is validated without the files it names", () => {
+  const INLINE = {
+    ...BASE,
+    default_locale: "en",
+    action: { default_popup: "popup.html" },
+    background: { service_worker: "sw.js" },
+    permissions: ["storag"],
+    web_accessible_resources: [{ resources: ["inject.js"], matches: ["<all_urls>"] }],
+  };
+
+  it("checks keys, permissions and browsers, names each skipped check, and reports no named file missing", async () => {
+    for (const manifest of [INLINE, JSON.stringify(INLINE)]) {
+      const out = JSON.parse(await manifestValidate.handler({ manifest, browsers: ["chrome", "firefox"] }));
+      const lines = [...out.value.errors, ...out.value.warnings].join("\n");
+
+      expect(out.value.skippedChecks).toEqual(["referencedFiles", "webAccessibleResourceFiles", "defaultLocaleCatalog", "sourceApiScan", "wasmSourceEvidence", "droppedRuntimePages"]);
+      expect(out.value.warnings[0]).toMatch(/^Only the manifest was sent, so these checks that read the project's files were skipped: /);
+      expect(lines).not.toMatch(/not found near the manifest|_locales\/en/);
+      expect(lines).toContain('Unrecognized permission "storag"');
+      expect(Object.keys(out.value.browserSupport)).toEqual(["chrome", "firefox"]);
+      expect(lines).toContain("Firefox: no browser_specific_settings.gecko.id");
+      expect(lines).not.toContain(os.tmpdir());
+    }
+  });
+
+  it("refuses inline text that is not a JSON object, and a call that also names a path", async () => {
+    for (const manifest of ["{ name: ", "[1]", "null"]) {
+      expect(JSON.parse(await manifestValidate.handler({ manifest })), manifest).toMatchObject({ ok: false, status: "manifest-unreadable", error: { code: "E_BAD_MANIFEST" } });
+    }
+
+    const both = JSON.parse(await manifestValidate.handler({ manifest: INLINE, projectPath: project(BASE) }));
+
+    expect(both).toMatchObject({ ok: false, status: "bad-request", error: { code: "E_BAD_REQUEST" } });
+  });
+});
+
 describe("the Firefox report names what Firefox itself would say", () => {
   it("warns on a missing gecko id and on Chromium-only keys, and does not block Firefox over a Chromium side panel", async () => {
     const dir = project(

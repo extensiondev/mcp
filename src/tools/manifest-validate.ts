@@ -74,6 +74,10 @@ export const schema = {
   inputSchema: {
     type: "object" as const,
     properties: {
+      manifest: {
+        type: ["object", "string"],
+        description: "The manifest itself, as an object or JSON text; skips the checks that read files.",
+      },
       manifestPath: {
         type: "string",
         description: "Path to manifest.json; or projectPath.",
@@ -103,6 +107,35 @@ export const schema = {
     required: [],
   },
 };
+
+const INLINE_SKIPPED_CHECKS = [
+  ["referencedFiles", "the files the manifest names (icons, pages, scripts)"],
+  ["webAccessibleResourceFiles", "the web_accessible_resources files"],
+  ["defaultLocaleCatalog", "the default_locale catalog"],
+  ["sourceApiScan", "the source scan for chrome.* calls a permission is missing for"],
+  ["wasmSourceEvidence", "the WebAssembly evidence in the source"],
+  ["droppedRuntimePages", "the pages a browser's build drops while code opens them"],
+] as const;
+
+const INLINE_SKIPPED_WARNING = `Only the manifest was sent, so these checks that read the project's files were skipped: ${INLINE_SKIPPED_CHECKS.map(([, said]) => said).join("; ")}. Pass manifestPath or projectPath to run them.`;
+
+function inlineManifest(raw: unknown): { ok: true; manifest: Record<string, unknown> } | { ok: false; message: string } {
+  let parsed = raw;
+
+  if (typeof raw === "string") {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return { ok: false, message: "manifest is not valid JSON text." };
+    }
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { ok: false, message: "manifest has to be a JSON object, the content of manifest.json." };
+  }
+
+  return { ok: true, manifest: parsed as Record<string, unknown> };
+}
 
 function collectPathRefs(m: Record<string, unknown>): string[] {
   const refs: string[] = [];
@@ -408,6 +441,7 @@ const DEFAULT_TARGET = "chrome";
 const KNOWN_TARGETS = [...CHROMIUM_FAMILY, ...GECKO_FAMILY, ...WEBKIT_FAMILY];
 
 export async function handler(args: {
+  manifest?: Record<string, unknown> | string;
   manifestPath?: string;
   projectPath?: string;
   browser?: string;
@@ -449,15 +483,32 @@ export async function handler(args: {
     browserSupport: {},
   };
 
-  const manifestPath =
-    args.manifestPath ??
-    (args.projectPath ? findProjectManifest(args.projectPath) : null);
+  const inline = args.manifest !== undefined;
 
-  if (!manifestPath) {
+  if (inline && (args.manifestPath || args.projectPath)) {
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "bad-request",
+      error: {
+        code: "E_BAD_REQUEST",
+        message: "Pass manifest, manifestPath or projectPath, one of them: manifest is validated without files and a path reads them, so nothing was validated.",
+        hint: "Drop manifest to validate the project's files, or drop the path to validate the manifest alone, and call again.",
+      },
+      value: { valid: false, errors: [], browserSupport: {} },
+      warnings: [],
+    });
+  }
+
+  const manifestPath = inline
+    ? null
+    : args.manifestPath ?? (args.projectPath ? findProjectManifest(args.projectPath) : null);
+
+  if (!manifestPath && !inline) {
     const errors = [
       args.projectPath
         ? `No manifest.json found under ${args.projectPath} (looked in the root and src/).`
-        : "Pass manifestPath (path to manifest.json) or projectPath (project root).",
+        : "Pass manifestPath (path to manifest.json), projectPath (project root) or manifest (the manifest itself).",
     ];
 
     return envelope({
@@ -474,9 +525,15 @@ export async function handler(args: {
     });
   }
 
-  const manifestDir = path.dirname(path.resolve(manifestPath));
+  const manifestRead = manifestPath
+    ? readManifestFile(manifestPath, args.projectPath)
+    : (() => {
+        const read = inlineManifest(args.manifest);
 
-  const manifestRead = readManifestFile(manifestPath, args.projectPath);
+        return read.ok
+          ? { ok: true as const, manifest: read.manifest }
+          : { ok: false as const, kind: "unreadable" as const, message: read.message, hint: "Pass the content of manifest.json as an object or as its JSON text, and call again." };
+      })();
 
   if (!manifestRead.ok) {
     const refused = manifestRead.kind === "refused";
@@ -498,6 +555,8 @@ export async function handler(args: {
 
   const manifest = manifestRead.manifest as Record<string, unknown>;
 
+  if (inline) result.warnings.push(INLINE_SKIPPED_WARNING);
+
   if (!manifest.name) {
     result.errors.push("Missing required field: name");
   }
@@ -510,15 +569,18 @@ export async function handler(args: {
 
   const chromiumManifest = engineManifestView(manifest, "chrome");
 
+  const manifestDir = manifestPath ? path.dirname(path.resolve(manifestPath)) : "";
   const projectRoot =
     path.basename(manifestDir) === "src" ? path.dirname(manifestDir) : manifestDir;
-  const roots = [
-    manifestDir,
-    path.join(manifestDir, "src"),
-    ...(projectRoot !== manifestDir ? [projectRoot] : []),
-    path.join(manifestDir, "public"),
-    path.join(projectRoot, "public"),
-  ];
+  const roots = manifestPath
+    ? [
+        manifestDir,
+        path.join(manifestDir, "src"),
+        ...(projectRoot !== manifestDir ? [projectRoot] : []),
+        path.join(manifestDir, "public"),
+        path.join(projectRoot, "public"),
+      ]
+    : [];
   const effectiveByBrowser = new Map<string, Record<string, unknown>>();
 
   for (const b of browsers) {
@@ -528,7 +590,7 @@ export async function handler(args: {
   const missingRefs = new Map<string, string[]>();
   const missingWar = new Map<string, string[]>();
 
-  for (const [b, view] of effectiveByBrowser) {
+  for (const [b, view] of manifestPath ? effectiveByBrowser : []) {
     for (const ref of new Set(collectPathRefs(view))) {
       if (fileResolvesSomewhere(ref, roots)) continue;
 
@@ -556,7 +618,7 @@ export async function handler(args: {
 
   const defaultLocale = manifest.default_locale;
 
-  if (typeof defaultLocale === "string" && defaultLocale) {
+  if (manifestPath && typeof defaultLocale === "string" && defaultLocale) {
     const hasCatalog = roots.some((root) =>
       fs.existsSync(
         path.resolve(root, "_locales", defaultLocale, "messages.json"),
@@ -574,7 +636,7 @@ export async function handler(args: {
 
   if (!iconMap || typeof iconMap["128"] !== "string") {
     storeReadiness.push(
-      `No 128x128 icon declared ("128" key in icons). The Chrome Web Store requires one for a store listing, and Edge Add-ons expects it too. ${icon128Fix(path.resolve(manifestPath))}`,
+      `No 128x128 icon declared ("128" key in icons). The Chrome Web Store requires one for a store listing, and Edge Add-ons expects it too. ${icon128Fix(manifestPath ? path.resolve(manifestPath) : null)}`,
     );
   }
 
@@ -654,7 +716,7 @@ export async function handler(args: {
     }
   }
 
-  const wasmSeen = wasmLacking.length ? wasmEvidence(projectRoot, scan.wasm) : [];
+  const wasmSeen = wasmLacking.length && manifestPath ? wasmEvidence(projectRoot, scan.wasm) : [];
 
   if (wasmUnsafe.length) {
     result.warnings.push(
@@ -988,7 +1050,7 @@ export async function handler(args: {
       );
     }
 
-    if (explicitBrowsers) {
+    if (explicitBrowsers && manifestPath) {
       for (const page of droppedRuntimePages(projectRoot, browser, null, manifest)) result.warnings.push(page.say);
     }
 
@@ -1076,7 +1138,7 @@ export async function handler(args: {
 
   const isTheme = [chromiumManifest, ...effectiveByBrowser.values()].some((view) => Boolean(view.theme) && typeof view.theme === "object");
   const themeStep = isTheme
-    ? `This is a theme manifest: extension_theme_verify with manifestPath "${path.resolve(manifestPath)}" reads the colors Chromium paints from it and the keys it drops; ${toolListed("extension_theme_verify") ? "call it next." : "it is in the extras feature group, so add extras to --features in this server's MCP config, or ask the user to, then call it."}`
+    ? `This is a theme manifest: extension_theme_verify with ${manifestPath ? `manifestPath "${path.resolve(manifestPath)}"` : "the same manifest object"} reads the colors Chromium paints from it and the keys it drops; ${toolListed("extension_theme_verify") ? "call it next." : "it is in the extras feature group, so add extras to --features in this server's MCP config, or ask the user to, then call it."}`
     : "";
 
   const refusedStep = result.refusedKeys?.length ? ` (the Chromium family refuses to load ${result.refusedKeys.join(", ")})` : "";
@@ -1094,6 +1156,7 @@ export async function handler(args: {
       ...result,
       ...(wantsSimilar ? { similarTemplates: result.similarTemplates ?? [] } : {}),
       ...(wantsStore ? { storeReadiness } : { storeReadinessOmitted: storeReadiness.length }),
+      ...(inline ? { skippedChecks: INLINE_SKIPPED_CHECKS.map(([name]) => name) } : {}),
       buildBlocking: result.errors.length > 0,
     },
   });

@@ -86,10 +86,10 @@ function readPackage(folders: string[]): Row {
   return {};
 }
 
-export function proposedGeckoId(manifest: Row, view: Row, manifestPath: string): ProposedGeckoId {
-  const manifestDir = path.dirname(path.resolve(manifestPath));
+export function proposedGeckoId(manifest: Row, view: Row, manifestPath: string | null): ProposedGeckoId {
+  const manifestDir = manifestPath ? path.dirname(path.resolve(manifestPath)) : "";
   const projectRoot = path.basename(manifestDir) === "src" ? path.dirname(manifestDir) : manifestDir;
-  const pkg = readPackage([...new Set([manifestDir, projectRoot])]);
+  const pkg = manifestPath ? readPackage([...new Set([manifestDir, projectRoot])]) : {};
   const manifestName = typeof view.name === "string" && !view.name.trim().startsWith("__MSG_") ? view.name : "";
   const packageName = typeof pkg.name === "string" ? pkg.name.slice(pkg.name.lastIndexOf("/") + 1) : "";
   const names: Array<[string, string]> = [

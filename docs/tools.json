@@ -1539,6 +1539,12 @@
       "untrusted": false,
       "inputs": [
         {
+          "name": "manifest",
+          "type": "object | string",
+          "required": false,
+          "description": "The manifest itself, as an object or JSON text; skips the checks that read files."
+        },
+        {
           "name": "manifestPath",
           "type": "string",
           "required": false,
