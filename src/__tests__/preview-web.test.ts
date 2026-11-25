@@ -25,6 +25,8 @@ const MANIFEST = {
   background: { service_worker: "sw.js" },
 };
 
+const DEV_SERVER_ID = `preview-${"0123456789abcdef".repeat(2)}`;
+
 function tmpDist(manifest?: unknown): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "preview-web-"));
 
@@ -186,7 +188,7 @@ describe("extension_preview_web", () => {
   it("reports previewLoadable when the middleware answers with the minted build", async () => {
     const dir = tmpDist(MANIFEST);
     global.fetch = jsonFetch({
-      identifier: "local-probe-ext",
+      identifier: DEV_SERVER_ID,
       version: "1.2.3",
       manifest: { name: "Probe Ext" },
       files: [1, 2, 3],
@@ -205,7 +207,7 @@ describe("extension_preview_web", () => {
       expect(out.value.previewLoadable).toBe(true);
       expect(out.value.probe.fileCount).toBe(3);
       expect(out.value.probe.matchesDist).toBe(true);
-      expect(out.value.probe.identifier).toBe("local-probe-ext");
+      expect(out.value.probe.identifier).toBe(DEV_SERVER_ID);
       expect(out.value.probe.loadedName).toBe("Probe Ext");
       expect(out.value.probe.loadedVersion).toBe("1.2.3");
       expect(out.value.probe.hostReported).toBeUndefined();
@@ -217,7 +219,7 @@ describe("extension_preview_web", () => {
   it("marks an unexpected identifier as the host's own claim even when the build matches", async () => {
     const dir = tmpDist(MANIFEST);
     global.fetch = jsonFetch({
-      identifier: "preview-abc",
+      identifier: "local-probe-ext",
       version: "1.2.3",
       manifest: { name: "Probe Ext" },
       files: [1, 2, 3],
@@ -235,7 +237,7 @@ describe("extension_preview_web", () => {
       expect(out.value.previewLoadable).toBe(true);
       expect(out.value.probe.matchesDist).toBe(true);
       expect(out.value.probe.identifier).toBeUndefined();
-      expect(out.value.probe.hostReported.identifier).toBe("preview-abc");
+      expect(out.value.probe.hostReported.identifier).toBe("local-probe-ext");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

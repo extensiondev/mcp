@@ -83,18 +83,7 @@ function clipHostClaim(value: string): string {
     : value;
 }
 
-function expectedPreviewIdentifier(
-  name: string | null,
-  distDir: string,
-): string {
-  const base =
-    (name ?? path.basename(distDir))
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "") || "extension";
-
-  return base.startsWith("local-") ? base : `local-${base}`;
-}
+const DEV_SERVER_IDENTIFIER = /^preview-[0-9a-f]{32}$/;
 
 const SURFACE = {
   defaultOrigin: DEFAULT_PREVIEW_DEV_URL,
@@ -628,8 +617,7 @@ export async function previewWebWith(args: PreviewWebArgs, local: PreviewWebLoca
     }
 
     const identifierConfirmed =
-      remoteIdentifier !== null &&
-      remoteIdentifier === expectedPreviewIdentifier(localName, distDir);
+      remoteIdentifier !== null && DEV_SERVER_IDENTIFIER.test(remoteIdentifier);
     const unconfirmed = {
       ...(!identifierConfirmed && remoteIdentifier !== null
         ? { identifier: clipHostClaim(remoteIdentifier) }
