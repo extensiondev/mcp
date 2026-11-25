@@ -1,0 +1,196 @@
+{
+  "description": "Every host the extension.dev MCP server reaches, what it sends there, and how to turn it off. src/__tests__/network-egress.test.ts fails when the source names a host this file does not hold.",
+  "hosts": [
+    {
+      "host": "www.extension.dev",
+      "reachedBy": "extension_docs_search (local group, no login); every platform tool, login and the guided store connect (platform group)",
+      "sends": "Docs search: the query text and the result limit, with no login and no id header. Platform tools: the access token, the per-install id header (x-extensiondev-install), the project ref and the tool's arguments; a shared preview uploads the build it made, a project created from a folder uploads that folder, a listing write uploads its images, a capture sync uploads the capture files.",
+      "login": "Docs search: none. Platform tools: the stored login or EXTENSION_DEV_TOKEN.",
+      "optOut": "Do not call extension_docs_search. Platform tools stay off unless --features names platform. EXTENSION_DEV_NO_TELEMETRY=1 or DO_NOT_TRACK=1 drops the id header."
+    },
+    {
+      "host": "mcp.extension.dev",
+      "reachedBy": "the platform tools answered by the hosted lane (platform group)",
+      "sends": "A credential that lasts ten minutes, the tool's arguments and the project ref; a store check or a listing sync also sends the text of STORE.md, the icon and screenshot sizes and digests, and the git HEAD. Never the login, a file path or the api override.",
+      "login": "A ten-minute credential exchanged at www.extension.dev, never the login.",
+      "optOut": "Platform tools stay off unless --features names platform."
+    },
+    {
+      "host": "registry.extension.land",
+      "reachedBy": "extension_templates and extension_create (the template catalog); extension_try and the build reads (published builds)",
+      "sends": "Catalog requests carry nothing but the URL. A build read sends the project ref in the URL and, for a private project, a read grant.",
+      "login": "Catalog: none. Private build reads: a short read grant.",
+      "optOut": "Do not call extension_templates, extension_create or extension_try."
+    },
+    {
+      "host": "raw.githubusercontent.com",
+      "reachedBy": "extension_templates with action source (template files)",
+      "sends": "The template's path and the catalog commit in the URL.",
+      "login": "none",
+      "optOut": "Do not call extension_templates with action source."
+    },
+    {
+      "host": "api.github.com",
+      "reachedBy": "extension_templates with action source (the template's file tree, answered as filesSource: \"tree\")",
+      "sends": "The catalog commit in the URL.",
+      "login": "none",
+      "optOut": "Do not call extension_templates with action source."
+    },
+    {
+      "host": "codeload.github.com",
+      "reachedBy": "extension_create (the template archive)",
+      "sends": "The template catalog commit in the URL.",
+      "login": "none",
+      "optOut": "Do not call extension_create.",
+      "via": {
+        "package": "extension-create"
+      }
+    },
+    {
+      "host": "registry.npmjs.org",
+      "reachedBy": "extension_create (the project's dependency install) and every engine command when the project has no engine of its own (npx extension@<version>)",
+      "sends": "The package names and versions being installed.",
+      "login": "none",
+      "optOut": "Call extension_create with install: false and install the project's engine yourself.",
+      "via": {
+        "package": "extension-create"
+      }
+    },
+    {
+      "host": "us.i.posthog.com",
+      "reachedBy": "extension_create, after a scaffold",
+      "sends": "One draft_seeded event: the template slug, source and commit, and a random per-process id. Never a path or a name.",
+      "login": "none",
+      "optOut": "EXTENSION_DEV_NO_TELEMETRY=1 or DO_NOT_TRACK=1."
+    },
+    {
+      "host": "clients2.google.com",
+      "reachedBy": "the guided store connect on Chrome (downloads the extension.dev tools extension from the Chrome Web Store)",
+      "sends": "The extension id and the browser version in the URL; the download follows the store's redirect.",
+      "login": "none",
+      "optOut": "Platform tools stay off unless --features names platform; a failed download falls back to the copy this package bundles."
+    },
+    {
+      "host": "edge.microsoft.com",
+      "reachedBy": "the guided store connect on Edge (downloads the extension.dev tools extension from Edge Add-ons)",
+      "sends": "The extension id in the URL; the download follows the store's redirect.",
+      "login": "none",
+      "optOut": "Platform tools stay off unless --features names platform; a failed download falls back to the copy this package bundles."
+    },
+    {
+      "host": "addons.mozilla.org",
+      "reachedBy": "the guided store connect on Firefox (reads and downloads the extension.dev tools add-on from Firefox Add-ons)",
+      "sends": "The add-on id in the URL.",
+      "login": "none",
+      "optOut": "Platform tools stay off unless --features names platform; a failed download falls back to the copy this package bundles."
+    },
+    {
+      "host": "googlechromelabs.github.io",
+      "reachedBy": "extension_browsers_install for Chrome (reads the available versions)",
+      "sends": "Nothing but the URL.",
+      "login": "none",
+      "optOut": "Do not call extension_browsers_install; point the tools at a browser already installed.",
+      "via": {
+        "package": "extension-install",
+        "runs": "@puppeteer/browsers"
+      }
+    },
+    {
+      "host": "storage.googleapis.com",
+      "reachedBy": "extension_browsers_install for Chrome (the download)",
+      "sends": "The version and platform in the URL.",
+      "login": "none",
+      "optOut": "Do not call extension_browsers_install; point the tools at a browser already installed.",
+      "via": {
+        "package": "extension-install",
+        "runs": "@puppeteer/browsers"
+      }
+    },
+    {
+      "host": "product-details.mozilla.org",
+      "reachedBy": "extension_browsers_install for Firefox (reads the available versions)",
+      "sends": "Nothing but the URL.",
+      "login": "none",
+      "optOut": "Do not call extension_browsers_install; point the tools at a browser already installed.",
+      "via": {
+        "package": "extension-install",
+        "runs": "@puppeteer/browsers"
+      }
+    },
+    {
+      "host": "archive.mozilla.org",
+      "reachedBy": "extension_browsers_install for Firefox (the download)",
+      "sends": "The version and platform in the URL.",
+      "login": "none",
+      "optOut": "Do not call extension_browsers_install; point the tools at a browser already installed.",
+      "via": {
+        "package": "extension-install",
+        "runs": "@puppeteer/browsers"
+      }
+    },
+    {
+      "host": "cdn.playwright.dev",
+      "reachedBy": "extension_browsers_install for Edge (the download)",
+      "sends": "The version and platform in the URL.",
+      "login": "none",
+      "optOut": "Do not call extension_browsers_install; point the tools at a browser already installed.",
+      "via": {
+        "package": "extension-install",
+        "runs": "playwright@"
+      }
+    },
+    {
+      "host": "playwright.download.prss.microsoft.com",
+      "reachedBy": "extension_browsers_install for Edge (the download mirror)",
+      "sends": "The version and platform in the URL.",
+      "login": "none",
+      "optOut": "Do not call extension_browsers_install; point the tools at a browser already installed.",
+      "via": {
+        "package": "extension-install",
+        "runs": "playwright@"
+      }
+    },
+    {
+      "host": "packages.microsoft.com",
+      "reachedBy": "extension_browsers_install for Edge on Linux (the package)",
+      "sends": "The version and platform in the URL.",
+      "login": "none",
+      "optOut": "Do not call extension_browsers_install; point the tools at a browser already installed.",
+      "via": {
+        "package": "extension-install",
+        "runs": "playwright@"
+      }
+    }
+  ],
+  "notReached": [
+    "blog.mozilla.org",
+    "chrome.google.com",
+    "code.extension.dev",
+    "console.extension.dev",
+    "cursor.com",
+    "developer.apple.com",
+    "developer.chrome.com",
+    "developer.mozilla.org",
+    "docs.extension.dev",
+    "extension.dev",
+    "extension.js.org",
+    "extensionworkshop.com",
+    "github.com",
+    "img.shields.io",
+    "insiders.vscode.dev",
+    "inspect.extension.dev",
+    "learn.microsoft.com",
+    "media.extension.land",
+    "microsoftedge.microsoft.com",
+    "partner.microsoft.com",
+    "preview.extension.dev",
+    "source.chromium.org",
+    "templates.extension.dev",
+    "themes.extension.dev"
+  ],
+  "notes": [
+    "notReached lists the hosts the source names only in links a person opens, never in a request this server sends.",
+    "Every browser the server launches loads whatever pages the person or the agent opens in it; those requests are the browser's, not this server's.",
+    "Loopback addresses (localhost, 127.0.0.1) are the browsers' debug ports and local development servers and never leave the machine."
+  ]
+}
