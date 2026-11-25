@@ -9,6 +9,7 @@
 import { approvalVerdict, namesRealMode } from "./approval-policy";
 import { envelope, isEnvelope, reframed } from "./envelope";
 import { STORE_SETTINGS_ACTION } from "./store-settings";
+import { fenceUntrusted } from "./untrusted-fence";
 
 type Args = Record<string, unknown>;
 
@@ -137,7 +138,8 @@ export function answeredAs(out: string, calledAs: string, actedAs: string): stri
 
   if (!isEnvelope(parsed) || parsed.command !== actedAs) return out;
 
-  const { schema: _schema, ...frame } = parsed;
+  const { schema: _schema, untrusted: _untrusted, untrustedEnd: _untrustedEnd, ...frame } = parsed as typeof parsed & { untrusted?: unknown; untrustedEnd?: unknown };
+  const answer = reframed({ ...frame, command: calledAs });
 
-  return reframed({ ...frame, command: calledAs });
+  return "untrustedEnd" in parsed ? fenceUntrusted(answer) : answer;
 }

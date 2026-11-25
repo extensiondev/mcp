@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import os from "node:os";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -437,6 +439,12 @@ describe("1108: a tool that read and wrote answers as a read twin and a write tw
 
     expect(twin.body.command).toBe("extension_storage_write");
     expect(JSON.stringify(twin.body.warnings ?? [])).not.toContain("still answers under the old name");
+  });
+
+  it("answers a twin of a page-reading tool inside the untrusted fence", async () => {
+    const read = await call(await connected(ALL), "extension_storage_read", { projectPath: os.tmpdir() });
+
+    expect(read.body).toMatchObject({ command: "extension_storage_read", untrustedEnd: `</untrusted-data-${read.body.untrusted?.boundary}>` });
   });
 
   it("names in the old name's warning only the twins this server lists", async () => {
