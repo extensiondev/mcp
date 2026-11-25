@@ -15,9 +15,13 @@ import { TOOL_TWINS, TWIN_ALIASES, twinArgs, twinRefusal } from "./tool-twins";
 
 export type { ToolAnnotations } from "./tool-annotations";
 
-export type FeatureGroup = "local" | "platform" | "extras";
+export type FeatureGroup = "local" | "platform" | "extras" | "hosted";
 
 export const FEATURE_GROUPS: FeatureGroup[] = ["local", "platform", "extras"];
+
+export const HOSTED_FEATURE_GROUP = "hosted" satisfies FeatureGroup;
+
+export const HOSTED_ONLY_TOOL_NAMES = ["extension_source_read", "extension_source_write"] as const;
 
 export const FEATURES_ENV = "EXTENSION_DEV_FEATURES";
 export const NO_SHIP_ENV = "EXTENSION_DEV_NO_SHIP";
@@ -83,6 +87,8 @@ export const TOOL_TITLES: Record<string, string> = {
   extension_release_promote: "Promote a release",
   extension_submit: "Submit to a store",
   extension_submit_check: "Check a store submission",
+  extension_source_read: "Read the stored source",
+  extension_source_write: "Change the stored source",
 };
 
 export function toolTitle(name: string): string {
@@ -265,6 +271,8 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
     untrusted: true,
     actsAs: { tool: "extension_submit", refuse: submitCheckRefused, askingOnly: true },
   },
+  extension_source_read: { group: HOSTED_FEATURE_GROUP, annotations: TOOL_ANNOTATIONS.extension_source_read, untrusted: true },
+  extension_source_write: { group: HOSTED_FEATURE_GROUP, annotations: TOOL_ANNOTATIONS.extension_source_write, untrusted: true },
 };
 
 for (const name of ["extension_list_extensions", "extension_reload", "extension_wait", "extension_analyze", "extension_storage", "extension_browsers"]) {
@@ -293,7 +301,7 @@ for (const [name, twins] of Object.entries(TWIN_ALIASES)) {
 export function runsOnPlatform(name: string): boolean {
   const policy = TOOL_POLICY[name];
 
-  return (policy?.group === "platform" || policy?.platformWhen !== undefined) && policy.onThisMachine !== true;
+  return (policy?.group === "platform" || policy?.group === HOSTED_FEATURE_GROUP || policy?.platformWhen !== undefined) && policy.onThisMachine !== true;
 }
 
 export interface ServerOptions {

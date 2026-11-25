@@ -25,3 +25,14 @@ export function hostedOnly(command: string): (args: Record<string, unknown>) => 
       value: { hosted: true },
     });
 }
+
+export function hostedServerOnly(command: string): string {
+  return composedRefusal({
+    ok: false,
+    command,
+    status: "hosted-only",
+    error: { code: "E_TOOL_DISABLED", message: `${command} reads or changes the source extension.dev stores, and only the hosted server at https://mcp.extension.dev/mcp serves it. Nothing was read or changed.` },
+    hint: "This server works on the project folder on this machine: read and edit its files there.",
+    value: { hosted: true },
+  });
+}

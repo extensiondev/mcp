@@ -18,6 +18,7 @@ import {
   TOOL_POLICY,
   disabledToolEnvelope,
   isServerFlag,
+  isToolListed,
   resolveServerOptions,
   runsOnPlatform,
   type ServerOptions,
@@ -57,8 +58,8 @@ afterEach(() => {
 });
 
 describe("the tool policy table", () => {
-  it("has exactly one row per registered tool", () => {
-    expect(Object.keys(TOOL_POLICY).sort()).toEqual(registered);
+  it("has exactly one row per registered tool, besides the hosted rows no local server registers", () => {
+    expect(Object.keys(TOOL_POLICY).filter((name) => TOOL_POLICY[name]!.group !== "hosted").sort()).toEqual(registered);
   });
 
   it("never marks a read-only tool destructive", () => {
@@ -245,6 +246,64 @@ describe("the default start stays under a directory's tool ceiling", () => {
     expect(runsOnPlatform("extension_publish")).toBe(true);
     expect(runsOnPlatform("extension_dev")).toBe(false);
     expect(runsOnPlatform("extension_network")).toBe(false);
+  });
+});
+
+describe("1175: the stored source tools are hosted only", () => {
+  const SOURCE = ["extension_source_read", "extension_source_write"];
+
+  it("keeps a policy row for each, in the hosted group no local start can name, and registers neither", () => {
+    expect(SOURCE.map((name) => TOOL_POLICY[name]?.group)).toEqual(["hosted", "hosted"]);
+    expect(FEATURE_GROUPS).not.toContain("hosted");
+    expect(DEFAULT_SERVER_OPTIONS.features).not.toContain("hosted");
+    for (const name of SOURCE) expect(registered, name).not.toContain(name);
+
+    const named = resolveServerOptions(["--features=local,platform,hosted"], {});
+
+    expect(named.ok).toBe(false);
+    if (!named.ok) expect(named.message).toContain('"hosted"');
+  });
+
+  it("reads with the read and writes without shipping or starting a build", () => {
+    const read = TOOL_POLICY.extension_source_read!;
+    const write = TOOL_POLICY.extension_source_write!;
+
+    expect(read.annotations).toEqual({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true });
+    expect(write.annotations).toEqual({ readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true });
+    expect([read.ships, write.ships, read.actsAs, write.actsAs]).toEqual([undefined, undefined, undefined, undefined]);
+    expect([read.untrusted, write.untrusted]).toEqual([true, true]);
+    expect([toolTitle("extension_source_read"), toolTitle("extension_source_write")]).toEqual(["Read the stored source", "Change the stored source"]);
+    expect(runsOnPlatform("extension_source_write")).toBe(true);
+  });
+
+  it("never lists them locally, under any group, and answers a local call as hosted only before anything runs", async () => {
+    for (const options of [undefined, { features: [...FEATURE_GROUPS], noShip: false }]) {
+      const client = await connected(options);
+      const listed = (await client.listTools()).tools.map((tool) => tool.name);
+
+      expect(listed).toHaveLength(options ? 51 : 20);
+
+      for (const name of SOURCE) {
+        expect(listed, name).not.toContain(name);
+
+        const out = await call(client, name, { project: "acme/app" });
+
+        expect(out.isError, name).toBe(true);
+        expect(out.body, name).toMatchObject({ ok: false, command: name, status: "hosted-only", error: { code: "E_TOOL_DISABLED" }, value: { hosted: true } });
+      }
+    }
+
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
+  it("lists them on a server whose options name the hosted group", () => {
+    const hosted = { features: ["platform", "hosted"], noShip: true } as ServerOptions;
+
+    for (const name of SOURCE) {
+      expect(isToolListed(name, hosted), name).toBe(true);
+      expect(isToolListed(name, { features: [...FEATURE_GROUPS], noShip: false }), name).toBe(false);
+      expect(disabledToolEnvelope(name, { project: "acme/app" }, hosted), name).toBeNull();
+    }
   });
 });
 

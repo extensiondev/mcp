@@ -72,6 +72,8 @@ export const TOOL_ANNOTATIONS = {
   extension_release_promote: acts({ destructiveHint: true, openWorldHint: true }),
   extension_submit: acts({ destructiveHint: true, openWorldHint: true }),
   extension_submit_check: acts({ openWorldHint: true }),
+  extension_source_read: reads(true),
+  extension_source_write: acts({ destructiveHint: true, openWorldHint: true }),
 } satisfies Record<string, ToolAnnotations>;
 
 export function repeatChangesNothing(command: string): boolean {

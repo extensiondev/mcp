@@ -26,8 +26,11 @@ import { FORWARDED_TOOLS, forgetApprovalHolders, forwardCall } from "../lib/host
 import { outcomeClock } from "../lib/outcome-clock";
 import { createToolDispatcher } from "../lib/tool-dispatch";
 import { tools } from "../index";
+import { HOSTED_FEATURE_GROUP, HOSTED_ONLY_TOOL_NAMES, hostedOnlyTools } from "../tool-exports";
 import { solidPng } from "./fixtures/png";
 import { APPROVAL, PROJECT, WWW, stubPlatformFetch } from "./hosted-platform-fetch";
+
+import type * as ToolExports from "../tool-exports";
 
 let tmp = "";
 const saved: Record<string, string | undefined> = {};
@@ -1089,5 +1092,34 @@ describe("the forwarder's smaller promises", () => {
     stubLane([new TypeError("fetch failed"), new TypeError("fetch failed")]);
 
     expect(await forwarded("extension_release_status", { project: "acme/web" })).toMatchObject({ ok: false, status: "offline", error: { code: "E_NETWORK" }, hint: expect.stringContaining("Nothing was changed") });
+  });
+});
+
+describe("1175: the stored source tools reach /mcp through the tools entry and never through the forwarder", () => {
+  it("exports their names, group, titles and hints from @extension.dev/mcp/tools, the same the built entry carries", async () => {
+    const built = (await import("@extension.dev/mcp/tools")) as typeof ToolExports;
+
+    expect(HOSTED_ONLY_TOOL_NAMES).toEqual(["extension_source_read", "extension_source_write"]);
+    expect(HOSTED_FEATURE_GROUP).toBe("hosted");
+    expect(hostedOnlyTools.extension_source_read).toEqual({ name: "extension_source_read", group: "hosted", title: "Read the stored source", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true } });
+    expect(hostedOnlyTools.extension_source_write).toMatchObject({ group: "hosted", annotations: { readOnlyHint: false, destructiveHint: true } });
+    expect(built.HOSTED_ONLY_TOOL_NAMES).toEqual(HOSTED_ONLY_TOOL_NAMES);
+    expect(built.hostedOnlyTools).toEqual(hostedOnlyTools);
+    expect(Object.keys(FORWARDED_TOOLS).filter((name) => HOSTED_ONLY_TOOL_NAMES.includes(name as never))).toEqual([]);
+  });
+
+  it("answers a signed-in local call hosted only and sends the lane nothing", async () => {
+    const { seen } = stubLane([]);
+    const dispatch = createToolDispatcher({ tools, options: { features: ["local", "platform", "extras"], noShip: false }, openApprovals: false });
+    writeCredentials({ version: 1, token: "device-login", workspaceSlug: "acme", projectSlug: "web", expiresAt: Math.floor(Date.now() / 1000) + 3600, api: WWW, provider: "extensiondev" });
+
+    for (const name of HOSTED_ONLY_TOOL_NAMES) {
+      const frame = await dispatch({ name, arguments: { project: "acme/web", files: [{ path: "a.js", content: "x" }] } });
+
+      expect(frame.isError, name).toBe(true);
+      expect(JSON.parse(frame.content[0]?.text ?? "{}"), name).toMatchObject({ status: "hosted-only", error: { code: "E_TOOL_DISABLED" } });
+    }
+
+    expect(seen).toEqual([]);
   });
 });

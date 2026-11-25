@@ -25,7 +25,9 @@ import { kernelHook, registeredKernelHooks } from "./kernel-hooks";
 import { crashAnswerFields, watchCall } from "./server-crash-log";
 import { resolveApiBase } from "./login-flow";
 import { stubbedReadWarning } from "./network-stubs";
+import { hostedServerOnly } from "./hosted-only";
 import {
+  HOSTED_FEATURE_GROUP,
   TOOL_POLICY,
   disabledToolEnvelope,
   isToolListed,
@@ -322,6 +324,8 @@ export function createToolSurface(setup: ToolHandlerOptions): {
 
         if (answered && !("reloadError" in answered)) return answered;
       }
+
+      if (TOOL_POLICY[name]?.group === HOSTED_FEATURE_GROUP && !options.features.includes(HOSTED_FEATURE_GROUP)) return refused(hostedServerOnly(name));
 
       return refused(
         envelope({

@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { TOOL_POLICY, toolTitle } from "./lib/tool-policy";
+import { HOSTED_FEATURE_GROUP, HOSTED_ONLY_TOOL_NAMES, TOOL_POLICY, toolTitle } from "./lib/tool-policy";
 import { tools } from "./lib/tool-registry";
 import * as addFeature from "./tools/add-feature";
 import * as analyze from "./tools/analyze";
@@ -77,6 +77,17 @@ export const BROWSER_TOOL_NAMES = [
   "extension_wait",
 ] as const;
 
+export { HOSTED_FEATURE_GROUP, HOSTED_ONLY_TOOL_NAMES };
+
+export type HostedOnlyToolName = (typeof HOSTED_ONLY_TOOL_NAMES)[number];
+
+export interface HostedOnlyToolPolicy {
+  name: string;
+  group: typeof HOSTED_FEATURE_GROUP;
+  title: string;
+  annotations: ToolAnnotations;
+}
+
 export type ServedToolName = (typeof SERVED_TOOL_NAMES)[number];
 export type BrowserToolName = (typeof BROWSER_TOOL_NAMES)[number];
 
@@ -131,3 +142,7 @@ export const servedTools = Object.fromEntries(
 export const browserToolSchemas = Object.fromEntries(
   BROWSER_TOOL_NAMES.map((name) => [name, schemaExport(name)]),
 ) as Record<BrowserToolName, ToolSchemaExport>;
+
+export const hostedOnlyTools = Object.fromEntries(
+  HOSTED_ONLY_TOOL_NAMES.map((name) => [name, { name, group: HOSTED_FEATURE_GROUP, title: toolTitle(name), annotations: TOOL_POLICY[name]!.annotations }]),
+) as Record<HostedOnlyToolName, HostedOnlyToolPolicy>;
