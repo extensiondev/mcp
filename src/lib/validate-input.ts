@@ -311,6 +311,7 @@ const ARG_ALIASES: Record<string, string[]> = {
   browser: ["browserName"],
   buildSha: ["buildId"],
   buildId: ["buildSha"],
+  to: ["outDir", "outputDir", "dest", "destination"],
 };
 
 export function normalizeArgAliases(

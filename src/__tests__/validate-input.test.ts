@@ -296,6 +296,20 @@ describe("normalizeArgAliases", () => {
     expect(out.name).toBe("x");
     expect(out.projectName).toBeUndefined();
   });
+
+  it("1121: extension_builds_download takes outDir and its kin as the to directory", () => {
+    const download = tools.find((tool) => tool.schema.name === "extension_builds_download")!.schema.inputSchema;
+
+    for (const alias of ["outDir", "outputDir", "dest", "destination"]) {
+      const out = normalizeArgAliases(download, { action: "download", buildId: "abc1234", browser: "edge", [alias]: "out" });
+      expect(out.to, alias).toBe("out");
+      expect(out[alias], alias).toBeUndefined();
+      expect(validateToolInput(download, out), alias).toEqual([]);
+    }
+
+    expect(normalizeArgAliases(download, { to: "keep", outDir: "ignore" }).to).toBe("keep");
+    expect(normalizeArgAliases(buildTool.schema.inputSchema, { outDir: "build" })).toEqual({ outDir: "build" });
+  });
 });
 
 describe("buildSha/buildId cross-aliases", () => {
