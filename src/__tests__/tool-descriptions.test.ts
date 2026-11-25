@@ -1,11 +1,13 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 import { serverInstructions, tools as ALL_TOOLS } from "../index";
 import { renderPrompt } from "../lib/prompts";
 import { DEFAULT_SERVER_OPTIONS, TOOL_POLICY, isToolListed } from "../lib/tool-policy";
-import { TOOL_TWINS } from "../lib/tool-twins";
+import { approvalLandedSentence } from "../lib/approval-gate";
+import { TOOL_TWINS, namedForForwarder } from "../lib/tool-twins";
 
 const IMPERATIVE_VERBS = [
   "Add",
@@ -391,3 +393,29 @@ describe("1141: no listed description or instruction carries a URL or a path on 
   });
 });
 
+
+describe("1198: every tool an answer tells the agent to call is one its reader serves", () => {
+  const SRC = join(__dirname, "..");
+  const sources = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+      entry.isDirectory() ? (entry.name === "__tests__" ? [] : sources(join(dir, entry.name))) : entry.name.endsWith(".ts") ? [join(dir, entry.name)] : [],
+    );
+  const SERVED = new Set(Object.keys(TOOL_POLICY));
+  const BEFORE_SPLIT = new Set(Object.keys(TOOL_POLICY).filter((name) => !TOOL_TWINS.some((twin) => twin.name === name)));
+  const called = (text: string): string[] => [...text.matchAll(/\b(extension_[a-z_]+) [{(]/g)].map((match) => match[1]!);
+
+  it("names only served tools wherever a sentence calls one", () => {
+    const strays = sources(SRC).flatMap((file) => called(readFileSync(file, "utf8")).filter((name) => !SERVED.has(name)).map((name) => `${file.slice(SRC.length + 1)}: ${name}`));
+
+    expect(strays).toEqual([]);
+  });
+
+  it("names the tool a forwarder from before the split serves, for every twin", () => {
+    const answer = { hint: approvalLandedSentence({}, "apr_1"), value: { next: TOOL_TWINS.map((twin) => `${twin.name} {action: "${twin.actions[0]}"}`) } };
+    const old = JSON.stringify(namedForForwarder(answer, "11.3.0"));
+
+    expect(called(old).filter((name) => !BEFORE_SPLIT.has(name))).toEqual([]);
+    expect(old).toContain('extension_approvals {action: \\"status\\"');
+    expect(namedForForwarder(answer, "11.4.0")).toBe(answer);
+  });
+});

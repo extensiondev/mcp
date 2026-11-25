@@ -342,3 +342,39 @@ export function acceptedSchema(name: string, schema: Record<string, unknown>): R
 
   return { ...schema, properties: { ...properties, action: { ...action, enum: [...action.enum, ...moved.filter((read) => !action.enum!.includes(read))] } } };
 }
+
+/* @invariant AN ANSWER NAMES ONLY TOOLS ITS READER SERVES. The hosted lane
+ * runs the newest kernel, so its answers name the read and write twins, but
+ * a forwarder released before the split (11.3.0 and older) lists none of
+ * them, and an agent told to call extension_approvals_read met "Unknown
+ * tool" (ledger 1198). Every twin is a narrowed view of the tool it splits,
+ * taking the same arguments, so an answer bound for such a forwarder names
+ * that tool in each twin's place, in every string it carries.
+ */
+export const LAST_VERSION_WITHOUT_TWINS = [11, 3, 0] as const;
+
+export function servesTwins(version: string | null | undefined): boolean {
+  const parts = String(version ?? "").split(/[.+-]/).slice(0, 3).map(Number);
+  if (parts.length < 3 || parts.some((part) => !Number.isInteger(part))) return true;
+
+  for (let index = 0; index < 3; index++) {
+    if (parts[index]! !== LAST_VERSION_WITHOUT_TWINS[index]) return parts[index]! > LAST_VERSION_WITHOUT_TWINS[index]!;
+  }
+
+  return false;
+}
+
+const TWIN_NAME = new RegExp(`\\b(${TOOL_TWINS.map((twin) => twin.name).join("|")})\\b`, "g");
+const TWIN_OF = new Map(TOOL_TWINS.map((twin) => [twin.name, twin.of]));
+
+function untwinned(value: unknown): unknown {
+  if (typeof value === "string") return value.replace(TWIN_NAME, (name) => TWIN_OF.get(name) ?? name);
+  if (Array.isArray(value)) return value.map(untwinned);
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, inner]) => [key, untwinned(inner)]));
+
+  return value;
+}
+
+export function namedForForwarder<T>(answer: T, forwarderVersion: string | null | undefined): T {
+  return servesTwins(forwarderVersion) ? answer : (untwinned(answer) as T);
+}

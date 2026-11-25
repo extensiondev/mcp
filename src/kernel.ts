@@ -125,6 +125,7 @@ export { renderableContentScripts, renderableSurfaces } from "./lib/surface-name
 export { trackFields, trackUrl } from "./lib/track-url";
 export type { InputIssue } from "./lib/validate-input";
 export { readZipEntry, unpackZip } from "./lib/zip-entries";
+export { LAST_VERSION_WITHOUT_TWINS, namedForForwarder, servesTwins } from "./lib/tool-twins";
 export { ACT_ACTIONS, BUILDS_ACT_TOOL, BUILDS_READ_TOOL, READ_ACTIONS, movedActHint } from "./lib/builds-split";
 export { namedRefusalOf, storeRunNeverStarted } from "./lib/named-refusal";
 export { localListingOf } from "./lib/store-listing-local";
