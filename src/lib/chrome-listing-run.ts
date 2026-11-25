@@ -471,12 +471,12 @@ const SAVE_TRIES = 5;
  * the publisher id the dashboard address showed, and a refused write is tried
  * again a few times and then reported, never written under another id.
  */
-export async function saveNewItem(run: ChromeRun, save: ItemSave): Promise<void> {
+export async function saveNewItem(run: ChromeRun, write: ItemSave): Promise<void> {
   if (!run.created || !run.itemId || !run.publisherId || run.itemSaved === "saved" || run.saveTries >= SAVE_TRIES) return;
 
   run.saveTries += 1;
 
-  const saved = await save({ itemId: run.itemId, publisherId: run.publisherId }).catch((err: unknown) => ({ ok: false as const, message: err instanceof Error ? err.message : String(err) }));
+  const saved = await write({ itemId: run.itemId, publisherId: run.publisherId }).catch((err: unknown) => ({ ok: false as const, message: err instanceof Error ? err.message : String(err) }));
 
   run.itemSaved = saved.ok ? "saved" : saved.message || "the platform did not answer";
 }
