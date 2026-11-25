@@ -125,6 +125,25 @@ describe("extension_preview_web", () => {
     }
   });
 
+  it("1164: answers the content scripts beside the surfaces, and none for a package Chrome refuses", async () => {
+    const declared = { content_scripts: [{ matches: ["<all_urls>"], js: ["content/scripts.js"], css: ["content/styles.css"] }] };
+    const dir = tmpDist({ manifest_version: 3, name: "Content", version: "1.0.0", ...declared });
+    const refused = tmpDist({ manifest_version: 3, name: "Refused", version: "1.0.0", ...declared, chrome_url_overrides: { newtab: "n.html", history: "h.html" } });
+
+    try {
+      const out = JSON.parse(await handler({ projectPath: dir, build: false, distPath: dir, probe: false }));
+      expect(out.value.surfaces).toEqual([]);
+      expect(out.value.contentScripts).toEqual(declared.content_scripts);
+      expect(out.value.contentScriptsNote).toMatch(/sample pages/);
+
+      const none = JSON.parse(await handler({ projectPath: refused, build: false, distPath: refused, probe: false }));
+      expect(none.value.contentScripts).toBeUndefined();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(refused, { recursive: true, force: true });
+    }
+  });
+
   it.skipIf(process.platform === "win32")("1058: refuses a distPath outside the project, a link out of it included, before anything is read or uploaded", async () => {
     const project = tmpDist(MANIFEST);
     const outside = tmpDist({ ...MANIFEST, name: "Outside Secret" });

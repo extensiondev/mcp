@@ -50,3 +50,13 @@ export function renderableSurfaces(manifest: Record<string, any>, paths: readonl
 
   return [...surfaces];
 }
+
+export function renderableContentScripts(manifest: Record<string, any>, paths: readonly string[] = []): Array<{ matches: string[]; js: string[]; css: string[] }> {
+  if (refusesInstall(manifest, paths) || !Array.isArray(manifest.content_scripts)) return [];
+
+  const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []);
+
+  return manifest.content_scripts
+    .filter((script: unknown) => script && typeof script === "object")
+    .map((script: Record<string, unknown>) => ({ matches: strings(script.matches), js: strings(script.js), css: strings(script.css) }));
+}

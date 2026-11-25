@@ -21,7 +21,7 @@ import {
   templatesOrigin,
 } from "../lib/platform-hold";
 import { PREVIEW_WEB_LOCAL } from "./preview-web-local";
-import { renderableSurfaces } from "../lib/surface-names";
+import { renderableContentScripts, renderableSurfaces } from "../lib/surface-names";
 import { dropTrailing } from "../lib/linear-text";
 import { jsonReadFailure } from "../lib/manifest-path";
 
@@ -409,6 +409,8 @@ export async function previewWebWith(args: PreviewWebArgs, local: PreviewWebLoca
   const internalUrl = SURFACE.scheme(encoded);
   const deepLink = `${hostBase}/?url=${encodeURIComponent(internalUrl)}`;
 
+  const distPaths = local.distPaths(distDir);
+  const contentScripts = renderableContentScripts(manifest, distPaths);
   const result: Record<string, unknown> = {
     deepLink,
     distDir,
@@ -417,7 +419,8 @@ export async function previewWebWith(args: PreviewWebArgs, local: PreviewWebLoca
       version: manifest.version ?? "0.0.0",
       manifestVersion: manifest.manifest_version === 2 ? 2 : 3,
     },
-    surfaces: renderableSurfaces(manifest, local.distPaths(distDir)),
+    surfaces: renderableSurfaces(manifest, distPaths),
+    ...(contentScripts.length ? { contentScripts, contentScriptsNote: "Content scripts mount no surface of their own; the preview runs them on its sample pages, so look for them there." } : {}),
     ...(buildResult ? { built: true } : { built: false }),
   };
 
