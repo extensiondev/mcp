@@ -793,7 +793,7 @@ export const PROJECT_TOKEN_INPUT = {
 } as const;
 
 export const LOGIN_STEPS =
-  "Run extension_auth_login (action: login), or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard). An extension with no extension.dev project yet starts with extension_project_create, which makes one from its GitHub repository, then extension_auth.";
+  "Run extension_auth_login (action: login), or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard). An extension with no extension.dev project yet starts with extension_project_create, which makes one from its GitHub repository, then extension_auth_login.";
 
 export const NO_TOKEN_MESSAGE = `No token. ${LOGIN_STEPS}`;
 

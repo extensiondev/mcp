@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { BUILDS_ACT_TOOL, movedActHint } from "./builds-split";
 import { envelope } from "./envelope";
 
 import type { FeatureGroup } from "./tool-policy";
@@ -233,6 +234,7 @@ export function twinRefusal(twin: ToolTwin): (args: Record<string, unknown>) => 
     if (twin.actions.includes(action as string)) return null;
 
     const other = TOOL_TWINS.find((candidate) => candidate.of === twin.of && candidate.actions.includes(action as string));
+    const moved = twin.of === "extension_builds" ? movedActHint(action) : undefined;
 
     return envelope({
       ok: false,
@@ -241,9 +243,9 @@ export function twinRefusal(twin: ToolTwin): (args: Record<string, unknown>) => 
       error: {
         code: "E_INPUT_VALIDATION",
         message: `${twin.name} takes action ${twin.actions.join(", ")}, not ${String(action)}.`,
-        hint: other ? `Call ${other.name} with the same arguments.` : `Call ${twin.of} with the same arguments.`,
+        hint: other ? `Call ${other.name} with the same arguments.` : (moved ?? `Call ${twin.of} with the same arguments.`),
       },
-      value: { useTool: other?.name ?? twin.of },
+      value: { useTool: other?.name ?? (moved ? BUILDS_ACT_TOOL : twin.of) },
     });
   };
 }

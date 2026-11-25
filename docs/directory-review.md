@@ -26,10 +26,10 @@ every upload. A call with no stored login is refused locally and sends nothing.
 
 | Tool | Name length | title | readOnlyHint | destructiveHint | idempotentHint | openWorldHint | Mixes read and write across actions | Answer text naming a plan, price or upgrade |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `extension_auth` | 14 | Read the signed-in identity | true | false | true | true | No: hosted serves `status` alone | None |
-| `extension_workspace` | 19 | Read the workspace | true | false | true | true | No: hosted serves `info`, `projects`, `settings`, all reads | None of its own since this audit; `value.plan` relays the platform's allowance record as the console shows it |
+| `extension_auth_read` | 19 | Read the signed-in identity | true | false | true | true | No: hosted serves `status` alone | None |
+| `extension_workspace_read` | 24 | Read the workspace | true | false | true | true | No: hosted serves `info`, `projects`, `settings`, all reads | None of its own since this audit; `value.plan` relays the platform's allowance record as the console shows it |
 | `extension_project_create` | 24 | Create a project | false | false | false | true | No: one operation | None; a refused create relays the platform's sentence, and a spent monthly allowance answers the limit reached, when it resets and the billing page (`value.limitReached`, `value.resetsAt`, `value.billingUrl`), never a price or an upgrade link |
-| `extension_builds` | 16 | Read builds | true | false | true | true | No: hosted serves `list`, `get`, `logs`, all reads | None; a spent allowance answers its reset and the billing page |
+| `extension_builds_read` | 21 | Read builds | true | false | true | true | No: hosted serves `list`, `get`, `logs`, all reads | None; a spent allowance answers its reset and the billing page |
 | `extension_builds_act` | 20 | Rebuild and configure builds | false | true | false | true | No: `rebuild`, `recheck`, `configure`, `create-channel`, `configure-channel` all write; `delete-channel` answers console only | None; a spent allowance answers its reset and the billing page |
 | `extension_release_status` | 24 | Read the release status | true | false | true | true | No: one read with `include` | None |
 | `extension_release_promote` | 25 | Promote a release | false | true | false | true | No: `promote`, `cut`, `rollback` all write | None; a spent monthly allowance answers the limit reached, when it resets and the billing page (`value.limitReached`, `value.resetsAt`, `value.billingUrl`), never a price or an upgrade link |
@@ -93,26 +93,26 @@ stored login existed and nothing was sent to the lane.
 - The same lane with no credential and no preflight header answers 200 with `ok: false`,
   `status: "auth-refused"`, `error.code: "E_AUTH_DENIED"` and the message "extension.dev refused
   this login: it was revoked, it expired, or it belongs to another environment. Call
-  extension_auth with action login to sign in again."
+  extension_auth_login with action login to sign in again."
 - The local server lists its 19 local tools as installed; the platform group adds 21 platform
   tools and the extras group 11 extras tools. With the platform group off, each tool of the eight cases answers `status: "tool-disabled"`,
   `error.code: "E_TOOL_DISABLED"` and the hint "Add platform to --features (or
   EXTENSION_DEV_FEATURES) in this server's MCP config, or ask the user to."
-- With the group on and no login, `extension_auth` (`action: "status"`) answers `ok: true`,
-  `status: "logged-out"` and the hint "No stored credentials. Run extension_auth (action: login)
+- With the group on and no login, `extension_auth_read` (`action: "status"`) answers `ok: true`,
+  `status: "logged-out"` and the hint "No stored credentials. Run extension_auth_login (action: login)
   to authenticate. Track it at https://console.extension.dev." The first tool of every other
-  case replayed (`extension_workspace` `projects`; `extension_builds` `list`, `get` and `logs`;
+  case replayed (`extension_workspace_read` `projects`; `extension_builds_read` `list`, `get` and `logs`;
   `extension_release_status`; `extension_release_promote`; `extension_builds_act` `rebuild`)
   answers `ok: false`, `status: "auth-required"`, `error.code: "E_AUTH_REQUIRED"`,
   `error.name: "PlatformAuthError"`, `value.hosted: true` and the message "No token. Run
-  extension_auth (action: login), or set EXTENSION_DEV_TOKEN (create one in the extension.dev
+  extension_auth_login (action: login), or set EXTENSION_DEV_TOKEN (create one in the extension.dev
   dashboard). An extension with no extension.dev project yet starts with
-  extension_project_create, which makes one from its GitHub repository, then extension_auth."
+  extension_project_create, which makes one from its GitHub repository, then extension_auth_login."
   (`NO_TOKEN_MESSAGE` in `src/lib/credentials.ts`).
-- `extension_builds` with `action: "rebuild"` answers `status: "invalid-arguments"`,
-  `error.code: "E_INPUT_VALIDATION"` and the hint "rebuild moved to extension_builds_act in
-  11.0.0: call extension_builds_act {action: \"rebuild\"} with the same arguments.
-  extension_builds only reads and downloads now, and nothing ran."
+- `extension_builds_read` with `action: "rebuild"` answers `status: "action-not-here"`,
+  `error.code: "E_INPUT_VALIDATION"`, `value.useTool: "extension_builds_act"` and the hint "rebuild
+  moved to extension_builds_act in 11.0.0: call extension_builds_act {action: \"rebuild\"} with the
+  same arguments. extension_builds_read only reads builds, and nothing ran."
 - Not replayed: `extension_project_create` of Negative 3. Signed out it asks the platform for a
   device code, which is a write, so it waits for the reviewer account with the rest.
 
@@ -149,7 +149,7 @@ here is created by an agent.
       "a fully populated account").
 - [ ] One project with a connected store (Chrome Web Store is enough) so `extension_release_status`
       answers store status.
-- [ ] A build that ran and passed, so `extension_builds` `list`, `get` and `logs` answer rows and
+- [ ] A build that ran and passed, so `extension_builds_read` `list`, `get` and `logs` answer rows and
       lines.
 - [ ] A release on Preview and one on Stable, so `extension_release_status` answers channels and
       history and `extension_release_promote` has a build to move.
@@ -182,7 +182,7 @@ account holds. The tests in `src/__tests__/docs-match-the-code.test.ts` pin the 
 ### Positive 1: Who am I signed in as
 
 - Prompt: "Which extension.dev account and project is this connection signed in as?"
-- Expected tools: `extension_auth` (`action: "status"`).
+- Expected tools: `extension_auth_read` (`action: "status"`).
 - Expected answer: `ok: true`, `value.workspaceSlug` and `value.projectSlug` naming the reviewer's
   workspace and project, `value.tokenCheck.verdict: "confirmed"` from the platform's whoami read,
   `value.expiresAt` for the connection's token, and a warning that reads "This connection renews
@@ -194,10 +194,10 @@ account holds. The tests in `src/__tests__/docs-match-the-code.test.ts` pin the 
 ### Positive 2: Which projects does the workspace hold
 
 - Prompt: "List the projects in my extension.dev workspace and tell me which one failed its last build."
-- Expected tools: `extension_workspace` (`action: "projects"`).
+- Expected tools: `extension_workspace_read` (`action: "projects"`).
 - Expected answer: `status: "listed"`, `value.projects` with one row per project and its last build,
   and the hint "<workspace> has N projects" followed by "; the last build failed for <project>"
-  when one did (`readProjects` in `src/tools/workspace.ts`), closing with "extension_builds
+  when one did (`readProjects` in `src/tools/workspace.ts`), closing with "extension_builds_read
   and extension_release_status read the ones this connection's token covers; to cover another
   project, sign in again from your MCP client, which takes you through the console sign-in on
   extension.dev." (`hostedAnswer` in the hosted server's `mcp-platform.ts`). To replay after the www promote: the
@@ -206,8 +206,8 @@ account holds. The tests in `src/__tests__/docs-match-the-code.test.ts` pin the 
 ### Positive 3: Did the latest build pass
 
 - Prompt: "Did the latest build of <workspace>/<project> pass? Show me its log if not."
-- Expected tools: `extension_builds` (`action: "list"`), then `extension_builds`
-  (`action: "get", buildId`), then `extension_builds` (`action: "logs", buildId`) only when the
+- Expected tools: `extension_builds_read` (`action: "list"`), then `extension_builds_read`
+  (`action: "get", buildId`), then `extension_builds_read` (`action: "logs", buildId`) only when the
   build did not pass.
 - Expected answer: the list answers "N recent builds of <workspace>/<project>, newest first; the
   latest is <build words>, <pins>. Pass action:\"get\" or action:\"logs\" with a buildId to read
@@ -236,7 +236,7 @@ account holds. The tests in `src/__tests__/docs-match-the-code.test.ts` pin the 
 ### Positive 5: Release the latest Stable build to Preview
 
 - Prompt: "Release the latest successful build of <workspace>/<project> to the Preview channel."
-- Expected tools: `extension_release_status` or `extension_builds` (`action: "list"`) to pick the
+- Expected tools: `extension_release_status` or `extension_builds_read` (`action: "list"`) to pick the
   buildId, then `extension_release_promote` (`buildId, channel: "preview"`), then the same call
   again with `approvalId` once a workspace owner approved.
 - Expected answer: the first promote answers `ok: false`, `status: "approval-required"`,

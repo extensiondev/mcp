@@ -11,6 +11,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import { createServer, tools } from "../index";
+import { createToolDispatcher } from "../lib/tool-dispatch";
 import {
   DEFAULT_SERVER_OPTIONS,
   FEATURE_GROUPS,
@@ -346,5 +347,21 @@ describe("1108: a tool that read and wrote answers as a read twin and a write tw
 
     expect(twin.body.command).toBe("extension_storage_write");
     expect(JSON.stringify(twin.body.warnings ?? [])).not.toContain("still answers under the old name");
+  });
+
+  it("names in the old name's warning only the twins this server lists", async () => {
+    const dispatch = createToolDispatcher({ tools: tools.filter((tool) => tool.schema.name !== "extension_storage_write"), options: ALL });
+    const out = await dispatch({ name: "extension_storage", arguments: { action: "get", key: "k" } });
+    const body = JSON.parse(out.content[0]!.text);
+
+    expect(body.warnings).toContain("extension_storage is now extension_storage_read; it still answers under the old name.");
+  });
+
+  it("points a build act sent to the read twin at the act tool, not at the old name", async () => {
+    const client = await connected(ALL);
+    const refused = await call(client, "extension_builds_read", { action: "rebuild", buildId: "603fc8a" });
+
+    expect(refused.body).toMatchObject({ command: "extension_builds_read", status: "action-not-here", value: { useTool: "extension_builds_act" } });
+    expect(refused.body.error.hint).toContain('call extension_builds_act {action: "rebuild"} with the same arguments');
   });
 });

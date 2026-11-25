@@ -170,10 +170,10 @@ function isFenced(text: string): boolean {
   }
 }
 
-function aliasNoted(frame: ToolFrame, call: RebuiltCall): ToolFrame {
-  const aliasOf = TOOL_POLICY[call.name]?.aliasOf;
+function aliasNoted(frame: ToolFrame, call: RebuiltCall, served: (name: string) => boolean): ToolFrame {
+  const aliasOf = TOOL_POLICY[call.name]?.aliasOf?.filter(served);
 
-  if (!aliasOf || call.internal) return frame;
+  if (!aliasOf?.length || call.internal) return frame;
 
   const sentence = `${call.name} is now ${aliasOf.join(" and ")}; it still answers under the old name.`;
   let noted = false;
@@ -295,7 +295,9 @@ export function createToolSurface(setup: ToolHandlerOptions): {
       ? { rebuilt, reason: active.reloadError, version: null, assertChecks: null }
       : { rebuilt, reason: failure ?? noLocalCarryReason(rebuilt), version: active.version, assertChecks: active.assertChecks };
 
-  const dispatch = async (call: RebuiltCall): Promise<ToolFrame> => withStructuredContent(aliasNoted(await withComposedRefusals(() => dispatched(call)), call), call.name);
+  const served = (name: string): boolean => toolMap.has(name) && isToolListed(name, options);
+
+  const dispatch = async (call: RebuiltCall): Promise<ToolFrame> => withStructuredContent(aliasNoted(await withComposedRefusals(() => dispatched(call)), call, served), call.name);
 
   const dispatched = async ({ name, arguments: args }: RebuiltCall): Promise<ToolFrame> => {
     const tool = toolMap.get(name);
