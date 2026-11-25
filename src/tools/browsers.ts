@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { MANAGED_BROWSERS, REAL_BROWSERS } from "../lib/common-schema";
+import { CONFIRM_INPUT } from "../lib/bulk-delete";
 import { envelope } from "../lib/envelope";
 import { detectBrowsers } from "./detect-browsers";
 import { listManagedBrowsers } from "./list-browsers";
@@ -40,8 +41,9 @@ export const schema = {
       all: {
         type: "boolean",
         default: false,
-        description: "uninstall: every managed binary.",
+        description: "uninstall: every managed binary; takes confirm.",
       },
+      confirm: CONFIRM_INPUT,
     },
     required: [],
   },

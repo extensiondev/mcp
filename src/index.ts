@@ -78,6 +78,7 @@ import { forwarderApprovalState } from "./lib/forward-approval-state";
 import { guideStoreConnect } from "./lib/guided-connect";
 import { guideFirstListing } from "./lib/guided-first-listing";
 import { forwardable } from "./lib/hosted-forwarder";
+import { withoutConfirm } from "./lib/bulk-delete";
 import { installPromptHandlers } from "./lib/prompts";
 import { installResourceHandlers } from "./lib/resources";
 
@@ -122,7 +123,7 @@ const baseTools: ToolModule[] = [
   forwardable(approvals),
   forwardable(buildsTool),
   forwardable(buildsAct),
-  forwardable(workspaceTool),
+  withoutConfirm(forwardable(workspaceTool)),
   forwardable(releasePromote),
   forwardable(submitTool),
   forwardable(submitCheck),
@@ -175,7 +176,7 @@ const PLAYBOOK_POINTER =
   "What follows is the deployment doctrine and the store playbook; a client may cut them, and every extension_submit_read and extension_submit_check answer repeats their steps as value.nextStep {kind, say, url}, so start a store ask with action:'preflight' and follow nextStep when the rest is missing.";
 
 const LINK_SHAPES =
-  "A build link (<workspace>.extension.dev/<project>/builds/<sha>, the buildSha extension_builds_read lists) opens one build and, on a private project, expires on the date the answer gives; a channel link (<workspace>.extension.dev/<project>/<channel>) always opens the channel's newest build and never expires; on a public project, or a public channel, send testers the channel link, otherwise the build link with the date it stops working, and a private project's channel link is withheld. An approval answer carries the approval page in value.trackUrl and value.checkUrl, the page to check once it is approved.";
+  "A build link (for the buildSha extension_builds_read lists) opens one build and, on a private project, expires on the date the answer gives; a channel link always opens the channel's newest build and never expires; on a public project, or a public channel, send testers the channel link, otherwise the build link with the date it stops working, and a private project's channel link is withheld. An approval answer carries the approval page in value.trackUrl and value.checkUrl, the page to check once it is approved.";
 
 export const DEPLOYMENT_DOCTRINE = [
   "Builds for anyone else come from the platform build (extension_builds_read), links from extension_publish and stores from extension_submit, and a store is touched only when the person asks for a store.",

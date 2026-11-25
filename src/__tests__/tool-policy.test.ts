@@ -400,6 +400,25 @@ describe("1108: a tool that read and wrote answers as a read twin and a write tw
     expect(JSON.stringify(read.body.warnings ?? [])).not.toContain("still answers here");
   });
 
+  it("1141: refuses a bulk delete without confirm before anything runs, and lets one item through", async () => {
+    const client = await connected(ALL);
+
+    for (const [name, args] of [
+      ["extension_browsers_install", { action: "uninstall", all: true }],
+      ["extension_browsers", { action: "uninstall", all: true }],
+      ["extension_workspace_configure", { action: "set-environment", remove: [{ name: "A" }, { name: "B" }] }],
+      ["extension_workspace", { action: "set-environment", remove: [{ name: "A" }, { name: "B" }] }],
+    ] as const) {
+      const out = await call(client, name, args);
+
+      expect(out.body, name).toMatchObject({ command: name, status: "confirm-required" });
+    }
+
+    const one = await call(client, "extension_workspace_configure", { action: "set-environment", remove: [{ name: "A" }] });
+
+    expect(one.body.status).not.toBe("confirm-required");
+  });
+
   it("points a build act sent to the read twin at the act tool, not at the old name", async () => {
     const client = await connected(ALL);
     const refused = await call(client, "extension_builds_read", { action: "rebuild", buildId: "603fc8a" });

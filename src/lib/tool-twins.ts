@@ -61,7 +61,7 @@ export const TOOL_TWINS: ToolTwin[] = [
   },
   {
     name: "extension_network_read",
-    drop: ["method", "url", "status", "body", "json", "contentType"],
+    drop: ["method", "url", "status", "body", "json", "contentType", "ruleId", "confirm"],
     of: "extension_network",
     actions: ["list", "requests"],
     group: "extras",
@@ -78,7 +78,7 @@ export const TOOL_TWINS: ToolTwin[] = [
     title: "Stub network responses",
     annotations: writes({ destructiveHint: true }),
     description: "Add a network stub rule to a Chromium session, or clear the rules. Answers the rules now in force; extension_network_read lists them and the requests seen. Rules last until extension_stop. Firefox is refused.",
-    params: { action: { description: "add: install a rule; clear: take the rules down." } },
+    params: { action: { description: "add: install a rule; clear: take one rule down by ruleId, or every rule with confirm." } },
   },
   {
     name: "extension_shares_read",
@@ -124,7 +124,7 @@ export const TOOL_TWINS: ToolTwin[] = [
   },
   {
     name: "extension_workspace_read",
-    drop: ["visibility", "settings", "variables", "remove", "approvalId"],
+    drop: ["visibility", "settings", "variables", "remove", "confirm", "approvalId"],
     of: "extension_workspace",
     actions: ["info", "projects", "usage", "settings"],
     group: "platform",
@@ -162,12 +162,12 @@ export const TOOL_TWINS: ToolTwin[] = [
     group: "platform",
     title: "Log in to extension.dev",
     annotations: writes({ destructiveHint: true, openWorldHint: true }),
-    description: "Sign in to an extension.dev project (a code at extension.dev/device, then deviceCode), or clear stored logins. Answers the login; extension_auth_read lists them. A login lasts a day, or what lifetime says (CI: Access tokens).",
+    description: "Sign in to an extension.dev project (a code on the linked device page, then deviceCode), or clear stored logins. Answers the login; extension_auth_read lists them. A login lasts a day, or what lifetime says (CI: Access tokens).",
     params: { action: { description: "login signs in; logout deletes only the local login." } },
   },
   {
     name: "extension_browsers_read",
-    drop: ["browser", "all"],
+    drop: ["browser", "all", "confirm"],
     of: "extension_browsers",
     actions: ["detect", "list"],
     group: "extras",

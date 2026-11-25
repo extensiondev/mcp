@@ -319,6 +319,17 @@ export class StubSession {
     await this.rearm();
   }
 
+  async remove(id: string): Promise<boolean> {
+    const at = this.rules.findIndex((rule) => rule.id === id);
+
+    if (at < 0) return false;
+
+    this.rules.splice(at, 1);
+    await this.rearm();
+
+    return true;
+  }
+
   async clear(): Promise<number> {
     const cleared = this.rules.length;
     this.rules.splice(0);

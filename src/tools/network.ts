@@ -9,6 +9,7 @@
 import { isChromiumFamily, isGeckoFamily } from "../lib/browser-family";
 import { CDP_PORT_MISSING_HINT, resolveCdpPort } from "../lib/cdp-port";
 import { SESSION_BROWSER, SESSION_PROJECT_PATH } from "../lib/common-schema";
+import { CONFIRM_INPUT, confirmRequired } from "../lib/bulk-delete";
 import { envelope } from "../lib/envelope";
 import {
   describeRule,
@@ -41,6 +42,8 @@ export const schema = {
       body: { type: "string", description: "add: response text." },
       json: { description: "add: response as a JSON value; not with body." },
       contentType: { type: "string", description: "add: Content-Type; default by body or json." },
+      ruleId: { type: "string", description: "clear: the one rule to take down; without it, every rule." },
+      confirm: { ...CONFIRM_INPUT, description: "clear without ruleId: true takes down more than one rule." },
       browser: SESSION_BROWSER,
     },
     required: ["projectPath", "action"],
@@ -116,6 +119,8 @@ export async function handler(args: {
   body?: string;
   json?: unknown;
   contentType?: string;
+  ruleId?: string;
+  confirm?: boolean;
   browser?: string;
 }): Promise<string> {
   const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
@@ -135,7 +140,7 @@ export async function handler(args: {
       value: { browser, ...rulesValue(session) },
       warnings: [session ? enableWarning(session) : null],
       hint: rules.length
-        ? `${rules.length} rule(s) are live on the ${browser} session: ${rules.slice(0, 5).map(describeRule).join("; ")}. extension_network_read {action: "requests"} says which requests hit one; {action: "clear"} takes them all down.`
+        ? `${rules.length} rule(s) are live on the ${browser} session: ${rules.slice(0, 5).map(describeRule).join("; ")}. extension_network_read {action: "requests"} says which requests hit one; {action: "clear", ruleId} takes one down.`
         : `No network stub is live on the ${browser} session, so every request reaches its real server. extension_network_stub {action: "add", url, status, json} installs one.`,
     });
   }
@@ -176,6 +181,31 @@ export async function handler(args: {
           : "Every rule answered at least once."
       } Read what the page did with it through extension_dom_snapshot or extension_eval.`,
     });
+  }
+
+  if (args.action === "clear" && args.ruleId) {
+    const removed = session ? await session.remove(args.ruleId) : false;
+
+    if (!removed) {
+      return refusal("rule-not-found", "E_BAD_REQUEST", `No rule ${args.ruleId} is live on the ${browser} session, so nothing changed.`, 'extension_network_read {action: "list"} answers the live rules and their ids.', { browser, ruleId: args.ruleId });
+    }
+
+    return envelope({
+      ok: true,
+      command: schema.name,
+      status: "rule-cleared",
+      value: { browser, ruleId: args.ruleId, ...rulesValue(session) },
+      hint: `Rule ${args.ruleId} was taken down; the other rules stay in force.`,
+    });
+  }
+
+  if (args.action === "clear" && session && session.rules.length > 1 && args.confirm !== true) {
+    return confirmRequired(
+      schema.name,
+      `clear takes down all ${session.rules.length} rules on the ${browser} session`,
+      "Call again with confirm: true to take them all down, or pass ruleId to take down one, which needs no confirm.",
+      { browser, ...rulesValue(session) },
+    );
   }
 
   if (args.action === "clear") {

@@ -47,6 +47,7 @@ import { createReloader, handoverState, type ActiveBuild, type BuildImporter, ty
 import { markListStale, reloadedWarning, serverStamp, staleEnvelope, type ServerStampReader } from "./server-stamp";
 import { markStaleLocal, noLocalCarryReason, predatedChecks, predatesCheckEnvelope, type HeldLocal } from "./stale-local";
 import { answeredAs } from "./submit-action-safety";
+import { bulkDeleteRefusal } from "./bulk-delete";
 import { acceptedSchema, movedReadSentence } from "./tool-twins";
 import { withComposedRefusals } from "./composed-refusal";
 import { annotate, frameText, refusedFrame, toolResultFrame, withStructuredContent } from "./tool-frames";
@@ -349,7 +350,7 @@ export function createToolSurface(setup: ToolHandlerOptions): {
 
     if (disabled) return refused(disabled);
 
-    const secret = secretArgumentRefusal(name, aliasedArgs);
+    const secret = secretArgumentRefusal(name, aliasedArgs) ?? bulkDeleteRefusal(name, aliasedArgs);
 
     if (secret) return refused(secret);
 

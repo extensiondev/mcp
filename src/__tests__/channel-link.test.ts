@@ -105,21 +105,22 @@ function spelledChannelLink(browser?: string): string {
     .replace(/\/browser$/, "/<browser>");
 }
 
-describe("every channel link a tool spells is the one the urls package formats", () => {
+describe("a tool names the channel link it answers and spells no path for it", () => {
   it.each([
     ["the server instructions", () => serverInstructions({ features: ["local", "platform"], noShip: false }), undefined],
     ["extension_publish", () => publishSchema.description, undefined],
   ])("%s", (_where, read, browser) => {
     const text = read();
 
-    expect(text).toContain(spelledChannelLink(browser));
+    expect(text).toContain("channel link");
+    expect(text).not.toContain(spelledChannelLink(browser));
     expect(text).not.toMatch(/\/channels\/<|\/channels\/\$\{/);
   });
 
-  it("no tool spells a channel page under the old channels path", () => {
+  it("no tool spells a channel page under the old channels path, nor the path at all (ledger 1141)", () => {
     const spelled = JSON.stringify(tools.map((tool) => tool.schema));
 
-    expect(spelled).toContain("<project>/<channel>");
+    expect(spelled).not.toContain("<project>/<channel>");
     expect(spelled).not.toMatch(/\/channels\/</);
   });
 });

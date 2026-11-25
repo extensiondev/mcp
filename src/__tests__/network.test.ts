@@ -261,6 +261,24 @@ describe("extension_network rules are session scoped", () => {
     expect(again.status).toBe("nothing-to-clear");
   });
 
+  it("1141: takes one rule down by ruleId, and takes several down only with confirm", async () => {
+    await call({ action: "add", url: "https://api.example.com/*", status: 500 });
+    await call({ action: "add", id: "users", url: "https://api.example.com/users", status: 201, body: "ok" });
+    await call({ action: "add", id: "items", url: "https://api.example.com/items", status: 204, body: "" });
+
+    const one = await call({ action: "clear", ruleId: "users" });
+    expect(one.status).toBe("rule-cleared");
+    expect(one.value.rules.map((rule: { id: string }) => rule.id)).toEqual(["stub-1", "items"]);
+
+    const held = await call({ action: "clear" });
+    expect(held.status).toBe("confirm-required");
+    expect(liveNetworkStubs(project)[0]?.rules).toHaveLength(2);
+
+    const all = await call({ action: "clear", confirm: true });
+    expect(all.status).toBe("rules-cleared");
+    expect(all.value.cleared).toBe(2);
+  });
+
   it("forgets the rules when the browser's connection closes, so a new session starts with none", async () => {
     await call({ action: "add", url: "https://api.example.com/*", status: 500 });
     expect(liveNetworkStubs(project)).toHaveLength(1);

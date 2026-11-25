@@ -65,7 +65,7 @@ describe("whoami reports the stored token identity, not the cwd", () => {
   });
 
   it("the tool description anchors identity to the stored token", () => {
-    expect(auth.schema.description).toContain("extension.dev/device");
+    expect(auth.schema.description).toContain("a code on the linked device page");
     expect(auth.schema.description).toMatch(
       /Identity is the stored token, not the working directory/i,
     );

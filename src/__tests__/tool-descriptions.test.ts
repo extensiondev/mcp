@@ -378,3 +378,16 @@ describe("1138: a twin's parameters describe only the actions it takes", () => {
     expect([...text.matchAll(/\b(extension_[a-z_]+)(?=`|\()/g)].map((match) => match[1]!).filter((name) => TOOL_POLICY[name]?.aliasOf)).toEqual([]);
   });
 });
+
+describe("1141: no listed description or instruction carries a URL or a path on a host", () => {
+  const all = { features: ["local", "platform", "extras"] as const, noShip: false };
+  const URL_TEXT = /https?:\/\/|extension\.dev\/|[a-z>-]\.extension\.dev\b/i;
+
+  it.each([
+    ...ALL_TOOLS.filter((tool) => isToolListed(tool.schema.name, { ...all, features: [...all.features] })).map((tool) => [tool.schema.name, JSON.stringify({ d: tool.schema.description, p: tool.schema.inputSchema })] as const),
+    ["the platform instructions", serverInstructions({ features: [...all.features], noShip: false })] as const,
+  ])("%s", (_where, text) => {
+    expect(text.match(URL_TEXT)?.[0] ?? null).toBeNull();
+  });
+});
+

@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { API_BASE } from "../lib/common-schema";
+import { CONFIRM_INPUT } from "../lib/bulk-delete";
 import { hostedOnly } from "../lib/hosted-only";
 
 export const schema = {
@@ -63,7 +64,7 @@ export const schema = {
       },
       remove: {
         type: "array",
-        description: "set-environment: build variables to delete.",
+        description: "set-environment: build variables to delete; more than one takes confirm.",
         items: {
           type: "object",
           properties: {
@@ -80,6 +81,7 @@ export const schema = {
           required: ["name"],
         },
       },
+      confirm: CONFIRM_INPUT,
       approvalId: {
         type: "string",
         description: "For set-visibility public.",

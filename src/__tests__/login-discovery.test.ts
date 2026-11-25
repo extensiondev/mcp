@@ -30,7 +30,7 @@ describe("extension_auth login names where the project slug lives", () => {
     const project = schema.inputSchema.properties.project as {
       description: string;
     };
-    expect(project.description).toContain("console.extension.dev");
-    expect(project.description).toMatch(/extension\.dev\/new/);
+    expect(project.description).toContain("the slugs the console shows");
+    expect(project.description).not.toMatch(/extension\.dev\//);
   });
 });

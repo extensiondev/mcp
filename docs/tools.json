@@ -195,7 +195,7 @@
       "name": "extension_auth_login",
       "tier": "platform",
       "group": "platform",
-      "description": "Sign in to an extension.dev project (a code at extension.dev/device, then deviceCode), or clear stored logins. Answers the login; extension_auth_read lists them. A login lasts a day, or what lifetime says (CI: Access tokens).",
+      "description": "Sign in to an extension.dev project (a code on the linked device page, then deviceCode), or clear stored logins. Answers the login; extension_auth_read lists them. A login lasts a day, or what lifetime says (CI: Access tokens).",
       "gate": "the server started with --features=local,platform",
       "samplePrompt": "Log this machine in to the acme/newtab project on extension.dev",
       "readOnly": false,
@@ -215,7 +215,7 @@
           "name": "project",
           "type": "string",
           "required": false,
-          "description": "'<workspace>/<project>' from console.extension.dev (new: extension.dev/new)."
+          "description": "'<workspace>/<project>', the slugs the console shows for the project."
         },
         {
           "name": "projectPath",
@@ -327,7 +327,14 @@
           "type": "boolean",
           "required": false,
           "default": false,
-          "description": "uninstall: every managed binary."
+          "description": "uninstall: every managed binary; takes confirm."
+        },
+        {
+          "name": "confirm",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "true confirms a delete of more than one item in one call."
         }
       ]
     },
@@ -1626,7 +1633,7 @@
           "type": "\"add\" | \"clear\"",
           "required": false,
           "default": "add",
-          "description": "add: install a rule; clear: take the rules down."
+          "description": "add: install a rule; clear: take one rule down by ruleId, or every rule with confirm."
         },
         {
           "name": "method",
@@ -1664,6 +1671,19 @@
           "type": "string",
           "required": false,
           "description": "add: Content-Type; default by body or json."
+        },
+        {
+          "name": "ruleId",
+          "type": "string",
+          "required": false,
+          "description": "clear: the one rule to take down; without it, every rule."
+        },
+        {
+          "name": "confirm",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "clear without ruleId: true takes down more than one rule."
         },
         {
           "name": "browser",
@@ -2007,7 +2027,7 @@
       "name": "extension_publish",
       "tier": "platform",
       "group": "platform",
-      "description": "Publish and share a build through extension.dev: answers the tester link, a page with a download and a run command for each browser (no project yet: extension_project_create). extension_preview_web: emulator links; extension_shares_manage revokes. On a public project, or a public channel, send testers the channel link (<workspace>.extension.dev/<project>/<channel>); a private build link expires.",
+      "description": "Publish and share a build through extension.dev: answers the tester link, a page with a download and a run command for each browser (no project yet: extension_project_create). extension_preview_web: emulator links; extension_shares_manage revokes. On a public project, or a public channel, send testers the channel link the answer gives; a private build link expires.",
       "gate": "the server started with --features=local,platform, and a login; sync-captures needs a workspace owner's approval, and a link to a private project a workspace member's",
       "samplePrompt": "Send the latest build to my testers",
       "readOnly": false,
@@ -3468,7 +3488,14 @@
           "name": "remove",
           "type": "array of object",
           "required": false,
-          "description": "set-environment: build variables to delete."
+          "description": "set-environment: build variables to delete; more than one takes confirm."
+        },
+        {
+          "name": "confirm",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "true confirms a delete of more than one item in one call."
         },
         {
           "name": "approvalId",

@@ -59,12 +59,12 @@ Run a test stage on an extension_dev or extension_start session: pass, fail, not
 
 ## extension_auth_login
 
-Sign in to an extension.dev project (a code at extension.dev/device, then deviceCode), or clear stored logins. Answers the login; extension_auth_read lists them. A login lasts a day, or what lifetime says (CI: Access tokens).
+Sign in to an extension.dev project (a code on the linked device page, then deviceCode), or clear stored logins. Answers the login; extension_auth_read lists them. A login lasts a day, or what lifetime says (CI: Access tokens).
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `action` | "login" \| "logout" | no | `"login"` | login signs in; logout deletes only the local login. |
-| `project` | string | no |  | '<workspace>/<project>' from console.extension.dev (new: extension.dev/new). |
+| `project` | string | no |  | '<workspace>/<project>', the slugs the console shows for the project. |
 | `projectPath` | string | no |  | login: the directory whose GitHub origin names the project. |
 | `projects` | array \| string | no |  | login: 1 to 20 existing projects of one workspace, at most 48 characters each, or "*" with workspace. |
 | `workspace` | string | no |  | login with projects: "*": the workspace. |
@@ -91,7 +91,8 @@ Install or remove a managed browser Extension.js launches; install downloads hun
 | --- | --- | --- | --- | --- |
 | `action` | "install" \| "uninstall" | no | `"install"` | install downloads a managed browser; uninstall removes one. |
 | `browser` | "chrome" \| "chromium" \| "edge" \| "firefox" | no |  | The managed binary. |
-| `all` | boolean | no | `false` | uninstall: every managed binary. |
+| `all` | boolean | no | `false` | uninstall: every managed binary; takes confirm. |
+| `confirm` | boolean | no | `false` | true confirms a delete of more than one item in one call. |
 
 ## extension_browsers_read
 
@@ -384,13 +385,15 @@ Add a network stub rule to a Chromium session, or clear the rules. Answers the r
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Project root of a running session: extension_dev, extension_start, or `npx extension dev\|start` by hand |
-| `action` | "add" \| "clear" | no | `"add"` | add: install a rule; clear: take the rules down. |
+| `action` | "add" \| "clear" | no | `"add"` | add: install a rule; clear: take one rule down by ruleId, or every rule with confirm. |
 | `method` | string | no |  | add: HTTP method; default ANY. |
 | `url` | string | no |  | add: exact URL, or a glob with * and ?. |
 | `status` | number | no | `200` | add: HTTP status to answer. |
 | `body` | string | no |  | add: response text. |
 | `json` | any | no |  | add: response as a JSON value; not with body. |
 | `contentType` | string | no |  | add: Content-Type; default by body or json. |
+| `ruleId` | string | no |  | clear: the one rule to take down; without it, every rule. |
+| `confirm` | boolean | no | `false` | clear without ruleId: true takes down more than one rule. |
 | `browser` | string | no |  | Running session's browser; needed when several run. |
 
 ## extension_open
@@ -461,7 +464,7 @@ Create an extension.dev project from a folder (projectPath, uploaded, no push; a
 
 ## extension_publish
 
-Publish and share a build through extension.dev: answers the tester link, a page with a download and a run command for each browser (no project yet: extension_project_create). extension_preview_web: emulator links; extension_shares_manage revokes. On a public project, or a public channel, send testers the channel link (<workspace>.extension.dev/<project>/<channel>); a private build link expires.
+Publish and share a build through extension.dev: answers the tester link, a page with a download and a run command for each browser (no project yet: extension_project_create). extension_preview_web: emulator links; extension_shares_manage revokes. On a public project, or a public channel, send testers the channel link the answer gives; a private build link expires.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -780,7 +783,8 @@ Change a project's settings, visibility or build environment on extension.dev. c
 | `visibility` | "private" \| "public" | no |  | private: plain call under the owner's own token; public: approve page. |
 | `settings` | object | no |  | configure-project: changed fields only (displayName, description, url, supportUrl, branch, rootDirectory, workspaceRoot, buildPullRequests, runWhatsNew, runExtensionExecutables, pullRequestComments, commitComments, autoCreateGitHubRelease, liveChannel); displayName renames the project. |
 | `variables` | array of object | no |  | set-environment: build variables to add or change. |
-| `remove` | array of object | no |  | set-environment: build variables to delete. |
+| `remove` | array of object | no |  | set-environment: build variables to delete; more than one takes confirm. |
+| `confirm` | boolean | no | `false` | true confirms a delete of more than one item in one call. |
 | `approvalId` | string | no |  | For set-visibility public. |
 | `workspace` | string | no |  | Slug. |
 | `project` | string | no |  | Stored login; the project to change. |
