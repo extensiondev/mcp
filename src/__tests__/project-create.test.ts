@@ -501,14 +501,21 @@ describe("extension_project_create", () => {
       "config/acme-prod-1a2b3c4d5e6f.json": '{ "type": "service_account", "private_key": "-----BEGIN PRIVATE KEY-----\\nMIIE" }',
       "src/keyboard.json": '{ "private_key": "see the build env" }',
       "src/key.ts": "export const key = 1;",
+      ".pypirc": "[pypi]",
+      ".aws/credentials": "[default]",
+      "credentials.json": "{}",
+      "keys/id_deploy": "-----BEGIN OPENSSH PRIVATE KEY-----",
+      "ios/embedded.mobileprovision": "binary",
     });
 
     const listing = collectSourceFiles(dir);
 
     expect(listing.leftOut.secrets).toEqual([
+      ".aws/",
       ".env",
       ".netrc",
       ".npmrc",
+      ".pypirc",
       ".yarnrc.yml",
       "acme-firebase-adminsdk-x1y2z-0123456789.json",
       "android/release.keystore",
@@ -519,7 +526,10 @@ describe("extension_project_create", () => {
       "client_secret_1234-abc.apps.googleusercontent.com.json",
       "config/.env.local",
       "config/acme-prod-1a2b3c4d5e6f.json",
+      "credentials.json",
       "id_ed25519",
+      "ios/embedded.mobileprovision",
+      "keys/id_deploy",
       "keys/id_rsa",
       "safari/AuthKey_TEST.p8",
     ]);

@@ -220,6 +220,7 @@ async function buildShare(
     ...(result.data.revokeUrl ? { revokeUrl: result.data.revokeUrl } : {}),
     serves: "uploaded-local-build",
     localBuildUploaded: true,
+    leftOut: result.data.leftOut,
     allowance: spendNarration({ what: "This share upload", body: result.body }),
     sharedAtFrom,
     ...(browserCheck
@@ -235,8 +236,14 @@ async function buildShare(
         : `keep it: ${record.note}` 
       } To find this link again later, or to pull it back once it has left this conversation, run extension_shares_read: it lists every link this token has shared with its live or dead state, and extension_shares_manage revokes one by artifactId or by pasting any of its URLs.${ 
       result.data.zipUrl ? ` ${ZIP_URL_REDIRECT_NOTE}` : "" 
-      }${record.warning ? ` ${record.warning}` : ""}`,
+      }${record.warning ? ` ${record.warning}` : ""}${leftOutNote(result.data.leftOut.secrets)}`,
   };
+}
+
+function leftOutNote(secrets: string[]): string {
+  if (secrets.length === 0) return "";
+
+  return ` ${secrets.length === 1 ? "One credential file stayed" : `${secrets.length} credential files stayed`} on this machine and are not in the link: ${secrets.join(", ")} (leftOut.secrets).`;
 }
 
 function detectSurfaces(manifest: Record<string, any>): string[] {

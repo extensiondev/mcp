@@ -17,6 +17,7 @@ import { identityHeaders } from "./session-identity";
 import { wwwRevokeUrl } from "./artifacts-api";
 import { platformHoldMessage, sawPlatformHold } from "./platform-hold";
 import { withoutRedirects } from "./platform-fetch";
+import { holdsSecret, isInstallConfig, isSecretFile, SECRET_FOLDERS } from "./source-archive";
 
 type FetchImpl = typeof fetch;
 
@@ -26,8 +27,6 @@ const IGNORED_SEGMENTS = new Set([
   ".DS_Store",
   "__MACOSX",
 ]);
-
-const IGNORED_FILES = /^\.env(\..*)?$|\.(pem|key|p12|pfx|keystore)$/i;
 
 const TEXTUAL = /\.(json|js|mjs|cjs|ts|tsx|jsx|html|htm|css|svg|txt|md|map)$/i;
 
@@ -46,6 +45,12 @@ export interface PreviewUploadResult {
   zipUrl?: string;
   revokeUrl?: string;
   expiresAt?: string;
+  leftOut: { secrets: string[] };
+}
+
+export interface DistListing {
+  files: PreviewUploadFile[];
+  leftOut: { secrets: string[] };
 }
 
 export type PreviewUploadOutcome =
@@ -72,8 +77,9 @@ function encodeFile(
   return { content: bytes.toString("base64"), encoding: "base64" };
 }
 
-export function collectDistFiles(distDir: string): PreviewUploadFile[] {
+export function collectDistFiles(distDir: string): DistListing {
   const files: PreviewUploadFile[] = [];
+  const secrets: string[] = [];
 
   const walk = (dir: string) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -82,16 +88,32 @@ export function collectDistFiles(distDir: string): PreviewUploadFile[] {
       const absolute = path.join(dir, entry.name);
       if (entry.isSymbolicLink()) continue;
 
+      const relative = path.relative(distDir, absolute).split(path.sep).join("/");
+
       if (entry.isDirectory()) {
+        if (SECRET_FOLDERS.includes(entry.name)) {
+          secrets.push(`${relative}/`);
+          continue;
+        }
+
         walk(absolute);
         continue;
       }
 
       if (!entry.isFile()) continue;
-      if (IGNORED_FILES.test(entry.name)) continue;
 
-      const relative = path.relative(distDir, absolute).split(path.sep).join("/");
+      if (isSecretFile(entry.name) || isInstallConfig(entry.name)) {
+        secrets.push(relative);
+        continue;
+      }
+
       const bytes = fs.readFileSync(absolute);
+
+      if (holdsSecret(entry.name, absolute, bytes.length)) {
+        secrets.push(relative);
+        continue;
+      }
+
       const { content, encoding } = encodeFile(relative, bytes);
       files.push({ path: relative, content, encoding });
     }
@@ -99,7 +121,12 @@ export function collectDistFiles(distDir: string): PreviewUploadFile[] {
 
   walk(distDir);
 
-  return files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  const byPath = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+  return {
+    files: files.sort((a, b) => byPath(a.path, b.path)),
+    leftOut: { secrets: secrets.sort(byPath) },
+  };
 }
 
 export async function uploadPreview(options: {
@@ -134,9 +161,10 @@ export async function uploadPreview(options: {
   }
 
   let files: PreviewUploadFile[];
+  let leftOut: { secrets: string[] };
 
   try {
-    files = collectDistFiles(options.distDir);
+    ({ files, leftOut } = collectDistFiles(options.distDir));
   } catch (err: any) {
     return {
       ok: false,
@@ -296,6 +324,7 @@ export async function uploadPreview(options: {
           ? wwwRevokeUrl(data.revokeUrl)
           : undefined,
       expiresAt: typeof data.expiresAt === "string" ? data.expiresAt : undefined,
+      leftOut,
     },
   };
 }

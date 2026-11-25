@@ -182,6 +182,7 @@ export async function createShareFromBuild(args: {
         ...(share.expiresAt ? { expiresAt: share.expiresAt } : {}),
         serves: "platform-build",
         files: unpacked.files,
+        leftOut: share.leftOut,
         allowance: spendNarration({ what: "This share upload", body: uploaded.body }),
       },
       hint: `Anyone with previewUrl can open build ${buildId} for ${browser} in the emulator, with no install or sign-in, and download it as a zip from zipUrl, so the link hands over the built code. It stays live until expiresAt. Run extension_shares_read (action: "list") to find it again, or action:"revoke" with its artifactId to pull it back.${share.zipUrl ? ` ${ZIP_URL_REDIRECT_NOTE}` : ""}`,

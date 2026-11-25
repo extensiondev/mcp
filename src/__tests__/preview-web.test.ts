@@ -67,7 +67,7 @@ describe("extension_preview_web", () => {
       readManifest: vi.fn(() => ({ ...MANIFEST })),
       devCheckout: vi.fn(() => null),
       navigate: vi.fn(async () => JSON.stringify({ ok: true })),
-      uploadPreview: vi.fn(async () => ({ ok: true as const, data: { artifactId: "gen_probe", previewUrl: "http://preview.extension.localhost/?preview=gen_probe" }, body: {} })),
+      uploadPreview: vi.fn(async () => ({ ok: true as const, data: { artifactId: "gen_probe", previewUrl: "http://preview.extension.localhost/?preview=gen_probe", leftOut: { secrets: [] } }, body: {} })),
       recordSharedPreview: vi.fn(() => ({ recorded: true, path: "/elsewhere/widget/.extension.dev/shared-previews.json", entries: 1, note: "recorded" })),
     };
     const touched: string[] = [];
@@ -735,6 +735,60 @@ describe("extension_preview_web", () => {
 
       return uploaded;
     }
+
+    it("keeps every credential file in the build on the machine and names each in the answer", async () => {
+      const dir = tmpDist(MANIFEST);
+      process.env.EXTENSION_DEV_TOKEN = "tok_test";
+      const planted: Record<string, string> = {
+        ".npmrc": "registry=https://registry.npmjs.org/\n",
+        ".netrc": "machine github.com login x password y",
+        ".pypirc": "[pypi]\npassword = pypi-x",
+        ".env.production": "API_KEY=x",
+        "id_rsa": "-----BEGIN OPENSSH PRIVATE KEY-----",
+        "keys/id_deploy": "-----BEGIN OPENSSH PRIVATE KEY-----",
+        "keys/upload.jks": "binary",
+        "keys/AuthKey_X.p8": "-----BEGIN PRIVATE KEY-----",
+        "keys/embedded.mobileprovision": "binary",
+        "credentials.json": "{}",
+        "service-account-prod.json": "{}",
+        "config/app.json": '{ "private_key": "-----BEGIN PRIVATE KEY-----\\nMIIE" }',
+        ".aws/credentials": "[default]",
+        ".ssh/config": "Host x",
+      };
+      const kept = [".env.example", "id_rsa.pub", "popup.html", "src/key.js"];
+
+      for (const name of [...Object.keys(planted), ...kept]) {
+        fs.mkdirSync(path.dirname(path.join(dir, name)), { recursive: true });
+        fs.writeFileSync(path.join(dir, name), planted[name] ?? "ok");
+      }
+
+      let posted: string[] = [];
+      global.fetch = (async (_input: any, init: any) => {
+        if (init?.method === "POST") {
+          posted = JSON.parse(String(init.body)).generation.files.map((file: { path: string }) => file.path);
+
+          return new Response(JSON.stringify({ artifactId: "gen_keys", previewUrl: "https://preview.extension.dev/?preview=gen_keys" }), { status: 201, headers: { "content-type": "application/json" } });
+        }
+
+        throw new Error("unrouted");
+      }) as unknown as typeof fetch;
+
+      try {
+        const out = JSON.parse(await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }));
+
+        expect(out.value.share.ok).toBe(true);
+        expect(posted.sort()).toEqual([...kept, "manifest.json"].sort());
+        expect(out.value.share.leftOut.secrets).toEqual([
+          ".aws/", ".env.production", ".netrc", ".npmrc", ".pypirc", ".ssh/", "config/app.json", "credentials.json",
+          "id_rsa", "keys/AuthKey_X.p8", "keys/embedded.mobileprovision", "keys/id_deploy", "keys/upload.jks", "service-account-prod.json",
+        ]);
+
+        expect(out.value.share.note).toContain("14 credential files stayed on this machine");
+        expect(JSON.stringify(out)).not.toContain("BEGIN");
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
 
     it("refuses to certify a share whose zip a browser cannot read", async () => {
       const dir = tmpDist(MANIFEST);

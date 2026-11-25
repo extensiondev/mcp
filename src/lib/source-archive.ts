@@ -114,7 +114,9 @@ export interface SourceListing {
 }
 
 const SECRET_FILE_NAME =
-  /^(?:\.env(?:\..+)?|\.envrc|\.netrc|_netrc|\.git-credentials|id_(?:rsa|dsa|ecdsa|ecdsa_sk|ed25519|ed25519_sk|xmss)|.*\.(?:pem|p8|p12|pfx|key|keystore|jks|ppk)|client_secret.*\.json|.+-firebase-adminsdk-.+\.json)$/i;
+  /^(?:\.env(?:\..+)?|\.envrc|\.netrc|_netrc|\.pypirc|\.git-credentials|id_[a-z0-9_-]+|.*\.(?:pem|p8|p12|pfx|key|keystore|jks|ppk|mobileprovision)|credentials\.json|service[-_]account.*\.json|client_secret.*\.json|.+-firebase-adminsdk-.+\.json)$/i;
+
+export const SECRET_FOLDERS = [".aws", ".ssh", ".gnupg"];
 
 const REGISTRY_CONFIG_NAMES = [".npmrc", ".yarnrc.yml"];
 
@@ -127,15 +129,20 @@ const PRIVATE_KEY_FIELD = /"private_key"\s*:\s*"-----BEGIN [A-Z ]*PRIVATE KEY---
 const SECRET_CONTENT_MAX_BYTES = 1024 * 1024;
 
 /* @invariant A KEY FILE STAYS ON THE MACHINE BY ITS NAME, BEFORE .gitignore
- * IS READ. `.env` and every `.env.*`, `.envrc`, `.netrc`, `.git-credentials`,
- * the SSH identity files (never their `.pub` halves), every `*.pem`, `*.p8`
- * (the App Store Connect AuthKey), `*.p12`, `*.pfx`, `*.key`, `*.keystore`,
- * `*.jks` and `*.ppk`, and the two names Google gives a downloaded credential
- * are held back and named in `leftOut.secrets`, because a value in them is a
+ * IS READ. `.env` and every `.env.*`, `.envrc`, `.netrc`, `.pypirc`,
+ * `.git-credentials`, every extensionless `id_*` SSH identity (never its
+ * `.pub` half), every `*.pem`, `*.p8` (the App Store Connect AuthKey),
+ * `*.p12`, `*.pfx`, `*.key`, `*.keystore`, `*.jks`, `*.ppk` and
+ * `*.mobileprovision`, `credentials.json`, `service-account*.json`, the two
+ * names Google gives a downloaded credential, and the `.aws`, `.ssh` and
+ * `.gnupg` folders are held back and named in `leftOut.secrets`, because a
+ * value in them is a
  * secret the moment it leaves the machine. The three example forms of `.env`
  * ship. The platform holds the same list in www
  * src/services/projects/source-archive.ts and refuses an archive that
- * carries one; a name added on one side is added on both.
+ * carries one; a name added on one side is added on both. A shared preview
+ * walks a build with the same list, and drops `.npmrc` and `.yarnrc.yml` by
+ * name, because a built extension never installs.
  */
 export function isSecretFile(name: string): boolean {
   const lower = name.toLowerCase();
@@ -153,6 +160,10 @@ export function isSecretFile(name: string): boolean {
  * PEM private key. A file that cannot be read here is left to the archive
  * step, which names the read failure.
  */
+export function isInstallConfig(name: string): boolean {
+  return REGISTRY_CONFIG_NAMES.includes(name.toLowerCase());
+}
+
 export function holdsSecret(name: string, absolute: string, bytes: number): boolean {
   const lower = name.toLowerCase();
   const registry = REGISTRY_CONFIG_NAMES.includes(lower);
@@ -205,6 +216,12 @@ export function collectSourceFiles(root: string): SourceListing {
 
       if (entry.isDirectory()) {
         if (SKIPPED_FOLDERS.has(entry.name)) continue;
+
+        if (SECRET_FOLDERS.includes(entry.name)) {
+          secrets.push(`${relativePath}/`);
+          continue;
+        }
+
         if (gitignored(relativePath, true, rules)) continue;
 
         walk(absolute, relativePath, rules);
