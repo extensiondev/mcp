@@ -1053,29 +1053,30 @@ describe("the guided store connect opens the MCP's own browser with extension.de
       const bound = (bodies: string[], extra: Partial<GuidedConnectRuntime> = {}) =>
         binding({ url: PROD_HANDOFF, launchBound: true, launchExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString() }, bodies, extra);
 
-      it("opens the Edge overview in front and signs the console in on the project's guided Edge page", async () => {
+      it("opens the project's guided Edge page for a full sign-in and never mints the MCP's store-connect-only session for it", async () => {
         prodSignIn();
         const bodies: string[] = [];
         const out = JSON.parse((await guideFirstListing(firstSubmission("first-submission-to-do"), { api: PROD }, bound(bodies)))!);
-        const launch = JSON.parse(fs.readFileSync(path.join(launches[0]!.extensionDir, "launch.json"), "utf8"));
+        const consolePage = `https://console.extension.dev/${WORKSPACE}/rebeccat/submissions/edge?guide=first-listing`;
 
-        expect(launches[0]!.url).toBe(PARTNER_CENTER_OVERVIEW);
-        expect(JSON.parse(bodies[0]!)).toMatchObject({ next: `/${WORKSPACE}/rebeccat/submissions/edge?guide=first-listing` });
-        expect(crypto.createHash("sha256").update(launch.secret).digest("hex")).toBe(JSON.parse(bodies[0]!).launchHash);
-        expect(out).toMatchObject({ status: "first-listing-guided", value: { opened: true, landedOn: PARTNER_CENTER_OVERVIEW, guidedBrowser: { opened: true }, nextStep: { kind: "dashboard", url: PARTNER_CENTER_OVERVIEW } } });
+        expect(bodies).toEqual([]);
+        expect(asked.some((url) => url.endsWith("/api/cli/console-handoff"))).toBe(false);
+        expect(launches[0]!.url).toBe(consolePage);
+        expect(fs.existsSync(path.join(launches[0]!.extensionDir, "launch.json"))).toBe(false);
+        expect(out).toMatchObject({ status: "first-listing-guided", value: { opened: true, landedOn: consolePage, partnerCenterPage: PARTNER_CENTER_OVERVIEW, guidedBrowser: { opened: true }, nextStep: { kind: "dashboard", url: consolePage } } });
         expect(out.value).not.toHaveProperty("openPages");
+        expect(out.value.sayToPerson).toContain("full extension.dev sign-in");
+        expect(out.value.sayToPerson).toContain("press End session");
         expect(out.value.sayToPerson).toContain("presses \"Create new extension\" once");
         expect(out.value.sayToPerson).toContain("stops before Publish");
         expect(out.value.sayToPerson).toContain("Hidden");
-        expect(JSON.stringify(out)).not.toContain(launch.secret);
-        expect(JSON.stringify(out)).not.toContain("c".repeat(43));
       });
 
-      it("opens the project's own product when Partner Center already holds one, and never presses Create for it", async () => {
+      it("names the project's own product when Partner Center already holds one, and never presses Create for it", async () => {
         prodSignIn();
         const out = JSON.parse((await guideFirstListing(firstSubmission("first-submission-waiting", { dashboardUrl: `https://partner.microsoft.com/dashboard/microsoftedge/${PRODUCT}/packages/dashboard` }), { api: PROD }, bound([])))!);
 
-        expect(launches[0]!.url).toBe(`https://partner.microsoft.com/dashboard/microsoftedge/${PRODUCT}/packages`);
+        expect(out.value.partnerCenterPage).toBe(`https://partner.microsoft.com/dashboard/microsoftedge/${PRODUCT}/packages`);
         expect(out.value.sayToPerson).toContain(PRODUCT);
         expect(out.value.sayToPerson).not.toContain("Create new extension");
       });
@@ -1095,7 +1096,6 @@ describe("the guided store connect opens the MCP's own browser with extension.de
 
         expect(await guideFirstListing(firstSubmission("first-submission-to-do"), { api: PROD }, bound([], { windowCheck: async () => "headless" }))).toBeNull();
         expect(launches).toHaveLength(1);
-        expect(fs.existsSync(path.join(launches[0]!.extensionDir, "launch.json"))).toBe(false);
       });
     });
 

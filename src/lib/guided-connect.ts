@@ -437,7 +437,7 @@ export type GuidedOpen =
   | { opened: false; note: string }
   | { opened: true; choice: GuidedBrowserChoice; label: string; extension: ToolsExtension; landing: ConsoleLanding; launched: LaunchResult; profileDir: string; onStorePage: boolean };
 
-export async function openGuided(options: { workspace: string; next: string; plainUrl: string; storePage: string | null; api?: string; runtime: GuidedConnectRuntime }): Promise<GuidedOpen> {
+export async function openGuided(options: { workspace: string; next: string | null; plainUrl: string; storePage: string | null; api?: string; runtime: GuidedConnectRuntime }): Promise<GuidedOpen> {
   const { runtime } = options;
   const block = runtime.launchBlock();
   if (block) return { opened: false, note: `No browser was opened: ${block}.` };
@@ -454,7 +454,7 @@ export async function openGuided(options: { workspace: string; next: string; pla
 
   const secret = options.storePage ? crypto.randomBytes(32).toString("base64url") : "";
   const launchHash = secret ? crypto.createHash("sha256").update(secret).digest("hex") : undefined;
-  const landing = await consoleLanding({ workspace: options.workspace, next: options.next, plainUrl: options.plainUrl, api: options.api, launchHash, fetchImpl: runtime.fetch });
+  const landing: ConsoleLanding = options.next === null ? { openUrl: options.plainUrl, signedIn: false, note: "" } : await consoleLanding({ workspace: options.workspace, next: options.next, plainUrl: options.plainUrl, api: options.api, launchHash, fetchImpl: runtime.fetch });
   const onStorePage = Boolean(options.storePage && landing.launchBound && landing.openUrl.split("#")[0] === LAUNCH_HANDOFF_PAGE);
   const extensionDir = guidedCopy(extension.dir, runtime.cacheDir(), engine);
 
