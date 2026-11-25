@@ -177,3 +177,34 @@ describe("1107: every answer carries the envelope as structuredContent, and a fe
     expect((answer.structuredContent as { command: string }).command).toBe("extension_docs_search");
   });
 });
+
+describe("an eval, storage or logs answer never outgrows what a client takes, and a cut answer says how to read the rest", () => {
+  it("cuts an eval of a 300,000 character string to the limit, keeps its keys, and names the narrower expression", () => {
+    const text = envelope({ ok: true, command: "extension_eval", status: "evaluated", value: { context: "background", result: "x".repeat(300_000) }, hint: "The expression ran in the background." });
+    const answer = toolResultFrame(text, true).content[0].text;
+    const parsed = JSON.parse(answer.slice(answer.indexOf("{"), answer.lastIndexOf("}") + 1));
+
+    expect(answer.length).toBeLessThan(50_000);
+    expect(parsed).toMatchObject({ ok: true, truncated: true, value: { context: "background", answerCut: { limit: 40_000 } } });
+    expect(parsed.value.answerCut.fullChars).toBeGreaterThan(300_000);
+    expect(parsed.hint).toContain("a path into the object");
+    expect(parsed.warnings).toContain("The expression ran in the background.");
+  });
+
+  it("cuts a storage area of many keys and names the one-key read", () => {
+    const area = Object.fromEntries(Array.from({ length: 2_000 }, (_, index) => [`key${index}`, "v".repeat(100)]));
+    const text = envelope({ ok: true, command: "extension_storage", status: "read", value: { area: "local", values: area } });
+    const parsed = JSON.parse(toolResultFrame(text).content[0].text);
+
+    expect(JSON.stringify(parsed.value).length).toBeLessThanOrEqual(40_200);
+    expect(parsed.truncated).toBe(true);
+    expect(parsed.value.area).toBe("local");
+    expect(parsed.hint).toContain("Read one key with key");
+  });
+
+  it("leaves a long answer of a tool that composes its own value whole", () => {
+    const text = envelope({ ok: true, command: "extension_submit", status: "preflight", value: { rows: Array.from({ length: 600 }, (_, index) => ({ id: `row${index}`, note: "n".repeat(100) })) } });
+
+    expect(toolResultFrame(text).content[0].text).toBe(text);
+  });
+});

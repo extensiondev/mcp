@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { cappedAnswer } from "./answer-cap";
 import { composedInThisCall } from "./composed-refusal";
 import { hintedAnswer, isEnvelope, type Envelope, reframed } from "./envelope";
 import { fenceUntrusted } from "./untrusted-fence";
@@ -55,7 +56,7 @@ const COMPOSED_REFUSAL_CODES = new Set([
 ]);
 
 export function toolResultFrame(answer: string, untrusted = false): ToolFrame {
-  const result = hintedAnswer(answer);
+  const result = hintedAnswer(cappedAnswer(answer));
   let refused: boolean;
   let composed = false;
 
