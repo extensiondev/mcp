@@ -19,11 +19,11 @@ import type { WebDriverClient } from "./webdriver";
 const PRODUCT = /^[A-Za-z]+\/(\d[\w.]*)/;
 const UA_VERSION = /\bVersion\/(\d[\w.]*)/;
 
-function version(browser: CaptureBrowser, raw: unknown): CapturedIn | null {
+function version(browser: CaptureBrowser, raw: unknown, name: string = browserDisplayName(browser)): CapturedIn | null {
   const text = typeof raw === "string" ? raw.trim() : "";
   const parsed = /^\d/.test(text) ? text : (PRODUCT.exec(text)?.[1] ?? "");
 
-  return parsed ? { name: browserDisplayName(browser), version: parsed } : null;
+  return parsed ? { name, version: parsed } : null;
 }
 
 /* @invariant THE BROWSER THAT MADE A CAPTURE IS READ FROM THE LIVE SESSION,
@@ -36,13 +36,13 @@ function version(browser: CaptureBrowser, raw: unknown): CapturedIn | null {
  * capabilities (the automation window's own user agent when the session
  * read refuses). A read that fails leaves capturedIn out rather than
  * inventing one. */
-export async function capturedInChromium(port: number, browser: CaptureBrowser, timeoutMs: number): Promise<CapturedIn | null> {
+export async function capturedInChromium(port: number, browser: CaptureBrowser, timeoutMs: number, name: string = browserDisplayName(browser)): Promise<CapturedIn | null> {
   const client = new CDPClient();
 
   try {
     await client.connect(await CDPClient.discoverBrowserWsUrl(port));
     const answer = (await client.sendCommand("Browser.getVersion", {}, undefined, timeoutMs)) as { product?: unknown } | null;
-    const read = version(browser, answer?.product);
+    const read = version(browser, answer?.product, name);
     if (read) return read;
   } catch {
     void 0;
@@ -50,7 +50,7 @@ export async function capturedInChromium(port: number, browser: CaptureBrowser, 
     client.disconnect();
   }
 
-  return version(browser, await CDPClient.discoverBrowserVersion(port));
+  return version(browser, await CDPClient.discoverBrowserVersion(port), name);
 }
 
 function contractBrowserVersion(projectPath: string, browser: CaptureBrowser): CapturedIn | null {

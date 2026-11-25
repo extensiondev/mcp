@@ -63,6 +63,14 @@ export function isCaptureBrowser(value: unknown): value is CaptureBrowser {
 
 export const browserDisplayName = (browser: CaptureBrowser): string => BROWSER_NAMES[browser];
 
+const ENGINE_SETS: Record<string, { set: CaptureBrowser; name: string }> = { chromium: { set: "chrome", name: "Chromium" } };
+
+export function captureSetOf(browser: string): { set: CaptureBrowser; name: string } | null {
+  if (isCaptureBrowser(browser)) return { set: browser, name: browserDisplayName(browser) };
+
+  return ENGINE_SETS[browser] ?? null;
+}
+
 export const capturesFolder = (browser: CaptureBrowser): string => `${CAPTURES_DIR}/${browser}`;
 
 export function capturesDir(projectPath: string, browser: CaptureBrowser): string {

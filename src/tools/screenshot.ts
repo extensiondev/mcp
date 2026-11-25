@@ -73,6 +73,7 @@ import {
   CAPTURE_BROWSERS,
   browserDisplayName,
   capturesFolder,
+  captureSetOf,
   isCaptureBrowser,
   majorVersion,
   nextCapturePath,
@@ -200,7 +201,8 @@ function captured(
       ? `The browser answered a ${size.width} x ${size.height} image where ${expected.width} x ${expected.height} was expected (a ${asked.width} x ${asked.height} CSS viewport at deviceScaleFactor ${asked.deviceScaleFactor}); width and height name the image as answered.`
       : null;
 
-  if (args.browserCapture && isCaptureBrowser(browser)) return capturedForBrowser(args, browser, context, png, url, transport, warnings, capturedIn, targetId);
+  const set = args.browserCapture ? captureSetOf(browser) : null;
+  if (set) return capturedForBrowser(args, set.set, context, png, url, transport, warnings, capturedIn, targetId, browser);
 
   const written = writeScreenshot(args.projectPath, browser, context, png, args.path);
   if (!written.ok) return refuse("bad-request", "E_BAD_REQUEST", written.message, written.hint);
@@ -234,6 +236,7 @@ function capturedForBrowser(
   warnings: Array<string | null>,
   capturedIn: CapturedIn | null,
   targetId?: string,
+  sessionBrowser: string = browser,
 ): string {
   const flat = flattenPngAlpha(png);
   if ("problem" in flat) return refuse("capture-failed", "E_CAPTURE_FAILED", `The browser answered ${flat.problem} for ${url}, which this tool cannot flatten for a browser capture.`);
@@ -245,14 +248,14 @@ function capturedForBrowser(
 
   const index = recordCapture(args.projectPath, browser, { file: path.basename(file), surface, width: flat.width, height: flat.height, capturedAt: new Date().toISOString() }, capturedIn);
   const made = majorVersion(capturedIn) || majorVersion(index.capturedIn);
-  const notes = [...warnings, capturedIn ? null : `The ${browser} session did not answer its version, so ${capturesFolder(browser)}/captures.json ${index.capturedIn ? "keeps the browser it recorded before" : "records no capturedIn"}; the build page then says the browser without a version.`];
+  const notes = [...warnings, capturedIn ? null : `The ${sessionBrowser} session did not answer its version, so ${capturesFolder(browser)}/captures.json ${index.capturedIn ? "keeps the browser it recorded before" : "records no capturedIn"}; the build page then says the browser without a version.`];
 
   return envelope({
     ok: true,
     command: COMMAND,
     status: "captured",
     value: {
-      browser,
+      browser: sessionBrowser,
       context,
       url,
       ...(targetId ? { targetId } : {}),
@@ -267,7 +270,7 @@ function capturedForBrowser(
       transport,
     },
     warnings: notes,
-    hint: `${file} (${flat.width} x ${flat.height} pixels) is a ${made || browserDisplayName(browser)} capture of the ${context}. ${syncCapturesDoor(browser)}`,
+    hint: `${file} (${flat.width} x ${flat.height} pixels) is a ${made || (captureSetOf(sessionBrowser)?.name ?? browserDisplayName(browser))} capture of the ${context}. ${syncCapturesDoor(browser)}`,
   });
 }
 
@@ -539,7 +542,8 @@ async function onChromium(args: Args, browser: string, context: string, timeoutM
     return capturedForStores(args, browser, context, "chromium", shoot, target.url, "cdp", [warning], target.targetId);
   }
 
-  const capturedIn = args.browserCapture && isCaptureBrowser(browser) ? await capturedInChromium(resolved.port, browser, timeoutMs) : null;
+  const set = args.browserCapture ? captureSetOf(browser) : null;
+  const capturedIn = set ? await capturedInChromium(resolved.port, set.set, timeoutMs, set.name) : null;
   const { outcome, behindWindow, hiddenTab, size } = await captureCdpPage(resolved.port, target.targetId, args, timeoutMs, session);
   const behindNote = behindWindow.tried && behindWindow.shown && outcome.ok ? BEHIND_WINDOW_CAPTURED : null;
 
@@ -710,12 +714,12 @@ export async function handler(args: Args): Promise<string> {
 
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
 
-  if (args.browserCapture && !isCaptureBrowser(browser)) {
+  if (args.browserCapture && !captureSetOf(browser)) {
     return refuse(
       "bad-request",
       "E_BAD_REQUEST",
       `The build pages show captures for ${CAPTURE_BROWSERS.join(", ")}, and this session runs ${browser}, so there is no captures/${browser}/ set to send.`,
-      `Start a dev session on one of them (extension_dev browser:"chrome") and capture there, or capture without browserCapture for a file of your own.`,
+      `Start a dev session on one of them (extension_dev browser:"chrome"), or on chromium, whose captures file into the chrome set, and capture there; or capture without browserCapture for a file of your own.`,
     );
   }
 

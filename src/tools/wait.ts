@@ -38,6 +38,7 @@ import {
 } from "../lib/session-starting";
 import { recentErrorLogs } from "./doctor";
 import { jsonReadFailure } from "../lib/manifest-path";
+import { readUnpackedRefusal, unpackedRefusalLifted, unpackedRefusalSays, type UnpackedRefusal } from "../lib/unpacked-refusal";
 
 import type { ReadyContract } from "../lib/types";
 
@@ -122,6 +123,7 @@ export async function handler(args: {
   let sawCompiledButUnattached = false;
   let unattachedContract: ReadyContract | null = null;
   const unattached = new UnattachedWatch(args.projectPath, browser);
+  let refusal: UnpackedRefusal | null | undefined;
   let lastContractStatus: string | null = null;
   let staleContractNote: string | null = null;
   let contractUnreadable: string | null = null;
@@ -305,8 +307,13 @@ export async function handler(args: {
           });
         }
 
-        if (!attached && browserUpNotAttached(contract)) {
+        if (!attached && browserUpNotAttached(contract) && refusal === undefined) {
+          refusal = await readUnpackedRefusal(args.projectPath, browser);
+        }
+
+        if (!attached && browserUpNotAttached(contract) && !(refusal && unpackedRefusalLifted(refusal))) {
           return browserUpNotAttachedAnswer(contract, {
+            refusal,
             command: schema.name,
             projectPath: args.projectPath,
             browser,
@@ -331,7 +338,7 @@ export async function handler(args: {
         const beforeRecovery = recovered ? recentErrorLogs(args.projectPath, browser, 3, {}, { beforeMs: reloadedMs }) : [];
         const guestCheck = await verifyGuestLoaded(args.projectPath, browser);
         const signingFrame = await safariSigningFrame(args.projectPath, browser);
-        const warnings: string[] = [...(signingFrame?.warnings ?? []), ...(unattached.recovery ? [unattached.recovery.say] : [])];
+        const warnings: string[] = [...(signingFrame?.warnings ?? []), ...(unattached.recovery ? [unattached.recovery.say] : []), ...(refusal ? [unpackedRefusalSays(refusal)] : [])];
 
         if (runtimeErrors.length) {
           warnings.push(
@@ -440,6 +447,7 @@ export async function handler(args: {
       warnings: [clampNote, staleContractNote],
       contract: unattachedContract,
       recovery: unattached.recovery,
+      refusal,
     });
   }
 

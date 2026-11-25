@@ -193,6 +193,31 @@ describe("extension_dev relays the engine's attach diagnosis instead of a generi
     expect(result.hint).not.toContain(NO_ATTACH_DIAGNOSIS_NOTE);
   }, 15_000);
 
+  it("relays the branded Chrome refusal the wait read, not the engine's profile picker sentence", async () => {
+    const project = tmpProject();
+    const refusal = { extensionId: "kgdaecdpfkikjncaalnmmnjjfpofkcbl", state: "DISABLED", disableReasons: ["unsupportedDeveloperExtension"], browserVersion: "Chrome/158.0.8127.88", developerModeTurnedOn: false, stateAfter: null };
+    const binary = "/Applications/Chromium.app/Contents/MacOS/Chromium";
+    const chromium = `Relaunch on Chromium under the same target, which keeps dist/chrome and files captures into the chrome set: call extension_dev with replace: true and chromiumBinary: "${binary}".`;
+
+    waitAnswer = () => {
+      const answer = JSON.parse(diagnosed(project));
+      answer.value.unpackedRefusal = refusal;
+      answer.value.nextStep = { kind: "relaunch", tool: "extension_dev", args: { projectPath: project, browser: "chrome", replace: true, chromiumBinary: binary }, say: chromium };
+
+      return JSON.stringify(answer);
+    };
+
+    const result = JSON.parse(await dev.handler({ projectPath: project }));
+
+    expect(result.status).toBe("compiled-not-attached");
+    expect(result.error.message).toContain("the browser turned the extension off");
+    expect(result.hint).not.toContain("profile picker");
+    expect(result.hint).toContain("Chrome 158.0.8127.88 turned this unpacked extension off");
+    expect(result.hint).toContain(chromium);
+    expect(result.value.unpackedRefusal).toEqual(refusal);
+    expect(result.value.nextStep.args.chromiumBinary).toBe(binary);
+  }, 15_000);
+
   it("keeps the started answer for an engine that stamps no diagnosis and says the engine reports none", async () => {
     const project = tmpProject();
 

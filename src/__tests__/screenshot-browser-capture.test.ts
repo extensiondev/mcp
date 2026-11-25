@@ -208,6 +208,18 @@ describe("extension_screenshot browserCapture files the capture under captures/<
     expect(fs.existsSync(path.join(dir, "captures"))).toBe(false);
   });
 
+  it("chromium files into the chrome set under its own name, so the Chromium way out of a branded Chrome refusal still captures", async () => {
+    await chromium("chromium", [], "Chrome/146.0.7670.0");
+
+    const out = await run({ projectPath: dir, browser: "chromium", url: "rebeccat", browserCapture: true });
+
+    expect(out.ok).toBe(true);
+    expect(out.value).toMatchObject({ browser: "chromium", browserCapture: true, folder: "captures/chrome", capturedIn: { name: "Chromium", version: "146.0.7670.0" } });
+    expect(out.value.path).toBe(path.join(dir, "captures", "chrome", "page-01.png"));
+    expect(out.hint).toBe(`${out.value.path} (640 x 480 pixels) is a Chromium 146 capture of the page. ${door("chrome")}`);
+    expect(index("chrome")).toMatchObject({ browser: "chrome", capturedIn: { name: "Chromium", version: "146.0.7670.0" }, captures: [{ file: "page-01.png", surface: "page" }] });
+  });
+
   it("refuses a session on a browser the build pages do not show, naming the four", async () => {
     await chromium("brave");
 

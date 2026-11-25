@@ -20,8 +20,10 @@ import { safariSigningFrame } from "./safari-signing";
 import { browserProfileRootDir } from "./session-paths";
 import { sessionPorts } from "./session-ports";
 import { dropTrailing } from "./linear-text";
+import { readUnpackedRefusal, unpackedRefusalLifted, unpackedRefusalSays, unpackedRefusalWayOut } from "./unpacked-refusal";
 
 import type { ExecutorRecovery } from "./executor-recovery";
+import type { UnpackedRefusal } from "./unpacked-refusal";
 import type { ReadyContract } from "./types";
 
 export const NO_ATTACH_DIAGNOSIS_NOTE =
@@ -40,6 +42,7 @@ export interface NotAttachedContext {
   warnings?: Array<string | null | undefined | false>;
   contract?: ReadyContract | null;
   recovery?: ExecutorRecovery | null;
+  refusal?: UnpackedRefusal | null;
 }
 
 export type FailedLeg = "browser" | "extension-load" | "executor";
@@ -152,6 +155,16 @@ function wayOutSentence(profile: string): string {
   return `Relaunch on a fresh profile: call extension_dev with replace: true and profile: "${profile}".`;
 }
 
+function refusalSentences(refusal: UnpackedRefusal, wayOut: string): { message: string; sayToPerson: string; hint: string } {
+  const says = unpackedRefusalSays(refusal);
+
+  return {
+    message: `The extension compiled and the browser is up, but the browser turned the extension off, so nothing can connect. ${says}`,
+    sayToPerson: `${says} ${wayOut}`,
+    hint: `${says} ${wayOut}`,
+  };
+}
+
 function sentences(hint: string, wayOut: string): { message: string; sayToPerson: string; hint: string } {
   return {
     message: `The extension compiled and the browser is up, but nothing inside it has connected. ${hint}`,
@@ -176,14 +189,16 @@ export function browserUpNotAttachedAnswer(
     projectPath: ctx.projectPath,
     browser: ctx.browser,
   });
-  const wayOut = wayOutSentence(profile);
-  const said = sentences(hint, wayOut);
+  const refusal = ctx.refusal ?? null;
+  const refusalWay = refusal ? unpackedRefusalWayOut(ctx.projectPath, ctx.browser) : null;
+  const wayOut = refusalWay ? refusalWay.sentence : wayOutSentence(profile);
+  const said = refusal ? refusalSentences(refusal, wayOut) : sentences(hint, wayOut);
 
   return envelope({
     ok: false,
     command: ctx.command,
     status: "compiled-not-attached",
-    error: { code: "E_NOT_ATTACHED", message: said.message },
+    error: { code: "E_NOT_ATTACHED", message: `${said.message} ${answeredAtOnce(contract)}` },
     value: {
       compiled: true,
       browserAttached: false,
@@ -200,6 +215,7 @@ export function browserUpNotAttachedAnswer(
           : null,
       browserUpNotAttachedAt: contract.browserUpNotAttachedAt,
       browserUpNotAttachedHint: hint,
+      ...(refusal ? { unpackedRefusal: refusal, unpackedRefusalSays: unpackedRefusalSays(refusal) } : {}),
       readyPath: ctx.readyPath,
       budgetMs: ctx.budgetMs,
       elapsedMs: ctx.elapsedMs,
@@ -207,12 +223,14 @@ export function browserUpNotAttachedAnswer(
       nextStep: {
         kind: "relaunch",
         tool: "extension_dev",
-        args: {
-          projectPath: ctx.projectPath,
-          browser: ctx.browser,
-          replace: true,
-          profile,
-        },
+        args: refusalWay
+          ? refusalWay.args
+          : {
+              projectPath: ctx.projectPath,
+              browser: ctx.browser,
+              replace: true,
+              profile,
+            },
         say: wayOut,
       },
     },
@@ -229,11 +247,13 @@ export function browserUpNotAttachedRelay(
 
   const nextStep = ready.nextStep as { say?: unknown } | undefined;
   const wayOut = typeof nextStep?.say === "string" ? nextStep.say : "";
-  const said = sentences(ready.browserUpNotAttachedHint, wayOut);
+  const refusal = ready.unpackedRefusal as UnpackedRefusal | undefined;
+  const said = refusal ? refusalSentences(refusal, wayOut) : sentences(ready.browserUpNotAttachedHint, wayOut);
 
   return {
     value: {
       browserUpNotAttachedHint: ready.browserUpNotAttachedHint,
+      ...(refusal ? { unpackedRefusal: refusal, unpackedRefusalSays: unpackedRefusalSays(refusal) } : {}),
       profilePath: ready.profilePath ?? null,
       profileReused: ready.profileReused ?? null,
       browserPid: ready.browserPid ?? null,
@@ -276,8 +296,11 @@ export async function compiledNotAttachedAnswer(
 
   const signingFrame = await safariSigningFrame(ctx.projectPath, ctx.browser);
   const undiagnosed = isSafariTarget(ctx.browser) ? "" : `, and ${NO_ATTACH_DIAGNOSIS_NOTE}`;
-  const observed = await observeAttachLegs(ctx.contract, ctx);
-  const wayOut = observed.freshProfile ? wayOutSentence(observed.freshProfile) : null;
+  const legs = await observeAttachLegs(ctx.contract, ctx);
+  const refusal = ctx.refusal ?? (legs.failedLeg === "extension-load" ? await readUnpackedRefusal(ctx.projectPath, ctx.browser) : null);
+  const observed = refusal ? refusalLegs(refusal, legs) : legs;
+  const refusalStep = refusal ? refusalNextStep(refusal, ctx) : null;
+  const wayOut = refusalStep ? refusalStep.say : observed.freshProfile ? wayOutSentence(observed.freshProfile) : null;
   const enableExtension = findSessionInfo(ctx.projectPath, ctx.browser)?.enableExtension === true;
   const safariEnable = safariEnableFrame(ctx.projectPath, ctx.browser, enableExtension, { identity: signingFrame?.signing.identity });
 
@@ -299,7 +322,10 @@ export async function compiledNotAttachedAnswer(
       ...(Object.keys(observed.legs).length ? { legs: observed.legs } : {}),
       ...(ctx.recovery ? { executorRecovery: ctx.recovery } : {}),
       rebuildsReachBrowser: false,
-      ...(observed.freshProfile && wayOut
+      ...(refusal ? { unpackedRefusal: refusal } : {}),
+      ...(refusalStep
+        ? { sayToPerson: `${observed.failedLegSays} ${refusalStep.say}`, nextStep: refusalStep }
+        : observed.freshProfile && wayOut
         ? {
             sayToPerson: `${observed.failedLegSays} ${wayOut}`,
             nextStep: {
@@ -321,4 +347,26 @@ export async function compiledNotAttachedAnswer(
       ...(signingFrame?.hints ?? []),
     ].join(" "),
   });
+}
+
+function refusalLegs(refusal: UnpackedRefusal, legs: ObservedAttachLegs): ObservedAttachLegs {
+  return { ...legs, failedLeg: "extension-load", failedLegSays: unpackedRefusalSays(refusal), freshProfile: null };
+}
+
+function refusalNextStep(refusal: UnpackedRefusal, ctx: NotAttachedContext): Record<string, unknown> & { say: string } {
+  if (unpackedRefusalLifted(refusal)) {
+    const say = "Call extension_wait again: the extension is on now, and the dev server stamps executorAttachedAt when its background connects.";
+
+    return { kind: "wait", tool: "extension_wait", args: { projectPath: ctx.projectPath, browser: ctx.browser }, say };
+  }
+
+  const way = unpackedRefusalWayOut(ctx.projectPath, ctx.browser);
+
+  return { kind: "relaunch", tool: "extension_dev", args: way.args, say: way.sentence };
+}
+
+function answeredAtOnce(contract: ReadyContract): string {
+  const waited = typeof contract.browserUpNotAttachedWaitMs === "number" ? ` after waiting ${Math.round(contract.browserUpNotAttachedWaitMs / 1000)} s` : "";
+
+  return `This answer comes at once, not at the end of the budget, because the dev server already stamped this diagnosis into ready.json${waited}.`;
 }

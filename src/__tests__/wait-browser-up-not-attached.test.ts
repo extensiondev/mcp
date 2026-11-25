@@ -24,6 +24,8 @@ import {
   freshProfilePath,
 } from "../lib/compiled-not-attached";
 import { browserProfileRootDir } from "../lib/session-paths";
+import { systemChromiumBinary } from "../lib/unpacked-refusal";
+import { onlyFakeChromeFetch, startFakeChrome, type FakeChrome } from "./fixtures/fake-chrome";
 import {
   writeCompiledUnattachedContract,
   writeModernContract,
@@ -142,6 +144,98 @@ describe("extension_wait answers the engine's own attach diagnosis as soon as re
     expect(later.value.nextStep).toBeUndefined();
 
     targets.mockRestore();
+  }, 10_000);
+});
+
+describe("extension_wait reads the extension's own state when branded Chrome turned the unpacked copy off", () => {
+  const EXTENSION_ID = "kgdaecdpfkikjncaalnmmnjjfpofkcbl";
+  let chrome: FakeChrome | null = null;
+
+  afterEach(async () => {
+    await chrome?.close();
+    chrome = null;
+    vi.unstubAllGlobals();
+  });
+
+  async function refusingChrome(flip: boolean, onFlip: () => void = () => {}): Promise<FakeChrome> {
+    let enabled = false;
+    chrome = await startFakeChrome([], (command) => {
+      if (command.method === "Target.createTarget") return { targetId: "EXTENSIONS" };
+      if (command.method !== "Runtime.evaluate") return undefined;
+
+      const expression = String(command.params.expression);
+
+      if (expression.includes("updateProfileConfiguration")) {
+        enabled = flip;
+        if (flip) onFlip();
+
+        return { result: { type: "boolean", value: flip } };
+      }
+
+      if (expression.includes("getExtensionInfo")) {
+        return { result: { type: "object", value: enabled ? { state: "ENABLED", reasons: [] } : { state: "DISABLED", reasons: ["unsupportedDeveloperExtension"] } } };
+      }
+
+      return undefined;
+    });
+
+    vi.stubGlobal("fetch", onlyFakeChromeFetch(() => chrome!.port));
+
+    return chrome;
+  }
+
+  it("names unsupportedDeveloperExtension instead of a profile picker and offers the Chromium relaunch when developer mode will not turn on", async () => {
+    const fake = await refusingChrome(false);
+    registerSession({ pid: process.pid, browser: "chrome", projectPath: dir, command: "dev" });
+    writeCompiledUnattachedContract(dir, "chrome", {
+      pid: process.pid,
+      cdpPort: fake.port,
+      extensionId: EXTENSION_ID,
+      profilePath: PROFILE,
+      profileReused: true,
+      browserUpNotAttachedAt: "2026-11-25T20:37:15.000Z",
+      browserUpNotAttachedWaitMs: 15_000,
+      browserUpNotAttachedHint: HINT,
+    });
+
+    const result = JSON.parse(await handler({ projectPath: dir, browser: "chrome", timeoutMs: 40_000 }));
+    const binary = systemChromiumBinary();
+
+    expect(result.status).toBe("compiled-not-attached");
+    expect(result.error.message).toContain("the browser turned the extension off");
+    expect(result.error.message).toContain("after waiting 15 s");
+    expect(result.hint).not.toContain("profile picker");
+    expect(result.hint).toContain(`Chrome 151 turned this unpacked extension off: chrome://extensions reads ${EXTENSION_ID} as DISABLED with disableReasons.unsupportedDeveloperExtension`);
+    expect(result.hint).toContain("A fresh profile does not change that.");
+    expect(result.value.unpackedRefusal).toMatchObject({ extensionId: EXTENSION_ID, state: "DISABLED", developerModeTurnedOn: false });
+    expect(result.value.nextStep.args).toEqual(
+      binary
+        ? { projectPath: dir, browser: "chrome", replace: true, chromiumBinary: binary }
+        : { projectPath: dir, browser: "chromium", replace: true },
+    );
+
+    expect(fake.commands.some((c) => c.method === "Target.closeTarget")).toBe(true);
+  }, 10_000);
+
+  it("turns developer mode on, keeps waiting, and answers ready with the repair named once the background connects", async () => {
+    const fake = await refusingChrome(true, () => {
+      setTimeout(() => writeModernContract(dir, "chrome", { pid: process.pid, cdpPort: chrome!.port, extensionId: EXTENSION_ID }), 50);
+    });
+    registerSession({ pid: process.pid, browser: "chrome", projectPath: dir, command: "dev" });
+    writeCompiledUnattachedContract(dir, "chrome", {
+      pid: process.pid,
+      cdpPort: fake.port,
+      extensionId: EXTENSION_ID,
+      browserUpNotAttachedAt: "2026-11-25T20:37:15.000Z",
+      browserUpNotAttachedWaitMs: 15_000,
+      browserUpNotAttachedHint: HINT,
+    });
+
+    const result = JSON.parse(await handler({ projectPath: dir, browser: "chrome", timeoutMs: 5_000 }));
+
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe("ready");
+    expect(result.warnings.join("\n")).toContain("This server turned developer mode on in the session's profile and Chrome enabled the extension again");
   }, 10_000);
 });
 
