@@ -23,6 +23,7 @@ import { STORE_MD_FILENAME } from "../lib/store-md";
 import { STORE_MD_DRAFT_SENTENCE } from "../lib/store-md-words";
 import { detectPackageManager, writeScaffoldToolchainNote } from "../lib/store-md-toolchain";
 import { FEATURES_ENV, toolListed } from "../lib/tool-policy";
+import { reportProgress } from "../lib/call-progress";
 
 const COMMAND = "extension_create";
 
@@ -266,6 +267,8 @@ export async function handler(args: {
         });
 
   let result: Awaited<ReturnType<typeof extensionCreate>>;
+
+  reportProgress((args.install ?? true) ? "Downloading the template and installing dependencies" : "Downloading the template");
 
   try {
     result = await attempt();

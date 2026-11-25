@@ -44,6 +44,7 @@ import {
   type LaunchFlagArgs,
 } from "../lib/launch-flags";
 import { geckoSocketLaunch } from "../lib/gecko-socket-process";
+import { reportProgress } from "../lib/call-progress";
 
 export const schema = {
   name: "extension_start",
@@ -277,6 +278,7 @@ export async function handler(
     removeSessionMarker(args.projectPath, browser, pid);
   });
 
+  reportProgress(`Launching ${browser} and loading the extension`);
   const boot = await pollBootVerdict(args.projectPath, browser, {
     child,
     readOutput: spawned.readOutput,

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { toolResultFrame } from "../index";
 import { refusedFrame } from "../lib/tool-frames";
@@ -208,3 +208,94 @@ describe("an eval, storage or logs answer never outgrows what a client takes, an
     expect(toolResultFrame(text).content[0].text).toBe(text);
   });
 });
+
+describe("1146: a call that sends a progressToken hears each phase and a heartbeat; one that does not hears nothing", () => {
+  const connected = async (handler: () => Promise<string>) => {
+    const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
+    const { Server } = await import("@modelcontextprotocol/sdk/server/index.js");
+    const { InMemoryTransport } = await import("@modelcontextprotocol/sdk/inMemory.js");
+    const { installToolHandlers } = await import("../lib/tool-dispatch");
+    const tool: ToolModule = { schema: { name: "extension_analyze", description: "", inputSchema: { type: "object", properties: {} } }, handler };
+    const server = new Server({ name: "progress-probe", version: "0.0.0" }, { capabilities: { tools: {} } });
+    installToolHandlers(server, { tools: [tool], options: { features: ["local", "extras"], noShip: true } });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const sent: Array<{ method?: string }> = [];
+    const send = serverTransport.send.bind(serverTransport);
+
+    serverTransport.send = async (message, options) => {
+      sent.push(message as { method?: string });
+
+      return send(message, options);
+    };
+
+    await server.connect(serverTransport);
+    const client = new Client({ name: "progress-probe", version: "0.0.0" });
+    await client.connect(clientTransport);
+
+    return { client, progressSent: () => sent.filter((message) => message.method === "notifications/progress") };
+  };
+
+  const answer = envelope({ ok: true, command: "extension_analyze", status: "analyzed", value: {} });
+
+  it("sends each reported phase with a rising progress count and the phase as its message", async () => {
+    const { reportProgress } = await import("../lib/call-progress");
+    const { client } = await connected(async () => {
+      reportProgress("Building for chrome");
+      reportProgress("Launching chrome and loading the extension");
+
+      return answer;
+    });
+    const heard: Array<{ progress: number; message?: string }> = [];
+
+    await client.callTool({ name: "extension_analyze", arguments: {} }, undefined, { onprogress: (progress) => heard.push(progress) });
+
+    expect(heard).toEqual([
+      expect.objectContaining({ progress: 1, message: "Building for chrome" }),
+      expect.objectContaining({ progress: 2, message: "Launching chrome and loading the extension" }),
+    ]);
+  });
+
+  it("repeats the phase every five seconds while it lasts", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+
+    try {
+      const { reportProgress } = await import("../lib/call-progress");
+      let finish: () => void = () => undefined;
+      const { client } = await connected(async () => {
+        reportProgress("Downloading and installing firefox");
+        await new Promise<void>((resolve) => { finish = resolve; });
+
+        return answer;
+      });
+      const heard: Array<{ progress: number; message?: string }> = [];
+      const call = client.callTool({ name: "extension_analyze", arguments: {} }, undefined, { onprogress: (progress) => heard.push(progress) });
+
+      await vi.waitFor(() => expect(heard.length).toBe(1));
+      await vi.advanceTimersByTimeAsync(10_000);
+      finish();
+      await call;
+
+      expect(heard.map((progress) => progress.message)).toEqual([
+        "Downloading and installing firefox",
+        "Downloading and installing firefox (5 s)",
+        "Downloading and installing firefox (10 s)",
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("sends no progress at all to a call without a progressToken", async () => {
+    const { reportProgress } = await import("../lib/call-progress");
+    const { client, progressSent } = await connected(async () => {
+      expect(reportProgress("Building for chrome")).toBe(false);
+
+      return answer;
+    });
+    const result = await client.callTool({ name: "extension_analyze", arguments: {} });
+
+    expect(result.isError).toBeFalsy();
+    expect(progressSent()).toEqual([]);
+  });
+});
+

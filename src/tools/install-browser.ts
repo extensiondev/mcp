@@ -12,6 +12,7 @@ import { extensionInstall, getManagedBrowsersCacheRoot } from "extension-install
 
 import { envelope } from "../lib/envelope";
 import { findManagedBinaryIn } from "./detect-browsers";
+import { reportProgress } from "../lib/call-progress";
 
 async function withMachineOutput<T>(run: () => Promise<T>): Promise<T> {
   const previous = process.env.EXTENSION_OUTPUT;
@@ -31,6 +32,7 @@ export async function installManagedBrowser(
   const start = Date.now();
 
   try {
+    reportProgress(`Downloading and installing ${browser}`);
     await withMachineOutput(() =>
       extensionInstall({
         browser,

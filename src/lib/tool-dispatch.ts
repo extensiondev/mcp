@@ -16,6 +16,7 @@ import { askingOnly, runAskingOnly } from "./ask-only";
 import { answerOnceDecided } from "./approval-wait";
 import { bindApprovalProject } from "./approval-record";
 import { withAnsweredProject, withApprovalLogin } from "./approval-scope";
+import { withCallProgress } from "./call-progress";
 import { withCallWaits } from "./call-waits";
 import { ENVELOPE_OUTPUT_SCHEMA, envelope } from "./envelope";
 import { appendWarnings } from "./envelope-warnings";
@@ -511,5 +512,7 @@ export function installToolHandlers(server: Server, setup: ToolHandlerOptions): 
     tools: (await surface.list()).map(listedToolEntry),
   }));
 
-  server.setRequestHandler(CallToolRequestSchema, async (request) => dispatch(request.params));
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) =>
+    withCallProgress(request.params._meta?.progressToken, (notice) => extra.sendNotification(notice), () => dispatch(request.params)),
+  );
 }

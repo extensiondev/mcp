@@ -21,6 +21,7 @@ import { liveProjectSessions } from "./session-browser";
 import { engineProjectRoot, readyContractPath } from "./session-paths";
 import { modulesMissing, startingSession } from "./session-starting";
 import { findWorkspaceMember, isWorkspaceOrRepositoryRoot, lockfileManager, pinnedManager } from "./workspace-member";
+import { reportProgress } from "./call-progress";
 
 /* @invariant ONE DEPENDENCY INSTALL PER PROJECT AT A TIME, AND EVERY BUILD
  * KNOWS WHEN ONE IS RUNNING. The engine installs a project's dependencies
@@ -593,6 +594,8 @@ export async function settleInstall(
   const began = Date.now();
   const said = `${plan.manager} ${plan.args.join(" ")}`;
   let result: Awaited<ReturnType<typeof runPackageInstall>>;
+
+  reportProgress(`Installing the project's dependencies (${said})`);
 
   try {
     result = await runPackageInstall(plan.manager, plan.args, {

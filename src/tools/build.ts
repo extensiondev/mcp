@@ -65,6 +65,7 @@ import { teamUnknownToXcodeRefusal } from "../lib/xcode-teams";
 import { isWasmPolicyLine } from "../lib/wasm-policy";
 import { reviewCoverageNotes, reviewDistReport, reviewRiskPointer, storeMdLine, wasmGrantLine } from "../lib/store-review";
 import { dropTrailing } from "../lib/linear-text";
+import { reportProgress } from "../lib/call-progress";
 
 const COMMAND = "extension_build";
 const DEV_SESSION_OWNS_THE_DIST = "E_DEV_SESSION_DIST_SHARED" as const;
@@ -917,6 +918,7 @@ export async function handler(args: {
   let engineRefusedJsonOutput: boolean;
 
   try {
+    reportProgress(`Building for ${browser}`);
     verdict = await outputJsonVerdict("build", args.projectPath);
     engineKnownTooOld = verdict.supported === false;
     attempt = engineKnownTooOld

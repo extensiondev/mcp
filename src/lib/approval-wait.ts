@@ -13,6 +13,7 @@ import { isEnvelope, type Envelope, reframed } from "./envelope";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { platformFetch } from "./platform-fetch";
 import { bearerHeaders } from "./request-fetch";
+import { reportProgress } from "./call-progress";
 
 type Args = Record<string, unknown>;
 
@@ -129,6 +130,7 @@ export async function answerOnceDecided(args: Args, call: (args: Args) => Promis
     const elapsed = outcomeClock.now() - started;
     if (elapsed >= boundMs) return withWaited(last, waited(), true, misses ? missesSentence(misses, waited(), lastMiss, "the approval") : undefined);
 
+    reportProgress(`Waiting for approval ${approvalId} (${waited()} of ${Math.round(boundMs / 1000)} s)`);
     await outcomeClock.sleep(Math.min(retry * 1000, boundMs - elapsed));
     const poll = await pollApproval(approvalId, args);
 

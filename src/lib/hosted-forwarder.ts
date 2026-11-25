@@ -36,6 +36,7 @@ import { workspaceConnectAnswer } from "./store-connection";
 import { forwardSubmitFacts, imagesTheLaneWants, labeledScreenshots, withProjectRoot, type ForwardFactsArgs, type WantedImage } from "./submit-facts-forward";
 import { storeMdSourceNote } from "./submit-facts-local";
 import { TOOL_POLICY } from "./tool-policy";
+import { reportProgress } from "./call-progress";
 
 import { version as packageVersion } from "../../package.json";
 
@@ -445,6 +446,7 @@ async function askLane(call: LaneCall): Promise<LaneAnswer> {
   answer = await sendOnce(call, false);
 
   while (answer.kind === "answer" && laneStatus(answer.body) === "act-in-flight" && outcomeClock.now() - firstSentAt < ACT_SETTLE_WINDOW_MS) {
+    reportProgress(`${call.command} is still running on extension.dev`);
     await outcomeClock.sleep(IN_FLIGHT_RECHECK_MS);
     answer = await sendOnce(call, false);
   }
@@ -700,6 +702,7 @@ async function forwardedAnswer(asked: { command: string; tool: string; rule: For
   const shaped = underCurrentName(rule.sent?.(args) ?? args);
   let call: LaneCall = { command, tool, session, sent: hostedArgs(shaped, facts, resource), key: crypto.randomBytes(24).toString("base64url"), reads: rule.reads?.(args) === true, deps };
   const startedAt = outcomeClock.now();
+  reportProgress(`Running ${command} on extension.dev`);
   let answer = await askLane(call);
 
   if (answer.kind !== "answer") return answerText(call, answer);
@@ -733,6 +736,7 @@ async function forwardedAnswer(asked: { command: string; tool: string; rule: For
       break;
     }
 
+    reportProgress(`Waiting on extension.dev for ${command} (${askedSeconds - left} of ${askedSeconds} s)`);
     const leg = resumes
       ? { ...call, key: crypto.randomBytes(24).toString("base64url"), sent: { ...hostedArgs(shaped, { ...(facts ?? {}), [RESUME_ACT_FACT]: true }, resource), waitSeconds: left } }
       : { ...call, sent: { ...hostedArgs(shaped, facts, resource), waitSeconds: left } };

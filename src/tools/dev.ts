@@ -79,6 +79,7 @@ import {
   observedNotAttachedRelay,
   browserUpNotAttachedRelay,
 } from "../lib/compiled-not-attached";
+import { reportProgress } from "../lib/call-progress";
 
 export const schema = {
   name: "extension_dev",
@@ -246,6 +247,7 @@ export async function handler(
 
   });
 
+  reportProgress(`Launching ${browser} and loading the extension`);
   const boot = await pollBootVerdict(args.projectPath, browser, {
     child,
     readOutput: spawned.readOutput,
@@ -688,6 +690,7 @@ function enableReadTheWaitMade(read: SafariEnableRead, signingHints: string[]): 
 }
 
 async function awaitReadyAndFirstLogs(projectPath: string, browser: string, budgetMs: number) {
+  reportProgress(`Waiting for the ${browser} session to be ready`);
   const ready = JSON.parse(await waitHandler({ projectPath, browser, timeoutMs: budgetMs })) as {
     status: string;
     hint?: string;
