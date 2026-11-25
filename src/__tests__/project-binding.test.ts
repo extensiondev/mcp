@@ -25,7 +25,7 @@ import { PLATFORM_KERNEL_HOOKS, installPlatformKernelHooks } from "../lib/platfo
 import { forwardable } from "../lib/hosted-forwarder";
 import { GUIDED_KEY_PAGES, guideStoreConnect, guidedConnectRuntime, launchGuidedBrowser, type GuidedConnectRuntime, type LaunchPlan } from "../lib/guided-connect";
 import { guidedCopy } from "../lib/guided-copy-build";
-import { endGuidedWindow, type GuidedProcess } from "../lib/guided-window-end";
+import { endGuidedWindow, runningOwner, type GuidedProcess } from "../lib/guided-window-end";
 import { PARTNER_CENTER_OVERVIEW, guideFirstListing } from "../lib/guided-first-listing";
 import { headlessFromProcesses } from "../lib/guided-window";
 import { workspaceConnectAnswer } from "../lib/store-connection";
@@ -850,6 +850,7 @@ describe("the guided store connect opens the MCP's own browser with extension.de
       let alive = true;
       const fake: GuidedProcess = {
         table: () => row,
+        list: () => null,
         signal: (pid, signal) => {
           signals.push(`${pid} ${signal}`);
           if (signal === "SIGTERM") alive = false;
@@ -882,6 +883,35 @@ describe("the guided store connect opens the MCP's own browser with extension.de
     expect(own.signals.slice(1).every((row) => row === "-4242 0")).toBe(true);
     expect(fs.existsSync(sessions)).toBe(false);
     expect(fs.readFileSync(path.join(profileDir, "Default", "Cookies"), "utf8")).toBe("sign-ins");
+  });
+
+  it("finds the guided window through the browser on its profile when the marker names a preview that already exited", () => {
+    const profileDir = path.join(tmp, "state", "guided-browser", "chrome", "profile");
+    const live = new Set<number>();
+    let rows = "";
+    const proc: GuidedProcess = {
+      table: () => null,
+      list: () => rows,
+      signal: (pid, signal) => signal !== 0 || live.has(pid),
+      wait: () => undefined,
+      platform: "darwin",
+    };
+
+    expect(runningOwner(profileDir, 9999, proc)).toBeNull();
+
+    rows = [
+      `  4242   777 /cache/chrome/Google Chrome for Testing --user-data-dir=${profileDir} --load-extension=/x`,
+      `  4300  4300 /cache/chrome/Google Chrome for Testing --user-data-dir=${profileDir}-other`,
+    ].join("\n");
+
+    expect(runningOwner(profileDir, 9999, proc)).toBe(777);
+    expect(runningOwner(`${profileDir}-other`, undefined, proc)).toBe(4300);
+    expect(runningOwner(path.join(tmp, "elsewhere"), undefined, proc)).toBeNull();
+
+    live.add(5150);
+
+    expect(runningOwner(profileDir, 5150, proc)).toBe(5150);
+    expect(runningOwner(profileDir, 9999, { ...proc, platform: "win32" })).toBeNull();
   });
 
   it("refuses the Chrome Web Store item served for the Edge item and loads the bundled copy, saying so", async () => {
@@ -1206,6 +1236,42 @@ describe("the guided store connect opens the MCP's own browser with extension.de
         }
 
         expect(launches).toHaveLength(0);
+      });
+
+      it("installs Chrome for Testing a cleanup removed and opens the guided page with it, or says the install failed", async () => {
+        prodSignIn();
+        let installed = false;
+        const installs: string[] = [];
+        const chromePerson = (install: (browser: string) => Promise<string | null>) =>
+          bound([], {
+            probe: () => ({
+              platform: "darwin",
+              systemBinary: (name) => (name === "chrome" ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : null),
+              managedBinary: (name) => (name === "chrome" && installed ? "/cache/chrome/Google Chrome for Testing" : null),
+              lastUsed: () => 1,
+              defaultBrowser: () => null,
+            }),
+            install,
+          });
+        const todo = firstSubmission("first-submission-to-do", { dashboardUrl: `https://partner.microsoft.com/dashboard/microsoftedge/${PRODUCT}/packages/dashboard` });
+
+        const refused = JSON.parse((await guideFirstListing(todo, { api: PROD }, chromePerson(async () => "the download stopped")))!);
+
+        expect(refused.hint).toMatch(/^No guided window was opened, so nothing on Partner Center was filled: Chrome for Testing is not installed and installing it failed \(the download stopped\)\./);
+        expect(launches).toHaveLength(0);
+
+        const out = JSON.parse(
+          (await guideFirstListing(todo, { api: PROD }, chromePerson(async (browser) => {
+            installs.push(browser);
+            installed = true;
+
+            return null;
+          })))!,
+        );
+
+        expect(installs).toEqual(["chrome"]);
+        expect(out).toMatchObject({ status: "first-listing-guided", value: { guidedBrowser: { opened: true, browser: "chrome" } } });
+        expect(launches[0]!.choice.binary).toBe("/cache/chrome/Google Chrome for Testing");
       });
 
       it("says the guided window did not open and why, with the missing listing text kept, instead of answering the plain to-do", async () => {

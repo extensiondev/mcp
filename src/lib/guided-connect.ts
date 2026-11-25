@@ -18,17 +18,18 @@ import { envelope, isEnvelope } from "./envelope";
 import { connectedAnswer, readStoreAccount, replacing, workspaceToken } from "./guided-connect-account";
 import { spawnExtensionCli } from "./exec";
 import {
-  chooseGuidedBrowser,
   guidedBrowserLabel,
   guidedEngine,
   guidedProfileDir,
+  installGuidedBrowser,
+  installedChoice,
   type BrowserProbe,
   type GuidedBrowser,
   type GuidedBrowserChoice,
 } from "./guided-browser";
 import { windowCheck, type WindowCheck } from "./guided-window";
 import { copiedBuild, guidedCopy, profileRanOtherBuild, startBuild } from "./guided-copy-build";
-import { endGuidedWindow, launchWord } from "./guided-window-end";
+import { endGuidedWindow, launchWord, runningOwner } from "./guided-window-end";
 import { headlessLaunch } from "./launch-flags";
 import { mcpOrigins } from "./origins";
 import { withoutRedirects } from "./platform-fetch";
@@ -94,6 +95,7 @@ export interface GuidedConnectRuntime {
   cacheDir(): string;
   launchEnv(): Record<string, string>;
   launch(plan: LaunchPlan): LaunchResult;
+  install?(browser: string): Promise<string | null>;
   windowCheck?(profileDir: string): Promise<WindowCheck>;
   schedule?(ms: number, run: () => void): void;
 }
@@ -144,16 +146,6 @@ function systemDefaultBrowser(platform: NodeJS.Platform): string | null {
   }
 
   return platform === "linux" ? quietRun("xdg-settings", ["get", "default-web-browser"]) : null;
-}
-
-function processAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function runningFile(profileDir: string): string {
@@ -211,17 +203,15 @@ export function launchGuidedBrowser(plan: LaunchPlan): LaunchResult {
   const build = copiedBuild(plan.extensionDir);
   const stale = profileRanOtherBuild(plan.profileDir, build);
 
-  let replaced = false;
+  const owner = runningOwner(plan.profileDir, running.pid);
+  const alive = owner !== null;
+  const replaced = alive && stale && endGuidedWindow(plan.profileDir, owner);
 
-  if (typeof running.pid === "number" && processAlive(running.pid) && stale) {
-    if (!endGuidedWindow(plan.profileDir, running.pid)) {
-      return { launched: false, reused: false, reason: "the guided browser that is open still runs an older extension.dev tools and could not be closed from here; close that window, then ask again so it starts with the current one" };
-    }
-
-    replaced = true;
+  if (alive && stale && !replaced) {
+    return { launched: false, reused: false, reason: "the guided browser that is open still runs an older extension.dev tools and could not be closed from here; close that window, then ask again so it starts with the current one" };
   }
 
-  if (!replaced && typeof running.pid === "number" && processAlive(running.pid) && plan.choice.binary) {
+  if (alive && !replaced && plan.choice.binary) {
     try {
       const child = spawn(plan.choice.binary, reuseArgs(plan), { detached: true, stdio: "ignore" });
       child.on("error", () => undefined);
@@ -278,6 +268,7 @@ export const guidedConnectRuntime: GuidedConnectRuntime = {
     defaultBrowser: () => systemDefaultBrowser(process.platform),
   }),
   fetch: (input, init) => globalThis.fetch(input, init),
+  install: installGuidedBrowser,
   stateDir: () => path.dirname(credentialsPath()),
   cacheDir: () => path.join(userCacheDir(), "extension-dev-tools"),
   launchEnv: () => visibleLaunchEnv(process.env),
@@ -430,9 +421,10 @@ export async function openGuided(options: { workspace: string; next: string | nu
   const block = runtime.launchBlock();
   if (block) return { opened: false, note: `No browser was opened: ${block}.` };
 
-  const choice = chooseGuidedBrowser(runtime.probe());
+  const { choice, failed } = await installedChoice(runtime);
   const label = choice.browser === "chrome" ? "Chrome for Testing" : guidedBrowserLabel(choice.browser);
 
+  if (failed) return { opened: false, note: `No browser was opened: ${label} is not installed and installing it failed (${failed}).` };
   if (choice.install) return { install: { ...choice, install: choice.install } };
 
   const engine = guidedEngine(choice.browser);

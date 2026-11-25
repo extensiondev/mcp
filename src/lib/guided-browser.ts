@@ -8,6 +8,7 @@
 
 import path from "node:path";
 
+import { installManagedBrowser } from "../tools/install-browser";
 import { isGeckoFamily } from "./browser-family";
 
 export const GUIDED_BROWSERS = [
@@ -163,4 +164,26 @@ export function guidedEngine(browser: GuidedBrowser): "chromium" | "gecko" {
 
 export function guidedProfileDir(stateDir: string, browser: GuidedBrowser): string {
   return path.join(stateDir, "guided-browser", browser, "profile");
+}
+
+/* @invariant THE GUIDED PATH INSTALLS ITS OWN ENGINE BROWSER (MCP ledger
+ * 1151). Chrome for Testing or Chromium lives in the managed cache, which a
+ * cleanup can empty while a guided window still runs from it; the person
+ * asked for the guided window, and extension_browsers_install sits in a tool
+ * group most servers start without, so the open installs the managed browser
+ * itself and says so, or says why it could not.
+ */
+export async function installGuidedBrowser(browser: string): Promise<string | null> {
+  const answer = JSON.parse(await installManagedBrowser(browser)) as { ok?: boolean; error?: { message?: string } };
+
+  return answer.ok === true ? null : answer.error?.message || `installing ${browser} did not finish`;
+}
+
+export async function installedChoice(runtime: { probe(): BrowserProbe; install?(browser: string): Promise<string | null> }): Promise<{ choice: GuidedBrowserChoice; failed: string | null }> {
+  const first = chooseGuidedBrowser(runtime.probe());
+  if (!first.install || !runtime.install) return { choice: first, failed: null };
+
+  const failed = await runtime.install(first.install);
+
+  return { choice: failed ? first : chooseGuidedBrowser(runtime.probe()), failed };
 }

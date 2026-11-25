@@ -12,6 +12,7 @@ import path from "node:path";
 
 export interface GuidedProcess {
   table(pid: number): string | null;
+  list(): string | null;
   signal(pid: number, signal: NodeJS.Signals | 0): boolean;
   wait(ms: number): void;
   platform: NodeJS.Platform;
@@ -21,6 +22,13 @@ export const guidedProcess: GuidedProcess = {
   table: (pid) => {
     try {
       return execFileSync("ps", ["-o", "pgid=,command=", "-p", String(pid)], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() || null;
+    } catch {
+      return null;
+    }
+  },
+  list: () => {
+    try {
+      return execFileSync("ps", ["-axo", "pid=,pgid=,command="], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 16 * 1024 * 1024 });
     } catch {
       return null;
     }
@@ -73,6 +81,25 @@ export function endGuidedWindow(profileDir: string, pid: number, proc: GuidedPro
   fs.rmSync(path.join(profileDir, "Default", "Sessions"), { recursive: true, force: true });
 
   return true;
+}
+
+/* @invariant THE BROWSER ON THE PROFILE NAMES THE WINDOW WHEN THE MARKER
+ * DOES NOT (MCP ledger 1151). The running marker can name a preview that
+ * already exited while the browser of an earlier one still holds the
+ * profile; a fresh preview on that profile dies at once and the answer
+ * claimed a window. A live marker PID decides; otherwise the process whose
+ * --user-data-dir is exactly this profile is the browser, and its process
+ * group is the preview that started it.
+ */
+export function runningOwner(profileDir: string, markerPid: unknown, proc: GuidedProcess = guidedProcess): number | null {
+  if (typeof markerPid === "number" && Number.isInteger(markerPid) && markerPid > 1 && proc.signal(markerPid, 0)) return markerPid;
+  if (proc.platform === "win32") return null;
+
+  const flag = `--user-data-dir=${profileDir}`;
+  const row = (proc.list() ?? "").split("\n").map((line) => line.trim().split(/\s+/)).find((words) => words.slice(2).includes(flag));
+  const group = Number(row?.[1] ?? 0);
+
+  return group > 1 ? group : null;
 }
 
 export function launchWord(launched: { reused: boolean; replaced?: true }): string {
