@@ -117,6 +117,26 @@ describe("a per-store `- Category:` line overrides the Listing value for that st
   });
 });
 
+describe("a Chrome category is one the Chrome Web Store dropdown lets a person pick (ledger 1228)", () => {
+  it("leaves the Productivity group heading out of the Chrome listing, names the five it heads and the store note, and keeps it for Edge", () => {
+    const parsed = parseStoreMdListing("## Listing\n\n- Summary: Hello\n- Category: Productivity\n");
+    const chrome = listingForStore(parsed, "chrome");
+    const reason = '"Productivity" is a group heading on the Chrome Web Store, not a category anyone can pick; it heads Communication, Developer Tools, Education, Tools or Workflow & Planning. The closest is Tools: write `- Category: Productivity (Chrome: Tools)` to keep Productivity for the other stores';
+
+    expect(chrome.listing.categories).toBeUndefined();
+    expect(chrome.unread.categories).toEqual({ line: "- Category:", reason });
+    expect(chrome.skipped).toContain(`categories in STORE.md: ${reason}, so it was left out`);
+    expect(listingForStore(parsed, "edge").listing.categories).toEqual(["Productivity"]);
+    expect(listingForStore(parseStoreMdListing("## Listing\n\n- Category: Productivity (Chrome: Tools, Safari: Utilities)\n"), "chrome").listing.categories).toEqual(["Tools"]);
+  });
+
+  it("names every Chrome category for a name that is neither a category nor a group heading", () => {
+    const chrome = listingForStore(parseStoreMdListing("## Listing\n\n- Category: Utilities\n"), "chrome");
+
+    expect(chrome.unread.categories?.reason).toMatch(/^"Utilities" is not a Chrome Web Store category; Chrome takes Accessibility, .* or Workflow & Planning\. For example Tools:/);
+  });
+});
+
 describe("the built-in category map fills the gap between the stores' vocabularies", () => {
   it("pins AMO's extension categories as www pins them from /api/v5/addons/categories/ (2026-10-26)", () => {
     expect(STORE_CATEGORY_NAMES.firefox).toEqual(AMO_EXTENSION_CATEGORIES_2026_10_26);

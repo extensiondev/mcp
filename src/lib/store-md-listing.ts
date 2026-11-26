@@ -18,7 +18,7 @@ import {
   type ListingText,
   type PermissionJustification,
 } from "./store-md-declarations";
-import { resolveStoreCategories, storesNamingACategory, type CategoryRead } from "./store-categories";
+import { chromeCategoryRefusal, resolveStoreCategories, storesNamingACategory, type CategoryRead } from "./store-categories";
 import { bounded, type OverLimitMeasure } from "./store-md-bounded";
 import { bulletLine, storeOwnLinesBody } from "./store-md-bullets";
 import { safariTitle } from "./store-md-safari-title";
@@ -192,7 +192,7 @@ interface StoreNote {
  * A trailing parenthetical on a single-value line is one of three things: a
  * remark ("MIT (see LICENSE)"), a list of the stores the value is for
  * ("Productivity (Chrome Web Store)"), or per-store values ("Productivity
- * (Chrome: Productivity, Safari: Utilities)"), told apart by whether its
+ * (Chrome: Tools, Safari: Utilities)"), told apart by whether its
  * comma items name a store and carry a colon. The text before the note is
  * the value every store takes; a "Store: value" pair inside it is that
  * store's own value and wins over the text before the note for that store
@@ -551,6 +551,14 @@ export function listingForStore(parsed: StoreMdListing, store: ListingStore): St
     }
   }
 
+  const wrongChrome = store === "chrome" && Array.isArray(listing.categories) ? chromeCategoryRefusal(listing.categories as string[]) : null;
+
+  if (wrongChrome) {
+    delete listing.categories;
+    skipped.push(`categories in STORE.md: ${wrongChrome}, so it was left out`);
+    unread.categories = { line: lineOf(parsed, "categories"), reason: wrongChrome };
+  }
+
   for (const [field, key] of Object.entries(parsed.placeholders ?? {}) as Array<[ListingField, string]>) {
     if (!STORE_FIELDS[store].includes(field) || merged[field] !== undefined || unread[field]) continue;
 
@@ -560,7 +568,7 @@ export function listingForStore(parsed: StoreMdListing, store: ListingStore): St
 
   if (store === "safari") safariTitle(listing, skipped, unread, parsed.lines.title);
 
-  if (listing.categories === undefined && parsed.lines.categories) {
+  if (listing.categories === undefined && parsed.lines.categories && !unread.categories) {
     const named = storesNamingACategory(parsed);
 
     unread.categories = {

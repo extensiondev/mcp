@@ -38,7 +38,7 @@ const STORE_MD = `# Store metadata
 
   Detection happens on your computer.
 
-- Category: Productivity (Chrome Web Store), Privacy & Security (Firefox and
+- Category: Tools (Chrome Web Store), Privacy & Security (Firefox and
   Edge).
 - Screenshots: TODO at least one 1280x800 screenshot per store.
 
@@ -172,7 +172,7 @@ describe("STORE.md fills the store listing", () => {
         "Hide personal information on every open tab with one click.",
       fullDescription:
         "Sharing your screen? Click PII Shield and names are blurred on every open tab.\n\nDetection happens on your computer.",
-      categories: ["Productivity"],
+      categories: ["Tools"],
       singlePurpose:
         "Hide personal information on the pages the user has open, on demand.",
     });
@@ -216,7 +216,7 @@ describe("STORE.md fills the store listing", () => {
   it("takes one category up to its store note for every store and keeps the note out", () => {
     const parsed = parseStoreMdListing(
       STORE_MD.replace(
-        "- Category: Productivity (Chrome Web Store), Privacy & Security (Firefox and\n  Edge).",
+        "- Category: Tools (Chrome Web Store), Privacy & Security (Firefox and\n  Edge).",
         "- Category: Privacy & Security (Chrome Web Store)",
       ),
     );
@@ -235,17 +235,17 @@ describe("STORE.md fills the store listing", () => {
   it("reads a bare category for every store", () => {
     const parsed = parseStoreMdListing(
       STORE_MD.replace(
-        "- Category: Productivity (Chrome Web Store), Privacy & Security (Firefox and\n  Edge).",
-        "- Category: Productivity",
+        "- Category: Tools (Chrome Web Store), Privacy & Security (Firefox and\n  Edge).",
+        "- Category: Privacy & Security",
       ),
     );
 
     expect(listingForStore(parsed, "chrome").listing.categories).toEqual([
-      "Productivity",
+      "Privacy & Security",
     ]);
 
     expect(listingForStore(parsed, "edge").listing.categories).toEqual([
-      "Productivity",
+      "Privacy & Security",
     ]);
   });
 
@@ -275,11 +275,11 @@ describe("STORE.md fills the store listing", () => {
   it("reads a single-value line up to its store note and takes the per-store values the note gives", () => {
     const parsed = parseStoreMdListing(
       STORE_MD.replace(
-        "- Category: Productivity (Chrome Web Store), Privacy & Security (Firefox and\n  Edge).",
+        "- Category: Tools (Chrome Web Store), Privacy & Security (Firefox and\n  Edge).",
         [
           "- Name: PII Shield (Safari: PII Shield for Safari, Edge: PII Shield for Edge)",
           "- Summary: Hide personal information on every open tab (beta)",
-          "- Category: Productivity (Chrome: Productivity, Safari: Utilities)",
+          "- Category: Productivity (Chrome: Tools, Safari: Utilities)",
         ].join("\n"),
       ),
     );
@@ -287,7 +287,7 @@ describe("STORE.md fills the store listing", () => {
     const safari = listingForStore(parsed, "safari").listing;
     const edge = listingForStore(parsed, "edge").listing;
 
-    expect(chrome).toMatchObject({ title: "PII Shield", shortDescription: "Hide personal information on every open tab (beta)", categories: ["Productivity"] });
+    expect(chrome).toMatchObject({ title: "PII Shield", shortDescription: "Hide personal information on every open tab (beta)", categories: ["Tools"] });
     expect(listingForStore(parsed, "firefox").listing.categories).toEqual(["Productivity"]);
     expect(safari).toMatchObject({ title: "PII Shield for Safari", categories: ["Utilities"] });
     expect(edge).toMatchObject({ title: "PII Shield for Edge", categories: ["Productivity"] });
@@ -295,12 +295,12 @@ describe("STORE.md fills the store listing", () => {
 
     const several = parseStoreMdListing(
       STORE_MD.replace(
-        "- Category: Productivity (Chrome Web Store), Privacy & Security (Firefox and\n  Edge).",
-        "- Category: Productivity (Chrome Web Store), Privacy & Security (Firefox: Privacy & Security, Edge)",
+        "- Category: Tools (Chrome Web Store), Privacy & Security (Firefox and\n  Edge).",
+        "- Category: Tools (Chrome Web Store), Privacy & Security (Firefox: Privacy & Security, Edge)",
       ),
     );
 
-    expect(listingForStore(several, "chrome").listing.categories).toEqual(["Productivity"]);
+    expect(listingForStore(several, "chrome").listing.categories).toEqual(["Tools"]);
     expect(listingForStore(several, "firefox").listing.categories).toEqual(["Privacy & Security"]);
     expect(listingForStore(several, "edge").listing.categories).toEqual(["Privacy & Security"]);
     expect(listingForStore(several, "safari").unread.categories).toEqual({ line: "- Category:", reason: "names chrome, edge and firefox only" });
@@ -338,9 +338,9 @@ describe("STORE.md fills the store listing", () => {
   it("names the line it could not take and the shape it reads", () => {
     const parsed = parseStoreMdListing(
       STORE_MD.replace(
-        "- Category: Productivity (Chrome Web Store), Privacy & Security (Firefox and\n  Edge).",
+        "- Category: Tools (Chrome Web Store), Privacy & Security (Firefox and\n  Edge).",
         [
-          "- Category: Productivity (Chrome Web Store), Tools (Edge)",
+          "- Category: Tools (Chrome Web Store), Tools (Edge)",
           "- Support email: help at example dot com",
         ].join("\n"),
       ),

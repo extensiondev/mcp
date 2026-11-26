@@ -62,6 +62,16 @@ export const STORE_CATEGORY_NAMES: Partial<Record<ListingStore, readonly string[
   ],
 };
 
+export const CHROME_CATEGORY_GROUPS: ReadonlyArray<{ group: string; closest: string; categories: readonly string[] }> = [
+  { group: "Productivity", closest: "Tools", categories: ["Communication", "Developer Tools", "Education", "Tools", "Workflow & Planning"] },
+  {
+    group: "Lifestyle",
+    closest: "Just for Fun",
+    categories: ["Art & Design", "Entertainment", "Games", "Household", "Just for Fun", "News & Weather", "Shopping", "Social Media & Networking", "Travel", "Well-being"],
+  },
+  { group: "Make Chrome Yours", closest: "Functionality & UI", categories: ["Accessibility", "Functionality & UI", "Privacy & Security"] },
+];
+
 const CATEGORY_MAP: Partial<Record<ListingStore, Record<string, string>>> = {
   firefox: {
     accessibility: "Other",
@@ -114,6 +124,29 @@ export function storeHasCategory(store: ListingStore, name: string): boolean {
   const names = STORE_CATEGORY_NAMES[store];
 
   return !names || names.some((own) => categoryKey(own) === categoryKey(name));
+}
+
+const orList = (names: readonly string[]): string =>
+  names.length > 1 ? `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}` : names[0] ?? "";
+
+/* @invariant A CHROME CATEGORY IS ONE THE DASHBOARD LETS A PERSON PICK (MCP
+ * ledger 1228). The Chrome Web Store dropdown heads its 18 categories with
+ * three group names (Productivity, Lifestyle, Make Chrome Yours) that cannot
+ * be picked, so a STORE.md category Chrome does not have is left out of the
+ * Chrome listing with a reason that names the categories its group heads,
+ * the closest one, and the store note that keeps the line for the others.
+ */
+export function chromeCategoryRefusal(names: readonly string[]): string | null {
+  const wrong = names.find((name) => !storeHasCategory("chrome", name));
+  if (wrong === undefined) return null;
+
+  const group = CHROME_CATEGORY_GROUPS.find((row) => categoryKey(row.group) === categoryKey(wrong));
+  const pick = group ? group.closest : "Tools";
+  const choices = group
+    ? `"${group.group}" is a group heading on the Chrome Web Store, not a category anyone can pick; it heads ${orList(group.categories)}`
+    : `"${wrong}" is not a Chrome Web Store category; Chrome takes ${orList(STORE_CATEGORY_NAMES.chrome ?? [])}`;
+
+  return `${choices}. ${group ? `The closest is ${pick}` : `For example ${pick}`}: write \`- Category: ${wrong} (Chrome: ${pick})\` to keep ${wrong} for the other stores`;
 }
 
 export function amoCategoriesOf(names: readonly string[]): string[] {
