@@ -15,6 +15,7 @@ import { clientRoots } from "./client-roots";
 import { RdpSession } from "./rdp";
 import { browserArtifactsDir } from "./session-paths";
 import { dropTrailing } from "./linear-text";
+import { repeatsAtWidth } from "./png-flat";
 
 export interface CaptureSize {
   width?: number;
@@ -24,7 +25,33 @@ export interface CaptureSize {
 
 export type CaptureOutcome =
   | { ok: true; png: Buffer }
-  | { ok: false; message: string; timedOut?: boolean };
+  | { ok: false; message: string; timedOut?: boolean; tiled?: boolean };
+
+const TWO_FRAMES = "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))";
+
+async function nextFrames(cdp: CDPClient, sessionId: string): Promise<void> {
+  await cdp.sendCommand("Runtime.evaluate", { expression: TWO_FRAMES, awaitPromise: true, returnByValue: true }, sessionId, 1_000).catch(() => undefined);
+}
+
+async function shoot(cdp: CDPClient, sessionId: string, timeoutMs: number): Promise<string | null> {
+  const shot = (await cdp.sendCommand(
+    "Page.captureScreenshot",
+    { format: "png", fromSurface: true, captureBeyondViewport: false },
+    sessionId,
+    timeoutMs,
+  )) as { data?: unknown } | undefined;
+
+  return typeof shot?.data === "string" && shot.data ? shot.data : null;
+}
+
+function tiledFrom(png: Buffer, laidOut: CssViewport | null, asked: { width: number }): boolean {
+  if (!laidOut || laidOut.width >= asked.width) return false;
+
+  const pixels = pngDimensions(png);
+  if (!pixels || !asked.width) return false;
+
+  return repeatsAtWidth(png, (laidOut.width * pixels.width) / asked.width);
+}
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
@@ -103,8 +130,12 @@ export async function captureCdpTarget(
     await cdp.connect(await CDPClient.discoverBrowserWsUrl(port));
     sessionId = await cdp.attachToTarget(targetId);
 
+    let laidOut: CssViewport | null = null;
+    let askedWidth = 0;
+
     if (size.width || size.height || size.deviceScaleFactor) {
       let { width, height } = size;
+      laidOut = await cssViewportOf(cdp, sessionId, timeoutMs).catch(() => null);
 
       if (!width || !height) {
         const viewport = await cssViewportOf(cdp, sessionId, timeoutMs);
@@ -113,23 +144,31 @@ export async function captureCdpTarget(
       }
 
       override = { width, height, deviceScaleFactor: size.deviceScaleFactor ?? 0, mobile: false };
+      askedWidth = width ?? 0;
       await cdp.sendCommand("Emulation.setDeviceMetricsOverride", override, sessionId, timeoutMs);
+      await nextFrames(cdp, sessionId);
     }
 
-    const shot = (await cdp.sendCommand(
-      "Page.captureScreenshot",
-      { format: "png", fromSurface: true, captureBeyondViewport: false },
-      sessionId,
-      timeoutMs,
-    )) as { data?: unknown } | undefined;
+    let data = await shoot(cdp, sessionId, timeoutMs);
 
     answered = true;
 
-    if (typeof shot?.data !== "string" || !shot.data) {
-      return { ok: false, message: "Page.captureScreenshot answered no image data" };
+    if (!data) return { ok: false, message: "Page.captureScreenshot answered no image data" };
+
+    if (tiledFrom(Buffer.from(data, "base64"), laidOut, { width: askedWidth })) {
+      await nextFrames(cdp, sessionId);
+      data = (await shoot(cdp, sessionId, timeoutMs)) ?? data;
+
+      if (tiledFrom(Buffer.from(data, "base64"), laidOut, { width: askedWidth })) {
+        return {
+          ok: false,
+          tiled: true,
+          message: `the browser painted the page's ${laidOut!.width} px layout repeated across the ${askedWidth} px viewport this capture asked for, twice, so no file was written; the tab never laid out again at the new size`,
+        };
+      }
     }
 
-    return { ok: true, png: Buffer.from(shot.data, "base64") };
+    return { ok: true, png: Buffer.from(data, "base64") };
   } catch (error) {
     const message = errorText(error);
 

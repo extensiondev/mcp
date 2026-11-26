@@ -287,7 +287,9 @@ function captureFailure(outcome: CaptureOutcome & { ok: false }, url: string, be
     outcome.timedOut ? "capture-timeout" : "capture-failed",
     outcome.timedOut ? "E_CAPTURE_TIMEOUT" : "E_CAPTURE_FAILED",
     `The browser did not hand back an image of ${url}: ${outcome.message}`,
-    outcome.timedOut
+    outcome.tiled
+      ? `Open the page fresh in a tab of its own with extension_open {url: "${url}", newTab: true}, which lays it out at the asked size, and capture that tab.`
+      : outcome.timedOut
       ? `The page did not paint within the budget.${behind}${whyNoPaint} This tool never brings a window forward; bring the page's tab forward yourself with extension_open {url, foreground: true} (it reloads the tab in place), or move the window onto the screen you are on, and retry; run the session headless (the default); or retry with a larger timeout, which is spent on the capture in full.`
       : "Confirm the session is ready (extension_wait) and the page is still open, then retry.",
   );

@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readyContractPath } from "../lib/session-paths";
 import { readyContract } from "./fixtures/engine-answers";
 import { onlyFakeChromeFetch, startFakeChrome, type FakeChrome, type FakeCommand } from "./fixtures/fake-chrome";
-import { solidPng } from "./fixtures/png";
+import { solidPng, tiledPng } from "./fixtures/png";
 
 const screenshot = await import("../tools/screenshot");
 
@@ -35,8 +35,10 @@ function evaluated(fragment: string): FakeCommand[] {
   return (chrome?.commands ?? []).filter((c) => c.method === "Runtime.evaluate" && String(c.params.expression).includes(fragment));
 }
 
-async function browser(visibility: string, matched = 1): Promise<void> {
+async function browser(visibility: string, matched = 1, tiledShots = 0): Promise<void> {
   let shown = visibility === "visible";
+  let overridden = false;
+  let tiledLeft = tiledShots;
 
   chrome = await startFakeChrome([PAGE, WORKER], (command) => {
     if (command.method === "Browser.getWindowForTarget") return { windowId: WINDOW_ID };
@@ -63,7 +65,18 @@ async function browser(visibility: string, matched = 1): Promise<void> {
       }
     }
 
-    if (command.method === "Page.captureScreenshot") return { data: solidPng(shown ? 640 : 320, 480).toString("base64") };
+    if (command.method === "Emulation.setDeviceMetricsOverride") overridden = true;
+    if (command.method === "Page.getLayoutMetrics") return { cssLayoutViewport: { clientWidth: 756, clientHeight: 513 } };
+
+    if (command.method === "Page.captureScreenshot") {
+      if (overridden && tiledLeft > 0) {
+        tiledLeft -= 1;
+
+        return { data: tiledPng(1280, 800, 756, 513).toString("base64") };
+      }
+
+      return { data: (overridden ? tiledPng(1280, 800, 1280, 800) : solidPng(shown ? 640 : 320, 480)).toString("base64") };
+    }
 
     return undefined;
   });
@@ -123,6 +136,29 @@ describe("extension_screenshot of a hidden tab shows it for the capture instead 
     expect(result.value).not.toHaveProperty("hiddenTab");
     expect(evaluated("chrome.tabs")).toHaveLength(0);
     expect(result.warnings.join(" ")).not.toContain("hidden tab");
+  }, 20_000);
+
+  it("never files the page's old layout tiled across the asked viewport, and names the fresh tab that lays it out", async () => {
+    await browser("hidden", 1, 2);
+
+    const result = JSON.parse(await screenshot.handler({ projectPath: dir, targetId: PAGE.id, store: "chrome" }));
+
+    expect(result.ok).toBe(false);
+    expect(result.error.code).toBe("E_CAPTURE_FAILED");
+    expect(result.error.message).toContain("the page's 756 px layout repeated across the 1280 px viewport");
+    expect(result.hint).toContain(`extension_open {url: "${PAGE.url}", newTab: true}`);
+    expect(chrome!.commands.filter((c) => c.method === "Page.captureScreenshot")).toHaveLength(2);
+    expect(fs.existsSync(path.join(dir, "store"))).toBe(false);
+  }, 20_000);
+
+  it("captures again after two frames when only the first shot repeats the old layout", async () => {
+    await browser("hidden", 1, 1);
+
+    const result = JSON.parse(await screenshot.handler({ projectPath: dir, targetId: PAGE.id, width: 1280, height: 800, deviceScaleFactor: 1 }));
+
+    expect(result.status).toBe("captured");
+    expect(result.value).toMatchObject({ width: 1280, height: 800 });
+    expect(chrome!.commands.filter((c) => c.method === "Page.captureScreenshot")).toHaveLength(2);
   }, 20_000);
 
   it("says the image may show a mid-animation state when it cannot tell which tab to show", async () => {

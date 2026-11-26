@@ -242,3 +242,48 @@ export function flattenPngAlpha(png: Buffer): Flattened {
 
   return { png: encodeRgb(width, height, toRgb(chunks, pixels)), hadAlpha: true, width, height };
 }
+
+export function decodeRgb(png: Buffer): { width: number; height: number; rgb: Buffer } | null {
+  const chunks = readChunks(png);
+  if (typeof chunks === "string") return null;
+
+  const { header } = chunks;
+  const channels = CHANNELS[header.colorType];
+  if (header.bitDepth !== 8 || header.interlace !== 0 || !channels) return null;
+
+  try {
+    const pixels = unfilter(zlib.inflateSync(chunks.data), header.width, header.height, channels);
+
+    return typeof pixels === "string" ? null : { width: header.width, height: header.height, rgb: toRgb(chunks, pixels) };
+  } catch {
+    return null;
+  }
+}
+
+function columnsRepeat(image: { width: number; height: number; rgb: Buffer }, tile: number): boolean {
+  const { width, height, rgb } = image;
+  const span = width - tile;
+  if (tile < 16 || span < 16) return false;
+
+  const first = rgb.readUIntBE(0, 3);
+  let varied = false;
+
+  for (let y = 0; y < height; y++) {
+    const row = y * width * 3;
+
+    for (let x = 0; x < span; x++) {
+      const a = row + x * 3;
+      const b = row + (x + tile) * 3;
+      if (rgb[a] !== rgb[b] || rgb[a + 1] !== rgb[b + 1] || rgb[a + 2] !== rgb[b + 2]) return false;
+      if (!varied && rgb.readUIntBE(a, 3) !== first) varied = true;
+    }
+  }
+
+  return varied;
+}
+
+export function repeatsAtWidth(png: Buffer, tileWidth: number): boolean {
+  const image = decodeRgb(png);
+
+  return image ? columnsRepeat(image, Math.round(tileWidth)) : false;
+}

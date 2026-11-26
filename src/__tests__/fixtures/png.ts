@@ -51,3 +51,28 @@ function encodeSolidPng(width: number, height: number): Buffer {
     chunk("IEND", Buffer.alloc(0)),
   ]);
 }
+
+export function tiledPng(width: number, height: number, tileWidth: number, tileHeight: number): Buffer {
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8;
+  header[9] = 2;
+  const rows = Array.from({ length: height }, (_, y) => {
+    const row = Buffer.alloc(1 + width * 3, 0xff);
+    row[0] = 0;
+
+    for (let x = 0; x < width; x++) {
+      if (x % tileWidth < 200 && y % tileHeight < 120) row.fill(0, 1 + x * 3 + 1, 1 + x * 3 + 3);
+    }
+
+    return row;
+  });
+
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", header),
+    chunk("IDAT", zlib.deflateSync(Buffer.concat(rows))),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
