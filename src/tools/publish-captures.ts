@@ -24,6 +24,7 @@ import {
   type CapturesRead,
 } from "../lib/browser-captures";
 import { envelope } from "../lib/envelope";
+import { STORE_MD_FILENAME } from "../lib/store-md";
 import { consoleProjectUrl } from "../lib/registry";
 import { badShipRequest, isRow, openShipApi, runShipAct, text } from "../lib/ship-act";
 
@@ -59,7 +60,7 @@ function refuseLocal(browser: CaptureBrowser, read: Extract<CapturesRead, { prob
     status: "bad-request",
     value: { action: SYNC_CAPTURES, browser, ...(read.file ? { file: read.file } : {}) },
     error: { code: "E_BAD_REQUEST", name: "CapturesInputError", message: `${read.problem}. Nothing was sent.` },
-    hint: `Capture again with extension_screenshot browserCapture:true on a ${browserDisplayName(browser)} dev session (it writes ${capturesFolder(browser)}/<surface>-NN.png as a flat PNG), or fix the file, then call sync-captures again with the same browsers and projectPath.`,
+    hint: `Capture again with extension_screenshot browserCapture:true on a ${browserDisplayName(browser)} dev session (it writes ${capturesFolder(browser)}/<surface>-NN.png as a flat PNG), name the PNG screenshots on STORE.md's \`- Screenshots:\` line, or fix the file, then call sync-captures again with the same browsers and projectPath.`,
   });
 }
 
@@ -144,7 +145,8 @@ function capturesTrackUrl(api: ProjectApi, args: SyncCapturesArgs): string {
 }
 
 /* @invariant A CAPTURE SET IS SENT AS THE FOLDER HOLDS IT, AND NEVER TWICE.
- * sync-captures reads captures/<browser>/ in file name order with the
+ * sync-captures reads captures/<browser>/ (else the screenshots STORE.md
+ * lists, in the order it names them) in file name order with the
  * surfaces, captions and capturedIn the index beside it records, refuses the
  * set on this machine before any approval is asked for, and sends it once:
  * the first call without approvalId answers approval-required with the
@@ -156,7 +158,7 @@ export async function syncCaptures(args: SyncCapturesArgs, local: PublishLocal):
   const unknown = browsers.filter((b) => !isCaptureBrowser(b));
 
   if (!browsers.length) {
-    return badShipRequest(COMMAND, SYNC_CAPTURES, "CapturesInputError", `sync-captures needs browsers, one or more of ${CAPTURE_BROWSERS.join(", ")}: each names the captures/<browser>/ folder to send. Nothing was sent.`);
+    return badShipRequest(COMMAND, SYNC_CAPTURES, "CapturesInputError", `sync-captures needs browsers, one or more of ${CAPTURE_BROWSERS.join(", ")}: each names the captures/<browser>/ folder to send, or STORE.md's screenshots when that folder is empty. Nothing was sent.`);
   }
 
   if (unknown.length) {
@@ -236,9 +238,11 @@ export async function syncCaptures(args: SyncCapturesArgs, local: PublishLocal):
     const count = Array.isArray(row.captures) ? row.captures.length : 0;
     const captured = readCapturedIn(row.capturedIn);
 
-    if (row.status === "unchanged") return `${capturesFolder(browser)}/ already matches the ${browserDisplayName(browser)} captures on record, so nothing was written for ${browser}.`;
+    const from = isRow(row.from) && text(row.from.folder) === STORE_MD_FILENAME ? `the screenshots ${STORE_MD_FILENAME} lists` : `${capturesFolder(browser)}/`;
 
-    return `${plural(count, `${browserDisplayName(browser)} capture`)} from ${capturesFolder(browser)}/ now ${count === 1 ? "shows" : "show"} on the public build pages of ${project}${captured ? ` as captured in ${majorVersion(captured)}` : ""}${publicUrl ? `: ${publicUrl}` : ""}.`;
+    if (row.status === "unchanged") return `${from} already ${from.endsWith("/") ? "matches" : "match"} the ${browserDisplayName(browser)} captures on record, so nothing was written for ${browser}.`;
+
+    return `${plural(count, `${browserDisplayName(browser)} capture`)} from ${from} now ${count === 1 ? "shows" : "show"} on the public build pages of ${project}${captured ? ` as captured in ${majorVersion(captured)}` : ""}${publicUrl ? `: ${publicUrl}` : ""}.`;
   });
 
   return envelope({

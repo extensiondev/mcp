@@ -245,6 +245,32 @@ describe("extension_publish sync-captures sends captures/<browser>/ once, after 
     expect(out.value).toMatchObject({ action: "sync-captures", browser: "chrome", row: 1, refusedBeforeApproval: true });
     expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
   });
+
+  it("reads the screenshots STORE.md lists when captures/<browser>/ is empty, in the order the line names them", async () => {
+    if (process.platform === "win32") return;
+
+    fs.rmSync(path.join(root, "captures"), { recursive: true, force: true });
+    fs.mkdirSync(path.join(root, "store"), { recursive: true });
+    fs.writeFileSync(path.join(root, "store", "screenshot-2-guard.png"), POPUP);
+    fs.writeFileSync(path.join(root, "store", "screenshot-1-pointer.png"), PAGE);
+    fs.writeFileSync(
+      path.join(root, "STORE.md"),
+      "# Widget\n\n## Listing\n\n- Screenshots: `store/screenshot-1-pointer.png`, `store/screenshot-2-guard.png`, `../outside.png`\n",
+    );
+
+    const asked = await sync({ projectPath: root });
+
+    expect(asked.status).toBe("approval-required");
+    expect(asked.value.browsers.chrome.captures).toEqual([
+      { file: "store/screenshot-1-pointer.png", sha256: sha(PAGE), width: 1280, height: 800 },
+      { file: "store/screenshot-2-guard.png", sha256: sha(POPUP), width: 800, height: 600 },
+    ]);
+
+    const written = await sync({ projectPath: root, approvalId: "apr_c" });
+
+    expect(written.value.browsers.chrome.from).toEqual({ folder: "STORE.md", files: ["store/screenshot-1-pointer.png", "store/screenshot-2-guard.png"] });
+    expect(written.hint).toContain("2 Chrome captures from the screenshots STORE.md lists now show");
+  });
 });
 
 describe("sync-captures refuses the set on this machine before anything is sent", () => {
@@ -311,7 +337,7 @@ describe("sync-captures refuses the set on this machine before anything is sent"
 
     const none = await refused();
 
-    expect(none.error).toMatchObject({ message: "captures/chrome/ holds no .png file. Nothing was sent." });
+    expect(none.error).toMatchObject({ message: "captures/chrome/ holds no .png file and STORE.md lists no PNG screenshot inside the project. Nothing was sent." });
   });
 
   it("a width under 640", async () => {

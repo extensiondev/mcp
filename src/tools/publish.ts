@@ -22,7 +22,7 @@ export const schema = {
         type: "string",
         enum: ["publish", "sync-captures"],
         default: "publish",
-        description: "publish: the link; sync-captures: captures/<browser>/*.png to build pages (approval).",
+        description: "publish: the link; sync-captures: captures/<browser>/*.png, else STORE.md screenshots, to build pages (approval).",
       },
       browsers: {
         type: "array",

@@ -479,7 +479,7 @@ Publish and share a build through extension.dev: answers the tester link, a page
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "publish" \| "sync-captures" | no | `"publish"` | publish: the link; sync-captures: captures/<browser>/*.png to build pages (approval). |
+| `action` | "publish" \| "sync-captures" | no | `"publish"` | publish: the link; sync-captures: captures/<browser>/*.png, else STORE.md screenshots, to build pages (approval). |
 | `browsers` | array of "chrome" \| "firefox" \| "edge" \| "safari" | no |  | sync-captures: browsers, one approval each. |
 | `projectPath` | string | no |  | sync-captures: project root. |
 | `approvalId` | string | no |  | Approved approval id. |

@@ -12,6 +12,8 @@ import path from "node:path";
 
 import { pngHeader } from "./png-flat";
 import { MAX_SCREENSHOT_BYTES, readPngSize } from "./store-listing-media";
+import { STORE_MD_FILENAME } from "./store-md";
+import { parseStoreMdListing } from "./store-md-listing";
 
 export const BROWSER_CAPTURES_ACTION = "extension_browsers.captures";
 export const CAPTURES_DIR = "captures";
@@ -164,29 +166,91 @@ export function listCaptureFiles(projectPath: string, browser: CaptureBrowser): 
 
 export type CapturesRead = { captures: LocalCapture[]; capturedIn: CapturedIn | null; folder: string; files: string[] } | { problem: string; file?: string };
 
+interface CaptureSource {
+  folder: string;
+  files: Array<{ file: string; absolute: string; row?: CaptureEntry }>;
+  index: CapturesIndex | null;
+}
+
+function insideProject(projectPath: string, given: string): string | null {
+  const root = path.resolve(projectPath);
+  const absolute = path.resolve(root, given);
+  const relative = path.relative(root, absolute);
+
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) return null;
+
+  return relative.split(path.sep).join("/");
+}
+
+export function storeMdScreenshotFiles(projectPath: string): string[] {
+  let content: string;
+
+  try {
+    content = fs.readFileSync(path.join(path.resolve(projectPath), STORE_MD_FILENAME), "utf8");
+  } catch {
+    return [];
+  }
+
+  const listed = parseStoreMdListing(content).screenshotPaths ?? [];
+
+  return listed
+    .map((given) => insideProject(projectPath, given))
+    .filter((file): file is string => Boolean(file) && file!.toLowerCase().endsWith(".png"))
+    .filter((file) => fs.existsSync(path.join(path.resolve(projectPath), file)));
+}
+
+/* @invariant A BROWSER'S CAPTURES ARE ITS OWN FOLDER, ELSE THE SCREENSHOTS
+ * STORE.md LISTS. captures/<browser>/ wins whenever it holds a PNG, with the
+ * surfaces and captions its index records. With no such folder the PNG files
+ * named on STORE.md's "- Screenshots:" line, inside projectPath and on disk,
+ * are the set, in the order the line names them, so an owner whose store
+ * listing already names its screenshots approves once and the agent copies
+ * no file and writes no index by hand (MCP ledger 1225).
+ */
+function captureSource(projectPath: string, browser: CaptureBrowser): CaptureSource {
+  const folder = capturesFolder(browser);
+  const own = listCaptureFiles(projectPath, browser);
+
+  if (own.length) {
+    const index = readCapturesIndex(projectPath, browser);
+    const rows = new Map(index.captures.map((entry) => [entry.file, entry]));
+
+    return {
+      folder,
+      index,
+      files: own.map((name) => ({ file: `${folder}/${name}`, absolute: path.join(capturesDir(projectPath, browser), name), row: rows.get(name) })),
+    };
+  }
+
+  const listed = storeMdScreenshotFiles(projectPath);
+
+  return {
+    folder: listed.length ? STORE_MD_FILENAME : folder,
+    index: null,
+    files: listed.map((file) => ({ file, absolute: path.join(path.resolve(projectPath), file) })),
+  };
+}
+
 /* @invariant A CAPTURE SET IS REFUSED HERE BEFORE ANY APPROVAL IS ASKED FOR.
  * The platform's rules for a browser capture (PNG, no alpha, one to ten per
  * browser, at least 640 wide, under the listing image byte cap, a caption of
- * 120 characters at most) are measured on the files in captures/<browser>/
- * before the first PUT, so an owner is never sent an approval page for a set
- * the platform would refuse once approved. */
+ * 120 characters at most) are measured on the files of the set before the
+ * first PUT, so an owner is never sent an approval page for a set the
+ * platform would refuse once approved. */
 export function readCaptures(projectPath: string, browser: CaptureBrowser): CapturesRead {
-  const folder = capturesFolder(browser);
-  const files = listCaptureFiles(projectPath, browser);
+  const source = captureSource(projectPath, browser);
+  const { folder } = source;
 
-  if (!files.length) return { problem: `${folder}/ holds no .png file` };
-  if (files.length > MAX_CAPTURES) return { problem: `${folder}/ holds ${files.length} .png files; a browser takes at most ${MAX_CAPTURES} captures` };
+  if (!source.files.length) return { problem: `${folder}/ holds no .png file and ${STORE_MD_FILENAME} lists no PNG screenshot inside the project` };
+  if (source.files.length > MAX_CAPTURES) return { problem: `${folder === STORE_MD_FILENAME ? `${STORE_MD_FILENAME} lists` : `${folder}/ holds`} ${source.files.length} .png files; a browser takes at most ${MAX_CAPTURES} captures` };
 
-  const index = readCapturesIndex(projectPath, browser);
-  const rows = new Map(index.captures.map((entry) => [entry.file, entry]));
   const captures: LocalCapture[] = [];
 
-  for (const name of files) {
-    const file = `${folder}/${name}`;
+  for (const { file, absolute, row } of source.files) {
     let bytes: Buffer;
 
     try {
-      bytes = fs.readFileSync(path.join(capturesDir(projectPath, browser), name));
+      bytes = fs.readFileSync(absolute);
     } catch {
       return { problem: `${file} could not be read`, file };
     }
@@ -199,7 +263,6 @@ export function readCaptures(projectPath: string, browser: CaptureBrowser): Capt
     if (size.width < MIN_CAPTURE_WIDTH) return { problem: `${file} is ${size.width}x${size.height}; a browser capture is at least ${MIN_CAPTURE_WIDTH} pixels wide`, file };
     if (bytes.length > MAX_SCREENSHOT_BYTES) return { problem: `${file} is ${bytes.length} bytes, over the ${MAX_SCREENSHOT_BYTES} an image takes`, file };
 
-    const row = rows.get(name);
     const caption = typeof row?.caption === "string" ? row.caption.trim() : "";
     if (caption.length > MAX_CAPTION_LENGTH) return { problem: `${file} has a caption of ${caption.length} characters in ${folder}/${CAPTURES_INDEX}; a caption takes at most ${MAX_CAPTION_LENGTH}`, file };
 
@@ -215,7 +278,7 @@ export function readCaptures(projectPath: string, browser: CaptureBrowser): Capt
     });
   }
 
-  return { captures, capturedIn: index.capturedIn ?? null, folder, files };
+  return { captures, capturedIn: source.index?.capturedIn ?? null, folder, files: source.files.map(({ file }) => (source.index ? path.posix.basename(file) : file)) };
 }
 
 /* @invariant THE DIGEST IS THE PLATFORM'S OWN RECIPE, BYTE FOR BYTE. The
