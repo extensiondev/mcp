@@ -14,6 +14,13 @@ describe("the draft refusal hints name the store of the call", () => {
     expect(shipRefusalHint("SUBMISSION_NOT_DRAFT")).toMatch(/^Only a Chrome draft/);
     expect(shipRefusalHint("NO_CHROME_DRAFT", undefined, "safari")).toContain('There is no Safari draft to send yet. Submit a build with extension_submit (browsers: ["safari"]');
   });
+
+  it("1267: the rollout refusal never says Chrome publishes to everyone at once, since a draft mode holds the publish", () => {
+    const hint = String(shipRefusalHint("ROLLOUT_NOT_STAGED", undefined, "chrome"));
+
+    expect(hint).toMatch(/^This project has no Chrome staged rollout, so there is no rollout to raise\./);
+    expect(hint).not.toContain("everyone at once");
+  });
 });
 
 describe("extension_submit publish for Safari with the TestFlight build named", () => {

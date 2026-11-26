@@ -99,7 +99,7 @@ const HINTS: Record<string, string> = {
   SUBMISSION_NOT_FOUND: `Read the submission ids with ${STORES_READ} and pass one as submissionId.`,
   SUBMISSION_NOT_JOINABLE: `The platform cannot tie this submission to its store record, so it did not act on it. Read it with ${STORES_READ}.`,
   ROLLOUT_STORE_NOT_SUPPORTED: "A staged rollout is a Chrome Web Store feature; no other store exposes one.",
-  ROLLOUT_NOT_STAGED: "Chrome publishes this project to everyone at once, so there is no rollout to raise. Staged publish is turned on in the project's Chrome store settings in the console and applies from the next submission.",
+  ROLLOUT_NOT_STAGED: "This project has no Chrome staged rollout, so there is no rollout to raise. Staged publish is turned on in the project's Chrome store settings in the console and applies from the next submission.",
   ROLLOUT_NOT_HIGHER: 'Pass a deployPercentage above the current one; extension_release_status (include: ["rollout"]) reads it.',
   ROLLOUT_PERCENTAGE_INVALID: "Pass deployPercentage as a whole number from 1 to 100.",
   ROLLOUT_PERCENTAGE_OUT_OF_RANGE: "Pass deployPercentage as a whole number from 1 to 100; stopping a rollout is done in the Chrome Web Store dashboard.",
