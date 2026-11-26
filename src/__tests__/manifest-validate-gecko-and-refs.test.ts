@@ -385,7 +385,7 @@ describe("data_collection_permissions follows what AMO's linter reports", () => 
   });
 
   it("warns when the minimum is below 140", async () => {
-    expect(await report({ gecko: { strict_min_version: "128.0" } })).toMatch(/strict_min_version is \\"128\.0\\", so AMO's linter reports the key as unsupported/);
+    expect(await report({ gecko: { strict_min_version: "128.0" } })).toMatch(/strict_min_version is \\"128\.0\\", so Mozilla's linter reports the key as unsupported/);
   });
 
   it("names the Android minimum at 140 and stays quiet once gecko_android sets 142", async () => {

@@ -47,7 +47,7 @@ export function offLaneHandOf(code: unknown, body: unknown): StoreActByHand | nu
 
 const OFF_LANE_TRUTHS: Record<string, Record<string, string>> = {
   firefox: {
-    publish: 'Firefox has no publish act; AMO reviews a Firefox version when it is submitted. Leave firefox out of publish, and submit the version with extension_submit (browsers: ["firefox"], dryRun: false).',
+    publish: 'Firefox has no publish act; Mozilla reviews a Firefox version when it is submitted. Leave firefox out of publish, and submit the version with extension_submit (browsers: ["firefox"], dryRun: false).',
   },
 };
 

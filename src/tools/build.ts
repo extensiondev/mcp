@@ -222,7 +222,7 @@ export function addonLintFrame(summary: EngineBuildSummary | null, distRoot: str
   }
 
   if (status === "failed") {
-    warnings.push(`The addons.mozilla.org lint failed to run${lint.reason ? ` (${lint.reason})` : ""}, so this answer carries no AMO findings for the package.`);
+    warnings.push(`The addons.mozilla.org lint failed to run${lint.reason ? ` (${lint.reason})` : ""}, so this answer carries no findings from Mozilla's linter for the package.`);
   }
 
   if (noteWrittenAt !== null && !noteIsCurrent && status !== "linted") {

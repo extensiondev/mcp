@@ -63,26 +63,26 @@ export function firefoxKeyPairState(json: Row): FirefoxKeyPairState {
 
 function keyPairFix(cause: string | undefined): string {
   return cause === "issuer-unknown"
-    ? `AMO no longer knows the issuer on file, so the key was revoked or regenerated at ${AMO_API_KEY_PAGE}; take the current pair from there (or generate one)`
+    ? `Mozilla no longer knows the issuer on file, so the key was revoked or regenerated at ${AMO_API_KEY_PAGE}; take the current pair from there (or generate one)`
     : `The issuer and secret do not match; re-copy both from ${AMO_API_KEY_PAGE}`;
 }
 
 export function firefoxKeyPairFailedSentences(reason: string, connectUrl: string, cause?: string): string {
-  return `${failedCheckSentence(reason, "firefox")} ${keyPairFix(cause)} and connect Firefox Add-ons again at ${connectUrl}, replacing the pair on file, where the console checks the pair against AMO before it saves it; then say preflight again. Nothing is submitted to Firefox until AMO answers that check.`;
+  return `${failedCheckSentence(reason, "firefox")} ${keyPairFix(cause)} and connect Firefox Add-ons again at ${connectUrl}, replacing the pair on file, where the console checks the pair against Mozilla before it saves it; then say preflight again. Nothing is submitted to Firefox until Mozilla answers that check.`;
 }
 
 export function firefoxWorkspaceKeyPairSentences(state: "failed" | "unverified", reason: string, accountsUrl: string, cause?: string): string {
   return state === "failed"
     ? `${failedCheckSentence(reason, "firefox", "workspace")} That pair is the workspace's Firefox Add-ons account, which every project without its own key uses; ${keyPairFix(cause).replace(/^The /, "the ")} and connect it again on the workspace's Store accounts page at ${accountsUrl}, replacing the pair on file, then say preflight again.`
-    : `The workspace's Firefox Add-ons account has not been checked against Mozilla yet; connect it again on the workspace's Store accounts page at ${accountsUrl}, where the console checks the pair against AMO before it saves it, then say preflight again.`;
+    : `The workspace's Firefox Add-ons account has not been checked against Mozilla yet; connect it again on the workspace's Store accounts page at ${accountsUrl}, where the console checks the pair against Mozilla before it saves it, then say preflight again.`;
 }
 
 export function firefoxKeyPairUnverifiedSentences(connectUrl: string, refused: boolean): string {
   const consequence = refused
     ? "so the platform refuses the upload until it is"
-    : "so an upload can fail at AMO after the owner's approval is spent";
+    : "so an upload can fail at Firefox Add-ons after the owner's approval is spent";
 
-  return `The AMO key pair saved for this project has not been checked against Mozilla, ${consequence}. Connect Firefox Add-ons once at ${connectUrl}: the console checks the issuer and secret against AMO before it saves them. Then say preflight again.`;
+  return `The Firefox Add-ons key pair saved for this project has not been checked against Mozilla, ${consequence}. Connect Firefox Add-ons once at ${connectUrl}: the console checks the issuer and secret against Mozilla before it saves them. Then say preflight again.`;
 }
 
 export function firefoxConnectUrl(ref: ProjectRef | null, api?: string): string {
@@ -90,7 +90,7 @@ export function firefoxConnectUrl(ref: ProjectRef | null, api?: string): string 
 }
 
 export function firefoxConnectSentences(connectUrl: string): string {
-  return `Firefox AMO is not connected to this project yet. Mozilla issues the two values once at ${AMO_API_KEY_PAGE}: the JWT issuer and the JWT secret, as the console form labels them. Paste them, with the add-on id or its AMO dashboard address, into the Firefox store settings at ${connectUrl}; store publishing is turned on there or with extension_submit action:"configure-store" store:"firefox" storeSettings:{enabled:true} (one owner approval); then say preflight again. I upload to the unlisted channel unless the project saved a release channel, and sign it for self distribution.`;
+  return `Firefox Add-ons is not connected to this project yet. Mozilla issues the two values once at ${AMO_API_KEY_PAGE}: the JWT issuer and the JWT secret, as the console form labels them. Paste them, with the add-on id or its AMO Developer Hub address, into the Firefox store settings at ${connectUrl}; store publishing is turned on there or with extension_submit action:"configure-store" store:"firefox" storeSettings:{enabled:true} (one owner approval); then say preflight again. I upload to the unlisted channel unless the project saved a release channel, and sign it for self distribution.`;
 }
 
 const SOURCE_ARCHIVE_CHECK = "store.firefox_source_archive";

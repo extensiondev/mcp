@@ -138,7 +138,7 @@ describe("a Firefox review line is keyed on the version AMO holds, never on the 
 
     expect(reviewBesideSubmission(ROW, unread, "firefox")).toMatchObject({
       stale: true,
-      staleReason: "this review line names version 0.2.0 of build 069d4b8; AMO's state for 0.2.0.8 has not been read yet",
+      staleReason: "this review line names version 0.2.0 of build 069d4b8; the state Firefox Add-ons holds for 0.2.0.8 has not been read yet",
     });
   });
 

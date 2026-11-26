@@ -82,7 +82,7 @@ export function nextStep(kind: NextStepKind, say: string, url?: string): NextSte
 const STORE_NAMES: Record<string, string> = {
   chrome: "the Chrome Web Store",
   edge: "Edge Add-ons",
-  firefox: "Firefox AMO",
+  firefox: "Firefox Add-ons",
   safari: "the App Store",
 };
 

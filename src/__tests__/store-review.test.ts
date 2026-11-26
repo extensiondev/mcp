@@ -279,8 +279,8 @@ describe("971: a Safari build names App Store review and the section Safari read
     const chrome = reviewDistReport(dist, "chrome").risks.find((r) => r.code === "BROAD_HOST_ACCESS")!;
 
     expect(safari.message).toContain("App Store reviewers ask why");
-    expect(safari.message).not.toMatch(/Chrome Web Store|AMO/);
-    expect(chrome.message).toContain("Chrome Web Store and AMO reviewers ask why");
+    expect(safari.message).not.toMatch(/Chrome Web Store|Firefox Add-ons/);
+    expect(chrome.message).toContain("Chrome Web Store and Firefox Add-ons reviewers ask why");
   });
 
   it("points a STORE.md check at the Safari section's reviewer notes", () => {
@@ -324,7 +324,7 @@ describe("949: Firefox reviewer notes with no build line are named, with the lin
       stage: "review",
       expected: sentence,
       actual: "no build line",
-      message: `The Firefox reviewer note in STORE.md has no build line, and AMO's reviewers rebuild a bundled add-on from that line. Write under \`### Reviewer notes\` in \`## Firefox Add-ons\` of STORE.md: ${sentence}`,
+      message: `The Firefox reviewer note in STORE.md has no build line, and Mozilla's reviewers rebuild a bundled add-on from that line. Write under \`### Reviewer notes\` in \`## Firefox Add-ons\` of STORE.md: ${sentence}`,
       write: { file: "STORE.md", section: "## Firefox Add-ons", heading: "### Reviewer notes", with: sentence },
     });
 
@@ -336,7 +336,7 @@ describe("949: Firefox reviewer notes with no build line are named, with the lin
     const bare = reviewerNoteToolchainCheck({ projectPath: dist, storeMd: "## Firefox Add-ons\n\n- Category: Productivity\n", toolchain })!;
 
     expect(unbuilt.message).toBe(
-      'The Firefox reviewer note in STORE.md has no build line, and AMO\'s reviewers rebuild a bundled add-on from that line. No build toolchain was read to fill it: run extension_build with browser "firefox" once, and this check names the line to write.',
+      'The Firefox reviewer note in STORE.md has no build line, and Mozilla\'s reviewers rebuild a bundled add-on from that line. No build toolchain was read to fill it: run extension_build with browser "firefox" once, and this check names the line to write.',
     );
 
     expect(unbuilt.write).toEqual({ file: "STORE.md", section: "## Firefox Add-ons", heading: "### Reviewer notes" });

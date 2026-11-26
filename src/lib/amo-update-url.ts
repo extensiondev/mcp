@@ -104,15 +104,15 @@ function channelSource(read: AmoChannelRead): string {
 }
 
 export const UPDATE_URL_UNKNOWN_CHANNEL =
-  "AMO refuses update_url on a listed submission; it is fine unlisted (STORE.md `- Channel:` decides). AMO's linter reported MANIFEST_UPDATE_URL (\"update_url\" is not allowed) on browser_specific_settings.gecko.update_url; write `- Channel: unlisted` or `- Channel: listed` under `## Firefox Add-ons` in STORE.md so this check can say which applies.";
+  "Firefox Add-ons refuses update_url on a listed submission; it is fine unlisted (STORE.md `- Channel:` decides). Mozilla's linter reported MANIFEST_UPDATE_URL (\"update_url\" is not allowed) on browser_specific_settings.gecko.update_url; write `- Channel: unlisted` or `- Channel: listed` under `## Firefox Add-ons` in STORE.md so this check can say which applies.";
 
 export function updateUrlLineFor(read: AmoChannelRead): string {
   if (read.channel === "unlisted") {
-    return `update_url is fine for an unlisted (self-distributed) add-on; remove it before a listed submission. AMO's linter reported MANIFEST_UPDATE_URL ("update_url" is not allowed) because it checks every manifest against the listed channel's rules; this project ships unlisted (${channelSource(read)}), where AMO signs the file with browser_specific_settings.gecko.update_url in place.`;
+    return `update_url is fine for an unlisted (self-distributed) add-on; remove it before a listed submission. Mozilla's linter reported MANIFEST_UPDATE_URL ("update_url" is not allowed) because it checks every manifest against the listed channel's rules; this project ships unlisted (${channelSource(read)}), where Mozilla signs the file with browser_specific_settings.gecko.update_url in place.`;
   }
 
   if (read.channel === "listed") {
-    return `Remove browser_specific_settings.gecko.update_url before the listed submission: AMO refuses update_url on a listed submission (MANIFEST_UPDATE_URL, "update_url" is not allowed), so the upload would be refused; this project ships listed (${channelSource(read)}). update_url is fine only for an unlisted (self-distributed) add-on.`;
+    return `Remove browser_specific_settings.gecko.update_url before the listed submission: Firefox Add-ons refuses update_url on a listed submission (MANIFEST_UPDATE_URL, "update_url" is not allowed), so the upload would be refused; this project ships listed (${channelSource(read)}). update_url is fine only for an unlisted (self-distributed) add-on.`;
   }
 
   return UPDATE_URL_UNKNOWN_CHANNEL;

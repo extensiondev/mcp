@@ -183,7 +183,7 @@
         "alsoRead": [
           "## Listing"
         ],
-        "limit": "up to 100 characters, asked only when a Firefox version goes to the listed audience, because AMO refuses a listed version without one, and never otherwise"
+        "limit": "up to 100 characters, asked only when a Firefox version goes to the listed audience, because Firefox Add-ons refuses a listed version without one, and never otherwise"
       },
       {
         "field": "reviewerNotes",

@@ -115,7 +115,7 @@ export const schema = {
           releaseChannel: {
             type: "string",
             enum: ["listed", "unlisted"],
-            description: "Firefox: the AMO channel.",
+            description: "Firefox Add-ons channel.",
           },
           chromeItemId: {
             type: "string",

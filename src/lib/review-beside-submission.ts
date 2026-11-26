@@ -212,7 +212,7 @@ function firefoxReviewBeside(
   return {
     ...review,
     stale: true,
-    staleReason: `this review line names version ${review.version || "unknown"} of build ${review.buildId || "unknown"}; AMO's state for ${version || "the newer submission"} has not been read yet`,
+    staleReason: `this review line names version ${review.version || "unknown"} of build ${review.buildId || "unknown"}; the state Firefox Add-ons holds for ${version || "the newer submission"} has not been read yet`,
   };
 }
 

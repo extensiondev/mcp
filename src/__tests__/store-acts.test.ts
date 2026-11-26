@@ -64,7 +64,7 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
     const firefox = offLane("firefox", "publish", "Sending the Firefox Add-ons draft to review").body;
     const chrome = offLane("chrome", "publish", "Sending the Chrome Web Store draft to review").body;
 
-    expect(shipRefusalHint("STORE_ACT_NOT_ON_LANE", undefined, "", firefox)).toContain("Firefox has no publish act; AMO reviews a Firefox version when it is submitted.");
+    expect(shipRefusalHint("STORE_ACT_NOT_ON_LANE", undefined, "", firefox)).toContain("Firefox has no publish act; Mozilla reviews a Firefox version when it is submitted.");
     expect(shipRefusalHint("STORE_ACT_NOT_ON_LANE", undefined, "", chrome)).toBeUndefined();
     expect(shipRefusalHint("PUBLISH_STORE_NOT_SUPPORTED")).toBeUndefined();
     expect(shipRefusalHint("CANCEL_STORE_NOT_SUPPORTED")).toBeUndefined();

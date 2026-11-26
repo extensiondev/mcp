@@ -1,5 +1,5 @@
 ---
-description: Get an extension through store review (Chrome Web Store, Firefox AMO, Edge Add-ons, App Store for Safari)
+description: Get an extension through store review (Chrome Web Store, Firefox Add-ons, Edge Add-ons, App Store for Safari)
 argument-hint: "[chrome|firefox|edge|safari|all]"
 ---
 
@@ -19,7 +19,7 @@ Default to `chrome` and `firefox`. `all` means chrome, firefox, edge and safari.
    - `<all_urls>` or broad host permissions without a reason in the listing
    - remote code (`eval`, `new Function`, scripts loaded from a URL)
    - permissions the code never uses
-   - Firefox: a missing `browser_specific_settings.gecko.data_collection_permissions` declaration, which AMO now requires for new add-ons and updates. The owner states what it holds: ask, and propose no value for it
+   - Firefox: a missing `browser_specific_settings.gecko.data_collection_permissions` declaration, which Firefox Add-ons now requires for new add-ons and updates. The owner states what it holds: ask, and propose no value for it
    - a bundle over 10 MB, source maps in the production build, missing 128px icon
 
 Steps 4 to 8 use the extension.dev platform tools (`extension_release_status`, `extension_submit_read`, `extension_approvals_request`, `extension_submit`), which the server lists only when it was started with `--features=local,platform`. If they are not in the tool list, stop here: starting the server with `--features=local,platform` lists them. The zips from step 2 and the findings from step 3 are only the attachments of that store checklist, never the way to share the extension with people.
@@ -39,5 +39,5 @@ Steps 4 to 8 use the extension.dev platform tools (`extension_release_status`, `
 ## Rules
 
 - Never submit without the user's confirmation in step 7, and never retry a real submission with a different build or store list under an old `approvalId`; request a new approval.
-- Keep the manifest version the project already declares. Extension.js templates use `chromium:manifest_version: 3` and `firefox:manifest_version: 2`, and AMO accepts both; do not migrate a manifest as part of a submission.
+- Keep the manifest version the project already declares. Extension.js templates use `chromium:manifest_version: 3` and `firefox:manifest_version: 2`, and Firefox Add-ons accepts both; do not migrate a manifest as part of a submission.
 - Store credentials are never arguments and never asked for in chat; they live in the extension.dev console.

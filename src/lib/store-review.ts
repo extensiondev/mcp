@@ -205,7 +205,7 @@ export function reviewRisksReport(input: {
   if (broad.length) {
     risks.push({
       code: "BROAD_HOST_ACCESS",
-      message: `The extension asks for access to every website (${broad.join(", ")}). ${WEBKIT_FAMILY.has(input.browser) ? "App Store" : "Chrome Web Store and AMO"} reviewers ask why, and the review takes longer.`,
+      message: `The extension asks for access to every website (${broad.join(", ")}). ${WEBKIT_FAMILY.has(input.browser) ? "App Store" : "Chrome Web Store and Firefox Add-ons"} reviewers ask why, and the review takes longer.`,
       fix: "List only the sites the extension works on, or use activeTab so access is granted per click; if every site is the point, say why in the listing.",
       permissions: broad,
     });
@@ -317,7 +317,7 @@ export function reviewRisksReport(input: {
     if (!gecko || !("data_collection_permissions" in gecko)) {
       risks.push({
         code: "FIREFOX_DATA_COLLECTION_MISSING",
-        message: "The Firefox manifest has no browser_specific_settings.gecko.data_collection_permissions. AMO requires it for new add-ons and for updates.",
+        message: "The Firefox manifest has no browser_specific_settings.gecko.data_collection_permissions. Firefox Add-ons requires it for new add-ons and for updates.",
         fix: 'Ask the owner what the extension collects and write "browser_specific_settings": { "gecko": { "data_collection_permissions": ... } } with the categories they state (https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/). Do not fill it in for them or suggest a value. This rule is about the declaration alone.',
       });
     }

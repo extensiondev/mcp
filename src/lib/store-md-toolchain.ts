@@ -351,7 +351,7 @@ export function reviewerNoteToolchainCheck(project: ToolchainProject): Row | nul
       stage: "review",
       expected: replacement ?? "the Node, package manager and Extension.js versions of the build that is uploaded",
       actual: "no build line",
-      message: `The Firefox reviewer note in ${STORE_MD_FILENAME} has no build line, and AMO's reviewers rebuild a bundled add-on from that line. ${replacement ? `Write under ${place}: ${replacement}` : NO_BUILD_READ}`,
+      message: `The Firefox reviewer note in ${STORE_MD_FILENAME} has no build line, and Mozilla's reviewers rebuild a bundled add-on from that line. ${replacement ? `Write under ${place}: ${replacement}` : NO_BUILD_READ}`,
       ...(built ? { built: { from: built.from, ...built.chain } } : {}),
       write: {
         file: STORE_MD_FILENAME,
@@ -367,8 +367,8 @@ export function reviewerNoteToolchainCheck(project: ToolchainProject): Row | nul
   const where = `the sentence under \`${REVIEWER_NOTE_HEADING}\` in \`${REVIEWER_NOTE_SECTION}\` of ${STORE_MD_FILENAME}`;
   const fix = replacement ? `Replace ${where} with: ${replacement}` : NO_BUILD_READ;
   const message = line.sample
-    ? `The Firefox reviewer note in ${STORE_MD_FILENAME} still carries the template's sample build line (${said}, with the "replace both" instruction), and AMO's reviewers rebuild the add-on from that line.${ran ? ` ${ran}.` : ""} ${fix}`
-    : `The Firefox reviewer note in ${STORE_MD_FILENAME} says ${said}, and ${ran}; AMO's reviewers rebuild the add-on from the note, so a version it misstates fails the source review. ${fix}`;
+    ? `The Firefox reviewer note in ${STORE_MD_FILENAME} still carries the template's sample build line (${said}, with the "replace both" instruction), and Mozilla's reviewers rebuild the add-on from that line.${ran ? ` ${ran}.` : ""} ${fix}`
+    : `The Firefox reviewer note in ${STORE_MD_FILENAME} says ${said}, and ${ran}; Mozilla's reviewers rebuild the add-on from the note, so a version it misstates fails the source review. ${fix}`;
 
   return {
     id: REVIEWER_NOTE_TOOLCHAIN_CHECK,

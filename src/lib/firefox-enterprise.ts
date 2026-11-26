@@ -24,9 +24,9 @@ export const FIREFOX_AGREEMENT_CHECK = "firefox.distribution_agreement";
 export const FIREFOX_ENTERPRISE_CHANNEL_CHECK = "firefox.enterprise_channel";
 export const ADMIN_INSTALL_ONLY_KEY = "browser_specific_settings.gecko.admin_install_only";
 
-export const ENTERPRISE_CHANNEL_SENTENCE = `${ADMIN_INSTALL_ONLY_KEY} is true, the key Mozilla has enterprise developers self-declare with, so from ${ENTERPRISE_CHANNEL_DAY} this version goes to AMO's enterprise channel, which is neither listed nor unlisted: enterprise versions are only available through that channel, never appear on AMO and are not distributed by Mozilla in any other way, and they follow the enterprise add-on policies. The submission process does not change, and every developer on AMO must accept the updated Firefox Add-on Distribution Agreement. To keep the add-on listed on AMO, submit it the usual way without the key. Until that day AMO's linter (addons-linter 10.15.0, measured 2026-11-11) refuses any upload that carries the key as ADMIN_INSTALL_ONLY_PROP_RESERVED. Mozilla's post: ${ENTERPRISE_POLICIES_POST}`;
+export const ENTERPRISE_CHANNEL_SENTENCE = `${ADMIN_INSTALL_ONLY_KEY} is true, the key Mozilla has enterprise developers self-declare with, so from ${ENTERPRISE_CHANNEL_DAY} this version goes to the Firefox Add-ons enterprise channel, which is neither listed nor unlisted: enterprise versions are only available through that channel, never appear on Firefox Add-ons and are not distributed by Mozilla in any other way, and they follow the enterprise add-on policies. The submission process does not change, and every developer on Firefox Add-ons must accept the updated Firefox Add-on Distribution Agreement. To keep the add-on listed on Firefox Add-ons, submit it the usual way without the key. Until that day Mozilla's linter (addons-linter 10.15.0, measured 2026-11-11) refuses any upload that carries the key as ADMIN_INSTALL_ONLY_PROP_RESERVED. Mozilla's post: ${ENTERPRISE_POLICIES_POST}`;
 
-export const AGREEMENT_SENTENCE = `Every developer on AMO must accept the updated Firefox Add-on Distribution Agreement, which Mozilla adopts on ${ENTERPRISE_CHANNEL_DAY} with the enterprise add-on policies (${ENTERPRISE_POLICIES_POST})`;
+export const AGREEMENT_SENTENCE = `Every developer on Firefox Add-ons must accept the updated Firefox Add-on Distribution Agreement, which Mozilla adopts on ${ENTERPRISE_CHANNEL_DAY} with the enterprise add-on policies (${ENTERPRISE_POLICIES_POST})`;
 
 export function adminInstallOnlyOf(manifest: Row): unknown {
   const bss = isRow(manifest.browser_specific_settings) ? manifest.browser_specific_settings : null;
@@ -38,7 +38,7 @@ export function adminInstallOnlyOf(manifest: Row): unknown {
 export function adminInstallOnlyTypeIssue(value: unknown): string | null {
   if (value === undefined || typeof value === "boolean") return null;
 
-  return `${ADMIN_INSTALL_ONLY_KEY} must be true or false, got ${JSON.stringify(value)}; AMO's linter refuses the upload with MANIFEST_FIELD_INVALID ("must be boolean").`;
+  return `${ADMIN_INSTALL_ONLY_KEY} must be true or false, got ${JSON.stringify(value)}; Mozilla's linter refuses the upload with MANIFEST_FIELD_INVALID ("must be boolean").`;
 }
 
 function readJson(file: string): Row | null {
@@ -120,14 +120,14 @@ export function firefoxAgreementCheck(read: AgreementRead | null, now = Date.now
   if (read?.accepted === true) return null;
 
   const inForce = now >= Date.parse(`${ENTERPRISE_CHANNEL_DATE}T00:00:00Z`);
-  const accept = `Accept it at ${FIREFOX_AGREEMENT_URL} with the connected AMO account, then call preflight again`;
+  const accept = `Accept it at ${FIREFOX_AGREEMENT_URL} with the connected Firefox Add-ons account, then call preflight again`;
   const base = {
     id: FIREFOX_AGREEMENT_CHECK,
     label: "The updated Firefox Add-on Distribution Agreement is accepted",
     stage: "integration",
     owner: "you",
     docsUrl: FIREFOX_AGREEMENT_URL,
-    expected: `an acceptance AMO dates ${ENTERPRISE_CHANNEL_DATE} or later`,
+    expected: `an acceptance Mozilla dates ${ENTERPRISE_CHANNEL_DATE} or later`,
   };
 
   if (read?.accepted === false && !read.acceptedAt) {
@@ -135,13 +135,13 @@ export function firefoxAgreementCheck(read: AgreementRead | null, now = Date.now
       ...base,
       status: "fail",
       severity: "blocking",
-      actual: "AMO records no acceptance for the connected account",
-      message: `AMO records no Firefox Add-on Distribution Agreement acceptance for the connected account, and AMO takes no submission without one. ${accept}.`,
+      actual: "Mozilla records no acceptance for the connected account",
+      message: `Mozilla records no Firefox Add-on Distribution Agreement acceptance for the connected account, and Firefox Add-ons takes no submission without one. ${accept}.`,
     };
   }
 
   if (read?.accepted === false) {
-    const dated = `AMO records the agreement accepted on ${day(read.acceptedAt)}, before the updated one`;
+    const dated = `Mozilla records the agreement accepted on ${day(read.acceptedAt)}, before the updated one`;
 
     return inForce
       ? {
@@ -156,12 +156,12 @@ export function firefoxAgreementCheck(read: AgreementRead | null, now = Date.now
           status: "warn",
           severity: "warning",
           actual: dated,
-          message: `${dated}. ${AGREEMENT_SENTENCE}; AMO takes this submission today and prompts for the updated agreement from that day. Accept it at ${FIREFOX_AGREEMENT_URL} when AMO prompts.`,
+          message: `${dated}. ${AGREEMENT_SENTENCE}; Firefox Add-ons takes this submission today and prompts for the updated agreement from that day. Accept it at ${FIREFOX_AGREEMENT_URL} when Mozilla prompts.`,
         };
   }
 
   const why = read?.detail ? `: ${dropTrailing(read.detail, ".", { whitespace: true })}` : " (the submit route's dry run did not answer it)";
-  const unread = `whether the connected AMO account accepted the updated Firefox Add-on Distribution Agreement could not be read${why}`;
+  const unread = `whether the connected Firefox Add-ons account accepted the updated Firefox Add-on Distribution Agreement could not be read${why}`;
 
   return {
     ...base,
@@ -169,7 +169,7 @@ export function firefoxAgreementCheck(read: AgreementRead | null, now = Date.now
     severity: "warning",
     actual: `acceptance could not be read${why}`,
     message: inForce
-      ? `${unread[0]!.toUpperCase()}${unread.slice(1)}, so this submission is not held on it. ${AGREEMENT_SENTENCE}, and that day has passed: AMO takes no submission from an account that has not accepted it. Read and accept it at ${FIREFOX_AGREEMENT_URL} with the connected AMO account.`
-      : `${unread[0]!.toUpperCase()}${unread.slice(1)}. ${AGREEMENT_SENTENCE}. Accept it at ${FIREFOX_AGREEMENT_URL} when AMO prompts.`,
+      ? `${unread[0]!.toUpperCase()}${unread.slice(1)}, so this submission is not held on it. ${AGREEMENT_SENTENCE}, and that day has passed: Firefox Add-ons takes no submission from an account that has not accepted it. Read and accept it at ${FIREFOX_AGREEMENT_URL} with the connected Firefox Add-ons account.`
+      : `${unread[0]!.toUpperCase()}${unread.slice(1)}. ${AGREEMENT_SENTENCE}. Accept it at ${FIREFOX_AGREEMENT_URL} when Mozilla prompts.`,
   };
 }

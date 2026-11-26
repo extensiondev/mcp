@@ -96,7 +96,7 @@ describe("the MANIFEST_UPDATE_URL line is said with the channel", () => {
   it("keeps it as the one line to remove for a listed add-on, saying the upload would be refused", () => {
     const line = updateUrlLineFor({ channel: "listed", source: "platform" });
 
-    expect(line).toMatch(/^Remove browser_specific_settings\.gecko\.update_url before the listed submission: AMO refuses update_url on a listed submission/);
+    expect(line).toMatch(/^Remove browser_specific_settings\.gecko\.update_url before the listed submission: Firefox Add-ons refuses update_url on a listed submission/);
     expect(line).toContain("the upload would be refused");
     expect(line).toContain("the project's Firefox store setting on extension.dev says listed");
     expect(line).toContain("update_url is fine only for an unlisted (self-distributed) add-on");
@@ -106,7 +106,7 @@ describe("the MANIFEST_UPDATE_URL line is said with the channel", () => {
     const line = updateUrlLineFor({ channel: null, source: null });
 
     expect(line).toBe(UPDATE_URL_UNKNOWN_CHANNEL);
-    expect(line).toMatch(/^AMO refuses update_url on a listed submission; it is fine unlisted \(STORE\.md `- Channel:` decides\)\./);
+    expect(line).toMatch(/^Firefox Add-ons refuses update_url on a listed submission; it is fine unlisted \(STORE\.md `- Channel:` decides\)\./);
     expect(line).not.toMatch(/\berror\b/);
   });
 });

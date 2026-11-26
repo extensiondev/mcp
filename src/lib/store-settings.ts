@@ -71,7 +71,7 @@ const EDGE_PRODUCT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-
 const AMO_GUID = /^(?:\{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}|[a-z0-9._-]*@[a-z0-9._-]+)$/i;
 const APP_STORE_ID = /^[1-9]\d{5,14}$/;
 const BUNDLE_ID = /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
-const AMO_GUID_RULING = "An AMO slug or numeric id does not identify the add-on to Mozilla's blocklist.";
+const AMO_GUID_RULING = "A Firefox Add-ons slug or numeric id does not identify the add-on to Mozilla's blocklist.";
 
 const CONSOLE_ONLY_KEYS = new Set([
   "storeId",
@@ -438,7 +438,7 @@ function readStoreId(store: StoreSettingsStore, raw: Row): { key: string; storeI
 
   return value.length <= 255 && AMO_GUID.test(value)
     ? { key, storeId: value }
-    : { problem: `firefoxAddonGuid "${value}" is not a Firefox add-on GUID. Enter the GUID from your manifest or your AMO developer page, in the form name@example.com or {xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}. ${AMO_GUID_RULING}` };
+    : { problem: `firefoxAddonGuid "${value}" is not a Firefox add-on GUID. Enter the GUID from your manifest or your add-on's page in the AMO Developer Hub, in the form name@example.com or {xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}. ${AMO_GUID_RULING}` };
 }
 
 /* @invariant THE CLIENT HASHES THE BYTES THE SERVER HASHES. The approval is

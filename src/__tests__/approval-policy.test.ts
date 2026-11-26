@@ -105,7 +105,7 @@ describe("the approval policy table holds Cezar's ruling of 2026-10-23 (ledger 1
 
   it("names what each kept mode does to the next upload, and nothing for a plain mode", () => {
     expect(publicSubmissionModeConsequence({ store: "edge", submissionMode: "review" })).toBe("Edge review sends the next upload to certification, which publishes the extension to everyone when it passes.");
-    expect(publicSubmissionModeConsequence({ store: "firefox", releaseChannel: "listed" })).toContain("AMO's listed review");
+    expect(publicSubmissionModeConsequence({ store: "firefox", releaseChannel: "listed" })).toContain("Mozilla's listed review");
 
     for (const [name, mode] of [["chrome", "public"], ["chrome", "staged"], ["firefox", "listed"]]) {
       expect(publicSubmissionModeConsequence({ store: name, submissionMode: mode }), `${name} ${mode}`).toMatch(/sends the next upload to .* which publishes/);

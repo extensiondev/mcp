@@ -902,7 +902,7 @@ export async function handler(args: {
 
       if (!staticTheme && (!dataCollection || typeof dataCollection !== "object")) {
         storeReadiness.push(
-          'Firefox: no browser_specific_settings.gecko.data_collection_permissions. AMO requires it for new add-ons and the Firefox build warns on every run. What the extension collects is the owner\'s declaration to Mozilla, so ask the person and write the block under firefox:browser_specific_settings.gecko.data_collection_permissions with the categories they state (https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/). Do not add it on their behalf, and do not propose a value for it either. This rule is about the declaration alone.',
+          'Firefox: no browser_specific_settings.gecko.data_collection_permissions. Firefox Add-ons requires it for new add-ons and the Firefox build warns on every run. What the extension collects is the owner\'s declaration to Mozilla, so ask the person and write the block under firefox:browser_specific_settings.gecko.data_collection_permissions with the categories they state (https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/). Do not add it on their behalf, and do not propose a value for it either. This rule is about the declaration alone.',
         );
       }
 
@@ -930,11 +930,11 @@ export async function handler(args: {
       if (dataCollection && typeof dataCollection === "object" && Number.isFinite(minMajor)) {
         if (minMajor < 140) {
           result.warnings.push(
-            `Firefox: data_collection_permissions is read by Firefox 140 and later, and strict_min_version is "${minVersion}", so AMO's linter reports the key as unsupported. Raise firefox:browser_specific_settings.gecko.strict_min_version to "140.0", or remove it.`,
+            `Firefox: data_collection_permissions is read by Firefox 140 and later, and strict_min_version is "${minVersion}", so Mozilla's linter reports the key as unsupported. Raise firefox:browser_specific_settings.gecko.strict_min_version to "140.0", or remove it.`,
           );
         } else if (minMajor < 142 && !(androidMajor >= 142)) {
           result.warnings.push(
-            `Firefox: strict_min_version "${minVersion}" covers data_collection_permissions on desktop, but Firefox for Android reads it from 142, so AMO's linter warns for Android. Add firefox:browser_specific_settings.gecko_android.strict_min_version "142.0".`,
+            `Firefox: strict_min_version "${minVersion}" covers data_collection_permissions on desktop, but Firefox for Android reads it from 142, so Mozilla's linter warns for Android. Add firefox:browser_specific_settings.gecko_android.strict_min_version "142.0".`,
           );
         }
       }
@@ -948,7 +948,7 @@ export async function handler(args: {
         result.warnings.push(`Firefox: ${ENTERPRISE_CHANNEL_SENTENCE}`);
       } else if (adminInstallOnly === false) {
         result.warnings.push(
-          `Firefox: ${ADMIN_INSTALL_ONLY_KEY} is false, and AMO's linter (addons-linter 10.15.0, measured 2026-11-11) refuses a listed or unlisted upload that carries the key at all (ADMIN_INSTALL_ONLY_PROP_RESERVED). Remove it; only an enterprise version sets it, to true.`,
+          `Firefox: ${ADMIN_INSTALL_ONLY_KEY} is false, and Mozilla's linter (addons-linter 10.15.0, measured 2026-11-11) refuses a listed or unlisted upload that carries the key at all (ADMIN_INSTALL_ONLY_PROP_RESERVED). Remove it; only an enterprise version sets it, to true.`,
         );
       }
 
