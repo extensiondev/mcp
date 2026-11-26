@@ -13,9 +13,9 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { DASHBOARD_HOME } from "../lib/chrome-dashboard-agent";
+import { CHROME_SELECTORS, DASHBOARD_HOME } from "../lib/chrome-dashboard-agent";
 import { chromePlan, type ChromePlan } from "../lib/chrome-listing-plan";
-import { chromeStep, newRun, openRows, saveNewItem, SIGN_IN_LINE, signInLine, type ChromePage, type Where } from "../lib/chrome-listing-run";
+import { chromeStep, fitHostLines, newRun, openRows, saveNewItem, SIGN_IN_LINE, signInLine, tabsOf, type ChromePage, type Where } from "../lib/chrome-listing-run";
 import { guidedConnectRuntime, type GuidedConnectRuntime, type LaunchPlan } from "../lib/guided-connect";
 import { guideChromeListing, liveRun, watchChromeListing, type ChromeListingDeps } from "../lib/guided-chrome-listing";
 
@@ -301,6 +301,82 @@ describe("one step of the guided Chrome first listing", () => {
     expect(signInLine("")).toBe(SIGN_IN_LINE);
   });
 
+  it("1243 and 1244: reads a label Chrome repeats, replaces an icon the item holds, names screenshots already there, fits host reasons whole and never opens Distribution on a live item", async () => {
+    const item = "omndndgipeomhfdobfbhpfemempnnpjp";
+    const reason = "downloads the build package and the listing images of the project from the platform with the person's sign-in, only the files the session names, and checks each package against its SHA-256.";
+    const hosts = ["https://*.extension.dev/*", "https://*.extension.land/*", "https://console.extension.dev/*", "https://www.extension.dev/device/handoff*", "https://partner.microsoft.com/*", "https://chrome.google.com/*", "https://addons.mozilla.org/*"];
+    const live = { state: "done", read: { word: "published" }, dashboardUrl: `https://chrome.google.com/webstore/devconsole/pub-owner/${item}/edit` };
+    const long = sheet(live);
+
+    long.pages[1]!.fields[0]!.text = ["`storage`: keeps the session.", ...hosts.map((host) => `${host}: ${reason}`)].join("\n");
+    long.pages[0]!.fields.push({ id: "chrome.category", label: "Category", text: "Developer Tools" }, { id: "chrome.homepage_url", label: "Official URL", text: "https://extension.dev" });
+
+    const plan = await chromePlan(long, async (url) => ({ ok: true, bytes: served[url]! }), tmp);
+
+    expect("DescriptionDescriptionDescription".replace(CHROME_SELECTORS.repeated, "$1")).toBe("Description");
+    expect("Homepage URLHomepage URLHomepage URL".replace(CHROME_SELECTORS.repeated, "$1")).toBe("Homepage URL");
+    expect(plan.notes.some((note) => /^the host reasons under Permissions justification join to [\d,]+ characters and Chrome's Host permission justification takes at most 1,000/.test(note))).toBe(true);
+
+    const fit = fitHostLines(plan.justifications.filter((line) => line.permission.includes("://")));
+
+    expect(fit.length).toBeGreaterThan(1000);
+    expect(fit.kept.map((line) => `${line.permission}: ${line.text}`).join("\n").length).toBeLessThanOrEqual(1000);
+    expect([...fit.kept.map((line) => line.permission), ...fit.left]).toEqual(hosts);
+    expect(tabsOf({ plan })).toEqual(["listing", "privacy"]);
+
+    let tab = "listing";
+    let icon = ["https://lh3.example/old-icon"];
+    const justified: Array<Array<{ permission: string }>> = [];
+    const set: string[] = [];
+    const calls: string[] = [];
+    const fake: ChromePage = {
+      call: async <T>(method: string, ...args: unknown[]) => {
+        calls.push(method);
+
+        const answers: Record<string, unknown> = {
+          where: { host: "chrome.google.com", path: `/u/1/webstore/devconsole/pub-owner/${item}/edit`, heading: "Store listing", itemsList: false, signedInAs: "owner@example.com", signIn: false, dashboard: true, publisherId: "pub-owner", itemId: item, tab, dialog: null, dialogTakesZip: false },
+          setText: "filled",
+          fieldRead: { found: true, value: "English (United States)" },
+          choose: { outcome: "open", x: 5, y: 5 },
+          option: { found: 0, seen: ["Productivity", "Workflow & Planning"] },
+          thumbs: 1,
+          images: icon,
+          justify: [{ key: "storage", outcome: "filled" }, { key: "host", outcome: "filled" }],
+          gate: args[0] === "save" ? { ok: true, label: "Save draft", x: 1, y: 1 } : { ok: true, label: "Privacy", x: 2, y: 2 },
+          marks: {},
+        };
+
+        if (method === "justify") justified.push(args[0] as Array<{ permission: string }>);
+        if (method === "gate" && String(args[0]).startsWith("tab:")) tab = String(args[0]).slice(4);
+
+        return answers[method] as T;
+      },
+      handle: async () => "input-1",
+      setFiles: async (_id, files) => {
+        set.push(...files.map((file) => path.basename(file)));
+        icon = ["https://lh3.example/new-icon"];
+      },
+      click: async () => undefined,
+      type: async () => undefined,
+      navigate: async () => undefined,
+    };
+    const run = newRun("extensiondev/extension-dev-tools", plan, 0);
+    const deps = { page: fake, sleep: async () => undefined, now: () => 0 };
+
+    for (let i = 0; i < 6 && !run.finished && !run.stopped; i += 1) await chromeStep(run, deps);
+
+    expect(run).toMatchObject({ finished: true, stopped: "", done: ["listing", "privacy"] });
+    expect(calls.filter((method) => method === "gate").length).toBe(3);
+    expect(run.filled).toEqual(expect.arrayContaining(["Description", "Homepage URL", "Store icon: chrome-icon-128x128.png (replaced the icon the item had)", `Host permission justification (${fit.kept.length} of 7 host reasons)`]));
+    expect(set).toEqual(["chrome-icon-128x128.png"]);
+    expect(justified[0]!.map((line) => line.permission)).toEqual(["storage", ...fit.kept.map((line) => line.permission)]);
+    expect(run.rows.map((row) => row.line)).toEqual(expect.arrayContaining([
+      'Category on Store listing: choose Developer Tools yourself; the open list shows no option reading "Developer Tools" (it shows "Productivity", "Workflow & Planning")',
+      "Screenshots on Store listing: the slot already holds 1 image, so chrome-screenshot-1-1280x800.png was not attached again; extension.dev tools never removes an image, so remove the old ones on the page and attach it yourself if they differ",
+      expect.stringMatching(new RegExp(`^Host permission justification on Privacy: the host reasons in STORE\\.md join to [\\d,]+ characters and Chrome takes at most 1,000, so ${fit.left.join(", ").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} were left out whole`)),
+    ]));
+  });
+
   it("drops a checklist line once the dashboard marks its tab complete and always leaves Submit for review", async () => {
     const run = newRun("ws/p", await planned(), 0);
 
@@ -345,7 +421,7 @@ describe("the guided Chrome first listing answer", () => {
     };
   }
 
-  it("opens the dashboard in a Chromium window even when Firefox was used last, a second call reads the run instead of opening again, and a call after the run stopped starts a fresh one", async () => {
+  it("opens the dashboard in a Chromium window even when Firefox was used last, a second call reads the run instead of opening again, a read after it stopped changes nothing, and replace: true starts a fresh one", async () => {
     const launches: LaunchPlan[] = [];
     const read: string[] = [];
     const deps: ChromeListingDeps = {
@@ -380,7 +456,13 @@ describe("the guided Chrome first listing answer", () => {
 
     stopped.stopped = "\"Save draft\" was not pressed on Store listing. Nothing else was pressed.";
 
-    const fresh = JSON.parse((await guideChromeListing(answer("first-submission-to-do"), {}, runtime(launches), deps))!);
+    const read2 = JSON.parse((await guideChromeListing(answer("first-submission-to-do"), {}, runtime(launches), deps))!);
+
+    expect(launches).toHaveLength(1);
+    expect(read2.hint).toMatch(/^The guided Chrome run stopped and this read changed nothing: "Save draft" was not pressed on Store listing\. Nothing else was pressed\. Once the cause is fixed on the page, call extension_submit \{action: "first-submission", store: "chrome", project: "extensiondev\/extension-dev-tools", replace: true\}/);
+    expect(liveRun("extensiondev/extension-dev-tools")).toBe(stopped);
+
+    const fresh = JSON.parse((await guideChromeListing(answer("first-submission-to-do"), { replace: true }, runtime(launches), deps))!);
 
     expect(launches).toHaveLength(2);
     expect(read).toHaveLength(2);

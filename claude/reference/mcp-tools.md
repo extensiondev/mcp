@@ -687,7 +687,7 @@ Submit an extension.dev build to the Chrome, Firefox, Edge and Safari stores. It
 | `buildNumber` | integer | no |  | Safari publish or release: TestFlight build number (default newest). |
 | `deployPercentage` | number | no |  | rollout: new share of users, 1 to 100, above the current one. |
 | `connectSession` | string | no |  | connect: value.connectSession to wait on with waitSeconds. |
-| `replace` | boolean | no |  | connect: true replaces a working key; only if asked. |
+| `replace` | boolean | no |  | connect: true replaces a working key; only if asked. first-submission: true restarts a stopped Chrome fill. |
 | `waitSeconds` | number | no |  | Seconds to wait for the result (with approvalId, the approval), 0 to 600 (omitted: 180, no wait for the approval; status, connect, first-submission: 0); the hosted server waits at most 45 and says so in warnings. |
 
 ## extension_submit_read

@@ -175,7 +175,7 @@ export const schema = {
       },
       replace: {
         type: "boolean",
-        description: "connect: true replaces a working key; only if asked.",
+        description: "connect: true replaces a working key; only if asked. first-submission: true restarts a stopped Chrome fill.",
       },
       waitSeconds: SUBMIT_WAIT_SECONDS,
     },

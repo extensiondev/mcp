@@ -15,6 +15,7 @@ import { chromeStep, itemUrl, newRun, openRows, saveNewItem, signInLine, type Ch
 import { envelope } from "./envelope";
 import { guidedEngine } from "./guided-browser";
 import { guidedConnectRuntime, openGuided, readStoreAccount, type GuidedConnectRuntime } from "./guided-connect";
+import { replacing } from "./guided-connect-account";
 import { guidedProcess, launchWord, type GuidedProcess } from "./guided-window-end";
 import { projectApiBytes } from "./project-api-bytes";
 import { openProjectApi, projectApiGet, projectApiSend, type ProjectApi } from "./project-api";
@@ -348,18 +349,23 @@ export async function guideChromeListing(result: string, args: Args, runtime: Gu
   const command = text(parsed.command) || "extension_submit";
   const kept = Object.fromEntries(Object.entries(value).filter(([key]) => !["opened", "openedNote", "openPages", "nextStep", "sayToPerson"].includes(key)));
   const prior = liveRun(slug);
-  const live = prior && !prior.stopped ? prior : null;
-  const restarted = prior?.stopped ? `The earlier run had stopped (${prior.stopped}); a fresh fill started in the same window and profile, keeping its sign-in.` : "";
+  const restart = Boolean(prior?.stopped) && replacing(args);
+  const live = prior && !restart ? prior : null;
+  const restarted = restart ? `The earlier run had stopped (${prior!.stopped}); a fresh fill started in the same window and profile, keeping its sign-in.` : "";
 
   if (live) {
     const say = live.stopped ? live.line : live.finished ? `The Chrome draft is filled and saved. ${openRows(live, live.marks).join("; ")}.` : live.line;
+    const again = `extension_submit {action: "first-submission", store: "chrome", project: "${slug}", replace: true}`;
+    const hint = live.stopped
+      ? `The guided Chrome run stopped and this read changed nothing: ${live.stopped} Once the cause is fixed on the page, call ${again} to start a fresh fill in the same window, keeping its sign-in.`
+      : `The guided window already runs this Chrome listing; nothing new was opened.`;
 
     return envelope({
       ok: true,
       command,
       status: CHROME_LISTING_STATUS,
       value: { ...kept, opened: true, progress: progressOf(live), sayToPerson: say, nextStep: nextStep("dashboard", say, live.itemId ? itemUrl(live) : DASHBOARD_HOME) },
-      hint: `The guided window already runs this Chrome listing; nothing new was opened.${saveItemStep(live, slug)}`,
+      hint: `${hint}${saveItemStep(live, slug)}`,
     });
   }
 

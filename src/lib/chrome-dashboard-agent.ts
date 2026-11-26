@@ -8,7 +8,7 @@
 
 export const AGENT_GLOBAL = "__extensionDevToolsChrome";
 
-export const AGENT_VERSION = 2;
+export const AGENT_VERSION = 3;
 
 export const DASHBOARD_HOME = "https://chrome.google.com/webstore/devconsole";
 
@@ -18,7 +18,9 @@ export type ChromeTab = (typeof CHROME_TABS)[number];
 
 export const TAB_LABELS: Record<ChromeTab, string> = { listing: "Store listing", privacy: "Privacy", distribution: "Distribution" };
 
-export type FieldSpec = { id: string; tab: ChromeTab; anchors: RegExp[]; control: "text" | "choice" };
+export type FieldSpec = { id: string; tab: ChromeTab; anchors: RegExp[]; control: "text" | "choice"; label?: string };
+
+export const CHROME_JUSTIFICATION_LIMIT = 1000;
 
 /* @invariant EVERY SELECTOR THE CHROME FILL READS IS NAMED HERE, IN ONE
  * TABLE, AND NONE IS PROVEN AGAINST THE LIVE DASHBOARD YET. Chrome keeps
@@ -31,6 +33,9 @@ export type FieldSpec = { id: string; tab: ChromeTab; anchors: RegExp[]; control
 export const CHROME_SELECTORS = {
   newItem: /^(?:\+\s*)?(?:add\s+)?new item$/i,
   itemsHeading: /^items$/i,
+  repeated: /^(.{2,}?)\1+/,
+  iconLead: /^store icon/i,
+  screenshotsLead: /^screenshots?\b/i,
   denied: /(?:^|\s)403(?:[.\s]|$)|forbidden|that’s an error|that's an error|(?:do not|don't|don’t) have (?:access|permission)|permission denied|not authorized/i,
   upload: /^upload$/i,
   save: /^save draft$/i,
@@ -52,7 +57,7 @@ export const CHROME_FIELDS: readonly FieldSpec[] = [
   { id: "chrome.description", tab: "listing", anchors: [/^(?:detailed )?description\b/i], control: "text" },
   { id: "chrome.category", tab: "listing", anchors: [/^category\b/i], control: "choice" },
   { id: "chrome.language", tab: "listing", anchors: [/^language\b/i], control: "choice" },
-  { id: "chrome.homepage_url", tab: "listing", anchors: [/^homepage url\b/i], control: "text" },
+  { id: "chrome.homepage_url", tab: "listing", anchors: [/^homepage url\b/i], control: "text", label: "Homepage URL" },
   { id: "chrome.single_purpose", tab: "privacy", anchors: [/single purpose/i], control: "text" },
   { id: "chrome.privacy_policy_url", tab: "privacy", anchors: [/privacy policy url/i], control: "text" },
 ];
@@ -64,6 +69,9 @@ export const CHROME_PAGE_AGENT = `(() => {
   const S = {
     newItem: new RegExp(${src(CHROME_SELECTORS.newItem)}, "i"),
     itemsHeading: new RegExp(${src(CHROME_SELECTORS.itemsHeading)}, "i"),
+    repeated: new RegExp(${src(CHROME_SELECTORS.repeated)}),
+    iconLead: new RegExp(${src(CHROME_SELECTORS.iconLead)}, "i"),
+    screenshotsLead: new RegExp(${src(CHROME_SELECTORS.screenshotsLead)}, "i"),
     denied: new RegExp(${src(CHROME_SELECTORS.denied)}, "i"),
     upload: new RegExp(${src(CHROME_SELECTORS.upload)}, "i"),
     save: new RegExp(${src(CHROME_SELECTORS.save)}, "i"),
@@ -84,13 +92,15 @@ export const CHROME_PAGE_AGENT = `(() => {
   const hiddenFile = (el) => el.isConnected && !el.closest("[" + PANEL + "]");
   const dialogs = () => Array.from(document.querySelectorAll("dialog[open], [role=dialog], [role=alertdialog], [aria-modal=true]")).filter(shown);
   const center = (el) => { el.scrollIntoView({ block: "center", inline: "center" }); const r = el.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; };
+  const once = (t) => norm(t).replace(S.repeated, "$1");
+  const visibleText = (node) => { const copy = node.cloneNode(true); copy.querySelectorAll("[aria-hidden=true]").forEach((n) => n.remove()); return once(copy.textContent); };
   const labelOf = (el) => {
-    const aria = norm(el.getAttribute("aria-label")); if (aria) return aria;
-    const by = norm((el.getAttribute("aria-labelledby") || "").split(/\\s+/).map((id) => { const n = id && document.getElementById(id); return n ? n.textContent : ""; }).join(" ")); if (by) return by;
-    if (el.id) { const l = Array.from(document.querySelectorAll("label")).find((x) => x.htmlFor === el.id); if (l) return norm(l.textContent); }
-    const wrap = el.closest("label"); if (wrap) return norm(wrap.textContent);
+    const aria = once(el.getAttribute("aria-label")); if (aria) return aria;
+    const by = once((el.getAttribute("aria-labelledby") || "").split(/\\s+/).map((id) => { const n = id && document.getElementById(id); return n ? visibleText(n) : ""; }).join(" ")); if (by) return by;
+    if (el.id) { const l = Array.from(document.querySelectorAll("label")).find((x) => x.htmlFor === el.id); if (l) return visibleText(l); }
+    const wrap = el.closest("label"); if (wrap) return visibleText(wrap);
     let at = el;
-    for (let i = 0; i < 4 && at.parentElement; i += 1) { at = at.parentElement; const t = norm(Array.from(at.childNodes).filter((n) => !(n.nodeType === 1 && (n.contains(el) || n.matches("input, textarea, select")))).map((n) => n.textContent).join(" ")); if (t) return t.slice(0, 200); }
+    for (let i = 0; i < 4 && at.parentElement; i += 1) { at = at.parentElement; const t = once(Array.from(at.childNodes).filter((n) => !(n.nodeType === 1 && (n.contains(el) || n.matches("input, textarea, select") || n.getAttribute("aria-hidden") === "true"))).map((n) => n.textContent).join(" ")); if (t) return t.slice(0, 200); }
     return "";
   };
   const ICONS = "i, svg, mat-icon, .material-icons, .material-symbols-outlined, [aria-hidden=true]";
@@ -142,33 +152,40 @@ export const CHROME_PAGE_AGENT = `(() => {
   };
   const scopeOf = (input) => { let at = input; for (let i = 0; i < 6 && at.parentElement && at.parentElement !== document.body && at.parentElement.querySelectorAll("input[type=file]").length <= 1; i += 1) at = at.parentElement; return at; };
   const slotRule = (slot) => slot === "icon" ? S.icon : S.screenshots;
+  const slotLead = (slot) => slot === "icon" ? S.iconLead : S.screenshotsLead;
+  const slotLabel = (input) => once(input.getAttribute("aria-label")) || visibleText(scopeOf(input));
   const fileInput = (slot) => {
     if (slot === "package") { const d = dialogs()[0]; const ins = d ? Array.from(d.querySelectorAll("input[type=file]")).filter(hiddenFile) : []; return ins.length === 1 ? ins[0] : null; }
+    const inputs = Array.from(document.querySelectorAll("input[type=file]")).filter(hiddenFile);
+    const lead = inputs.filter((input) => slotLead(slot).test(slotLabel(input)));
+    if (lead.length === 1) return lead[0];
     const re = slotRule(slot);
-    const hits = Array.from(document.querySelectorAll("input[type=file]")).filter(hiddenFile).filter((input) => re.test(norm(scopeOf(input).textContent) + " " + norm(input.getAttribute("aria-label"))));
+    const hits = inputs.filter((input) => re.test(norm(scopeOf(input).textContent) + " " + norm(input.getAttribute("aria-label"))));
     return hits.length === 1 ? hits[0] : null;
   };
-  const thumbs = (slot) => {
+  const images = (slot) => {
     const input = fileInput(slot);
-    if (!input) return -1;
-    return Array.from(scopeOf(input).querySelectorAll("img")).filter((img) => img.getAttribute("src") && shown(img) && !/placeholder/i.test(img.getAttribute("src") || "")).length;
+    if (!input) return null;
+    return Array.from(scopeOf(input).querySelectorAll("img")).filter((img) => img.getAttribute("src") && shown(img) && !/placeholder/i.test(img.getAttribute("src") || "")).map((img) => img.getAttribute("src"));
   };
-  const controls = () => Array.from(document.querySelectorAll("input:not([type=hidden]):not([type=file]):not([type=radio]):not([type=checkbox]), textarea, select, [role=combobox], [contenteditable=true]")).filter(shown);
+  const thumbs = (slot) => { const srcs = images(slot); return srcs ? srcs.length : -1; };
+  const controls = () => Array.from(document.querySelectorAll("input:not([type=hidden]):not([type=file]):not([type=radio]):not([type=checkbox]), textarea, select, [role=combobox], [role=listbox][aria-expanded], [aria-haspopup=listbox]:not(input), [contenteditable=true]")).filter(shown).filter((el, i, all) => !all.some((other) => other !== el && other.contains(el)));
   const findControl = (anchors) => {
     const res = anchors.map((a) => new RegExp(a, "i"));
     const hits = controls().filter((el) => { const l = labelOf(el); return res.some((re) => re.test(l)); });
     return hits.length === 1 ? hits[0] : null;
   };
-  const valueOf = (el) => el.tagName === "SELECT" ? norm(el.selectedOptions[0] ? el.selectedOptions[0].text : "") : (el.tagName === "INPUT" || el.tagName === "TEXTAREA") ? el.value : norm(el.textContent);
+  const valueOf = (el) => { if (el.tagName === "SELECT") return norm(el.selectedOptions[0] ? el.selectedOptions[0].text : ""); if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") return el.value; const sel = el.querySelector("[role=option][aria-selected=true]"); return sel ? visibleText(sel) : visibleText(el); };
   const fire = (el, type) => el.dispatchEvent(new Event(type, { bubbles: true, composed: true }));
   const sameChoice = (a, b) => { const x = norm(a).toLowerCase(); const y = norm(b).toLowerCase(); return Boolean(x) && (x === y || y.endsWith(" " + x) || y.endsWith(">" + x) || y.endsWith("\\u203a " + x)); };
-  const fieldRead = (anchors) => { const el = findControl(anchors); return el ? { found: true, kind: el.tagName === "SELECT" ? "select" : el.getAttribute("role") === "combobox" ? "combo" : "text", value: valueOf(el), editable: !(el.disabled || el.readOnly || el.getAttribute("aria-disabled") === "true") } : { found: false }; };
+  const fieldRead = (anchors) => { const el = findControl(anchors); return el ? { found: true, kind: el.tagName === "SELECT" ? "select" : el.tagName === "INPUT" || el.tagName === "TEXTAREA" ? "text" : "combo", value: valueOf(el), editable: !(el.disabled || el.readOnly || el.getAttribute("aria-disabled") === "true"), limit: el.maxLength > 0 ? el.maxLength : 0 } : { found: false }; };
   const setText = (anchors, text) => {
     const el = findControl(anchors);
     if (!el) return "missing";
     if (el.disabled || el.readOnly) return "not-editable";
     if (el.tagName !== "INPUT" && el.tagName !== "TEXTAREA") return "missing";
     if (el.value === text) return "unchanged";
+    if (el.maxLength > 0 && text.length > el.maxLength) return "too-long";
     const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
     const d = Object.getOwnPropertyDescriptor(proto, "value");
     if (d && d.set) d.set.call(el, text); else el.value = text;
@@ -192,8 +209,11 @@ export const CHROME_PAGE_AGENT = `(() => {
     return { outcome: "open", x: at.x, y: at.y };
   };
   const option = (wanted) => {
-    const opts = Array.from(document.querySelectorAll("[role=option]")).filter(shown).filter((o) => sameChoice(wanted, o.textContent));
-    if (opts.length !== 1) return null;
+    const all = Array.from(document.querySelectorAll("[role=option], [role=menuitemradio]")).filter(shown);
+    let opts = all.filter((o) => sameChoice(wanted, visibleText(o)));
+    if (opts.length > 1) opts = opts.filter((o) => !o.closest("[aria-expanded=false]"));
+    if (opts.length > 1) { const exact = opts.filter((o) => visibleText(o).toLowerCase() === norm(wanted).toLowerCase()); if (exact.length) opts = exact; }
+    if (opts.length !== 1) return { found: opts.length, seen: all.map(visibleText).filter(Boolean).slice(0, 20) };
     const at = center(opts[0]);
     return { x: at.x, y: at.y };
   };
@@ -219,6 +239,7 @@ export const CHROME_PAGE_AGENT = `(() => {
   const setOn = (el, text) => {
     if (el.disabled || el.readOnly) return "not-editable";
     if (el.value === text) return "unchanged";
+    if (el.maxLength > 0 && text.length > el.maxLength) return "too-long";
     const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
     const d = Object.getOwnPropertyDescriptor(proto, "value");
     if (d && d.set) d.set.call(el, text); else el.value = text;
@@ -256,6 +277,6 @@ export const CHROME_PAGE_AGENT = `(() => {
     uploads: Array.from(document.querySelectorAll("input[type=file]")).filter(hiddenFile).map((input) => (norm(input.getAttribute("aria-label")) || norm(scopeOf(input).textContent)).slice(0, 48)).slice(0, 8),
     buttons: actions(document).map(actionLabel).filter(Boolean).slice(0, 24),
   });
-  globalThis.${AGENT_GLOBAL} = { version: ${AGENT_VERSION}, inventory, where, gate, fileInput, thumbs, fieldRead, setText, focusText, choose, option, justify, visibility, visibilityAt, marks };
+  globalThis.${AGENT_GLOBAL} = { version: ${AGENT_VERSION}, inventory, images, where, gate, fileInput, thumbs, fieldRead, setText, focusText, choose, option, justify, visibility, visibilityAt, marks };
   return true;
 })()`;

@@ -6,8 +6,11 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { CHROME_FIELDS, CHROME_TABS, DASHBOARD_HOME, TAB_LABELS, type ChromeTab } from "./chrome-dashboard-agent";
-import { stillSame, type ChromePlan, type PlanFile } from "./chrome-listing-plan";
+import { CHROME_FIELDS, CHROME_JUSTIFICATION_LIMIT, CHROME_TABS, DASHBOARD_HOME, TAB_LABELS, type ChromeTab } from "./chrome-dashboard-agent";
+import { addRow, attach, chars, fillChoice, fillText, fitHostLines, isHostPattern } from "./chrome-listing-fill";
+import { stillSame, type ChromePlan } from "./chrome-listing-plan";
+
+export { fitHostLines } from "./chrome-listing-fill";
 
 export type Where = {
   host: string;
@@ -98,8 +101,6 @@ function switchTo(run: ChromeRun): string {
 }
 
 const CREATE_WAIT_MS = 120_000;
-const IMAGE_WAIT_MS = 30_000;
-const POLL_MS = 1000;
 
 const REFUSED: Record<string, string> = {
   "signed-out": "The dashboard asks for a sign-in; sign in in this window and the fill goes on by itself.",
@@ -150,26 +151,12 @@ function stop(run: ChromeRun, why: string): "stopped" {
   return "stopped";
 }
 
-function addRow(run: ChromeRun, row: Row): void {
-  if (!run.rows.some((have) => have.line === row.line)) run.rows.push(row);
-}
-
 async function press(deps: StepDeps, kind: string): Promise<Gate> {
   const gate = await deps.page.call<Gate>("gate", kind);
 
   if (gate.ok) await deps.page.click(gate.x, gate.y);
 
   return gate;
-}
-
-async function until(deps: StepDeps, test: () => Promise<boolean>, ms: number): Promise<boolean> {
-  for (let waited = 0; waited < ms; waited += POLL_MS) {
-    if (await test()) return true;
-
-    await deps.sleep(POLL_MS);
-  }
-
-  return test();
 }
 
 async function createItem(run: ChromeRun, deps: StepDeps, where: Where): Promise<string> {
@@ -219,113 +206,10 @@ async function createItem(run: ChromeRun, deps: StepDeps, where: Where): Promise
   return "wait";
 }
 
-async function typeInto(deps: StepDeps, anchors: string[], value: string): Promise<boolean> {
-  if (!(await deps.page.call<boolean>("focusText", anchors))) return false;
-
-  await deps.page.type(value);
-
-  const read = await deps.page.call<{ found: boolean; value?: string }>("fieldRead", anchors);
-
-  return read.found && read.value === value;
+export function tabsOf(run: Pick<ChromeRun, "plan">): ChromeTab[] {
+  return CHROME_TABS.filter((tab) => tab !== "distribution" || !run.plan.live);
 }
 
-async function fillText(run: ChromeRun, deps: StepDeps, id: string, anchors: string[], value: string, tab: ChromeTab): Promise<void> {
-  const outcome = await deps.page.call<string>("setText", anchors, value);
-  const label = run.plan.labels[id] ?? id;
-
-  if (outcome === "filled" || outcome === "unchanged" || (outcome === "needs-typing" && (await typeInto(deps, anchors, value)))) {
-    run.filled.push(label);
-
-    return;
-  }
-
-  addRow(run, { tab, line: `${label} on ${TAB_LABELS[tab]}: ${outcome === "missing" ? "no single field for it was found" : "the field did not take the text"}; paste it from STORE.md` });
-}
-
-async function fillChoice(run: ChromeRun, deps: StepDeps, id: string, anchors: string[], wanted: string[], tab: ChromeTab, label: string): Promise<void> {
-  for (const value of wanted) {
-    const chosen = await deps.page.call<{ outcome: string; x?: number; y?: number }>("choose", anchors, value);
-
-    if (chosen.outcome === "filled" || chosen.outcome === "unchanged") {
-      run.filled.push(label);
-
-      return;
-    }
-
-    if (chosen.outcome === "open" && chosen.x !== undefined && chosen.y !== undefined) {
-      await deps.page.click(chosen.x, chosen.y);
-      await deps.sleep(500);
-
-      const at = await deps.page.call<{ x: number; y: number } | null>("option", value);
-
-      if (at) {
-        await deps.page.click(at.x, at.y);
-        await deps.sleep(300);
-
-        const read = await deps.page.call<{ found: boolean; value?: string }>("fieldRead", anchors);
-
-        if (read.found && String(read.value ?? "").toLowerCase().includes(value.toLowerCase())) {
-          run.filled.push(label);
-
-          return;
-        }
-      }
-    }
-
-    if (chosen.outcome === "missing") break;
-  }
-
-  addRow(run, { tab, line: `${label} on ${TAB_LABELS[tab]}: choose ${wanted[0]} yourself` });
-}
-
-async function shownMore(deps: StepDeps, slot: "icon" | "screenshots", before: number): Promise<{ more: boolean; count: number }> {
-  let count = before;
-  const more = await until(deps, async () => (count = await deps.page.call<number>("thumbs", slot)) > before, IMAGE_WAIT_MS);
-
-  return { more, count };
-}
-
-async function attach(run: ChromeRun, deps: StepDeps, slot: "icon" | "screenshots", files: PlanFile[], label: string): Promise<void> {
-  if (!files.length) {
-    addRow(run, { tab: "listing", line: `${label} on Store listing: the project has none to upload; add ${slot === "icon" ? "a 128x128 icon" : "a 1280x800 screenshot"} on the store card` });
-
-    return;
-  }
-
-  let count = await deps.page.call<number>("thumbs", slot);
-
-  if (count < 0) {
-    addRow(run, { tab: "listing", line: `${label} on Store listing: no single upload slot was found` });
-
-    return;
-  }
-
-  if (slot === "icon" && count > 0) return;
-
-  for (const file of files.slice(count)) {
-    if (!stillSame(file)) {
-      addRow(run, { tab: "listing", line: `${label} on Store listing: ${file.name} changed on disk after its check, so it was not set` });
-      continue;
-    }
-
-    const input = await deps.page.handle("fileInput", slot);
-
-    if (!input) {
-      addRow(run, { tab: "listing", line: `${label} on Store listing: no single upload slot was found` });
-
-      return;
-    }
-
-    await deps.page.setFiles(input, [file.path]);
-
-    const landed = await shownMore(deps, slot, count);
-
-    count = landed.count;
-
-    if (landed.more) run.filled.push(`${label}: ${file.name}`);
-    else addRow(run, { tab: "listing", line: `${label} on Store listing: ${file.name} did not show as a thumbnail within 30 seconds` });
-  }
-}
 
 async function fillTab(run: ChromeRun, deps: StepDeps, tab: ChromeTab): Promise<void> {
   const fields = run.plan.fields;
@@ -347,7 +231,7 @@ async function fillTab(run: ChromeRun, deps: StepDeps, tab: ChromeTab): Promise<
     if (!value) continue;
 
     if (spec.control === "choice") await fillChoice(run, deps, spec.id, anchors, [value], tab, run.plan.labels[spec.id] ?? spec.id);
-    else await fillText(run, deps, spec.id, anchors, value, tab);
+    else await fillText(run, deps, spec.id, anchors, value, tab, spec.label ?? run.plan.labels[spec.id] ?? spec.id);
   }
 
   if (tab === "listing") {
@@ -357,20 +241,26 @@ async function fillTab(run: ChromeRun, deps: StepDeps, tab: ChromeTab): Promise<
 
   if (tab === "privacy") {
     if (run.plan.justifications.length) {
-      const set = await deps.page.call<Array<{ key: string; outcome: string }>>("justify", run.plan.justifications);
+      const hosts = fitHostLines(run.plan.justifications.filter((line) => isHostPattern(line.permission)));
+      const lines = [...run.plan.justifications.filter((line) => !isHostPattern(line.permission)), ...hosts.kept];
+      const set = await deps.page.call<Array<{ key: string; outcome: string }>>("justify", lines);
 
       for (const row of set) {
         const name = row.key === "host" ? "Host permission justification" : `${row.key} justification`;
+        const text = run.plan.justifications.find((line) => line.permission === row.key)?.text ?? "";
 
-        if (row.outcome === "filled" || row.outcome === "unchanged") run.filled.push(name);
+        if (row.outcome === "filled" || row.outcome === "unchanged") run.filled.push(row.key === "host" && hosts.left.length ? `${name} (${hosts.kept.length} of ${hosts.kept.length + hosts.left.length} host reasons)` : name);
+        else if (row.outcome === "too-long") addRow(run, { tab, line: `${name} on Privacy: the text is ${chars(text.length)} characters and Chrome takes at most ${chars(CHROME_JUSTIFICATION_LIMIT)}, so nothing was typed; shorten it in STORE.md` });
         else addRow(run, { tab, line: `${name} on Privacy: ${row.outcome === "missing" ? "no single box for it was found" : "the box did not take the text"}; paste it from STORE.md` });
       }
+
+      if (hosts.left.length) addRow(run, { tab, line: `Host permission justification on Privacy: the host reasons in STORE.md join to ${chars(hosts.length)} characters and Chrome takes at most ${chars(CHROME_JUSTIFICATION_LIMIT)}, so ${hosts.left.join(", ")} ${hosts.left.length === 1 ? "was" : "were"} left out whole, never cut mid-sentence; shorten the host bullets under Permissions justification in STORE.md and sync again` });
     }
 
     for (const declaration of run.plan.declarations) addRow(run, { tab, line: `${declaration} on Privacy: yours to answer; extension.dev tools never ticks a certification` });
   }
 
-  if (tab === "distribution" && !run.plan.live) await chooseVisibility(run, deps);
+  if (tab === "distribution") await chooseVisibility(run, deps);
 
   if (run.rows.slice(before).some((row) => /no single (?:field|upload slot|box)/.test(row.line))) {
     const saw = await sawOn(deps);
@@ -514,7 +404,7 @@ export async function chromeStep(run: ChromeRun, deps: StepDeps): Promise<string
 
   if (where.itemId !== run.itemId) return stop(run, `This tab shows item ${where.itemId}, not ${run.itemId}, so nothing is filled on it.`);
 
-  const tab = CHROME_TABS.find((row) => !run.done.includes(row));
+  const tab = tabsOf(run).find((row) => !run.done.includes(row));
 
   if (!tab) {
     run.marks = (await deps.page.call<Record<string, string>>("marks")) ?? {};

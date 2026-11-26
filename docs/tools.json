@@ -3063,7 +3063,7 @@
           "name": "replace",
           "type": "boolean",
           "required": false,
-          "description": "connect: true replaces a working key; only if asked."
+          "description": "connect: true replaces a working key; only if asked. first-submission: true restarts a stopped Chrome fill."
         },
         {
           "name": "waitSeconds",

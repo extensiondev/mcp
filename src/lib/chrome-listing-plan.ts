@@ -11,6 +11,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { CHROME_JUSTIFICATION_LIMIT } from "./chrome-dashboard-agent";
 import { isRow, text } from "./row";
 
 export type ChromeVisibilityPick = "unlisted" | "private";
@@ -182,6 +183,13 @@ export async function chromePlan(read: unknown, fetchBytes: FetchBytes, tempRoot
     notes.push("the platform names no verified package for Chrome, so no new item can be made");
   }
 
+  const justifications = justificationLines(fields["chrome.permission_justifications"] ?? "");
+  const hostLength = justifications.filter((line) => /:\/\/|^<all_urls>$|^\*/.test(line.permission)).map((line) => `${line.permission}: ${line.text}`).join("\n").length;
+
+  if (hostLength > CHROME_JUSTIFICATION_LIMIT) notes.push(`the host reasons under Permissions justification join to ${hostLength.toLocaleString("en-US")} characters and Chrome's Host permission justification takes at most ${CHROME_JUSTIFICATION_LIMIT.toLocaleString("en-US")}, so only the whole reasons that fit are typed and the rest are named in the checklist`);
+
+  for (const line of justifications) if (!/:\/\/|^<all_urls>$|^\*/.test(line.permission) && line.text.length > CHROME_JUSTIFICATION_LIMIT) notes.push(`the ${line.permission} reason is ${line.text.length.toLocaleString("en-US")} characters and Chrome takes at most ${CHROME_JUSTIFICATION_LIMIT.toLocaleString("en-US")}, so it is not typed`);
+
   const seen = visibilityPick(fields["chrome.visibility"] ?? "");
 
   if (seen.note) notes.push(seen.note);
@@ -193,7 +201,7 @@ export async function chromePlan(read: unknown, fetchBytes: FetchBytes, tempRoot
     item: itemOf(body.dashboardUrl),
     fields,
     labels,
-    justifications: justificationLines(fields["chrome.permission_justifications"] ?? ""),
+    justifications,
     visibility: seen.pick,
     notes,
     pkg,
