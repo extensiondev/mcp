@@ -39,6 +39,21 @@ export interface ChromeDriver {
   open(wsUrl: string): Promise<CdpSession>;
   sleep(ms: number): Promise<void>;
   now(): number;
+  image?(url: string): Promise<Buffer | null>;
+}
+
+const STORE_IMAGE_HOST = /^https:\/\/lh\d\.googleusercontent\.com\//i;
+const STORE_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
+
+export async function storeImage(url: string, fetchImpl: typeof fetch = fetch): Promise<Buffer | null> {
+  if (!STORE_IMAGE_HOST.test(url)) return null;
+
+  const res = await fetchImpl(url, { redirect: "error", signal: AbortSignal.timeout(15_000) }).catch(() => null);
+  if (!res?.ok) return null;
+
+  const bytes = Buffer.from(await res.arrayBuffer());
+
+  return bytes.length <= STORE_IMAGE_MAX_BYTES ? bytes : null;
 }
 
 export interface ChromeListingDeps {
@@ -133,6 +148,7 @@ export const cdpChromeDriver: ChromeDriver = {
   },
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   now: () => Date.now(),
+  image: (url) => storeImage(url),
 };
 
 /* @invariant ONE TICK READS ONE TAB OF THE MCP'S OWN GUIDED WINDOW. The
@@ -163,7 +179,7 @@ export async function chromeTick(run: ChromeRun, args: { port: number; driver: C
       return "checklist";
     }
 
-    const outcome = await chromeStep(run, { page: track, sleep: args.driver.sleep, now: args.driver.now }).catch((err: unknown) => {
+    const outcome = await chromeStep(run, { page: track, sleep: args.driver.sleep, now: args.driver.now, ...(args.driver.image ? { image: (url: string) => args.driver.image!(url) } : {}) }).catch((err: unknown) => {
       run.line = `The dashboard tab changed under the fill (${err instanceof Error ? err.message : String(err)}); it tries again.`;
 
       return "retry";
@@ -349,16 +365,18 @@ export async function guideChromeListing(result: string, args: Args, runtime: Gu
   const command = text(parsed.command) || "extension_submit";
   const kept = Object.fromEntries(Object.entries(value).filter(([key]) => !["opened", "openedNote", "openPages", "nextStep", "sayToPerson"].includes(key)));
   const prior = liveRun(slug);
-  const restart = Boolean(prior?.stopped) && replacing(args);
+  const restart = Boolean(prior && (prior.stopped || prior.finished)) && (replacing(args) || args.refill === true);
   const live = prior && !restart ? prior : null;
-  const restarted = restart ? `The earlier run had stopped (${prior!.stopped}); a fresh fill started in the same window and profile, keeping its sign-in.` : "";
+  const restarted = !restart ? "" : prior!.stopped ? `The earlier run had stopped (${prior!.stopped}); a fresh fill started in the same window and profile, keeping its sign-in.` : "The earlier run had finished; a fresh fill started in the same window and profile from the listing as it is now, keeping its sign-in.";
 
   if (live) {
     const say = live.stopped ? live.line : live.finished ? `The Chrome draft is filled and saved. ${openRows(live, live.marks).join("; ")}.` : live.line;
     const again = `extension_submit {action: "first-submission", store: "chrome", project: "${slug}", replace: true}`;
     const hint = live.stopped
       ? `The guided Chrome run stopped and this read changed nothing: ${live.stopped} Once the cause is fixed on the page, call ${again} to start a fresh fill in the same window, keeping its sign-in.`
-      : `The guided window already runs this Chrome listing; nothing new was opened.`;
+      : live.finished
+        ? `The guided Chrome run finished and this read changed nothing. To fill the dashboard again from the listing as it is now (for example after sync-listing changed it), call ${again}.`
+        : `The guided window already runs this Chrome listing; nothing new was opened.`;
 
     return envelope({
       ok: true,

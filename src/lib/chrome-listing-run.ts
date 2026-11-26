@@ -78,7 +78,7 @@ export type ChromeRun = {
   startedAt: number;
 };
 
-export type StepDeps = { page: ChromePage; sleep: (ms: number) => Promise<void>; now: () => number };
+export type StepDeps = { page: ChromePage; sleep: (ms: number) => Promise<void>; now: () => number; image?: (url: string) => Promise<Buffer | null> };
 
 export const SIGN_IN_LINE = "Sign in to the Chrome Web Store developer dashboard in this window. The fill starts by itself once the dashboard shows.";
 

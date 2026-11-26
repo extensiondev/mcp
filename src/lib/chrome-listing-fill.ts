@@ -6,10 +6,13 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import fs from "node:fs";
+
 import { CHROME_JUSTIFICATION_LIMIT, TAB_LABELS, type ChromeTab } from "./chrome-dashboard-agent";
 import { stillSame, type PlanFile } from "./chrome-listing-plan";
+import { imageFingerprint } from "./image-fingerprint";
 
-import type { ChromeRun, Row, StepDeps } from "./chrome-listing-run";
+import type { ChromeRun, Row, StepDeps, Where } from "./chrome-listing-run";
 
 const IMAGE_WAIT_MS = 30_000;
 const POLL_MS = 1000;
@@ -124,7 +127,7 @@ export async function attach(run: ChromeRun, deps: StepDeps, slot: "icon" | "scr
     return;
   }
 
-  let count = await deps.page.call<number>("thumbs", slot);
+  const count = await deps.page.call<number>("thumbs", slot);
 
   if (count < 0) {
     addRow(run, { tab: "listing", line: `${label} on Store listing: no single upload slot was found` });
@@ -139,12 +142,99 @@ export async function attach(run: ChromeRun, deps: StepDeps, slot: "icon" | "scr
   }
 
   if (slot === "screenshots" && count > 0) {
-    const kept = files.slice(0, count).map((file) => file.name);
+    const fresh = await syncScreenshots(run, deps, files, label);
 
-    if (kept.length) addRow(run, { tab: "listing", line: `${label} on Store listing: the slot already holds ${count} image${count === 1 ? "" : "s"}, so ${kept.join(", ")} ${kept.length === 1 ? "was" : "were"} not attached again; extension.dev tools never removes an image, so remove the old ones on the page and attach ${kept.length === 1 ? "it" : "them"} yourself if they differ` });
+    if (fresh) await attachEach(run, deps, slot, fresh, label);
+
+    return;
   }
 
-  for (const file of files.slice(count)) {
+  await attachEach(run, deps, slot, files, label);
+}
+
+const MAX_SCREENSHOTS = 5;
+
+type Tile = { key: string; label: string; removable: boolean };
+
+const fullSize = (key: string): string => `${key.replace(/=[^/]*$/, "")}=s0`;
+
+async function tilesOf(deps: StepDeps): Promise<Tile[]> {
+  return (await deps.page.call<Tile[] | null>("slotImages", "screenshots")) ?? [];
+}
+
+async function syncScreenshots(run: ChromeRun, deps: StepDeps, files: PlanFile[], label: string): Promise<PlanFile[] | null> {
+  const tiles = await tilesOf(deps);
+
+  if (!deps.image || !tiles.length) {
+    addRow(run, { tab: "listing", line: `${label} on Store listing: the slot already holds images that could not be compared with the listing's files, so nothing was attached; compare them on the page yourself` });
+
+    return null;
+  }
+
+  const mine = files.map((file) => imageFingerprint(fs.readFileSync(file.path)));
+  const read: Array<Tile & { name: string; match: number; unread: boolean }> = [];
+
+  for (const [index, tile] of tiles.entries()) {
+    const bytes = /^https:\/\//.test(tile.key) ? await deps.image(fullSize(tile.key)).catch(() => null) : null;
+
+    read.push({ ...tile, name: tile.label || `Screenshot ${index + 1}`, match: bytes ? mine.indexOf(imageFingerprint(bytes)) : -1, unread: !bytes });
+  }
+
+  const matched = read.filter((tile) => tile.match >= 0);
+  let kept = 0;
+
+  while (kept < matched.length && matched[kept]!.match === kept) kept += 1;
+
+  const foreign = read.filter((tile) => tile.match < 0);
+
+  for (const tile of foreign) addRow(run, { tab: "listing", line: `${label} on Store listing: ${tile.name} on the page is not one of the listing's files${tile.unread ? " (its image could not be read)" : ""}, so it stays; remove it yourself if it is outdated` });
+
+  if (kept) run.filled.push(`${label}: ${files.slice(0, kept).map((file) => file.name).join(", ")} already on the page`);
+
+  const stays: number[] = [];
+  let removed = 0;
+
+  for (const tile of matched.slice(kept)) {
+    const at = await deps.page.call<{ x: number; y: number } | null>("removeAt", "screenshots", tile.key);
+
+    if (!at) {
+      stays.push(tile.match);
+      addRow(run, { tab: "listing", line: `${label} on Store listing: ${tile.name} is a copy of ${files[tile.match]!.name}, but no single remove control was found for it, so it stays` });
+      continue;
+    }
+
+    await deps.page.click(at.x, at.y);
+    await deps.sleep(800);
+
+    const after = await deps.page.call<Where>("where");
+
+    if (after?.dialog) {
+      addRow(run, { tab: "listing", line: `${label} on Store listing: removing ${tile.name}, a copy of ${files[tile.match]!.name}, opened a dialog ("${after.dialog}") that extension.dev tools never answers; answer it on the page, then attach the rest yourself` });
+
+      return null;
+    }
+
+    if ((await tilesOf(deps)).some((have) => have.key === tile.key)) {
+      stays.push(tile.match);
+      addRow(run, { tab: "listing", line: `${label} on Store listing: ${tile.name}, a copy of ${files[tile.match]!.name}, was still on the page after its remove control was pressed` });
+    } else removed += 1;
+  }
+
+  if (removed) run.filled.push(`${label}: removed ${removed} cop${removed === 1 ? "y" : "ies"} of the listing's own files so they go back in order`);
+
+  const want = files.map((_, index) => index).filter((index) => index >= kept && !stays.includes(index));
+  const room = Math.max(0, MAX_SCREENSHOTS - foreign.length - kept - stays.length);
+  const over = want.slice(room);
+
+  if (over.length) addRow(run, { tab: "listing", line: `${label} on Store listing: ${over.map((index) => files[index]!.name).join(", ")} ${over.length === 1 ? "was" : "were"} not attached, since the slot takes ${MAX_SCREENSHOTS} and ${foreign.length} of them hold images that are not the listing's files` });
+
+  return want.slice(0, room).map((index) => files[index]!);
+}
+
+async function attachEach(run: ChromeRun, deps: StepDeps, slot: "icon" | "screenshots", files: PlanFile[], label: string): Promise<void> {
+  let count = Math.max(0, await deps.page.call<number>("thumbs", slot));
+
+  for (const file of files) {
     if (!stillSame(file)) {
       addRow(run, { tab: "listing", line: `${label} on Store listing: ${file.name} changed on disk after its check, so it was not set` });
       continue;

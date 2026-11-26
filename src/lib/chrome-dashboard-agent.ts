@@ -8,7 +8,7 @@
 
 export const AGENT_GLOBAL = "__extensionDevToolsChrome";
 
-export const AGENT_VERSION = 3;
+export const AGENT_VERSION = 4;
 
 export const DASHBOARD_HOME = "https://chrome.google.com/webstore/devconsole";
 
@@ -35,6 +35,7 @@ export const CHROME_SELECTORS = {
   itemsHeading: /^items$/i,
   repeated: /^(.{2,}?)\1+/,
   iconLead: /^store icon/i,
+  removeImage: /^remove image\b/i,
   screenshotsLead: /^screenshots?\b/i,
   denied: /(?:^|\s)403(?:[.\s]|$)|forbidden|that’s an error|that's an error|(?:do not|don't|don’t) have (?:access|permission)|permission denied|not authorized/i,
   upload: /^upload$/i,
@@ -71,6 +72,7 @@ export const CHROME_PAGE_AGENT = `(() => {
     itemsHeading: new RegExp(${src(CHROME_SELECTORS.itemsHeading)}, "i"),
     repeated: new RegExp(${src(CHROME_SELECTORS.repeated)}),
     iconLead: new RegExp(${src(CHROME_SELECTORS.iconLead)}, "i"),
+    removeImage: new RegExp(${src(CHROME_SELECTORS.removeImage)}, "i"),
     screenshotsLead: new RegExp(${src(CHROME_SELECTORS.screenshotsLead)}, "i"),
     denied: new RegExp(${src(CHROME_SELECTORS.denied)}, "i"),
     upload: new RegExp(${src(CHROME_SELECTORS.upload)}, "i"),
@@ -169,6 +171,27 @@ export const CHROME_PAGE_AGENT = `(() => {
     return Array.from(scopeOf(input).querySelectorAll("img")).filter((img) => img.getAttribute("src") && shown(img) && !/placeholder/i.test(img.getAttribute("src") || "")).map((img) => img.getAttribute("src"));
   };
   const thumbs = (slot) => { const srcs = images(slot); return srcs ? srcs.length : -1; };
+  const tiles = (slot) => {
+    const input = fileInput(slot);
+    if (!input) return [];
+    return Array.from(scopeOf(input).querySelectorAll("img")).filter((img) => img.getAttribute("src") && shown(img) && !/placeholder/i.test(img.getAttribute("src") || "")).map((img) => {
+      const holder = img.closest("[data-image-key]");
+      const key = holder ? holder.getAttribute("data-image-key") : String(img.getAttribute("src")).replace(/=[^/]*$/, "");
+      let at = img; let remove = null;
+      for (let i = 0; i < 5 && at && !remove; i += 1) { at = at.parentElement; if (!at) break; const hits = actions(at).filter((el) => S.removeImage.test(actionLabel(el))); if (hits.length === 1) remove = hits[0]; else if (hits.length > 1) break; }
+      return { key: key, img: img, remove: remove };
+    });
+  };
+  const slotImages = (slot) => tiles(slot).map((t) => ({ key: t.key, label: t.remove ? actionLabel(t.remove).replace(S.removeImage, "").trim() : "", removable: Boolean(t.remove) }));
+  const removeAt = (slot, key) => {
+    if (dialogs().length) return null;
+    const hits = tiles(slot).filter((t) => t.key === key && t.remove);
+    if (hits.length !== 1) return null;
+    const el = hits[0].remove;
+    if (el.disabled || el.getAttribute("aria-disabled") === "true") return null;
+    const at = center(el);
+    return { x: at.x, y: at.y };
+  };
   const controls = () => Array.from(document.querySelectorAll("input:not([type=hidden]):not([type=file]):not([type=radio]):not([type=checkbox]), textarea, select, [role=combobox], [role=listbox][aria-expanded], [aria-haspopup=listbox]:not(input), [contenteditable=true]")).filter(shown).filter((el, i, all) => !all.some((other) => other !== el && other.contains(el)));
   const findControl = (anchors) => {
     const res = anchors.map((a) => new RegExp(a, "i"));
@@ -277,6 +300,6 @@ export const CHROME_PAGE_AGENT = `(() => {
     uploads: Array.from(document.querySelectorAll("input[type=file]")).filter(hiddenFile).map((input) => (norm(input.getAttribute("aria-label")) || norm(scopeOf(input).textContent)).slice(0, 48)).slice(0, 8),
     buttons: actions(document).map(actionLabel).filter(Boolean).slice(0, 24),
   });
-  globalThis.${AGENT_GLOBAL} = { version: ${AGENT_VERSION}, inventory, images, where, gate, fileInput, thumbs, fieldRead, setText, focusText, choose, option, justify, visibility, visibilityAt, marks };
+  globalThis.${AGENT_GLOBAL} = { version: ${AGENT_VERSION}, inventory, images, slotImages, removeAt, where, gate, fileInput, thumbs, fieldRead, setText, focusText, choose, option, justify, visibility, visibilityAt, marks };
   return true;
 })()`;

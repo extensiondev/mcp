@@ -14,28 +14,15 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { CHROME_SELECTORS, DASHBOARD_HOME } from "../lib/chrome-dashboard-agent";
+import { attach } from "../lib/chrome-listing-fill";
 import { chromePlan, type ChromePlan } from "../lib/chrome-listing-plan";
 import { chromeStep, fitHostLines, newRun, openRows, saveNewItem, SIGN_IN_LINE, signInLine, tabsOf, type ChromePage, type Where } from "../lib/chrome-listing-run";
-import { guidedConnectRuntime, type GuidedConnectRuntime, type LaunchPlan } from "../lib/guided-connect";
+import { type LaunchPlan } from "../lib/guided-connect";
 import { guideChromeListing, liveRun, watchChromeListing, type ChromeListingDeps } from "../lib/guided-chrome-listing";
-
-const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-const ZIP = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(60, 1)]);
-
-function png(width: number, height: number): Buffer {
-  const head = Buffer.alloc(16);
-
-  head.writeUInt32BE(13, 0);
-  head.write("IHDR", 4);
-  head.writeUInt32BE(width, 8);
-  head.writeUInt32BE(height, 12);
-
-  return Buffer.concat([PNG, head, Buffer.alloc(32)]);
-}
+import { painted, runtime, served, sha, sheet, ZIP, sheetAnswer, fakePage } from "./fixtures/chrome-listing-sheet";
 
 const ownerOnlyMode = (posix: number) => (process.platform === "win32" ? 0o666 : posix);
 const WINDOWS_MODE = "Windows keeps no POSIX mode bits, so privacy there is the per-user folder's ACL";
-const sha = (bytes: Buffer) => crypto.createHash("sha256").update(bytes).digest("hex");
 
 let tmp: string;
 
@@ -46,22 +33,6 @@ beforeEach(() => {
 afterEach(() => {
   fs.rmSync(tmp, { recursive: true, force: true });
 });
-
-function sheet(extra: Record<string, unknown> = {}, visibility = "Unlisted") {
-  return {
-    dashboardUrl: "https://chrome.google.com/webstore/devconsole",
-    package: { url: "/pkg", name: "chrome.zip", buildId: "abc1234", sha256: sha(ZIP) },
-    left: [{ id: "chrome.item", label: "Chrome Web Store item" }],
-    pages: [
-      { page: "Store listing", fields: [{ id: "chrome.description", label: "Description", text: "Fills store pages." }], images: [{ id: "chrome.store_icon", files: [{ url: "/icon", name: "chrome-icon-128x128.png" }] }, { id: "chrome.screenshots", files: [{ url: "/shot", name: "chrome-screenshot-1-1280x800.png" }, { url: "/wide", name: "chrome-screenshot-2-1400x800.png" }] }], answers: [] },
-      { page: "Privacy", fields: [{ id: "chrome.permission_justifications", label: "Permissions justification", text: "`storage`: keeps the session.\nhttps://*.extension.dev/*: downloads the package." }], images: [], answers: [{ id: "chrome.data_usage", label: "Data usage certifications", kind: "owner-certifies" }] },
-      { page: "Distribution", fields: [{ id: "chrome.visibility", label: "Visibility", text: visibility }], images: [], answers: [] },
-    ],
-    ...extra,
-  };
-}
-
-const served: Record<string, Buffer> = { "/pkg": ZIP, "/icon": png(128, 128), "/shot": png(1280, 800), "/wide": png(1400, 800) };
 
 describe("the Chrome first-listing sheet", () => {
   it("keeps only the package whose SHA-256 the build recorded and images of the size each slot takes", async () => {
@@ -97,33 +68,8 @@ describe("the Chrome first-listing sheet", () => {
   });
 });
 
-type Call = { method: string; args: unknown[] };
-
-function page(where: Partial<Where>, gates: Record<string, unknown> = {}): { page: ChromePage; calls: Call[]; clicks: number } {
-  const calls: Call[] = [];
-  const state = { clicks: 0 };
-  const base: Where = { host: "chrome.google.com", path: "/webstore/devconsole/pub-1", signIn: false, dashboard: true, publisherId: "pub-1", itemId: "", tab: "", dialog: null, dialogTakesZip: false, ...where };
-
-  return {
-    calls,
-    get clicks() {
-      return state.clicks;
-    },
-    page: {
-      call: async <T>(method: string, ...args: unknown[]) => {
-        calls.push({ method, args });
-
-        return (method === "where" ? base : (gates[String(args[0])] ?? { ok: false, reason: "no-button" })) as T;
-      },
-      handle: async () => null,
-      setFiles: async () => undefined,
-      click: async () => {
-        state.clicks += 1;
-      },
-      type: async () => undefined,
-      navigate: async () => undefined,
-    },
-  };
+function stepDeps(fake: ChromePage, image?: (url: string) => Promise<Buffer | null>) {
+  return { page: fake, sleep: async () => undefined, now: () => 0, ...(image ? { image } : {}) };
 }
 
 async function planned(): Promise<ChromePlan> {
@@ -133,7 +79,7 @@ async function planned(): Promise<ChromePlan> {
 describe("one step of the guided Chrome first listing", () => {
   it("only waits on a Google sign-in page and reads nothing on it", async () => {
     const run = newRun("ws/p", await planned(), 0);
-    const fake = page({ host: "accounts.google.com", signIn: true, dashboard: false });
+    const fake = fakePage({ host: "accounts.google.com", signIn: true, dashboard: false });
 
     expect(await chromeStep(run, { page: fake.page, sleep: async () => undefined, now: () => 0 })).toBe("wait");
     expect(run.line).toBe(SIGN_IN_LINE);
@@ -144,7 +90,7 @@ describe("one step of the guided Chrome first listing", () => {
   it("presses New item once, never again when no item comes back, and stops after two minutes", async () => {
     let now = 0;
     const run = newRun("ws/p", await planned(), now);
-    const fake = page({}, { newItem: { ok: true, label: "New item", x: 1, y: 1 } });
+    const fake = fakePage({}, { newItem: { ok: true, label: "New item", x: 1, y: 1 } });
     const deps = { page: fake.page, sleep: async () => undefined, now: () => now };
 
     expect(await chromeStep(run, deps)).toBe("moved");
@@ -160,8 +106,8 @@ describe("one step of the guided Chrome first listing", () => {
   });
 
   it("stops at a dialog or a guarded control and presses nothing", async () => {
-    const dialog = page({ dialog: "Submit for review?" });
-    const guarded = page({}, { newItem: { ok: false, reason: "guarded" } });
+    const dialog = fakePage({ dialog: "Submit for review?" });
+    const guarded = fakePage({}, { newItem: { ok: false, reason: "guarded" } });
 
     for (const fake of [dialog, guarded]) {
       const run = newRun("ws/p", await planned(), 0);
@@ -174,7 +120,7 @@ describe("one step of the guided Chrome first listing", () => {
 
   it("refuses to fill an item the run did not make when the project names none", async () => {
     const run = newRun("ws/p", await planned(), 0);
-    const fake = page({ itemId: "abcdefghijklmnopabcdefghijklmnop" });
+    const fake = fakePage({ itemId: "abcdefghijklmnopabcdefghijklmnop" });
 
     expect(await chromeStep(run, { page: fake.page, sleep: async () => undefined, now: () => 0 })).toBe("stopped");
     expect(run.itemId).toBe("");
@@ -372,9 +318,65 @@ describe("one step of the guided Chrome first listing", () => {
     expect(justified[0]!.map((line) => line.permission)).toEqual(["storage", ...fit.kept.map((line) => line.permission)]);
     expect(run.rows.map((row) => row.line)).toEqual(expect.arrayContaining([
       'Category on Store listing: choose Developer Tools yourself; the open list shows no option reading "Developer Tools" (it shows "Productivity", "Workflow & Planning")',
-      "Screenshots on Store listing: the slot already holds 1 image, so chrome-screenshot-1-1280x800.png was not attached again; extension.dev tools never removes an image, so remove the old ones on the page and attach it yourself if they differ",
+      "Screenshots on Store listing: the slot already holds images that could not be compared with the listing's files, so nothing was attached; compare them on the page yourself",
       expect.stringMatching(new RegExp(`^Host permission justification on Privacy: the host reasons in STORE\\.md join to [\\d,]+ characters and Chrome takes at most 1,000, so ${fit.left.join(", ").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} were left out whole`)),
     ]));
+  });
+
+  it("1247: removes only the slot's copies of the listing's own screenshots, by pixels, keeps a foreign image and attaches the listing in order", async () => {
+    const shots = [1, 2, 3, 4].map((n) => painted(1280, 800, n * 40));
+    const four = sheet();
+
+    four.pages[0]!.images[1]!.files = shots.map((_, i) => ({ url: `/s${i + 1}`, name: `chrome-screenshot-${i + 1}-1280x800.png` }));
+
+    const plan = await chromePlan(four, async (url) => ({ ok: true, bytes: /^\/s\d$/.test(url) ? shots[Number(url.slice(2)) - 1]! : served[url]! }), tmp);
+    const store: Record<string, Buffer> = { "https://lh3.example/old": Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]), ...Object.fromEntries([1, 2, 3].map((i) => [`https://lh3.example/k${i + 1}`, painted(1280, 800, (i + 1) * 40, true)])) };
+    let tiles = ["https://lh3.example/old", "https://lh3.example/k2", "https://lh3.example/k3", "https://lh3.example/k4"];
+    let pending = "";
+    const removed: string[] = [];
+    const attached: string[] = [];
+    const fake: ChromePage = {
+      call: async <T>(method: string, ...args: unknown[]) => {
+        if (method === "thumbs") return tiles.length as T;
+        if (method === "slotImages") return tiles.map((key, i) => ({ key, label: `Screenshot ${i + 1}`, removable: true })) as T;
+
+        if (method === "removeAt") {
+          pending = String(args[1]);
+
+          return { x: 1, y: 1 } as T;
+        }
+
+        return (method === "where" ? { dialog: null } : null) as T;
+      },
+      handle: async () => "input-1",
+      setFiles: async (_id, files) => {
+        attached.push(path.basename(files[0]!));
+        tiles = [...tiles, `https://lh3.example/new-${attached.length}`];
+      },
+      click: async () => {
+        removed.push(pending);
+        tiles = tiles.filter((key) => key !== pending);
+      },
+      type: async () => undefined,
+      navigate: async () => undefined,
+    };
+    const fetched: string[] = [];
+    const run = newRun("extensiondev/extension-dev-tools", plan, 0);
+
+    expect(shots[1]!.equals(store["https://lh3.example/k2"]!)).toBe(false);
+
+    await attach(run, stepDeps(fake, async (url) => {
+      fetched.push(url);
+
+      return store[url.replace(/=s0$/, "")] ?? null;
+    }), "screenshots", plan.screenshots, "Screenshots");
+
+    expect(fetched).toEqual(["https://lh3.example/old=s0", "https://lh3.example/k2=s0", "https://lh3.example/k3=s0", "https://lh3.example/k4=s0"]);
+    expect(removed).toEqual(["https://lh3.example/k2", "https://lh3.example/k3", "https://lh3.example/k4"]);
+    expect(attached).toEqual([1, 2, 3, 4].map((n) => `chrome-screenshot-${n}-1280x800.png`));
+    expect(tiles[0]).toBe("https://lh3.example/old");
+    expect(run.filled).toEqual(["Screenshots: removed 3 copies of the listing's own files so they go back in order", ...attached.map((name) => `Screenshots: ${name}`)]);
+    expect(run.rows.map((row) => row.line)).toEqual(["Screenshots on Store listing: Screenshot 1 on the page is not one of the listing's files, so it stays; remove it yourself if it is outdated"]);
   });
 
   it("drops a checklist line once the dashboard marks its tab complete and always leaves Submit for review", async () => {
@@ -391,37 +393,7 @@ describe("one step of the guided Chrome first listing", () => {
 });
 
 describe("the guided Chrome first listing answer", () => {
-  function answer(status: string, store = "chrome", project = "extension-dev-tools"): string {
-    return JSON.stringify({
-      ok: true,
-      command: "extension_submit",
-      status,
-      value: { action: "first-submission", store, project: `extensiondev/${project}`, pageUrl: `https://console.extension.dev/extensiondev/${project}/submissions/chrome`, dashboardUrl: null, opened: true, openPages: [{ url: "https://console.extension.dev/x" }] },
-      hint: "lane words",
-    });
-  }
-
-  function runtime(launches: LaunchPlan[]): GuidedConnectRuntime {
-    const binary = (name: string) => `/Applications/${name}.app/Contents/MacOS/${name}`;
-
-    return {
-      ...guidedConnectRuntime,
-      launchBlock: () => "",
-      probe: () => ({ platform: "darwin", systemBinary: (name) => (name === "firefox" || name === "chromium" ? binary(name) : null), managedBinary: () => null, lastUsed: (app) => (app.includes("firefox") ? 9 : 1), defaultBrowser: () => null }),
-      fetch: (async () => Promise.reject(new Error("offline"))) as unknown as typeof fetch,
-      stateDir: () => tmp,
-      cacheDir: () => path.join(tmp, "cache"),
-      launch: (plan) => {
-        launches.push(plan);
-
-        return { launched: true, reused: false };
-      },
-      windowCheck: async () => "visible",
-      schedule: () => undefined,
-    };
-  }
-
-  it("opens the dashboard in a Chromium window even when Firefox was used last, a second call reads the run instead of opening again, a read after it stopped changes nothing, and replace: true starts a fresh one", async () => {
+  it("opens the dashboard in a Chromium window even when Firefox was used last, a second call reads the run instead of opening again, a read after it stopped or finished changes nothing, and replace: true or a sync-listing refill starts a fresh one", async () => {
     const launches: LaunchPlan[] = [];
     const read: string[] = [];
     const deps: ChromeListingDeps = {
@@ -433,10 +405,10 @@ describe("the guided Chrome first listing answer", () => {
       watch: (args) => watchChromeListing({ ...args, minutes: 0, proc: { table: () => null, list: () => "", signal: () => false, wait: () => undefined, platform: "darwin" } }),
     };
 
-    expect(await guideChromeListing(answer("first-submission-to-do", "edge"), {}, runtime(launches), deps)).toBeNull();
-    expect(await guideChromeListing(answer("first-submission-done"), {}, runtime(launches), deps)).toBeNull();
+    expect(await guideChromeListing(sheetAnswer("first-submission-to-do", "edge"), {}, runtime(launches, tmp), deps)).toBeNull();
+    expect(await guideChromeListing(sheetAnswer("first-submission-done"), {}, runtime(launches, tmp), deps)).toBeNull();
 
-    const out = JSON.parse((await guideChromeListing(answer("first-submission-to-do"), {}, runtime(launches), deps))!);
+    const out = JSON.parse((await guideChromeListing(sheetAnswer("first-submission-to-do"), {}, runtime(launches, tmp), deps))!);
 
     expect(launches.map((plan) => [plan.choice.browser, plan.url])).toEqual([["chromium", DASHBOARD_HOME]]);
     expect(out).toMatchObject({ status: "first-listing-guided", value: { opened: true, landedOn: DASHBOARD_HOME, guidedBrowser: { browser: "chromium" }, nextStep: { kind: "dashboard", url: DASHBOARD_HOME } } });
@@ -445,7 +417,7 @@ describe("the guided Chrome first listing answer", () => {
     expect(out.value.sayToPerson).toContain("presses \"New item\" once");
     expect(out.value.sayToPerson).toContain("Submit for review stays with you");
 
-    const again = JSON.parse((await guideChromeListing(answer("first-submission-to-do"), {}, runtime(launches), deps))!);
+    const again = JSON.parse((await guideChromeListing(sheetAnswer("first-submission-to-do"), {}, runtime(launches, tmp), deps))!);
 
     expect(launches).toHaveLength(1);
     expect(read).toEqual(["extensiondev/extension-dev-tools"]);
@@ -456,19 +428,41 @@ describe("the guided Chrome first listing answer", () => {
 
     stopped.stopped = "\"Save draft\" was not pressed on Store listing. Nothing else was pressed.";
 
-    const read2 = JSON.parse((await guideChromeListing(answer("first-submission-to-do"), {}, runtime(launches), deps))!);
+    const read2 = JSON.parse((await guideChromeListing(sheetAnswer("first-submission-to-do"), {}, runtime(launches, tmp), deps))!);
 
     expect(launches).toHaveLength(1);
     expect(read2.hint).toMatch(/^The guided Chrome run stopped and this read changed nothing: "Save draft" was not pressed on Store listing\. Nothing else was pressed\. Once the cause is fixed on the page, call extension_submit \{action: "first-submission", store: "chrome", project: "extensiondev\/extension-dev-tools", replace: true\}/);
     expect(liveRun("extensiondev/extension-dev-tools")).toBe(stopped);
 
-    const fresh = JSON.parse((await guideChromeListing(answer("first-submission-to-do"), { replace: true }, runtime(launches), deps))!);
+    const fresh = JSON.parse((await guideChromeListing(sheetAnswer("first-submission-to-do"), { replace: true }, runtime(launches, tmp), deps))!);
 
     expect(launches).toHaveLength(2);
     expect(read).toHaveLength(2);
     expect(fresh.hint).toMatch(/^The earlier run had stopped \("Save draft" was not pressed on Store listing\. Nothing else was pressed\.\); a fresh fill started in the same window/);
     expect(fresh.value.progress).not.toHaveProperty("stopped");
     expect(liveRun("extensiondev/extension-dev-tools")).not.toBe(stopped);
+
+    const finished = liveRun("extensiondev/extension-dev-tools")!;
+
+    finished.finished = true;
+
+    const after = JSON.parse((await guideChromeListing(sheetAnswer("first-submission-to-do"), {}, runtime(launches, tmp), deps))!);
+
+    expect(launches).toHaveLength(2);
+    expect(after.hint).toMatch(/^The guided Chrome run finished and this read changed nothing\. To fill the dashboard again from the listing as it is now \(for example after sync-listing changed it\), call extension_submit \{action: "first-submission", store: "chrome", project: "extensiondev\/extension-dev-tools", replace: true\}/);
+
+    for (const args of [{ replace: true }, { refill: true }]) {
+      const done = liveRun("extensiondev/extension-dev-tools")!;
+
+      done.finished = true;
+
+      const refilled = JSON.parse((await guideChromeListing(sheetAnswer("first-submission-to-do"), args, runtime(launches, tmp), deps))!);
+
+      expect(refilled.hint).toMatch(/^The earlier run had finished; a fresh fill started in the same window and profile from the listing as it is now/);
+      expect(liveRun("extensiondev/extension-dev-tools")).not.toBe(done);
+    }
+
+    expect(launches).toHaveLength(4);
   });
 
   it("1239: fills the update of an item Chrome already serves, from a published sheet or the lane's already-live refusal, and leaves Distribution alone", async () => {
@@ -483,12 +477,12 @@ describe("the guided Chrome first listing answer", () => {
         return watchChromeListing({ ...args, minutes: 0, proc: { table: () => null, list: () => "", signal: () => false, wait: () => undefined, platform: "darwin" } });
       },
     };
-    const published = (status: string, project: string, word = "published") => JSON.stringify({ ...JSON.parse(answer(status, "chrome", project)), value: { ...JSON.parse(answer(status, "chrome", project)).value, read: { word } } });
+    const published = (status: string, project: string, word = "published") => JSON.stringify({ ...JSON.parse(sheetAnswer(status, "chrome", project)), value: { ...JSON.parse(sheetAnswer(status, "chrome", project)).value, read: { word } } });
 
-    expect(await guideChromeListing(published("first-submission-done", "in-review", "submitted"), {}, runtime(launches), deps)).toBeNull();
+    expect(await guideChromeListing(published("first-submission-done", "in-review", "submitted"), {}, runtime(launches, tmp), deps)).toBeNull();
 
     for (const [status, project] of [["first-submission-done", "live-a"], ["first-submission-already-live", "live-b"]]) {
-      const out = JSON.parse((await guideChromeListing(published(status!, project!), {}, runtime(launches), deps))!);
+      const out = JSON.parse((await guideChromeListing(published(status!, project!), {}, runtime(launches, tmp), deps))!);
 
       expect(out).toMatchObject({ status: "first-listing-guided", value: { opened: true } });
       expect(out.value.sayToPerson).toContain("an item Chrome already serves");
@@ -502,7 +496,7 @@ describe("the guided Chrome first listing answer", () => {
   it("opens nothing when the first-submission sheet cannot be read, and says why", async () => {
     const launches: LaunchPlan[] = [];
     const deps: ChromeListingDeps = { plan: async () => ({ refused: "the login expired" }), watch: () => { throw new Error("no watch"); } };
-    const out = JSON.parse((await guideChromeListing(answer("first-submission-waiting", "chrome", "unread"), {}, runtime(launches), deps))!);
+    const out = JSON.parse((await guideChromeListing(sheetAnswer("first-submission-waiting", "chrome", "unread"), {}, runtime(launches, tmp), deps))!);
 
     expect(launches).toEqual([]);
     expect(out).toMatchObject({ status: "first-submission-waiting", value: { opened: false, guidedBrowser: { opened: false } } });

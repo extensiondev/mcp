@@ -216,7 +216,7 @@ async function guidedFillOf(call: LaneCall, args: Args, store: "chrome" | "edge"
   let guided: Args;
 
   try {
-    guided = JSON.parse((await guide(JSON.stringify(sheet), ask)) ?? "null") as Args;
+    guided = JSON.parse((await guide(JSON.stringify(sheet), { ...ask, refill: true })) ?? "null") as Args;
   } catch {
     return null;
   }
