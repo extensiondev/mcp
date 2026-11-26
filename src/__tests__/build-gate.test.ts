@@ -9,6 +9,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 
 import type * as ExecModule from "../lib/exec";
 
+const RACE_ROUNDS = 40;
 const cliCalls: string[][] = [];
 let cliResultOverride: { code: number; stdout: string; stderr: string } | null =
   null;
@@ -1092,18 +1093,24 @@ describe("941: one dependency install runs on a project at a time, and a build s
         return Promise.all(servers.map(async (server) => String((await server.lines.next()).value)));
       };
 
-      const until = Date.now() + 1_500;
-      const holdersPerRound = new Set<number>();
+      const holdersPerRound: number[] = [];
 
-      await all("release");
-
-      for (let round = 0; round < 250 && Date.now() < until; round += 1) {
-        holdInstall(dir, NOBODY, null);
-        holdersPerRound.add((await all(`take ${Date.now() + 3}`)).filter((answer) => answer === "held").length);
+      const release = async (): Promise<number> => {
+        const sent = Date.now();
         await all("release");
+
+        return Date.now() - sent;
+      };
+
+      let reach = await release();
+
+      for (let round = 0; round < RACE_ROUNDS; round += 1) {
+        holdInstall(dir, NOBODY, null);
+        holdersPerRound.push((await all(`take ${Date.now() + Math.max(3, reach * 2)}`)).filter((answer) => answer === "held").length);
+        reach = await release();
       }
 
-      expect([...holdersPerRound]).toEqual([1]);
+      expect(holdersPerRound).toEqual(Array.from({ length: RACE_ROUNDS }, () => 1));
     },
     20_000,
   );

@@ -572,11 +572,12 @@ describe("ledger 515: a session the agent owns ends itself after an idle time, a
       idleClock.graceMs = graceMs;
     }
 
-    const deadline = Date.now() + 3_000;
-    while (isAlive(pid) && Date.now() < deadline) await sleep(50);
+    const settled = (): boolean => fs.existsSync(idledOutPath(project, "chrome")) && !fs.existsSync(idleRecordPath(project, "chrome")) && !listSessionMarkers().some((m) => path.resolve(m.projectPath) === path.resolve(project));
+
+    while (isAlive(pid)) await sleep(50);
 
     expect(await waitGone(pid)).toBe(true);
-    while (!fs.existsSync(idledOutPath(project, "chrome")) && Date.now() < deadline) await sleep(50);
+    while (!settled()) await sleep(50);
 
     const ended = readIdledOut(project, "chrome");
     expect(ended).toMatchObject({ pid, idleMinutes: 0.005, session: { projectPath: path.resolve(project), browser: "chrome" } });

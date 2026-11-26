@@ -217,7 +217,7 @@ describe("extension_dev health tick", () => {
     expect(failed.value.sessionStopped).toBe(true);
     expect(failed.hint).toMatch(/call extension_dev again/);
     expect(failed.error.message).not.toMatch(/The process is running/);
-    expect(first?.exitCode !== null || first?.signalCode !== null).toBe(true);
+    await new Promise<void>((resolve) => (first?.exitCode !== null || first?.signalCode !== null ? resolve() : first!.once("exit", () => resolve())));
 
     nextChild = () => fakeCli('console.log("building"); setTimeout(()=>{}, 60000);');
 

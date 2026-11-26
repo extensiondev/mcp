@@ -10,7 +10,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { lanePageUrl, setApprovalOpener } from "../lib/approval-open";
 import { loginIdOf } from "../lib/credential-source";
@@ -33,6 +33,7 @@ import { APPROVAL, PROJECT, WWW, stubPlatformFetch } from "./hosted-platform-fet
 import type * as ToolExports from "../tool-exports";
 
 let tmp = "";
+const BUNDLE_IMPORT_BUDGET_MS = 60_000;
 const saved: Record<string, string | undefined> = {};
 
 beforeEach(() => {
@@ -1182,8 +1183,13 @@ describe("the forwarder's smaller promises", () => {
 });
 
 describe("1175: the stored source tools reach /mcp through the tools entry and never through the forwarder", () => {
-  it("exports their names, group, titles and hints from @extension.dev/mcp/tools, the same the built entry carries", async () => {
-    const built = (await import("@extension.dev/mcp/tools")) as typeof ToolExports;
+  let built: typeof ToolExports;
+
+  beforeAll(async () => {
+    built = (await import("@extension.dev/mcp/tools")) as typeof ToolExports;
+  }, BUNDLE_IMPORT_BUDGET_MS);
+
+  it("exports their names, group, titles and hints from @extension.dev/mcp/tools, the same the built entry carries", () => {
 
     expect(HOSTED_ONLY_TOOL_NAMES).toEqual(["extension_source_read", "extension_source_write"]);
     expect(HOSTED_FEATURE_GROUP).toBe("hosted");

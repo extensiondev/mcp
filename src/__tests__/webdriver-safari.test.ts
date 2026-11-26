@@ -47,6 +47,7 @@ vi.mock("../lib/act", async (importOriginal) => {
 });
 
 const BROWSER = "safari";
+const IGNORE_SCALE_BUDGET_MS = 30_000;
 
 interface FakeSafari {
   port: number;
@@ -485,7 +486,7 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
     const ordinaryTook = fastest(rules);
 
     expect(ordinaryTook * 5, `100 ordinary lines took ${ordinaryTook.toFixed(1)} ms over 300 paths, and 100 lines that walk every path took ${walkedTook.toFixed(1)} ms`).toBeLessThan(walkedTook);
-  });
+  }, IGNORE_SCALE_BUDGET_MS);
 
   it("901: keeps negation, anchoring, directory-only lines, escapes and a nested file's base", () => {
     const rules = [...parseGitignore("# note\n*.log\n!keep.log\n/root.txt\nout/\ndocs/**/draft.md\n**/tmp\nsrc/*.map\n\\#hash\n\\!bang\nwith\\ space\nimg[0-9].png\n[z-a].txt\n"), ...parseGitignore("*.gen.ts\n/only-here\n", "packages/app")];

@@ -6,26 +6,24 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import os from "node:os";
-
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import { createServer, tools } from "../index";
+import { envelope } from "../lib/envelope";
 import { createToolDispatcher } from "../lib/tool-dispatch";
-import {
-  DEFAULT_SERVER_OPTIONS,
-  FEATURE_GROUPS,
-  TOOL_POLICY,
-  disabledToolEnvelope,
-  isServerFlag,
-  isToolListed,
-  resolveServerOptions,
-  runsOnPlatform,
-  type ServerOptions,
-  toolTitle,
-} from "../lib/tool-policy";
+import { DEFAULT_SERVER_OPTIONS, FEATURE_GROUPS, TOOL_POLICY, disabledToolEnvelope, isServerFlag, isToolListed, resolveServerOptions, runsOnPlatform, type ServerOptions, toolTitle } from "../lib/tool-policy";
+
+import type * as ActModule from "../lib/act";
+
+const actStub = vi.hoisted(() => ({ answer: null as string | null }));
+
+vi.mock("../lib/act", async (importOriginal) => {
+  const actual = await importOriginal<typeof ActModule>();
+
+  return { ...actual, runActVerb: async (...args: Parameters<typeof actual.runActVerb>) => actStub.answer ?? actual.runActVerb(...args) };
+});
 
 async function connected(options?: ServerOptions): Promise<Client> {
   const [clientTransport, serverTransport] =
@@ -57,6 +55,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  actStub.answer = null;
 });
 
 describe("the tool policy table", () => {
@@ -443,7 +442,8 @@ describe("1108: a tool that read and wrote answers as a read twin and a write tw
   });
 
   it("answers a twin of a page-reading tool inside the untrusted fence", async () => {
-    const read = await call(await connected(ALL), "extension_storage_read", { projectPath: os.tmpdir() });
+    actStub.answer = envelope({ ok: true, command: "extension_storage", status: "ok", value: { k: "<a page wrote this>" } });
+    const read = await call(await connected(ALL), "extension_storage_read", { action: "get", key: "k", projectPath: process.cwd() });
 
     expect(read.body).toMatchObject({ command: "extension_storage_read", untrustedEnd: `</untrusted-data-${read.body.untrusted?.boundary}>` });
   });
