@@ -10,7 +10,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-import { LISTING_TEXT_FIELDS, type ListingStore, type ListingText } from "./store-md-listing";
+import { LISTING_TEXT_FIELDS, type ListingStore, type ListingText, type LocaleText } from "./store-md-listing";
 import { STORE_SCREENSHOT_SPECS, sizeLabel } from "./store-screenshot-sizes";
 
 export const STORE_LISTING_ACTION = "extension_store.listing";
@@ -86,6 +86,7 @@ export interface ListingImage {
 
 export interface ListingPatch {
   listing: ListingText;
+  locales?: Record<string, LocaleText>;
   icons?: ListingImage[];
   screenshots?: ListingImage[];
 }
@@ -98,6 +99,7 @@ export interface ListingImageView {
 
 export interface ListingDigestPatch {
   listing: ListingText;
+  locales?: Record<string, LocaleText>;
   icons?: ListingImageView[];
   screenshots?: ListingImageView[];
 }
@@ -322,6 +324,8 @@ export function listingDigest(patch: ListingDigestPatch): string {
     if (value !== undefined) listing[field] = value;
   }
 
+  if (patch.locales && Object.keys(patch.locales).length) listing.locales = patch.locales;
+
   const canonical: Record<string, unknown> = { listing };
   if (patch.icons) canonical.icons = patch.icons.map(imageView);
   if (patch.screenshots) canonical.screenshots = patch.screenshots.map(imageView);
@@ -334,7 +338,17 @@ export function writeBody(patch: ListingPatch): Record<string, unknown> {
   if (patch.icons) media.icons = patch.icons.map((image) => ({ dataBase64: (image.bytes ?? Buffer.alloc(0)).toString("base64") }));
   if (patch.screenshots) media.screenshots = patch.screenshots.map((image) => ({ dataBase64: (image.bytes ?? Buffer.alloc(0)).toString("base64") }));
 
-  return { listing: patch.listing, ...(Object.keys(media).length ? { media } : {}) };
+  return { listing: listingWithLocales(patch), ...(Object.keys(media).length ? { media } : {}) };
+}
+
+/* @invariant A LANGUAGE'S LISTING TRAVELS INSIDE THE LISTING IT BELONGS TO.
+ * The platform keeps the listing as one document per store, so the extra
+ * languages cross as listing.locales, keyed by language tag, and are hashed
+ * after every other field, only when there is one, so a listing with no
+ * extra language hashes as it always did.
+ */
+export function listingWithLocales(patch: Pick<ListingPatch, "listing" | "locales">): ListingText | (ListingText & { locales: Record<string, LocaleText> }) {
+  return patch.locales && Object.keys(patch.locales).length ? { ...patch.listing, locales: patch.locales } : patch.listing;
 }
 
 export function approvalBody(store: ListingStore, patch: ListingDigestPatch): Record<string, unknown> {
@@ -342,5 +356,5 @@ export function approvalBody(store: ListingStore, patch: ListingDigestPatch): Re
   if (patch.icons) media.icons = patch.icons.map(imageView);
   if (patch.screenshots) media.screenshots = patch.screenshots.map(imageView);
 
-  return { store, listing: patch.listing, ...(Object.keys(media).length ? { media } : {}) };
+  return { store, listing: listingWithLocales(patch), ...(Object.keys(media).length ? { media } : {}) };
 }

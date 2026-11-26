@@ -102,12 +102,14 @@ export { accessFacts, dataCollectionFacts, networkFacts, remoteCodeFacts } from 
 export type { CodeFacts } from "./lib/store-code-facts";
 export { ITEM_NOT_LINKED_CODE, NOT_CONNECTED_CODES, PUBLISH_APPROVAL_SENTENCE, REVIEW_PROMISE, WORKSPACE_RECONNECT_STATE, broadModeSentence, chromeItemUrl, connectSentences, connectionOf, connectionSourceOf, dispatchedStep, doneStep, failedCheckSentence, fallbackConnectUrl, itemLinkUrls, linkItemSentences, nextStep, reportConnectionSource, runPublishRefusedStep, runPublishesAfterUpload, runPublishesStep, storeSettingsUrl, storeSwitchOff, storeSwitchSentences, submitFailedStep, submitStep, uploadStopsAtDraft, uploadedStepFailedStep, withApproveStep, withReviewPromise, withoutSecretNames, workspaceAccountSentence, workspaceReconnectSentences, workspaceStoreAccountsUrl, storeLabel } from "./lib/store-connection";
 export type { ConnectionSource, ItemLinkUrls, ModeIds, NextStep, StoreConnection } from "./lib/store-connection";
-export { MAX_SCREENSHOT_MASTER_BYTES, STORE_LISTING_ACTION, approvalBody, declaredIcon128, icon128FromBytes, listingDigest, screenshotRefusal, screenshotRule, writeBody } from "./lib/store-listing-media";
+export { MAX_SCREENSHOT_MASTER_BYTES, STORE_LISTING_ACTION, approvalBody, declaredIcon128, icon128FromBytes, listingDigest, listingWithLocales, screenshotRefusal, screenshotRule, writeBody } from "./lib/store-listing-media";
 export type { ListingDigestPatch, ListingImage, ListingPatch } from "./lib/store-listing-media";
 export type { OverLimitMeasure } from "./lib/store-md-bounded";
 export { HOST_BULLET_EXAMPLE, HOST_BULLET_FORM, STORE_OWN_LINES_PLACE, stripQuotes } from "./lib/store-md-bullets";
-export { BULLET_KEYS, EDGE_FIELDS_READ_FROM_CHROME, LISTING_LIST_LIMITS, LISTING_SECTION, LISTING_TEXT_LIMITS, PRIVACY_SECTION, SEARCH_TERMS_JOINED_LIMITS, STORE_FIELDS, STORE_OWN_LINES, STORE_SECTIONS, SUBSECTION_KEYS } from "./lib/store-md-declarations";
-export type { ListingField, ListingStore, ListingText, ListingTextField, PermissionJustification } from "./lib/store-md-declarations";
+export { BULLET_KEYS, EDGE_FIELDS_READ_FROM_CHROME, LISTING_LIST_LIMITS, LISTING_SECTION, LISTING_TEXT_LIMITS, LOCALE_FIELDS, PRIVACY_SECTION, SEARCH_TERMS_JOINED_LIMITS, STORE_FIELDS, STORE_OWN_LINES, STORE_SECTIONS, SUBSECTION_KEYS, localeSection, normalizeLocale } from "./lib/store-md-declarations";
+export type { ListingField, ListingStore, ListingText, ListingTextField, LocaleField, LocaleText, PermissionJustification } from "./lib/store-md-declarations";
+export { localizedListingFor } from "./lib/store-md-locales";
+export type { LocaleRow, LocalizedListing, LocalizedRead, ManifestLocales } from "./lib/store-md-locales";
 export { LISTING_STORES, classifyStore, derivedListingFields, listingForStore, parseStoreMdListing } from "./lib/store-md-listing";
 export type { StoreListingRead, StoreMdListing, StoreMdPrivacy, UnreadLine } from "./lib/store-md-listing";
 export { SCREENSHOTS_DOOR, screenshotsAdvice, screenshotsLineSentence } from "./lib/store-md-screenshots";

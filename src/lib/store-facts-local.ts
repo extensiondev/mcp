@@ -19,6 +19,7 @@ import { detectPackageManager, firefoxBuildScript, localBuildToolchain } from ".
 import { staleSentence, type LocalIcon, type OnboardingFacts, type SafariDescriptionRead, type StoreMdRead, type ToolchainFacts } from "./submit-facts";
 
 import type { ListingStore } from "./store-md-declarations";
+import type { ManifestLocaleMessages, ManifestLocales } from "./store-md-locales";
 
 type Row = Record<string, unknown>;
 
@@ -131,6 +132,63 @@ function localized(value: string, read: ManifestRead): string | null {
   const entry = messages ? Object.entries(messages).find(([name]) => name.toLowerCase() === key.toLowerCase())?.[1] : null;
 
   return isRow(entry) && typeof entry.message === "string" ? entry.message : null;
+}
+
+function sourceManifestRead(projectPath: string): ManifestRead | null {
+  const root = engineProjectRoot(projectPath);
+
+  for (const [file, from] of [[path.join(root, "src", "manifest.json"), "src/manifest.json"], [path.join(root, "manifest.json"), "manifest.json"]] as const) {
+    const manifest = readJson(file);
+    if (manifest) return { manifest, dir: path.dirname(file), from };
+  }
+
+  return null;
+}
+
+function messageOf(messages: Row | null, raw: unknown): string | undefined {
+  const key = MESSAGE_KEY.exec(text(raw))?.[1];
+  const entry = key && messages ? Object.entries(messages).find(([name]) => name.toLowerCase() === key.toLowerCase())?.[1] : null;
+  const message = isRow(entry) ? text(entry.message) : "";
+
+  return message && !MESSAGE_KEY.test(message) ? message : undefined;
+}
+
+/* @invariant A LANGUAGE THE PACKAGE SHIPS IS READ FROM THE SOURCE IT SHIPS.
+ * The source manifest names the extension and its description by message
+ * keys, and each _locales folder beside it holds that language's words; only
+ * those two messages are read, for the languages STORE.md writes no listing
+ * for. A manifest whose name is not a message has no language of its own to
+ * offer, so nothing is read.
+ */
+export function manifestLocalesOf(projectPath: string): ManifestLocales | null {
+  if (!text(projectPath)) return null;
+
+  const read = sourceManifestRead(projectPath);
+  const defaultLocale = text(read?.manifest.default_locale);
+  if (!read || !defaultLocale || !MESSAGE_KEY.test(text(read.manifest.name))) return null;
+
+  const dir = path.join(read.dir, "_locales");
+  let folders: string[];
+
+  try {
+    folders = fs.readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
+  } catch {
+    return null;
+  }
+
+  const messages: Record<string, ManifestLocaleMessages> = {};
+
+  for (const folder of folders) {
+    const json = readJson(path.join(dir, folder, "messages.json"));
+    const name = messageOf(json, read.manifest.name);
+    const description = messageOf(json, read.manifest.description);
+
+    if (name || description) messages[folder] = { ...(name ? { name } : {}), ...(description ? { description } : {}) };
+  }
+
+  const folder = path.relative(engineProjectRoot(projectPath), dir).split(path.sep).join("/");
+
+  return Object.keys(messages).length > 1 ? { defaultLocale, folder, messages } : null;
 }
 
 export function safariDescriptionOf(projectPath: string): SafariDescriptionRead | null {

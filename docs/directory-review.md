@@ -16,7 +16,8 @@ the hosted lane at `https://mcp.extension.dev/mcp/forward`: the local server exc
 stored login at www.extension.dev for a credential that lasts ten minutes, and sends the lane
 that credential, the tool's arguments and the project ref. The login itself, `projectPath` and
 `api` never leave. A store check or a listing sync also sends the facts it read from the project
-folder (the text of `STORE.md`, icon and screenshot sizes and digests, the git HEAD), and listing
+folder (the text of `STORE.md`, the manifest's name and description in each `_locales` language,
+icon and screenshot sizes and digests, the git HEAD), and listing
 image bytes go to www.extension.dev only when the lane says the listing write needs them. Steps
 that touch the machine run there and never on the lane: sign in, sign out and status, a create
 and its device approval, a web preview, a build download, a capture sync, a share create and

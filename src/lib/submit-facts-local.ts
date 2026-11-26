@@ -16,6 +16,7 @@ import {
   chromeWebStoreMdText,
   gitHead,
   localIcon,
+  manifestLocalesOf,
   manifestUpdateUrlOf,
   onboardingFactsOf,
   readText,
@@ -86,6 +87,7 @@ function readProjectFacts(args: SubmitFactsArgs, action: string): ProjectFacts {
     onboarding: preflight ? onboardingFactsOf(projectPath) : emptyProjectFacts().onboarding,
     draft: preflight && exists ? draftFactsOf(projectPath, storeMd) : null,
     shots: listing && exists ? shotsFactsOf(projectPath, listing, args.screenshots) : null,
+    manifestLocales: action === "sync-listing" && exists ? manifestLocalesOf(projectPath) : null,
   };
 }
 
@@ -117,6 +119,7 @@ export function readLocalListing(projectPath: string, store: ListingStore, scree
       storeMd: readText(storeMdPath(projectPath)),
       chromeWebStoreMd: chromeWebStoreMdText(projectPath),
       icons: { [store]: localIcon(projectPath, store) },
+      manifestLocales: manifestLocalesOf(projectPath),
     },
     store,
     screenshots,

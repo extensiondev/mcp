@@ -14,6 +14,7 @@ import type { FirefoxManifestRead } from "./firefox-enterprise";
 import type { PngHeader } from "./png-flat";
 import type { CodeFacts } from "./store-code-facts";
 import type { ListingImage } from "./store-listing-media";
+import type { ManifestLocales } from "./store-md-locales";
 import type { BuiltToolchain } from "./store-md-toolchain";
 
 type Row = Record<string, unknown>;
@@ -107,6 +108,7 @@ export interface ProjectFacts {
   onboarding: OnboardingFacts;
   draft: DraftFacts | null;
   shots: ShotsFacts | null;
+  manifestLocales?: ManifestLocales | null;
 }
 
 export interface SubmitFacts {

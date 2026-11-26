@@ -14,7 +14,7 @@ import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { actionFingerprint } from "../lib/approval-gate";
-import { stagedPatch, type StagedImage } from "../lib/listing-image-stage";
+import { stagedPatch, stagedWriteBody, type StagedImage } from "../lib/listing-image-stage";
 import { listingDigest, type ListingPatch } from "../lib/store-listing-media";
 import { solidPng } from "./fixtures/png";
 import { API, PROJECT_ROUTE, useProjectRoutes, type Call } from "./fixtures/project-routes";
@@ -170,5 +170,11 @@ describe("the listing approval fingerprint hashes the exact media the listing wr
 
     expect(listingDigest(stagedPatch(local, answered))).toBe(WWW_STORE_LISTING_DIGEST);
     expect(listingDigest(local)).not.toBe(WWW_STORE_LISTING_DIGEST);
+
+    const locales = { "pt-BR": { title: "PII Shield BR" } };
+    const withLocales = stagedPatch({ ...local, locales }, answered);
+
+    expect(stagedWriteBody(withLocales).listing).toEqual({ ...FIXTURE.listing, locales });
+    expect(listingDigest(withLocales)).toBe(listingDigest({ ...FIXTURE, locales }));
   });
 });

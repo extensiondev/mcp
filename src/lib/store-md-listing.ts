@@ -24,6 +24,7 @@ import { bulletLine, storeOwnLinesBody } from "./store-md-bullets";
 import { safariTitle } from "./store-md-safari-title";
 import { screenshotFilesListed } from "./store-md-screenshots";
 import { stripHtmlComments } from "./html-comments";
+import { isLocaleHeading, localeSections, type LocaleSections } from "./store-md-locale-sections";
 
 export * from "./store-md-declarations";
 
@@ -40,6 +41,7 @@ export interface StoreMdListing {
   stores: Partial<Record<ListingStore, ListingText>>;
   privacy: StoreMdPrivacy;
   lines: Partial<Record<ListingField, string>>;
+  locales: LocaleSections;
   placeholders?: Partial<Record<ListingField, string>>;
   screenshotsLine?: string;
   screenshotFiles?: number;
@@ -410,10 +412,13 @@ export function parseStoreMdListing(content: string): StoreMdListing {
     stores: {},
     privacy: { section: "", attested: null },
     lines: {},
+    locales: localeSections(content, parseStoreMdListing),
   };
 
   for (const section of splitSections(content, 2)) {
     const heading = section.heading.toLowerCase();
+
+    if (isLocaleHeading(section.heading)) continue;
 
     if (heading.startsWith("listing")) {
       readBullets(result, section.body, result.shared, false);

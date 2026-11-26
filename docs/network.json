@@ -11,7 +11,7 @@
     {
       "host": "mcp.extension.dev",
       "reachedBy": "the platform tools answered by the hosted lane (platform group)",
-      "sends": "A credential that lasts ten minutes, the tool's arguments and the project ref; a store check or a listing sync also sends the text of STORE.md, the icon and screenshot sizes and digests, and the git HEAD. Never the login, a file path or the api override.",
+      "sends": "A credential that lasts ten minutes, the tool's arguments and the project ref; a store check or a listing sync also sends the text of STORE.md, the manifest's name and description in each _locales language, the icon and screenshot sizes and digests, and the git HEAD. Never the login, a file path or the api override.",
       "login": "A ten-minute credential exchanged at www.extension.dev, never the login.",
       "optOut": "Platform tools stay off unless --features names platform."
     },

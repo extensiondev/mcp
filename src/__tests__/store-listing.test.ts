@@ -9,7 +9,7 @@ import { CHROMEWEBSTORE_MD_PREFILL_CALL, parseChromeWebStoreMd } from "../lib/ch
 import { stripHtmlComments } from "../lib/html-comments";
 import { parseStoreMd } from "../lib/store-md";
 import { emailShaped } from "../lib/store-md-bounded";
-import { listingDigest } from "../lib/store-listing-media";
+import { listingDigest, writeBody } from "../lib/store-listing-media";
 import { STORE_FIELDS, derivedListingFields, listingForStore, parseStoreMdListing } from "../lib/store-md-listing";
 import { TOOL_POLICY } from "../lib/tool-policy";
 import { readLocalListing } from "../lib/submit-facts-local";
@@ -592,5 +592,98 @@ describe("the STORE.md Support URL line", () => {
     expect(listingForStore(parsed, "safari").listing.homepageUrl).toBe("https://example.com");
     expect(listingForStore(parsed, "chrome").listing.supportUrl).toBeUndefined();
     expect(STORE_FIELDS.safari.slice(-2)).toEqual(["supportUrl", "releaseMode"]);
+  });
+});
+
+describe("a STORE.md listing in more than one language", () => {
+  const TRANSLATED = `${STORE_MD}
+## Listing (pt_br)
+
+- Name: PII Shield
+- Summary: Esconda dados pessoais em todas as abas com um clique.
+- Description:
+
+  Vai compartilhar a tela? Clique no PII Shield.
+
+## Listing (draft)
+
+- Homepage: https://example.com
+`;
+
+  function localized(): string {
+    const root = project();
+    fs.writeFileSync(path.join(root, "STORE.md"), TRANSLATED);
+    fs.mkdirSync(path.join(root, "src", "_locales", "en"), { recursive: true });
+    fs.mkdirSync(path.join(root, "src", "_locales", "pt_BR"));
+    fs.mkdirSync(path.join(root, "src", "_locales", "de"));
+    fs.writeFileSync(path.join(root, "src", "manifest.json"), JSON.stringify({ name: "__MSG_appName__", description: "__MSG_appDesc__", default_locale: "en" }));
+    fs.writeFileSync(path.join(root, "src", "_locales", "en", "messages.json"), JSON.stringify({ appName: { message: "PII Shield" }, appDesc: { message: "Hide personal information." } }));
+    fs.writeFileSync(path.join(root, "src", "_locales", "pt_BR", "messages.json"), JSON.stringify({ appName: { message: "PII Shield BR" }, appDesc: { message: "Manifest words." } }));
+    fs.writeFileSync(path.join(root, "src", "_locales", "de", "messages.json"), JSON.stringify({ appname: { message: "PII-Schild" }, appDesc: { message: "Persönliche Daten verbergen." } }));
+
+    return root;
+  }
+
+  it("reads each language's section apart from the default listing", () => {
+    const parsed = parseStoreMdListing(TRANSLATED);
+
+    expect(parsed.shared.shortDescription).toBe("Hide personal information on every open tab with one click.");
+    expect(parsed.shared.homepageUrl).toBe("https://example.com");
+    expect(parsed.locales).toEqual({
+      "pt-BR": {
+        title: "PII Shield",
+        shortDescription: "Esconda dados pessoais em todas as abas com um clique.",
+        fullDescription: "Vai compartilhar a tela? Clique no PII Shield.",
+      },
+    });
+  });
+
+  it("sends the languages to Firefox Add-ons, defaults the rest from _locales, and names them for the stores that take none", () => {
+    const root = localized();
+    const firefox = readLocalListing(root, "firefox");
+    const chrome = readLocalListing(root, "chrome");
+    const edge = readLocalListing(root, "edge");
+    if ("problem" in firefox || "problem" in chrome || "problem" in edge) throw new Error("no listing");
+
+
+    expect(firefox.patch.locales).toEqual({
+      "pt-BR": parseStoreMdListing(TRANSLATED).locales["pt-BR"],
+      de: { title: "PII-Schild", shortDescription: "Persönliche Daten verbergen." },
+    });
+
+    expect(firefox.localized?.rows).toEqual([
+      { locale: "pt-BR", fields: ["title", "shortDescription", "fullDescription"], from: "## Listing (pt-BR) in STORE.md" },
+      { locale: "de", fields: ["title", "shortDescription"], from: "src/_locales/de/messages.json" },
+    ]);
+
+    expect(firefox.localized?.sent).toBe(true);
+    expect((writeBody(firefox.patch).listing as Record<string, unknown>).locales).toEqual(firefox.patch.locales);
+
+    for (const other of [chrome, edge]) {
+      expect(other.patch.locales).toBeUndefined();
+      expect(other.localized?.sent).toBe(false);
+      expect(other.localized?.sentence).toContain("the pt-BR and de listings were not sent");
+      expect(other.localized?.sentence).toContain("`src/_locales/de/messages.json`");
+    }
+  });
+
+  it("names a translated line over its limit instead of sending it", () => {
+    const long = TRANSLATED.replace("- Summary: Esconda", `- Summary: ${"x".repeat(260)} Esconda`);
+    const read = listingForStore(parseStoreMdListing(long), "firefox");
+    const root = project();
+    fs.writeFileSync(path.join(root, "STORE.md"), long);
+    const local = readLocalListing(root, "firefox");
+    if ("problem" in local) throw new Error(local.problem);
+
+    expect(read.listing.shortDescription).toBe("Hide personal information on every open tab with one click.");
+    expect(local.patch.locales?.["pt-BR"]?.shortDescription).toBeUndefined();
+    expect(local.localized?.skipped[0]).toMatch(/^Summary for pt-BR \(## Listing \(pt-BR\) in STORE\.md\) is \d+ characters, over the 250/);
+  });
+
+  it("hashes the languages after every other field, and a listing without one as before", () => {
+    const listing = { title: "PII Shield", reviewContactPhone: "+5511999999999", supportUrl: "https://example.com/support" };
+
+    expect(listingDigest({ listing, locales: {} })).toBe("e660d01dee637ba0e15fc7a0f938f3ead7a8e6683239b9460649ee5af0a3b732");
+    expect(listingDigest({ listing: { title: "PII Shield" }, locales: { "pt-BR": { title: "PII Shield BR", shortDescription: "Esconda." } } })).toBe("15bfdea0de67f20afb204f6135e4b054fca2ea59a87ccb0c9858e1cf26db4c7e");
   });
 });

@@ -13,6 +13,7 @@ import { withChromeVisibility } from "./chrome-visibility";
 import { chromeWebStoreHeld, chromeWebStoreHeldSentence, chromeWebStoreMdOf } from "./chromewebstore-md";
 import { STORE_MD_FILENAME } from "./store-md";
 import { STORE_FIELDS, listingForStore, parseStoreMdListing, type ListingField, type ListingStore, type StoreMdPrivacy, type UnreadLine } from "./store-md-listing";
+import { localizedListingFor, type LocalizedListing } from "./store-md-locales";
 import { storeMdOverLimitOf, type StoreMdOverLimit } from "./store-md-over-limit";
 import { screenshotsLineSentence } from "./store-md-screenshots";
 import { factOf, storeMdFileOf, type IconOrigin, type IconStale, type LocalIcon, type ProjectFacts } from "./submit-facts";
@@ -44,11 +45,12 @@ export interface LocalListing {
   categories?: CategoryRead;
   screenshotsNamed?: number;
   pasteLines?: PasteLines;
+  localized?: LocalizedListing;
 }
 
 export type LocalListingRead = LocalListing | { problem: string } | null;
 
-export type ListingFacts = Pick<ProjectFacts, "projectPath" | "storeMdFile" | "storeMd" | "chromeWebStoreMd" | "icons">;
+export type ListingFacts = Pick<ProjectFacts, "projectPath" | "storeMdFile" | "storeMd" | "chromeWebStoreMd" | "icons" | "manifestLocales">;
 
 const NO_ICON_READ: LocalIcon = { missing: "no manifest.json in the project" };
 
@@ -72,7 +74,8 @@ export function localListingOf(
   const read = listingForStore(parsed, store);
   const { listing, skipped, unread } = withChromeVisibility(read, parsed.lines.visibility);
   const icon = factOf(project.icons, store) ?? NO_ICON_READ;
-  const patch: ListingPatch = { listing };
+  const localized = localizedListingFor(parsed, project.manifestLocales, store);
+  const patch: ListingPatch = { listing, ...(Object.keys(localized.locales).length ? { locales: localized.locales } : {}) };
   const screenshotsLine = parsed.screenshotsLine && !screenshots?.length ? screenshotsLineSentence(parsed.screenshotsLine, parsed.screenshotFiles ?? 0) : "";
 
   if ("icon" in icon) patch.icons = [icon.icon];
@@ -92,6 +95,7 @@ export function localListingOf(
     ...(parsed.screenshotsLine ? { screenshotsNamed: parsed.screenshotFiles ?? 0 } : {}),
     ...(store === "chrome" ? { pasteLines: chromePasteLines(content) } : {}),
     ...(read.categories ? { categories: read.categories } : {}),
+    ...(localized.localized ? { localized: localized.localized } : {}),
     ...("icon" in icon ? { icon: icon.origin } : { iconMissing: icon.missing }),
     ...("stale" in icon && icon.stale ? { iconStale: icon.stale } : {}),
   };

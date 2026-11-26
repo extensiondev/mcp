@@ -10,7 +10,7 @@ import { envelope } from "./envelope";
 import { LISTING_TOO_LARGE_STATUS } from "./listing-body-limit";
 import { projectApiSend, type ProjectApi, type ProjectApiRead, type ProjectApiRefusal } from "./project-api";
 import { isRow, text } from "./row";
-import { MAX_SCREENSHOT_MASTER_BYTES, type ListingDigestPatch, type ListingImage, type ListingPatch } from "./store-listing-media";
+import { MAX_SCREENSHOT_MASTER_BYTES, listingWithLocales, type ListingDigestPatch, type ListingImage, type ListingPatch } from "./store-listing-media";
 
 import type { ListingStore } from "./store-md-listing";
 
@@ -224,7 +224,7 @@ export async function stageListingImages(api: ProjectApi, store: ListingStore, p
 export function stagedPatch(patch: ListingPatch, images: StagedImage[]): ListingDigestPatch {
   const view = (kind: ImageKind) =>
     images.filter((image) => image.kind === kind).map(({ sha256, width, height }) => ({ sha256, width, height }));
-  const staged: ListingDigestPatch = { listing: patch.listing };
+  const staged: ListingDigestPatch = { listing: patch.listing, ...(patch.locales ? { locales: patch.locales } : {}) };
   if (patch.icons) staged.icons = view("icons");
   if (patch.screenshots) staged.screenshots = view("screenshots");
 
@@ -236,7 +236,7 @@ export function stagedWriteBody(staged: ListingDigestPatch): Record<string, unkn
   if (staged.icons) media.icons = staged.icons;
   if (staged.screenshots) media.screenshots = staged.screenshots;
 
-  return { listing: staged.listing, ...(Object.keys(media).length ? { media } : {}) };
+  return { listing: listingWithLocales(staged), ...(Object.keys(media).length ? { media } : {}) };
 }
 
 export function stagedSentence(store: string, images: StagedImage[]): string {

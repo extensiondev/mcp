@@ -56,6 +56,26 @@ export type ListingField = keyof ListingText;
 
 export const LISTING_SECTION = "## Listing";
 
+export const LOCALE_FIELDS = ["title", "shortDescription", "fullDescription"] as const;
+
+export type LocaleField = (typeof LOCALE_FIELDS)[number];
+
+export type LocaleText = Partial<Record<LocaleField, string>>;
+
+export const localeSection = (locale: string): string => `${LISTING_SECTION} (${locale})`;
+
+const LOCALE_TAG = /^[a-z]{2,3}(?:[-_][a-z0-9]{2,8})*$/i;
+
+export function normalizeLocale(raw: string): string | null {
+  const tag = raw.trim();
+  if (!LOCALE_TAG.test(tag)) return null;
+
+  const [language = "", ...rest] = tag.split(/[-_]/);
+  const parts = rest.map((part) => (/^[a-z]{4}$/i.test(part) ? part[0]!.toUpperCase() + part.slice(1).toLowerCase() : /^(?:[a-z]{2}|\d{3})$/i.test(part) ? part.toUpperCase() : part.toLowerCase()));
+
+  return [language.toLowerCase(), ...parts].join("-");
+}
+
 export const PRIVACY_SECTION = "## Privacy and data use";
 
 export const STORE_SECTIONS: Record<ListingStore, string> = {
