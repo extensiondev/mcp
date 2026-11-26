@@ -33,6 +33,8 @@ function png(width: number, height: number): Buffer {
   return Buffer.concat([PNG, head, Buffer.alloc(32)]);
 }
 
+const ownerOnlyMode = (posix: number) => (process.platform === "win32" ? 0o666 : posix);
+const WINDOWS_MODE = "Windows keeps no POSIX mode bits, so privacy there is the per-user folder's ACL";
 const sha = (bytes: Buffer) => crypto.createHash("sha256").update(bytes).digest("hex");
 
 let tmp: string;
@@ -66,7 +68,7 @@ describe("the Chrome first-listing sheet", () => {
     const plan = await chromePlan(sheet(), async (url) => ({ ok: true, bytes: served[url]! }), tmp);
 
     expect(plan.pkg?.sha256).toBe(sha(ZIP));
-    expect(fs.statSync(plan.pkg!.path).mode & 0o777).toBe(0o600);
+    expect(fs.statSync(plan.pkg!.path).mode & 0o777, WINDOWS_MODE).toBe(ownerOnlyMode(0o600));
     expect(plan.icon.map((file) => file.name)).toEqual(["chrome-icon-128x128.png"]);
     expect(plan.screenshots.map((file) => file.name)).toEqual(["chrome-screenshot-1-1280x800.png"]);
     expect(plan.notes).toEqual(["chrome-screenshot-2-1400x800.png is 1400x800, and Chrome takes screenshots at 1280x800 or 640x400"]);

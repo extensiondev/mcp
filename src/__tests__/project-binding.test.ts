@@ -46,6 +46,8 @@ const API = "http://localhost:3100";
 const WORKSPACE = "cezaraugusto";
 const FUTURE = Math.floor(Date.now() / 1000) + 3600;
 const ENV_KEYS = ["XDG_CONFIG_HOME", "EXTENSION_DEV_API_URL", "EXTENSION_DEV_TOKEN", "EXTENSION_DEV_PROJECT", "EXTENSION_DEV_APPROVAL_GATE"];
+const ownerOnlyMode = (posix: number) => (process.platform === "win32" ? 0o666 : posix);
+const WINDOWS_MODE = "Windows keeps no POSIX mode bits, so privacy there is the per-user folder's ACL";
 const saved: Record<string, string | undefined> = {};
 let tmp: string;
 let sent: Array<{ url: string; auth: string }>;
@@ -692,7 +694,7 @@ describe("the guided store connect opens the MCP's own browser with extension.de
 
     expect(fs.existsSync(path.join(again.dir, "POISON.js"))).toBe(false);
     expect(treeSha256(again.dir)).toBe(readBundleRecord(bundledToolsDir()!)!.sha256.firefox);
-    expect(fs.statSync(cacheDir).mode & 0o777).toBe(0o700);
+    expect(fs.statSync(cacheDir).mode & 0o777, WINDOWS_MODE).toBe(ownerOnlyMode(0o700));
   });
 
   describe("the Firefox Add-ons copy", () => {
@@ -1121,7 +1123,7 @@ describe("the guided store connect opens the MCP's own browser with extension.de
       expect(launches[0]!.url).toBe(GUIDED_KEY_PAGES.edge!.url);
       expect(launch).toMatchObject({ handoff: PROD_HANDOFF, expiresAt: launchExpiresAt });
       expect(crypto.createHash("sha256").update(launch.secret).digest("hex")).toBe(minted.launchHash);
-      expect(fs.statSync(file).mode & 0o777).toBe(0o600);
+      expect(fs.statSync(file).mode & 0o777, WINDOWS_MODE).toBe(ownerOnlyMode(0o600));
       const manifest = JSON.parse(fs.readFileSync(path.join(launches[0]!.extensionDir, "manifest.json"), "utf8"));
       const verified = fs.readdirSync(path.join(tmp, "cache")).find((name) => name.startsWith("bundled-chromium-"))!;
 
