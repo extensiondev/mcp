@@ -8,7 +8,7 @@
 
 export const AGENT_GLOBAL = "__extensionDevToolsChrome";
 
-export const AGENT_VERSION = 5;
+export const AGENT_VERSION = 6;
 
 export const DASHBOARD_HOME = "https://chrome.google.com/webstore/devconsole";
 
@@ -36,7 +36,10 @@ export const CHROME_SELECTORS = {
   repeated: /^(.{2,}?)\1+/,
   iconLead: /^store icon/i,
   removeImage: /^remove image\b/i,
-  removeImageDialog: /^remove image\b[\s\S]*are you sure you want to remove this image/i,
+  removeImageDialog: /^remove image\s*are you sure you want to remove this image/i,
+  remoteCode: /remote code/i,
+  dataUsage: /^data usage$/i,
+  certification: /^i do not\b/i,
   dialogRemove: /^remove$/i,
   dialogCancel: /^cancel$/i,
   screenshotsLead: /^screenshots?\b/i,
@@ -68,6 +71,16 @@ export const CHROME_FIELDS: readonly FieldSpec[] = [
 
 const src = (re: RegExp) => JSON.stringify(re.source);
 
+export type DialogFacts = { modal: string | null; text: string; buttons: string[] };
+
+export const DIALOG_RULES = `((confirmText) => {
+  const live = (d) => d.modal !== "false" && d.text.length > 0;
+  const confirm = (d) => confirmText.test(d.text) && d.buttons.filter((b) => /^remove$/i.test(b)).length === 1 && d.buttons.filter((b) => /^cancel$/i.test(b)).length === 1;
+  const pick = (all, which) => { const shown = all.filter(live); if (!shown.length || !shown.every(confirm) || (which === "remove" && shown.length !== 1)) return -1; return all.indexOf(shown[shown.length - 1]); };
+  return { live, confirm, pick };
+})`;
+
+
 export const CHROME_PAGE_AGENT = `(() => {
   if (globalThis.${AGENT_GLOBAL} && globalThis.${AGENT_GLOBAL}.version === ${AGENT_VERSION}) return true;
   const S = {
@@ -92,13 +105,19 @@ export const CHROME_PAGE_AGENT = `(() => {
     incomplete: new RegExp(${src(CHROME_SELECTORS.incomplete)}, "i"),
     hostJustification: new RegExp(${src(CHROME_SELECTORS.hostJustification)}, "i"),
     justification: new RegExp(${src(CHROME_SELECTORS.justification)}, "i"),
+    remoteCode: new RegExp(${src(CHROME_SELECTORS.remoteCode)}, "i"),
+    dataUsage: new RegExp(${src(CHROME_SELECTORS.dataUsage)}, "i"),
+    certification: new RegExp(${src(CHROME_SELECTORS.certification)}, "i"),
     vis: { unlisted: new RegExp(${src(CHROME_SELECTORS.unlisted)}, "i"), private: new RegExp(${src(CHROME_SELECTORS.private)}, "i"), public: new RegExp(${src(CHROME_SELECTORS.public)}, "i") },
   };
   const PANEL = "data-extension-dev-tools-panel";
   const norm = (v) => String(v == null ? "" : v).replace(/\\s+/g, " ").trim();
   const shown = (el) => { if (!el || !el.isConnected || el.closest("[" + PANEL + "]")) return false; if (el.closest("[hidden], [aria-hidden=true], [inert]")) return false; const st = getComputedStyle(el); if (st.display === "none" || st.visibility === "hidden") return false; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   const hiddenFile = (el) => el.isConnected && !el.closest("[" + PANEL + "]");
-  const dialogs = () => Array.from(document.querySelectorAll("dialog[open], [role=dialog], [role=alertdialog], [aria-modal=true]")).filter(shown);
+  const R = ${DIALOG_RULES}(S.removeImageDialog);
+  const dialogText = (el) => norm(typeof el.innerText === "string" ? el.innerText : Array.from(el.querySelectorAll("*")).filter((n) => !n.children.length).map((n) => n.textContent).join(" "));
+  const facts = (el) => ({ modal: el.getAttribute("aria-modal"), text: dialogText(el), buttons: Array.from(el.querySelectorAll("button, [role=button]")).filter(shown).map((b) => norm(b.getAttribute("aria-label")) || dialogText(b)) });
+  const dialogs = () => Array.from(document.querySelectorAll("dialog[open], [role=dialog], [role=alertdialog], [aria-modal=true]")).filter(shown).filter((el) => R.live(facts(el)));
   const center = (el) => { el.scrollIntoView({ block: "center", inline: "center" }); const r = el.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; };
   const once = (t) => norm(t).replace(S.repeated, "$1");
   const visibleText = (node) => { const copy = node.cloneNode(true); copy.querySelectorAll("[aria-hidden=true]").forEach((n) => n.remove()); return once(copy.textContent); };
@@ -129,6 +148,7 @@ export const CHROME_PAGE_AGENT = `(() => {
     return {
       host, path: location.pathname,
       heading: (heads[0] || "").slice(0, 120),
+      rendered: heads.length > 0 || actions(document).length > 0 || controls().length > 0,
       itemsList: heads.some((h) => S.itemsHeading.test(h)),
       denied: !controls().length && S.denied.test((document.title || "") + " " + norm(document.body ? document.body.innerText : "").slice(0, 600)),
       signedInAs: acct ? norm(acct.getAttribute("content")) : "",
@@ -136,7 +156,7 @@ export const CHROME_PAGE_AGENT = `(() => {
       dashboard: host === "chrome.google.com" && /^\\/(?:u\\/\\d+\\/)?webstore\\/devconsole/i.test(location.pathname),
       publisherId: m ? m[1] : "", itemId: m && m[2] ? m[2].toLowerCase() : "",
       tab: byNav || byPath,
-      dialog: d ? norm(d.textContent).replace(/\\S{16,}/g, "[hidden]").slice(0, 240) : null,
+      dialog: d ? dialogText(d).replace(/\\S{16,}/g, "[hidden]").slice(0, 240) : null,
       dialogTakesZip: Boolean(d && Array.from(d.querySelectorAll("input[type=file]")).some(hiddenFile)),
     };
   };
@@ -147,7 +167,7 @@ export const CHROME_PAGE_AGENT = `(() => {
     const rule = tab ? S.tabs[tab] : S[kind];
     if (!rule) return { ok: false, reason: "no-button" };
     if (kind === "upload") { if (!d) return { ok: false, reason: "no-button" }; }
-    else if (d) return { ok: false, reason: "dialog", asks: norm(d.textContent).replace(/\\S{16,}/g, "[hidden]").slice(0, 240) };
+    else if (d) return { ok: false, reason: "dialog", asks: dialogText(d).replace(/\\S{16,}/g, "[hidden]").slice(0, 240) };
     const hits = actions(kind === "upload" ? d : document).filter((el) => rule.test(actionLabel(el)));
     if (!hits.length) return { ok: false, reason: "no-button" };
     if (hits.length > 1) return { ok: false, reason: "many-buttons" };
@@ -189,11 +209,12 @@ export const CHROME_PAGE_AGENT = `(() => {
     });
   };
   const topDialog = () => { const ds = dialogs(); return ds.length ? ds[ds.length - 1] : null; };
-  const dialogShown = () => { const d = topDialog(); if (!d) return null; const words = visibleText(d); return { count: dialogs().length, text: words.replace(/\\S{16,}/g, "[hidden]").slice(0, 240), removeImage: S.removeImageDialog.test(words) }; };
+  const dialogShown = () => { const d = topDialog(); if (!d) return null; const f = facts(d); return { count: dialogs().length, text: f.text.replace(/\\S{16,}/g, "[hidden]").slice(0, 240), removeImage: R.confirm(f) }; };
   const dialogButton = (which) => {
-    const d = topDialog();
     const all = dialogs();
-    if (!d || !all.every((one) => S.removeImageDialog.test(visibleText(one))) || (which === "remove" && all.length !== 1)) return null;
+    const at = R.pick(all.map(facts), which);
+    const d = at >= 0 ? all[at] : null;
+    if (!d) return null;
     const want = which === "remove" ? S.dialogRemove : S.dialogCancel;
     const hits = actions(d).filter((el) => want.test(actionLabel(el)));
     if (hits.length !== 1 || hits[0].disabled) return null;
@@ -313,11 +334,19 @@ export const CHROME_PAGE_AGENT = `(() => {
     }
     return out;
   };
+  const wordsShown = (re) => { if (!document.body) return false; const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); for (let n = walk.nextNode(); n; n = walk.nextNode()) { const at = n.parentElement; if (at && re.test(n.textContent || "") && !at.closest("script, style") && shown(at)) return true; } return false; };
+  const privacyAsks = () => {
+    const heads = Array.from(document.querySelectorAll("h1, h2, h3, [role=heading]")).filter(shown).map((h) => norm(h.textContent));
+    const boxes = Array.from(document.querySelectorAll("input[type=checkbox], [role=checkbox]")).filter((el) => el.isConnected && !el.closest("[" + PANEL + "]"));
+    const ticked = (el) => el.tagName === "INPUT" ? el.checked : el.getAttribute("aria-checked") === "true";
+    const certs = boxes.filter((el) => S.certification.test(labelOf(el)));
+    return { remoteCode: wordsShown(S.remoteCode), dataUsage: heads.some((h) => S.dataUsage.test(h)), certified: certs.filter(ticked).length, certifications: certs.length, types: boxes.filter((el) => !S.certification.test(labelOf(el)) && ticked(el)).map((el) => labelOf(el).slice(0, 60)) };
+  };
   const inventory = () => ({
     controls: controls().map((el) => labelOf(el).slice(0, 48) || el.tagName.toLowerCase()).slice(0, 16),
     uploads: Array.from(document.querySelectorAll("input[type=file]")).filter(hiddenFile).map((input) => (norm(input.getAttribute("aria-label")) || norm(scopeOf(input).textContent)).slice(0, 48)).slice(0, 8),
     buttons: actions(document).map(actionLabel).filter(Boolean).slice(0, 24),
   });
-  globalThis.${AGENT_GLOBAL} = { version: ${AGENT_VERSION}, inventory, images, slotImages, removeAt, dialogShown, dialogButton, where, gate, fileInput, thumbs, fieldRead, setText, focusText, choose, option, justify, visibility, visibilityAt, marks };
+  globalThis.${AGENT_GLOBAL} = { version: ${AGENT_VERSION}, inventory, privacyAsks, images, slotImages, removeAt, dialogShown, dialogButton, where, gate, fileInput, thumbs, fieldRead, setText, focusText, choose, option, justify, visibility, visibilityAt, marks };
   return true;
 })()`;

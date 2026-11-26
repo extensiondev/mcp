@@ -13,10 +13,10 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { CHROME_SELECTORS, DASHBOARD_HOME } from "../lib/chrome-dashboard-agent";
+import { CHROME_SELECTORS, DASHBOARD_HOME, DIALOG_RULES, type DialogFacts } from "../lib/chrome-dashboard-agent";
 import { attach } from "../lib/chrome-listing-fill";
 import { chromePlan, type ChromePlan } from "../lib/chrome-listing-plan";
-import { chromeStep, fitHostLines, newRun, openRows, saveNewItem, SIGN_IN_LINE, signInLine, tabsOf, type ChromePage, type Where } from "../lib/chrome-listing-run";
+import { chromeStep, fitHostLines, newRun, openRows, RENDER_WAIT_MS, saveNewItem, SIGN_IN_LINE, signInLine, tabsOf, type ChromePage, type PrivacyAsks, type Where } from "../lib/chrome-listing-run";
 import { type LaunchPlan } from "../lib/guided-connect";
 import { guideChromeListing, liveRun, watchChromeListing, type ChromeListingDeps } from "../lib/guided-chrome-listing";
 import { painted, runtime, served, sha, sheet, ZIP, sheetAnswer, fakePage, stepDeps } from "./fixtures/chrome-listing-sheet";
@@ -392,6 +392,63 @@ describe("one step of the guided Chrome first listing", () => {
       expect(await chromeStep(run, stepDeps(fake.page))).toBe(outcome);
       expect(fake.clicks).toBe(cancel ? 1 : 0);
       expect(cancel ? run.line : run.stopped).toMatch(cancel ? /^Canceled a Remove Image confirmation left open/ : /^The dashboard shows a dialog: "Discard changes\? Cancel Discard"/);
+    }
+  });
+
+  it("1260: confirms the Remove Image dialog beside Chrome's open nav drawer, read as the page renders it, and nothing else", () => {
+    const rules = new Function(`return ${DIALOG_RULES}`)()(CHROME_SELECTORS.removeImageDialog) as { live: (d: DialogFacts) => boolean; pick: (all: DialogFacts[], which: string) => number };
+    const drawer: DialogFacts = { modal: "false", text: "", buttons: ["Items", "Settings", "Profile", "Notifications"] };
+    const confirm: DialogFacts = { modal: "true", text: "Remove Image Are you sure you want to remove this image? This cannot be undone. Cancel Remove", buttons: ["Cancel", "Remove"] };
+    const discard: DialogFacts = { modal: "true", text: "Discard changes? Cancel Discard", buttons: ["Cancel", "Discard"] };
+
+    expect(CHROME_SELECTORS.removeImageDialog.test("Remove ImageAre you sure you want to remove this image? This cannot be undone.")).toBe(true);
+    expect(rules.live(drawer)).toBe(false);
+    expect([rules.pick([drawer, confirm], "remove"), rules.pick([confirm, drawer], "remove"), rules.pick([drawer, confirm], "cancel")]).toEqual([1, 0, 1]);
+    expect([rules.pick([drawer, confirm, { ...confirm }], "remove"), rules.pick([drawer, confirm, { ...confirm }], "cancel")]).toEqual([-1, 2]);
+    expect([rules.pick([drawer, discard], "cancel"), rules.pick([confirm, discard], "remove"), rules.pick([drawer], "cancel"), rules.pick([{ ...confirm, buttons: ["Remove"] }], "remove")]).toEqual([-1, -1, -1, -1]);
+  });
+
+  it("1259: waits for a newly opened dashboard to render before filling, then names a page that never does", async () => {
+    let now = 0;
+    const fake = fakePage({ itemId: "abcdefghijklmnopabcdefghijklmnop", path: "/u/1/webstore/devconsole/pub-1/abcdefghijklmnopabcdefghijklmnop/edit", rendered: false });
+    const run = newRun("ws/p", await planned(), now);
+    const deps = { page: fake.page, sleep: async () => undefined, now: () => now };
+
+    run.itemId = "abcdefghijklmnopabcdefghijklmnop";
+
+    expect(await chromeStep(run, deps)).toBe("wait");
+    now = RENDER_WAIT_MS;
+    expect(await chromeStep(run, deps)).toBe("wait");
+    expect(run.line).toMatch(/^Waiting for the Chrome Web Store dashboard to finish loading/);
+    now = RENDER_WAIT_MS + 1;
+    expect(await chromeStep(run, deps)).toBe("stopped");
+    expect(run.stopped).toMatch(/^The Chrome Web Store dashboard never rendered at \/u\/1\/webstore\/devconsole\/pub-1\/abcdefghijklmnopabcdefghijklmnop\/edit: after 60 seconds/);
+    expect(fake.calls.map((call) => call.method)).toEqual(["where", "where", "where"]);
+    expect(fake.clicks).toBe(0);
+  });
+
+  it("1261: asks on Privacy only for the remote code and data usage answers the page shows and has not already ticked", async () => {
+    const asked = sheet();
+
+    (asked.pages[1]!.answers as unknown[]).push({ id: "chrome.remote_code", label: "Remote code", kind: "owner-certifies" });
+
+    const plan = await chromePlan(asked, async (url) => ({ ok: true, bytes: served[url]! }), tmp);
+    const cases: Array<[PrivacyAsks | null, string[], string[]]> = [
+      [{ remoteCode: false, dataUsage: true, certified: 3, certifications: 3, types: ["Authentication information"] }, ["Data usage certifications: already answered on the page (3 certifications ticked; data types Authentication information); change them on Privacy if STORE.md says otherwise", "Remote code: Chrome does not ask about remote code for this item, so there is nothing to answer"], []],
+      [{ remoteCode: true, dataUsage: true, certified: 2, certifications: 3, types: [] }, [], ["Data usage certifications", "Remote code"]],
+      [null, [], ["Data usage certifications", "Remote code"]],
+    ];
+
+    for (const [asks, filled, rows] of cases) {
+      const run = newRun("ws/p", plan, 0);
+      const base = fakePage({ itemId: "abcdefghijklmnopabcdefghijklmnop", tab: "privacy" }, { save: { ok: true, label: "Save draft", x: 1, y: 1 } });
+      const page: ChromePage = { ...base.page, call: async <T>(method: string, ...args: unknown[]) => (method === "privacyAsks" ? (asks as T) : method === "justify" ? ([] as T) : base.page.call<T>(method, ...args)) };
+
+      Object.assign(run, { itemId: "abcdefghijklmnopabcdefghijklmnop", publisherId: "pub-1", done: ["listing"] });
+
+      expect(await chromeStep(run, stepDeps(page))).toBe("moved");
+      expect(run.filled.filter((line) => /^(?:Remote code|Data usage)/.test(line))).toEqual(filled);
+      expect(run.rows.map((row) => row.line.split(" on Privacy")[0]).filter((line) => /^(?:Remote code|Data usage)/.test(line!))).toEqual(rows);
     }
   });
 

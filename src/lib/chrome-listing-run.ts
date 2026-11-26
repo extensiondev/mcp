@@ -16,6 +16,7 @@ export type Where = {
   host: string;
   path: string;
   heading?: string;
+  rendered?: boolean;
   itemsList?: boolean;
   denied?: boolean;
   signedInAs?: string;
@@ -40,6 +41,8 @@ export interface ChromePage {
 }
 
 export type Row = { tab: ChromeTab | "any"; line: string };
+
+export type PrivacyAsks = { remoteCode: boolean; dataUsage: boolean; certified: number; certifications: number; types: string[] };
 
 export type Inventory = { controls: string[]; uploads: string[]; buttons: string[] };
 
@@ -76,6 +79,7 @@ export type ChromeRun = {
   stopped: string;
   finished: boolean;
   startedAt: number;
+  blankSince: number | null;
 };
 
 export type StepDeps = { page: ChromePage; sleep: (ms: number) => Promise<void>; now: () => number; image?: (url: string) => Promise<Buffer | null> };
@@ -101,6 +105,8 @@ function switchTo(run: ChromeRun): string {
 }
 
 const CREATE_WAIT_MS = 120_000;
+
+export const RENDER_WAIT_MS = 60_000;
 
 const REFUSED: Record<string, string> = {
   "signed-out": "The dashboard asks for a sign-in; sign in in this window and the fill goes on by itself.",
@@ -135,6 +141,7 @@ export function newRun(slug: string, plan: ChromePlan, now: number): ChromeRun {
     stopped: "",
     finished: false,
     startedAt: now,
+    blankSince: null,
   };
 }
 
@@ -257,7 +264,13 @@ async function fillTab(run: ChromeRun, deps: StepDeps, tab: ChromeTab): Promise<
       if (hosts.left.length) addRow(run, { tab, line: `Host permission justification on Privacy: the host reasons in STORE.md join to ${chars(hosts.length)} characters and Chrome takes at most ${chars(CHROME_JUSTIFICATION_LIMIT)}, so ${hosts.left.join(", ")} ${hosts.left.length === 1 ? "was" : "were"} left out whole, never cut mid-sentence; shorten the host bullets under Permissions justification in STORE.md and sync again` });
     }
 
-    for (const declaration of run.plan.declarations) addRow(run, { tab, line: `${declaration} on Privacy: yours to answer; extension.dev tools never ticks a certification` });
+    const asks = run.plan.declarations.length ? await deps.page.call<PrivacyAsks | null>("privacyAsks").catch(() => null) : null;
+
+    for (const declaration of run.plan.declarations) {
+      if (asks && /remote code/i.test(declaration) && !asks.remoteCode) run.filled.push(`${declaration}: Chrome does not ask about remote code for this item, so there is nothing to answer`);
+      else if (asks && /data usage/i.test(declaration) && asks.dataUsage && asks.certifications > 0 && asks.certified === asks.certifications) run.filled.push(`${declaration}: already answered on the page (${asks.certified} certifications ticked; data types ${asks.types.length ? asks.types.join(", ") : "none"}); change them on Privacy if STORE.md says otherwise`);
+      else addRow(run, { tab, line: `${declaration} on Privacy: yours to answer; extension.dev tools never ticks a certification` });
+    }
   }
 
   if (tab === "distribution") await chooseVisibility(run, deps);
@@ -351,6 +364,18 @@ export async function chromeStep(run: ChromeRun, deps: StepDeps): Promise<string
 
     return "moved";
   }
+
+  if (where.rendered === false) {
+    run.blankSince ??= deps.now();
+
+    if (deps.now() - run.blankSince > RENDER_WAIT_MS) return stop(run, `The Chrome Web Store dashboard never rendered at ${where.path}: after ${RENDER_WAIT_MS / 1000} seconds it still shows no heading, no fields and no buttons. Reload the window, then call this again with replace: true.`);
+
+    run.line = "Waiting for the Chrome Web Store dashboard to finish loading before filling anything.";
+
+    return "wait";
+  }
+
+  run.blankSince = null;
 
   if (where.dialog && !(run.newPressed && !run.itemId && where.dialogTakesZip)) {
     const cancel = await deps.page.call<{ x: number; y: number } | null>("dialogButton", "cancel");
