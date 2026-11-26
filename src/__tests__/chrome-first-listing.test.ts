@@ -288,6 +288,34 @@ describe("the guided Chrome first listing answer", () => {
     expect(again.value.progress).toMatchObject({ itemId: null, created: false, done: [] });
   });
 
+  it("1239: fills the update of an item Chrome already serves, from a published sheet or the lane's already-live refusal, and leaves Distribution alone", async () => {
+    const launches: LaunchPlan[] = [];
+    const watched: ChromePlan[] = [];
+    const live = { state: "done", read: { word: "published", storeWord: "PUBLISHED", readAt: "2026-11-26T10:40:46.456Z", source: "poll" }, dashboardUrl: "https://chrome.google.com/webstore/devconsole/pub1/abcdefghijklmnopabcdefghijklmnop/edit" };
+    const deps: ChromeListingDeps = {
+      plan: async () => ({ plan: await chromePlan(sheet(live), async (url) => ({ ok: true, bytes: served[url]! }), tmp) }),
+      watch: (args) => {
+        watched.push(args.plan);
+
+        return watchChromeListing({ ...args, minutes: 0, proc: { table: () => null, list: () => "", signal: () => false, wait: () => undefined, platform: "darwin" } });
+      },
+    };
+    const published = (status: string, project: string, word = "published") => JSON.stringify({ ...JSON.parse(answer(status, "chrome", project)), value: { ...JSON.parse(answer(status, "chrome", project)).value, read: { word } } });
+
+    expect(await guideChromeListing(published("first-submission-done", "in-review", "submitted"), {}, runtime(launches), deps)).toBeNull();
+
+    for (const [status, project] of [["first-submission-done", "live-a"], ["first-submission-already-live", "live-b"]]) {
+      const out = JSON.parse((await guideChromeListing(published(status!, project!), {}, runtime(launches), deps))!);
+
+      expect(out).toMatchObject({ status: "first-listing-guided", value: { opened: true } });
+      expect(out.value.sayToPerson).toContain("an item Chrome already serves");
+      expect(out.value.sayToPerson).toContain("leaves Distribution as Chrome serves it");
+      expect(out.value.sayToPerson).not.toContain("New item");
+    }
+
+    expect(watched.map((plan) => [plan.live, plan.item?.itemId])).toEqual([[true, "abcdefghijklmnopabcdefghijklmnop"], [true, "abcdefghijklmnopabcdefghijklmnop"]]);
+  });
+
   it("opens nothing when the first-submission sheet cannot be read, and says why", async () => {
     const launches: LaunchPlan[] = [];
     const deps: ChromeListingDeps = { plan: async () => ({ refused: "the login expired" }), watch: () => { throw new Error("no watch"); } };

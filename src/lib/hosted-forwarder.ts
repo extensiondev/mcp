@@ -33,7 +33,7 @@ import { bearerFetch, unreachedBy } from "./platform-fetch";
 import { PROJECT_HEADER } from "./request-fetch";
 import { identityHeaders } from "./session-identity";
 import { readSharedPreviews } from "./share-record";
-import { workspaceConnectAnswer } from "./store-connection";
+import { listingFillable, workspaceConnectAnswer } from "./store-connection";
 import { forwardSubmitFacts, imagesTheLaneWants, labeledScreenshots, withProjectRoot, type ForwardFactsArgs, type WantedImage } from "./submit-facts-forward";
 import { storeMdSourceNote } from "./submit-facts-local";
 import { submitDryRunAnswer } from "./submit-dry-run";
@@ -195,8 +195,8 @@ async function guidedFillOf(call: LaneCall, args: Args, store: "chrome" | "edge"
   if (read.kind !== "answer") return null;
 
   const sheet = takeMemory(call.session.resource, read.body);
-  const state = laneStatus(sheet);
-  if (state !== "first-submission-to-do" && state !== "first-submission-waiting") return null;
+  const sheetValue = sheet && typeof sheet === "object" ? (sheet as Args).value : null;
+  if (!listingFillable(store, laneStatus(sheet), sheetValue)) return null;
 
   let guided: Args;
 
@@ -224,9 +224,11 @@ async function guidedFillOf(call: LaneCall, args: Args, store: "chrome" | "edge"
  * more; while the sheet is still to do or waiting, the same guided window a
  * first-submission call opens fills the dashboard (Edge's store logo is the
  * platform's own resize of the build icon) and stops before Submit for
- * review or Publish, and the sync answer carries its progress. An item
- * already sent for review, a sheet that cannot be read, or a window that
- * does not open leaves the sync answer as the lane gave it.
+ * review or Publish, and the sync answer carries its progress. A Chrome
+ * item Chrome already serves is filled the same way for its update, leaving
+ * its Distribution as served (ledger 1239). Any other item already sent for
+ * review, a sheet that cannot be read, or a window that does not open leaves
+ * the sync answer as the lane gave it.
  */
 async function guidedListingFill(call: LaneCall, args: Args, shown: Args, deps: ForwarderDeps): Promise<Args | null> {
   if (call.command !== "extension_submit" || actionOf(args, "") !== "sync-listing") return null;

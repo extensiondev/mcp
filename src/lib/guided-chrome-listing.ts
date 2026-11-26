@@ -20,7 +20,7 @@ import { projectApiBytes } from "./project-api-bytes";
 import { openProjectApi, projectApiGet, projectApiSend, type ProjectApi } from "./project-api";
 import { readStoreSettingsChange } from "./store-settings";
 import { isRow, text } from "./row";
-import { nextStep } from "./store-connection";
+import { chromeItemLive, listingFillable, nextStep } from "./store-connection";
 
 type Args = Record<string, unknown>;
 
@@ -279,8 +279,12 @@ function chromeOnly(runtime: GuidedConnectRuntime): GuidedConnectRuntime {
   };
 }
 
-export function chromeListingSay(args: { label: string; itemId: string; slug: string }): string {
+export function chromeListingSay(args: { label: string; itemId: string; slug: string; live?: boolean }): string {
   const start = args.itemId ? `item ${args.itemId}` : "the dashboard home";
+
+  if (args.live) {
+    return `The ${args.label} window opened on the Chrome Web Store developer dashboard (${start}) for ${args.slug}, an item Chrome already serves. ${SIGN_IN_LINE} Then it fills the update's Store listing (description, category, language, homepage, icon and screenshots) and Privacy (single purpose, permission justifications, privacy policy) from the listing on extension.dev, pressing only "Save draft" on each, and leaves Distribution as Chrome serves it. It stops with a checklist: the remote code answer and the data usage certifications are yours to tick, and Submit for review stays with you.`;
+  }
 
   return `The ${args.label} window opened on the Chrome Web Store developer dashboard (${start}) for ${args.slug}. ${SIGN_IN_LINE} Then it ${args.itemId ? "" : "presses \"New item\" once and uploads the platform's verified package (its SHA-256 checked), which makes a draft item and saves its ID on the project; it "}fills Store listing (description, category, language, homepage, icon and screenshots), Privacy (single purpose, permission justifications, privacy policy) and Distribution (Unlisted, the least public option), pressing only "Save draft" on each. It stops with a checklist: the remote code answer and the data usage certifications are yours to tick, and Submit for review stays with you.`;
 }
@@ -329,7 +333,9 @@ export async function guideChromeListing(result: string, args: Args, runtime: Gu
   const [workspace = "", project = ""] = slug.split("/");
 
   if (value.action !== "first-submission" || value.store !== "chrome" || !workspace || !project) return null;
-  if (status !== "first-submission-to-do" && status !== "first-submission-waiting") return null;
+  if (!listingFillable("chrome", status, value)) return null;
+
+  const updating = chromeItemLive(status, value);
 
   const command = text(parsed.command) || "extension_submit";
   const kept = Object.fromEntries(Object.entries(value).filter(([key]) => !["opened", "openedNote", "openPages", "nextStep", "sayToPerson"].includes(key)));
@@ -355,7 +361,7 @@ export async function guideChromeListing(result: string, args: Args, runtime: Gu
     return envelope({ ok: true, command, status, value: { ...kept, opened: false, guidedBrowser: { opened: false, note } }, hint: [note, text(parsed.hint)].filter(Boolean).join(" ") });
   }
 
-  const plan = planned.plan;
+  const plan = { ...planned.plan, live: planned.plan.live || updating };
   const start = plan.item ? itemUrl(plan.item) : DASHBOARD_HOME;
   const opened = await openGuided({ workspace, next: null, plainUrl: start, storePage: null, api: text(args.api) || undefined, runtime: chromeOnly(runtime) });
 
@@ -370,7 +376,7 @@ export async function guideChromeListing(result: string, args: Args, runtime: Gu
   }
 
   const run = deps.watch({ slug, plan, profileDir: opened.profileDir, api: text(args.api) || undefined });
-  const say = chromeListingSay({ label: opened.label, itemId: plan.item?.itemId ?? "", slug });
+  const say = chromeListingSay({ label: opened.label, itemId: plan.item?.itemId ?? "", slug, live: plan.live });
 
   return envelope({
     ok: true,

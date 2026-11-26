@@ -30,6 +30,7 @@ export type ChromePlan = {
   screenshots: PlanFile[];
   declarations: string[];
   left: string[];
+  live: boolean;
 };
 
 export type FetchBytes = (url: string, maxBytes: number) => Promise<{ ok: true; bytes: Buffer } | { ok: false; message: string }>;
@@ -199,6 +200,7 @@ export async function chromePlan(read: unknown, fetchBytes: FetchBytes, tempRoot
     screenshots,
     declarations,
     left,
+    live: text(body.state) === "done" && isRow(body.read) && text(body.read.word) === "published",
   };
 }
 

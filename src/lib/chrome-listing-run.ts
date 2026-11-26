@@ -327,7 +327,7 @@ async function fillTab(run: ChromeRun, deps: StepDeps, tab: ChromeTab): Promise<
     for (const declaration of run.plan.declarations) addRow(run, { tab, line: `${declaration} on Privacy: yours to answer; extension.dev tools never ticks a certification` });
   }
 
-  if (tab === "distribution") await chooseVisibility(run, deps);
+  if (tab === "distribution" && !run.plan.live) await chooseVisibility(run, deps);
 }
 
 /* @invariant A FIRST CHROME DRAFT IS NEVER PUBLIC

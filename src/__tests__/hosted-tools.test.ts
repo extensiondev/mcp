@@ -205,6 +205,14 @@ describe("the forwarder", () => {
     expect(sent.value.notSynced[0].guidedFill).toBeUndefined();
     expect(sent.hint).toBe("Not synced to chrome: one field.");
     expect(handed).toHaveLength(1);
+
+    const live = (status: string, value: Record<string, unknown> = {}) => JSON.parse(envelopeOf(status === "first-submission-already-live" ? { ok: false, command: "extension_submit", status, error: { code: "E_BAD_REQUEST", message: "already live" }, value: { action: "first-submission", store: "chrome", project: "acme/web", ...value } } : { ok: true, command: "extension_submit", status, value: { action: "first-submission", store: "chrome", project: "acme/web", ...value } }));
+    const { lane: liveLane } = stubLane([synced(), live("first-submission-done", { read: { word: "published" } }), synced(), live("first-submission-already-live", { itemId: "abcdefghijklmnopabcdefghijklmnop" })]);
+
+    expect((await ask()).value.notSynced[0].guidedFill).toMatchObject({ opened: true });
+    expect((await ask()).value.notSynced[0].guidedFill).toMatchObject({ opened: true });
+    expect(liveLane()).toHaveLength(4);
+    expect(handed.slice(1)).toEqual([expect.objectContaining({ status: "first-submission-done" }), expect.objectContaining({ status: "first-submission-already-live" })]);
   });
 
   it("1230: hands an Edge store logo sync-listing left open to the guided first listing, and leaves it alone once the product was published", async () => {

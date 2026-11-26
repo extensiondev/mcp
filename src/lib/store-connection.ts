@@ -75,6 +75,23 @@ export interface NextStep {
 
 const DRAFT_STORES = new Set(["chrome", "edge"]);
 
+const OPEN_SHEET_STATES: ReadonlySet<string> = new Set(["first-submission-to-do", "first-submission-waiting"]);
+
+export const FIRST_SUBMISSION_LIVE_STATUS = "first-submission-already-live";
+
+export function chromeItemLive(status: string, value: unknown): boolean {
+  if (status === FIRST_SUBMISSION_LIVE_STATUS) return true;
+  if (status !== "first-submission-done" || !value || typeof value !== "object") return false;
+
+  const read = (value as { read?: unknown }).read;
+
+  return Boolean(read) && typeof read === "object" && String((read as { word?: unknown }).word ?? "") === "published";
+}
+
+export function listingFillable(store: string, status: string, value: unknown): boolean {
+  return OPEN_SHEET_STATES.has(status) || (store === "chrome" && chromeItemLive(status, value));
+}
+
 export function nextStep(kind: NextStepKind, say: string, url?: string): NextStep {
   return { kind, say, url: url || null };
 }
