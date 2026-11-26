@@ -222,7 +222,7 @@ describe("extension_start confirms only what it read and never points at a temp 
     await vi.waitFor(() => expect(cli!.child.exitCode !== null || cli!.child.signalCode !== null).toBe(true));
   }, 20_000);
 
-  function engineStamps(project: string, code: "extension_load_refused" | "compile_error", then: "stay" | "exit"): SpawnedCli {
+  function engineStamps(project: string, code: "extension_load_refused" | "compile_error", then: "stay" | "exit" | "stamp-then-exit"): SpawnedCli {
     const file = readyContractPath(project, "chrome");
     const refused = errorContract("chrome", code, { command: "start", distPath: path.join(project, "dist", "chrome") });
     const cli = fakeCli(
@@ -232,7 +232,7 @@ describe("extension_start confirms only what it read and never points at a temp 
        const tick = setInterval(() => {
          if (!fs.existsSync(gate)) return;
          clearInterval(tick);
-         ${then === "exit" ? "process.exit(1);" : `fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(Object.assign(${JSON.stringify(refused)}, { pid: process.pid })));`}
+         ${then === "exit" ? "process.exit(1);" : then === "stamp-then-exit" ? `fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(Object.assign(${JSON.stringify(refused)}, { pid: process.pid }))); setTimeout(() => process.exit(1), 400);` : `fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(Object.assign(${JSON.stringify(refused)}, { pid: process.pid })));`}
        }, 20);
        setTimeout(() => {}, 60000);`,
     );
@@ -281,6 +281,17 @@ describe("extension_start confirms only what it read and never points at a temp 
     const project = tmpProject();
 
     nextChild = () => engineStamps(project, "extension_load_refused", "exit");
+
+    const result = JSON.parse(await start.handler({ projectPath: project }));
+
+    expect(result.ok).toBe(false);
+    expect(result.error.message).toContain("The engine's start process has exited, so nothing is running.");
+  }, 10_000);
+
+  it("1268: waits for an engine that stamps its refusal and exits right after, and says nothing is running", async () => {
+    const project = tmpProject();
+
+    nextChild = () => engineStamps(project, "extension_load_refused", "stamp-then-exit");
 
     const result = JSON.parse(await start.handler({ projectPath: project }));
 

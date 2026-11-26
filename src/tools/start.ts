@@ -25,6 +25,7 @@ import { removeCarrier } from "../lib/carrier";
 import { envelope, isEnvelope, type Envelope, reframed } from "../lib/envelope";
 import { buildIsolatedRun, isolatedEngineRefusal, isolatedSentence, openIsolatedRun, removeIsolatedRun, type IsolatedRun } from "../lib/isolated-run";
 import { productionLaunchEvidence, readFreshContract, readLoadOverDebugPort } from "../lib/production-launch";
+import { exitSettled } from "../lib/exit-settled";
 import { awaitStartLanding, engineExitAfterBoot, startAnswer } from "../lib/start-answer";
 import { controlledIdentity, resolveLoadedId, sessionIdentityWarnings, settledIdentity } from "../lib/controlled-identity";
 import { spawnExtensionCli, spawnFailedEnvelope, type SpawnedCli } from "../lib/exec";
@@ -427,6 +428,8 @@ export async function handler(
     landing?.kind === "failed" && isDeadContractCode(landing.frame.error?.contractCode, command)
       ? await stopFailedBoot(args.projectPath, browser)
       : null;
+  if (landing?.kind === "failed" && !deadStop) await exitSettled(child);
+
   const freshContract = readFreshContract(args.projectPath, browser, spawnedAt);
   const engineExit = deadStop ? null : engineExitAfterBoot(child, spawned.readOutput);
 
