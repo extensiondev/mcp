@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { actionFingerprint } from "../lib/approval-gate";
 import { writeCredentials } from "../lib/credentials";
-import { doneStep, PUBLISH_SENTENCE, submitFailedStep } from "../lib/store-connection";
+import { doneStep, PUBLISH_SENTENCE, submitFailedStep, uploadStopsAtDraft } from "../lib/store-connection";
 import { WORLD_API, usePlatformWorld, type World } from "./fixtures/platform-world";
 
 const SUBMIT = /^POST \/api\/cli\/stores\/submit$/;
@@ -104,6 +104,12 @@ describe("the Edge package operation reaches the record with its source and mess
     expect(mixed.say).toContain("Edge Add-ons holds its upload as a draft, not published and not in review");
     expect(mixed.say).not.toContain(PUBLISH_SENTENCE);
     expect(doneStep(["chrome"], "", [], { chrome: "draft-until-public" }).kind).toBe("publish");
+  });
+
+  it("1236: Chrome's draft mode skips the publish step, so its upload stops at a draft and never reads as sent on to review", () => {
+    expect(uploadStopsAtDraft("chrome", "draft")).toBe(true);
+    expect(doneStep(["chrome"], "", [], { chrome: "draft" }).kind).toBe("publish");
+    expect(uploadStopsAtDraft("chrome", "public")).toBe(false);
   });
 });
 

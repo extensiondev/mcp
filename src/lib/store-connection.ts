@@ -119,7 +119,7 @@ function storeNames(stores: string[]): string {
  * sentence here now reads the mode first and says which of the two is true.
  */
 const DRAFT_MODE_IDS: Record<string, ReadonlySet<string>> = {
-  chrome: new Set(["draft-until-public"]),
+  chrome: new Set(["draft-until-public", "draft"]),
   edge: new Set(["draft"]),
 };
 
