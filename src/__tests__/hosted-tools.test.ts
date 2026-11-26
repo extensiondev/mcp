@@ -171,6 +171,41 @@ describe("the forwarder", () => {
     for (const index of [0, 1, 2]) expect((await ask(index)).warnings).toEqual(["The lane's own warning."]);
   });
 
+  it("1224: types a Chrome listing no store took into the guided window while the first submission is open, and leaves the sync answer alone once the item was sent", async () => {
+    const project = path.join(tmp, "paste");
+    fs.mkdirSync(project, { recursive: true });
+    fs.writeFileSync(path.join(project, "package.json"), JSON.stringify({ name: "paste" }));
+    fs.writeFileSync(path.join(project, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "x", version: "1.0.0" }));
+    fs.writeFileSync(path.join(project, "STORE.md"), "# Store\n\n## Listing\n\n- Summary: hello\n");
+    const gap = { store: "chrome", reached: "extension.dev", fields: ["Description"], tabs: ["Store listing"], dashboardUrl: null };
+    const synced = () => JSON.parse(envelopeOf({ ok: true, command: "extension_submit", status: "listing-partly-synced", value: { action: "sync-listing", project: "acme/web", notSynced: [gap], reachedStores: ["firefox"] }, hint: "Not synced to chrome: one field." }));
+    const sheet = (status: string) => JSON.parse(envelopeOf({ ok: true, command: "extension_submit", status, value: { action: "first-submission", store: "chrome", project: "acme/web" } }));
+    const handed: unknown[] = [];
+
+    const guideFirstListing = async (answer: string) => {
+      handed.push(JSON.parse(answer));
+
+      return envelopeOf({ ok: true, command: "extension_submit", status: "first-listing-guided", value: { store: "chrome", progress: { done: [] }, sayToPerson: "The window opened." }, hint: "Opened the guided window." });
+    };
+
+    const { lane } = stubLane([synced(), sheet("first-submission-to-do"), synced(), sheet("first-submission-done")]);
+    const ask = async () => JSON.parse(await forwardCall("extension_submit", { action: "sync-listing", browsers: ["chrome", "firefox"], projectPath: project }, async () => "local", { ...FORWARDING, platform: "darwin", guideFirstListing }));
+
+    const out = await ask();
+
+    expect(out.status).toBe("listing-partly-synced");
+    expect(out.value.notSynced[0]).toMatchObject({ ...gap, guidedFill: { opened: true, sayToPerson: "The window opened.", progress: { done: [] } } });
+    expect(out.hint).toBe("Opened the guided window. Not synced to chrome: one field.");
+    expect(lane()[1]!.body.args).toMatchObject({ action: "first-submission", store: "chrome", project: "acme/web" });
+    expect(handed).toEqual([expect.objectContaining({ status: "first-submission-to-do" })]);
+
+    const sent = await ask();
+
+    expect(sent.value.notSynced[0].guidedFill).toBeUndefined();
+    expect(sent.hint).toBe("Not synced to chrome: one field.");
+    expect(handed).toHaveLength(1);
+  });
+
   it("retries a lane that did not answer, and a refused cached credential, with the same key", async () => {
     const denied = { ok: false, status: "auth-refused", error: { code: "E_AUTH_DENIED", message: "Refused." } };
     const { lane } = stubLane([new Error("socket hang up"), LISTED, denied, LISTED]);

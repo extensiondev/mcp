@@ -176,6 +176,56 @@ async function guidedFirstListing(command: string, args: Args, shown: Args, deps
   return guide(JSON.stringify(shown), args);
 }
 
+const GUIDED_LISTING_STATUS = "first-listing-guided";
+
+/* @invariant A CHROME LISTING NO STORE TOOK IS TYPED IN BY THE GUIDED WINDOW
+ * WHEN IT CAN BE (MCP ledger 1224). Google's API takes none of the Chrome
+ * listing fields, so a sync-listing answer that names chrome under
+ * notSynced reads the project's Chrome first-submission sheet once more;
+ * while that sheet is still to do or waiting, the same guided fill a
+ * first-submission call opens types the fields into the dashboard and stops
+ * before Submit for review, and the sync answer carries its progress. An
+ * item already sent for review, a sheet that cannot be read, or a window
+ * that does not open leaves the sync answer as the lane gave it.
+ */
+async function guidedChromePaste(call: LaneCall, args: Args, shown: Args, deps: ForwarderDeps): Promise<Args | null> {
+  if (call.command !== "extension_submit" || actionOf(args, "") !== "sync-listing") return null;
+
+  const value = shown.value && typeof shown.value === "object" ? (shown.value as Args) : null;
+  const gaps = Array.isArray(value?.notSynced) ? (value!.notSynced as Args[]) : [];
+  const project = text(value?.project);
+  const guide = deps.guideFirstListing ?? (registeredKernelHooks().includes("guideFirstListing") ? kernelHook("guideFirstListing") : undefined);
+
+  if (!value || !project || !guide || !gaps.some((gap) => text(gap?.store) === "chrome")) return null;
+
+  const ask: Args = { action: "first-submission", store: "chrome", project, waitSeconds: 0, ...(text(args.api) ? { api: text(args.api) } : {}) };
+  const read = await askLane({ ...call, reads: true, key: crypto.randomBytes(24).toString("base64url"), sent: hostedArgs(ask, null, call.session.resource) });
+  if (read.kind !== "answer") return null;
+
+  const sheet = takeMemory(call.session.resource, read.body);
+  const state = laneStatus(sheet);
+  if (state !== "first-submission-to-do" && state !== "first-submission-waiting") return null;
+
+  let guided: Args;
+
+  try {
+    guided = JSON.parse((await guide(JSON.stringify(sheet), ask)) ?? "null") as Args;
+  } catch {
+    return null;
+  }
+
+  if (laneStatus(guided) !== GUIDED_LISTING_STATUS || !guided.value || typeof guided.value !== "object") return null;
+
+  const fill = guided.value as Args;
+  const guidedFill = { opened: true, ...(fill.progress ? { progress: fill.progress } : {}), ...(text(fill.sayToPerson) ? { sayToPerson: text(fill.sayToPerson) } : {}), ...(fill.nextStep ? { nextStep: fill.nextStep } : {}) };
+
+  return {
+    ...shown,
+    value: { ...value, notSynced: gaps.map((gap) => (text(gap?.store) === "chrome" ? { ...gap, guidedFill } : gap)) },
+    hint: [text(guided.hint), text(shown.hint)].filter(Boolean).join(" "),
+  };
+}
+
 /* @invariant AN ASK-ONLY CALL REACHES THE LANE UNDER THE ASK-ONLY TOOL'S NAME,
  * OR NOT AT ALL. The asking-only mark lives in this process and does not cross
  * the wire, so a call the dispatcher runs as another tool while asking only is
@@ -834,6 +884,9 @@ async function forwardedAnswer(asked: { command: string; tool: string; rule: For
   const shown = (rule.answered ? rule.answered(args, body) : body) as Args;
   const guided = (await guidedProjectConnect(command, args, shown, deps)) ?? (await guidedFirstListing(command, args, shown, deps));
   if (guided) return guided;
+
+  const filled = await guidedChromePaste(call, args, shown, deps);
+  if (filled) return laneEnvelope(command, filled, deps);
 
   const opening = openLanePages(shown, deps);
   const retold = opening.unopened ? await retoldUnopened(call, shaped, facts, shown, opening.unopened) : null;
