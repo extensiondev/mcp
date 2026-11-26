@@ -331,10 +331,20 @@ async function save(run: ChromeRun, deps: StepDeps, tab: ChromeTab, where: Where
   return "moved";
 }
 
-export function openRows(run: Pick<ChromeRun, "rows" | "plan">, marks: Record<string, string>): string[] {
+export function publishCall(slug: string): string {
+  return `extension_approvals_request {act: "extension_submit", args: {action: "publish", project: "${slug}", browsers: ["chrome"]}}`;
+}
+
+export function submitRow(run: Pick<ChromeRun, "slug" | "created">): string {
+  if (run.created) return `Submit for review: this item was made in the dashboard, so the platform holds no draft record of it to send yet; extension_approvals_request {act: "extension_submit", args: {action: "submit", project: "${run.slug}", browsers: ["chrome"], buildSha: "<the build's sha>"}} records the build as the item's draft once a workspace owner approves it, and then ${publishCall(run.slug)} sends it to review the same way`;
+
+  return `Submit for review: ${publishCall(run.slug)} asks a workspace owner to approve it on extension.dev, and extension_submit with the same arguments and that approvalId sends this saved draft to Chrome's review through the Chrome Web Store API under the project's saved Chrome mode, then reads the review state back; nothing is pressed on the page`;
+}
+
+export function openRows(run: Pick<ChromeRun, "rows" | "plan" | "slug" | "created">, marks: Record<string, string>): string[] {
   const rows = run.rows.filter((row) => row.tab === "any" || marks[row.tab] !== "complete").map((row) => row.line);
 
-  return [...rows, ...run.plan.left.map((label) => `${label}: still missing on the platform side`), "Submit for review: yours to press when you choose to; extension.dev tools never presses it"];
+  return [...rows, ...run.plan.left.map((label) => `${label}: still missing on the platform side`), submitRow(run)];
 }
 
 /* @invariant ONE STEP OF THE GUIDED FIRST CHROME LISTING, ON THE ITEM THIS

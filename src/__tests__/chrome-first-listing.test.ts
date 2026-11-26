@@ -452,7 +452,7 @@ describe("one step of the guided Chrome first listing", () => {
     }
   });
 
-  it("drops a checklist line once the dashboard marks its tab complete and always leaves Submit for review", async () => {
+  it("1262: drops a checklist line once the dashboard marks its tab complete and always ends on the approval-gated publish call, never a hand press", async () => {
     const run = newRun("ws/p", await planned(), 0);
 
     run.rows = [
@@ -460,8 +460,14 @@ describe("one step of the guided Chrome first listing", () => {
       { tab: "listing", line: "Category on Store listing: choose Developer Tools yourself" },
     ];
 
-    expect(openRows(run, { privacy: "incomplete" })).toEqual([...run.rows.map((row) => row.line), expect.stringMatching(/^Submit for review: yours to press/)]);
-    expect(openRows(run, { privacy: "complete", listing: "unknown" })).toEqual(["Category on Store listing: choose Developer Tools yourself", expect.stringMatching(/^Submit for review: yours to press/)]);
+    const publish = 'Submit for review: extension_approvals_request {act: "extension_submit", args: {action: "publish", project: "ws/p", browsers: ["chrome"]}} asks a workspace owner to approve it on extension.dev, and extension_submit with the same arguments and that approvalId sends this saved draft to Chrome\'s review through the Chrome Web Store API under the project\'s saved Chrome mode, then reads the review state back; nothing is pressed on the page';
+
+    expect(openRows(run, { privacy: "incomplete" })).toEqual([...run.rows.map((row) => row.line), publish]);
+    expect(openRows(run, { privacy: "complete", listing: "unknown" })).toEqual(["Category on Store listing: choose Developer Tools yourself", publish]);
+
+    run.created = true;
+
+    expect(openRows(run, {}).slice(-1)[0]).toMatch(/^Submit for review: this item was made in the dashboard, so the platform holds no draft record of it to send yet; extension_approvals_request \{act: "extension_submit", args: \{action: "submit", project: "ws\/p", browsers: \["chrome"\], buildSha: "<the build's sha>"\}\}/);
   });
 });
 
@@ -488,7 +494,7 @@ describe("the guided Chrome first listing answer", () => {
     expect(out.value).not.toHaveProperty("openPages");
     expect(out.value.sayToPerson).toContain(SIGN_IN_LINE);
     expect(out.value.sayToPerson).toContain("presses \"New item\" once");
-    expect(out.value.sayToPerson).toContain("Submit for review stays with you");
+    expect(out.value.sayToPerson).toContain("Submit for review is one approval-gated extension_submit publish call afterwards");
 
     const again = JSON.parse((await guideChromeListing(sheetAnswer("first-submission-to-do"), {}, runtime(launches, tmp), deps))!);
 
@@ -522,7 +528,9 @@ describe("the guided Chrome first listing answer", () => {
     const after = JSON.parse((await guideChromeListing(sheetAnswer("first-submission-to-do"), {}, runtime(launches, tmp), deps))!);
 
     expect(launches).toHaveLength(2);
-    expect(after.hint).toMatch(/^The guided Chrome run finished and this read changed nothing\. To fill the dashboard again from the listing as it is now \(for example after sync-listing changed it\), call extension_submit \{action: "first-submission", store: "chrome", project: "extensiondev\/extension-dev-tools", replace: true\}/);
+    expect(after.value.nextStep).toMatchObject({ kind: "publish", say: expect.stringMatching(/^Submit for review: extension_approvals_request \{act: "extension_submit", args: \{action: "publish", project: "extensiondev\/extension-dev-tools", browsers: \["chrome"\]\}\}/) });
+    expect(after.hint).toMatch(/^The guided Chrome run finished and this read changed nothing\. To send the saved draft to review, extension_approvals_request \{act: "extension_submit", args: \{action: "publish"/);
+    expect(after.hint).toMatch(/\. To fill the dashboard again from the listing as it is now \(for example after sync-listing changed it\), call extension_submit \{action: "first-submission", store: "chrome", project: "extensiondev\/extension-dev-tools", replace: true\}/);
 
     for (const args of [{ replace: true }, { refill: true }]) {
       const done = liveRun("extensiondev/extension-dev-tools")!;

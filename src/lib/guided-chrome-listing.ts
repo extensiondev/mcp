@@ -11,7 +11,7 @@ import fs from "node:fs";
 import { CDPConnection } from "./cdp-connection";
 import { AGENT_GLOBAL, CHROME_PAGE_AGENT, DASHBOARD_HOME } from "./chrome-dashboard-agent";
 import { chromePlan, type ChromePlan, type FetchBytes } from "./chrome-listing-plan";
-import { chromeStep, itemUrl, newRun, openRows, saveNewItem, signInLine, type ChromePage, type ChromeRun, type ItemSave } from "./chrome-listing-run";
+import { chromeStep, itemUrl, newRun, openRows, saveNewItem, signInLine, submitRow, type ChromePage, type ChromeRun, type ItemSave } from "./chrome-listing-run";
 import { envelope } from "./envelope";
 import { guidedEngine } from "./guided-browser";
 import { guidedConnectRuntime, openGuided, readStoreAccount, type GuidedConnectRuntime } from "./guided-connect";
@@ -308,10 +308,10 @@ export function chromeListingSay(args: { label: string; itemId: string; slug: st
   const start = args.itemId ? `item ${args.itemId}` : "the dashboard home";
 
   if (args.live) {
-    return `The ${args.label} window opened on the Chrome Web Store developer dashboard (${start}) for ${args.slug}, an item Chrome already serves. ${signIn} Then it fills the update's Store listing (description, category, language, homepage, icon and screenshots) and Privacy (single purpose, permission justifications, privacy policy) from the listing on extension.dev, pressing only "Save draft" on each, and leaves Distribution as Chrome serves it. It stops with a checklist: the remote code answer, when the page asks it, and any data usage certification not already ticked are yours, and Submit for review stays with you.`;
+    return `The ${args.label} window opened on the Chrome Web Store developer dashboard (${start}) for ${args.slug}, an item Chrome already serves. ${signIn} Then it fills the update's Store listing (description, category, language, homepage, icon and screenshots) and Privacy (single purpose, permission justifications, privacy policy) from the listing on extension.dev, pressing only "Save draft" on each, and leaves Distribution as Chrome serves it. It stops with a checklist: the remote code answer, when the page asks it, and any data usage certification not already ticked are yours, and Submit for review is one approval-gated extension_submit publish call afterwards, which sends the saved draft through the Chrome Web Store API.`;
   }
 
-  return `The ${args.label} window opened on the Chrome Web Store developer dashboard (${start}) for ${args.slug}. ${signIn} Then it ${args.itemId ? "" : "presses \"New item\" once and uploads the platform's verified package (its SHA-256 checked), which makes a draft item and saves its ID on the project; it "}fills Store listing (description, category, language, homepage, icon and screenshots), Privacy (single purpose, permission justifications, privacy policy) and Distribution (Unlisted, the least public option), pressing only "Save draft" on each. It stops with a checklist: the remote code answer, when the page asks it, and any data usage certification not already ticked are yours, and Submit for review stays with you.`;
+  return `The ${args.label} window opened on the Chrome Web Store developer dashboard (${start}) for ${args.slug}. ${signIn} Then it ${args.itemId ? "" : "presses \"New item\" once and uploads the platform's verified package (its SHA-256 checked), which makes a draft item and saves its ID on the project; it "}fills Store listing (description, category, language, homepage, icon and screenshots), Privacy (single purpose, permission justifications, privacy policy) and Distribution (Unlisted, the least public option), pressing only "Save draft" on each. It stops with a checklist: the remote code answer, when the page asks it, and any data usage certification not already ticked are yours, and Submit for review is one approval-gated extension_submit publish call afterwards, which sends the saved draft through the Chrome Web Store API.`;
 }
 
 function progressOf(run: ChromeRun): Record<string, unknown> {
@@ -375,14 +375,14 @@ export async function guideChromeListing(result: string, args: Args, runtime: Gu
     const hint = live.stopped
       ? `The guided Chrome run stopped and this read changed nothing: ${live.stopped} Once the cause is fixed on the page, call ${again} to start a fresh fill in the same window, keeping its sign-in.`
       : live.finished
-        ? `The guided Chrome run finished and this read changed nothing. To fill the dashboard again from the listing as it is now (for example after sync-listing changed it), call ${again}.`
+        ? `The guided Chrome run finished and this read changed nothing. To send the saved draft to review, ${submitRow(live).replace(/^Submit for review: /, "")}. To fill the dashboard again from the listing as it is now (for example after sync-listing changed it), call ${again}.`
         : `The guided window already runs this Chrome listing; nothing new was opened.`;
 
     return envelope({
       ok: true,
       command,
       status: CHROME_LISTING_STATUS,
-      value: { ...kept, opened: true, progress: progressOf(live), sayToPerson: say, nextStep: nextStep("dashboard", say, live.itemId ? itemUrl(live) : DASHBOARD_HOME) },
+      value: { ...kept, opened: true, progress: progressOf(live), sayToPerson: say, nextStep: live.finished && !live.stopped ? nextStep("publish", submitRow(live)) : nextStep("dashboard", say, live.itemId ? itemUrl(live) : DASHBOARD_HOME) },
       hint: `${hint}${saveItemStep(live, slug)}`,
     });
   }
