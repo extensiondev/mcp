@@ -206,7 +206,14 @@ async function guidedFillOf(call: LaneCall, args: Args, store: "chrome" | "edge"
     return null;
   }
 
-  if (laneStatus(guided) !== GUIDED_LISTING_STATUS || !guided.value || typeof guided.value !== "object") return null;
+  if (!guided || !guided.value || typeof guided.value !== "object") return null;
+
+  if (laneStatus(guided) !== GUIDED_LISTING_STATUS) {
+    const shut = (guided.value as Args).guidedBrowser;
+    const note = shut && typeof shut === "object" ? text((shut as Args).note) : "";
+
+    return note ? { hint: note, guidedFill: { opened: false, note } } : null;
+  }
 
   const fill = guided.value as Args;
 

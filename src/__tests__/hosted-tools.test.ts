@@ -213,6 +213,16 @@ describe("the forwarder", () => {
     expect((await ask()).value.notSynced[0].guidedFill).toMatchObject({ opened: true });
     expect(liveLane()).toHaveLength(4);
     expect(handed.slice(1)).toEqual([expect.objectContaining({ status: "first-submission-done" }), expect.objectContaining({ status: "first-submission-already-live" })]);
+
+    const NOTE = "No guided window was opened, so nothing on the Chrome Web Store was filled: the profile is in use.";
+    const shut = async () => envelopeOf({ ok: true, command: "extension_submit", status: "first-submission-done", value: { store: "chrome", opened: false, guidedBrowser: { opened: false, note: NOTE } } });
+
+    stubLane([synced(), live("first-submission-done", { read: { word: "published" } })]);
+
+    const unopened = JSON.parse(await forwardCall("extension_submit", { action: "sync-listing", browsers: ["chrome", "firefox"], projectPath: project }, async () => "local", { ...FORWARDING, platform: "darwin", guideFirstListing: shut }));
+
+    expect(unopened.value.notSynced[0].guidedFill).toEqual({ opened: false, note: NOTE });
+    expect(unopened.hint).toContain(NOTE);
   });
 
   it("1230: hands an Edge store logo sync-listing left open to the guided first listing, and leaves it alone once the product was published", async () => {
