@@ -8,7 +8,7 @@
 
 export const AGENT_GLOBAL = "__extensionDevToolsChrome";
 
-export const AGENT_VERSION = 4;
+export const AGENT_VERSION = 5;
 
 export const DASHBOARD_HOME = "https://chrome.google.com/webstore/devconsole";
 
@@ -36,6 +36,9 @@ export const CHROME_SELECTORS = {
   repeated: /^(.{2,}?)\1+/,
   iconLead: /^store icon/i,
   removeImage: /^remove image\b/i,
+  removeImageDialog: /^remove image\b[\s\S]*are you sure you want to remove this image/i,
+  dialogRemove: /^remove$/i,
+  dialogCancel: /^cancel$/i,
   screenshotsLead: /^screenshots?\b/i,
   denied: /(?:^|\s)403(?:[.\s]|$)|forbidden|that’s an error|that's an error|(?:do not|don't|don’t) have (?:access|permission)|permission denied|not authorized/i,
   upload: /^upload$/i,
@@ -73,6 +76,9 @@ export const CHROME_PAGE_AGENT = `(() => {
     repeated: new RegExp(${src(CHROME_SELECTORS.repeated)}),
     iconLead: new RegExp(${src(CHROME_SELECTORS.iconLead)}, "i"),
     removeImage: new RegExp(${src(CHROME_SELECTORS.removeImage)}, "i"),
+    removeImageDialog: new RegExp(${src(CHROME_SELECTORS.removeImageDialog)}, "i"),
+    dialogRemove: new RegExp(${src(CHROME_SELECTORS.dialogRemove)}, "i"),
+    dialogCancel: new RegExp(${src(CHROME_SELECTORS.dialogCancel)}, "i"),
     screenshotsLead: new RegExp(${src(CHROME_SELECTORS.screenshotsLead)}, "i"),
     denied: new RegExp(${src(CHROME_SELECTORS.denied)}, "i"),
     upload: new RegExp(${src(CHROME_SELECTORS.upload)}, "i"),
@@ -181,6 +187,18 @@ export const CHROME_PAGE_AGENT = `(() => {
       for (let i = 0; i < 5 && at && !remove; i += 1) { at = at.parentElement; if (!at) break; const hits = actions(at).filter((el) => S.removeImage.test(actionLabel(el))); if (hits.length === 1) remove = hits[0]; else if (hits.length > 1) break; }
       return { key: key, img: img, remove: remove };
     });
+  };
+  const topDialog = () => { const ds = dialogs(); return ds.length ? ds[ds.length - 1] : null; };
+  const dialogShown = () => { const d = topDialog(); if (!d) return null; const words = visibleText(d); return { count: dialogs().length, text: words.replace(/\\S{16,}/g, "[hidden]").slice(0, 240), removeImage: S.removeImageDialog.test(words) }; };
+  const dialogButton = (which) => {
+    const d = topDialog();
+    const all = dialogs();
+    if (!d || !all.every((one) => S.removeImageDialog.test(visibleText(one))) || (which === "remove" && all.length !== 1)) return null;
+    const want = which === "remove" ? S.dialogRemove : S.dialogCancel;
+    const hits = actions(d).filter((el) => want.test(actionLabel(el)));
+    if (hits.length !== 1 || hits[0].disabled) return null;
+    const at = center(hits[0]);
+    return { x: at.x, y: at.y };
   };
   const slotImages = (slot) => tiles(slot).map((t) => ({ key: t.key, label: t.remove ? actionLabel(t.remove).replace(S.removeImage, "").trim() : "", removable: Boolean(t.remove) }));
   const removeAt = (slot, key) => {
@@ -300,6 +318,6 @@ export const CHROME_PAGE_AGENT = `(() => {
     uploads: Array.from(document.querySelectorAll("input[type=file]")).filter(hiddenFile).map((input) => (norm(input.getAttribute("aria-label")) || norm(scopeOf(input).textContent)).slice(0, 48)).slice(0, 8),
     buttons: actions(document).map(actionLabel).filter(Boolean).slice(0, 24),
   });
-  globalThis.${AGENT_GLOBAL} = { version: ${AGENT_VERSION}, inventory, images, slotImages, removeAt, where, gate, fileInput, thumbs, fieldRead, setText, focusText, choose, option, justify, visibility, visibilityAt, marks };
+  globalThis.${AGENT_GLOBAL} = { version: ${AGENT_VERSION}, inventory, images, slotImages, removeAt, dialogShown, dialogButton, where, gate, fileInput, thumbs, fieldRead, setText, focusText, choose, option, justify, visibility, visibilityAt, marks };
   return true;
 })()`;

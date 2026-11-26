@@ -12,7 +12,7 @@ import { CHROME_JUSTIFICATION_LIMIT, TAB_LABELS, type ChromeTab } from "./chrome
 import { stillSame, type PlanFile } from "./chrome-listing-plan";
 import { imageFingerprint } from "./image-fingerprint";
 
-import type { ChromeRun, Row, StepDeps, Where } from "./chrome-listing-run";
+import type { ChromeRun, Row, StepDeps } from "./chrome-listing-run";
 
 const IMAGE_WAIT_MS = 30_000;
 const POLL_MS = 1000;
@@ -153,6 +153,10 @@ export async function attach(run: ChromeRun, deps: StepDeps, slot: "icon" | "scr
 }
 
 const MAX_SCREENSHOTS = 5;
+const DIALOG_WAIT_MS = 10_000;
+const REMOVE_WAIT_MS = 15_000;
+
+type DialogShown = { count: number; text: string; removeImage: boolean };
 
 type Tile = { key: string; label: string; removable: boolean };
 
@@ -203,21 +207,40 @@ async function syncScreenshots(run: ChromeRun, deps: StepDeps, files: PlanFile[]
       continue;
     }
 
+    const copy = `${tile.name}, a copy of ${files[tile.match]!.name}`;
+    const gone = async () => !(await tilesOf(deps)).some((have) => have.key === tile.key);
+    let shown: DialogShown | null = null;
+
     await deps.page.click(at.x, at.y);
-    await deps.sleep(800);
 
-    const after = await deps.page.call<Where>("where");
+    const moved = await until(deps, async () => Boolean((shown = await deps.page.call<DialogShown | null>("dialogShown"))) || (await gone()), DIALOG_WAIT_MS);
 
-    if (after?.dialog) {
-      addRow(run, { tab: "listing", line: `${label} on Store listing: removing ${tile.name}, a copy of ${files[tile.match]!.name}, opened a dialog ("${after.dialog}") that extension.dev tools never answers; answer it on the page, then attach the rest yourself` });
+    if (shown) {
+      const open: DialogShown = shown;
+      const ok = open.removeImage && open.count === 1 ? await deps.page.call<{ x: number; y: number } | null>("dialogButton", "remove") : null;
+
+      if (typeof ok?.x !== "number" || typeof ok.y !== "number") {
+        addRow(run, { tab: "listing", line: `${label} on Store listing: removing ${copy} opened ${open.count > 1 ? `${open.count} dialogs` : "a dialog"} ("${open.text}") that extension.dev tools does not answer; answer it on the page, then attach the rest yourself` });
+
+        return null;
+      }
+
+      await deps.page.click(ok.x, ok.y);
+
+      const closed = await until(deps, async () => !(await deps.page.call<DialogShown | null>("dialogShown")) && (await gone()), REMOVE_WAIT_MS);
+
+      if (!closed) {
+        addRow(run, { tab: "listing", line: `${label} on Store listing: Remove was pressed on the confirmation for ${copy}, and the image or the dialog was still on the page after ${REMOVE_WAIT_MS / 1000} seconds; nothing else was removed` });
+
+        return null;
+      }
+    } else if (!moved) {
+      addRow(run, { tab: "listing", line: `${label} on Store listing: ${copy} was still on the page after its remove control was pressed, and no confirmation showed; nothing else was removed` });
 
       return null;
     }
 
-    if ((await tilesOf(deps)).some((have) => have.key === tile.key)) {
-      stays.push(tile.match);
-      addRow(run, { tab: "listing", line: `${label} on Store listing: ${tile.name}, a copy of ${files[tile.match]!.name}, was still on the page after its remove control was pressed` });
-    } else removed += 1;
+    removed += 1;
   }
 
   if (removed) run.filled.push(`${label}: removed ${removed} cop${removed === 1 ? "y" : "ies"} of the listing's own files so they go back in order`);

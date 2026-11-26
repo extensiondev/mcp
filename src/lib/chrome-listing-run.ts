@@ -353,6 +353,16 @@ export async function chromeStep(run: ChromeRun, deps: StepDeps): Promise<string
   }
 
   if (where.dialog && !(run.newPressed && !run.itemId && where.dialogTakesZip)) {
+    const cancel = await deps.page.call<{ x: number; y: number } | null>("dialogButton", "cancel");
+
+    if (typeof cancel?.x === "number" && typeof cancel.y === "number") {
+      await deps.page.click(cancel.x, cancel.y);
+      await deps.sleep(800);
+      run.line = "Canceled a Remove Image confirmation left open on the page; no image was removed by it.";
+
+      return "moved";
+    }
+
     return stop(run, `The dashboard shows a dialog: "${where.dialog}". Answer it on the page yourself.`);
   }
 

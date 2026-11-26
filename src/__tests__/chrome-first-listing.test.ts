@@ -19,7 +19,7 @@ import { chromePlan, type ChromePlan } from "../lib/chrome-listing-plan";
 import { chromeStep, fitHostLines, newRun, openRows, saveNewItem, SIGN_IN_LINE, signInLine, tabsOf, type ChromePage, type Where } from "../lib/chrome-listing-run";
 import { type LaunchPlan } from "../lib/guided-connect";
 import { guideChromeListing, liveRun, watchChromeListing, type ChromeListingDeps } from "../lib/guided-chrome-listing";
-import { painted, runtime, served, sha, sheet, ZIP, sheetAnswer, fakePage } from "./fixtures/chrome-listing-sheet";
+import { painted, runtime, served, sha, sheet, ZIP, sheetAnswer, fakePage, stepDeps } from "./fixtures/chrome-listing-sheet";
 
 const ownerOnlyMode = (posix: number) => (process.platform === "win32" ? 0o666 : posix);
 const WINDOWS_MODE = "Windows keeps no POSIX mode bits, so privacy there is the per-user folder's ACL";
@@ -67,10 +67,6 @@ describe("the Chrome first-listing sheet", () => {
     expect(plan.item).toEqual({ publisherId: "pub-1", itemId: "abcdefghijklmnopabcdefghijklmnop" });
   });
 });
-
-function stepDeps(fake: ChromePage, image?: (url: string) => Promise<Buffer | null>) {
-  return { page: fake, sleep: async () => undefined, now: () => 0, ...(image ? { image } : {}) };
-}
 
 async function planned(): Promise<ChromePlan> {
   return chromePlan(sheet(), async (url) => ({ ok: true, bytes: served[url]! }), tmp);
@@ -323,7 +319,7 @@ describe("one step of the guided Chrome first listing", () => {
     ]));
   });
 
-  it("1247: removes only the slot's copies of the listing's own screenshots, by pixels, keeps a foreign image and attaches the listing in order", async () => {
+  it("1247: removes only the slot's copies of the listing's own screenshots, by pixels, confirming each Remove Image dialog before the next, keeps a foreign image and attaches the listing in order", async () => {
     const shots = [1, 2, 3, 4].map((n) => painted(1280, 800, n * 40));
     const four = sheet();
 
@@ -333,29 +329,36 @@ describe("one step of the guided Chrome first listing", () => {
     const store: Record<string, Buffer> = { "https://lh3.example/old": Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]), ...Object.fromEntries([1, 2, 3].map((i) => [`https://lh3.example/k${i + 1}`, painted(1280, 800, (i + 1) * 40, true)])) };
     let tiles = ["https://lh3.example/old", "https://lh3.example/k2", "https://lh3.example/k3", "https://lh3.example/k4"];
     let pending = "";
+    let confirming = "";
+    let most = 0;
     const removed: string[] = [];
     const attached: string[] = [];
     const fake: ChromePage = {
       call: async <T>(method: string, ...args: unknown[]) => {
         if (method === "thumbs") return tiles.length as T;
         if (method === "slotImages") return tiles.map((key, i) => ({ key, label: `Screenshot ${i + 1}`, removable: true })) as T;
+        if (method === "dialogShown") return (confirming ? { count: 1, text: "Remove Image Are you sure you want to remove this image? This cannot be undone. Cancel Remove", removeImage: true } : null) as T;
+        if (method === "dialogButton") return (confirming && args[0] === "remove" ? { x: 9, y: 9 } : null) as T;
 
         if (method === "removeAt") {
-          pending = String(args[1]);
+          pending = confirming ? "" : String(args[1]);
 
-          return { x: 1, y: 1 } as T;
+          return (confirming ? null : { x: 1, y: 1 }) as T;
         }
 
-        return (method === "where" ? { dialog: null } : null) as T;
+        return null as T;
       },
       handle: async () => "input-1",
-      setFiles: async (_id, files) => {
-        attached.push(path.basename(files[0]!));
-        tiles = [...tiles, `https://lh3.example/new-${attached.length}`];
-      },
-      click: async () => {
-        removed.push(pending);
-        tiles = tiles.filter((key) => key !== pending);
+      setFiles: async (_id, files) => void (attached.push(path.basename(files[0]!)), (tiles = [...tiles, `https://lh3.example/new-${attached.length}`])),
+      click: async (x) => {
+        if (x === 9 && confirming) {
+          removed.push(confirming);
+          tiles = tiles.filter((key) => key !== confirming);
+          confirming = "";
+        } else if (x === 1 && pending) {
+          confirming = pending;
+          most += 1;
+        }
       },
       type: async () => undefined,
       navigate: async () => undefined,
@@ -374,9 +377,22 @@ describe("one step of the guided Chrome first listing", () => {
     expect(fetched).toEqual(["https://lh3.example/old=s0", "https://lh3.example/k2=s0", "https://lh3.example/k3=s0", "https://lh3.example/k4=s0"]);
     expect(removed).toEqual(["https://lh3.example/k2", "https://lh3.example/k3", "https://lh3.example/k4"]);
     expect(attached).toEqual([1, 2, 3, 4].map((n) => `chrome-screenshot-${n}-1280x800.png`));
-    expect(tiles[0]).toBe("https://lh3.example/old");
+    expect([most, confirming, tiles[0]]).toEqual([3, "", "https://lh3.example/old"]);
     expect(run.filled).toEqual(["Screenshots: removed 3 copies of the listing's own files so they go back in order", ...attached.map((name) => `Screenshots: ${name}`)]);
     expect(run.rows.map((row) => row.line)).toEqual(["Screenshots on Store listing: Screenshot 1 on the page is not one of the listing's files, so it stays; remove it yourself if it is outdated"]);
+  });
+
+  it("1247: cancels a Remove Image confirmation left open at the start and stops at any other dialog", async () => {
+    for (const [text, cancel, outcome] of [["Remove Image Are you sure you want to remove this image? This cannot be undone. Cancel Remove", { x: 3, y: 3 }, "moved"], ["Discard changes? Cancel Discard", null, "stopped"]] as const) {
+      const fake = fakePage({ dialog: text, itemId: "abcdefghijklmnopabcdefghijklmnop" }, { cancel });
+      const run = newRun("ws/p", await planned(), 0);
+
+      run.itemId = "abcdefghijklmnopabcdefghijklmnop";
+
+      expect(await chromeStep(run, stepDeps(fake.page))).toBe(outcome);
+      expect(fake.clicks).toBe(cancel ? 1 : 0);
+      expect(cancel ? run.line : run.stopped).toMatch(cancel ? /^Canceled a Remove Image confirmation left open/ : /^The dashboard shows a dialog: "Discard changes\? Cancel Discard"/);
+    }
   });
 
   it("drops a checklist line once the dashboard marks its tab complete and always leaves Submit for review", async () => {

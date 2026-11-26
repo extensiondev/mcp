@@ -140,3 +140,7 @@ export function fakePage(where: Partial<Where>, gates: Record<string, unknown> =
     },
   };
 }
+
+export function stepDeps(fake: ChromePage, image?: (url: string) => Promise<Buffer | null>) {
+  return { page: fake, sleep: async () => undefined, now: () => 0, ...(image ? { image } : {}) };
+}
