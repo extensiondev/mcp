@@ -6,7 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-
 import { chromePasteLines, type PasteLines } from "./chrome-paste-lines";
 import { withChromeVisibility } from "./chrome-visibility";
 import { chromeWebStoreHeld, chromeWebStoreHeldSentence, chromeWebStoreMdOf } from "./chromewebstore-md";
