@@ -189,14 +189,29 @@ function storesToFill(value: Args): Array<"chrome" | "edge"> {
   return [...(gaps.some((gap) => text(gap?.store) === "chrome") ? ["chrome" as const] : []), ...(edgeLogo ? ["edge" as const] : [])];
 }
 
+function sentFactsOf(sent: Args): Args | null {
+  const local = sent[LOCAL_FACTS_KEY];
+  if (!local || typeof local !== "object") return null;
+
+  const { [MEMORY_KEY]: _memory, ...facts } = local as Args;
+
+  return Object.keys(facts).length ? facts : null;
+}
+
 async function guidedFillOf(call: LaneCall, args: Args, store: "chrome" | "edge", project: string, guide: (result: string, args: Args) => Promise<string | null>): Promise<Args | null> {
   const ask: Args = { action: "first-submission", store, project, waitSeconds: 0, ...(text(args.api) ? { api: text(args.api) } : {}) };
-  const read = await askLane({ ...call, reads: true, key: crypto.randomBytes(24).toString("base64url"), sent: hostedArgs(ask, null, call.session.resource) });
+  const read = await askLane({ ...call, reads: true, key: crypto.randomBytes(24).toString("base64url"), sent: hostedArgs(ask, sentFactsOf(call.sent), call.session.resource) });
   if (read.kind !== "answer") return null;
 
   const sheet = takeMemory(call.session.resource, read.body);
   const sheetValue = sheet && typeof sheet === "object" ? (sheet as Args).value : null;
-  if (!listingFillable(store, laneStatus(sheet), sheetValue)) return null;
+
+  if (!listingFillable(store, laneStatus(sheet), sheetValue)) {
+    const error = sheet.ok === false && sheet.error && typeof sheet.error === "object" ? text((sheet.error as Args).message) : "";
+    const note = error ? `No guided window was opened, since the ${store} first-submission sheet could not be read: ${error}` : "";
+
+    return note ? { hint: note, guidedFill: { opened: false, note } } : null;
+  }
 
   let guided: Args;
 

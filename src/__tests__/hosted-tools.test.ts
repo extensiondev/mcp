@@ -198,6 +198,7 @@ describe("the forwarder", () => {
     expect(out.value.notSynced[0]).toMatchObject({ ...gap, guidedFill: { opened: true, sayToPerson: "The window opened.", progress: { done: [] } } });
     expect(out.hint).toBe("Opened the guided window. Not synced to chrome: one field.");
     expect(lane()[1]!.body.args).toMatchObject({ action: "first-submission", store: "chrome", project: "acme/web" });
+    expect(lane()[1]!.body.args.local).toHaveProperty("facts");
     expect(handed).toEqual([expect.objectContaining({ status: "first-submission-to-do" })]);
 
     const sent = await ask();
@@ -223,6 +224,14 @@ describe("the forwarder", () => {
 
     expect(unopened.value.notSynced[0].guidedFill).toEqual({ opened: false, note: NOTE });
     expect(unopened.hint).toContain(NOTE);
+
+    const FACTS = "extension_submit on the hosted lane needs the facts the local half reads (args.local.facts); none were sent.";
+
+    stubLane([synced(), JSON.parse(envelopeOf({ ok: false, command: "extension_submit", status: "invalid-request", error: { code: "E_LOCAL_FACTS_REQUIRED", message: FACTS } }))]);
+
+    const refused = JSON.parse(await forwardCall("extension_submit", { action: "sync-listing", browsers: ["chrome", "firefox"], projectPath: project }, async () => "local", { ...FORWARDING, platform: "darwin", guideFirstListing: shut }));
+
+    expect(refused.value.notSynced[0].guidedFill).toEqual({ opened: false, note: `No guided window was opened, since the chrome first-submission sheet could not be read: ${FACTS}` });
   });
 
   it("1230: hands an Edge store logo sync-listing left open to the guided first listing, and leaves it alone once the product was published", async () => {
