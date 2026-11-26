@@ -49,6 +49,7 @@ import type { ToolModule } from "./tool-dispatch";
 type Args = Record<string, unknown>;
 
 export const FORWARDER_HEADER = "x-extensiondev-forwarder";
+export const FORWARDER_TWINS_HEADER = "x-extensiondev-forwarder-twins";
 export const IDEMPOTENCY_HEADER = "idempotency-key";
 export const LOCAL_FACTS_KEY = "local";
 export { FORWARD_TIMEOUT_MS };
@@ -505,6 +506,7 @@ async function sendOnce(call: LaneCall, fresh: boolean): Promise<LaneAnswer> {
           accept: "application/json",
           "content-type": "application/json",
           [FORWARDER_HEADER]: deps.version ?? packageVersion,
+          [FORWARDER_TWINS_HEADER]: "1",
           [IDEMPOTENCY_HEADER]: key,
           ...(session.project ? { [PROJECT_HEADER]: session.project } : {}),
           ...identityHeaders(command),

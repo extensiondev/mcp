@@ -354,7 +354,10 @@ export function acceptedSchema(name: string, schema: Record<string, unknown>): R
  * them, and an agent told to call extension_approvals_read met "Unknown
  * tool" (ledger 1198). Every twin is a narrowed view of the tool it splits,
  * taking the same arguments, so an answer bound for such a forwarder names
- * that tool in each twin's place, in every string it carries.
+ * that tool in each twin's place, in every string it carries. A forwarder
+ * built from source after the split still reports 11.3.0 until the next
+ * release, so it sends x-extensiondev-forwarder-twins: 1 and the lane names
+ * the twins it lists (ledger 1270).
  */
 export const LAST_VERSION_WITHOUT_TWINS = [11, 3, 0] as const;
 

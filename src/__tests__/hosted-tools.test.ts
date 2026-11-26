@@ -93,7 +93,7 @@ describe("the forwarder", () => {
     expect(JSON.parse(out)).toEqual(LISTED);
     expect(local).not.toHaveBeenCalled();
     expect(seen.filter((hit) => hit.url.endsWith("/exchange"))).toHaveLength(1);
-    expect(first?.headers).toMatchObject({ authorization: "Bearer forward-1", "x-extensiondev-forwarder": "11.0.0", "x-extensiondev-project": "acme/web" });
+    expect(first?.headers).toMatchObject({ authorization: "Bearer forward-1", "x-extensiondev-forwarder": "11.0.0", "x-extensiondev-forwarder-twins": "1", "x-extensiondev-project": "acme/web" });
     expect(first?.headers["idempotency-key"]).toMatch(/^[A-Za-z0-9_-]{16,128}$/);
     expect(second?.headers["idempotency-key"]).not.toBe(first?.headers["idempotency-key"]);
     expect(first?.body).toEqual({ tool: "extension_builds", args: { action: "list", project: "acme/web" } });
