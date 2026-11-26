@@ -53,7 +53,7 @@ export const schema = {
       },
       releaseNotes: {
         type: "string",
-        description: "Release notes, markdown.",
+        description: "Release notes, markdown. They show on the approval page and on the public What's New of the build this releases, ahead of the store listing's notes.",
       },
       approvalId: {
         type: "string",

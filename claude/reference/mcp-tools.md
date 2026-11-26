@@ -505,7 +505,7 @@ Release a build to a channel on extension.dev, cut a version-bump pull request, 
 | `sourceChannel` | string | no |  | Channel to promote from (inferred). |
 | `browsers` | array of string | no |  | Browsers; default the build's index, which falls back to chrome alone. |
 | `version` | string | no |  | Version label; cut: the exact version. |
-| `releaseNotes` | string | no |  | Release notes, markdown. |
+| `releaseNotes` | string | no |  | Release notes, markdown. They show on the approval page and on the public What's New of the build this releases, ahead of the store listing's notes. |
 | `approvalId` | string | no |  | Approved approval id; every release needs a workspace owner's approval. |
 | `waitSeconds` | number | no |  | Seconds to wait for the result (with approvalId, the approval), 0 to 600 (omitted: 180, no wait for the approval); the hosted server waits at most 45 and says so in warnings. |
 | `api` | string | no |  | Base URL; omitted: EXTENSION_DEV_API_URL, else extension.dev. |
