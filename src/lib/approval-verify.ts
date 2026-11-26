@@ -122,8 +122,17 @@ export function withoutClosingStop(text: string): string {
   return dropTrailing(text.trim(), ".!?", { whitespace: true });
 }
 
-function describedBy(input: ApprovalGateInput, minted?: MintedApproval | null): string {
-  return minted?.description || input.description;
+export function namedAct(actLine: unknown, facts: string): string {
+  const line = typeof actLine === "string" ? withoutClosingStop(actLine) : "";
+  if (!line) return "";
+
+  return facts && !facts.includes(line) ? `${line}. ${facts}` : `${line}.`;
+}
+
+function describedBy(input: ApprovalGateInput, minted?: MintedApproval | null, data: Record<string, unknown> = {}): string {
+  const facts = minted?.description || "";
+
+  return namedAct(data.actLine, facts) || namedAct(minted?.actLine, facts) || facts || input.description;
 }
 
 function linesAsked(scope: ApprovalScope): string[] {
@@ -409,7 +418,7 @@ export async function verifyApproval(params: {
       APPROVAL_REJECTED_STATUS,
       "E_APPROVAL_REJECTED",
       "ApprovalConsumed",
-      `Approval ${approvalId} was already used once and approvals are single-use. This call executed nothing, but the call that used it may already have run the action: ${describedBy(input, minted)} Read the current state first (${input.stateRead ?? "extension_release_status for a promote or submission, extension_shares_read for a revoke"}), and request a fresh approval by calling this tool with no approvalId only if the action did not happen.`,
+      `Approval ${approvalId} was already used once and approvals are single-use. This call executed nothing, but the call that used it may already have run the action: ${describedBy(input, minted, data)} Read the current state first (${input.stateRead ?? "extension_release_status for a promote or submission, extension_shares_read for a revoke"}), and request a fresh approval by calling this tool with no approvalId only if the action did not happen.`,
       { action: input.action, approvalId },
     );
   }
@@ -422,7 +431,7 @@ export async function verifyApproval(params: {
       envelope: pendingApproval({
         command: input.command,
         approvalId,
-        message: `Approval ${approvalId} has not been granted yet: ${describedBy(input, minted)}${pageTraceSentence(trace)}`,
+        message: `Approval ${approvalId} has not been granted yet: ${describedBy(input, minted, data)}${pageTraceSentence(trace)}`,
         undone: "Nothing was executed.",
         api: input.api,
         approvalUrl: (typeof data.approvalUrl === "string" ? data.approvalUrl.trim() : "") || minted?.approvalUrl || undefined,

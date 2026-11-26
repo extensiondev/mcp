@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { evaluateApproval, type ApprovalGateInput } from "../lib/approval-gate";
+import { approvalMintAnswer, approvalRecord, PROMOTE_ACT_LINE, PROMOTE_FACTS } from "./fixtures/platform-answers";
 
 const API = "https://www.extension.dev";
 
@@ -177,5 +178,66 @@ describe("a submit approval repeats the platform's outcome sentence on every lat
     );
 
     expect(JSON.parse((waiting as { envelope: string }).envelope).hint).toContain(`has not been granted yet: ${AGENT_SAID}`);
+  });
+});
+
+describe("ledger 1234: an approval is named by the platform's act line, its description kept as the facts", () => {
+  const AGENT_SAID = "Promote build abc1234 to the stable channel of acme/widget.";
+  const token = `${Buffer.from(JSON.stringify({ u: "acme", p: "widget" })).toString("base64url")}.sig`;
+  const promote = (over: Partial<ApprovalGateInput>) =>
+    input({
+      command: "extension_release_promote",
+      action: "extension_release_promote",
+      scope: { buildSha: "abc1234", channel: "stable" },
+      description: AGENT_SAID,
+      token,
+      ...over,
+    });
+  let previousXdg: string | undefined;
+  let isolated = "";
+
+  beforeEach(() => {
+    previousXdg = process.env.XDG_CONFIG_HOME;
+    isolated = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-gate-actline-"));
+    process.env.XDG_CONFIG_HOME = isolated;
+  });
+
+  afterEach(() => {
+    if (previousXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = previousXdg;
+
+    fs.rmSync(isolated, { recursive: true, force: true });
+  });
+
+  it("asks, waits and refuses a spent approval with the act line, keeping description and adding actLine", async () => {
+    const minted = await evaluateApproval(promote({ fetchImpl: answering(201, approvalMintAnswer()) }));
+    const asked = JSON.parse((minted as { envelope: string }).envelope);
+
+    expect(asked.error.message.startsWith(`${PROMOTE_ACT_LINE}. ${PROMOTE_FACTS} `)).toBe(true);
+    expect(asked.error.message).not.toContain(AGENT_SAID);
+    expect(asked.value.description).toBe(PROMOTE_FACTS);
+    expect(asked.value.actLine).toBe(PROMOTE_ACT_LINE);
+
+    const waiting = await evaluateApproval(
+      promote({ approvalId: "apr_1", fetchImpl: answering(200, approvalRecord(asked.value.fingerprint, { status: "pending" })) }),
+    );
+
+    expect(JSON.parse((waiting as { envelope: string }).envelope).hint).toContain(`Approval apr_1 has not been granted yet: ${PROMOTE_ACT_LINE}. ${PROMOTE_FACTS}`);
+
+    const spent = await evaluateApproval(
+      promote({ approvalId: "apr_1", fetchImpl: answering(200, approvalRecord(asked.value.fingerprint, { used: true })) }),
+    );
+    const consumed = JSON.parse((spent as { envelope: string }).envelope);
+
+    expect(consumed.error.name).toBe("ApprovalConsumed");
+    expect(consumed.error.message).toContain(`may already have run the action: ${PROMOTE_ACT_LINE}. ${PROMOTE_FACTS} Read the current state`);
+  });
+
+  it("falls back to the description alone when the platform answers no act line", async () => {
+    const minted = await evaluateApproval(promote({ fetchImpl: answering(201, approvalMintAnswer({ actLine: undefined, description: "Move the Stable channel to build abc1234." })) }));
+    const asked = JSON.parse((minted as { envelope: string }).envelope);
+
+    expect(asked.error.message.startsWith("Move the Stable channel to build abc1234. ")).toBe(true);
+    expect(asked.value).not.toHaveProperty("actLine");
   });
 });

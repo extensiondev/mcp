@@ -177,6 +177,7 @@ export function rememberMintedApproval(args: RememberApprovalArgs): MintedApprov
     mintedAt: new Date(now).toISOString(),
     expiresAt,
     ...(trimmed(args.description) ? { description: trimmed(args.description) } : {}),
+    ...(trimmed(args.actLine) ? { actLine: trimmed(args.actLine) } : {}),
   };
   const server = targetServer(args.api);
   const file = approvalRecordPath();

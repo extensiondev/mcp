@@ -18,6 +18,7 @@ export interface MintedApproval {
   mintedAt: string;
   expiresAt: string;
   description?: string;
+  actLine?: string;
   replaces?: string[];
   replacedBy?: string;
 }
@@ -32,6 +33,7 @@ export interface RememberApprovalArgs {
   approvalUrl: string;
   expiresAt?: string;
   description?: string;
+  actLine?: string;
   answeredFor?: string;
   now?: number;
 }

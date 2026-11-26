@@ -122,10 +122,26 @@ export function publishChannelAnswer(overrides: Body = {}): Body {
   };
 }
 
+export const PROMOTE_ACT_LINE = "Move the Stable channel to build abc1234 in widget";
+export const PROMOTE_FACTS = "Everyone on the Stable channel gets this build.";
+
+export function approvalMintAnswer(overrides: Body = {}): Body {
+  return {
+    approvalId: "apr_1",
+    approvalUrl: "https://www.extension.dev/device/approve/apr_1",
+    status: "pending",
+    expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+    description: PROMOTE_FACTS,
+    actLine: PROMOTE_ACT_LINE,
+    ...overrides,
+  };
+}
+
 export function approvalRecord(fingerprint: string, overrides: Body = {}): Body {
   return {
     approvalId: "apr_1",
     status: "approved",
+    actLine: PROMOTE_ACT_LINE,
     fingerprint,
     expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
     used: false,
@@ -139,5 +155,6 @@ export const PLATFORM_WRITERS = {
   publishAnswer: "www src/app/api/cli/publish/route.ts before link and projectVisibility, private project 200 with expiresAt in epoch seconds; a public project answers no token, expiresAt or ttlHours",
   publishAnswerWithLink: "www src/app/api/cli/publish/route.ts since 90907689d, the same keys plus link and projectVisibility",
   publishChannelAnswer: "www src/app/api/cli/publish/route.ts with body channel on a private project: a channel:<name> share, link.kind channel, link.serves the channel's builds from exposure.json",
-  approvalRecord: "www src/app/api/cli/approvals/[approvalId]/route.ts, the record a verify reads",
+  approvalMintAnswer: "www src/app/api/cli/approvals/route.ts POST since e6ef89507c, 201 mint or 200 standing: description holds only the facts the heading does not state, actLine the heading",
+  approvalRecord: "www src/app/api/cli/approvals/[approvalId]/route.ts, the record a verify reads, actLine since 8ced27ba6e and no description",
 } as const;

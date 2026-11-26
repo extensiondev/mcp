@@ -30,6 +30,7 @@ import {
   actionPhrase,
   block,
   readJson,
+  namedAct,
   verifyApproval,
   withoutClosingStop,
   type ApprovalGateInput,
@@ -280,6 +281,9 @@ async function requestApproval(params: {
   const approvalId = String(data.approvalId || "").trim();
   const approvalUrl = String(data.approvalUrl || "").trim();
   const described = typeof data.description === "string" && data.description.trim() ? data.description.trim() : input.description;
+  const actLine = typeof data.actLine === "string" ? data.actLine.trim() : "";
+  const named = namedAct(actLine, typeof data.description === "string" ? data.description.trim() : "") || described;
+  const actLined = actLine ? { actLine } : {};
   const subject = readApprovalSubject(data.subject);
   const lines = readLines(data.lines);
   const lined = lines.length ? { lines } : {};
@@ -304,6 +308,7 @@ async function requestApproval(params: {
     approvalUrl,
     expiresAt: typeof data.expiresAt === "string" ? data.expiresAt : undefined,
     description: described,
+    ...actLined,
   });
   const replaces = remembered?.replaces?.length ? { replaces: remembered.replaces } : {};
 
@@ -316,11 +321,12 @@ async function requestApproval(params: {
       APPROVAL_REQUIRED_STATUS,
       "E_APPROVAL_REQUIRED",
       "ApprovalRenewed",
-      `Approval ${renewing.approvalId} expired at ${expiredAt}, so nothing was executed. A fresh approval for the same act was requested: ${described} Open ${approvalUrl} to review and approve, then call ${nextCallSentence(input, approvalId)}. ${approvalLandedSentence(input, approvalId, data.approverRole)}`,
+      `Approval ${renewing.approvalId} expired at ${expiredAt}, so nothing was executed. A fresh approval for the same act was requested: ${named} Open ${approvalUrl} to review and approve, then call ${nextCallSentence(input, approvalId)}. ${approvalLandedSentence(input, approvalId, data.approverRole)}`,
       {
         action: input.action,
         fingerprint,
         description: described,
+        ...actLined,
         approvalId,
         approvalUrl,
         ...(data.expiresAt ? { expiresAt: data.expiresAt } : {}),
@@ -340,13 +346,14 @@ async function requestApproval(params: {
     APPROVAL_REQUIRED_STATUS,
     "E_APPROVAL_REQUIRED",
     "ApprovalRequired",
-    `${described} ${unsaid(described, input.reason ?? (input.irreversible ? "This is irreversible, so a human must approve it first." : "A human must approve it first."))} Open ${
+    `${named} ${unsaid(named, input.reason ?? (input.irreversible ? "This is irreversible, so a human must approve it first." : "A human must approve it first."))} Open ${
       approvalUrl || "the approval URL"
     } to review and approve, then call ${nextCallSentence(input, approvalId || "<from the response>")}. ${approvalLandedSentence(input, approvalId || "<from the response>", data.approverRole)} Nothing was executed.`,
     {
       action: input.action,
       fingerprint,
       description: described,
+      ...actLined,
       ...(approvalId ? { approvalId } : {}),
       ...(approvalUrl ? { approvalUrl } : {}),
       ...(data.expiresAt ? { expiresAt: data.expiresAt } : {}),
