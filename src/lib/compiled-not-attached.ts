@@ -116,6 +116,20 @@ export interface NotAttachedRelay {
   hint: string;
 }
 
+export const SAID_ONCE_IN_THE_HINT = ["browserUpNotAttachedHint", "sayToPerson", "unpackedRefusalSays", "failedLegSays", "nextStep"] as const;
+
+export function withoutWhatTheHintSays(ready: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(ready).filter(([key]) => !(SAID_ONCE_IN_THE_HINT as readonly string[]).includes(key)));
+}
+
+function argsOnly(nextStep: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!nextStep) return undefined;
+
+  const { say: _said, ...rest } = nextStep;
+
+  return rest;
+}
+
 export function browserUpNotAttached(contract: ReadyContract): boolean {
   return (
     typeof contract.browserUpNotAttachedAt === "string" &&
@@ -245,23 +259,24 @@ export function browserUpNotAttachedRelay(
   if (ready.status !== "compiled-not-attached") return null;
   if (typeof ready.browserUpNotAttachedHint !== "string") return null;
 
-  const nextStep = ready.nextStep as { say?: unknown } | undefined;
+  const nextStep = ready.nextStep as ({ say?: unknown } & Record<string, unknown>) | undefined;
   const wayOut = typeof nextStep?.say === "string" ? nextStep.say : "";
   const refusal = ready.unpackedRefusal as UnpackedRefusal | undefined;
   const said = refusal ? refusalSentences(refusal, wayOut) : sentences(ready.browserUpNotAttachedHint, wayOut);
+  const step = argsOnly(nextStep);
 
   return {
     value: {
-      browserUpNotAttachedHint: ready.browserUpNotAttachedHint,
-      ...(refusal ? { unpackedRefusal: refusal, unpackedRefusalSays: unpackedRefusalSays(refusal) } : {}),
+      ...(refusal ? { unpackedRefusal: refusal } : {}),
       profilePath: ready.profilePath ?? null,
       profileReused: ready.profileReused ?? null,
       browserPid: ready.browserPid ?? null,
       waitedMs: ready.waitedMs ?? null,
-      sayToPerson: said.sayToPerson,
-      ...(nextStep ? { nextStep } : {}),
+      ...(step ? { nextStep: step } : {}),
     },
-    message: said.message,
+    message: refusal
+      ? "The extension compiled and the browser is up, but the browser turned the extension off, so nothing can connect; hint says why and the one call that gets past it."
+      : "The extension compiled and the browser is up, but nothing inside it has connected; hint says why and the one call that gets past it.",
     hint: said.hint,
   };
 }
@@ -278,12 +293,10 @@ export function observedNotAttachedRelay(
   return {
     value: {
       failedLeg: ready.failedLeg,
-      failedLegSays: ready.failedLegSays,
       legs: ready.legs,
-      sayToPerson: ready.sayToPerson,
-      nextStep,
+      nextStep: argsOnly(nextStep as Record<string, unknown>),
     },
-    message: `The extension compiled, but the runtime executor never attached. ${ready.failedLegSays}`,
+    message: "The extension compiled, but the runtime executor never attached; hint names the leg that failed and the one call that gets past it.",
     hint: `${ready.failedLegSays} ${nextStep.say} ${REBUILD_NOT_REACHING_NOTE}`,
   };
 }

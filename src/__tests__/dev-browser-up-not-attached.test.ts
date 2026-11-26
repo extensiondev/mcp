@@ -174,7 +174,6 @@ describe("extension_dev relays the engine's attach diagnosis instead of a generi
     expect(result.status).toBe("compiled-not-attached");
     expect(result.error.code).toBe("E_NOT_ATTACHED");
     expect(result.value).toMatchObject({
-      browserUpNotAttachedHint: HINT,
       profilePath: PROFILE,
       profileReused: true,
       browserPid: 66462,
@@ -183,9 +182,13 @@ describe("extension_dev relays the engine's attach diagnosis instead of a generi
 
     expect(result.value.nextStep.tool).toBe("extension_dev");
     expect(result.value.nextStep.args).toEqual({ projectPath: project, browser: "chrome", replace: true, profile: FRESH });
-    expect(result.value.sayToPerson.startsWith(HINT)).toBe(true);
-    expect(result.value.sayToPerson).toContain(WAY_OUT);
     expect(result.hint.startsWith(HINT)).toBe(true);
+
+    const raw = JSON.stringify(result);
+    const copies = (text: string) => raw.split(JSON.stringify(text).slice(1, -1)).length - 1;
+
+    expect(copies(HINT)).toBe(1);
+    expect(copies(WAY_OUT)).toBe(1);
     expect(result.hint).toContain(WAY_OUT);
     expect(result.value.ready.status).toBe("compiled-not-attached");
     expect(result.value.firstLogs).toBeDefined();

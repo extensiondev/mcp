@@ -78,6 +78,7 @@ import {
   REBUILD_NOT_REACHING_NOTE,
   observedNotAttachedRelay,
   browserUpNotAttachedRelay,
+  withoutWhatTheHintSays,
 } from "../lib/compiled-not-attached";
 import { reportProgress } from "../lib/call-progress";
 
@@ -569,12 +570,13 @@ export async function handler(
       ok: false,
       command: schema.name,
       status: "compiled-not-attached",
-      error: { code: "E_NOT_ATTACHED", message: diagnosis.message },
+      error: { code: "E_NOT_ATTACHED", message: diagnosis.message, hint: "value.nextStep is the one call that gets past it; the top-level hint says why." },
       value: {
         pid,
         browser,
         ...portReport,
         ...readiness,
+        ready: withoutWhatTheHintSays(readiness!.ready),
         ...diagnosis.value,
         projectPath: args.projectPath,
         ...(replaced.length > 0 ? { replacedSession: replaced[0] } : {}),
