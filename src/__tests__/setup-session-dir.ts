@@ -15,6 +15,8 @@ process.env.EXTENSION_MCP_SESSION_DIR = fs.mkdtempSync(
 
 process.env.EXTENSION_DEV_NO_TELEMETRY = "1";
 
+if (process.platform !== "win32") process.env.XDG_CONFIG_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-test-config-"));
+
 installLocalKernelHooks();
 
 xcodeTeamsReader.read = async () => null;

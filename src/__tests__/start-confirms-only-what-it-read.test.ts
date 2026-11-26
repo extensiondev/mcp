@@ -232,12 +232,17 @@ describe("extension_start confirms only what it read and never points at a temp 
        const tick = setInterval(() => {
          if (!fs.existsSync(gate)) return;
          clearInterval(tick);
-         fs.mkdirSync(path.dirname(file), { recursive: true });
-         fs.writeFileSync(file, JSON.stringify(Object.assign(${JSON.stringify(refused)}, { pid: process.pid })));
-         ${then === "exit" ? "process.exit(1);" : ""}
+         ${then === "exit" ? "process.exit(1);" : `fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(Object.assign(${JSON.stringify(refused)}, { pid: process.pid })));`}
        }, 20);
        setTimeout(() => {}, 60000);`,
     );
+
+    if (then === "exit") {
+      cli.child.once("exit", () => {
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, JSON.stringify({ ...refused, pid: cli.child.pid }));
+      });
+    }
 
     return cli;
   }
