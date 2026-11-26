@@ -8,7 +8,7 @@
 
 export const AGENT_GLOBAL = "__extensionDevToolsChrome";
 
-export const AGENT_VERSION = 1;
+export const AGENT_VERSION = 2;
 
 export const DASHBOARD_HOME = "https://chrome.google.com/webstore/devconsole";
 
@@ -30,6 +30,8 @@ export type FieldSpec = { id: string; tab: ChromeTab; anchors: RegExp[]; control
  */
 export const CHROME_SELECTORS = {
   newItem: /^(?:\+\s*)?(?:add\s+)?new item$/i,
+  itemsHeading: /^items$/i,
+  denied: /(?:^|\s)403(?:[.\s]|$)|forbidden|that’s an error|that's an error|(?:do not|don't|don’t) have (?:access|permission)|permission denied|not authorized/i,
   upload: /^upload$/i,
   save: /^save draft$/i,
   tabs: { listing: /^store listing$/i, privacy: /^privacy(?: practices)?$/i, distribution: /^distribution$/i } as Record<ChromeTab, RegExp>,
@@ -61,6 +63,8 @@ export const CHROME_PAGE_AGENT = `(() => {
   if (globalThis.${AGENT_GLOBAL} && globalThis.${AGENT_GLOBAL}.version === ${AGENT_VERSION}) return true;
   const S = {
     newItem: new RegExp(${src(CHROME_SELECTORS.newItem)}, "i"),
+    itemsHeading: new RegExp(${src(CHROME_SELECTORS.itemsHeading)}, "i"),
+    denied: new RegExp(${src(CHROME_SELECTORS.denied)}, "i"),
     upload: new RegExp(${src(CHROME_SELECTORS.upload)}, "i"),
     save: new RegExp(${src(CHROME_SELECTORS.save)}, "i"),
     tabs: { listing: new RegExp(${src(CHROME_SELECTORS.tabs.listing)}, "i"), privacy: new RegExp(${src(CHROME_SELECTORS.tabs.privacy)}, "i"), distribution: new RegExp(${src(CHROME_SELECTORS.tabs.distribution)}, "i") },
@@ -102,8 +106,14 @@ export const CHROME_PAGE_AGENT = `(() => {
     const byNav = current ? Object.keys(S.tabs).find((k) => S.tabs[k].test(actionLabel(current))) : "";
     const byPath = tm ? ({ "": "listing", listing: "listing", privacy: "privacy", distribution: "distribution" })[(tm[1] || "").toLowerCase()] || "" : "";
     const d = dialogs()[0];
+    const heads = Array.from(document.querySelectorAll("h1, [role=heading][aria-level='1']")).filter(shown).map((h) => norm(h.textContent)).filter(Boolean);
+    const acct = document.querySelector("meta[name=og-profile-acct]");
     return {
       host, path: location.pathname,
+      heading: (heads[0] || "").slice(0, 120),
+      itemsList: heads.some((h) => S.itemsHeading.test(h)),
+      denied: !controls().length && S.denied.test((document.title || "") + " " + norm(document.body ? document.body.innerText : "").slice(0, 600)),
+      signedInAs: acct ? norm(acct.getAttribute("content")) : "",
       signIn: host === "accounts.google.com" || passwordShown(),
       dashboard: host === "chrome.google.com" && /^\\/(?:u\\/\\d+\\/)?webstore\\/devconsole/i.test(location.pathname),
       publisherId: m ? m[1] : "", itemId: m && m[2] ? m[2].toLowerCase() : "",
@@ -241,6 +251,11 @@ export const CHROME_PAGE_AGENT = `(() => {
     }
     return out;
   };
-  globalThis.${AGENT_GLOBAL} = { version: ${AGENT_VERSION}, where, gate, fileInput, thumbs, fieldRead, setText, focusText, choose, option, justify, visibility, visibilityAt, marks };
+  const inventory = () => ({
+    controls: controls().map((el) => labelOf(el).slice(0, 48) || el.tagName.toLowerCase()).slice(0, 16),
+    uploads: Array.from(document.querySelectorAll("input[type=file]")).filter(hiddenFile).map((input) => (norm(input.getAttribute("aria-label")) || norm(scopeOf(input).textContent)).slice(0, 48)).slice(0, 8),
+    buttons: actions(document).map(actionLabel).filter(Boolean).slice(0, 24),
+  });
+  globalThis.${AGENT_GLOBAL} = { version: ${AGENT_VERSION}, inventory, where, gate, fileInput, thumbs, fieldRead, setText, focusText, choose, option, justify, visibility, visibilityAt, marks };
   return true;
 })()`;

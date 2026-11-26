@@ -31,6 +31,7 @@ export type ChromePlan = {
   declarations: string[];
   left: string[];
   live: boolean;
+  account: string;
 };
 
 export type FetchBytes = (url: string, maxBytes: number) => Promise<{ ok: true; bytes: Buffer } | { ok: false; message: string }>;
@@ -201,6 +202,7 @@ export async function chromePlan(read: unknown, fetchBytes: FetchBytes, tempRoot
     declarations,
     left,
     live: text(body.state) === "done" && isRow(body.read) && text(body.read.word) === "published",
+    account: text(body.connectedAs),
   };
 }
 

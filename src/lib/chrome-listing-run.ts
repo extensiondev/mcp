@@ -12,6 +12,10 @@ import { stillSame, type ChromePlan, type PlanFile } from "./chrome-listing-plan
 export type Where = {
   host: string;
   path: string;
+  heading?: string;
+  itemsList?: boolean;
+  denied?: boolean;
+  signedInAs?: string;
   signIn: boolean;
   dashboard: boolean;
   publisherId: string;
@@ -34,6 +38,18 @@ export interface ChromePage {
 
 export type Row = { tab: ChromeTab | "any"; line: string };
 
+export type Inventory = { controls: string[]; uploads: string[]; buttons: string[] };
+
+async function sawOn(deps: StepDeps): Promise<string> {
+  const seen = await deps.page.call<Inventory | null>("inventory").catch(() => null);
+
+  if (!seen || typeof seen !== "object") return "";
+
+  const list = (rows: unknown) => (Array.isArray(rows) && rows.length ? rows.map((row) => `"${String(row)}"`).join(", ") : "none");
+
+  return `labeled fields ${list(seen.controls)}; upload inputs ${list(seen.uploads)}; buttons ${list(seen.buttons)}`;
+}
+
 export type ChromeRun = {
   slug: string;
   plan: ChromePlan;
@@ -46,6 +62,9 @@ export type ChromeRun = {
   createPressedAt: number;
   zipSet: boolean;
   uploadPressed: boolean;
+  itemOpens: number;
+  authUser: number;
+  tried: string[];
   done: ChromeTab[];
   filled: string[];
   rows: Row[];
@@ -59,6 +78,24 @@ export type ChromeRun = {
 export type StepDeps = { page: ChromePage; sleep: (ms: number) => Promise<void>; now: () => number };
 
 export const SIGN_IN_LINE = "Sign in to the Chrome Web Store developer dashboard in this window. The fill starts by itself once the dashboard shows.";
+
+export function signInLine(account: string): string {
+  return account ? `Sign in as ${account}, the Google account that holds the Chrome Web Store item, in this window. The fill starts by itself once the item shows.` : SIGN_IN_LINE;
+}
+
+const ITEM_OPENS = 3;
+
+const AUTH_USERS = 5;
+
+function seenOn(where: Where): string {
+  const shows = where.denied ? "a 403 page (this account has no access to it)" : where.itemsList ? "the Items list" : where.heading ? `"${where.heading}"` : "a page without a heading";
+
+  return `${shows} at ${where.path}${where.signedInAs ? `, signed in as ${where.signedInAs}` : ""}`;
+}
+
+function switchTo(run: ChromeRun): string {
+  return run.plan.account ? `Sign in as ${run.plan.account} in this window` : "Sign in in this window to the Google account whose publisher holds the item";
+}
 
 const CREATE_WAIT_MS = 120_000;
 const IMAGE_WAIT_MS = 30_000;
@@ -86,6 +123,9 @@ export function newRun(slug: string, plan: ChromePlan, now: number): ChromeRun {
     createPressedAt: 0,
     zipSet: false,
     uploadPressed: false,
+    itemOpens: 0,
+    authUser: 0,
+    tried: [],
     done: [],
     filled: [],
     rows: [],
@@ -97,8 +137,10 @@ export function newRun(slug: string, plan: ChromePlan, now: number): ChromeRun {
   };
 }
 
-export function itemUrl(run: Pick<ChromeRun, "publisherId" | "itemId">): string {
-  return `${DASHBOARD_HOME}/${run.publisherId}/${run.itemId}/edit`;
+export function itemUrl(run: Pick<ChromeRun, "publisherId" | "itemId"> & { authUser?: number }): string {
+  const home = run.authUser ? DASHBOARD_HOME.replace("/webstore/", `/u/${run.authUser}/webstore/`) : DASHBOARD_HOME;
+
+  return `${home}/${run.publisherId}/${run.itemId}/edit`;
 }
 
 function stop(run: ChromeRun, why: string): "stopped" {
@@ -287,6 +329,7 @@ async function attach(run: ChromeRun, deps: StepDeps, slot: "icon" | "screenshot
 
 async function fillTab(run: ChromeRun, deps: StepDeps, tab: ChromeTab): Promise<void> {
   const fields = run.plan.fields;
+  const before = run.rows.length;
 
   for (const spec of CHROME_FIELDS.filter((row) => row.tab === tab)) {
     const anchors = spec.anchors.map((re) => re.source);
@@ -328,6 +371,12 @@ async function fillTab(run: ChromeRun, deps: StepDeps, tab: ChromeTab): Promise<
   }
 
   if (tab === "distribution" && !run.plan.live) await chooseVisibility(run, deps);
+
+  if (run.rows.slice(before).some((row) => /no single (?:field|upload slot|box)/.test(row.line))) {
+    const saw = await sawOn(deps);
+
+    if (saw) addRow(run, { tab, line: `What ${TAB_LABELS[tab]} showed when a field was not found: ${saw}` });
+  }
 }
 
 /* @invariant A FIRST CHROME DRAFT IS NEVER PUBLIC
@@ -358,10 +407,14 @@ async function chooseVisibility(run: ChromeRun, deps: StepDeps): Promise<void> {
   else addRow(run, { tab: "distribution", line: `Visibility on Distribution: choose ${want === "private" ? "Private" : "Unlisted"}; the page still reads ${after.read}` });
 }
 
-async function save(run: ChromeRun, deps: StepDeps, tab: ChromeTab): Promise<string> {
+async function save(run: ChromeRun, deps: StepDeps, tab: ChromeTab, where: Where): Promise<string> {
   const gate = await press(deps, "save");
 
-  if (!gate.ok && gate.reason !== "disabled") return stop(run, `"Save draft" was not pressed on ${TAB_LABELS[tab]}: ${REFUSED[gate.reason] ?? gate.reason}${gate.asks ? ` It shows "${gate.asks}".` : ""}`);
+  if (!gate.ok && gate.reason !== "disabled") {
+    const saw = gate.asks ? "" : await sawOn(deps);
+
+    return stop(run, `"Save draft" was not pressed on ${TAB_LABELS[tab]}: ${REFUSED[gate.reason] ?? gate.reason}${gate.asks ? ` It shows "${gate.asks}".` : ` The page shows ${seenOn(where)}${saw ? `, with ${saw}` : ""}.`}`);
+  }
 
   await deps.sleep(1500);
 
@@ -396,7 +449,9 @@ export async function chromeStep(run: ChromeRun, deps: StepDeps): Promise<string
   const where = await deps.page.call<Where>("where");
 
   if (where.signIn) {
-    run.line = SIGN_IN_LINE;
+    if (run.authUser >= AUTH_USERS) Object.assign(run, { authUser: 0, itemOpens: 0, tried: [] });
+
+    run.line = signInLine(run.plan.account);
 
     return "wait";
   }
@@ -426,7 +481,32 @@ export async function chromeStep(run: ChromeRun, deps: StepDeps): Promise<string
     return createItem(run, deps, where);
   }
 
-  if (!where.itemId) {
+  const otherPublisher = Boolean(run.publisherId && where.publisherId && where.publisherId.toLowerCase() !== run.publisherId.toLowerCase());
+
+  if (otherPublisher || !where.itemId || where.itemsList || where.denied) {
+    if (run.authUser >= AUTH_USERS) {
+      run.line = `No account signed in to this window opens item ${run.itemId} of publisher ${run.publisherId}${run.tried.length ? ` (tried ${run.tried.join(", ")})` : ""}. ${switchTo(run)}; the fill goes on by itself once the item opens. Nothing was filled or pressed.`;
+
+      return "wait";
+    }
+
+    if (otherPublisher || where.denied || run.itemOpens >= ITEM_OPENS) {
+      const seen = `/u/${run.authUser}/ ${seenOn(where)}${otherPublisher ? ` of publisher ${where.publisherId}` : ""}`;
+
+      if (!run.tried.includes(seen)) run.tried.push(seen);
+
+      run.authUser += 1;
+      run.itemOpens = 0;
+
+      if (run.authUser >= AUTH_USERS) {
+        run.line = `No account signed in to this window opens item ${run.itemId} of publisher ${run.publisherId} (tried ${run.tried.join(", ")}). ${switchTo(run)}; the fill goes on by itself once the item opens. Nothing was filled or pressed.`;
+
+        return "wait";
+      }
+    }
+
+    run.itemOpens += 1;
+    run.line = `Opening item ${run.itemId} as signed-in account /u/${run.authUser}/; the last page showed ${seenOn(where)}.`;
     await deps.page.navigate(itemUrl(run));
 
     return "moved";
@@ -449,7 +529,7 @@ export async function chromeStep(run: ChromeRun, deps: StepDeps): Promise<string
 
   if (where.tab !== tab) {
     const gate = await press(deps, `tab:${tab}`);
-    if (!gate.ok) return stop(run, `The ${TAB_LABELS[tab]} tab was not opened: ${REFUSED[gate.reason] ?? gate.reason}`);
+    if (!gate.ok) return stop(run, `The ${TAB_LABELS[tab]} tab was not opened: ${REFUSED[gate.reason] ?? gate.reason} The page shows ${seenOn(where)}.`);
 
     await deps.sleep(1500);
 
@@ -459,7 +539,7 @@ export async function chromeStep(run: ChromeRun, deps: StepDeps): Promise<string
   run.line = `Filling ${TAB_LABELS[tab]}.`;
   await fillTab(run, deps, tab);
 
-  return save(run, deps, tab);
+  return save(run, deps, tab, where);
 }
 
 export type ItemSave = (ids: { itemId: string; publisherId: string }) => Promise<{ ok: true } | { ok: false; message: string }>;

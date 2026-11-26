@@ -11,10 +11,10 @@ import fs from "node:fs";
 import { CDPConnection } from "./cdp-connection";
 import { AGENT_GLOBAL, CHROME_PAGE_AGENT, DASHBOARD_HOME } from "./chrome-dashboard-agent";
 import { chromePlan, type ChromePlan, type FetchBytes } from "./chrome-listing-plan";
-import { chromeStep, itemUrl, newRun, openRows, saveNewItem, SIGN_IN_LINE, type ChromePage, type ChromeRun, type ItemSave } from "./chrome-listing-run";
+import { chromeStep, itemUrl, newRun, openRows, saveNewItem, signInLine, type ChromePage, type ChromeRun, type ItemSave } from "./chrome-listing-run";
 import { envelope } from "./envelope";
 import { guidedEngine } from "./guided-browser";
-import { guidedConnectRuntime, openGuided, type GuidedConnectRuntime } from "./guided-connect";
+import { guidedConnectRuntime, openGuided, readStoreAccount, type GuidedConnectRuntime } from "./guided-connect";
 import { guidedProcess, launchWord, type GuidedProcess } from "./guided-window-end";
 import { projectApiBytes } from "./project-api-bytes";
 import { openProjectApi, projectApiGet, projectApiSend, type ProjectApi } from "./project-api";
@@ -246,7 +246,13 @@ export async function platformPlan(slug: string, apiBase: string | undefined): P
     return got.ok ? { ok: true, bytes: got.bytes } : { ok: false, message: got.message };
   };
 
-  return { plan: await chromePlan(read.json, fetchBytes) };
+  const plan = await chromePlan(read.json, fetchBytes);
+
+  if (plan.account) return { plan };
+
+  const account = await readStoreAccount({ workspace: slug.split("/")[0] ?? "", store: "chrome", api: apiBase, fetchImpl: fetch }).catch(() => null);
+
+  return { plan: { ...plan, account: account && "account" in account ? (account.account?.connectedAs ?? "") : "" } };
 }
 
 export function platformSave(slug: string, apiBase: string | undefined): ItemSave {
@@ -279,14 +285,16 @@ function chromeOnly(runtime: GuidedConnectRuntime): GuidedConnectRuntime {
   };
 }
 
-export function chromeListingSay(args: { label: string; itemId: string; slug: string; live?: boolean }): string {
+export function chromeListingSay(args: { label: string; itemId: string; slug: string; live?: boolean; account?: string }): string {
+  const signIn = signInLine(args.account ?? "");
+
   const start = args.itemId ? `item ${args.itemId}` : "the dashboard home";
 
   if (args.live) {
-    return `The ${args.label} window opened on the Chrome Web Store developer dashboard (${start}) for ${args.slug}, an item Chrome already serves. ${SIGN_IN_LINE} Then it fills the update's Store listing (description, category, language, homepage, icon and screenshots) and Privacy (single purpose, permission justifications, privacy policy) from the listing on extension.dev, pressing only "Save draft" on each, and leaves Distribution as Chrome serves it. It stops with a checklist: the remote code answer and the data usage certifications are yours to tick, and Submit for review stays with you.`;
+    return `The ${args.label} window opened on the Chrome Web Store developer dashboard (${start}) for ${args.slug}, an item Chrome already serves. ${signIn} Then it fills the update's Store listing (description, category, language, homepage, icon and screenshots) and Privacy (single purpose, permission justifications, privacy policy) from the listing on extension.dev, pressing only "Save draft" on each, and leaves Distribution as Chrome serves it. It stops with a checklist: the remote code answer and the data usage certifications are yours to tick, and Submit for review stays with you.`;
   }
 
-  return `The ${args.label} window opened on the Chrome Web Store developer dashboard (${start}) for ${args.slug}. ${SIGN_IN_LINE} Then it ${args.itemId ? "" : "presses \"New item\" once and uploads the platform's verified package (its SHA-256 checked), which makes a draft item and saves its ID on the project; it "}fills Store listing (description, category, language, homepage, icon and screenshots), Privacy (single purpose, permission justifications, privacy policy) and Distribution (Unlisted, the least public option), pressing only "Save draft" on each. It stops with a checklist: the remote code answer and the data usage certifications are yours to tick, and Submit for review stays with you.`;
+  return `The ${args.label} window opened on the Chrome Web Store developer dashboard (${start}) for ${args.slug}. ${signIn} Then it ${args.itemId ? "" : "presses \"New item\" once and uploads the platform's verified package (its SHA-256 checked), which makes a draft item and saves its ID on the project; it "}fills Store listing (description, category, language, homepage, icon and screenshots), Privacy (single purpose, permission justifications, privacy policy) and Distribution (Unlisted, the least public option), pressing only "Save draft" on each. It stops with a checklist: the remote code answer and the data usage certifications are yours to tick, and Submit for review stays with you.`;
 }
 
 function progressOf(run: ChromeRun): Record<string, unknown> {
@@ -339,7 +347,9 @@ export async function guideChromeListing(result: string, args: Args, runtime: Gu
 
   const command = text(parsed.command) || "extension_submit";
   const kept = Object.fromEntries(Object.entries(value).filter(([key]) => !["opened", "openedNote", "openPages", "nextStep", "sayToPerson"].includes(key)));
-  const live = liveRun(slug);
+  const prior = liveRun(slug);
+  const live = prior && !prior.stopped ? prior : null;
+  const restarted = prior?.stopped ? `The earlier run had stopped (${prior.stopped}); a fresh fill started in the same window and profile, keeping its sign-in.` : "";
 
   if (live) {
     const say = live.stopped ? live.line : live.finished ? `The Chrome draft is filled and saved. ${openRows(live, live.marks).join("; ")}.` : live.line;
@@ -376,7 +386,7 @@ export async function guideChromeListing(result: string, args: Args, runtime: Gu
   }
 
   const run = deps.watch({ slug, plan, profileDir: opened.profileDir, api: text(args.api) || undefined });
-  const say = chromeListingSay({ label: opened.label, itemId: plan.item?.itemId ?? "", slug, live: plan.live });
+  const say = chromeListingSay({ label: opened.label, itemId: plan.item?.itemId ?? "", slug, live: plan.live, account: plan.account });
 
   return envelope({
     ok: true,
@@ -392,6 +402,7 @@ export async function guideChromeListing(result: string, args: Args, runtime: Gu
       nextStep: nextStep("dashboard", say, start),
     },
     hint: [
+      restarted,
       `${launchWord(opened.launched)} ${opened.choice.why} Profile: ${opened.profileDir}.`,
       plan.notes.length ? `Left out: ${plan.notes.join("; ")}.` : "",
       `Tell the person: "${say}" Call extension_submit {action: "first-submission", store: "chrome", project: "${slug}"} again to read the run's progress and checklist; a new item is saved on the project by itself, as its Edge product is.`,

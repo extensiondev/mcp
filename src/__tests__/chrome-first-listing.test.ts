@@ -15,9 +15,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { DASHBOARD_HOME } from "../lib/chrome-dashboard-agent";
 import { chromePlan, type ChromePlan } from "../lib/chrome-listing-plan";
-import { chromeStep, newRun, openRows, saveNewItem, SIGN_IN_LINE, type ChromePage, type Where } from "../lib/chrome-listing-run";
+import { chromeStep, newRun, openRows, saveNewItem, SIGN_IN_LINE, signInLine, type ChromePage, type Where } from "../lib/chrome-listing-run";
 import { guidedConnectRuntime, type GuidedConnectRuntime, type LaunchPlan } from "../lib/guided-connect";
-import { guideChromeListing, watchChromeListing, type ChromeListingDeps } from "../lib/guided-chrome-listing";
+import { guideChromeListing, liveRun, watchChromeListing, type ChromeListingDeps } from "../lib/guided-chrome-listing";
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const ZIP = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(60, 1)]);
@@ -212,6 +212,95 @@ describe("one step of the guided Chrome first listing", () => {
     expect(refused.itemSaved).toBe("403 not an owner");
   });
 
+  it("1241: opens the item as the signed-in account that holds its publisher, asks for that account only when none does, and fills nothing on an Items list", async () => {
+    const item = "omndndgipeomhfdobfbhpfemempnnpjp";
+    const plan = { ...(await chromePlan(sheet({ dashboardUrl: `https://chrome.google.com/webstore/devconsole/pub-owner/${item}/edit` }), async (url) => ({ ok: true, bytes: served[url]! }), tmp)), account: "owner@example.com" };
+    const capture: Where = { host: "chrome.google.com", path: "/webstore/devconsole/pub-other", heading: "Items", itemsList: true, signedInAs: "person@example.com", signIn: false, dashboard: true, publisherId: "pub-other", itemId: "", tab: "", dialog: null, dialogTakesZip: false };
+    const form = (index: number): Where => ({ ...capture, path: `/u/${index}/webstore/devconsole/pub-owner/${item}/edit`, heading: "Store listing", itemsList: false, signedInAs: "owner@example.com", publisherId: "pub-owner", itemId: item, tab: "listing" });
+    const at = (url: string) => Number(/\/u\/(\d+)\//.exec(url)?.[1] ?? 0);
+
+    const drive = (owner: number | null) => {
+      const calls: string[] = [];
+      const visits: string[] = [];
+      const state = { clicks: 0 };
+      const fake: ChromePage = {
+        call: async <T>(method: string) => {
+          calls.push(method);
+
+          if (method !== "where") return { ok: false, reason: "no-button" } as T;
+
+          const last = visits[visits.length - 1];
+
+          return (last && owner !== null && at(last) === owner ? form(owner) : capture) as T;
+        },
+        handle: async () => null,
+        setFiles: async () => undefined,
+        click: async () => {
+          state.clicks += 1;
+        },
+        type: async () => undefined,
+        navigate: async (to) => {
+          visits.push(to);
+        },
+      };
+
+      return { calls, visits, state, deps: { page: fake, sleep: async () => undefined, now: () => 0 } };
+    };
+
+    const found = drive(1);
+    const run = newRun("extensiondev/extension-dev-tools", plan, 0);
+
+    expect(await chromeStep(run, found.deps)).toBe("moved");
+    expect(found.visits).toEqual([`https://chrome.google.com/u/1/webstore/devconsole/pub-owner/${item}/edit`]);
+    expect(found.calls).toEqual(["where"]);
+    expect(await chromeStep(run, found.deps)).toBe("stopped");
+    expect(run.stopped).toContain("The page shows \"Store listing\" at /u/1/webstore/devconsole/pub-owner");
+    expect(found.calls).toContain("inventory");
+
+    const none = drive(null);
+    const lost = newRun("extensiondev/extension-dev-tools", plan, 0);
+
+    for (let i = 0; i < 4; i += 1) expect(await chromeStep(lost, none.deps)).toBe("moved");
+
+    expect(await chromeStep(lost, none.deps)).toBe("wait");
+    expect(await chromeStep(lost, none.deps)).toBe("wait");
+    expect(none.visits.map(at)).toEqual([1, 2, 3, 4]);
+    expect(lost.line).toMatch(new RegExp(`^No account signed in to this window opens item ${item} of publisher pub-owner \\(tried /u/0/ the Items list at /webstore/devconsole/pub-other, signed in as person@example.com of publisher pub-other, `));
+    expect(lost.line).toContain("Sign in as owner@example.com in this window");
+    expect(none.calls.every((method) => method === "where")).toBe(true);
+    expect(none.state.clicks).toBe(0);
+    expect(lost).toMatchObject({ stopped: "", filled: [], done: [] });
+
+    const listed = drive(0);
+    const race = newRun("extensiondev/extension-dev-tools", plan, 0);
+    const itemsAtItem: Where = { ...form(0), heading: "Items", itemsList: true };
+
+    race.publisherId = "pub-owner";
+    listed.deps.page.call = (async <T>(method: string) => (method === "where" ? itemsAtItem : { ok: false, reason: "no-button" }) as T) as ChromePage["call"];
+
+    for (let i = 0; i < 4; i += 1) expect(await chromeStep(race, listed.deps)).toBe("moved");
+
+    expect(listed.visits.map(at)).toEqual([0, 0, 0, 1]);
+
+    const refused = newRun("extensiondev/extension-dev-tools", plan, 0);
+    const deniedAt: Where = { ...form(0), heading: "", itemsList: false, denied: true };
+    const seen: string[] = [];
+
+    listed.deps.page.call = (async <T>(method: string) => {
+      seen.push(method);
+
+      return (method === "where" ? deniedAt : { ok: false, reason: "no-button" }) as T;
+    }) as ChromePage["call"];
+
+    expect(await chromeStep(refused, listed.deps)).toBe("moved");
+    expect(listed.visits.map(at).slice(4)).toEqual([1]);
+    expect(refused.tried).toEqual([`/u/0/ a 403 page (this account has no access to it) at /u/0/webstore/devconsole/pub-owner/${item}/edit, signed in as owner@example.com`]);
+    expect(seen).toEqual(["where"]);
+    expect(race.filled).toEqual([]);
+    expect(signInLine("owner@example.com")).toMatch(/^Sign in as owner@example.com, the Google account that holds the Chrome Web Store item/);
+    expect(signInLine("")).toBe(SIGN_IN_LINE);
+  });
+
   it("drops a checklist line once the dashboard marks its tab complete and always leaves Submit for review", async () => {
     const run = newRun("ws/p", await planned(), 0);
 
@@ -256,7 +345,7 @@ describe("the guided Chrome first listing answer", () => {
     };
   }
 
-  it("opens the dashboard in a Chromium window even when Firefox was used last, and a second call reads the run instead of opening again", async () => {
+  it("opens the dashboard in a Chromium window even when Firefox was used last, a second call reads the run instead of opening again, and a call after the run stopped starts a fresh one", async () => {
     const launches: LaunchPlan[] = [];
     const read: string[] = [];
     const deps: ChromeListingDeps = {
@@ -286,6 +375,18 @@ describe("the guided Chrome first listing answer", () => {
     expect(read).toEqual(["extensiondev/extension-dev-tools"]);
     expect(again.hint).toMatch(/^The guided window already runs this Chrome listing/);
     expect(again.value.progress).toMatchObject({ itemId: null, created: false, done: [] });
+
+    const stopped = liveRun("extensiondev/extension-dev-tools")!;
+
+    stopped.stopped = "\"Save draft\" was not pressed on Store listing. Nothing else was pressed.";
+
+    const fresh = JSON.parse((await guideChromeListing(answer("first-submission-to-do"), {}, runtime(launches), deps))!);
+
+    expect(launches).toHaveLength(2);
+    expect(read).toHaveLength(2);
+    expect(fresh.hint).toMatch(/^The earlier run had stopped \("Save draft" was not pressed on Store listing\. Nothing else was pressed\.\); a fresh fill started in the same window/);
+    expect(fresh.value.progress).not.toHaveProperty("stopped");
+    expect(liveRun("extensiondev/extension-dev-tools")).not.toBe(stopped);
   });
 
   it("1239: fills the update of an item Chrome already serves, from a published sheet or the lane's already-live refusal, and leaves Distribution alone", async () => {
