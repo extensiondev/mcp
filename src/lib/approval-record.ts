@@ -76,7 +76,7 @@ export function mintedProjectMatches(
 }
 
 export function renameNote(from: string, to: string): string {
-  return `The project was renamed from ${from} to ${to} since the approval was minted.`;
+  return `The approval names ${from}, an earlier name of ${to} (the same project), so it was used for ${to}.`;
 }
 
 function readFile(): ApprovalFile {

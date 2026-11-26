@@ -95,14 +95,14 @@ describe("an approval is bound to the project by its id, not by the slug the tok
     expect(mint("leon")).not.toHaveProperty("projectId");
   });
 
-  it("passes a retry that names the new slug of the same project and says it was renamed", () => {
+  it("passes a retry that names the new slug of the same project and names the earlier name, never when the rename happened (ledger 1227)", () => {
     renamedLeon();
 
     const args = { approvalId: APPROVAL_ID, project: "acme/lion", api: API, action: "configure" };
     const bound = bindApprovalProject("extension_builds", args);
 
     expect(bound).toEqual({ args, note: renameNote("acme/leon", "acme/lion") });
-    expect("note" in bound && bound.note).toBe("The project was renamed from acme/leon to acme/lion since the approval was minted.");
+    expect("note" in bound && bound.note).toBe("The approval names acme/leon, an earlier name of acme/lion (the same project), so it was used for acme/lion.");
   });
 
   it("resolves a bare new slug in the minted workspace", () => {
