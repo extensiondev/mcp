@@ -10,16 +10,18 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import vm from "node:vm";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { CHROME_SELECTORS, DASHBOARD_HOME, DIALOG_RULES, type DialogFacts } from "../lib/chrome-dashboard-agent";
+import { CHROME_PAGE_AGENT, CHROME_SELECTORS, DASHBOARD_HOME, DIALOG_RULES, type DialogFacts } from "../lib/chrome-dashboard-agent";
 import { attach } from "../lib/chrome-listing-fill";
+import { chromeLocalesOf } from "../lib/chrome-listing-languages";
 import { chromePlan, type ChromePlan } from "../lib/chrome-listing-plan";
 import { chromeStep, fitHostLines, newRun, openRows, RENDER_WAIT_MS, saveNewItem, SIGN_IN_LINE, signInLine, tabsOf, type ChromePage, type PrivacyAsks, type Where } from "../lib/chrome-listing-run";
 import { type LaunchPlan } from "../lib/guided-connect";
 import { guideChromeListing, liveRun, watchChromeListing, type ChromeListingDeps } from "../lib/guided-chrome-listing";
-import { painted, runtime, served, sha, sheet, ZIP, sheetAnswer, fakePage, stepDeps } from "./fixtures/chrome-listing-sheet";
+import { painted, png, runtime, served, sha, sheet, ZIP, sheetAnswer, fakePage, stepDeps } from "./fixtures/chrome-listing-sheet";
 
 const ownerOnlyMode = (posix: number) => (process.platform === "win32" ? 0o666 : posix);
 const WINDOWS_MODE = "Windows keeps no POSIX mode bits, so privacy there is the per-user folder's ACL";
@@ -70,6 +72,35 @@ describe("the Chrome first-listing sheet", () => {
 
 async function planned(): Promise<ChromePlan> {
   return chromePlan(sheet(), async (url) => ({ ok: true, bytes: served[url]! }), tmp);
+}
+
+const TRANSLATED = `# Store listing
+
+## Listing
+
+- Name: Shield
+- Description: Hides personal data.
+
+## Listing (pt-BR)
+
+- Name: Escudo
+- Description: Esconde dados pessoais.
+
+## Listing (de)
+
+- Description: Verbirgt persönliche Daten.
+`;
+
+function translatedProject(): string {
+  const root = fs.mkdtempSync(path.join(tmp, "project-"));
+  const shots = path.join(root, "store", "screenshots", "chrome", "pt-BR");
+
+  fs.writeFileSync(path.join(root, "STORE.md"), TRANSLATED);
+  fs.mkdirSync(shots, { recursive: true });
+  fs.writeFileSync(path.join(shots, "1.png"), png(1280, 800));
+  fs.writeFileSync(path.join(shots, "2.png"), png(1400, 800));
+
+  return root;
 }
 
 describe("one step of the guided Chrome first listing", () => {
@@ -452,6 +483,105 @@ describe("one step of the guided Chrome first listing", () => {
     }
   });
 
+  it("1258: the page script the fill injects parses, so the dashboard never refuses it", () => {
+    expect(() => new vm.Script(CHROME_PAGE_AGENT)).not.toThrow();
+  });
+
+  it("1258: after the default language, picks each STORE.md language, fills its description and screenshots, saves the draft and names a language the package does not ship", async () => {
+    const base = await planned();
+    const local = chromeLocalesOf(translatedProject(), base.dir);
+    const plan = { ...base, locales: local.locales };
+
+    expect(local.locales.map((row) => [row.locale, row.description, row.screenshots.map((file) => file.name)])).toEqual([["pt-BR", "Esconde dados pessoais.", ["pt-BR-1.png"]], ["de", "Verbirgt persönliche Daten.", []]]);
+    expect(local.notes).toEqual(["pt-BR/2.png is 1400x800, and Chrome takes screenshots at 1280x800 or 640x400"]);
+
+    let tab = "listing";
+    let language = "English (United States)";
+    let slot = "";
+    const thumbs: Record<string, number> = {};
+    const typed: Array<[string, string]> = [];
+    const saves: string[] = [];
+    const item = "abcdefghijklmnopabcdefghijklmnop";
+    const fake: ChromePage = {
+      call: async <T>(method: string, ...args: unknown[]) => {
+        if (method === "where") return { host: "chrome.google.com", path: `/webstore/devconsole/pub-1/${item}/edit`, signIn: false, dashboard: true, publisherId: "pub-1", itemId: item, tab, dialog: null, dialogTakesZip: false } as T;
+        if (method === "languagePicker") return { state: "picker", value: language } as T;
+
+        if (method === "pickLanguage") {
+          if (args[0] !== "Portuguese (Brazil)") return { outcome: "no-option" } as T;
+
+          language = "Portuguese (Brazil)";
+
+          return { outcome: "filled" } as T;
+        }
+
+        if (method === "setText") {
+          typed.push([language, String(args[1])]);
+
+          return "filled" as T;
+        }
+
+        if (method === "thumbs") return (thumbs[`${language}/${String(args[0])}`] ?? 0) as T;
+        if (method === "fieldRead") return { found: true, value: "English (United States)" } as T;
+        if (method === "visibility") return { read: "unlisted", offers: {} } as T;
+        if (method === "justify") return [] as T;
+
+        if (method === "gate") {
+          if (args[0] === "save") saves.push(language);
+          if (String(args[0]).startsWith("tab:")) tab = String(args[0]).slice(4);
+
+          return { ok: true, label: "Save draft", x: 1, y: 1 } as T;
+        }
+
+        return null as T;
+      },
+      handle: async (_method, ...args) => {
+        slot = String(args[0]);
+
+        return "input-1";
+      },
+      setFiles: async () => void (thumbs[`${language}/${slot}`] = (thumbs[`${language}/${slot}`] ?? 0) + 1),
+      click: async () => undefined,
+      type: async () => undefined,
+      navigate: async () => undefined,
+    };
+    const run = newRun("ws/p", plan, 0);
+
+    Object.assign(run, { itemId: item, publisherId: "pub-1" });
+
+    for (let i = 0; i < 12 && !run.finished && !run.stopped; i += 1) await chromeStep(run, stepDeps(fake));
+
+    expect(run).toMatchObject({ finished: true, stopped: "", done: ["listing", "privacy", "distribution"], defaultLanguage: "English (United States)" });
+    expect(typed).toEqual([["English (United States)", "Fills store pages."], ["Portuguese (Brazil)", "Esconde dados pessoais."]]);
+    expect(saves).toEqual(["English (United States)", "Portuguese (Brazil)", "Portuguese (Brazil)", "Portuguese (Brazil)"]);
+    expect(run.languages.map((row) => row.line)).toEqual([
+      "pt-BR (Portuguese (Brazil)): Description, Screenshots: pt-BR-1.png saved as a draft",
+      expect.stringMatching(/^de on Store listing: the language picker offers no German \(the list has no option reading "German"\); Chrome lists only the languages the package ships, so add _locales\/de\/messages\.json, upload a new package and run the fill again$/),
+    ]);
+
+    expect(openRows(run, { listing: "complete" })).toContain(run.languages[1]!.line);
+
+    const single = newRun("ws/p", plan, 0);
+    const all: ChromePage = { ...fake, call: async <T>(method: string, ...args: unknown[]) => (method === "languagePicker" ? ({ state: "all" } as T) : fake.call<T>(method, ...args)) };
+
+    Object.assign(single, { itemId: item, publisherId: "pub-1", done: ["listing"] });
+    tab = "listing";
+
+    expect(await chromeStep(single, stepDeps(all))).toBe("moved");
+    expect(single.languages.map((row) => row.line)).toEqual(["pt-BR", "de"].map((tag) => `${tag} on Store listing: Chrome shows this item's listing "For all languages", so the package it holds ships one language; Chrome adds ${tag} only from _locales/${tag.replace("-", "_")}/messages.json in the package, so add it, upload a new package and run the fill again`));
+
+    const over = newRun("ws/p", plan, 0);
+
+    Object.assign(over, { itemId: item, publisherId: "pub-1" });
+    language = "Portuguese (Brazil)";
+    tab = "listing";
+    typed.length = 0;
+
+    expect(await chromeStep(over, stepDeps(fake))).toBe("stopped");
+    expect(over.stopped).toMatch(/^Store listing shows the pt-BR listing \("Portuguese \(Brazil\)"\), not the default language's, so the default description is not typed over it/);
+    expect(typed).toEqual([]);
+  });
+
   it("1262: drops a checklist line once the dashboard marks its tab complete and always ends on the approval-gated publish call, never a hand press", async () => {
     const run = newRun("ws/p", await planned(), 0);
 
@@ -562,16 +692,20 @@ describe("the guided Chrome first listing answer", () => {
 
     expect(await guideChromeListing(published("first-submission-done", "in-review", "submitted"), {}, runtime(launches, tmp), deps)).toBeNull();
 
+    const projectPath = translatedProject();
+
     for (const [status, project] of [["first-submission-done", "live-a"], ["first-submission-already-live", "live-b"]]) {
-      const out = JSON.parse((await guideChromeListing(published(status!, project!), {}, runtime(launches, tmp), deps))!);
+      const out = JSON.parse((await guideChromeListing(published(status!, project!), { projectPath }, runtime(launches, tmp), deps))!);
 
       expect(out).toMatchObject({ status: "first-listing-guided", value: { opened: true } });
       expect(out.value.sayToPerson).toContain("an item Chrome already serves");
       expect(out.value.sayToPerson).toContain("leaves Distribution as Chrome serves it");
       expect(out.value.sayToPerson).not.toContain("New item");
+      expect(out.value.sayToPerson).toContain("it picks pt-BR and de on Store listing's language picker");
+      expect(out.value.progress.languages).toEqual(["pt-BR: waiting for the default language's Store listing to be saved", "de: waiting for the default language's Store listing to be saved"]);
     }
 
-    expect(watched.map((plan) => [plan.live, plan.item?.itemId])).toEqual([[true, "abcdefghijklmnopabcdefghijklmnop"], [true, "abcdefghijklmnopabcdefghijklmnop"]]);
+    expect(watched.map((plan) => [plan.live, plan.item?.itemId, plan.locales.map((row) => row.locale)])).toEqual([[true, "abcdefghijklmnopabcdefghijklmnop", ["pt-BR", "de"]], [true, "abcdefghijklmnopabcdefghijklmnop", ["pt-BR", "de"]]]);
   });
 
   it("opens nothing when the first-submission sheet cannot be read, and says why", async () => {

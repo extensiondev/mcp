@@ -18,6 +18,8 @@ export type ChromeVisibilityPick = "unlisted" | "private";
 
 export type PlanFile = { name: string; path: string; sha256: string };
 
+export type ChromeLocale = { locale: string; description: string; screenshots: PlanFile[]; from: string; folder: string };
+
 export type ChromePlan = {
   dir: string;
   item: { publisherId: string; itemId: string } | null;
@@ -33,15 +35,16 @@ export type ChromePlan = {
   left: string[];
   live: boolean;
   account: string;
+  locales: ChromeLocale[];
 };
 
 export type FetchBytes = (url: string, maxBytes: number) => Promise<{ ok: true; bytes: Buffer } | { ok: false; message: string }>;
 
 const MAX_PACKAGE_BYTES = 48 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
-const MAX_SCREENSHOTS = 5;
+export const MAX_SCREENSHOTS = 5;
 const ICON_SIZE = "128x128";
-const SCREENSHOT_SIZES = new Set(["1280x800", "640x400"]);
+export const SCREENSHOT_SIZES = new Set(["1280x800", "640x400"]);
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const ZIP = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
 const ITEM_ADDRESS = /^https:\/\/chrome\.google\.com\/(?:u\/\d+\/)?webstore\/devconsole\/([^/?#\s]+)\/([a-p]{32})(?:[/?#]|$)/i;
@@ -100,7 +103,7 @@ function fileName(raw: string, fallback: string): string {
   return name || fallback;
 }
 
-function keep(dir: string, name: string, bytes: Buffer): PlanFile {
+export function keep(dir: string, name: string, bytes: Buffer): PlanFile {
   const target = path.join(dir, name);
 
   fs.writeFileSync(target, bytes, { mode: 0o600 });
@@ -211,6 +214,7 @@ export async function chromePlan(read: unknown, fetchBytes: FetchBytes, tempRoot
     left,
     live: text(body.state) === "done" && isRow(body.read) && text(body.read.word) === "published",
     account: text(body.connectedAs),
+    locales: [],
   };
 }
 

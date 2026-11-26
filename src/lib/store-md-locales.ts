@@ -76,7 +76,7 @@ function storeSentence(store: ListingStore, rows: LocaleRow[]): string {
   }
 
   if (store === "chrome") {
-    return `For chrome, the ${languages} listing${one ? " was" : "s were"} not sent: Google's API takes no localized listing. Chrome Web Store reads each language's name and summary from the package's _locales/<language>/messages.json, and each language's description is pasted on the Store listing tab after picking that language, from ${sources}.`;
+    return `For chrome, the ${languages} listing${one ? " was" : "s were"} not sent: Google's API takes no localized listing. Chrome Web Store reads each language's name and summary from the package's _locales/<language>/messages.json, and extension_submit {action: "first-submission", store: "chrome"} opens the guided window, which picks each language on Store listing and fills its description from ${sources}, with the screenshots under store/screenshots/chrome/<language>/, and saves the draft.`;
   }
 
   if (store === "edge") {

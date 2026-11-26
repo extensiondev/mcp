@@ -665,6 +665,8 @@ describe("a STORE.md listing in more than one language", () => {
       expect(other.localized?.sentence).toContain("the pt-BR and de listings were not sent");
       expect(other.localized?.sentence).toContain("`src/_locales/de/messages.json`");
     }
+
+    expect(chrome.localized?.sentence).toContain('extension_submit {action: "first-submission", store: "chrome"} opens the guided window, which picks each language on Store listing and fills its description');
   });
 
   it("names a translated line over its limit instead of sending it", () => {

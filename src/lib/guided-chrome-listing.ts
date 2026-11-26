@@ -10,7 +10,9 @@ import fs from "node:fs";
 
 import { CDPConnection } from "./cdp-connection";
 import { AGENT_GLOBAL, CHROME_PAGE_AGENT, DASHBOARD_HOME } from "./chrome-dashboard-agent";
+import { chromeLocalesOf } from "./chrome-listing-languages";
 import { chromePlan, type ChromePlan, type FetchBytes } from "./chrome-listing-plan";
+import { clientProjectDir } from "./client-roots";
 import { chromeStep, itemUrl, newRun, openRows, saveNewItem, signInLine, submitRow, type ChromePage, type ChromeRun, type ItemSave } from "./chrome-listing-run";
 import { envelope } from "./envelope";
 import { guidedEngine } from "./guided-browser";
@@ -302,16 +304,25 @@ function chromeOnly(runtime: GuidedConnectRuntime): GuidedConnectRuntime {
   };
 }
 
-export function chromeListingSay(args: { label: string; itemId: string; slug: string; live?: boolean; account?: string }): string {
+function languagesSaid(locales: string[]): string {
+  if (!locales.length) return "";
+
+  const list = locales.length > 1 ? `${locales.slice(0, -1).join(", ")} and ${locales[locales.length - 1]}` : locales[0]!;
+
+  return ` After the default language, it picks ${list} on Store listing's language picker and fills ${locales.length === 1 ? "that language's" : "each language's"} description and screenshots from STORE.md, pressing only "Save draft"; Chrome reads each language's name and summary from the package's _locales, so a language the package does not ship is named, not typed.`;
+}
+
+export function chromeListingSay(args: { label: string; itemId: string; slug: string; live?: boolean; account?: string; locales?: string[] }): string {
   const signIn = signInLine(args.account ?? "");
+  const languages = languagesSaid(args.locales ?? []);
 
   const start = args.itemId ? `item ${args.itemId}` : "the dashboard home";
 
   if (args.live) {
-    return `The ${args.label} window opened on the Chrome Web Store developer dashboard (${start}) for ${args.slug}, an item Chrome already serves. ${signIn} Then it fills the update's Store listing (description, category, language, homepage, icon and screenshots) and Privacy (single purpose, permission justifications, privacy policy) from the listing on extension.dev, pressing only "Save draft" on each, and leaves Distribution as Chrome serves it. It stops with a checklist: the remote code answer, when the page asks it, and any data usage certification not already ticked are yours, and Submit for review is one approval-gated extension_submit publish call afterwards, which sends the saved draft through the Chrome Web Store API.`;
+    return `The ${args.label} window opened on the Chrome Web Store developer dashboard (${start}) for ${args.slug}, an item Chrome already serves. ${signIn} Then it fills the update's Store listing (description, category, language, homepage, icon and screenshots) and Privacy (single purpose, permission justifications, privacy policy) from the listing on extension.dev, pressing only "Save draft" on each, and leaves Distribution as Chrome serves it.${languages} It stops with a checklist: the remote code answer, when the page asks it, and any data usage certification not already ticked are yours, and Submit for review is one approval-gated extension_submit publish call afterwards, which sends the saved draft through the Chrome Web Store API.`;
   }
 
-  return `The ${args.label} window opened on the Chrome Web Store developer dashboard (${start}) for ${args.slug}. ${signIn} Then it ${args.itemId ? "" : "presses \"New item\" once and uploads the platform's verified package (its SHA-256 checked), which makes a draft item and saves its ID on the project; it "}fills Store listing (description, category, language, homepage, icon and screenshots), Privacy (single purpose, permission justifications, privacy policy) and Distribution (Unlisted, the least public option), pressing only "Save draft" on each. It stops with a checklist: the remote code answer, when the page asks it, and any data usage certification not already ticked are yours, and Submit for review is one approval-gated extension_submit publish call afterwards, which sends the saved draft through the Chrome Web Store API.`;
+  return `The ${args.label} window opened on the Chrome Web Store developer dashboard (${start}) for ${args.slug}. ${signIn} Then it ${args.itemId ? "" : "presses \"New item\" once and uploads the platform's verified package (its SHA-256 checked), which makes a draft item and saves its ID on the project; it "}fills Store listing (description, category, language, homepage, icon and screenshots), Privacy (single purpose, permission justifications, privacy policy) and Distribution (Unlisted, the least public option), pressing only "Save draft" on each.${languages} It stops with a checklist: the remote code answer, when the page asks it, and any data usage certification not already ticked are yours, and Submit for review is one approval-gated extension_submit publish call afterwards, which sends the saved draft through the Chrome Web Store API.`;
 }
 
 function progressOf(run: ChromeRun): Record<string, unknown> {
@@ -324,6 +335,7 @@ function progressOf(run: ChromeRun): Record<string, unknown> {
     filled: run.filled,
     line: run.line,
     ...(run.stopped ? { stopped: run.stopped } : {}),
+    ...(run.plan.locales.length ? { languages: run.plan.locales.map((row) => run.languages.find((done) => done.locale === row.locale)?.line ?? `${row.locale}: waiting for the default language's Store listing to be saved`) } : {}),
     checklist: run.finished ? openRows(run, run.marks) : run.rows.map((row) => row.line),
     notes: run.plan.notes,
   };
@@ -395,7 +407,9 @@ export async function guideChromeListing(result: string, args: Args, runtime: Gu
     return envelope({ ok: true, command, status, value: { ...kept, opened: false, guidedBrowser: { opened: false, note } }, hint: [note, text(parsed.hint)].filter(Boolean).join(" ") });
   }
 
-  const plan = { ...planned.plan, live: planned.plan.live || updating };
+  const localDir = text(args.projectPath) || clientProjectDir() || "";
+  const local = chromeLocalesOf(localDir, planned.plan.dir);
+  const plan = { ...planned.plan, live: planned.plan.live || updating, locales: local.locales, notes: [...planned.plan.notes, ...local.notes] };
   const start = plan.item ? itemUrl(plan.item) : DASHBOARD_HOME;
   const opened = await openGuided({ workspace, next: null, plainUrl: start, storePage: null, api: text(args.api) || undefined, runtime: chromeOnly(runtime) });
 
@@ -410,7 +424,7 @@ export async function guideChromeListing(result: string, args: Args, runtime: Gu
   }
 
   const run = deps.watch({ slug, plan, profileDir: opened.profileDir, api: text(args.api) || undefined });
-  const say = chromeListingSay({ label: opened.label, itemId: plan.item?.itemId ?? "", slug, live: plan.live, account: plan.account });
+  const say = chromeListingSay({ label: opened.label, itemId: plan.item?.itemId ?? "", slug, live: plan.live, account: plan.account, locales: plan.locales.map((row) => row.locale) });
 
   return envelope({
     ok: true,

@@ -8,6 +8,7 @@
 
 import { CHROME_FIELDS, CHROME_JUSTIFICATION_LIMIT, CHROME_TABS, DASHBOARD_HOME, TAB_LABELS, type ChromeTab } from "./chrome-dashboard-agent";
 import { addRow, attach, chars, fillChoice, fillText, fitHostLines, isHostPattern } from "./chrome-listing-fill";
+import { languageStep, pendingLanguage, readsAs, type PickerRead } from "./chrome-listing-languages";
 import { stillSame, type ChromePlan } from "./chrome-listing-plan";
 
 export { fitHostLines } from "./chrome-listing-fill";
@@ -74,6 +75,8 @@ export type ChromeRun = {
   done: ChromeTab[];
   filled: string[];
   rows: Row[];
+  languages: Array<{ locale: string; line: string }>;
+  defaultLanguage: string;
   marks: Record<string, string>;
   line: string;
   stopped: string;
@@ -136,6 +139,8 @@ export function newRun(slug: string, plan: ChromePlan, now: number): ChromeRun {
     done: [],
     filled: [],
     rows: [],
+    languages: [],
+    defaultLanguage: "",
     marks: {},
     line: "Opening the Chrome Web Store developer dashboard.",
     stopped: "",
@@ -449,6 +454,14 @@ export async function chromeStep(run: ChromeRun, deps: StepDeps): Promise<string
 
   if (where.itemId !== run.itemId) return stop(run, `This tab shows item ${where.itemId}, not ${run.itemId}, so nothing is filled on it.`);
 
+  const language = run.done.includes("listing") ? pendingLanguage(run) : null;
+
+  if (language) {
+    run.line = `Filling the ${language.locale} listing on Store listing.`;
+
+    return languageStep(run, deps, where, language);
+  }
+
   const tab = tabsOf(run).find((row) => !run.done.includes(row));
 
   if (!tab) {
@@ -469,6 +482,14 @@ export async function chromeStep(run: ChromeRun, deps: StepDeps): Promise<string
     await deps.sleep(1500);
 
     return "moved";
+  }
+
+  if (tab === "listing" && run.plan.locales.length) {
+    const picker = await deps.page.call<PickerRead>("languagePicker");
+    const shows = picker?.state === "picker" ? run.plan.locales.find((row) => readsAs(picker.value, row.locale)) : undefined;
+
+    if (shows && picker?.state === "picker") return stop(run, `Store listing shows the ${shows.locale} listing ("${picker.value}"), not the default language's, so the default description is not typed over it. Pick the default language at the top of Store listing, then call this again with replace: true.`);
+    if (picker?.state === "picker") run.defaultLanguage = picker.value;
   }
 
   run.line = `Filling ${TAB_LABELS[tab]}.`;

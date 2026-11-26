@@ -8,7 +8,7 @@
 
 export const AGENT_GLOBAL = "__extensionDevToolsChrome";
 
-export const AGENT_VERSION = 6;
+export const AGENT_VERSION = 7;
 
 export const DASHBOARD_HOME = "https://chrome.google.com/webstore/devconsole";
 
@@ -43,6 +43,8 @@ export const CHROME_SELECTORS = {
   dialogRemove: /^remove$/i,
   dialogCancel: /^cancel$/i,
   screenshotsLead: /^screenshots?\b/i,
+  productDetails: /^product details$/i,
+  allLanguages: /for all languages/i,
   denied: /(?:^|\s)403(?:[.\s]|$)|forbidden|that’s an error|that's an error|(?:do not|don't|don’t) have (?:access|permission)|permission denied|not authorized/i,
   upload: /^upload$/i,
   save: /^save draft$/i,
@@ -93,6 +95,8 @@ export const CHROME_PAGE_AGENT = `(() => {
     dialogRemove: new RegExp(${src(CHROME_SELECTORS.dialogRemove)}, "i"),
     dialogCancel: new RegExp(${src(CHROME_SELECTORS.dialogCancel)}, "i"),
     screenshotsLead: new RegExp(${src(CHROME_SELECTORS.screenshotsLead)}, "i"),
+    productDetails: new RegExp(${src(CHROME_SELECTORS.productDetails)}, "i"),
+    allLanguages: new RegExp(${src(CHROME_SELECTORS.allLanguages)}, "i"),
     denied: new RegExp(${src(CHROME_SELECTORS.denied)}, "i"),
     upload: new RegExp(${src(CHROME_SELECTORS.upload)}, "i"),
     save: new RegExp(${src(CHROME_SELECTORS.save)}, "i"),
@@ -218,8 +222,8 @@ export const CHROME_PAGE_AGENT = `(() => {
     const want = which === "remove" ? S.dialogRemove : S.dialogCancel;
     const hits = actions(d).filter((el) => want.test(actionLabel(el)));
     if (hits.length !== 1 || hits[0].disabled) return null;
-    const at = center(hits[0]);
-    return { x: at.x, y: at.y };
+    const spot = center(hits[0]);
+    return { x: spot.x, y: spot.y };
   };
   const slotImages = (slot) => tiles(slot).map((t) => ({ key: t.key, label: t.remove ? actionLabel(t.remove).replace(S.removeImage, "").trim() : "", removable: Boolean(t.remove) }));
   const removeAt = (slot, key) => {
@@ -232,9 +236,22 @@ export const CHROME_PAGE_AGENT = `(() => {
     return { x: at.x, y: at.y };
   };
   const controls = () => Array.from(document.querySelectorAll("input:not([type=hidden]):not([type=file]):not([type=radio]):not([type=checkbox]), textarea, select, [role=combobox], [role=listbox][aria-expanded], [aria-haspopup=listbox]:not(input), [contenteditable=true]")).filter(shown).filter((el, i, all) => !all.some((other) => other !== el && other.contains(el)));
+  const productHead = () => { const hs = Array.from(document.querySelectorAll("h2, h3, [role=heading]")).filter(shown).filter((h) => S.productDetails.test(norm(h.textContent))); return hs.length === 1 ? hs[0] : null; };
+  const pickers = () => {
+    const h = productHead();
+    if (!h || !h.parentElement) return [];
+    const head = h.parentElement;
+    const section = h.closest("section") || head;
+    const article = section.closest("article") || section.parentElement;
+    const all = controls();
+    const inHead = all.filter((el) => head.contains(el));
+    if (inHead.length) return inHead;
+    return article ? all.filter((el) => article.contains(el) && !section.contains(el) && Boolean(section.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING)) : [];
+  };
   const findControl = (anchors) => {
     const res = anchors.map((a) => new RegExp(a, "i"));
-    const hits = controls().filter((el) => { const l = labelOf(el); return res.some((re) => re.test(l)); });
+    const skip = pickers();
+    const hits = controls().filter((el) => !skip.includes(el)).filter((el) => { const l = labelOf(el); return res.some((re) => re.test(l)); });
     return hits.length === 1 ? hits[0] : null;
   };
   const valueOf = (el) => { if (el.tagName === "SELECT") return norm(el.selectedOptions[0] ? el.selectedOptions[0].text : ""); if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") return el.value; const sel = el.querySelector("[role=option][aria-selected=true]"); return sel ? visibleText(sel) : visibleText(el); };
@@ -255,8 +272,8 @@ export const CHROME_PAGE_AGENT = `(() => {
     return el.value === text ? "filled" : "needs-typing";
   };
   const focusText = (anchors) => { const el = findControl(anchors); if (!el || (el.tagName !== "INPUT" && el.tagName !== "TEXTAREA")) return false; el.focus(); el.select(); return true; };
-  const choose = (anchors, wanted) => {
-    const el = findControl(anchors);
+  const choose = (anchors, wanted) => chooseOn(findControl(anchors), wanted);
+  const chooseOn = (el, wanted) => {
     if (!el) return { outcome: "missing" };
     if (el.tagName === "SELECT") {
       if (el.disabled) return { outcome: "not-editable" };
@@ -270,6 +287,15 @@ export const CHROME_PAGE_AGENT = `(() => {
     const at = center(el);
     return { outcome: "open", x: at.x, y: at.y };
   };
+  const languagePicker = () => {
+    const h = productHead();
+    if (!h) return { state: "none" };
+    const hits = pickers();
+    if (hits.length > 1) return { state: "many" };
+    if (hits.length === 1) return { state: "picker", value: valueOf(hits[0]) };
+    return { state: S.allLanguages.test(norm(h.parentElement ? h.parentElement.textContent : "")) ? "all" : "none" };
+  };
+  const pickLanguage = (wanted) => { const hits = pickers(); return hits.length === 1 ? chooseOn(hits[0], wanted) : { outcome: "missing" }; };
   const option = (wanted) => {
     const all = Array.from(document.querySelectorAll("[role=option], [role=menuitemradio]")).filter(shown);
     let opts = all.filter((o) => sameChoice(wanted, visibleText(o)));
@@ -347,6 +373,6 @@ export const CHROME_PAGE_AGENT = `(() => {
     uploads: Array.from(document.querySelectorAll("input[type=file]")).filter(hiddenFile).map((input) => (norm(input.getAttribute("aria-label")) || norm(scopeOf(input).textContent)).slice(0, 48)).slice(0, 8),
     buttons: actions(document).map(actionLabel).filter(Boolean).slice(0, 24),
   });
-  globalThis.${AGENT_GLOBAL} = { version: ${AGENT_VERSION}, inventory, privacyAsks, images, slotImages, removeAt, dialogShown, dialogButton, where, gate, fileInput, thumbs, fieldRead, setText, focusText, choose, option, justify, visibility, visibilityAt, marks };
+  globalThis.${AGENT_GLOBAL} = { version: ${AGENT_VERSION}, inventory, privacyAsks, images, slotImages, removeAt, dialogShown, dialogButton, where, gate, fileInput, thumbs, fieldRead, setText, focusText, choose, option, languagePicker, pickLanguage, justify, visibility, visibilityAt, marks };
   return true;
 })()`;

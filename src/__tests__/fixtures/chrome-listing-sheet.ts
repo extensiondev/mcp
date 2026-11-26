@@ -17,7 +17,7 @@ import type { ChromePage, Where } from "../../lib/chrome-listing-run";
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 export const ZIP = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(60, 1)]);
 
-function png(width: number, height: number): Buffer {
+export function png(width: number, height: number): Buffer {
   const head = Buffer.alloc(16);
 
   head.writeUInt32BE(13, 0);
