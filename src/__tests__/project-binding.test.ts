@@ -13,7 +13,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import ts from "typescript";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { clientDirs, setClientRoots } from "../lib/client-roots";
 import { resolveCredential } from "../lib/credential-source";
@@ -767,8 +767,8 @@ describe("the guided store connect opens the MCP's own browser with extension.de
     fs.mkdirSync(path.dirname(profileDir), { recursive: true, mode: 0o755 });
     fs.chmodSync(path.dirname(profileDir), 0o755);
     fs.writeFileSync(path.join(unpacked, "manifest.json"), "{}");
-    fs.writeFileSync(path.join(unpacked, "node_modules", ".bin", "extension"), `#!/bin/sh\necho planted > "${mark}"\n`, { mode: 0o755 });
-    fs.writeFileSync(path.join(bin, "npx"), `#!/bin/sh\necho "own $EXTENSION_HEADLESS $EXTENSION_BROWSER_FLAGS" > "${mark}"\n`, { mode: 0o755 });
+    fs.writeFileSync(path.join(unpacked, "node_modules", ".bin", "extension"), `#!/bin/sh\necho planted > "${mark}.part" && mv "${mark}.part" "${mark}"\n`, { mode: 0o755 });
+    fs.writeFileSync(path.join(bin, "npx"), `#!/bin/sh\necho "own $EXTENSION_HEADLESS $EXTENSION_BROWSER_FLAGS" > "${mark}.part" && mv "${mark}.part" "${mark}"\n`, { mode: 0o755 });
     const before = { PATH: process.env.PATH, EXTENSION_HEADLESS: process.env.EXTENSION_HEADLESS, EXTENSION_BROWSER_FLAGS: process.env.EXTENSION_BROWSER_FLAGS };
     process.env.PATH = `${bin}${path.delimiter}${before.PATH}`;
     process.env.EXTENSION_HEADLESS = "1";
@@ -778,7 +778,7 @@ describe("the guided store connect opens the MCP's own browser with extension.de
       const out = launchGuidedBrowser({ choice: { browser: "chromium", binary: null, install: null, why: "" }, extensionDir: unpacked, profileDir, url: PAGE, env: guidedConnectRuntime.launchEnv() });
 
       expect(out).toEqual({ launched: true, reused: false });
-      for (let waited = 0; !fs.existsSync(mark) && waited < 100; waited += 1) await new Promise((resolve) => setTimeout(resolve, 20));
+      await vi.waitFor(() => expect(fs.existsSync(mark)).toBe(true), { timeout: 10_000, interval: 20 });
       expect(fs.readFileSync(mark, "utf8").trim()).toBe("own 0 --lang=pt-BR");
     } finally {
       for (const [key, value] of Object.entries(before)) {
