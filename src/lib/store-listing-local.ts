@@ -6,7 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import path from "node:path";
 
 import { chromePasteLines, type PasteLines } from "./chrome-paste-lines";
 import { withChromeVisibility } from "./chrome-visibility";
@@ -50,7 +49,7 @@ export interface LocalListing {
 
 export type LocalListingRead = LocalListing | { problem: string } | null;
 
-export type ListingFacts = Pick<ProjectFacts, "projectPath" | "storeMdFile" | "storeMd" | "chromeWebStoreMd" | "icons" | "manifestLocales">;
+export type ListingFacts = Pick<ProjectFacts, "projectPath" | "storeMdFile" | "storeMd" | "chromeWebStoreMd" | "icons" | "manifestLocales" | "manifestRequests">;
 
 const NO_ICON_READ: LocalIcon = { missing: "no manifest.json in the project" };
 
@@ -71,7 +70,7 @@ export function localListingOf(
   }
 
   const parsed = parseStoreMdListing(content);
-  const read = listingForStore(parsed, store);
+  const read = listingForStore(parsed, store, project.manifestRequests ?? null);
   const { listing, skipped, unread } = withChromeVisibility(read, parsed.lines.visibility);
   const icon = factOf(project.icons, store) ?? NO_ICON_READ;
   const localized = localizedListingFor(parsed, project.manifestLocales, store);

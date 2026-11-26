@@ -112,6 +112,8 @@ export { localizedListingFor } from "./lib/store-md-locales";
 export type { LocaleRow, LocalizedListing, LocalizedRead, ManifestLocales } from "./lib/store-md-locales";
 export { LISTING_STORES, classifyStore, derivedListingFields, listingForStore, parseStoreMdListing } from "./lib/store-md-listing";
 export type { StoreListingRead, StoreMdListing, StoreMdPrivacy, UnreadLine } from "./lib/store-md-listing";
+export { manifestRequestsOf } from "./lib/store-md-justifications";
+export type { ManifestRequests } from "./lib/store-md-justifications";
 export { SCREENSHOTS_DOOR, screenshotsAdvice, screenshotsLineSentence } from "./lib/store-md-screenshots";
 export { reviewerNoteToolchainCheck } from "./lib/store-md-toolchain";
 export { blockingWords, withStoreMdNamedForPerson } from "./lib/store-md-words";

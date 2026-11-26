@@ -13,6 +13,7 @@ import { firefoxManifestOf } from "./firefox-enterprise";
 import { text } from "./row";
 import { draftFactsOf, shotsFactsOf } from "./store-draft-facts-local";
 import {
+  chromeManifestRequestsOf,
   chromeWebStoreMdText,
   gitHead,
   localIcon,
@@ -88,6 +89,7 @@ function readProjectFacts(args: SubmitFactsArgs, action: string): ProjectFacts {
     draft: preflight && exists ? draftFactsOf(projectPath, storeMd) : null,
     shots: listing && exists ? shotsFactsOf(projectPath, listing, args.screenshots) : null,
     manifestLocales: action === "sync-listing" && exists ? manifestLocalesOf(projectPath) : null,
+    manifestRequests: action === "sync-listing" && exists ? chromeManifestRequestsOf(projectPath) : null,
   };
 }
 
@@ -120,6 +122,7 @@ export function readLocalListing(projectPath: string, store: ListingStore, scree
       chromeWebStoreMd: chromeWebStoreMdText(projectPath),
       icons: { [store]: localIcon(projectPath, store) },
       manifestLocales: manifestLocalesOf(projectPath),
+      manifestRequests: chromeManifestRequestsOf(projectPath),
     },
     store,
     screenshots,

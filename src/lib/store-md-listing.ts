@@ -16,11 +16,11 @@ import {
   type ListingField,
   type ListingStore,
   type ListingText,
-  type PermissionJustification,
 } from "./store-md-declarations";
 import { chromeCategoryRefusal, resolveStoreCategories, storesNamingACategory, type CategoryRead } from "./store-categories";
 import { bounded, type OverLimitMeasure } from "./store-md-bounded";
 import { bulletLine, storeOwnLinesBody } from "./store-md-bullets";
+import { justificationBullets, justifyInto, type JustificationBullet, type ManifestRequests } from "./store-md-justifications";
 import { safariTitle } from "./store-md-safari-title";
 import { screenshotFilesListed } from "./store-md-screenshots";
 import { stripHtmlComments } from "./html-comments";
@@ -46,6 +46,7 @@ export interface StoreMdListing {
   screenshotsLine?: string;
   screenshotFiles?: number;
   screenshotPaths?: string[];
+  justificationBullets?: Partial<Record<ListingStore, JustificationBullet[]>>;
 }
 
 export interface UnreadLine {
@@ -314,17 +315,8 @@ function privacyProse(body: string): string {
   return usable(kept.join("\n").trim());
 }
 
-function justifications(body: string, prefix: string): PermissionJustification[] {
-  for (const sub of splitSections(body, 3)) {
-    if (!sub.heading.toLowerCase().startsWith(prefix)) continue;
-
-    return bullets(sub.body)
-      .map(({ key, value }) => ({ permission: key, justification: usable(unwrap(value)) }))
-      .filter((entry) => entry.permission && entry.justification);
-  }
-
-  return [];
-}
+const justificationSection = (body: string, prefix: string): JustificationBullet[] =>
+  justificationBullets(splitSections(body, 3).find((sub) => sub.heading.toLowerCase().startsWith(prefix))?.body ?? "");
 
 /* @invariant STORE.md CARRIES NO SCREENSHOT. A "- Screenshots:" line, in
  * the bare form or with a note, is recorded by its key and read for no
@@ -442,8 +434,11 @@ export function parseStoreMdListing(content: string): StoreMdListing {
 
       for (const { field, prefix } of SUBSECTION_KEYS) {
         if (field === "permissionJustifications") {
-          const permissions = justifications(section.body, prefix);
-          if (permissions.length) text.permissionJustifications = permissions;
+          const read = justificationSection(section.body, prefix);
+
+          if (read.length) result.justificationBullets = { ...result.justificationBullets, [store]: read };
+
+          justifyInto(text, read, null);
 
           continue;
         }
@@ -529,7 +524,7 @@ function borrowedFromChrome(parsed: StoreMdListing, store: ListingStore, merged:
  * names it, with the heading the owner wrote (ledger 413). The field stays
  * in unread so it is never reported as a line not found.
  */
-export function listingForStore(parsed: StoreMdListing, store: ListingStore): StoreListingRead {
+export function listingForStore(parsed: StoreMdListing, store: ListingStore, requests: ManifestRequests | null = null): StoreListingRead {
   const merged: ListingText = { ...parsed.shared, ...(parsed.overrides[store] ?? {}), ...(parsed.stores[store] ?? {}) };
   const borrowed = borrowedFromChrome(parsed, store, merged);
   const categories = resolveStoreCategories(parsed, store);
@@ -538,6 +533,10 @@ export function listingForStore(parsed: StoreMdListing, store: ListingStore): St
 
   const listing: ListingText = {};
   const skipped: string[] = [];
+  const justified = STORE_FIELDS[store].includes("permissionJustifications") ? parsed.justificationBullets?.[borrowed.permissionJustifications ? "chrome" : store] : undefined;
+
+  if (justified) skipped.push(...justifyInto(merged, justified, requests));
+
   const unread: Partial<Record<ListingField, UnreadLine>> = {};
   const overLimit: FieldOverLimit[] = [];
 

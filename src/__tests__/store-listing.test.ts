@@ -104,7 +104,7 @@ function project(): string {
   fs.mkdirSync(path.join(root, "dist", "chrome", "icons"), { recursive: true });
   fs.writeFileSync(
     path.join(root, "dist", "chrome", "manifest.json"),
-    JSON.stringify({ icons: { "16": "icons/16.png", "128": "icons/128.png" } }),
+    JSON.stringify({ permissions: ["storage", "scripting"], icons: { "16": "icons/16.png", "128": "icons/128.png" } }),
   );
 
   fs.writeFileSync(

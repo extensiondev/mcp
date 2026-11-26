@@ -15,6 +15,7 @@ import { isRow, text } from "./row";
 import { engineProjectRoot } from "./session-paths";
 import { iconFromDist, iconFromSource } from "./store-listing-media";
 import { CHROMEWEBSTORE_MD_FILENAME, STORE_MD_FILENAME } from "./store-md";
+import { manifestRequestsOf, type ManifestRequests } from "./store-md-justifications";
 import { detectPackageManager, firefoxBuildScript, localBuildToolchain } from "./store-md-toolchain";
 import { staleSentence, type LocalIcon, type OnboardingFacts, type SafariDescriptionRead, type StoreMdRead, type ToolchainFacts } from "./submit-facts";
 
@@ -189,6 +190,14 @@ export function manifestLocalesOf(projectPath: string): ManifestLocales | null {
   const folder = path.relative(engineProjectRoot(projectPath), dir).split(path.sep).join("/");
 
   return Object.keys(messages).length > 1 ? { defaultLocale, folder, messages } : null;
+}
+
+export function chromeManifestRequestsOf(projectPath: string): ManifestRequests | null {
+  if (!text(projectPath)) return null;
+
+  const root = engineProjectRoot(projectPath);
+
+  return manifestRequestsOf(sourceManifestRead(projectPath)?.manifest, readJson(path.join(root, "dist", "chrome", "manifest.json")));
 }
 
 export function safariDescriptionOf(projectPath: string): SafariDescriptionRead | null {

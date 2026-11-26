@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { bulletLine, storeOwnLinesBody } from "../lib/store-md-bullets";
 import { listingForStore, parseStoreMdListing } from "../lib/store-md-listing";
 import { readLocalListing } from "../lib/submit-facts-local";
+
 import type { LocalListing } from "../lib/store-listing-local";
 
 const HOST_REASON = "Asked for one site at a time when the user allows it; nothing at install.";
@@ -86,6 +87,64 @@ describe("the store section's own lines are read under any sub-heading (ledger 3
 
     expect(listing.title).toBe("Hands-free");
     expect(listing.permissionJustifications!.map((entry) => entry.permission)).toContain("name");
+  });
+});
+
+const VISIONARIO_MATCH = "https://visionario.cezaraugusto.com/key*";
+const CONTENT_SCRIPT_BULLET = `- One content script is declared, on \`${VISIONARIO_MATCH}\` only: it reads the key the user opens and nothing else.`;
+const PRO_BULLET = "- Pro: a paid upgrade that unlocks more boards.";
+
+const VISIONARIO = (extra = "") => `# Store metadata
+
+## Listing
+
+- Name: Visionario
+- Summary: Boards for your ideas.
+
+## Chrome Web Store
+
+### Permissions justification
+
+- storage: Keeps the boards on the device.
+${CONTENT_SCRIPT_BULLET}
+${PRO_BULLET}
+${extra}
+### Visibility
+
+- Visibility: unlisted
+`;
+
+describe("a justification is recorded only for what the manifest requests (ledger 1251)", () => {
+  it("keys a bullet that names a match mid-sentence by that match, and names the bullet that justifies nothing", () => {
+    const read = listingForStore(parseStoreMdListing(VISIONARIO()), "chrome");
+
+    expect(read.listing.permissionJustifications).toEqual([
+      { permission: "storage", justification: "Keeps the boards on the device." },
+      { permission: VISIONARIO_MATCH, justification: CONTENT_SCRIPT_BULLET.slice(2) },
+    ]);
+
+    expect(read.skipped).toEqual([`the permission justification bullet "${PRO_BULLET}" names no permission or host pattern, so it was left out`]);
+  });
+
+  it("maps every bullet against the project's manifest, content script matches included, and names each one it could not map", () => {
+    const storeMd = VISIONARIO("- tabs: Finds the open board.\n- The side panel shows the boards, which is why sidePanel is asked for.\n");
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-justify-"));
+
+    fs.mkdirSync(path.join(root, "src"));
+    fs.writeFileSync(path.join(root, "STORE.md"), storeMd);
+    fs.writeFileSync(
+      path.join(root, "src", "manifest.json"),
+      JSON.stringify({ permissions: ["storage"], "chromium:permissions": ["storage", "sidePanel"], content_scripts: [{ matches: [VISIONARIO_MATCH], js: ["key.js"] }] }),
+    );
+
+    const local = readLocalListing(root, "chrome");
+    if ("problem" in local) throw new Error(local.problem);
+
+    expect(local.patch.listing.permissionJustifications!.map((row) => row.permission)).toEqual(["storage", VISIONARIO_MATCH, "sidePanel"]);
+    expect(local.skipped).toEqual([
+      `the permission justification bullet "${PRO_BULLET}" names no permission or host the manifest requests, so it was left out`,
+      'the permission justification bullet "- tabs: Finds the open board." is keyed by tabs, which the manifest does not request, so it was left out',
+    ]);
   });
 });
 
