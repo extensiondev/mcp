@@ -30,8 +30,8 @@ function approvalRequired(action: string, scope: Record<string, string>) {
 describe("extension_release_promote cuts a release pull request and rolls a channel back, each with an owner's approval", () => {
   const platform = useProjectRoutes("extdev-release-acts-");
 
-  it("offers cut and rollback beside promote, and stays a shipping tool", () => {
-    expect(schema.inputSchema.properties.action.enum).toEqual(["promote", "cut", "rollback"]);
+  it("offers cut, rollback and notes beside promote, and stays a shipping tool", () => {
+    expect(schema.inputSchema.properties.action.enum).toEqual(["promote", "cut", "rollback", "notes"]);
     expect(schema.inputSchema.required).toEqual([]);
     expect(TOOL_POLICY.extension_release_promote.ships).toBe("always");
   });

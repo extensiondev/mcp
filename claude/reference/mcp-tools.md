@@ -497,7 +497,7 @@ Release a build to a channel on extension.dev, cut a version-bump pull request, 
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `action` | "promote" \| "cut" \| "rollback" | no | `"promote"` | promote: channel to buildId; cut: version-bump pull request; rollback: previous build. |
+| `action` | "promote" \| "cut" \| "rollback" \| "notes" | no | `"promote"` | promote: channel to buildId; cut: version-bump pull request; rollback: previous build; notes: replace a channel's releaseNotes. |
 | `project` | string | no |  | '<workspace>/<project>' login to use when several are stored. |
 | `buildId` | string | no |  | Build commit sha (7+ characters). |
 | `channel` | string | no |  | Target channel, e.g. stable, preview. |

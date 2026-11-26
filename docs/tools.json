@@ -2159,10 +2159,10 @@
       "inputs": [
         {
           "name": "action",
-          "type": "\"promote\" | \"cut\" | \"rollback\"",
+          "type": "\"promote\" | \"cut\" | \"rollback\" | \"notes\"",
           "required": false,
           "default": "promote",
-          "description": "promote: channel to buildId; cut: version-bump pull request; rollback: previous build."
+          "description": "promote: channel to buildId; cut: version-bump pull request; rollback: previous build; notes: replace a channel's releaseNotes."
         },
         {
           "name": "project",

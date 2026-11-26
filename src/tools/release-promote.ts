@@ -18,9 +18,9 @@ export const schema = {
     properties: {
       action: {
         type: "string",
-        enum: ["promote", "cut", "rollback"],
+        enum: ["promote", "cut", "rollback", "notes"],
         default: "promote",
-        description: "promote: channel to buildId; cut: version-bump pull request; rollback: previous build.",
+        description: "promote: channel to buildId; cut: version-bump pull request; rollback: previous build; notes: replace a channel's releaseNotes.",
       },
       project: PROJECT_TOKEN_INPUT,
       buildId: {
