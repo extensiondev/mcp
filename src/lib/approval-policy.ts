@@ -79,6 +79,7 @@ export const APPROVAL_POLICY = {
   extension_release_promote: "approval",
   "extension_release.cut": "approval",
   "extension_release.rollback": "approval",
+  "extension_release.notes": "approval",
   "extension_shares.revoke": "approval",
   "extension_shares.public": "approval",
   "extension_builds.channel-audience": "approval",
