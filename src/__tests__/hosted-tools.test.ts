@@ -207,6 +207,39 @@ describe("the forwarder", () => {
     expect(handed).toHaveLength(1);
   });
 
+  it("1230: hands an Edge store logo sync-listing left open to the guided first listing, and leaves it alone once the product was published", async () => {
+    const project = path.join(tmp, "logo");
+    fs.mkdirSync(project, { recursive: true });
+    fs.writeFileSync(path.join(project, "package.json"), JSON.stringify({ name: "logo" }));
+    fs.writeFileSync(path.join(project, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "x", version: "1.0.0" }));
+    fs.writeFileSync(path.join(project, "STORE.md"), "# Store\n\n## Listing\n\n- Summary: hello\n");
+    const edge = { status: "synced", images: { cleared: [], remain: ["store logo"], storeLogo: "missing" }, stillBlocking: ["edge.store_logo"] };
+    const synced = () => JSON.parse(envelopeOf({ ok: true, command: "extension_submit", status: "listing-synced", value: { action: "sync-listing", project: "acme/web", stores: { edge } }, hint: "For edge, the store logo is still open." }));
+    const sheet = (status: string) => JSON.parse(envelopeOf({ ok: true, command: "extension_submit", status, value: { action: "first-submission", store: "edge", project: "acme/web", pageUrl: "https://console.extension.dev/acme/web/submissions/edge" } }));
+    const handed: unknown[] = [];
+
+    const guideFirstListing = async (answer: string) => {
+      handed.push(JSON.parse(answer));
+
+      return envelopeOf({ ok: true, command: "extension_submit", status: "first-listing-guided", value: { store: "edge", sayToPerson: "The panel fills the listing with its images." }, hint: "Opened the guided Edge window." });
+    };
+
+    const { lane } = stubLane([synced(), sheet("first-submission-waiting"), synced(), sheet("first-submission-done")]);
+    const ask = async () => JSON.parse(await forwardCall("extension_submit", { action: "sync-listing", browsers: ["edge"], projectPath: project }, async () => "local", { ...FORWARDING, platform: "darwin", guideFirstListing }));
+
+    const out = await ask();
+
+    expect(out.value.stores.edge).toMatchObject({ ...edge, guidedFill: { opened: true, sayToPerson: "The panel fills the listing with its images." } });
+    expect(out.hint).toBe("Opened the guided Edge window. For edge, the store logo is still open.");
+    expect(lane()[1]!.body.args).toMatchObject({ action: "first-submission", store: "edge", project: "acme/web" });
+    expect(handed).toEqual([expect.objectContaining({ status: "first-submission-waiting" })]);
+
+    const live = await ask();
+
+    expect(live.value.stores.edge.guidedFill).toBeUndefined();
+    expect(handed).toHaveLength(1);
+  });
+
   it("retries a lane that did not answer, and a refused cached credential, with the same key", async () => {
     const denied = { ok: false, status: "auth-refused", error: { code: "E_AUTH_DENIED", message: "Refused." } };
     const { lane } = stubLane([new Error("socket hang up"), LISTED, denied, LISTED]);

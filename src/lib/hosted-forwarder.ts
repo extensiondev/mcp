@@ -178,27 +178,19 @@ async function guidedFirstListing(command: string, args: Args, shown: Args, deps
 
 const GUIDED_LISTING_STATUS = "first-listing-guided";
 
-/* @invariant A CHROME LISTING NO STORE TOOK IS TYPED IN BY THE GUIDED WINDOW
- * WHEN IT CAN BE (MCP ledger 1224). Google's API takes none of the Chrome
- * listing fields, so a sync-listing answer that names chrome under
- * notSynced reads the project's Chrome first-submission sheet once more;
- * while that sheet is still to do or waiting, the same guided fill a
- * first-submission call opens types the fields into the dashboard and stops
- * before Submit for review, and the sync answer carries its progress. An
- * item already sent for review, a sheet that cannot be read, or a window
- * that does not open leaves the sync answer as the lane gave it.
- */
-async function guidedChromePaste(call: LaneCall, args: Args, shown: Args, deps: ForwarderDeps): Promise<Args | null> {
-  if (call.command !== "extension_submit" || actionOf(args, "") !== "sync-listing") return null;
+function storesToFill(value: Args): Array<"chrome" | "edge"> {
+  const gaps = Array.isArray(value.notSynced) ? (value.notSynced as Args[]) : [];
+  const stores = value.stores && typeof value.stores === "object" ? (value.stores as Args) : {};
+  const edge = stores.edge && typeof stores.edge === "object" ? (stores.edge as Args) : {};
+  const images = edge.images && typeof edge.images === "object" ? (edge.images as Args) : {};
+  const blocking = Array.isArray(edge.stillBlocking) ? edge.stillBlocking.map((id) => text(id)) : [];
+  const edgeLogo = Boolean(text(images.storeLogo)) || blocking.includes("edge.store_logo");
 
-  const value = shown.value && typeof shown.value === "object" ? (shown.value as Args) : null;
-  const gaps = Array.isArray(value?.notSynced) ? (value!.notSynced as Args[]) : [];
-  const project = text(value?.project);
-  const guide = deps.guideFirstListing ?? (registeredKernelHooks().includes("guideFirstListing") ? kernelHook("guideFirstListing") : undefined);
+  return [...(gaps.some((gap) => text(gap?.store) === "chrome") ? ["chrome" as const] : []), ...(edgeLogo ? ["edge" as const] : [])];
+}
 
-  if (!value || !project || !guide || !gaps.some((gap) => text(gap?.store) === "chrome")) return null;
-
-  const ask: Args = { action: "first-submission", store: "chrome", project, waitSeconds: 0, ...(text(args.api) ? { api: text(args.api) } : {}) };
+async function guidedFillOf(call: LaneCall, args: Args, store: "chrome" | "edge", project: string, guide: (result: string, args: Args) => Promise<string | null>): Promise<Args | null> {
+  const ask: Args = { action: "first-submission", store, project, waitSeconds: 0, ...(text(args.api) ? { api: text(args.api) } : {}) };
   const read = await askLane({ ...call, reads: true, key: crypto.randomBytes(24).toString("base64url"), sent: hostedArgs(ask, null, call.session.resource) });
   if (read.kind !== "answer") return null;
 
@@ -217,12 +209,55 @@ async function guidedChromePaste(call: LaneCall, args: Args, shown: Args, deps: 
   if (laneStatus(guided) !== GUIDED_LISTING_STATUS || !guided.value || typeof guided.value !== "object") return null;
 
   const fill = guided.value as Args;
-  const guidedFill = { opened: true, ...(fill.progress ? { progress: fill.progress } : {}), ...(text(fill.sayToPerson) ? { sayToPerson: text(fill.sayToPerson) } : {}), ...(fill.nextStep ? { nextStep: fill.nextStep } : {}) };
+
+  return {
+    hint: text(guided.hint),
+    guidedFill: { opened: true, ...(fill.progress ? { progress: fill.progress } : {}), ...(text(fill.sayToPerson) ? { sayToPerson: text(fill.sayToPerson) } : {}), ...(fill.nextStep ? { nextStep: fill.nextStep } : {}) },
+  };
+}
+
+/* @invariant A LISTING FIELD NO STORE API TAKES IS TYPED IN BY THE GUIDED
+ * WINDOW WHEN IT CAN BE (MCP ledgers 1224 and 1230). Google's API takes none
+ * of the Chrome listing fields, and Edge's takes no listing image, so a
+ * sync-listing answer that names chrome under notSynced, or leaves Edge's
+ * 300x300 store logo open, reads that store's first-submission sheet once
+ * more; while the sheet is still to do or waiting, the same guided window a
+ * first-submission call opens fills the dashboard (Edge's store logo is the
+ * platform's own resize of the build icon) and stops before Submit for
+ * review or Publish, and the sync answer carries its progress. An item
+ * already sent for review, a sheet that cannot be read, or a window that
+ * does not open leaves the sync answer as the lane gave it.
+ */
+async function guidedListingFill(call: LaneCall, args: Args, shown: Args, deps: ForwarderDeps): Promise<Args | null> {
+  if (call.command !== "extension_submit" || actionOf(args, "") !== "sync-listing") return null;
+
+  const value = shown.value && typeof shown.value === "object" ? (shown.value as Args) : null;
+  const project = text(value?.project);
+  const guide = deps.guideFirstListing ?? (registeredKernelHooks().includes("guideFirstListing") ? kernelHook("guideFirstListing") : undefined);
+
+  if (!value || !project || !guide) return null;
+
+  const fills: Partial<Record<"chrome" | "edge", Args>> = {};
+
+  for (const store of storesToFill(value)) {
+    const fill = await guidedFillOf(call, args, store, project, guide);
+    if (fill) fills[store] = fill;
+  }
+
+  if (!fills.chrome && !fills.edge) return null;
+
+  const gaps = Array.isArray(value.notSynced) ? (value.notSynced as Args[]) : [];
+  const stores = value.stores && typeof value.stores === "object" ? (value.stores as Args) : {};
+  const edgeRow = stores.edge && typeof stores.edge === "object" ? (stores.edge as Args) : null;
 
   return {
     ...shown,
-    value: { ...value, notSynced: gaps.map((gap) => (text(gap?.store) === "chrome" ? { ...gap, guidedFill } : gap)) },
-    hint: [text(guided.hint), text(shown.hint)].filter(Boolean).join(" "),
+    value: {
+      ...value,
+      ...(fills.chrome ? { notSynced: gaps.map((gap) => (text(gap?.store) === "chrome" ? { ...gap, guidedFill: fills.chrome!.guidedFill } : gap)) } : {}),
+      ...(fills.edge && edgeRow ? { stores: { ...stores, edge: { ...edgeRow, guidedFill: fills.edge.guidedFill } } } : {}),
+    },
+    hint: [text(fills.chrome?.hint), text(fills.edge?.hint), text(shown.hint)].filter(Boolean).join(" "),
   };
 }
 
@@ -885,7 +920,7 @@ async function forwardedAnswer(asked: { command: string; tool: string; rule: For
   const guided = (await guidedProjectConnect(command, args, shown, deps)) ?? (await guidedFirstListing(command, args, shown, deps));
   if (guided) return guided;
 
-  const filled = await guidedChromePaste(call, args, shown, deps);
+  const filled = await guidedListingFill(call, args, shown, deps);
   if (filled) return laneEnvelope(command, filled, deps);
 
   const opening = openLanePages(shown, deps);
