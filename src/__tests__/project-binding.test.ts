@@ -24,7 +24,7 @@ import { loginForPath, pathIdentity, serverLogins } from "../lib/path-project";
 import { PLATFORM_KERNEL_HOOKS, installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
 import { forwardable } from "../lib/hosted-forwarder";
 import { outcomeClock } from "../lib/outcome-clock";
-import { GUIDED_KEY_PAGES, guideStoreConnect, guidedConnectRuntime, launchGuidedBrowser, type GuidedConnectRuntime, type LaunchPlan } from "../lib/guided-connect";
+import { GUIDED_KEY_PAGES, LAUNCH_HANDOFF_PAGE, guideStoreConnect, guidedConnectRuntime, launchGuidedBrowser, type GuidedConnectRuntime, type LaunchPlan } from "../lib/guided-connect";
 import { guidedCopy } from "../lib/guided-copy-build";
 import { endGuidedWindow, runningOwner, type GuidedProcess } from "../lib/guided-window-end";
 import { APP_STORE_CONNECT_APPS, PARTNER_CENTER_OVERVIEW, guideFirstListing } from "../lib/guided-first-listing";
@@ -1113,7 +1113,7 @@ describe("the guided store connect opens the MCP's own browser with extension.de
     expect(launches[launches.length - 1]!.url).toBe("http://console.extension.localhost/cezaraugusto/settings/store-accounts#c");
 
     await guided("cezaraugusto", handing(HANDOFF, bodies), "safari");
-    expect(JSON.parse(bodies[bodies.length - 1]!)).toEqual({ next: "/cezaraugusto/settings/store-accounts" });
+    expect(JSON.parse(bodies[bodies.length - 1]!)).toEqual({ next: "/cezaraugusto/settings/store-accounts", launchHash: expect.stringMatching(/^[0-9a-f]{64}$/) });
     expect(JSON.parse(bodies[0]!)).toMatchObject({ next: "/cezaraugusto/settings/store-accounts?store=edge" });
   });
 
@@ -1171,6 +1171,27 @@ describe("the guided store connect opens the MCP's own browser with extension.de
       expect(out.value.sayToPerson).toContain("the extension.dev tools panel shows on that page");
       expect(out.value.sayToPerson).not.toContain("Allow");
       expect(out.value.sayToPerson).toContain(`"Create a new API key and connect"`);
+      expect(JSON.stringify(out)).not.toContain(launch.secret);
+      expect(JSON.stringify(out)).not.toContain("c".repeat(43));
+    });
+
+    it("opens every other store's connect on the bare handoff page in front, with the code and secret only in the extension's folder (1291)", async () => {
+      prodSignIn();
+      const bodies: string[] = [];
+      const launchExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      const out = JSON.parse(await guideStoreConnect(workspaceConnectAnswer("extension_submit", WORKSPACE, ["firefox"], PROD), { browsers: ["firefox"], api: PROD }, binding({ url: PROD_HANDOFF, launchBound: true, launchExpiresAt }, bodies)));
+      const file = path.join(launches[0]!.extensionDir, "launch.json");
+      const launch = JSON.parse(fs.readFileSync(file, "utf8"));
+      const minted = JSON.parse(bodies[0]!);
+
+      expect(minted.next).toBe(`/${WORKSPACE}/settings/store-accounts?store=firefox`);
+      expect(launches[0]!.url).toBe(LAUNCH_HANDOFF_PAGE);
+      expect(launches[0]!.url).not.toContain("#");
+      expect(launch).toMatchObject({ handoff: PROD_HANDOFF, expiresAt: launchExpiresAt, front: true });
+      expect(crypto.createHash("sha256").update(launch.secret).digest("hex")).toBe(minted.launchHash);
+      expect(fs.statSync(file).mode & 0o777, WINDOWS_MODE).toBe(ownerOnlyMode(0o600));
+      expect(out).toMatchObject({ status: "workspace-connect-guided", value: { signedIn: true } });
+      expect(out.value.sayToPerson).not.toContain("sign in to extension.dev once");
       expect(JSON.stringify(out)).not.toContain(launch.secret);
       expect(JSON.stringify(out)).not.toContain("c".repeat(43));
     });
@@ -1245,20 +1266,25 @@ describe("the guided store connect opens the MCP's own browser with extension.de
       const bound = (bodies: string[], extra: Partial<GuidedConnectRuntime> = {}) =>
         binding({ url: PROD_HANDOFF, launchBound: true, launchExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString() }, bodies, extra);
 
-      it("opens the project's guided Edge page for a full sign-in and never mints the MCP's store-connect-only session for it", async () => {
+      it("signs the guided window in through a launch-bound handoff scoped to this project's first Edge listing (1291)", async () => {
         prodSignIn();
         const bodies: string[] = [];
         const out = JSON.parse((await guideFirstListing(firstSubmission("first-submission-to-do"), { api: PROD }, bound(bodies)))!);
         const consolePage = `https://console.extension.dev/${WORKSPACE}/rebeccat/submissions/edge?guide=first-listing`;
+        const file = path.join(launches[0]!.extensionDir, "launch.json");
+        const launch = JSON.parse(fs.readFileSync(file, "utf8"));
 
-        expect(bodies).toEqual([]);
-        expect(asked.some((url) => url.endsWith("/api/cli/console-handoff"))).toBe(false);
-        expect(launches[0]!.url).toBe(consolePage);
-        expect(fs.existsSync(path.join(launches[0]!.extensionDir, "launch.json"))).toBe(false);
+        expect(bodies.map((body) => JSON.parse(body))).toEqual([{ next: `/${WORKSPACE}/rebeccat/submissions/edge?guide=first-listing`, launchHash: expect.stringMatching(/^[0-9a-f]{64}$/) }]);
+        expect(crypto.createHash("sha256").update(launch.secret).digest("hex")).toBe(JSON.parse(bodies[0]!).launchHash);
+        expect(launch).toMatchObject({ handoff: PROD_HANDOFF, front: true });
+        expect(launches[0]!.url).toBe(LAUNCH_HANDOFF_PAGE);
         expect(out).toMatchObject({ status: "first-listing-guided", value: { opened: true, landedOn: consolePage, partnerCenterPage: PARTNER_CENTER_OVERVIEW, guidedBrowser: { opened: true }, nextStep: { kind: "dashboard", url: consolePage } } });
         expect(out.value).not.toHaveProperty("openPages");
-        expect(out.value.sayToPerson).toContain("full extension.dev sign-in");
-        expect(out.value.sayToPerson).toContain("press \"Sign in to continue\"");
+        expect(out.value.sayToPerson).toContain("signs in to the console by itself");
+        expect(out.value.sayToPerson).toContain("reaches only this project's first Edge listing");
+        expect(out.value.sayToPerson).not.toContain("Sign in to continue");
+        expect(JSON.stringify(out)).not.toContain(launch.secret);
+        expect(JSON.stringify(out)).not.toContain("c".repeat(43));
         expect(out.value.sayToPerson).toContain("presses \"Create new extension\" once");
         expect(out.value.sayToPerson).toContain("presses Publish once, and Partner Center's confirm, only after a workspace owner's extension.dev approval");
         expect(out.value.sayToPerson).not.toContain("the person presses Publish");
@@ -1266,6 +1292,17 @@ describe("the guided store connect opens the MCP's own browser with extension.de
         expect(out.hint).toContain(`extension_approvals_request {act: "extension_submit", args: {action: "first-submission", store: "edge", project: "${WORKSPACE}/rebeccat"}}`);
         expect(out.hint).toContain(`without waiting for their word, call extension_submit {action: "first-submission", store: "edge", project: "${WORKSPACE}/rebeccat", waitSeconds: 300}`);
         expect(out.hint).not.toContain("When they say");
+      });
+
+      it("opens the plain guided page and writes no launch file when the platform gives no handoff", async () => {
+        prodSignIn();
+        const out = JSON.parse((await guideFirstListing(firstSubmission("first-submission-to-do"), { api: PROD }, binding({}, [])))!);
+        const consolePage = `https://console.extension.dev/${WORKSPACE}/rebeccat/submissions/edge?guide=first-listing`;
+
+        expect(launches[0]!.url).toBe(consolePage);
+        expect(fs.existsSync(path.join(launches[0]!.extensionDir, "launch.json"))).toBe(false);
+        expect(out.value.sayToPerson).toContain("sign in to extension.dev there if it asks");
+        expect(out.value.sayToPerson).not.toContain("by itself");
       });
 
       it("watches its own guided window for the panel's image request once the window opens (ledger 1171)", async () => {
@@ -1293,8 +1330,9 @@ describe("the guided store connect opens the MCP's own browser with extension.de
         const fresh = JSON.parse((await guideFirstListing(safari("https://appstoreconnect.apple.com/apps"), { api: PROD }, bound([])))!);
         const consolePage = `https://console.extension.dev/${WORKSPACE}/rebeccat/submissions/safari?guide=first-listing`;
 
-        expect(launches[0]!.url).toBe(consolePage);
+        expect(launches[0]!.url).toBe(LAUNCH_HANDOFF_PAGE);
         expect(fresh).toMatchObject({ status: "first-listing-guided", value: { opened: true, landedOn: consolePage, appStoreConnectPage: APP_STORE_CONNECT_APPS } });
+        expect(fresh.value.sayToPerson).toContain("reaches only this project's first App Store listing");
         expect(fresh.value).not.toHaveProperty("partnerCenterPage");
         expect(fresh.value.sayToPerson).toContain("presses Create once");
         expect(fresh.value.sayToPerson).toContain("never presses Publish on App Privacy");

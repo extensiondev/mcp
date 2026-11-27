@@ -362,16 +362,19 @@ function launchExpiry(raw: string | undefined): string {
 }
 
 /* @invariant THE LAUNCH SECRET REACHES ONLY THE BROWSER THIS MCP OPENS (MCP
- * ledger 1114). Its sha256 goes to the platform with the handoff mint; the
- * secret itself and the one-time handoff address are written 0600 into the
- * extension folder this MCP loads and nowhere else, never into argv, a log or
- * the answer. The extension takes them once, opens the handoff in a background
- * tab and gives the secret to that tab alone, so the confirm press is skipped
- * there and kept for any link opened anywhere else. The file is removed two
- * minutes after the launch, when this process exits, and on the next guided
- * connect, whichever comes first.
+ * ledger 1114, 1291). Every guided launch that mints a handoff, each store
+ * connect and each first listing, makes one. Its sha256 goes to the platform
+ * with the handoff mint; the secret itself and the one-time handoff address
+ * are written 0600 into the extension folder this MCP loads and nowhere else,
+ * never into argv, a log or the answer. A store page launch (Edge's key page)
+ * has the extension open the handoff in a background tab; every other launch
+ * opens the bare handoff page in front, and the extension hands that page the
+ * code and the secret once. The confirm press is skipped there and kept for
+ * any link opened anywhere else. The file is removed two minutes after the
+ * launch, when this process exits, and on the next guided launch, whichever
+ * comes first.
  */
-export function writeLaunchFile(extensionDir: string, launch: { handoff: string; secret: string; expiresAt: string }): void {
+export function writeLaunchFile(extensionDir: string, launch: { handoff: string; secret: string; expiresAt: string; front?: true }): void {
   const file = launchFile(extensionDir);
   const staging = `${file}.${process.pid}.${Date.now()}`;
   const body = { id: crypto.randomBytes(12).toString("base64url"), ...launch };
@@ -471,16 +474,19 @@ export async function openGuided(options: { workspace: string; next: string | nu
 
   if ("failed" in extension) return { opened: false, note: `No browser was opened: ${extension.failed}.` };
 
-  const secret = options.storePage ? crypto.randomBytes(32).toString("base64url") : "";
+  const secret = options.next === null ? "" : crypto.randomBytes(32).toString("base64url");
   const launchHash = secret ? crypto.createHash("sha256").update(secret).digest("hex") : undefined;
   const landing: ConsoleLanding = options.next === null ? { openUrl: options.plainUrl, signedIn: false, note: "" } : await consoleLanding({ workspace: options.workspace, next: options.next, plainUrl: options.plainUrl, api: options.api, launchHash, fetchImpl: runtime.fetch });
-  const onStorePage = Boolean(options.storePage && landing.launchBound && landing.openUrl.split("#")[0] === LAUNCH_HANDOFF_PAGE);
+  const launchBound = Boolean(secret && landing.launchBound && landing.openUrl.split("#")[0] === LAUNCH_HANDOFF_PAGE);
+  const onStorePage = Boolean(options.storePage && launchBound);
   const extensionDir = guidedCopy(extension.dir, runtime.cacheDir(), engine);
 
-  if (onStorePage) writeLaunchFile(extensionDir, { handoff: landing.openUrl, secret, expiresAt: launchExpiry(landing.expiresAt) });
+  clearLaunchFile(extensionDir);
+  if (launchBound) writeLaunchFile(extensionDir, { handoff: landing.openUrl, secret, expiresAt: launchExpiry(landing.expiresAt), ...(onStorePage ? {} : { front: true as const }) });
 
   const profileDir = guidedProfileDir(runtime.stateDir(), choice.browser as GuidedBrowser);
-  const launched = runtime.launch({ choice, extensionDir, profileDir, url: onStorePage && options.storePage ? options.storePage : landing.openUrl, env: runtime.launchEnv() });
+  const url = onStorePage && options.storePage ? options.storePage : launchBound ? LAUNCH_HANDOFF_PAGE : landing.openUrl;
+  const launched = runtime.launch({ choice, extensionDir, profileDir, url, env: runtime.launchEnv() });
 
   if (!launched.launched) {
     clearLaunchFile(extensionDir);
@@ -488,7 +494,7 @@ export async function openGuided(options: { workspace: string; next: string | nu
     return { opened: false, note: `No browser was opened: ${label} did not start (${launched.reason ?? "no reason given"}).` };
   }
 
-  if (onStorePage) (runtime.schedule ?? scheduleLater)(LAUNCH_FILE_KEEP_MS, () => clearLaunchFile(extensionDir));
+  if (launchBound) (runtime.schedule ?? scheduleLater)(LAUNCH_FILE_KEEP_MS, () => clearLaunchFile(extensionDir));
 
   const shown = runtime.windowCheck ? await runtime.windowCheck(profileDir) : "unknown";
 
