@@ -92,6 +92,7 @@ interface ForwardRule {
   sent?: (args: Args) => Args;
   answered?: (args: Args, body: unknown) => unknown;
   resumes?: (body: Args) => boolean;
+  rereads?: (args: Args, body: Args) => boolean;
   resumesWhereStarted?: true;
 }
 
@@ -304,6 +305,32 @@ const reading =
   (args: Args): boolean =>
     actions.includes(actionOf(args, fallback));
 
+const FIRST_SUBMISSION_WAITING = new Set(["first-submission-to-do", "first-submission-waiting"]);
+
+function firstSubmissionWaitRereads(args: Args, body: Args): boolean {
+  return actionOf(args, "") === "first-submission" && Number(args.waitSeconds ?? 0) > 0 && FIRST_SUBMISSION_WAITING.has(laneStatus(body));
+}
+
+function withWholeFirstSubmissionWait(body: Args, seconds: number): Args {
+  if (typeof body.hint !== "string") return body;
+
+  return { ...body, hint: body.hint.replace(/\bThis call waited \d+ s reading\b/, `This call waited ${seconds} s reading`) };
+}
+
+function endedEarly(body: Args, waited: number, asked: number, why: string): Args {
+  const plain = withoutHostedWait(body);
+  const said = `This call waited ${waited} s of the ${asked} s asked and ended early: ${why} The answer is the last read; call it again with waitSeconds to keep waiting.`;
+
+  return { ...plain, warnings: [...(Array.isArray(plain.warnings) ? plain.warnings : []), said] };
+}
+
+function legEnding(answer: LaneAnswer): string {
+  if (answer.kind === "lost") return `the platform did not answer the next read (${answer.httpStatus ? `HTTP ${answer.httpStatus}, ` : ""}${answer.reason}).`;
+  if (answer.kind === "stale-credential") return "the login this server holds for extension.dev was refused on the next read.";
+
+  return "the platform refused the next read.";
+}
+
 function submitReads(args: Args): boolean {
   const action = actionOf(args, "submit");
 
@@ -338,7 +365,7 @@ export const FORWARDED_TOOLS: Readonly<Record<string, ForwardRule>> = Object.fre
   extension_builds_act: {},
   extension_preview_web: { local: () => true },
   extension_publish: { local: (args) => actionOf(args, "publish") === "sync-captures" },
-  extension_submit: { reads: submitReads, ...SUBMIT_RULE, resumes: (body) => laneStatus(body) === SUBMIT_DISPATCHED_STATUS },
+  extension_submit: { reads: submitReads, ...SUBMIT_RULE, resumes: (body) => laneStatus(body) === SUBMIT_DISPATCHED_STATUS, rereads: firstSubmissionWaitRereads },
   extension_submit_check: { reads: submitReads, ...SUBMIT_RULE },
 });
 
@@ -909,7 +936,8 @@ async function forwardedAnswer(asked: { command: string; tool: string; rule: For
   }
 
   const resumes = !call.reads && rule.resumes?.(body) === true && (carriedMemory(resource)[SUBMIT_DISPATCHES_SHELF] ?? []).length > 0;
-  let cut = call.reads || resumes ? hostedWaitOf(body) : null;
+  const rereads = !call.reads && !resumes && rule.rereads?.(args, body) === true;
+  let cut = call.reads || resumes || rereads ? hostedWaitOf(body) : null;
   const askedSeconds = cut?.askedSeconds ?? 0;
   let legs = 1;
 
@@ -925,22 +953,29 @@ async function forwardedAnswer(asked: { command: string; tool: string; rule: For
     reportProgress(`Waiting on extension.dev for ${command} (${askedSeconds - left} of ${askedSeconds} s)`);
     const leg = resumes
       ? { ...call, key: crypto.randomBytes(24).toString("base64url"), sent: { ...hostedArgs(shaped, { ...(facts ?? {}), [RESUME_ACT_FACT]: true }, resource), waitSeconds: left } }
-      : { ...call, sent: { ...hostedArgs(shaped, facts, resource), waitSeconds: left } };
+      : rereads
+        ? { ...call, reads: true, key: freshKey(), sent: { ...hostedArgs(shaped, facts, resource), waitSeconds: left } }
+        : { ...call, sent: { ...hostedArgs(shaped, facts, resource), waitSeconds: left } };
     const next = await askLane(leg);
-    if (next.kind !== "answer") break;
+
+    if (next.kind !== "answer") {
+      if (rereads) body = endedEarly(body, Math.round((outcomeClock.now() - startedAt) / 1000), askedSeconds, legEnding(next));
+
+      break;
+    }
 
     const answered = takeMemory(resource, next.body);
     if (resumes && laneStatus(answered) === RESUME_UNKNOWN_STATUS) break;
 
     legs += 1;
     body = answered;
-    cut = !resumes || rule.resumes?.(body) === true ? hostedWaitOf(body) : null;
+    cut = resumes ? (rule.resumes?.(body) === true ? hostedWaitOf(body) : null) : rereads ? (rule.rereads?.(args, body) === true ? hostedWaitOf(body) : null) : hostedWaitOf(body);
   }
 
   const follow = !call.reads && !resumes ? buildFollowOf(body) : null;
 
   if (follow) body = await followedBuild(call, follow, body, startedAt);
-  else if (legs > 1) body = withWholeWait(body, Math.round((outcomeClock.now() - startedAt) / 1000));
+  else if (legs > 1) body = rereads ? withWholeFirstSubmissionWait(body, Math.round((outcomeClock.now() - startedAt) / 1000)) : withWholeWait(body, Math.round((outcomeClock.now() - startedAt) / 1000));
 
   body = withOneNotice(body);
 

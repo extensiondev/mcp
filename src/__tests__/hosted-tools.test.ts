@@ -1172,6 +1172,56 @@ describe("the forwarder gives the person the wait they asked for and keeps what 
     expect(out.hint).toContain("Build c5c0007 succeeded.");
   });
 
+  it("1299: holds a first-submission wait the lane cut for the seconds asked, reading again under new keys, and says what ended it early", async () => {
+    const notice = "The hosted lane ends every wait within 45 s, so this wait ran 45 s of the 300 s asked.";
+    const waiting = (granted = 45) => ({
+      ok: true,
+      command: "extension_submit",
+      status: "first-submission-waiting",
+      value: { action: "first-submission", store: "edge", project: "acme/web", state: "waiting", hostedWait: { askedSeconds: 300, grantedSeconds: granted, notice } },
+      warnings: [notice],
+      hint: `Partner Center is reviewing nothing yet. This call waited ${granted} s reading the platform's first-submission record of acme/web: waiting.`,
+    });
+    const ask = { action: "first-submission", store: "edge", project: "acme/web", waitSeconds: 300 };
+
+    const laneOf = (answers: unknown[]) => {
+      const { lane } = stubLane(answers);
+      const stubbed = globalThis.fetch;
+
+      vi.stubGlobal("fetch", async (input: unknown, init?: RequestInit) => {
+        if (String(input) === LANE) await outcomeClock.sleep(Math.min(45, Number(JSON.parse(String(init?.body)).args.waitSeconds)) * 1000);
+
+        return stubbed(input as string, init);
+      });
+
+      return lane;
+    };
+
+    const held = laneOf(Array.from({ length: 7 }, () => waiting()));
+    const out = await forwarded("extension_submit", ask);
+
+    expect(held().map((hit) => hit.body.args.waitSeconds)).toEqual([300, 255, 210, 165, 120, 75, 30]);
+    expect(new Set(held().map((hit) => hit.headers["idempotency-key"])).size).toBe(7);
+    expect(out).toMatchObject({ ok: true, status: "first-submission-waiting" });
+    expect(out.value).not.toHaveProperty("hostedWait");
+    expect(JSON.stringify(out)).not.toContain(notice);
+    expect(out.hint).toContain("This call waited 300 s reading the platform's first-submission record of acme/web: waiting.");
+
+    const done = { ok: true, command: "extension_submit", status: "first-submission-done", value: { action: "first-submission", store: "edge", project: "acme/web", state: "done" }, hint: "Partner Center took it for review." };
+    const settled = laneOf([waiting(), waiting(), done]);
+
+    expect(await forwarded("extension_submit", ask)).toMatchObject({ ok: true, status: "first-submission-done", hint: "Partner Center took it for review." });
+    expect(settled()).toHaveLength(3);
+
+    const cutShort = laneOf([waiting(), new Response(JSON.stringify({ code: "FORWARD_LANE_CLOSED", message: "The lane is off." }), { status: 403 })]);
+    const ended = await forwarded("extension_submit", ask);
+
+    expect(cutShort()).toHaveLength(2);
+    expect(ended).toMatchObject({ ok: true, status: "first-submission-waiting" });
+    expect(ended.value).not.toHaveProperty("hostedWait");
+    expect(ended.warnings).toEqual([expect.stringMatching(/^This call waited 90 s of the 300 s asked and ended early: the platform (refused|did not answer) the next read/)]);
+  });
+
   it("1202: sends a submit the lane held before its upload once more, in a fresh call under a new key with the checked mark", async () => {
     const SUBMIT = { browsers: ["firefox"], buildSha: "701792e", dryRun: false, approvalId: "apr_1202", project: "acme/web", waitSeconds: 300 };
     const memory = { "submit-prechecked": [["https://www.extension.dev\nfirefox\n701792e", { modes: { firefox: "listed" }, warnings: [] }]] };
