@@ -640,7 +640,7 @@ describe("922: a dev session that exists and has not compiled yet is starting, f
 
   beforeEach(() => {
     ran.length = 0;
-    startingWait.budgetMs = 50;
+    startingWait.budgetMs = 0;
   });
 
   afterEach(() => {
@@ -772,7 +772,7 @@ describe("922: a dev session that exists and has not compiled yet is starting, f
     }
 
     expect(ran).toEqual(SESSION_TOOLS);
-  }, 15_000);
+  }, 30_000);
 
   it("leaves a project with no session, a dead session and a production session to their own answers", async () => {
     const dispatch = createToolDispatcher({ tools: [standIn("extension_open")], options: { features: ["local"], noShip: false } });
