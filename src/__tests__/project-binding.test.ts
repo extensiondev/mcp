@@ -23,6 +23,7 @@ import { storeMdFileOf } from "../lib/submit-facts";
 import { loginForPath, pathIdentity, serverLogins } from "../lib/path-project";
 import { PLATFORM_KERNEL_HOOKS, installPlatformKernelHooks } from "../lib/platform-kernel-hooks";
 import { forwardable } from "../lib/hosted-forwarder";
+import { outcomeClock } from "../lib/outcome-clock";
 import { GUIDED_KEY_PAGES, guideStoreConnect, guidedConnectRuntime, launchGuidedBrowser, type GuidedConnectRuntime, type LaunchPlan } from "../lib/guided-connect";
 import { guidedCopy } from "../lib/guided-copy-build";
 import { endGuidedWindow, runningOwner, type GuidedProcess } from "../lib/guided-window-end";
@@ -646,9 +647,20 @@ describe("the guided store connect opens the MCP's own browser with extension.de
     };
   }
 
+  let clock = 0;
+
   beforeEach(() => {
     launches = [];
     asked = [];
+    clock = 1_000_000;
+    vi.spyOn(outcomeClock, "now").mockImplementation(() => clock);
+    vi.spyOn(outcomeClock, "sleep").mockImplementation(async (ms) => {
+      clock += ms;
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("verifies a CRX3 by its signed id and refuses another item, a tampered archive and a non-CRX", () => {
@@ -1036,6 +1048,29 @@ describe("the guided store connect opens the MCP's own browser with extension.de
     const free = await guided("cezaraugusto", accounts(null));
     expect(free.status).toBe("workspace-connect-guided");
     expect(free.value).not.toHaveProperty("storeAccount");
+    expect(free.value.waited).toEqual({ seconds: 180, readFrom: `${API}/api/workspaces/cezaraugusto/store-accounts`, read: "not connected yet" });
+    expect(free.value.sayToPerson).not.toContain("Tell me when");
+    expect(free.hint).toContain(`This call waited 180 s, reading ${API}/api/workspaces/cezaraugusto/store-accounts every 5 s: Edge Add-ons is not connected yet.`);
+
+    let reads = 0;
+    const arriving = runtime("edge", (url) => {
+      if (url !== `${API}/api/workspaces/cezaraugusto/store-accounts`) return new Response("", { status: 404 });
+
+      reads += 1;
+
+      return Response.json({ workspace: "cezaraugusto", storeAccounts: { edge: reads >= 3 ? account : null } });
+    });
+    const launchedBefore = launches.length;
+    const landed = await guided("cezaraugusto", arriving);
+
+    expect(launches).toHaveLength(launchedBefore + 1);
+    expect(landed).toMatchObject({ status: "workspace-store-connected", value: { account: { connectedAs: "Rebecca T" }, guidedBrowser: { opened: true }, waited: { seconds: 10, read: "connected" }, nextStep: { kind: "done" } } });
+    expect(landed.value.sayToPerson).toBe("Edge Add-ons is connected for cezaraugusto as Rebecca T.");
+    expect(landed.hint).toContain(`Read cezaraugusto's store accounts at ${API}/api/workspaces/cezaraugusto/store-accounts after 10 s of waiting in this call: Edge Add-ons is connected as Rebecca T`);
+
+    const now = JSON.parse(await guideStoreConnect(workspaceConnectAnswer("extension_submit", "cezaraugusto", ["edge"], API), { browsers: ["edge"], api: API, waitSeconds: 0 }, accounts(null)));
+    expect(now.status).toBe("workspace-connect-guided");
+    expect(now.value).not.toHaveProperty("waited");
 
     const unread = await guided("cezaraugusto", runtime("edge", () => new Response("", { status: 503 })));
     expect(unread).toMatchObject({ status: "workspace-connect-guided", value: { storeAccount: { read: false, reason: "the platform answered 503" } } });
@@ -1229,6 +1264,8 @@ describe("the guided store connect opens the MCP's own browser with extension.de
         expect(out.value.sayToPerson).not.toContain("the person presses Publish");
         expect(out.value.sayToPerson).toContain("Hidden");
         expect(out.hint).toContain(`extension_approvals_request {act: "extension_submit", args: {action: "first-submission", store: "edge", project: "${WORKSPACE}/rebeccat"}}`);
+        expect(out.hint).toContain(`without waiting for their word, call extension_submit {action: "first-submission", store: "edge", project: "${WORKSPACE}/rebeccat", waitSeconds: 300}`);
+        expect(out.hint).not.toContain("When they say");
       });
 
       it("watches its own guided window for the panel's image request once the window opens (ledger 1171)", async () => {
@@ -1262,11 +1299,15 @@ describe("the guided store connect opens the MCP's own browser with extension.de
         expect(fresh.value.sayToPerson).toContain("presses Create once");
         expect(fresh.value.sayToPerson).toContain("never presses Publish on App Privacy");
         expect(fresh.hint).not.toContain("extension_approvals_request {act: \"extension_submit\", args: {action: \"first-submission\"");
+        expect(fresh.hint).toContain(`without waiting for their word, call extension_submit {action: "first-submission", store: "safari", project: "${WORKSPACE}/rebeccat", waitSeconds: 300}`);
+        expect(fresh.hint).not.toContain("When they say");
 
         const made = JSON.parse((await guideFirstListing(safari("https://appstoreconnect.apple.com/apps/1234567890/distribution/privacy"), { api: PROD }, bound([])))!);
 
         expect(made.value.appStoreConnectPage).toBe("https://appstoreconnect.apple.com/apps/1234567890/distribution/privacy");
         expect(made.value.sayToPerson).not.toContain("presses Create");
+        expect(made.hint).toContain("The project already holds the app record 1234567890.");
+        expect(made.hint).not.toContain("waitSeconds");
       });
 
       it("leaves every other answer as the platform gave it and opens nothing", async () => {

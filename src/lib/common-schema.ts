@@ -81,7 +81,7 @@ const ACT_OMITTED = `${WAIT_SECONDS_DEFAULT}, no wait for the approval`;
 
 export const ACT_WAIT_SECONDS = waitSecondsInput(ACT_WAITS_FOR, ACT_OMITTED);
 
-export const SUBMIT_WAIT_SECONDS = waitSecondsInput(ACT_WAITS_FOR, `${ACT_OMITTED}; status, connect, first-submission: 0`);
+export const SUBMIT_WAIT_SECONDS = waitSecondsInput(ACT_WAITS_FOR, `${ACT_OMITTED}; status, connect, first-submission: 0; a guided connect: ${WAIT_SECONDS_DEFAULT}`);
 
 export const API_BASE = {
   type: "string",

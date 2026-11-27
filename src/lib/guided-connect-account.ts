@@ -41,6 +41,10 @@ function nullableText(value: unknown): string | null {
   return text(value) || null;
 }
 
+export function storeAccountsUrl(workspace: string, api?: string): string {
+  return `${mcpOrigins(api).www}/api/workspaces/${encodeURIComponent(workspace)}/store-accounts`;
+}
+
 /* @invariant A GUIDED CONNECT READS THE WORKSPACE'S STORE ACCOUNTS BEFORE IT
  * OPENS ANYTHING (MCP ledger 1120). A store the workspace already holds is
  * answered with who connected it, since when and its last check, and no
@@ -53,7 +57,7 @@ export async function readStoreAccount(options: { workspace: string; store: stri
   if (!token) return { unread: `no login for ${options.workspace} is on this machine` };
 
   try {
-    const res = await withoutRedirects(options.fetchImpl)(`${mcpOrigins(options.api).www}/api/workspaces/${encodeURIComponent(options.workspace)}/store-accounts`, {
+    const res = await withoutRedirects(options.fetchImpl)(storeAccountsUrl(options.workspace, options.api), {
       headers: { authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(10_000),
     });
@@ -126,6 +130,39 @@ export function connectedAnswer(command: string, connect: { workspace: string; p
       `No window was opened: ${workspace} already holds an account for ${name}.`,
       project ? `${project} uses it unless it holds a key of its own.` : "",
       `Tell the person: "${say}" Only when they ask for a new key, call ${replaceCall(workspace, store)}.`,
+    ].filter(Boolean).join(" "),
+  });
+}
+
+export function waitedConnectedAnswer(command: string, connect: { workspace: string; project: string; store: string; url: string; api?: string }, account: StoreAccountView, seconds: number): string {
+  const { workspace, project, store, url } = connect;
+  const name = storeLabel(store);
+  const who = account.connectedAs ? ` as ${account.connectedAs}` : "";
+  const readFrom = storeAccountsUrl(workspace, connect.api);
+  const failed = account.healthy === false;
+  const say = failed
+    ? `${name} took the key for ${workspace}${who}, and its check failed${account.reason ? `: ${account.reason}` : ""}. Ask to replace it to try a new key.`
+    : `${name} is connected for ${workspace}${who}.`;
+
+  return envelope({
+    ok: true,
+    command,
+    status: CONNECTED_STATUS,
+    value: {
+      workspace,
+      ...(project ? { project } : {}),
+      store,
+      storeAccountsUrl: url,
+      account,
+      guidedBrowser: { opened: true },
+      waited: { seconds, readFrom, read: "connected" },
+      sayToPerson: say,
+      nextStep: nextStep(failed ? "connect" : "done", say, url),
+    },
+    hint: [
+      `Read ${workspace}'s store accounts at ${readFrom} after ${seconds} s of waiting in this call: ${name} is connected${who}${account.connectedAt ? ` since ${shownTime(account.connectedAt)}` : ""}.`,
+      project ? `${project} uses it unless it holds a key of its own.` : "",
+      `Tell the person: "${say}"${failed ? ` Only when they ask for a new key, call ${replaceCall(workspace, store)}.` : ""}`,
     ].filter(Boolean).join(" "),
   });
 }

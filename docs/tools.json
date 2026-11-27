@@ -3057,7 +3057,7 @@
           "name": "connectSession",
           "type": "string",
           "required": false,
-          "description": "connect: value.connectSession to wait on with waitSeconds."
+          "description": "connect: value.connectSession to wait on."
         },
         {
           "name": "replace",
@@ -3069,7 +3069,7 @@
           "name": "waitSeconds",
           "type": "number",
           "required": false,
-          "description": "Seconds to wait for the result (with approvalId, the approval), 0 to 600 (omitted: 180, no wait for the approval; status, connect, first-submission: 0); the hosted server waits at most 45 and says so in warnings."
+          "description": "Seconds to wait for the result (with approvalId, the approval), 0 to 600 (omitted: 180, no wait for the approval; status, connect, first-submission: 0; a guided connect: 180); the hosted server waits at most 45 and says so in warnings."
         }
       ]
     },

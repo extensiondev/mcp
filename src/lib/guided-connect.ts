@@ -15,7 +15,7 @@ import { findManagedBinary, findSystemBinary } from "../tools/detect-browsers";
 import { autoOpenBlock, openableUrl } from "./approval-open";
 import { credentialsPath } from "./credentials";
 import { envelope, isEnvelope } from "./envelope";
-import { connectedAnswer, readStoreAccount, replacing, workspaceToken } from "./guided-connect-account";
+import { connectedAnswer, readStoreAccount, replacing, storeAccountsUrl, waitedConnectedAnswer, workspaceToken, type StoreAccountView } from "./guided-connect-account";
 import { spawnExtensionCli } from "./exec";
 import {
   guidedBrowserLabel,
@@ -33,6 +33,7 @@ import { copiedBuild, guidedCopy, profileRanOtherBuild, startBuild } from "./gui
 import { endGuidedWindow, launchWord, runningOwner } from "./guided-window-end";
 import { headlessLaunch } from "./launch-flags";
 import { mcpOrigins } from "./origins";
+import { outcomeClock, waitBound } from "./outcome-clock";
 import { withoutRedirects } from "./platform-fetch";
 import { isRow, text } from "./row";
 import { nextStep, storeLabel } from "./store-connection";
@@ -62,6 +63,8 @@ const LAUNCH_SECONDS = 15 * 60;
 const LAUNCH_FILE = "launch.json";
 
 export const LAUNCH_FILE_KEEP_MS = 120_000;
+
+export const CONNECT_POLL_MS = 5_000;
 
 function scheduleLater(ms: number, run: () => void): void {
   const timer = setTimeout(run, ms);
@@ -386,6 +389,37 @@ function readBack(workspace: string): string {
   return `extension_workspace_read {action:"info", workspace:"${workspace}", include:["storeAccounts"]}`;
 }
 
+type ConnectWait = { account: StoreAccountView; seconds: number } | { seconds: number; last: string };
+
+/* @invariant A GUIDED CONNECT WAITS OUT THE PERSON'S PRESSES ITSELF (MCP
+ * ledger 1293). Once the window opens on a store the workspace's accounts
+ * were read for, the call reads those accounts again every few seconds for
+ * waitSeconds (the shared bound: omitted is the default, 0 answers at once),
+ * and answers connected with what it read and where as soon as the store
+ * shows up, so the agent never asks the person to say when. A first read
+ * that failed, or no login on this machine, is not waited on, since nothing
+ * could be read.
+ */
+async function waitForAccount(options: { workspace: string; store: string; api?: string; seconds: number; runtime: GuidedConnectRuntime }): Promise<ConnectWait> {
+  const now = () => outcomeClock.now();
+  const started = now();
+  const deadline = started + options.seconds * 1000;
+  let last = "not connected yet";
+
+  while (now() < deadline) {
+    await outcomeClock.sleep(Math.min(CONNECT_POLL_MS, Math.max(0, deadline - now())));
+
+    const read = await readStoreAccount({ workspace: options.workspace, store: options.store, api: options.api, fetchImpl: options.runtime.fetch });
+    const seconds = Math.round((now() - started) / 1000);
+
+    if ("account" in read && read.account) return { account: read.account, seconds };
+
+    last = "unread" in read ? `not read (${read.unread})` : "not connected yet";
+  }
+
+  return { seconds: Math.round((now() - started) / 1000), last };
+}
+
 function plainAnswer(parsed: { command: string; value: Args; hint: string }, note: string): string {
   return envelope({
     ok: true,
@@ -516,8 +550,18 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
   const signIn = landing.signedIn ? "" : "sign in to extension.dev once, then ";
   const say = onKeyPage && keyPage
     ? `In front, the ${label} window shows the ${keyPage.page}; sign in to Partner Center there if it asks. Within a few seconds the extension.dev tools panel shows on that page (the ${workspace} console signs in by itself in a background tab) with one button to press, "Create a new API key and connect": it presses Partner Center's "New API key" for you, names the key extension.dev if asked, and sends the Client ID and the new key to the console, which checks them with ${storeName} before it keeps them, so no key passes through this chat. If the panel asks for "Turn on API" first, press that on the page. ${storeName} is connected only when the panel says so.`
-    : `In the ${label} window that just opened on the ${workspace} Store accounts page, ${signIn}follow the extension.dev tools panel: it takes you to the ${storeName} key page, captures the values when you press it and hands them to the console, so no key passes through this chat. Tell me when the page says connected.`;
+    : `In the ${label} window that just opened on the ${workspace} Store accounts page, ${signIn}follow the extension.dev tools panel: it takes you to the ${storeName} key page, captures the values when you press it and hands them to the console, so no key passes through this chat. This chat reads the connection from extension.dev by itself.`;
   const openedWord = launchWord(launched);
+  const api = text(args.api) || undefined;
+  const seconds = store && read && "account" in read ? waitBound(args.waitSeconds) : 0;
+  const waited = seconds > 0 ? await waitForAccount({ workspace, store, api, seconds, runtime }) : null;
+
+  if (waited && "account" in waited) return waitedConnectedAnswer(parsed.command, { workspace, project, store, url: plainUrl, api }, waited.account, waited.seconds);
+
+  const readFrom = storeAccountsUrl(workspace, api);
+  const waitedLine = waited
+    ? `This call waited ${waited.seconds} s, reading ${readFrom} every ${CONNECT_POLL_MS / 1000} s: ${storeName} is ${waited.last}. To read it again without opening anything, call ${readBack(workspace)}.`
+    : `Call ${readBack(workspace)} to read whether ${storeName} is connected, or pass waitSeconds to have this call wait for it.`;
 
   return envelope({
     ok: true,
@@ -533,6 +577,7 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
       signedIn: landing.signedIn,
       ...(onKeyPage && keyPage ? { landedOn: keyPage.url } : {}),
       ...accountState,
+      ...(waited ? { waited: { seconds: waited.seconds, readFrom, read: waited.last } } : {}),
       sayToPerson: say,
       nextStep: nextStep("connect", say, plainUrl),
     },
@@ -542,7 +587,8 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
       extension.source === "bundled" ? extension.note : "",
       landing.note,
       project ? `${project} uses the workspace's ${storeName} account once it is connected, unless it holds a key of its own.` : "",
-      `Tell the person: "${say}" When they say done, call ${readBack(workspace)} and report whether ${storeName} is connected.`,
+      `Tell the person: "${say}"`,
+      waitedLine,
     ].filter(Boolean).join(" "),
   });
 }

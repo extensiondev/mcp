@@ -51,6 +51,19 @@ export function firstListingSay(args: { label: string; productId: string; slug: 
   return `The ${args.label} window opened on the ${args.slug} Edge page of the console. It needs a full extension.dev sign-in: sign in there if it asks, and if the page says the window was signed in by your MCP, press "Sign in to continue" there, which signs in fully and comes back to the same page, since that quick sign-in only connects store accounts. Once the page loads signed in, it opens ${args.productId ? `the Partner Center product ${args.productId}` : "the Edge overview in Partner Center"} with the extension.dev tools panel; sign in to Partner Center there if it asks. The panel has one button: it ${create}uploads the platform's verified package of the latest build after checking its SHA-256, sets Availability to Hidden (the least public option), fills Properties, Privacy and Store listings from the project's store data with its images, and presses each page's Save only. Once Partner Center marks every page complete, the panel presses Publish once, and Partner Center's confirm, only after a workspace owner's extension.dev approval of this exact act reads approved: the first submission of this package at Hidden visibility. Until then it stops with a checklist and names the approval page. Once Partner Center shows the product in review, the panel marks the first submission on the project. If no panel shows, ask the person what the console page says.`;
 }
 
+function firstSubmissionWait(store: string, slug: string): string {
+  return `extension_submit {action: "first-submission", store: "${store}", project: "${slug}", waitSeconds: 300}`;
+}
+
+function safariNext(slug: string, productId: string): string {
+  const submit = `extension_approvals_request {act: "extension_submit", args: {action: "submit", project: "${slug}", browsers: ["safari"], buildSha: "<the build's sha>"}}`;
+  const privacy = "App Privacy's Publish is not readable through any App Store Connect API, so the person approves the submit once they have pressed it.";
+
+  return productId
+    ? `The project already holds the app record ${productId}. ${privacy} Ask the owner's approval of the submit now with ${submit}.`
+    : `Then, without waiting for their word, call ${firstSubmissionWait("safari", slug)}: it waits until the platform reads the app record New App creates (the app's Apple ID saved to the project) and answers at once when it does. ${privacy} Once the record is read, ask the owner's approval of the submit with ${submit}.`;
+}
+
 /* @invariant A FIRST EDGE OR APP STORE LISTING ENDS IN THE GUIDED BROWSER, NEVER IN A
  * DEFAULT BROWSER WITHOUT EXTENSION.DEV TOOLS, AND NEVER ON THE MCP'S QUICK
  * SIGN-IN. That handoff session reaches store-account connects only, so the
@@ -125,9 +138,9 @@ export async function guideFirstListing(result: string, args: Args, runtime: Gui
       `${launchWord(opened.launched)} ${opened.choice.why} Profile: ${opened.profileDir}.`,
       opened.extension.source === "bundled" ? opened.extension.note : "",
       ...(apple
-        ? [`Tell the person: "${say}" Never press Create or Publish for them. When they say App Privacy is published, call extension_submit {action: "first-submission", store: "safari", project: "${slug}"} to read the app record, then submit the build through the App Store Connect API with extension_approvals_request {act: "extension_submit", args: {action: "submit", project: "${slug}", browsers: ["safari"], buildSha: "<the build's sha>"}}.`]
+        ? [`Tell the person: "${say}" Never press Create or Publish for them.`, safariNext(slug, start.productId)]
         : [`Now call extension_approvals_request {act: "extension_submit", args: {action: "first-submission", store: "edge", project: "${slug}"}}, which asks the owner's approval of the Publish press and answers its approvalUrl; never approve it yourself and never press Publish for the person.`,
-      `Tell the person: "${say}" and give them the approvalUrl. When they say it is in review, call extension_submit {action: "first-submission", store: "edge", project: "${slug}", waitSeconds: 300}.`]),
+      `Tell the person: "${say}" and give them the approvalUrl. Then, without waiting for their word, call ${firstSubmissionWait("edge", slug)}: it waits while the platform reads Partner Center and answers done with the store's own word once the product is in review; while it answers waiting, call it again.`]),
     ].filter(Boolean).join(" "),
   });
 }

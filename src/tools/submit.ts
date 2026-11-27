@@ -171,7 +171,7 @@ export const schema = {
       },
       connectSession: {
         type: "string",
-        description: "connect: value.connectSession to wait on with waitSeconds.",
+        description: "connect: value.connectSession to wait on.",
       },
       replace: {
         type: "boolean",
