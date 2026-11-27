@@ -399,13 +399,13 @@ describe("1141: no listed description or instruction carries a URL or a path on 
   });
 });
 
+const SRC = join(__dirname, "..");
+const sources = (dir: string): string[] =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+    entry.isDirectory() ? (entry.name === "__tests__" ? [] : sources(join(dir, entry.name))) : entry.name.endsWith(".ts") ? [join(dir, entry.name)] : [],
+  );
 
 describe("1198: every tool an answer tells the agent to call is one its reader serves", () => {
-  const SRC = join(__dirname, "..");
-  const sources = (dir: string): string[] =>
-    readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
-      entry.isDirectory() ? (entry.name === "__tests__" ? [] : sources(join(dir, entry.name))) : entry.name.endsWith(".ts") ? [join(dir, entry.name)] : [],
-    );
   const SERVED = new Set(Object.keys(TOOL_POLICY));
   const BEFORE_SPLIT = new Set(Object.keys(TOOL_POLICY).filter((name) => !TOOL_TWINS.some((twin) => twin.name === name)));
   const called = (text: string): string[] => [...text.matchAll(/\b(extension_[a-z_]+) [{(]/g)].map((match) => match[1]!);
@@ -438,22 +438,18 @@ describe("1198: every tool an answer tells the agent to call is one its reader s
   });
 });
 
-describe("1296: the default server names no extras tool in a description or a hint", () => {
-  const EXTRAS = Object.keys(TOOL_POLICY).filter((name) => TOOL_POLICY[name]!.group === "extras");
-  const listed = (name: string): boolean => isToolListed(name, DEFAULT_SERVER_OPTIONS);
-  const extrasNamed = (text: string): string[] => [...new Set(text.match(/\bextension_[a-z_]+\b/g) ?? [])].filter((name) => EXTRAS.includes(name));
-  const SRC = join(__dirname, "..");
-  const sources = (dir: string): string[] =>
-    readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
-      entry.isDirectory() ? (entry.name === "__tests__" ? [] : sources(join(dir, entry.name))) : entry.name.endsWith(".ts") ? [join(dir, entry.name)] : [],
-    );
+describe("1296 and 1297: the default server names no tool it does not list in a description or a hint", () => {
+  const listed = (name: string): boolean => isToolListed(name, DEFAULT_SERVER_OPTIONS) || (TOOL_POLICY[name]?.aliasOf ?? []).some((twin) => isToolListed(twin, DEFAULT_SERVER_OPTIONS));
+  const UNLISTED = Object.keys(TOOL_POLICY).filter((name) => !listed(name));
+  const extrasNamed = (text: string): string[] => [...new Set(text.match(/\bextension_[a-z_]+\b/g) ?? [])].filter((name) => UNLISTED.includes(name));
 
   it("lists descriptions and parameter descriptions that name only listed tools, and leaves them whole with extras on", () => {
     const strays = listedTools(ALL_TOOLS, DEFAULT_SERVER_OPTIONS).flatMap((tool) => extrasNamed(JSON.stringify({ d: tool.description, p: tool.inputSchema })).map((name) => `${tool.name}: ${name}`));
     const all = { features: ["local", "platform", "extras"] as Array<"local" | "platform" | "extras">, noShip: false };
 
-    expect(EXTRAS.every((name) => !listed(name))).toBe(true);
+    expect(UNLISTED).toEqual(expect.arrayContaining(["extension_wait", "extension_storage_read", "extension_builds_read", "extension_publish", "extension_source_read"]));
     expect(strays).toEqual([]);
+    expect(listedTools(ALL_TOOLS, DEFAULT_SERVER_OPTIONS).flatMap((tool) => [...JSON.stringify({ d: tool.description, p: tool.inputSchema }).matchAll(/"(?:d|description)":"\s*"/g)].map(() => tool.name))).toEqual([]);
     expect(listedTools(ALL_TOOLS, all).map((tool) => tool.description)).toEqual(ALL_TOOLS.filter((tool) => isToolListed(tool.schema.name, all)).map((tool) => tool.schema.description));
     expect(listedTools(ALL_TOOLS, DEFAULT_SERVER_OPTIONS).find((tool) => tool.name === "extension_dev")?.description).toContain("extension_open shows a surface and extension_stop ends the session.");
   });
@@ -473,6 +469,6 @@ describe("1296: the default server names no extras tool in a description or a hi
     const said = sources(SRC).flatMap((file) => readFileSync(file, "utf8").split("\n").filter((line) => /["`'][^"`']*\bextension_[a-z_]+\b[^"`']* [^"`']*["`']/.test(line) && extrasNamed(line).length));
 
     expect(said.length).toBeGreaterThan(50);
-    expect(said.flatMap((line) => extrasNamed(withoutUnlistedTools(line, "extension_open", listed)))).toEqual([]);
+    expect(said.flatMap((line) => extrasNamed(withoutUnlistedTools(line, "extension_open", DEFAULT_SERVER_OPTIONS)))).toEqual([]);
   });
 });

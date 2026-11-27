@@ -6,7 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { TOOL_POLICY } from "./tool-policy";
+import { HOSTED_FEATURE_GROUP, TOOL_POLICY, isToolListed, type ServerOptions } from "./tool-policy";
+import { fenceUntrusted } from "./untrusted-fence";
 
 import type { ToolFrame } from "./server-reload";
 
@@ -42,14 +43,20 @@ const RULES: Rule[] = [
   [new RegExp(`\\b${WAIT_TOOL}\\b`, "g"), () => "extension_doctor"],
 ];
 
-type Listed = (name: string) => boolean;
+const POLICY_TOOLS = (): string[] => Object.keys(TOOL_POLICY).sort((a, b) => b.length - a.length);
 
-const EXTRAS_TOOLS = (): string[] =>
-  Object.keys(TOOL_POLICY)
-    .filter((name) => TOOL_POLICY[name]!.group === "extras")
-    .sort((a, b) => b.length - a.length);
+const callable = (name: string, options: ServerOptions): boolean => isToolListed(name, options) || (TOOL_POLICY[name]?.aliasOf ?? []).some((twin) => isToolListed(twin, options));
 
-const unlistedExtras = (listed: Listed): string[] => EXTRAS_TOOLS().filter((name) => !listed(name));
+const unlistedTools = (options: ServerOptions): string[] => POLICY_TOOLS().filter((name) => !callable(name, options));
+
+function hiddenBy(name: string, options: ServerOptions): { word: string; how: string } {
+  const group = TOOL_POLICY[name]!.group;
+
+  if (group === HOSTED_FEATURE_GROUP) return { word: "hosted", how: "only the hosted MCP server lists it" };
+  if (!options.features.includes(group)) return { word: group, how: `add ${group} to --features in this server's MCP config to list it` };
+
+  return { word: "shipping", how: "this server runs with --no-ship, which hides it" };
+}
 
 const toolPattern = (names: string[]): RegExp => new RegExp(`\\b(?:${names.join("|")})\\b`, "g");
 
@@ -63,44 +70,60 @@ export function withoutUnlistedWait(text: string, command: string): string {
   return RULES.reduce((said, [pattern, replace]) => said.replace(pattern, (match: string, ...groups: unknown[]) => replace(command, match, ...(groups.filter((group) => typeof group === "string" || group === undefined) as string[]))), text);
 }
 
-export function withoutUnlistedTools(text: string, command: string, listed: Listed): string {
-  const waited = listed(WAIT_TOOL) ? text : withoutUnlistedWait(text, command);
-  const unlisted = unlistedExtras(listed);
+export function withoutUnlistedTools(text: string, command: string, options: ServerOptions): string {
+  const waited = isToolListed(WAIT_TOOL, options) ? text : withoutUnlistedWait(text, command);
+  const unlisted = unlistedTools(options);
   if (!names(waited, unlisted)) return waited;
 
-  let told = false;
+  const told = new Set<string>();
 
   return waited.replace(toolPattern(unlisted), (name: string, offset: number) => {
-    const said = `the extras ${shortName(name)} tool${told ? "" : " (add extras to --features in this server's MCP config to list it)"}`;
-    told = true;
+    const { word, how } = hiddenBy(name, options);
+    const said = `the ${word} ${shortName(name)} tool${told.has(how) ? "" : ` (${how})`}`;
+    told.add(how);
 
     return /(?:^|[.!?:]\s|"|\n)$/.test(waited.slice(Math.max(0, offset - 2), offset)) ? `T${said.slice(1)}` : said;
   });
 }
 
-function proseWithoutUnlisted(value: unknown, command: string, listed: Listed): unknown {
-  if (typeof value === "string") return value.includes(" ") ? withoutUnlistedTools(value, command, listed) : value;
-  if (Array.isArray(value)) return value.map((item) => proseWithoutUnlisted(item, command, listed));
+function proseWithoutUnlisted(value: unknown, command: string, options: ServerOptions): unknown {
+  if (typeof value === "string") return value.includes(" ") ? withoutUnlistedTools(value, command, options) : value;
+  if (Array.isArray(value)) return value.map((item) => proseWithoutUnlisted(item, command, options));
   if (!value || typeof value !== "object") return value;
 
-  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, proseWithoutUnlisted(item, command, listed)]));
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, proseWithoutUnlisted(item, command, options)]));
 }
 
-function answerWithoutUnlisted(text: string, command: string, listed: Listed): string {
+function answerWithoutUnlisted(text: string, command: string, options: ServerOptions): string {
   try {
     const parsed: unknown = JSON.parse(text);
 
-    return parsed && typeof parsed === "object" ? JSON.stringify(proseWithoutUnlisted(parsed, command, listed)) : text;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return text;
+    if (!("untrustedEnd" in parsed)) return JSON.stringify(proseWithoutUnlisted(parsed, command, options));
+
+    const { untrusted, untrustedEnd: _end, ...fenced } = parsed as Record<string, unknown> & { untrusted?: { boundary?: unknown } };
+    const error = fenced.error && typeof fenced.error === "object" && !Array.isArray(fenced.error) ? (fenced.error as Record<string, unknown>) : null;
+    const boundary = typeof untrusted?.boundary === "string" ? untrusted.boundary : null;
+    if (!boundary) return text;
+
+    const rewritten = {
+      ...fenced,
+      ...("hint" in fenced ? { hint: proseWithoutUnlisted(fenced.hint, command, options) } : {}),
+      ...("warnings" in fenced ? { warnings: proseWithoutUnlisted(fenced.warnings, command, options) } : {}),
+      ...(error && "hint" in error ? { error: { ...error, hint: proseWithoutUnlisted(error.hint, command, options) } } : {}),
+    };
+
+    return fenceUntrusted(JSON.stringify(rewritten), () => boundary);
   } catch {
     return text;
   }
 }
 
-export function frameWithoutUnlistedTools(frame: ToolFrame, command: string, listed: Listed): ToolFrame {
-  const unlisted = [...unlistedExtras(listed), ...(listed(WAIT_TOOL) ? [] : [WAIT_TOOL])];
-  if (!listed(command) || !frame.content.some((part) => typeof part.text === "string" && names(part.text, unlisted))) return frame;
+export function frameWithoutUnlistedTools(frame: ToolFrame, command: string, options: ServerOptions): ToolFrame {
+  const unlisted = [...unlistedTools(options), ...(isToolListed(WAIT_TOOL, options) ? [] : [WAIT_TOOL])];
+  if (!callable(command, options) || !frame.content.some((part) => typeof part.text === "string" && names(part.text, unlisted))) return frame;
 
-  return { ...frame, content: frame.content.map((part) => (typeof part.text === "string" ? { ...part, text: answerWithoutUnlisted(part.text, command, listed) } : part)) };
+  return { ...frame, content: frame.content.map((part) => (typeof part.text === "string" ? { ...part, text: answerWithoutUnlisted(part.text, command, options) } : part)) };
 }
 
 function splitTop(text: string, separator: string): string[] {
@@ -147,22 +170,24 @@ function listedSentence(sentence: string, unlisted: string[]): string | null {
   return clauses.length ? `${clauses.join("; ")}${end}` : null;
 }
 
-export function describedForListed(description: string, listed: Listed): string {
-  const unlisted = unlistedExtras(listed);
+export function describedForListed(description: string, options: ServerOptions): string {
+  const unlisted = unlistedTools(options);
   if (!names(description, unlisted)) return description;
 
-  return description
+  const kept = description
     .split(/(?<=[.!?]) (?=[A-Z]|extension_)/)
     .map((sentence) => listedSentence(sentence, unlisted))
     .filter((sentence): sentence is string => sentence !== null)
     .join(" ");
+
+  return kept.trim() ? kept : withoutUnlistedTools(description, "", options);
 }
 
-export function schemaForListed<T>(schema: T, listed: Listed): T {
-  if (Array.isArray(schema)) return schema.map((item) => (item && typeof item === "object" ? schemaForListed(item, listed) : item)) as T;
+export function schemaForListed<T>(schema: T, options: ServerOptions): T {
+  if (Array.isArray(schema)) return schema.map((item) => (item && typeof item === "object" ? schemaForListed(item, options) : item)) as T;
   if (!schema || typeof schema !== "object") return schema;
 
   return Object.fromEntries(
-    Object.entries(schema).map(([key, value]) => [key, key === "description" && typeof value === "string" ? describedForListed(value, listed) : value && typeof value === "object" ? schemaForListed(value, listed) : value]),
+    Object.entries(schema).map(([key, value]) => [key, key === "description" && typeof value === "string" ? describedForListed(value, options) : value && typeof value === "object" ? schemaForListed(value, options) : value]),
   ) as T;
 }

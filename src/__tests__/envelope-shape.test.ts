@@ -45,6 +45,10 @@ const RAW_SERIALIZER_ALLOWED = new Map<string, string>([
     "owns the wire form of an act frame: a tool that annotated the CLI's own frame hands it back through actFrameJson, so no tool hand-builds one",
   ],
   [
+    "lib/listed-tools.ts",
+    "re-serializes an envelope that envelope() already built, changing only the prose that names a tool this server does not list, so reframing it again would add deferred warnings twice",
+  ],
+  [
     "lib/hosted-forwarder.ts",
     "relays the envelope the hosted lane's own envelope() built, byte for byte, so the forwarded answer is the in-process answer; anything the lane sends that is not an envelope goes through envelope()",
   ],

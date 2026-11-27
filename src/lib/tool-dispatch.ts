@@ -126,8 +126,8 @@ export function listedTools(tools: ToolModule[], options: ServerOptions): Listed
     .filter((t) => isToolListed(t.schema.name, options))
     .map((t) => ({
       name: t.schema.name,
-      description: describedForListed(t.schema.description, (tool) => isToolListed(tool, options)),
-      inputSchema: schemaForListed(t.schema.inputSchema, (tool) => isToolListed(tool, options)),
+      description: describedForListed(t.schema.description, options),
+      inputSchema: schemaForListed(t.schema.inputSchema, options),
       ...(t.schema.outputSchema ? { outputSchema: t.schema.outputSchema } : {}),
       ...(t.title ? { title: t.title } : {}),
       ...(t.annotations ? { annotations: t.annotations } : {}),
@@ -313,7 +313,7 @@ export function createToolSurface(setup: ToolHandlerOptions): {
 
   const served = (name: string): boolean => toolMap.has(name) && isToolListed(name, options);
 
-  const listedWords = (frame: ToolFrame, command: string): ToolFrame => frameWithoutUnlistedTools(frame, command, (tool) => isToolListed(tool, options));
+  const listedWords = (frame: ToolFrame, command: string): ToolFrame => frameWithoutUnlistedTools(frame, command, options);
 
   const dispatchOnce = async (call: RebuiltCall): Promise<ToolFrame> => withStructuredContent(listedWords(aliasNoted(await withComposedRefusals(() => dispatched(call)), call, served, toolMap.get(call.name)?.schema.inputSchema), call.name), call.name);
 
