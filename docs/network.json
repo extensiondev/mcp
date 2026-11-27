@@ -163,6 +163,7 @@
     }
   ],
   "notReached": [
+    "appstoreconnect.apple.com",
     "blog.mozilla.org",
     "chrome.google.com",
     "code.extension.dev",

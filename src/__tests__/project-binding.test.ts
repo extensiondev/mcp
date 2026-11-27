@@ -26,7 +26,7 @@ import { forwardable } from "../lib/hosted-forwarder";
 import { GUIDED_KEY_PAGES, guideStoreConnect, guidedConnectRuntime, launchGuidedBrowser, type GuidedConnectRuntime, type LaunchPlan } from "../lib/guided-connect";
 import { guidedCopy } from "../lib/guided-copy-build";
 import { endGuidedWindow, runningOwner, type GuidedProcess } from "../lib/guided-window-end";
-import { PARTNER_CENTER_OVERVIEW, guideFirstListing } from "../lib/guided-first-listing";
+import { APP_STORE_CONNECT_APPS, PARTNER_CENTER_OVERVIEW, guideFirstListing } from "../lib/guided-first-listing";
 import { ATTACH_SLOTS, attachSlot, checkRequest, debugPortOf, serveAttachOnce, unpackedExtensionId, type AttachDriver, type CdpSession } from "../lib/guided-attach";
 import { headlessFromProcesses } from "../lib/guided-window";
 import { workspaceConnectAnswer } from "../lib/store-connection";
@@ -1247,6 +1247,26 @@ describe("the guided store connect opens the MCP's own browser with extension.de
         expect(out.value.partnerCenterPage).toBe(`https://partner.microsoft.com/dashboard/microsoftedge/${PRODUCT}/packages`);
         expect(out.value.sayToPerson).toContain(PRODUCT);
         expect(out.value.sayToPerson).not.toContain("Create new extension");
+      });
+
+      it("opens the guided App Store page on Apps, or on App Privacy once the app record exists, and never asks to approve a press (1277)", async () => {
+        prodSignIn();
+        const safari = (dashboardUrl: string) =>
+          firstSubmission("first-submission-waiting", { store: "safari", pageUrl: `https://console.extension.dev/${WORKSPACE}/rebeccat/submissions/safari`, dashboardUrl });
+        const fresh = JSON.parse((await guideFirstListing(safari("https://appstoreconnect.apple.com/apps"), { api: PROD }, bound([])))!);
+        const consolePage = `https://console.extension.dev/${WORKSPACE}/rebeccat/submissions/safari?guide=first-listing`;
+
+        expect(launches[0]!.url).toBe(consolePage);
+        expect(fresh).toMatchObject({ status: "first-listing-guided", value: { opened: true, landedOn: consolePage, appStoreConnectPage: APP_STORE_CONNECT_APPS } });
+        expect(fresh.value).not.toHaveProperty("partnerCenterPage");
+        expect(fresh.value.sayToPerson).toContain("presses Create once");
+        expect(fresh.value.sayToPerson).toContain("never presses Publish on App Privacy");
+        expect(fresh.hint).not.toContain("extension_approvals_request {act: \"extension_submit\", args: {action: \"first-submission\"");
+
+        const made = JSON.parse((await guideFirstListing(safari("https://appstoreconnect.apple.com/apps/1234567890/distribution/privacy"), { api: PROD }, bound([])))!);
+
+        expect(made.value.appStoreConnectPage).toBe("https://appstoreconnect.apple.com/apps/1234567890/distribution/privacy");
+        expect(made.value.sayToPerson).not.toContain("presses Create");
       });
 
       it("leaves every other answer as the platform gave it and opens nothing", async () => {

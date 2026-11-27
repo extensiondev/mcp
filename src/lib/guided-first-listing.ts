@@ -23,6 +23,22 @@ export const PARTNER_CENTER_OVERVIEW = "https://partner.microsoft.com/dashboard/
 
 const PRODUCT_IN_URL = /\/microsoftedge\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/|$)/i;
 
+export const APP_STORE_CONNECT_APPS = "https://appstoreconnect.apple.com/apps";
+
+const APP_IN_URL = /^https:\/\/appstoreconnect\.apple\.com\/apps\/(\d{6,12})(?:[/?#]|$)/i;
+
+export function appRecordStart(dashboardUrl: unknown): { url: string; productId: string } {
+  const productId = APP_IN_URL.exec(text(dashboardUrl))?.[1] ?? "";
+
+  return productId ? { url: `${APP_STORE_CONNECT_APPS}/${productId}/distribution/privacy`, productId } : { url: APP_STORE_CONNECT_APPS, productId: "" };
+}
+
+export function appRecordSay(args: { label: string; productId: string; slug: string }): string {
+  const create = args.productId ? "" : "opens New App, ticks macOS only, types the App Store name, primary language, the project's bundle ID and an SKU, presses Create once and saves the new app's Apple ID to the project's App Store settings (no paste), then ";
+
+  return `The ${args.label} window opened on the ${args.slug} App Store page of the console. It needs a full extension.dev sign-in: sign in there if it asks, and if the page says the window was signed in by your MCP, press "Sign in to continue" there, which signs in fully and comes back to the same page, since that quick sign-in only connects store accounts. Once the page loads signed in, it opens ${args.productId ? `App Privacy of the app ${args.productId}` : "Apps"} in App Store Connect with the extension.dev tools panel; sign in to App Store Connect there if it asks. The panel has one button: it ${create}answers App Privacy's data collection question only when STORE.md says the app collects no data, and presses Save. It never presses Publish on App Privacy: the person does, once the answers read right. App Store Connect's API cannot create an app or answer App Privacy, so these are the only steps on the website; every version then goes to review through the API. If no panel shows, ask the person what the console page says.`;
+}
+
 export function firstListingStart(dashboardUrl: unknown): { url: string; productId: string } {
   const productId = PRODUCT_IN_URL.exec(text(dashboardUrl))?.[1]?.toLowerCase() ?? "";
 
@@ -35,7 +51,7 @@ export function firstListingSay(args: { label: string; productId: string; slug: 
   return `The ${args.label} window opened on the ${args.slug} Edge page of the console. It needs a full extension.dev sign-in: sign in there if it asks, and if the page says the window was signed in by your MCP, press "Sign in to continue" there, which signs in fully and comes back to the same page, since that quick sign-in only connects store accounts. Once the page loads signed in, it opens ${args.productId ? `the Partner Center product ${args.productId}` : "the Edge overview in Partner Center"} with the extension.dev tools panel; sign in to Partner Center there if it asks. The panel has one button: it ${create}uploads the platform's verified package of the latest build after checking its SHA-256, sets Availability to Hidden (the least public option), fills Properties, Privacy and Store listings from the project's store data with its images, and presses each page's Save only. Once Partner Center marks every page complete, the panel presses Publish once, and Partner Center's confirm, only after a workspace owner's extension.dev approval of this exact act reads approved: the first submission of this package at Hidden visibility. Until then it stops with a checklist and names the approval page. Once Partner Center shows the product in review, the panel marks the first submission on the project. If no panel shows, ask the person what the console page says.`;
 }
 
-/* @invariant A FIRST EDGE LISTING ENDS IN THE GUIDED BROWSER, NEVER IN A
+/* @invariant A FIRST EDGE OR APP STORE LISTING ENDS IN THE GUIDED BROWSER, NEVER IN A
  * DEFAULT BROWSER WITHOUT EXTENSION.DEV TOOLS, AND NEVER ON THE MCP'S QUICK
  * SIGN-IN. That handoff session reaches store-account connects only, so the
  * project page that offers the guided session refuses it. The MCP's own
@@ -62,17 +78,18 @@ export async function guideFirstListing(result: string, args: Args, runtime: Gui
   const [workspace = "", project = ""] = slug.split("/");
   const pageUrl = text(value.pageUrl);
 
-  if (value.action !== "first-submission" || value.store !== "edge" || !workspace || !project || !pageUrl) return null;
+  if (value.action !== "first-submission" || (value.store !== "edge" && value.store !== "safari") || !workspace || !project || !pageUrl) return null;
   if (status !== "first-submission-to-do" && status !== "first-submission-waiting") return null;
 
-  const start = firstListingStart(value.dashboardUrl);
+  const apple = value.store === "safari";
+  const start = apple ? appRecordStart(value.dashboardUrl) : firstListingStart(value.dashboardUrl);
   const guideQuery = `?guide=${FIRST_LISTING_GUIDE}`;
   const opened = await openGuided({ workspace, next: null, plainUrl: `${pageUrl.split("?")[0]}${guideQuery}`, storePage: null, api: text(args.api) || undefined, runtime });
 
   if ("install" in opened || !opened.opened) {
     const note = "install" in opened
       ? `No guided window was opened: ${opened.install.why} It is not installed; install it with extension_browsers_install {action: "install", browser: "${opened.install.install}"}, then call this again.`
-      : `No guided window was opened, so nothing on Partner Center was filled: ${opened.note.replace(/^No (?:browser was opened|window is showing): /, "")}`;
+      : `No guided window was opened, so nothing on ${apple ? "App Store Connect" : "Partner Center"} was filled: ${opened.note.replace(/^No (?:browser was opened|window is showing): /, "")}`;
     const left = Object.fromEntries(Object.entries(value).filter(([key]) => !["opened", "openedNote", "openPages"].includes(key)));
 
     return envelope({
@@ -86,7 +103,7 @@ export async function guideFirstListing(result: string, args: Args, runtime: Gui
 
   if (guidedEngine(opened.choice.browser) === "chromium") runtime.watchAttach?.({ profileDir: opened.profileDir, extensionDir: opened.extensionDir });
 
-  const say = firstListingSay({ label: opened.label, productId: start.productId, slug });
+  const say = (apple ? appRecordSay : firstListingSay)({ label: opened.label, productId: start.productId, slug });
   const consolePage = `${pageUrl.split("?")[0]}${guideQuery}`;
   const kept = Object.fromEntries(Object.entries(value).filter(([key]) => !["opened", "openedNote", "openPages", "nextStep", "sayToPerson"].includes(key)));
 
@@ -100,15 +117,17 @@ export async function guideFirstListing(result: string, args: Args, runtime: Gui
       guidedBrowser: { opened: true, browser: opened.choice.browser, why: opened.choice.why, profile: opened.profileDir, reused: opened.launched.reused, ...(opened.launched.replaced ? { replaced: true } : {}) },
       toolsExtension: { source: opened.extension.source, version: opened.extension.version, note: opened.extension.note },
       landedOn: consolePage,
-      partnerCenterPage: start.url,
+      ...(apple ? { appStoreConnectPage: start.url } : { partnerCenterPage: start.url }),
       sayToPerson: say,
       nextStep: nextStep("dashboard", say, consolePage),
     },
     hint: [
       `${launchWord(opened.launched)} ${opened.choice.why} Profile: ${opened.profileDir}.`,
       opened.extension.source === "bundled" ? opened.extension.note : "",
-      `Now call extension_approvals_request {act: "extension_submit", args: {action: "first-submission", store: "edge", project: "${slug}"}}, which asks the owner's approval of the Publish press and answers its approvalUrl; never approve it yourself and never press Publish for the person.`,
-      `Tell the person: "${say}" and give them the approvalUrl. When they say it is in review, call extension_submit {action: "first-submission", store: "edge", project: "${slug}", waitSeconds: 300}.`,
+      ...(apple
+        ? [`Tell the person: "${say}" Never press Create or Publish for them. When they say App Privacy is published, call extension_submit {action: "first-submission", store: "safari", project: "${slug}"} to read the app record, then submit the build through the App Store Connect API with extension_approvals_request {act: "extension_submit", args: {action: "submit", project: "${slug}", browsers: ["safari"], buildSha: "<the build's sha>"}}.`]
+        : [`Now call extension_approvals_request {act: "extension_submit", args: {action: "first-submission", store: "edge", project: "${slug}"}}, which asks the owner's approval of the Publish press and answers its approvalUrl; never approve it yourself and never press Publish for the person.`,
+      `Tell the person: "${say}" and give them the approvalUrl. When they say it is in review, call extension_submit {action: "first-submission", store: "edge", project: "${slug}", waitSeconds: 300}.`]),
     ].filter(Boolean).join(" "),
   });
 }
