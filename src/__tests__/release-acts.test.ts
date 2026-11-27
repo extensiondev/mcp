@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import { actionFingerprint } from "../lib/approval-gate";
+import { parseChannels } from "../lib/registry";
 import { TOOL_POLICY } from "../lib/tool-policy";
 import { handler as promote, schema } from "../tools/release-promote";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
@@ -34,5 +35,15 @@ describe("extension_release_promote cuts a release pull request and rolls a chan
     expect(schema.inputSchema.properties.action.enum).toEqual(["promote", "cut", "rollback", "notes"]);
     expect(schema.inputSchema.required).toEqual([]);
     expect(TOOL_POLICY.extension_release_promote.ships).toBe("always");
+  });
+
+  it("keeps each channel's notes on the channels read, which the notes-set hint names as the read back", () => {
+    const channels = parseChannels({
+      public: { sha: "", audience: "public" },
+      "chrome-public": { sha: "eed26de", buildId: "eed26de", audience: "public", notes: NOTES },
+      "firefox-public": { sha: "eed26de", buildId: "eed26de", audience: "public", notes: "" },
+    });
+
+    expect(channels.map((entry) => entry.notes)).toEqual([undefined, NOTES, undefined]);
   });
 });

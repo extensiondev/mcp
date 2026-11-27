@@ -313,6 +313,7 @@ export interface ChannelEntry {
   promotedAt?: string;
   description?: string;
   audience?: "public" | "private";
+  notes?: string;
 }
 
 export function parseChannels(json: unknown): ChannelEntry[] {
@@ -341,6 +342,7 @@ export function parseChannels(json: unknown): ChannelEntry[] {
     const promotedAt = promotedAtField || fromDescription;
     if (promotedAt) entry.promotedAt = promotedAt;
     if (description) entry.description = description;
+    if (typeof row.notes === "string" && row.notes.trim()) entry.notes = row.notes;
 
     out.push(entry);
   }
