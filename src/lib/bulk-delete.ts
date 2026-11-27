@@ -51,6 +51,26 @@ export function bulkDeleteRefusal(name: string, args: Args): string | null {
   return confirmRequired(name, what, "Call again with confirm: true to delete them all, or name one item per call, which needs no confirm.");
 }
 
+/* @invariant A REFUSAL NAMES ONLY AN ARGUMENT ITS READER'S TOOL TAKES.
+ * confirm arrived after 11.3.0, so a forwarder at 11.3.0 or older refuses it
+ * as an unknown argument, and an agent told to call again with confirm: true
+ * met that refusal (ledger 1272). An answer bound for such a forwarder names
+ * one item per call, the route its schema can take.
+ */
+const TAKES_CONFIRM = ", which takes confirm: true.";
+
+export const ONE_ITEM_PER_CALL_HINT =
+  "Call again once per item, naming one item per call, which needs no confirm: this server's version of the tool takes no confirm argument.";
+
+export function oneItemPerCall<T>(answer: T): T {
+  const told = answer as { status?: unknown; error?: { message?: unknown; hint?: unknown } } | null;
+  const message = told?.error?.message;
+
+  if (!told || typeof told !== "object" || told.status !== "confirm-required" || typeof message !== "string" || !message.endsWith(TAKES_CONFIRM)) return answer;
+
+  return { ...told, error: { ...told.error, message: `${message.slice(0, -TAKES_CONFIRM.length)}. This server's version of the tool deletes one item per call.`, ...(told.error?.hint === undefined ? {} : { hint: ONE_ITEM_PER_CALL_HINT }) }, hint: ONE_ITEM_PER_CALL_HINT } as T;
+}
+
 export const CONFIRM_INPUT = {
   type: "boolean",
   default: false,

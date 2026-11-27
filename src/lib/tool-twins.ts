@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { BUILDS_ACT_TOOL, movedActHint } from "./builds-split";
+import { oneItemPerCall } from "./bulk-delete";
 import { envelope } from "./envelope";
 
 import type { FeatureGroup } from "./tool-policy";
@@ -384,5 +385,5 @@ function untwinned(value: unknown): unknown {
 }
 
 export function namedForForwarder<T>(answer: T, forwarderVersion: string | null | undefined): T {
-  return servesTwins(forwarderVersion) ? answer : (untwinned(answer) as T);
+  return servesTwins(forwarderVersion) ? answer : oneItemPerCall(untwinned(answer) as T);
 }

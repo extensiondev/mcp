@@ -7,6 +7,7 @@ import { serverInstructions, tools as ALL_TOOLS } from "../index";
 import { renderPrompt } from "../lib/prompts";
 import { DEFAULT_SERVER_OPTIONS, TOOL_POLICY, isToolListed } from "../lib/tool-policy";
 import { approvalLandedSentence } from "../lib/approval-gate";
+import { bulkDeleteRefusal } from "../lib/bulk-delete";
 import { TOOL_TWINS, namedForForwarder } from "../lib/tool-twins";
 
 const IMPERATIVE_VERBS = [
@@ -418,5 +419,17 @@ describe("1198: every tool an answer tells the agent to call is one its reader s
     expect(called(old).filter((name) => !BEFORE_SPLIT.has(name))).toEqual([]);
     expect(old).toContain('extension_approvals {action: \\"status\\"');
     expect(namedForForwarder(answer, "11.4.0")).toBe(answer);
+  });
+
+  it("1272: names one item per call, never confirm, to a forwarder whose schema has no confirm", () => {
+    const refused = JSON.parse(bulkDeleteRefusal("extension_workspace", { action: "set-environment", remove: [{ name: "A" }, { name: "B" }] })!);
+    const old = namedForForwarder(refused, "11.3.0");
+
+    expect(old.status).toBe("confirm-required");
+    expect(JSON.stringify(old)).not.toContain("confirm: true");
+    expect(old.hint).toContain("one item per call");
+    expect(old.error.message).toBe("Nothing was deleted: set-environment deletes 2 build variables in one call. This server's version of the tool deletes one item per call.");
+    expect(namedForForwarder(old, "11.3.0")).toEqual(old);
+    expect(namedForForwarder(refused, "11.4.0").hint).toContain("Call again with confirm: true");
   });
 });
