@@ -1225,8 +1225,10 @@ describe("the guided store connect opens the MCP's own browser with extension.de
         expect(out.value.sayToPerson).toContain("full extension.dev sign-in");
         expect(out.value.sayToPerson).toContain("press \"Sign in to continue\"");
         expect(out.value.sayToPerson).toContain("presses \"Create new extension\" once");
-        expect(out.value.sayToPerson).toContain("stops before Publish");
+        expect(out.value.sayToPerson).toContain("presses Publish once, and Partner Center's confirm, only after a workspace owner's extension.dev approval");
+        expect(out.value.sayToPerson).not.toContain("the person presses Publish");
         expect(out.value.sayToPerson).toContain("Hidden");
+        expect(out.hint).toContain(`extension_approvals_request {act: "extension_submit", args: {action: "first-submission", store: "edge", project: "${WORKSPACE}/rebeccat"}}`);
       });
 
       it("watches its own guided window for the panel's image request once the window opens (ledger 1171)", async () => {

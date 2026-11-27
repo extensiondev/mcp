@@ -42,6 +42,13 @@ export const REQUESTABLE_TOOLS = Object.keys(REQUESTABLE_ACTS);
 
 const DEFAULT_ACTION: Record<string, string> = { extension_submit: "submit" };
 
+const storeOf = (args: Args): string => {
+  const browsers = Array.isArray(args.browsers) ? args.browsers : [];
+  const named = typeof args.store === "string" ? args.store : browsers.length === 1 ? String(browsers[0]) : "";
+
+  return named.trim().toLowerCase();
+};
+
 interface ActCall {
   act: string;
   args: Args;
@@ -68,6 +75,10 @@ export function runWithInlineAsk<T>(run: () => Promise<T>): Promise<T> {
 }
 
 const actionOf = (args: Args): string => (typeof args.action === "string" ? args.action : "");
+
+const ASKS_ONLY_AS_REQUEST: Readonly<Record<string, (args: Args) => boolean>> = {
+  extension_submit: (args) => actionOf(args) === "first-submission" && storeOf(args) === "edge",
+};
 
 function actOf(name: string, args: Args): string | null {
   if (REQUESTABLE_ACTS[name]) return name;
@@ -121,7 +132,7 @@ export function approvalsRequestRefused(args: Args): string | null {
 
   const action = actionOf(inner) || DEFAULT_ACTION[act] || "";
 
-  if (actions.length && !actions.includes(action)) {
+  if (actions.length && !actions.includes(action) && !ASKS_ONLY_AS_REQUEST[act]?.(inner)) {
     return refusal(`${act} ${action || "with no action"} runs without an approval page, so call ${act} directly. The actions that ask are ${actions.join(", ")}.`, { useTool: act, actions });
   }
 

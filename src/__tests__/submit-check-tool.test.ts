@@ -11,6 +11,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import { createServer } from "../index";
+import { approvalsRequestRefused } from "../lib/approvals-request";
 import { schema as submitSchema } from "../tools/submit";
 import { usePlatformWorld, WORLD_API } from "./fixtures/platform-world";
 
@@ -46,11 +47,13 @@ describe("extension_submit_check takes the calls that only read or ask; an ask r
       { act: "extension_submit", args: { ...args, approvalId: "apr_world" } },
       { act: "extension_shares_manage", args: { action: "create" } },
       { act: "extension_storage", args: {} },
+      { act: "extension_submit", args: { action: "first-submission", store: "chrome", ...api } },
     ]) {
       expect((await world.call("extension_approvals_request", request)).status, JSON.stringify(request)).toBe("request-refused");
     }
 
     expect(sent()).toEqual([]);
+    expect(approvalsRequestRefused({ act: "extension_submit", args: { action: "first-submission", store: "edge", project: "acme/widget" } })).toBeNull();
   });
 
   it("answers a preflight from extension_submit's own handler, reading the same routes", async () => {
