@@ -11,7 +11,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { CHROME_JUSTIFICATION_LIMIT } from "./chrome-dashboard-agent";
 import { isRow, text } from "./row";
 
 export type ChromeVisibilityPick = "unlisted" | "private";
@@ -29,6 +28,7 @@ export type ChromePlan = {
   visibility: ChromeVisibilityPick;
   notes: string[];
   pkg: PlanFile | null;
+  pkgBuild: string;
   icon: PlanFile[];
   screenshots: PlanFile[];
   declarations: string[];
@@ -39,6 +39,8 @@ export type ChromePlan = {
 };
 
 export type FetchBytes = (url: string, maxBytes: number) => Promise<{ ok: true; bytes: Buffer } | { ok: false; message: string }>;
+
+export const CHROME_JUSTIFICATION_LIMIT = 1000;
 
 const MAX_PACKAGE_BYTES = 48 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
@@ -172,6 +174,7 @@ export async function chromePlan(read: unknown, fetchBytes: FetchBytes, tempRoot
   }
 
   let pkg: PlanFile | null = null;
+  let pkgBuild = "";
   const wanted = isRow(body.package) ? body.package : null;
   const digest = text(wanted?.sha256).toLowerCase();
 
@@ -181,7 +184,10 @@ export async function chromePlan(read: unknown, fetchBytes: FetchBytes, tempRoot
     if (!got.ok) notes.push(`the package was not fetched (${got.message})`);
     else if (sha256Of(got.bytes) !== digest) notes.push("the package bytes do not match the SHA-256 the build recorded, so it was not used");
     else if (!got.bytes.subarray(0, 4).equals(ZIP)) notes.push("the package is not a zip, so it was not used");
-    else pkg = keep(dir, "chrome.zip", got.bytes);
+    else {
+      pkg = keep(dir, "chrome.zip", got.bytes);
+      pkgBuild = /^[0-9a-f]{7,40}$/i.test(text(wanted.buildId)) ? text(wanted.buildId).toLowerCase() : "";
+    }
   } else {
     notes.push("the platform names no verified package for Chrome, so no new item can be made");
   }
@@ -208,6 +214,7 @@ export async function chromePlan(read: unknown, fetchBytes: FetchBytes, tempRoot
     visibility: seen.pick,
     notes,
     pkg,
+    pkgBuild,
     icon,
     screenshots,
     declarations,

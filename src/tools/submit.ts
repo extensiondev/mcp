@@ -37,7 +37,7 @@ export const schema = {
           "mint-signing",
         ],
         default: "submit",
-        description: `${SUBMIT_WRITE_SAFETY} submit: buildSha to the stores. sync-listing: listing from STORE.md. publish (alias review): draft to review. release (Safari): approved version on sale. cancel: withdraw from review. rollout: raise Chrome's staged rollout. configure-store: storeSettings. connect: page where the person gives the platform the key. first-submission: a first Chrome, Edge or Firefox listing. mint-signing (Safari): register the bundle id, mint certificates and profiles.`,
+        description: `${SUBMIT_WRITE_SAFETY} submit: buildSha to the stores. sync-listing: listing from STORE.md. publish (alias review): draft to review. release (Safari): approved version on sale. cancel: withdraw from review. rollout: raise Chrome's staged rollout. configure-store: storeSettings. connect: page where the person gives the platform the key. first-submission: a first Chrome, Edge, Firefox or App Store (Safari) listing. mint-signing (Safari): register the bundle id, mint certificates and profiles.`,
       },
       project: PROJECT_TOKEN_INPUT,
       workspace: {

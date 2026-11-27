@@ -12,8 +12,6 @@ import zlib from "node:zlib";
 
 import { guidedConnectRuntime, type GuidedConnectRuntime, type LaunchPlan } from "../../lib/guided-connect";
 
-import type { ChromePage, Where } from "../../lib/chrome-listing-run";
-
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 export const ZIP = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(60, 1)]);
 
@@ -55,31 +53,6 @@ function chunk(type: string, body: Buffer): Buffer {
   return Buffer.concat([head, body, crc]);
 }
 
-export function painted(width: number, height: number, shade: number, storeCopy = false): Buffer {
-  const ihdr = Buffer.alloc(13);
-  const rows: Buffer[] = [];
-
-  ihdr.writeUInt32BE(width, 0);
-  ihdr.writeUInt32BE(height, 4);
-  ihdr.set([8, 2, 0, 0, 0], 8);
-
-  for (let y = 0; y < height; y += 1) {
-    const row = Buffer.alloc(1 + width * 3);
-
-    for (let x = 0; x < width; x += 1) row.set([(x + shade) & 0xff, (y * shade) & 0xff, shade], 1 + x * 3);
-
-    if (storeCopy) {
-      row[0] = 1;
-
-      for (let x = width * 3; x > 3; x -= 1) row[x] = (row[x]! - row[x - 3]!) & 0xff;
-    }
-
-    rows.push(row);
-  }
-
-  return Buffer.concat([PNG, chunk("IHDR", ihdr), ...(storeCopy ? [chunk("tEXt", Buffer.from("Software\0store"))] : []), chunk("IDAT", zlib.deflateSync(Buffer.concat(rows), { level: storeCopy ? 1 : 9 })), chunk("IEND", Buffer.alloc(0))]);
-}
-
 export const served: Record<string, Buffer> = { "/pkg": ZIP, "/icon": png(128, 128), "/shot": png(1280, 800), "/wide": png(1400, 800) };
 
 export function sheetAnswer(status: string, store = "chrome", project = "extension-dev-tools"): string {
@@ -110,37 +83,4 @@ export function runtime(launches: LaunchPlan[], tmp: string): GuidedConnectRunti
     windowCheck: async () => "visible",
     schedule: () => undefined,
   };
-}
-
-type Call = { method: string; args: unknown[] };
-
-export function fakePage(where: Partial<Where>, gates: Record<string, unknown> = {}): { page: ChromePage; calls: Call[]; clicks: number } {
-  const calls: Call[] = [];
-  const state = { clicks: 0 };
-  const base: Where = { host: "chrome.google.com", path: "/webstore/devconsole/pub-1", signIn: false, dashboard: true, publisherId: "pub-1", itemId: "", tab: "", dialog: null, dialogTakesZip: false, ...where };
-
-  return {
-    calls,
-    get clicks() {
-      return state.clicks;
-    },
-    page: {
-      call: async <T>(method: string, ...args: unknown[]) => {
-        calls.push({ method, args });
-
-        return (method === "where" ? base : (gates[String(args[0])] ?? { ok: false, reason: "no-button" })) as T;
-      },
-      handle: async () => null,
-      setFiles: async () => undefined,
-      click: async () => {
-        state.clicks += 1;
-      },
-      type: async () => undefined,
-      navigate: async () => undefined,
-    },
-  };
-}
-
-export function stepDeps(fake: ChromePage, image?: (url: string) => Promise<Buffer | null>) {
-  return { page: fake, sleep: async () => undefined, now: () => 0, ...(image ? { image } : {}) };
 }

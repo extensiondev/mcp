@@ -9,11 +9,10 @@
 import fs from "node:fs";
 
 import { CDPConnection } from "./cdp-connection";
-import { AGENT_GLOBAL, CHROME_PAGE_AGENT, DASHBOARD_HOME } from "./chrome-dashboard-agent";
 import { chromeLocalesOf } from "./chrome-listing-languages";
 import { chromePlan, type ChromePlan, type FetchBytes } from "./chrome-listing-plan";
 import { clientProjectDir } from "./client-roots";
-import { chromeStep, itemUrl, newRun, openRows, saveNewItem, signInLine, submitRow, type ChromePage, type ChromeRun, type ItemSave } from "./chrome-listing-run";
+import { DASHBOARD_HOME, DASHBOARD_PAGE, itemUrl, newRun, panelSource, panelTick, submitRow, type ChromeRun, type ItemSave } from "./chrome-panel";
 import { envelope } from "./envelope";
 import { guidedEngine } from "./guided-browser";
 import { guidedConnectRuntime, openGuided, readStoreAccount, type GuidedConnectRuntime } from "./guided-connect";
@@ -41,29 +40,13 @@ export interface ChromeDriver {
   open(wsUrl: string): Promise<CdpSession>;
   sleep(ms: number): Promise<void>;
   now(): number;
-  image?(url: string): Promise<Buffer | null>;
-}
-
-const STORE_IMAGE_HOST = /^https:\/\/lh\d\.googleusercontent\.com\//i;
-const STORE_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
-
-export async function storeImage(url: string, fetchImpl: typeof fetch = fetch): Promise<Buffer | null> {
-  if (!STORE_IMAGE_HOST.test(url)) return null;
-
-  const res = await fetchImpl(url, { redirect: "error", signal: AbortSignal.timeout(15_000) }).catch(() => null);
-  if (!res?.ok) return null;
-
-  const bytes = Buffer.from(await res.arrayBuffer());
-
-  return bytes.length <= STORE_IMAGE_MAX_BYTES ? bytes : null;
 }
 
 export interface ChromeListingDeps {
   plan(slug: string, api: string | undefined): Promise<{ plan: ChromePlan } | { refused: string }>;
-  watch(args: { slug: string; plan: ChromePlan; profileDir: string; api: string | undefined }): ChromeRun;
+  watch(args: { slug: string; plan: ChromePlan; profileDir: string; api: string | undefined }): ChromeRun | null;
 }
 
-const DASHBOARD_PAGE = /^https:\/\/chrome\.google\.com\/(?:u\/\d+\/)?webstore\/devconsole(?:[/?#]|$)/i;
 const SIGN_IN_PAGE = /^https:\/\/accounts\.google\.com\//i;
 
 export function debugPortOf(profileDir: string, proc: GuidedProcess = guidedProcess): number | null {
@@ -85,54 +68,9 @@ export function dashboardTarget(targets: readonly CdpTarget[]): CdpTarget | null
 async function evaluated<T>(session: CdpSession, expression: string): Promise<T> {
   const answer = (await session.send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true })) as { result?: { value?: unknown }; exceptionDetails?: unknown };
 
-  if (answer?.exceptionDetails) throw new Error("the dashboard page refused the fill script");
+  if (answer?.exceptionDetails) throw new Error("the dashboard page refused the panel script");
 
   return answer?.result?.value as T;
-}
-
-const callOf = (method: string, args: unknown[]) => `globalThis.${AGENT_GLOBAL}.${method}(${args.map((arg) => JSON.stringify(arg)).join(", ")})`;
-
-/* @invariant THE FILL NEVER RUNS ON A GOOGLE SIGN-IN PAGE. Chrome keeps
- * extensions off the Chrome Web Store, so this page script is the panel
- * there; it goes only into a chrome.google.com developer dashboard tab, and
- * on accounts.google.com only the address is read, so no sign-in field is
- * ever read, typed into or pressed.
- */
-export function cdpPage(session: CdpSession, url: () => string): ChromePage {
-  const ready = async () => {
-    if (!DASHBOARD_PAGE.test(url())) return;
-
-    await evaluated(session, CHROME_PAGE_AGENT);
-  };
-
-  return {
-    call: async <T>(method: string, ...args: unknown[]): Promise<T> => {
-      if (!DASHBOARD_PAGE.test(url())) return (method === "where" ? { host: "", path: "", signIn: SIGN_IN_PAGE.test(url()), dashboard: false, publisherId: "", itemId: "", tab: "", dialog: null, dialogTakesZip: false } : null) as T;
-
-      await ready();
-
-      return evaluated<T>(session, callOf(method, args));
-    },
-    handle: async (method, ...args) => {
-      await ready();
-
-      const answer = (await session.send("Runtime.evaluate", { expression: callOf(method, args), returnByValue: false })) as { result?: { objectId?: string; subtype?: string } };
-
-      return answer?.result?.subtype === "node" ? (answer.result.objectId ?? null) : null;
-    },
-    setFiles: async (objectId, files) => {
-      await session.send("DOM.setFileInputFiles", { files, objectId });
-    },
-    click: async (x, y) => {
-      for (const type of ["mouseMoved", "mousePressed", "mouseReleased"]) await session.send("Input.dispatchMouseEvent", { type, x, y, button: "left", clickCount: type === "mouseMoved" ? 0 : 1 });
-    },
-    type: async (typed) => {
-      await session.send("Input.insertText", { text: typed });
-    },
-    navigate: async (to) => {
-      await session.send("Page.navigate", { url: to });
-    },
-  };
 }
 
 export const cdpChromeDriver: ChromeDriver = {
@@ -150,44 +88,27 @@ export const cdpChromeDriver: ChromeDriver = {
   },
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   now: () => Date.now(),
-  image: (url) => storeImage(url),
 };
 
-/* @invariant ONE TICK READS ONE TAB OF THE MCP'S OWN GUIDED WINDOW. The
- * debug port comes from the browser running this very profile, the tab is
- * the developer dashboard (or the Google sign-in it sent the person to), and
- * nothing but the fill itself is written into that tab.
+/* @invariant ONE TICK RELAYS FOR ONE TAB OF THE MCP'S OWN GUIDED WINDOW, AND
+ * PRESSES NOTHING (MCP ledger 1277). The debug port comes from the browser
+ * running this very profile and the tab is its developer dashboard tab. The
+ * only things the MCP sends that tab are Runtime.evaluate calls that place
+ * the bundled tools panel and read or answer its queue; it sends no click,
+ * no key, no file and no navigation, so every step on the page is the
+ * panel's own, after the person's press. A Google sign-in tab is never
+ * evaluated at all.
  */
-export async function chromeTick(run: ChromeRun, args: { port: number; driver: ChromeDriver }): Promise<string> {
+export async function chromeTick(run: ChromeRun, args: { port: number; driver: ChromeDriver; source: string; save?: ItemSave }): Promise<string> {
   const target = dashboardTarget(await args.driver.targets(args.port));
-  if (!target) return "idle";
+  if (!target || !DASHBOARD_PAGE.test(target.url)) return "idle";
 
   const session = await args.driver.open(target.webSocketDebuggerUrl);
-  let address = target.url;
 
   try {
-    const page = cdpPage(session, () => address);
-    const track: ChromePage = {
-      ...page,
-      navigate: async (to) => {
-        await page.navigate(to);
-        address = to;
-      },
-    };
+    const placed = await panelTick(run, { evaluate: (expression) => evaluated(session, expression) }, { tabUrl: target.url, source: args.source, ...(args.save ? { save: args.save } : {}) });
 
-    if (run.finished) {
-      run.marks = (await page.call<Record<string, string>>("marks").catch(() => null)) ?? run.marks;
-
-      return "checklist";
-    }
-
-    const outcome = await chromeStep(run, { page: track, sleep: args.driver.sleep, now: args.driver.now, ...(args.driver.image ? { image: (url: string) => args.driver.image!(url) } : {}) }).catch((err: unknown) => {
-      run.line = `The dashboard tab changed under the fill (${err instanceof Error ? err.message : String(err)}); it tries again.`;
-
-      return "retry";
-    });
-
-    return outcome;
+    return placed ? "relayed" : "idle";
   } finally {
     session.close();
   }
@@ -199,12 +120,16 @@ export function liveRun(slug: string): ChromeRun | null {
   return runs.get(slug)?.run ?? null;
 }
 
-export function watchChromeListing(args: { slug: string; plan: ChromePlan; profileDir: string; save?: ItemSave; minutes?: number; driver?: ChromeDriver; proc?: GuidedProcess }): ChromeRun {
+export function watchChromeListing(args: { slug: string; plan: ChromePlan; profileDir: string; save?: ItemSave; minutes?: number; driver?: ChromeDriver; proc?: GuidedProcess; source?: string | null }): ChromeRun | null {
+  const source = args.source === undefined ? panelSource() : args.source;
+
+  if (!source) return null;
+
   runs.get(args.slug)?.stop();
 
   const driver = args.driver ?? cdpChromeDriver;
-  const run = newRun(args.slug, args.plan, driver.now());
   const until = driver.now() + (args.minutes ?? 60) * 60_000;
+  const run = newRun({ slug: args.slug, plan: args.plan, expiresAt: new Date(until).toISOString() });
   let busy = false;
   let timer: ReturnType<typeof setInterval> | null = null;
 
@@ -223,13 +148,15 @@ export function watchChromeListing(args: { slug: string; plan: ChromePlan; profi
     if (!port) return;
 
     busy = true;
-    chromeTick(run, { port, driver })
+    chromeTick(run, { port, driver, source, ...(args.save ? { save: args.save } : {}) })
       .catch(() => "idle")
-      .then(() => (args.save ? saveNewItem(run, args.save) : undefined))
+      .then(() => {
+        if (run.ended) stop();
+      })
       .finally(() => {
         busy = false;
       });
-  }, 1500);
+  }, 1000);
 
   timer.unref?.();
   runs.set(args.slug, { run, stop, profileDir: args.profileDir });
@@ -249,7 +176,7 @@ export async function platformPlan(slug: string, apiBase: string | undefined): P
   if (!opened.ok) return { refused: opened.message };
 
   const api = opened.api;
-  const read = await projectApiGet<Record<string, unknown>>(api, "stores/chrome/first-submission");
+  const read = await projectApiGet<Record<string, unknown>>(api, "stores/chrome/first-submission?reviewer=1");
   if (!read.ok) return { refused: read.message };
 
   const pkg = isRow(read.json.package) ? read.json.package : null;
@@ -309,49 +236,60 @@ function languagesSaid(locales: string[]): string {
 
   const list = locales.length > 1 ? `${locales.slice(0, -1).join(", ")} and ${locales[locales.length - 1]}` : locales[0]!;
 
-  return ` After the default language, it picks ${list} on Store listing's language picker and fills ${locales.length === 1 ? "that language's" : "each language's"} description and screenshots from STORE.md, pressing only "Save draft"; Chrome reads each language's name and summary from the package's _locales, so a language the package does not ship is named, not typed.`;
+  return ` After the default language it picks ${list} on Store listing's language picker and fills ${locales.length === 1 ? "that language's" : "each language's"} description and screenshots from STORE.md; a language the package does not ship is named, not typed.`;
+}
+
+export function signInLine(account: string): string {
+  return account ? `Sign in as ${account}, the Google account that holds the Chrome Web Store item, in this window.` : "Sign in to the Chrome Web Store developer dashboard in this window.";
 }
 
 export function chromeListingSay(args: { label: string; itemId: string; slug: string; live?: boolean; account?: string; locales?: string[] }): string {
-  const signIn = signInLine(args.account ?? "");
-  const languages = languagesSaid(args.locales ?? []);
-
   const start = args.itemId ? `item ${args.itemId}` : "the dashboard home";
+  const make = args.itemId ? "" : "presses \"New item\" once, attaches the platform's verified package after checking its SHA-256 and saves the new item on the project; it ";
+  const distribution = args.live ? "and leaves Distribution as Chrome serves it" : "and Distribution (Unlisted, the least public option)";
 
-  if (args.live) {
-    return `The ${args.label} window opened on the Chrome Web Store developer dashboard (${start}) for ${args.slug}, an item Chrome already serves. ${signIn} Then it fills the update's Store listing (description, category, language, homepage, icon and screenshots) and Privacy (single purpose, permission justifications, privacy policy) from the listing on extension.dev, pressing only "Save draft" on each, and leaves Distribution as Chrome serves it.${languages} It stops with a checklist: the remote code answer, when the page asks it, and any data usage certification not already ticked are yours, and Submit for review is one approval-gated extension_submit publish call afterwards, which sends the saved draft through the Chrome Web Store API.`;
-  }
-
-  return `The ${args.label} window opened on the Chrome Web Store developer dashboard (${start}) for ${args.slug}. ${signIn} Then it ${args.itemId ? "" : "presses \"New item\" once and uploads the platform's verified package (its SHA-256 checked), which makes a draft item and saves its ID on the project; it "}fills Store listing (description, category, language, homepage, icon and screenshots), Privacy (single purpose, permission justifications, privacy policy) and Distribution (Unlisted, the least public option), pressing only "Save draft" on each.${languages} It stops with a checklist: the remote code answer, when the page asks it, and any data usage certification not already ticked are yours, and Submit for review is one approval-gated extension_submit publish call afterwards, which sends the saved draft through the Chrome Web Store API.`;
+  return `The ${args.label} window opened on the Chrome Web Store developer dashboard (${start}) for ${args.slug}${args.live ? ", an item Chrome already serves" : ""}. ${signInLine(args.account ?? "")} The extension.dev tools panel then shows on the dashboard; press its one button, and the panel ${make}fills Store listing and Privacy from the listing on extension.dev ${distribution}, pressing only "Save draft" on each tab.${languagesSaid(args.locales ?? [])} It ends with a checklist: certifications are yours, and Submit for review is one approval-gated extension_submit publish call afterwards, through the Chrome Web Store API.`;
 }
 
 function progressOf(run: ChromeRun): Record<string, unknown> {
+  const { progress } = run;
+
   return {
-    itemId: run.itemId || null,
-    publisherId: run.publisherId || null,
-    created: run.created,
-    ...(run.created ? { itemSaved: run.itemSaved === "saved" ? true : run.itemSaved || "saving" } : {}),
-    done: run.done,
-    filled: run.filled,
-    line: run.line,
-    ...(run.stopped ? { stopped: run.stopped } : {}),
-    ...(run.plan.locales.length ? { languages: run.plan.locales.map((row) => run.languages.find((done) => done.locale === row.locale)?.line ?? `${row.locale}: waiting for the default language's Store listing to be saved`) } : {}),
-    checklist: run.finished ? openRows(run, run.marks) : run.rows.map((row) => row.line),
+    itemId: progress.itemId || null,
+    publisherId: progress.publisherId || null,
+    created: progress.created,
+    ...(progress.created ? { itemSaved: progress.itemSaved ? true : run.saveError || "saving" } : {}),
+    running: progress.running,
+    finished: progress.finished,
+    done: progress.done,
+    filled: progress.filled,
+    ...(run.plan.locales.length ? { languages: run.plan.locales.map((row) => progress.languages.find((done) => done.locale === row.locale)?.line ?? `${row.locale}: waiting for the default language's Store listing to be saved`) } : {}),
+    checklist: progress.missing,
     notes: run.plan.notes,
   };
 }
 
-function saveItemStep(run: ChromeRun, slug: string): string {
-  return run.created && run.itemId && run.itemSaved && run.itemSaved !== "saved" ? ` The new item was not saved on the project (${run.itemSaved}); call extension_submit {action: "configure-store", store: "chrome", project: "${slug}", storeSettings: {chromeItemId: "${run.itemId}", publisherId: "${run.publisherId}"}}.` : "";
+function lineOf(run: ChromeRun): string {
+  if (run.progress.finished) return "The Chrome draft is filled and saved, and it stays a draft; the panel's checklist names what is left.";
+  if (run.progress.running) return "The panel on the dashboard is filling the listing.";
+
+  return "The panel on the dashboard waits for the person's press on its button.";
 }
 
-/* @invariant A FIRST CHROME LISTING IS FILLED BY THE MCP OVER ITS GUIDED
- * WINDOW'S DEBUG PORT, AND ENDS AS A DRAFT. Chrome runs no extension on the
- * Chrome Web Store, so the tools panel cannot work there; the MCP reads the
- * project's first-submission sheet and its verified files with the login's
- * own token, opens the dashboard in a Chromium guided window, and drives it
- * step by step. A second call while the run lives reports its progress
- * instead of opening another window.
+function saveItemStep(run: ChromeRun, slug: string): string {
+  const { progress } = run;
+
+  return progress.created && progress.itemId && !progress.itemSaved && run.saveError ? ` The new item was not saved on the project (${run.saveError}); call extension_submit {action: "configure-store", store: "chrome", project: "${slug}", storeSettings: {chromeItemId: "${progress.itemId}", publisherId: "${progress.publisherId}"}}.` : "";
+}
+
+/* @invariant A FIRST CHROME LISTING IS FILLED BY THE SHARED TOOLS PANEL,
+ * WHICH THE MCP PLACES IN ITS GUIDED WINDOW, AND ENDS AS A DRAFT (MCP ledger
+ * 1277). Chrome runs no extension on the Chrome Web Store, so the MCP reads
+ * the project's first-submission sheet and its verified files with the
+ * login's own token, opens the dashboard in a Chromium guided window, places
+ * the bundled panel there and answers its requests; the person presses the
+ * panel's button and the panel does the steps. A second call while the run
+ * lives reports its progress instead of opening another window.
  */
 export async function guideChromeListing(result: string, args: Args, runtime: GuidedConnectRuntime = guidedConnectRuntime, deps: ChromeListingDeps = chromeListingDeps): Promise<string | null> {
   let parsed: unknown;
@@ -377,24 +315,22 @@ export async function guideChromeListing(result: string, args: Args, runtime: Gu
   const command = text(parsed.command) || "extension_submit";
   const kept = Object.fromEntries(Object.entries(value).filter(([key]) => !["opened", "openedNote", "openPages", "nextStep", "sayToPerson"].includes(key)));
   const prior = liveRun(slug);
-  const restart = Boolean(prior && (prior.stopped || prior.finished)) && (replacing(args) || args.refill === true);
+  const restart = Boolean(prior && !prior.progress.running) && (replacing(args) || args.refill === true);
   const live = prior && !restart ? prior : null;
-  const restarted = !restart ? "" : prior!.stopped ? `The earlier run had stopped (${prior!.stopped}); a fresh fill started in the same window and profile, keeping its sign-in.` : "The earlier run had finished; a fresh fill started in the same window and profile from the listing as it is now, keeping its sign-in.";
+  const restarted = !restart ? "" : "The earlier panel run was replaced; a fresh panel run started in the same window and profile from the listing as it is now, keeping its sign-in.";
 
   if (live) {
-    const say = live.stopped ? live.line : live.finished ? `The Chrome draft is filled and saved. ${openRows(live, live.marks).join("; ")}.` : live.line;
+    const say = lineOf(live);
     const again = `extension_submit {action: "first-submission", store: "chrome", project: "${slug}", replace: true}`;
-    const hint = live.stopped
-      ? `The guided Chrome run stopped and this read changed nothing: ${live.stopped} Once the cause is fixed on the page, call ${again} to start a fresh fill in the same window, keeping its sign-in.`
-      : live.finished
-        ? `The guided Chrome run finished and this read changed nothing. To send the saved draft to review, ${submitRow(live).replace(/^Submit for review: /, "")}. To fill the dashboard again from the listing as it is now (for example after sync-listing changed it), call ${again}.`
-        : `The guided window already runs this Chrome listing; nothing new was opened.`;
+    const hint = live.progress.finished
+      ? `The guided Chrome run finished and this read changed nothing. To send the saved draft to review, ${submitRow(live).replace(/^Submit for review: /, "")}. To fill the dashboard again from the listing as it is now (for example after sync-listing changed it), call ${again}.`
+      : `The guided window already holds the tools panel for this Chrome listing; nothing new was opened. ${live.progress.running ? "" : `If the panel stopped, the person presses Continue on it; ${again} starts a fresh run.`}`.trim();
 
     return envelope({
       ok: true,
       command,
       status: CHROME_LISTING_STATUS,
-      value: { ...kept, opened: true, progress: progressOf(live), sayToPerson: say, nextStep: live.finished && !live.stopped ? nextStep("publish", submitRow(live)) : nextStep("dashboard", say, live.itemId ? itemUrl(live) : DASHBOARD_HOME) },
+      value: { ...kept, opened: true, progress: progressOf(live), sayToPerson: say, nextStep: live.progress.finished ? nextStep("publish", submitRow(live)) : nextStep("dashboard", say, live.progress.itemId ? itemUrl(live.progress) : DASHBOARD_HOME) },
       hint: `${hint}${saveItemStep(live, slug)}`,
     });
   }
@@ -424,6 +360,15 @@ export async function guideChromeListing(result: string, args: Args, runtime: Gu
   }
 
   const run = deps.watch({ slug, plan, profileDir: opened.profileDir, api: text(args.api) || undefined });
+
+  if (!run) {
+    fs.rmSync(plan.dir, { recursive: true, force: true });
+
+    const note = "The guided window opened, but this MCP holds no verified copy of the extension.dev tools panel, so nothing was placed on the dashboard; update @extension.dev/mcp, then call this again.";
+
+    return envelope({ ok: true, command, status, value: { ...kept, opened: true, guidedBrowser: { opened: true, browser: opened.choice.browser, note } }, hint: [note, text(parsed.hint)].filter(Boolean).join(" ") });
+  }
+
   const say = chromeListingSay({ label: opened.label, itemId: plan.item?.itemId ?? "", slug, live: plan.live, account: plan.account, locales: plan.locales.map((row) => row.locale) });
 
   return envelope({
@@ -443,7 +388,7 @@ export async function guideChromeListing(result: string, args: Args, runtime: Gu
       restarted,
       `${launchWord(opened.launched)} ${opened.choice.why} Profile: ${opened.profileDir}.`,
       plan.notes.length ? `Left out: ${plan.notes.join("; ")}.` : "",
-      `Tell the person: "${say}" Call extension_submit {action: "first-submission", store: "chrome", project: "${slug}"} again to read the run's progress and checklist; a new item is saved on the project by itself, as its Edge product is.`,
+      `Tell the person: "${say}" Call extension_submit {action: "first-submission", store: "chrome", project: "${slug}"} again to read the run's progress and checklist; a new item is saved on the project by itself, as its Edge product is. The MCP only places the panel and answers it; it presses nothing on the page.`,
     ].filter(Boolean).join(" "),
   });
 }
