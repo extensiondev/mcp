@@ -112,7 +112,7 @@ const { processStartedAt } = await import("../lib/process-identity");
 const { TOOL_POLICY, isToolListed, DEFAULT_SERVER_OPTIONS } = await import("../lib/tool-policy");
 const { startingWait } = await import("../lib/session-starting");
 const { REFUSAL_HINTS } = await import("../lib/refusal-hints");
-const { withoutUnlistedWait } = await import("../lib/listed-wait");
+const { withoutUnlistedWait } = await import("../lib/listed-tools");
 const { registerSession, removeSession, removeSessionMarker, listSessionMarkers } = await import(
   "../lib/process-manager"
 );

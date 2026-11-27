@@ -299,7 +299,7 @@ describe("a read made while rules are live says so", () => {
       schema: { name: "extension_dom_snapshot", description: "fake", inputSchema: { type: "object", properties: { projectPath: { type: "string" } } } },
       handler: async () => envelope({ ok: true, command: "extension_dom_snapshot", status: "snapshot", value: { nodes: [] } }),
     };
-    const dispatch = createToolDispatcher({ tools: [reader], options: { features: ["local"], noShip: false } });
+    const dispatch = createToolDispatcher({ tools: [reader], options: { features: ["local", "extras"], noShip: false } });
 
     const frame = JSON.parse((await dispatch({ name: "extension_dom_snapshot", arguments: { projectPath: project } })).content[0]!.text);
     expect(frame.warnings).toHaveLength(1);

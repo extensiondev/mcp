@@ -46,7 +46,7 @@ import { inSessionOrder, sessionLaneKey } from "./session-order";
 import { secretArgumentRefusal } from "./secret-arguments";
 import { withSessionIdle } from "./session-idle";
 import { sessionStartingAnswer } from "./session-starting";
-import { WAIT_TOOL, frameWithoutUnlistedWait } from "./listed-wait";
+import { WAIT_TOOL, describedForListed, frameWithoutUnlistedTools, schemaForListed } from "./listed-tools";
 import { createReloader, handoverState, type ActiveBuild, type BuildImporter, type ListedTool, type RebuiltCall, type ToolFrame } from "./server-reload";
 import { markListStale, reloadedWarning, serverStamp, staleEnvelope, type ServerStampReader } from "./server-stamp";
 import { markStaleLocal, noLocalCarryReason, predatedChecks, predatesCheckEnvelope, type HeldLocal } from "./stale-local";
@@ -126,8 +126,8 @@ export function listedTools(tools: ToolModule[], options: ServerOptions): Listed
     .filter((t) => isToolListed(t.schema.name, options))
     .map((t) => ({
       name: t.schema.name,
-      description: t.schema.description,
-      inputSchema: t.schema.inputSchema,
+      description: describedForListed(t.schema.description, (tool) => isToolListed(tool, options)),
+      inputSchema: schemaForListed(t.schema.inputSchema, (tool) => isToolListed(tool, options)),
       ...(t.schema.outputSchema ? { outputSchema: t.schema.outputSchema } : {}),
       ...(t.title ? { title: t.title } : {}),
       ...(t.annotations ? { annotations: t.annotations } : {}),
@@ -313,7 +313,7 @@ export function createToolSurface(setup: ToolHandlerOptions): {
 
   const served = (name: string): boolean => toolMap.has(name) && isToolListed(name, options);
 
-  const listedWords = (frame: ToolFrame, command: string): ToolFrame => (isToolListed(WAIT_TOOL, options) ? frame : frameWithoutUnlistedWait(frame, command));
+  const listedWords = (frame: ToolFrame, command: string): ToolFrame => frameWithoutUnlistedTools(frame, command, (tool) => isToolListed(tool, options));
 
   const dispatchOnce = async (call: RebuiltCall): Promise<ToolFrame> => withStructuredContent(listedWords(aliasNoted(await withComposedRefusals(() => dispatched(call)), call, served, toolMap.get(call.name)?.schema.inputSchema), call.name), call.name);
 

@@ -9,6 +9,10 @@ import { DEFAULT_SERVER_OPTIONS, TOOL_POLICY, isToolListed } from "../lib/tool-p
 import { approvalLandedSentence } from "../lib/approval-gate";
 import { bulkDeleteRefusal } from "../lib/bulk-delete";
 import { TOOL_TWINS, namedForForwarder } from "../lib/tool-twins";
+import { createToolDispatcher, listedTools } from "../lib/tool-dispatch";
+import { withoutUnlistedTools } from "../lib/listed-tools";
+import { REFUSAL_HINTS } from "../lib/refusal-hints";
+import { envelope } from "../lib/envelope";
 
 const IMPERATIVE_VERBS = [
   "Add",
@@ -431,5 +435,44 @@ describe("1198: every tool an answer tells the agent to call is one its reader s
     expect(old.error.message).toBe("Nothing was deleted: set-environment deletes 2 build variables in one call. This server's version of the tool deletes one item per call.");
     expect(namedForForwarder(old, "11.3.0")).toEqual(old);
     expect(namedForForwarder(refused, "11.4.0").hint).toContain("Call again with confirm: true");
+  });
+});
+
+describe("1296: the default server names no extras tool in a description or a hint", () => {
+  const EXTRAS = Object.keys(TOOL_POLICY).filter((name) => TOOL_POLICY[name]!.group === "extras");
+  const listed = (name: string): boolean => isToolListed(name, DEFAULT_SERVER_OPTIONS);
+  const extrasNamed = (text: string): string[] => [...new Set(text.match(/\bextension_[a-z_]+\b/g) ?? [])].filter((name) => EXTRAS.includes(name));
+  const SRC = join(__dirname, "..");
+  const sources = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+      entry.isDirectory() ? (entry.name === "__tests__" ? [] : sources(join(dir, entry.name))) : entry.name.endsWith(".ts") ? [join(dir, entry.name)] : [],
+    );
+
+  it("lists descriptions and parameter descriptions that name only listed tools, and leaves them whole with extras on", () => {
+    const strays = listedTools(ALL_TOOLS, DEFAULT_SERVER_OPTIONS).flatMap((tool) => extrasNamed(JSON.stringify({ d: tool.description, p: tool.inputSchema })).map((name) => `${tool.name}: ${name}`));
+    const all = { features: ["local", "platform", "extras"] as Array<"local" | "platform" | "extras">, noShip: false };
+
+    expect(EXTRAS.every((name) => !listed(name))).toBe(true);
+    expect(strays).toEqual([]);
+    expect(listedTools(ALL_TOOLS, all).map((tool) => tool.description)).toEqual(ALL_TOOLS.filter((tool) => isToolListed(tool.schema.name, all)).map((tool) => tool.schema.description));
+    expect(listedTools(ALL_TOOLS, DEFAULT_SERVER_OPTIONS).find((tool) => tool.name === "extension_dev")?.description).toContain("extension_open shows a surface and extension_stop ends the session.");
+  });
+
+  it("answers every refusal hint and every source sentence naming an extras tool in words that name none", async () => {
+    const dispatch = createToolDispatcher({
+      tools: [{ schema: { name: "extension_open", description: "stand-in", inputSchema: { type: "object", properties: { hint: { type: "string" } } } }, handler: async (args: Record<string, unknown>) => envelope({ ok: false, command: "extension_open", status: "failed", error: { code: "E_INTERNAL", message: "x" }, hint: String(args.hint) }) }],
+      options: DEFAULT_SERVER_OPTIONS,
+    });
+
+    for (const [code, hint] of Object.entries(REFUSAL_HINTS)) {
+      const frame = await dispatch({ name: "extension_open", arguments: { hint: hint.replaceAll("{command}", "extension_open") } });
+
+      expect(extrasNamed(frame.content[0]?.text ?? ""), code).toEqual([]);
+    }
+
+    const said = sources(SRC).flatMap((file) => readFileSync(file, "utf8").split("\n").filter((line) => /["`'][^"`']*\bextension_[a-z_]+\b[^"`']* [^"`']*["`']/.test(line) && extrasNamed(line).length));
+
+    expect(said.length).toBeGreaterThan(50);
+    expect(said.flatMap((line) => extrasNamed(withoutUnlistedTools(line, "extension_open", listed)))).toEqual([]);
   });
 });

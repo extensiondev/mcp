@@ -13,9 +13,9 @@ import { ENVELOPE_SCHEMA } from "../lib/envelope";
 import { scriptLiteral } from "../lib/script-literal";
 import { adoptHandover, listRebuilt, type BuildImporter } from "../lib/server-reload";
 import { createServerStamp, listStaleSentence, reloadedWarning } from "../lib/server-stamp";
+import { describedForListed } from "../lib/listed-tools";
+import { isToolListed, type ServerOptions } from "../lib/tool-policy";
 import { SUBMIT_ACTIONS } from "../tools/submit";
-
-import type { ServerOptions } from "../lib/tool-policy";
 
 const API = "http://localhost:3100";
 const OPTIONS: ServerOptions = { features: ["local", "platform"], noShip: false };
@@ -175,7 +175,7 @@ describe("the listed tool schema is the one the answering build validates agains
     writeBuild(file, fixtureBuild(true, false), REBUILT);
 
     expect((await listed("extension_submit"))?.description).toBe(REBUILT_SUBMIT.description);
-    expect((await listed("extension_dev"))?.description).toBe(tools.find((tool) => tool.schema.name === "extension_dev")?.schema.description);
+    expect((await listed("extension_dev"))?.description).toBe(describedForListed(tools.find((tool) => tool.schema.name === "extension_dev")!.schema.description, (name) => isToolListed(name, OPTIONS)));
     expect(await listedNames()).not.toContain(ADDED_TOOL.name);
   });
 
