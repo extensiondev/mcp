@@ -109,7 +109,10 @@ const evalTool = await import("../tools/eval");
 const start = await import("../tools/start");
 const { installRecordPath, runningInstall } = await import("../lib/project-install");
 const { processStartedAt } = await import("../lib/process-identity");
-const { TOOL_POLICY } = await import("../lib/tool-policy");
+const { TOOL_POLICY, isToolListed, DEFAULT_SERVER_OPTIONS } = await import("../lib/tool-policy");
+const { startingWait } = await import("../lib/session-starting");
+const { REFUSAL_HINTS } = await import("../lib/refusal-hints");
+const { withoutUnlistedWait } = await import("../lib/listed-wait");
 const { registerSession, removeSession, removeSessionMarker, listSessionMarkers } = await import(
   "../lib/process-manager"
 );
@@ -633,9 +636,57 @@ describe("922: a dev session that exists and has not compiled yet is starting, f
     }
   }
 
+  const { budgetMs: startingBudgetMs } = startingWait;
+
   beforeEach(() => {
     ran.length = 0;
+    startingWait.budgetMs = 50;
   });
+
+  afterEach(() => {
+    startingWait.budgetMs = startingBudgetMs;
+  });
+
+  const namedTools = (text: string): string[] => [...new Set(text.match(/extension_[a-z_]+/g) ?? [])];
+
+  it("on the default server, a session tool waits for its starting session, runs once it is ready, and names only listed tools (ledger 1289)", async () => {
+    const project = tmpProject();
+    const cli = fakeCli(INSTALLING);
+    registerSession({ pid: cli.child.pid!, browser: "chrome", projectPath: project, command: "dev", logPath: cli.logPath });
+    await installLineWritten(cli.logPath);
+
+    const listed = SESSION_TOOLS.filter((name) => isToolListed(name, DEFAULT_SERVER_OPTIONS));
+    const dispatch = createToolDispatcher({ tools: listed.map(standIn), options: DEFAULT_SERVER_OPTIONS });
+    const unlisted = (text: string): string[] => namedTools(text).filter((name) => !isToolListed(name, DEFAULT_SERVER_OPTIONS));
+
+    expect(isToolListed("extension_wait", DEFAULT_SERVER_OPTIONS)).toBe(false);
+
+    for (const name of ["extension_open", "extension_eval", "extension_dom_snapshot"]) {
+      const frame = await dispatch({ name, arguments: { projectPath: project } });
+      const answer = JSON.parse(frame.content[0]?.text ?? "{}");
+
+      expect(answer.error.code, name).toBe("E_SESSION_STARTING");
+      expect(answer.error.hint, name).toMatch(new RegExp(`^Call ${name} again with the same arguments: it waits for a starting session on its own`));
+      expect(unlisted(frame.content[0]?.text ?? ""), name).toEqual([]);
+    }
+
+    expect(ran).toEqual([]);
+
+    startingWait.budgetMs = 10_000;
+    const waiting = dispatch({ name: "extension_open", arguments: { projectPath: project } });
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    stamp(project, readyContract("dev", "chrome", { pid: cli.child.pid }));
+    const answer = JSON.parse((await waiting).content[0]?.text ?? "{}");
+
+    expect(answer.ok).toBe(true);
+    expect(ran).toEqual(["extension_open"]);
+
+    for (const [code, hint] of Object.entries(REFUSAL_HINTS)) {
+      for (const command of ["extension_open", "extension_dev"]) {
+        expect(withoutUnlistedWait(hint.replaceAll("{command}", command), command), `${code} from ${command}`).not.toContain("extension_wait");
+      }
+    }
+  }, 20_000);
 
   it("names every session tool, and none of the three an agent calls while it waits", () => {
     expect(SESSION_TOOLS.sort()).toEqual([
@@ -668,7 +719,8 @@ describe("922: a dev session that exists and has not compiled yet is starting, f
       expect(result.value.ready).toMatchObject({ status: "starting", waitingOn: "dependency-install", compiled: false, browserAttached: false, budgetMs: 1_000 });
       expect(result.value.firstLogs).toEqual({ status: "starting" });
       expect(result.value.capabilities.allowEval).toBe(true);
-      expect(result.hint).toMatch(/^The session is still starting \(ready\.status: starting, waiting on dependency-install\), not ready: call extension_wait until it answers ready/);
+      expect(result.hint).toMatch(/^The session is still starting \(ready\.status: starting, waiting on dependency-install\), not ready: call the session tool you need next \(extension_open, extension_eval, extension_dom_snapshot and the rest\): each waits for the session to be ready within its own timeout/);
+      expect(namedTools(result.hint).filter((name) => !isToolListed(name, DEFAULT_SERVER_OPTIONS))).toEqual([]);
       expect(result.hint).toContain("A first run installs dependencies and can take a couple of minutes.");
     } finally {
       nextChild = () => fakeCli("setTimeout(()=>{}, 60000)");
@@ -745,7 +797,7 @@ describe("922: a dev session that exists and has not compiled yet is starting, f
 
     expect(starting.status).toBe("starting");
     expect(starting.error.code).toBe("E_SESSION_STARTING");
-    expect(starting.error.hint).toContain("then call extension_logs again");
+    expect(starting.error.hint).toMatch(/^Call extension_logs again/);
     expect(starting.error.hint).not.toMatch(/Start a dev session/);
 
     const logs = path.join(project, "dist", "extension-js", "chrome", "logs.ndjson");

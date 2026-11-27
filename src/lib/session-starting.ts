@@ -15,6 +15,7 @@ import { findSessionInfo, sessionSinceMs } from "./process-manager";
 import { pidState, sessionStart } from "./process-identity";
 import { liveProjectSessions, resolveSessionBrowser } from "./session-browser";
 import { engineProjectRoot, readyContractPath } from "./session-paths";
+import { toolListed } from "./tool-policy";
 import { declaredDependencyNames, findWorkspaceMember } from "./workspace-member";
 
 import type { ReadyContract } from "./types";
@@ -155,7 +156,23 @@ export const FIRST_RUN_NOTE = "A first run installs dependencies and can take a 
 export const SOURCE_NOT_LOADABLE_NOTE =
   "Do not load the source folder into a browser yourself: it cannot run unbuilt, because the build is what resolves the imports in its content scripts.";
 
-export function sessionStartingEnvelope(command: string, projectPath: string, starting: StartingSession): string {
+export const startingWait = { budgetMs: 30_000, maxMs: 300_000, pollMs: 250 };
+
+export interface StartingWaited {
+  waitListed: boolean;
+  waitedMs?: number;
+}
+
+function startingHint(command: string, starting: StartingSession, waited: StartingWaited): string {
+  const tail = `${FIRST_RUN_NOTE} The session exists: do not start or replace it.`;
+
+  if (waited.waitListed) return `Call extension_wait with this projectPath and browser: "${starting.browser}", then call ${command} again. ${tail}`;
+  if (waited.waitedMs === undefined) return `Call ${command} again in a few seconds with the same arguments. ${tail}`;
+
+  return `Call ${command} again with the same arguments: it waits for a starting session on its own, and this call waited ${Math.round(waited.waitedMs / 1000)} s. A larger timeout waits longer. ${tail}`;
+}
+
+export function sessionStartingEnvelope(command: string, projectPath: string, starting: StartingSession, waited: StartingWaited = { waitListed: toolListed("extension_wait") }): string {
   return envelope({
     ok: false,
     command,
@@ -173,7 +190,7 @@ export function sessionStartingEnvelope(command: string, projectPath: string, st
       waitingOn: starting.waitingOn,
       readyPath: starting.readyPath,
     },
-    hint: `Call extension_wait with this projectPath and browser: "${starting.browser}", then call ${command} again. ${FIRST_RUN_NOTE} The session exists: do not start or replace it.`,
+    hint: startingHint(command, starting, waited),
   });
 }
 
@@ -181,10 +198,7 @@ function namedBrowser(args: Record<string, unknown>): string | undefined {
   return typeof args.browser === "string" && args.browser.trim() ? args.browser : undefined;
 }
 
-export function sessionStartingRefusal(command: string, args: Record<string, unknown>): string | null {
-  const projectPath = typeof args.projectPath === "string" && args.projectPath.trim() ? args.projectPath : null;
-  if (!projectPath) return null;
-
+function startingOf(projectPath: string, args: Record<string, unknown>): StartingSession | null {
   const explicit = namedBrowser(args);
   const { browser } = resolveSessionBrowser(projectPath, explicit);
   const starting = startingSession(projectPath, browser);
@@ -192,5 +206,29 @@ export function sessionStartingRefusal(command: string, args: Record<string, unk
   if (!starting) return null;
   if (!explicit && liveProjectSessions(projectPath).length > 1) return null;
 
-  return sessionStartingEnvelope(command, projectPath, starting);
+  return starting;
+}
+
+function waitBudgetMs(args: Record<string, unknown>): number {
+  const asked = typeof args.timeout === "number" && Number.isFinite(args.timeout) && args.timeout >= 0 ? args.timeout : startingWait.budgetMs;
+
+  return Math.min(asked, startingWait.maxMs);
+}
+
+export async function sessionStartingAnswer(command: string, args: Record<string, unknown>, waitListed: boolean): Promise<string | null> {
+  const projectPath = typeof args.projectPath === "string" && args.projectPath.trim() ? args.projectPath : null;
+  if (!projectPath) return null;
+
+  let starting = startingOf(projectPath, args);
+  if (!starting) return null;
+
+  const begun = Date.now();
+  const deadline = begun + waitBudgetMs(args);
+
+  while (starting && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, Math.min(startingWait.pollMs, Math.max(0, deadline - Date.now()))));
+    starting = startingOf(projectPath, args);
+  }
+
+  return starting ? sessionStartingEnvelope(command, projectPath, starting, { waitListed, waitedMs: Date.now() - begun }) : null;
 }

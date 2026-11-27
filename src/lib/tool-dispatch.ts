@@ -45,7 +45,8 @@ import { scrubRunAnswer } from "./run-privacy";
 import { inSessionOrder, sessionLaneKey } from "./session-order";
 import { secretArgumentRefusal } from "./secret-arguments";
 import { withSessionIdle } from "./session-idle";
-import { sessionStartingRefusal } from "./session-starting";
+import { sessionStartingAnswer } from "./session-starting";
+import { WAIT_TOOL, frameWithoutUnlistedWait } from "./listed-wait";
 import { createReloader, handoverState, type ActiveBuild, type BuildImporter, type ListedTool, type RebuiltCall, type ToolFrame } from "./server-reload";
 import { markListStale, reloadedWarning, serverStamp, staleEnvelope, type ServerStampReader } from "./server-stamp";
 import { markStaleLocal, noLocalCarryReason, predatedChecks, predatesCheckEnvelope, type HeldLocal } from "./stale-local";
@@ -312,7 +313,9 @@ export function createToolSurface(setup: ToolHandlerOptions): {
 
   const served = (name: string): boolean => toolMap.has(name) && isToolListed(name, options);
 
-  const dispatchOnce = async (call: RebuiltCall): Promise<ToolFrame> => withStructuredContent(aliasNoted(await withComposedRefusals(() => dispatched(call)), call, served, toolMap.get(call.name)?.schema.inputSchema), call.name);
+  const listedWords = (frame: ToolFrame, command: string): ToolFrame => (isToolListed(WAIT_TOOL, options) ? frame : frameWithoutUnlistedWait(frame, command));
+
+  const dispatchOnce = async (call: RebuiltCall): Promise<ToolFrame> => withStructuredContent(listedWords(aliasNoted(await withComposedRefusals(() => dispatched(call)), call, served, toolMap.get(call.name)?.schema.inputSchema), call.name), call.name);
 
   const dispatch = async (call: RebuiltCall): Promise<ToolFrame> => {
     const args = (call.arguments ?? {}) as Record<string, unknown>;
@@ -463,10 +466,12 @@ export function createToolSurface(setup: ToolHandlerOptions): {
         run(
           async () => {
             if (!platform) {
+              const starting = TOOL_POLICY[name]?.liveSession ? await sessionStartingAnswer(name, normalizedArgs, isToolListed(WAIT_TOOL, options)) : null;
+
               return annotate(
-                await withCallWaits(() =>
+                starting ?? await withCallWaits(() =>
                   inSessionOrder(sessionLaneKey(normalizedArgs), name, () =>
-                    withSessionIdle(normalizedArgs, async () => (TOOL_POLICY[name]?.liveSession ? sessionStartingRefusal(name, normalizedArgs) : null) ?? tool.handler(normalizedArgs)),
+                    withSessionIdle(normalizedArgs, async () => (TOOL_POLICY[name]?.liveSession ? await sessionStartingAnswer(name, { ...normalizedArgs, timeout: 0 }, isToolListed(WAIT_TOOL, options)) : null) ?? tool.handler(normalizedArgs)),
                   ),
                 ),
                 { note: bound.note, warning: stubbedReadWarning(name, normalizedArgs) },

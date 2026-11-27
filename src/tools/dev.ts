@@ -43,6 +43,7 @@ import {
 import { guardSameBrowserSession } from "../lib/same-browser-session";
 import { IDLE_MINUTES_SCHEMA, armSessionIdle, idleSentence, resolveIdleMinutes } from "../lib/session-idle";
 import { FIRST_RUN_NOTE } from "../lib/session-starting";
+import { toolListed } from "../lib/tool-policy";
 import { sessionInstallGate } from "../lib/project-install";
 import { handler as waitHandler } from "./wait";
 import { handler as logsHandler } from "./logs";
@@ -482,6 +483,7 @@ export async function handler(
   profileReused = profileReusedAt(carryover, readyProfilePath, spawnedAt);
 
   const controlVerbs = "storage, reload, open, dom_snapshot";
+  const listedControlTools = controlVerbs.split(", ").map((verb) => `extension_${verb}`).filter((tool) => toolListed(tool)).join("/");
   const control = contractControlState(args.projectPath, browser, spawnedAt);
   const controlBound = allowControl && control.port !== null;
   const toolbarButton = controlBound && !args.noBrowser && !isSafariTarget(browser) ? declaredToolbarButton(args.projectPath, browser) : null;
@@ -600,7 +602,7 @@ export async function handler(
   const nextStep = sessionReady
     ? "The session is ready (ready.status: ready) and the first log lines are in firstLogs, so no extension_wait is needed: extension_inspect reads the live state and extension_logs the console."
     : stillStarting
-      ? `The session is still starting (ready.status: starting, waiting on ${String((readiness?.ready as Record<string, unknown>).waitingOn)}), not ready: call extension_wait until it answers ready, and call it again if it runs out. ${FIRST_RUN_NOTE} Until then the session tools answer E_SESSION_STARTING; do not start or replace the session.`
+      ? `The session is still starting (ready.status: starting, waiting on ${String((readiness?.ready as Record<string, unknown>).waitingOn)}), not ready: ${toolListed("extension_wait") ? `call extension_wait until it answers ready, and call it again if it runs out. ${FIRST_RUN_NOTE} Until then the session tools answer E_SESSION_STARTING` : `call the session tool you need next (extension_open, extension_eval, extension_dom_snapshot and the rest): each waits for the session to be ready within its own timeout before it runs. ${FIRST_RUN_NOTE} A call that still finds it starting answers E_SESSION_STARTING and is safe to repeat`}; do not start or replace the session.`
     : readiness
       ? `ready.status is ${readiness.ready.status}, not ready: ${
           readiness.ready.status === "compiled-not-attached" && isSafariTarget(browser)
@@ -650,10 +652,10 @@ export async function handler(
       : `${nextStep} ${readiness?.ready.status === "compiled-not-attached" && !isSafariTarget(browser) ? `${REBUILD_NOT_REACHING_NOTE} ` : ""}${signingFrame?.hints.length ? `${signingFrame.hints.join(" ")} ` : ""}${isSafariTarget(browser) ? "" : `${headlessHint(visibility.headless)} `}${hiddenUi ? `${hiddenBrowserUiHint(hiddenUi)} ` : ""}${
         allowControl
           ? controlBound
-            ? `Control channel is ON (port ${control.port} per ready.json): extension_${controlVerbs.split(", ").join("/extension_")}${args.allowEval ? "/extension_eval" : ""} will work against this session.${toolbarClickNote}`
+            ? `Control channel is ON (port ${control.port} per ready.json): ${listedControlTools}${args.allowEval ? "/extension_eval" : ""} will work against this session.${toolbarClickNote}`
             : control.unavailableReason
-              ? `Control was requested, but the engine reports no control port (${control.unavailableReason}), so extension_${controlVerbs.split(", ").join("/extension_")} will be refused until the session is relaunched.`
-              : `Control was requested; ready.json has not stamped the control port yet, so extension_wait is what confirms extension_${controlVerbs.split(", ").join("/extension_")} will work.`
+              ? `Control was requested, but the engine reports no control port (${control.unavailableReason}), so ${listedControlTools} will be refused until the session is relaunched.`
+              : `Control was requested; ready.json has not stamped the control port yet, so ${toolListed("extension_wait") ? `extension_wait is what confirms ${listedControlTools} will work` : `${listedControlTools} wait for a starting session within their own timeout`}.`
           : "Control channel is OFF because this session was started with allowControl: false: extension_storage_read, extension_storage_write, extension_reload, extension_open and extension_dom_snapshot are locked, and extension_eval needs allowEval: true. To unlock them, call extension_dev again without allowControl: false (plus allowEval: true for eval) and replace: true (it stops this session first); a plain second call is refused so the session does not fork."
         } When you are done, call extension_stop to shut down the dev server and browser.${idleMinutes === null ? "" : ` ${idleSentence(idleMinutes)}`}`,
   });
