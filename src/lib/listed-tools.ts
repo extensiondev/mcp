@@ -70,28 +70,45 @@ export function withoutUnlistedWait(text: string, command: string): string {
   return RULES.reduce((said, [pattern, replace]) => said.replace(pattern, (match: string, ...groups: unknown[]) => replace(command, match, ...(groups.filter((group) => typeof group === "string" || group === undefined) as string[]))), text);
 }
 
-export function withoutUnlistedTools(text: string, command: string, options: ServerOptions): string {
+const LOCAL_SERVER = "npx -y @extension.dev/mcp";
+
+function withLocalServerNote(text: string, options: ServerOptions, told: Set<string>): string {
+  const local = unlistedTools(options).filter((name) => TOOL_POLICY[name]!.group !== HOSTED_FEATURE_GROUP);
+  const named = [...new Set(text.match(toolPattern(local)) ?? [])].filter((name) => !told.has(name));
+  if (named.length === 0) return text;
+
+  for (const name of named) told.add(name);
+
+  const list = named.length === 1 ? named[0]! : `${named.slice(0, -1).join(", ")} and ${named[named.length - 1]}`;
+  const end = /[.!?]$/.test(text.trimEnd()) ? "" : ".";
+
+  return `${text.trimEnd()}${end} ${list} ${named.length === 1 ? "runs" : "run"} in the local MCP server (${LOCAL_SERVER}), which lists ${named.length === 1 ? "it" : "them"}.`;
+}
+
+export function withoutUnlistedTools(text: string, command: string, options: ServerOptions, told: Set<string> = new Set()): string {
+  if (options.hosted) return withLocalServerNote(text, options, told);
+
   const waited = isToolListed(WAIT_TOOL, options) ? text : withoutUnlistedWait(text, command);
   const unlisted = unlistedTools(options);
   if (!names(waited, unlisted)) return waited;
 
-  const told = new Set<string>();
+  const explained = new Set<string>();
 
   return waited.replace(toolPattern(unlisted), (name: string, offset: number) => {
     const { word, how } = hiddenBy(name, options);
-    const said = `the ${word} ${shortName(name)} tool${told.has(how) ? "" : ` (${how})`}`;
-    told.add(how);
+    const said = `the ${word} ${shortName(name)} tool${explained.has(how) ? "" : ` (${how})`}`;
+    explained.add(how);
 
     return /(?:^|[.!?:]\s|"|\n)$/.test(waited.slice(Math.max(0, offset - 2), offset)) ? `T${said.slice(1)}` : said;
   });
 }
 
-function proseWithoutUnlisted(value: unknown, command: string, options: ServerOptions): unknown {
-  if (typeof value === "string") return value.includes(" ") ? withoutUnlistedTools(value, command, options) : value;
-  if (Array.isArray(value)) return value.map((item) => proseWithoutUnlisted(item, command, options));
+function proseWithoutUnlisted(value: unknown, command: string, options: ServerOptions, told: Set<string> = new Set()): unknown {
+  if (typeof value === "string") return value.includes(" ") ? withoutUnlistedTools(value, command, options, told) : value;
+  if (Array.isArray(value)) return value.map((item) => proseWithoutUnlisted(item, command, options, told));
   if (!value || typeof value !== "object") return value;
 
-  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, proseWithoutUnlisted(item, command, options)]));
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, proseWithoutUnlisted(item, command, options, told)]));
 }
 
 function answerWithoutUnlisted(text: string, command: string, options: ServerOptions): string {
@@ -106,11 +123,12 @@ function answerWithoutUnlisted(text: string, command: string, options: ServerOpt
     const boundary = typeof untrusted?.boundary === "string" ? untrusted.boundary : null;
     if (!boundary) return text;
 
+    const told = new Set<string>();
     const rewritten = {
       ...fenced,
-      ...("hint" in fenced ? { hint: proseWithoutUnlisted(fenced.hint, command, options) } : {}),
-      ...("warnings" in fenced ? { warnings: proseWithoutUnlisted(fenced.warnings, command, options) } : {}),
-      ...(error && "hint" in error ? { error: { ...error, hint: proseWithoutUnlisted(error.hint, command, options) } } : {}),
+      ...("hint" in fenced ? { hint: proseWithoutUnlisted(fenced.hint, command, options, told) } : {}),
+      ...("warnings" in fenced ? { warnings: proseWithoutUnlisted(fenced.warnings, command, options, told) } : {}),
+      ...(error && "hint" in error ? { error: { ...error, hint: proseWithoutUnlisted(error.hint, command, options, told) } } : {}),
     };
 
     return fenceUntrusted(JSON.stringify(rewritten), () => boundary);
@@ -171,6 +189,8 @@ function listedSentence(sentence: string, unlisted: string[]): string | null {
 }
 
 export function describedForListed(description: string, options: ServerOptions): string {
+  if (options.hosted) return description;
+
   const unlisted = unlistedTools(options);
   if (!names(description, unlisted)) return description;
 

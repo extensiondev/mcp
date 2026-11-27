@@ -317,6 +317,7 @@ export interface ServerOptions {
   features: FeatureGroup[];
   noShip: boolean;
   project?: string;
+  hosted?: boolean;
 }
 
 export const DEFAULT_SERVER_OPTIONS: ServerOptions = {

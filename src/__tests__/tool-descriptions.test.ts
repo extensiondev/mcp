@@ -455,10 +455,8 @@ describe("1296 and 1297: the default server names no tool it does not list in a 
   });
 
   it("answers every refusal hint and every source sentence naming an extras tool in words that name none", async () => {
-    const dispatch = createToolDispatcher({
-      tools: [{ schema: { name: "extension_open", description: "stand-in", inputSchema: { type: "object", properties: { hint: { type: "string" } } } }, handler: async (args: Record<string, unknown>) => envelope({ ok: false, command: "extension_open", status: "failed", error: { code: "E_INTERNAL", message: "x" }, hint: String(args.hint) }) }],
-      options: DEFAULT_SERVER_OPTIONS,
-    });
+    const standIn = { schema: { name: "extension_open", description: "stand-in", inputSchema: { type: "object", properties: { hint: { type: "string" } } } }, handler: async (args: Record<string, unknown>) => envelope({ ok: false, command: "extension_open", status: "failed", error: { code: "E_INTERNAL", message: "x" }, hint: String(args.hint) }) };
+    const dispatch = createToolDispatcher({ tools: [standIn], options: DEFAULT_SERVER_OPTIONS });
 
     for (const [code, hint] of Object.entries(REFUSAL_HINTS)) {
       const frame = await dispatch({ name: "extension_open", arguments: { hint: hint.replaceAll("{command}", "extension_open") } });
@@ -470,5 +468,12 @@ describe("1296 and 1297: the default server names no tool it does not list in a 
 
     expect(said.length).toBeGreaterThan(50);
     expect(said.flatMap((line) => extrasNamed(withoutUnlistedTools(line, "extension_open", DEFAULT_SERVER_OPTIONS)))).toEqual([]);
+  });
+
+  it("1298: keeps the lane's descriptions on the hosted server and names a local tool with the local server that lists it", () => {
+    const hosted = { features: ["platform"] as Array<"platform">, noShip: false, hosted: true };
+
+    expect(listedTools(ALL_TOOLS, hosted).map((tool) => tool.description)).toEqual(ALL_TOOLS.filter((tool) => isToolListed(tool.schema.name, hosted)).map((tool) => tool.schema.description));
+    expect(withoutUnlistedTools('extension_screenshot store:"chrome" captures it; extension_wait reads it', "extension_submit", hosted)).toBe('extension_screenshot store:"chrome" captures it; extension_wait reads it. extension_screenshot and extension_wait run in the local MCP server (npx -y @extension.dev/mcp), which lists them.');
   });
 });
