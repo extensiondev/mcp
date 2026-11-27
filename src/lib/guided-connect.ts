@@ -48,14 +48,36 @@ export const GUIDED_STATUS = "workspace-connect-guided";
 
 export { CONNECTED_STATUS, readStoreAccount, replaceCall, type StoreAccountRead, type StoreAccountView } from "./guided-connect-account";
 
-export const GUIDED_CONNECT_STORES = new Set(["edge"]);
+export const GUIDED_CONNECT_STORES = new Set(["edge", "firefox", "safari"]);
 
 export const HANDOFF_PATH = "/api/cli/console-handoff";
 
 export const LAUNCH_HANDOFF_PAGE = "https://www.extension.dev/device/handoff";
 
-export const GUIDED_KEY_PAGES: Record<string, { url: string; page: string }> = {
-  edge: { url: "https://partner.microsoft.com/dashboard/microsoftedge/publishapi", page: "Edge Partner Center Publish API page" },
+export type GuidedKeyPage = { url: string; page: string; engines: ReadonlyArray<"chromium" | "gecko">; say: (args: { label: string; workspace: string; storeName: string; downloads: boolean }) => string };
+
+export const GUIDED_KEY_PAGES: Record<string, GuidedKeyPage> = {
+  edge: {
+    url: "https://partner.microsoft.com/dashboard/microsoftedge/publishapi",
+    page: "Edge Partner Center Publish API page",
+    engines: ["chromium", "gecko"],
+    say: ({ label, workspace, storeName }) =>
+      `In front, the ${label} window shows the Edge Partner Center Publish API page; sign in to Partner Center there if it asks. Within a few seconds the extension.dev tools panel shows on that page (the ${workspace} console signs in by itself in a background tab) with one button to press, "Create a new API key and connect": it presses Partner Center's "New API key" for you, names the key extension.dev if asked, and sends the Client ID and the new key to the console, which checks them with ${storeName} before it keeps them, so no key passes through this chat. If the panel asks for "Turn on API" first, press that on the page. ${storeName} is connected only when the panel says so.`,
+  },
+  firefox: {
+    url: "https://addons.mozilla.org/en-US/developers/addon/api/key/",
+    page: "Firefox Add-ons API credentials page",
+    engines: ["chromium"],
+    say: ({ label, workspace, storeName }) =>
+      `In front, the ${label} window shows the Firefox Add-ons API credentials page; log in to Firefox Add-ons there if it asks. Within a few seconds the extension.dev tools panel shows on that page (the ${workspace} console signs in by itself in a background tab) with one button to press, "Generate credentials and connect": it presses AMO's "Generate new credentials" and sends the JWT issuer and secret AMO then shows to the console, which checks them with ${storeName} before it keeps them, so no key passes through this chat. If AMO asks to confirm the email address first, press "Confirm email address" and follow the link AMO mails. If the account already has credentials, AMO never shows their secret again: the panel says that regenerating revokes the old pair everywhere it is used and presses "Revoke and regenerate credentials" only if the person presses its own "Regenerate and connect". ${storeName} is connected only when the panel says so.`,
+  },
+  safari: {
+    url: "https://appstoreconnect.apple.com/access/integrations/api",
+    page: "App Store Connect Team Keys page",
+    engines: ["chromium", "gecko"],
+    say: ({ label, workspace, storeName, downloads }) =>
+      `In front, the ${label} window shows the App Store Connect Team Keys page; sign in to App Store Connect there if it asks (the panel never touches sign-in or two-factor fields). Within a few seconds the extension.dev tools panel shows on that page (the ${workspace} console signs in by itself in a background tab) with one button to press, "Create a key and connect": it presses "Generate API Key" (or "+"), names the key extension.dev with the Admin role, which creating signing certificates needs, and presses Generate. ${downloads ? "This MCP then points that window's downloads at a private folder, reads the one .p8 Apple downloads, deletes it, and hands it to the panel, which sends it with the Issuer ID and Key ID" : "This browser gives the MCP no download folder, so the panel outlines \"Download API Key\": download the .p8 and choose it in the panel, which sends it with the Issuer ID and Key ID"} to the console, which checks them with ${storeName} before it keeps them, so no key passes through this chat or the clipboard. If the panel asks for "Request Access" first, the Account Holder presses it on the page. ${storeName} is connected only when the panel says so.`,
+  },
 };
 
 const LAUNCH_SECONDS = 15 * 60;
@@ -311,7 +333,7 @@ export function handoffUrl(raw: string, api?: string): string {
   return origin && (origin === originOf(origins.www) || origin === originOf(origins.console)) ? href : "";
 }
 
-export const HANDOFF_STORES = new Set(["chrome", "edge", "firefox"]);
+export const HANDOFF_STORES = new Set(["chrome", "edge", "firefox", "safari"]);
 
 export function handoffNext(workspace: string, store: string): string {
   return `/${workspace}/settings/store-accounts${HANDOFF_STORES.has(store) ? `?store=${store}` : ""}`;
@@ -458,7 +480,7 @@ export type GuidedOpen =
   | { opened: false; note: string }
   | { opened: true; choice: GuidedBrowserChoice; label: string; extension: ToolsExtension; extensionDir: string; landing: ConsoleLanding; launched: LaunchResult; profileDir: string; onStorePage: boolean };
 
-export async function openGuided(options: { workspace: string; next: string | null; plainUrl: string; storePage: string | null; api?: string; runtime: GuidedConnectRuntime }): Promise<GuidedOpen> {
+export async function openGuided(options: { workspace: string; next: string | null; plainUrl: string; storePage: string | null; storeEngines?: ReadonlyArray<"chromium" | "gecko">; api?: string; runtime: GuidedConnectRuntime }): Promise<GuidedOpen> {
   const { runtime } = options;
   const block = runtime.launchBlock();
   if (block) return { opened: false, note: `No browser was opened: ${block}.` };
@@ -474,18 +496,19 @@ export async function openGuided(options: { workspace: string; next: string | nu
 
   if ("failed" in extension) return { opened: false, note: `No browser was opened: ${extension.failed}.` };
 
+  const storePage = options.storePage && (!options.storeEngines || options.storeEngines.includes(engine)) ? options.storePage : null;
   const secret = options.next === null ? "" : crypto.randomBytes(32).toString("base64url");
   const launchHash = secret ? crypto.createHash("sha256").update(secret).digest("hex") : undefined;
   const landing: ConsoleLanding = options.next === null ? { openUrl: options.plainUrl, signedIn: false, note: "" } : await consoleLanding({ workspace: options.workspace, next: options.next, plainUrl: options.plainUrl, api: options.api, launchHash, fetchImpl: runtime.fetch });
   const launchBound = Boolean(secret && landing.launchBound && landing.openUrl.split("#")[0] === LAUNCH_HANDOFF_PAGE);
-  const onStorePage = Boolean(options.storePage && launchBound);
+  const onStorePage = Boolean(storePage && launchBound);
   const extensionDir = guidedCopy(extension.dir, runtime.cacheDir(), engine);
 
   clearLaunchFile(extensionDir);
   if (launchBound) writeLaunchFile(extensionDir, { handoff: landing.openUrl, secret, expiresAt: launchExpiry(landing.expiresAt), ...(onStorePage ? {} : { front: true as const }) });
 
   const profileDir = guidedProfileDir(runtime.stateDir(), choice.browser as GuidedBrowser);
-  const url = onStorePage && options.storePage ? options.storePage : launchBound ? LAUNCH_HANDOFF_PAGE : landing.openUrl;
+  const url = onStorePage && storePage ? storePage : launchBound ? LAUNCH_HANDOFF_PAGE : landing.openUrl;
   const launched = runtime.launch({ choice, extensionDir, profileDir, url, env: runtime.launchEnv() });
 
   if (!launched.launched) {
@@ -536,7 +559,7 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
   const answer = { command: parsed.command, value: { ...value, ...accountState }, hint: [unread, text(parsed.hint)].filter(Boolean).join(" ") };
 
   const keyPage = GUIDED_KEY_PAGES[store];
-  const opened = await openGuided({ workspace, next: handoffNext(workspace, store), plainUrl, storePage: keyPage?.url ?? null, api: text(args.api) || undefined, runtime });
+  const opened = await openGuided({ workspace, next: handoffNext(workspace, store), plainUrl, storePage: keyPage?.url ?? null, storeEngines: keyPage?.engines, api: text(args.api) || undefined, runtime });
 
   if ("install" in opened) {
     return envelope({
@@ -554,8 +577,12 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
 
   const storeName = store ? storeLabel(store) : "the store";
   const signIn = landing.signedIn ? "" : "sign in to extension.dev once, then ";
+  const downloads = store === "safari" && guidedEngine(choice.browser) === "chromium";
+
+  if (onKeyPage && downloads) runtime.watchAttach?.({ profileDir, extensionDir: opened.extensionDir });
+
   const say = onKeyPage && keyPage
-    ? `In front, the ${label} window shows the ${keyPage.page}; sign in to Partner Center there if it asks. Within a few seconds the extension.dev tools panel shows on that page (the ${workspace} console signs in by itself in a background tab) with one button to press, "Create a new API key and connect": it presses Partner Center's "New API key" for you, names the key extension.dev if asked, and sends the Client ID and the new key to the console, which checks them with ${storeName} before it keeps them, so no key passes through this chat. If the panel asks for "Turn on API" first, press that on the page. ${storeName} is connected only when the panel says so.`
+    ? keyPage.say({ label, workspace, storeName, downloads })
     : `In the ${label} window that just opened on the ${workspace} Store accounts page, ${signIn}follow the extension.dev tools panel: it takes you to the ${storeName} key page, captures the values when you press it and hands them to the console, so no key passes through this chat. This chat reads the connection from extension.dev by itself.`;
   const openedWord = launchWord(launched);
   const api = text(args.api) || undefined;

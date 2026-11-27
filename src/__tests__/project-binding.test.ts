@@ -28,7 +28,7 @@ import { GUIDED_KEY_PAGES, LAUNCH_HANDOFF_PAGE, guideStoreConnect, guidedConnect
 import { guidedCopy } from "../lib/guided-copy-build";
 import { endGuidedWindow, runningOwner, type GuidedProcess } from "../lib/guided-window-end";
 import { APP_STORE_CONNECT_APPS, PARTNER_CENTER_OVERVIEW, guideFirstListing } from "../lib/guided-first-listing";
-import { ATTACH_SLOTS, attachSlot, checkRequest, debugPortOf, serveAttachOnce, unpackedExtensionId, type AttachDriver, type CdpSession } from "../lib/guided-attach";
+import { ATTACH_SLOTS, attachSlot, checkRequest, debugPortOf, serveAttachOnce, serveKeyOnce, unpackedExtensionId, type AttachDriver, type CdpSession } from "../lib/guided-attach";
 import { headlessFromProcesses } from "../lib/guided-window";
 import { workspaceConnectAnswer } from "../lib/store-connection";
 import { AMO_ADDON_API, bundledToolsDir, crxIdOf, readBundleRecord, readCrx3, resolveToolsExtension, treeSha256 } from "../lib/tools-extension";
@@ -1113,7 +1113,7 @@ describe("the guided store connect opens the MCP's own browser with extension.de
     expect(launches[launches.length - 1]!.url).toBe("http://console.extension.localhost/cezaraugusto/settings/store-accounts#c");
 
     await guided("cezaraugusto", handing(HANDOFF, bodies), "safari");
-    expect(JSON.parse(bodies[bodies.length - 1]!)).toEqual({ next: "/cezaraugusto/settings/store-accounts", launchHash: expect.stringMatching(/^[0-9a-f]{64}$/) });
+    expect(JSON.parse(bodies[bodies.length - 1]!)).toEqual({ next: "/cezaraugusto/settings/store-accounts?store=safari", launchHash: expect.stringMatching(/^[0-9a-f]{64}$/) });
     expect(JSON.parse(bodies[0]!)).toMatchObject({ next: "/cezaraugusto/settings/store-accounts?store=edge" });
   });
 
@@ -1179,12 +1179,12 @@ describe("the guided store connect opens the MCP's own browser with extension.de
       prodSignIn();
       const bodies: string[] = [];
       const launchExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-      const out = JSON.parse(await guideStoreConnect(workspaceConnectAnswer("extension_submit", WORKSPACE, ["firefox"], PROD), { browsers: ["firefox"], api: PROD }, binding({ url: PROD_HANDOFF, launchBound: true, launchExpiresAt }, bodies)));
+      const out = JSON.parse(await guideStoreConnect(workspaceConnectAnswer("extension_submit", WORKSPACE, ["chrome"], PROD), { browsers: ["chrome"], api: PROD }, binding({ url: PROD_HANDOFF, launchBound: true, launchExpiresAt }, bodies)));
       const file = path.join(launches[0]!.extensionDir, "launch.json");
       const launch = JSON.parse(fs.readFileSync(file, "utf8"));
       const minted = JSON.parse(bodies[0]!);
 
-      expect(minted.next).toBe(`/${WORKSPACE}/settings/store-accounts?store=firefox`);
+      expect(minted.next).toBe(`/${WORKSPACE}/settings/store-accounts?store=chrome`);
       expect(launches[0]!.url).toBe(LAUNCH_HANDOFF_PAGE);
       expect(launches[0]!.url).not.toContain("#");
       expect(launch).toMatchObject({ handoff: PROD_HANDOFF, expiresAt: launchExpiresAt, front: true });
@@ -1194,6 +1194,23 @@ describe("the guided store connect opens the MCP's own browser with extension.de
       expect(out.value.sayToPerson).not.toContain("sign in to extension.dev once");
       expect(JSON.stringify(out)).not.toContain(launch.secret);
       expect(JSON.stringify(out)).not.toContain("c".repeat(43));
+    });
+
+    it.each([
+      ["safari", "Create a key and connect", 1],
+      ["firefox", "Generate credentials and connect", 0],
+    ])("1292: opens the %s key page in front with its own one press, and serves downloads only for App Store Connect", async (store, press, watches) => {
+      prodSignIn();
+      const bodies: string[] = [];
+      const watched: unknown[] = [];
+      const rt = binding({ url: PROD_HANDOFF, launchBound: true, launchExpiresAt: new Date(Date.now() + 60_000).toISOString() }, bodies, { watchAttach: (args) => watched.push(args) });
+      const out = JSON.parse(await guideStoreConnect(workspaceConnectAnswer("extension_submit", WORKSPACE, [store], PROD), { browsers: [store], api: PROD }, rt));
+
+      expect(launches[0]!.url).toBe(GUIDED_KEY_PAGES[store]!.url);
+      expect(JSON.parse(bodies[0]!)).toMatchObject({ next: `/${WORKSPACE}/settings/store-accounts?store=${store}` });
+      expect(out).toMatchObject({ status: "workspace-connect-guided", value: { landedOn: GUIDED_KEY_PAGES[store]!.url } });
+      expect(out.value.sayToPerson).toContain(`"${press}"`);
+      expect(watched).toHaveLength(watches);
     });
 
     it("removes the launch file from disk within two minutes of the launch", async () => {
@@ -1682,5 +1699,87 @@ describe("ledger 1171: the MCP sets the Partner Center image slots of its own gu
     expect(shown).toContainEqual(stranger);
     expect(set).toEqual([files[3]!.name, files[4]!.name]);
     expect(answer).toEqual({ attached: files.map((file) => file.name), missing: [], note: "removed 2 second copies of the same image" });
+  });
+
+  describe("ledger 1292: the App Store Connect .p8 through the MCP's own download folder", () => {
+    const TEAM_KEYS = "https://appstoreconnect.apple.com/access/integrations/api";
+    const PEM = "-----BEGIN PRIVATE KEY-----\nMIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQg\n-----END PRIVATE KEY-----";
+
+    function keyRig({ url = TEAM_KEYS, land = (dir: string) => fs.writeFileSync(path.join(dir, "AuthKey_7MM5YSX5LS.p8"), PEM) }: { url?: string; land?: (dir: string) => void } = {}) {
+      const ownId = unpackedExtensionId("/nonexistent/guided-chromium");
+      const calls: string[] = [];
+      let folder = "";
+      let answered: unknown = null;
+
+      const session = (wsUrl: string): CdpSession => ({
+        close: () => undefined,
+        send: async (method, params = {}) => {
+          const expression = String(params.expression ?? "");
+
+          if (wsUrl === "browser") {
+            calls.push(`${method}:${String(params.behavior)}`);
+            if (params.behavior === "allow") folder = String(params.downloadPath);
+
+            return {};
+          }
+
+          if (expression.includes(".takeKey?.()")) return { result: { value: { nonce: "key-nonce-01", url } } };
+
+          if (expression.includes(".armedKey?.(")) {
+            calls.push("armed");
+            land(folder);
+
+            return { result: { value: true } };
+          }
+
+          if (expression.includes(".keyOpen?.(")) return { result: { value: true } };
+          if (expression.includes(".doneKey?.(")) answered = JSON.parse(expression.slice(expression.indexOf(".doneKey?.(") + 11, expression.lastIndexOf(") ??")));
+
+          return { result: { value: true } };
+        },
+      });
+
+      const driver: AttachDriver = {
+        targets: async () => [
+          { type: "service_worker", url: `chrome-extension://${ownId}/background/service_worker.js`, webSocketDebuggerUrl: "worker" },
+          { type: "page", url: TEAM_KEYS, webSocketDebuggerUrl: "page" },
+        ],
+        browser: async () => "browser",
+        open: async (wsUrl) => session(wsUrl),
+        sleep: async () => undefined,
+      };
+
+      return { run: () => serveKeyOnce({ port: 9222, extensionId: ownId, driver, tempRoot: fs.mkdtempSync(path.join(os.tmpdir(), "key-test-")), waitMs: 3000 }), calls, answered: () => answered, folder: () => folder };
+    }
+
+    it("sets the window's downloads to a private folder before the panel presses, reads the one .p8, removes the folder and restores the browser's setting", async () => {
+      const rig = keyRig();
+
+      expect(await rig.run()).toBe("served");
+      expect(rig.calls).toEqual(["Browser.setDownloadBehavior:allow", "armed", "Browser.setDownloadBehavior:default"]);
+      expect(rig.answered()).toEqual({ nonce: "key-nonce-01", p8: PEM });
+      expect(fs.existsSync(rig.folder())).toBe(false);
+    });
+
+    it.each([
+      ["two .p8 files", (dir: string) => ["a.p8", "b.p8"].forEach((name) => fs.writeFileSync(path.join(dir, name), PEM)), "more than one .p8 landed, so none was read"],
+      ["a file that is not a key", (dir: string) => fs.writeFileSync(path.join(dir, "AuthKey_X.p8"), "<html>"), "the file that landed is not a .p8 key"],
+      ["nothing", () => undefined, "no .p8 landed within 60 seconds"],
+    ])("hands nothing over when %s lands, and still restores the browser's setting", async (_name, land, note) => {
+      const rig = keyRig({ land });
+
+      await rig.run();
+      expect(rig.answered()).toEqual({ nonce: "key-nonce-01", note });
+      expect(rig.calls[rig.calls.length - 1]).toBe("Browser.setDownloadBehavior:default");
+      expect(fs.existsSync(rig.folder())).toBe(false);
+    });
+
+    it("never touches the browser's downloads for an ask that is not from a Team Keys tab it can see", async () => {
+      const rig = keyRig({ url: "https://appstoreconnect.apple.com.evil.example/access/integrations/api" });
+
+      await rig.run();
+      expect(rig.calls).toEqual([]);
+      expect(rig.answered()).toEqual({ nonce: "key-nonce-01", note: "the MCP did not find the App Store Connect tab that asked" });
+    });
   });
 });

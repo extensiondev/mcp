@@ -44,6 +44,7 @@ export type CdpTarget = { type: string; url: string; webSocketDebuggerUrl: strin
 
 export interface AttachDriver {
   targets(port: number): Promise<CdpTarget[]>;
+  browser?(port: number): Promise<string | null>;
   open(wsUrl: string): Promise<CdpSession>;
   sleep(ms: number): Promise<void>;
 }
@@ -355,11 +356,118 @@ export async function serveAttachOnce(args: { port: number; extensionId: string;
   }
 }
 
+const TEAM_KEYS = /^https:\/\/appstoreconnect\.apple\.com\/access\/(?:integrations\/)?api(?:[/?#]|$)/i;
+const P8 = /^-----BEGIN PRIVATE KEY-----[\s\S]{16,4096}-----END PRIVATE KEY-----\s*$/;
+const MAX_P8_BYTES = 64 * 1024;
+const KEY_WAIT_MS = 60_000;
+
+type KeyAnswer = { nonce: string; p8?: string; note?: string };
+
+async function landedKey(args: { dir: string; sleep: (ms: number) => Promise<void>; open: () => Promise<boolean>; waitMs: number }): Promise<Omit<KeyAnswer, "nonce">> {
+  for (let waited = 0; waited < args.waitMs; waited += 500) {
+    await args.sleep(500);
+
+    if (!(await args.open())) return { note: "the panel withdrew the download before a .p8 landed" };
+
+    const names = fs.readdirSync(args.dir);
+    const keys = names.filter((name) => /\.p8$/i.test(name));
+
+    if (names.some((name) => /\.crdownload$/i.test(name)) || !keys.length) continue;
+    if (keys.length > 1) return { note: "more than one .p8 landed, so none was read" };
+
+    const file = path.join(args.dir, keys[0]!);
+    const stat = fs.lstatSync(file);
+    if (!stat.isFile() || stat.size > MAX_P8_BYTES) return { note: "the file that landed is not a .p8 key" };
+
+    const key = fs.readFileSync(file, "utf8").trim();
+
+    return P8.test(key) ? { p8: key } : { note: "the file that landed is not a .p8 key" };
+  }
+
+  return { note: "no .p8 landed within 60 seconds" };
+}
+
+/* @invariant THE MCP TAKES APPLE'S .P8 ONLY THROUGH A DOWNLOAD FOLDER OF ITS
+ * OWN, FOR ITS OWN GUIDED WINDOW, AND KEEPS NOTHING (MCP ledger 1292). The
+ * ask comes from the extension.dev tools worker of the folder this MCP
+ * loaded, for an App Store Connect Team Keys tab; the MCP sets that browser's
+ * downloads to a fresh 0700 folder with Browser.setDownloadBehavior (browser
+ * configuration, never a page press), tells the worker, and the panel presses
+ * Apple's Download. The one .p8 that lands is read, the folder is removed and
+ * the browser's own download setting is restored whatever happens; a second
+ * file, a non-key file or a withdrawn ask hands nothing over.
+ */
+export async function serveKeyOnce(args: { port: number; extensionId: string; driver: AttachDriver; tempRoot?: string; waitMs?: number }): Promise<"idle" | "served"> {
+  if (!args.driver.browser) return "idle";
+
+  const targets = await args.driver.targets(args.port);
+  const worker = targets.find((target) => target.type === "service_worker" && target.url.startsWith(`chrome-extension://${args.extensionId}/`));
+  if (!worker) return "idle";
+
+  const session = await args.driver.open(worker.webSocketDebuggerUrl);
+
+  try {
+    const raw = await evaluate(session, `globalThis.${RELAY_GLOBAL}?.takeKey?.() ?? null`);
+    if (!isRow(raw)) return "idle";
+
+    const nonce = text(raw.nonce);
+    const url = text(raw.url);
+    if (!NONCE.test(nonce)) return "served";
+
+    const answer = async (result: Omit<KeyAnswer, "nonce">) => {
+      await evaluate(session, `globalThis.${RELAY_GLOBAL}?.doneKey?.(${JSON.stringify({ nonce, ...result })}) ?? false`);
+    };
+
+    if (!TEAM_KEYS.test(url) || !targets.some((target) => target.type === "page" && target.url === url)) {
+      await answer({ note: "the MCP did not find the App Store Connect tab that asked" });
+
+      return "served";
+    }
+
+    const browserUrl = await args.driver.browser(args.port);
+
+    if (!browserUrl) {
+      await answer({ note: "the MCP could not reach this browser's download setting" });
+
+      return "served";
+    }
+
+    const dir = fs.mkdtempSync(path.join(args.tempRoot ?? os.tmpdir(), "extension-dev-key-"));
+    const browser = await args.driver.open(browserUrl);
+    let result: Omit<KeyAnswer, "nonce"> = { note: "the download folder could not be set" };
+
+    try {
+      fs.chmodSync(dir, 0o700);
+      await browser.send("Browser.setDownloadBehavior", { behavior: "allow", downloadPath: dir, eventsEnabled: false });
+
+      if ((await evaluate(session, `globalThis.${RELAY_GLOBAL}?.armedKey?.(${JSON.stringify(nonce)}) ?? false`)) === true) {
+        result = await landedKey({ dir, sleep: args.driver.sleep, open: async () => (await evaluate(session, `globalThis.${RELAY_GLOBAL}?.keyOpen?.(${JSON.stringify(nonce)}) ?? false`)) === true, waitMs: args.waitMs ?? KEY_WAIT_MS });
+      }
+    } finally {
+      await browser.send("Browser.setDownloadBehavior", { behavior: "default" }).catch(() => undefined);
+      browser.close();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+
+    await answer(result);
+
+    return "served";
+  } finally {
+    session.close();
+  }
+}
+
 export const cdpAttachDriver: AttachDriver = {
   targets: async (port) => {
     const res = await fetch(`http://127.0.0.1:${port}/json/list`);
 
     return res.ok ? ((await res.json()) as CdpTarget[]) : [];
+  },
+  browser: async (port) => {
+    const res = await fetch(`http://127.0.0.1:${port}/json/version`);
+    const body: unknown = res.ok ? await res.json() : null;
+
+    return isRow(body) && /^ws:\/\/(?:127\.0\.0\.1|localhost):\d+\/devtools\/browser\//.test(text(body.webSocketDebuggerUrl)) ? text(body.webSocketDebuggerUrl) : null;
   },
   open: async (wsUrl) => {
     const connection = new CDPConnection();
@@ -396,6 +504,7 @@ export function watchGuidedAttach(args: { profileDir: string; extensionDir: stri
 
     busy = true;
     serveAttachOnce({ port, extensionId, driver })
+      .then((served) => (served === "idle" ? serveKeyOnce({ port, extensionId, driver }) : served))
       .catch(() => "idle")
       .finally(() => {
         busy = false;
