@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 
 import { readZipEntry, unpackZip } from "./zip-entries";
 
-export const MIN_TOOLS_VERSION = "0.1.3";
+export const MIN_TOOLS_VERSION = "0.1.4";
 
 export const TOOLS_ITEMS = {
   chrome: { id: "omndndgipeomhfdobfbhpfemempnnpjp", publisher: "lfoeajgcchlidpicbabpmckkejpckcfb", store: "the Chrome Web Store" },

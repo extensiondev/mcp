@@ -710,9 +710,9 @@ describe("the guided store connect opens the MCP's own browser with extension.de
   });
 
   describe("the Firefox Add-ons copy", () => {
-    const FILE = "https://addons.mozilla.org/firefox/downloads/file/1/extension_dev_tools-0.1.3.xpi";
+    const FILE = "https://addons.mozilla.org/firefox/downloads/file/1/extension_dev_tools-0.1.4.xpi";
 
-    function xpi(id = "sidekick@extension.dev", version = "0.1.3"): Buffer {
+    function xpi(id = "sidekick@extension.dev", version = "0.1.4"): Buffer {
       return storedZip({ "manifest.json": JSON.stringify({ manifest_version: 3, version, browser_specific_settings: { gecko: { id } } }), "background/scripts.js": "void 0;" });
     }
 
@@ -723,7 +723,7 @@ describe("the guided store connect opens the MCP's own browser with extension.de
         if (url === AMO_ADDON_API) {
           if (options.status) return new Response("", { status: options.status });
 
-          return Response.json({ current_version: { version: options.version ?? "0.1.3", file: { url: options.url ?? FILE, hash: options.hash ?? `sha256:${crypto.createHash("sha256").update(bytes).digest("hex")}` } } });
+          return Response.json({ current_version: { version: options.version ?? "0.1.4", file: { url: options.url ?? FILE, hash: options.hash ?? `sha256:${crypto.createHash("sha256").update(bytes).digest("hex")}` } } });
         }
 
         files.push(String(url));
@@ -739,7 +739,7 @@ describe("the guided store connect opens the MCP's own browser with extension.de
       const { fetchImpl } = amo({});
       const first = await resolveToolsExtension({ engine: "gecko", edge: false, cacheDir, fetchImpl });
 
-      expect(first).toMatchObject({ source: "firefox", version: "0.1.3", note: "extension.dev tools 0.1.3 comes from Firefox Add-ons." });
+      expect(first).toMatchObject({ source: "firefox", version: "0.1.4", note: "extension.dev tools 0.1.4 comes from Firefox Add-ons." });
       if ("failed" in first) throw new Error(first.failed);
 
       expect(fs.existsSync(path.join(first.dir, "background", "scripts.js"))).toBe(true);
@@ -754,8 +754,8 @@ describe("the guided store connect opens the MCP's own browser with extension.de
     it.each([
       ["not listed yet", { status: 404 }, "it does not list the add-on yet"],
       ["an unlisted add-on, which AMO answers 401", { status: 401 }, "it does not list the add-on yet"],
-      ["a version under the minimum", { version: "0.1.0", bytes: xpi(undefined, "0.1.0") }, "it serves 0.1.0, older than 0.1.3"],
-      ["a file on another host", { url: "https://evil.test/extension_dev_tools-0.1.3.xpi" }, "its file address is not an https address on addons.mozilla.org or mozilla.net"],
+      ["a version under the minimum", { version: "0.1.3", bytes: xpi(undefined, "0.1.3") }, "it serves 0.1.3, older than 0.1.4"],
+      ["a file on another host", { url: "https://evil.test/extension_dev_tools-0.1.4.xpi" }, "its file address is not an https address on addons.mozilla.org or mozilla.net"],
       ["a file over http", { url: "http://addons.mozilla.org/file.xpi" }, "its file address is not an https address on addons.mozilla.org or mozilla.net"],
       ["a host that only ends like mozilla.net", { url: "https://evilmozilla.net/file.xpi" }, "its file address is not an https address on addons.mozilla.org or mozilla.net"],
       ["a sha256 that does not match", { hash: `sha256:${"0".repeat(64)}` }, "its file does not match the sha256 it names"],
@@ -764,7 +764,7 @@ describe("the guided store connect opens the MCP's own browser with extension.de
       const { fetchImpl, files } = amo(options);
       const out = await resolveToolsExtension({ engine: "gecko", edge: false, cacheDir: path.join(tmp, "amo-cache"), fetchImpl });
 
-      expect(out).toMatchObject({ source: "bundled", note: `Firefox Add-ons was not used because ${reason}, so extension.dev tools 0.1.3 is the copy bundled with this MCP.` });
+      expect(out).toMatchObject({ source: "bundled", note: `Firefox Add-ons was not used because ${reason}, so extension.dev tools 0.1.4 is the copy bundled with this MCP.` });
       if (String((options as { url?: string }).url ?? "").includes("evil")) expect(files).toEqual([]);
     });
   });
@@ -948,7 +948,7 @@ describe("the guided store connect opens the MCP's own browser with extension.de
     const out = await guided("cezaraugusto", runtime("edge", (url) => (url.includes("edge.microsoft.com") ? new Response(STORE_CRX) : new Response("", { status: 404 }))));
 
     expect(asked.find((url) => !url.includes("/store-accounts"))).toContain("edge.microsoft.com/extensionwebstorebase/v1/crx");
-    expect(out.value.toolsExtension).toMatchObject({ source: "bundled", version: "0.1.3" });
+    expect(out.value.toolsExtension).toMatchObject({ source: "bundled", version: "0.1.4" });
     expect(out.hint).toContain("Edge Add-ons was not used because its download was refused: the CRX names item omndndgipeomhfdobfbhpfemempnnpjp, not pnijfgjkilbnmjiomlajfbmiccjejbpm");
     expect(fs.existsSync(path.join(launches[0]!.extensionDir, "manifest.json"))).toBe(true);
   });
@@ -958,9 +958,9 @@ describe("the guided store connect opens the MCP's own browser with extension.de
 
     const older = await guided("cezaraugusto", runtime("chromium", (url) => (url.includes("clients2.google.com") ? new Response(STORE_CRX) : new Response("", { status: 404 }))));
 
-    expect(older.value.toolsExtension.note).toBe("The Chrome Web Store serves 0.1.0, older than 0.1.3, so extension.dev tools 0.1.3 is the copy bundled with this MCP.");
+    expect(older.value.toolsExtension.note).toBe("The Chrome Web Store serves 0.1.0, older than 0.1.4, so extension.dev tools 0.1.4 is the copy bundled with this MCP.");
     expect(launches[0]!.extensionDir).toBe(path.join(tmp, "cache", "guided-chromium"));
-    expect(fs.existsSync(path.join(tmp, "cache", `bundled-chromium-0.1.3-${readBundleRecord(bundledToolsDir()!)!.sha256.chromium.slice(0, 12)}`))).toBe(true);
+    expect(fs.existsSync(path.join(tmp, "cache", `bundled-chromium-0.1.4-${readBundleRecord(bundledToolsDir()!)!.sha256.chromium.slice(0, 12)}`))).toBe(true);
 
     const offline = await guided("cezaraugusto", runtime("chromium", () => Promise.reject(new Error("getaddrinfo ENOTFOUND"))));
 

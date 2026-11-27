@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "version": "0.1.3",
+  "version": "0.1.4",
   "name": "extension.dev tools",
   "author": "extension.dev",
   "description": "Tools from extension.dev for browser extension developers. Today: store submission tooling. More on the way.",
