@@ -86,6 +86,13 @@ export const OVERRIDE_SURFACES = ["newtab", "history", "bookmarks"];
 export const renderedTabTargets = new Set<string>();
 export const renderedGeckoSurfaces = new Map<string, string>();
 const PERSISTENT_WINDOW_SURFACES = ["side-panel"];
+const SURFACES = ["popup", "options", "side-panel", "devtools", "newtab", "history", "bookmarks", "action", "command"];
+const ENGINE_SURFACE_NAMES: Record<string, string> = { "side-panel": "sidebar" };
+const ENGINE_UNKNOWN_SURFACE = /unknown surface: [\w-]+ \(use [^)]*\)/g;
+
+function inToolSurfaceWords(raw: string, surface: string): string {
+  return raw.replace(ENGINE_UNKNOWN_SURFACE, `unknown surface: ${surface} (use ${SURFACES.slice(0, -1).join(", ")} or ${SURFACES[SURFACES.length - 1]})`);
+}
 
 type SettledTarget = {
   id: string;
@@ -1144,7 +1151,7 @@ export const schema = {
       projectPath: SESSION_PROJECT_PATH,
       surface: {
         type: "string",
-        enum: ["popup", "options", "side-panel", "devtools", "newtab", "history", "bookmarks", "action", "command"],
+        enum: SURFACES,
         description:
           "Surface to open; action and command replay; devtools is Chromium only.",
       },
@@ -1518,13 +1525,13 @@ async function openOnce(args: OpenArgs): Promise<string> {
     clickFailure = clicked.failed;
   }
 
-  const cli = ["open", args.surface, args.projectPath];
+  const cli = ["open", ENGINE_SURFACE_NAMES[args.surface] ?? args.surface, args.projectPath];
   if (args.surface === "command" && args.name) cli.push("--name", args.name);
 
   cli.push("--browser", browser);
   if (args.timeout != null) cli.push("--timeout", String(args.timeout));
 
-  const raw = await runActVerb(cli, args.projectPath, args.timeout, schema.name);
+  const raw = inToolSurfaceWords(await runActVerb(cli, args.projectPath, args.timeout, schema.name), args.surface);
 
   if (args.surface === "action" && isChromiumFamily(browser)) {
     const idle = parseFrameObject(raw);

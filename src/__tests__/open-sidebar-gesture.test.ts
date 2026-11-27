@@ -39,6 +39,14 @@ const idleActionRefusal = () =>
     warnings: [],
   });
 
+const engineUnknownSurface = (surface: string) =>
+  envelope({
+    ok: false,
+    command: "open",
+    status: "usage",
+    error: { code: "E_ARGS", name: "CliError", message: `unknown surface: ${surface} (use popup, options, sidebar, action, or command)` },
+  });
+
 let actResult = gestureRefusal();
 let actionResult: string | null = null;
 let panelBehavior: Record<string, unknown> | null = null;
@@ -50,6 +58,8 @@ vi.mock("../lib/act", async (importOriginal) => {
     ...actual,
     runActVerb: async (cli: string[]) => {
       cliCalls.push(cli);
+
+      if (!["popup", "options", "sidebar", "action", "command"].includes(cli[1])) return engineUnknownSurface(cli[1]);
 
       return cli[1] === "action" && actionResult ? actionResult : actResult;
     },
@@ -278,7 +288,7 @@ describe("extension_open sidebar on Chromium when Chrome demands a user gesture"
     );
 
     expect(cliCalls).toHaveLength(1);
-    expect(cliCalls[0].slice(0, 2)).toEqual(["open", "side-panel"]);
+    expect(cliCalls[0].slice(0, 2)).toEqual(["open", "sidebar"]);
     expect(result.ok).toBe(true);
     expect(result.status).toBe("opened");
     expect(result.value).toEqual({
@@ -385,6 +395,16 @@ describe("extension_open sidebar on Chromium when Chrome demands a user gesture"
     expect(result.warnings.join("\n")).toContain("headless");
   });
 
+  it("names the surfaces in the tool's own enum when the engine refuses one as unknown (ledger 1290)", async () => {
+    const p = project();
+    actResult = engineUnknownSurface("sidebar");
+
+    const result = JSON.parse(await open.handler({ projectPath: p.dir, surface: "side-panel" }));
+
+    expect(result.error.message).toContain("unknown surface: side-panel (use popup, options, side-panel, devtools, newtab, history, bookmarks, action or command)");
+    expect(result.error.message).not.toMatch(/\bsidebar\b/);
+  });
+
   it("passes any other engine failure through untouched", async () => {
     const p = project();
     actResult = envelope({
@@ -436,7 +456,7 @@ describe("extension_open action on Chromium when the click has no popup and no l
 
     const result = JSON.parse(await open.handler({ projectPath: p.dir, surface: "action" }));
 
-    expect(cliCalls.map((cli) => cli[1])).toEqual(["action", "side-panel"]);
+    expect(cliCalls.map((cli) => cli[1])).toEqual(["action", "sidebar"]);
     expect(result.ok).toBe(true);
     expect(result.value).toMatchObject({ surface: "side-panel", gesture: "synthetic-click", triggered: "sidePanel", openPanelOnActionClick: read, surfaceTarget: { targetId: "panel" } });
     expect(result.warnings.join("\n")).toContain(said);
