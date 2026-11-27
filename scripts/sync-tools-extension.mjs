@@ -8,7 +8,7 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { promises as fs } from "node:fs";
+import { promises as fs, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -76,6 +76,23 @@ async function copySource(from, to) {
   return pkg;
 }
 
+export function preBuildSteps(pkg) {
+  return String(pkg.scripts?.build ?? "")
+    .split("&&")
+    .map((step) => step.trim())
+    .filter((step) => step && !/\bextension@\d+\.\d+\.\d+\b/.test(step));
+}
+
+function runPreBuildSteps(source) {
+  const pkg = JSON.parse(readFileSync(path.join(source, "package.json"), "utf8"));
+
+  for (const step of preBuildSteps(pkg)) {
+    const run = spawnSync(step, { cwd: source, stdio: "inherit", shell: true });
+
+    if (run.status !== 0) throw new Error(`The build step "${step}" failed with exit ${run.status}.`);
+  }
+}
+
 function engineSpec(pkg) {
   const match = /extension@(\d+\.\d+\.\d+)/.exec(String(pkg.scripts?.build ?? ""));
   if (!match) throw new Error("The tools extension's build script names no exact extension@ version.");
@@ -89,6 +106,7 @@ async function main() {
   const scratch = await fs.mkdtemp(path.join(os.tmpdir(), "tools-extension-sync-"));
 
   try {
+    runPreBuildSteps(source);
     const pkg = await copySource(source, scratch);
     const engine = engineSpec(pkg);
     await standaloneTsconfig(scratch, monorepo);

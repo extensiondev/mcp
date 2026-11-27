@@ -8,6 +8,8 @@ import { describe, expect, it } from "vitest";
 import { ENVELOPE_SCHEMA, ERROR_CODES, envelopeObject } from "../lib/envelope";
 import { MIN_TOOLS_VERSION, bundledToolsDir, compareVersions, readBundleRecord, treeSha256 } from "../lib/tools-extension";
 import { validateAgainstSchema } from "./envelope-validate";
+// @ts-expect-error the sync script is plain JavaScript with no declarations
+import { preBuildSteps } from "../../scripts/sync-tools-extension.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const contractDir = path.join(here, "contract");
@@ -231,5 +233,10 @@ describe("the bundled extension.dev tools is the build its record names", () => 
       expect(treeSha256(built), `${folder} was edited by hand; re-run scripts/sync-tools-extension.mjs`).toBe(record!.sha256[folder]);
       expect(JSON.parse(fs.readFileSync(path.join(built, "manifest.json"), "utf8")).version).toBe(record!.version);
     }
+  });
+
+  it("runs the steps the tools build script runs before the engine, so a generated kit file is in the copy it builds", () => {
+    expect(preBuildSteps({ scripts: { build: "node tools/kit-css.mjs && npx -y extension@4.1.38 build --browser chrome" } })).toEqual(["node tools/kit-css.mjs"]);
+    expect(preBuildSteps({ scripts: { build: "npx -y extension@4.1.38 build" } })).toEqual([]);
   });
 });

@@ -3,14 +3,11 @@
     <title>extension.dev tools</title>
     
   <link rel="stylesheet" href="/action/index.css"></head>
-  <body>
-    <main id="tools-popup">
-      <p class="eyebrow">extension.dev tools</p>
-      <p id="tools-status">Reading the session.</p>
-      <div class="actions">
-        <button id="tools-allow" type="button" hidden=""></button>
-        <button id="tools-cancel" type="button" class="secondary" hidden="">End the session</button>
-      </div>
+  <body class="w-80 bg-background font-sans text-foreground antialiased">
+    <main id="tools-popup" class="flex flex-col gap-4 p-gutter">
+      <p class="text-xs text-muted-foreground">extension.dev tools</p>
+      <p id="tools-status" class="text-sm break-words select-text">Reading the session.</p>
+      <div id="tools-actions" class="flex flex-col gap-3 empty:hidden"></div>
     </main>
     <script src="/action/index.js" type="module"></script>
   
