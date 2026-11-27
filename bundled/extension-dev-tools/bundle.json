@@ -1,9 +1,9 @@
 {
   "name": "extension.dev tools",
   "version": "0.1.3",
-  "engine": "extension@4.1.38",
+  "engine": "extension@4.4.0",
   "sha256": {
-    "chromium": "1a35bba4f63e9261f138d3aff860a9ce0160aef9b08bcedb63d0b3c87633ea48",
-    "firefox": "86c7e98fa73e332f99e0bbc0b64377174f108c02b150106d713a0fbf9a1c4a69"
+    "chromium": "79b4ea3b358409b5a014f241a513740a80984349446a95386b05b5341c97472e",
+    "firefox": "e97f2499a8ae9dd501566b1b16671e5ef0f8f489dc4c50fcaa21e73fa38d7c34"
   }
 }
