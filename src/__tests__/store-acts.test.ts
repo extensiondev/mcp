@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { actionFingerprint } from "../lib/approval-gate";
 import { VERSION_ACTION, versionScopeFor } from "../lib/approval-lines";
-import { shipRefusalHint } from "../lib/ship-act";
+import { openShipApi, runShipAct, shipRefusalHint } from "../lib/ship-act";
 import { TOOL_POLICY } from "../lib/tool-policy";
 import { handler as status } from "../tools/release-status";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
@@ -59,6 +59,31 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
     expect(out.hint).toBe(out.value.sayToPerson);
     expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
   };
+
+  it("1305: an approval ask the platform answers with an older build's approval names that approval, its build and the latest one, and says it will not be spent", async () => {
+    platform.login();
+    const scope = { store: "edge", firstSubmission: "partner-center", buildSha: "c1d7afe", packageSha256: "e".repeat(64), visibility: "hidden" };
+    const earlier = { approvalId: "apr_old", status: "approved", buildSha: "9de7bae", latestBuildSha: "c1d7afe", approvalUrl: `${API}/device/approve/apr_old` };
+    const asked = approvalRequired("extension_store.publish", scope);
+
+    platform.routes[`POST ${PROJECT_ROUTE}/stores/edge/first-submission`] = () => ({ ...asked, body: { ...asked.body, supersededApproval: earlier } });
+    platform.routes[`POST ${APPROVALS}`] = () => ({ status: 201, body: { approvalId: "apr_new", approvalUrl: `${API}/device/approve/apr_new`, description: "First Edge submission." } });
+
+    const opened = await openShipApi("extension_submit", { api: API }, { action: "first-submission", store: "edge" });
+    if ("refused" in opened) throw new Error(opened.refused);
+
+    const act = { command: "extension_submit", act: "first-submission", action: "extension_store.publish", route: "stores/edge/first-submission", body: {}, description: "First Edge submission.", reason: "Partner Center only.", stateRead: "the first-submission read", scopeFits: () => true, value: { store: "edge" } };
+    const ran = await runShipAct(act, opened.api);
+    const out = JSON.parse(ran.ok ? "{}" : ran.out);
+
+    expect(out).toMatchObject({ ok: false, status: "approval-required", value: { approvalId: "apr_new", supersededApproval: earlier } });
+    expect(out.hint.startsWith(`Approval apr_old is approved but unspent, yet it names build 9de7bae; the latest build is c1d7afe, so apr_old will not be spent. The owner approves the new one at ${API}/device/approve/apr_new instead.`)).toBe(true);
+
+    platform.routes[`POST ${PROJECT_ROUTE}/stores/edge/first-submission`] = () => asked;
+    const plain = await runShipAct(act, opened.api);
+
+    expect(JSON.parse(plain.ok ? "{}" : plain.out).value).not.toHaveProperty("supersededApproval");
+  });
 
   it("610: a Firefox publish off the lane says Firefox has no publish act and AMO reviews a version when it is submitted", () => {
     const firefox = offLane("firefox", "publish", "Sending the Firefox Add-ons draft to review").body;

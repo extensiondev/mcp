@@ -9,7 +9,7 @@
 import { approvalRoundTrip } from "./approval-outcome";
 import { namedRefusalOf } from "./named-refusal";
 import { billingUrl } from "./console-urls";
-import { envelope, type ErrorCode } from "./envelope";
+import { envelope, reframed, type ErrorCode, type ParsedFrame } from "./envelope";
 import {
   actionFingerprint,
   requestApprovalAfterRefusal,
@@ -339,6 +339,32 @@ function scopeOf(raw: unknown): ApprovalScope | null {
  * matches the call's own arguments, so an owner is never shown an approval
  * that could not authorize the call the agent will repeat.
  */
+function supersededSentence(earlier: Row, newUrl: string): string {
+  const id = text(earlier.approvalId);
+  const said = text(earlier.status) === "pending" ? "still waits on the owner and" : "is approved but unspent, yet it";
+
+  return `Approval ${id} ${said} names build ${text(earlier.buildSha)}; the latest build is ${text(earlier.latestBuildSha)}, so ${id} will not be spent. The owner approves the new one${newUrl ? ` at ${newUrl}` : ""} instead.`;
+}
+
+function withSupersededApproval(body: unknown, out: string): string {
+  const earlier = isRow(body) && isRow((body as Row).supersededApproval) ? ((body as Row).supersededApproval as Row) : null;
+  if (!earlier || !text(earlier.approvalId) || !text(earlier.buildSha) || !text(earlier.latestBuildSha)) return out;
+
+  let answer: Row;
+
+  try {
+    answer = JSON.parse(out) as Row;
+  } catch {
+    return out;
+  }
+
+  const value = isRow(answer.value) ? (answer.value as Row) : {};
+  const said = supersededSentence(earlier, text(value.approvalUrl));
+  const hint = text(answer.hint);
+
+  return reframed({ ...answer, value: { ...value, supersededApproval: earlier }, hint: hint ? `${said} ${hint}` : said } as ParsedFrame);
+}
+
 async function askForApproval(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): Promise<string> {
   const asked = isRow(read.body) && isRow((read.body as Row).approvalRequest) ? ((read.body as Row).approvalRequest as Row) : {};
   const scope = scopeOf(asked.scope);
@@ -362,7 +388,7 @@ async function askForApproval(act: ShipAct, read: ProjectApiRefusal, api: Projec
     });
   }
 
-  return requestApprovalAfterRefusal({
+  return withSupersededApproval(read.body, await requestApprovalAfterRefusal({
     command: act.command,
     action: act.action,
     scope,
@@ -375,7 +401,7 @@ async function askForApproval(act: ShipAct, read: ProjectApiRefusal, api: Projec
     reason: act.reason,
     stateRead: act.stateRead,
     irreversible: act.irreversible,
-  });
+  }));
 }
 
 export async function openShipApi(command: string, args: { project?: string; api?: string }, value: Row): Promise<{ api: ProjectApi } | { refused: string }> {
