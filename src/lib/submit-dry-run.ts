@@ -12,7 +12,7 @@ import { screenshotRefusal, type ListingImage } from "./store-listing-media";
 import { LISTING_STORES, type ListingStore } from "./store-md-declarations";
 import { localListingOf } from "./store-listing-local";
 import { factOf } from "./submit-facts";
-import { readSubmitFacts, type SubmitFactsArgs } from "./submit-facts-local";
+import { clientProjectPathNote, noClientStoreMdNote, readSubmitFacts, type SubmitFactsArgs } from "./submit-facts-local";
 
 type Args = Record<string, unknown>;
 
@@ -56,7 +56,7 @@ function listingPreview(args: Args): string {
 
   const facts = readSubmitFacts(args as SubmitFactsArgs).project;
 
-  if (!facts.projectPath || !facts.exists || !facts.shots) return refused("sync-listing needs projectPath, the extension project root that holds STORE.md and the built dist.");
+  if (!facts.projectPath || !facts.exists || !facts.shots) return refused(`sync-listing needs projectPath, the extension project root that holds STORE.md and the built dist; a local server reads the client's directory in its place when that directory holds STORE.md.${text(args.projectPath) ? "" : noClientStoreMdNote()}`);
 
   const given = args.screenshots !== undefined ? facts.shots.given : null;
 
@@ -93,6 +93,7 @@ function listingPreview(args: Args): string {
 
     return `${store}: ${fields.length ? fields.join(", ") : "nothing"}`;
   });
+  const from = clientProjectPathNote(args);
   const build = text(args.useBuild) ? ` The write would also take the icon of build ${text(args.useBuild)}, which only extension.dev reads.` : "";
 
   return envelope({
@@ -100,7 +101,7 @@ function listingPreview(args: Args): string {
     command: COMMAND,
     status: "sync-listing-preview",
     value: { action: LISTING_ACT, dryRun: true, written: false, stores },
-    hint: `${NOTHING_SENT} sync-listing would write, read from STORE.md and the local images: ${said.join("; ")}.${build} The platform may still refuse a value or ask a workspace owner's approval for one it derives. To write it, call extension_submit with the same arguments and dryRun omitted.`,
+    hint: `${from ? `${from} ` : ""}${NOTHING_SENT} sync-listing would write, read from STORE.md and the local images: ${said.join("; ")}.${build} The platform may still refuse a value or ask a workspace owner's approval for one it derives. To write it, call extension_submit with the same arguments and dryRun omitted.`,
   });
 }
 

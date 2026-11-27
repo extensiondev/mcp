@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { clientProjectDir } from "./client-roots";
 import { firefoxManifestOf } from "./firefox-enterprise";
 import { text } from "./row";
 import { draftFactsOf, shotsFactsOf } from "./store-draft-facts-local";
@@ -26,6 +27,7 @@ import {
   toolchainFactsOf,
 } from "./store-facts-local";
 import { storeMdPath, storeMdRepositoryNote } from "./session-paths";
+import { STORE_MD_FILENAME } from "./store-md";
 import { LISTING_STORES, type ListingStore } from "./store-md-declarations";
 import { emptyProjectFacts, type ProjectFacts, type StoreMdRead, type SubmitFacts } from "./submit-facts";
 import { localListingOf } from "./store-listing-local";
@@ -104,6 +106,31 @@ export function storeMdSourceNote(args: SubmitFactsArgs): string | null {
   const action = args.action === undefined ? "submit" : args.action;
 
   return projectPath && READ_ACTIONS.has(action) ? storeMdRepositoryNote(projectPath) : null;
+}
+
+const SUBMIT_COMMANDS = new Set(["extension_submit", "extension_submit_check"]);
+const clientFilled = new WeakSet<object>();
+
+export function withClientProjectPath<T extends Record<string, unknown>>(command: string, args: T): T {
+  if (!SUBMIT_COMMANDS.has(command) || text(args.action) !== "sync-listing" || text(args.projectPath)) return args;
+
+  const dir = clientProjectDir();
+  if (!dir || !fs.existsSync(path.join(dir, STORE_MD_FILENAME))) return args;
+
+  const filled = { ...args, projectPath: dir };
+  clientFilled.add(filled);
+
+  return filled;
+}
+
+export function clientProjectPathNote(args: object): string | null {
+  return clientFilled.has(args) ? `projectPath was omitted, so sync-listing read the client's directory ${text((args as SubmitFactsArgs).projectPath)}, which holds ${STORE_MD_FILENAME}.` : null;
+}
+
+export function noClientStoreMdNote(): string {
+  const dir = clientProjectDir();
+
+  return dir ? ` The client's directory ${dir} holds no ${STORE_MD_FILENAME} either.` : "";
 }
 
 export function readSubmitFacts(args: SubmitFactsArgs): SubmitFacts {

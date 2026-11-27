@@ -22,6 +22,7 @@ import { forgetForwardCredentials } from "../lib/forward-credential";
 import { saveHeldBatch } from "../lib/held-batches";
 import { runAskingOnly } from "../lib/ask-only";
 import { forgetCarriedMemory } from "../lib/forward-lane-answer";
+import { clientDirs } from "../lib/client-roots";
 import { FORWARDED_TOOLS, forgetApprovalHolders, forwardCall } from "../lib/hosted-forwarder";
 import { outcomeClock } from "../lib/outcome-clock";
 import { createToolDispatcher } from "../lib/tool-dispatch";
@@ -896,6 +897,34 @@ describe("the forwarder", () => {
     }
 
     expect(seen).toHaveLength(0);
+  });
+
+  it("1275: sync-listing without projectPath reads the client's directory when it holds STORE.md, and names it", async () => {
+    const root = path.join(tmp, "here");
+    fs.mkdirSync(path.join(root, "dist", "edge"), { recursive: true });
+    fs.writeFileSync(path.join(root, "dist", "edge", "manifest.json"), JSON.stringify({ manifest_version: 3, name: "x", version: "1.0.0" }));
+    const synced = JSON.parse(envelopeOf({ ok: true, command: "extension_submit", status: "listing-synced", value: {} }));
+    const { lane } = stubLane([synced]);
+    const args = { action: "sync-listing", browsers: ["edge"], project: "acme/web" };
+    clientDirs.cwd = () => root;
+
+    try {
+      const bare = JSON.parse(await forwardCall("extension_submit", { ...args, dryRun: true }, async () => "local", FORWARDING));
+      expect(bare.error.message).toContain(`The client's directory ${root} holds no STORE.md either.`);
+
+      fs.writeFileSync(path.join(root, "STORE.md"), "# Store\n\n## Listing\n\n- Summary: hello\n");
+      const said = `projectPath was omitted, so sync-listing read the client's directory ${root}, which holds STORE.md.`;
+      const preview = JSON.parse(await forwardCall("extension_submit", { ...args, dryRun: true }, async () => "local", FORWARDING));
+      expect(preview).toMatchObject({ ok: true, status: "sync-listing-preview", value: { stores: { edge: { listing: { shortDescription: "hello" } } } } });
+      expect(preview.hint).toContain(said);
+
+      const sent = JSON.parse(await forwardCall("extension_submit", args, async () => "local", FORWARDING));
+      expect(lane()[0]?.body.args.local.facts.project).toMatchObject({ exists: true });
+      expect(lane()[0]?.body.args).not.toHaveProperty("projectPath");
+      expect(sent.warnings).toContain(said);
+    } finally {
+      clientDirs.cwd = () => process.cwd();
+    }
   });
 });
 

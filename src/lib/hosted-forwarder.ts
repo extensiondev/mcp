@@ -35,7 +35,7 @@ import { identityHeaders } from "./session-identity";
 import { readSharedPreviews } from "./share-record";
 import { listingFillable, workspaceConnectAnswer } from "./store-connection";
 import { forwardSubmitFacts, imagesTheLaneWants, labeledScreenshots, withProjectRoot, type ForwardFactsArgs, type WantedImage } from "./submit-facts-forward";
-import { storeMdSourceNote } from "./submit-facts-local";
+import { clientProjectPathNote, storeMdSourceNote, withClientProjectPath } from "./submit-facts-local";
 import { submitDryRunAnswer } from "./submit-dry-run";
 import { TOOL_POLICY } from "./tool-policy";
 import { reportProgress } from "./call-progress";
@@ -125,7 +125,7 @@ const SUBMIT_RULE: ForwardRule = {
 
     return guidedConnectStore(args) ? { ...shaped, waitSeconds: 0 } : shaped;
   },
-  answered: (args, body) => withStoreMdSource(withProjectRoot(body, args.projectPath), storeMdSourceNote(args)),
+  answered: (args, body) => withStoreMdSource(withStoreMdSource(withProjectRoot(body, args.projectPath), storeMdSourceNote(args)), clientProjectPathNote(args)),
 };
 
 function guidedConnectStore(args: Args): string {
@@ -703,9 +703,11 @@ async function retoldUnopened(call: LaneCall, shaped: Args, facts: Args | null, 
  * the lane is closed, and an auth status, carry what the lane's preflight
  * names as closed.
  */
-export async function forwardCall(command: string, args: Args, local: (args: Args) => Promise<string>, deps: ForwarderDeps = {}): Promise<string> {
+export async function forwardCall(command: string, given: Args, local: (args: Args) => Promise<string>, deps: ForwarderDeps = {}): Promise<string> {
   const rule = FORWARDED_TOOLS[command];
-  if (!rule || forwardSession()) return local(args);
+  if (!rule || forwardSession()) return local(given);
+
+  const args = withClientProjectPath(command, given);
 
   const held = submitDryRunAnswer(command, args);
   if (held) return held;
