@@ -252,7 +252,7 @@ describe("the guided Chrome first listing answer", () => {
     expect(out).toMatchObject({ status: "first-listing-guided", value: { opened: true, landedOn: DASHBOARD_HOME, guidedBrowser: { browser: "chromium" }, nextStep: { kind: "dashboard", url: DASHBOARD_HOME } } });
     expect(out.value).not.toHaveProperty("openPages");
     expect(out.value.sayToPerson).toContain(signInLine(""));
-    expect(out.value.sayToPerson).toContain("press its one button");
+    expect(out.value.sayToPerson).toContain("the next step is to press \"Create and fill the Chrome listing\" in the panel");
     expect(out.value.sayToPerson).toContain("presses \"New item\" once");
     expect(out.value.sayToPerson).toContain("Submit for review is one approval-gated extension_submit publish call afterwards");
     expect(out.hint).toContain("it presses nothing on the page");

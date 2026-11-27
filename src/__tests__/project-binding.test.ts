@@ -1303,6 +1303,8 @@ describe("the guided store connect opens the MCP's own browser with extension.de
         expect(JSON.stringify(out)).not.toContain(launch.secret);
         expect(JSON.stringify(out)).not.toContain("c".repeat(43));
         expect(out.value.sayToPerson).toContain("presses \"Create new extension\" once");
+        expect(out.value.sayToPerson).toContain("panel open on its one button");
+        expect(out.value.sayToPerson).toContain("The next step is to press \"Create and fill the Edge listing\" in the panel");
         expect(out.value.sayToPerson).toContain("presses Publish once, and Partner Center's confirm, only after a workspace owner's extension.dev approval");
         expect(out.value.sayToPerson).not.toContain("the person presses Publish");
         expect(out.value.sayToPerson).toContain("Hidden");
@@ -1338,6 +1340,7 @@ describe("the guided store connect opens the MCP's own browser with extension.de
         expect(out.value.partnerCenterPage).toBe(`https://partner.microsoft.com/dashboard/microsoftedge/${PRODUCT}/packages`);
         expect(out.value.sayToPerson).toContain(PRODUCT);
         expect(out.value.sayToPerson).not.toContain("Create new extension");
+        expect(out.value.sayToPerson).toContain("The next step is to press \"Fill the Edge listing\" in the panel");
       });
 
       it("opens the guided App Store page on Apps, or on App Privacy once the app record exists, and never asks to approve a press (1277)", async () => {
@@ -1352,6 +1355,7 @@ describe("the guided store connect opens the MCP's own browser with extension.de
         expect(fresh.value.sayToPerson).toContain("reaches only this project's first App Store listing");
         expect(fresh.value).not.toHaveProperty("partnerCenterPage");
         expect(fresh.value.sayToPerson).toContain("presses Create once");
+        expect(fresh.value.sayToPerson).toContain("The next step is to press \"Create the App Store app record\" in the panel");
         expect(fresh.value.sayToPerson).toContain("never presses Publish on App Privacy");
         expect(fresh.hint).not.toContain("extension_approvals_request {act: \"extension_submit\", args: {action: \"first-submission\"");
         expect(fresh.hint).toContain(`without waiting for their word, call extension_submit {action: "first-submission", store: "safari", project: "${WORKSPACE}/rebeccat", waitSeconds: 300}`);
@@ -1361,6 +1365,7 @@ describe("the guided store connect opens the MCP's own browser with extension.de
 
         expect(made.value.appStoreConnectPage).toBe("https://appstoreconnect.apple.com/apps/1234567890/distribution/privacy");
         expect(made.value.sayToPerson).not.toContain("presses Create");
+        expect(made.value.sayToPerson).toContain("The next step is to press \"Finish the App Store Connect steps\" in the panel");
         expect(made.hint).toContain("The project already holds the app record 1234567890.");
         expect(made.hint).not.toContain("waitSeconds");
       });
