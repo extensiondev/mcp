@@ -4,7 +4,7 @@
     "repo": "extension-js/templates",
     "commit": "255e7b57c6be400bde4ed8744257bc64e27e4012"
   },
-  "generatedAt": "2026-11-19T15:42:35.712Z",
+  "generatedAt": "2026-11-27T19:35:12.053Z",
   "workspace": "extension-dev",
   "templates": [
     {
@@ -102,16 +102,16 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "f60bd0f4c75d52b73e31c84bc6c891db051dfe3ef7b452a6cb38e523ecd736ce",
-          "size": 45549
+          "sha256": "3a92b3cb9b0791b18d9cb7e5122d51f3fb89fa9008904e8077db83f63e2ba2ca",
+          "size": 45561
         },
         "edge": {
-          "sha256": "f60bd0f4c75d52b73e31c84bc6c891db051dfe3ef7b452a6cb38e523ecd736ce",
-          "size": 45549
+          "sha256": "3a92b3cb9b0791b18d9cb7e5122d51f3fb89fa9008904e8077db83f63e2ba2ca",
+          "size": 45561
         },
         "firefox": {
-          "sha256": "1a728c6a1eaf530070d2f432780459936c4f06b562902dc163c0fdc672216633",
-          "size": 45567
+          "sha256": "f4b8085db395e54d6a2dbdcd76540636421aa78fc4efb3fb9f1a1645b08d03ad",
+          "size": 45570
         }
       },
       "executables": [
@@ -120,13 +120,13 @@
           "files": [
             {
               "name": "chrome-extension-linux.tar.gz",
-              "bytes": 1694875,
-              "sha256": "75cf4f44ca46667d9fefccb41e8f624443b5d192e662db5aaf0b29df5189d010"
+              "bytes": 1694921,
+              "sha256": "1e434d9590cb3c5cd1da52235ec603125298b1c6c7f818bf32c083c5ad71c8f8"
             },
             {
               "name": "chrome-extension-windows.exe",
-              "bytes": 3299723,
-              "sha256": "2021249bf35733ff2bedcf3c1ceee3cf04f4eb608dbb8aeec25086f97d93227a"
+              "bytes": 3300060,
+              "sha256": "7b0cf27a4dd554dd2a05e7f699052703d5f80eaff1e99434333f37c50d50edea"
             }
           ],
           "macosNotarizationPending": true
@@ -136,13 +136,13 @@
           "files": [
             {
               "name": "edge-extension-linux.tar.gz",
-              "bytes": 1694868,
-              "sha256": "5707cd2d5160553f5bf6e5791d0a07ccfd6d3be96d49356e3874d67875796ed8"
+              "bytes": 1694911,
+              "sha256": "7aee43a5a49e5db8a4d2f45ce6983260817c6c76e3664da62183b31c79722ff8"
             },
             {
               "name": "edge-extension-windows.exe",
-              "bytes": 3299684,
-              "sha256": "5dea92e82ed6648efb931675936117936337611d50c9f69ad53deb2addae1ae8"
+              "bytes": 3300051,
+              "sha256": "b3dca6b278d3001066bb35f4a021e59ca07ec3966e746f652ebcf16f26908640"
             }
           ],
           "macosNotarizationPending": true
@@ -152,18 +152,23 @@
           "files": [
             {
               "name": "firefox-extension-linux.tar.gz",
-              "bytes": 1698688,
-              "sha256": "40e89596b9ba8c3d4e5d353a57c62a524d69b009d415ce99eb98bbfcf9282b5b"
+              "bytes": 1698770,
+              "sha256": "2b1e6d3e7e82bf89a69d255579248b951c8a38651703860f2528d320ded2b9d9"
             },
             {
               "name": "firefox-extension-windows.exe",
-              "bytes": 3291387,
-              "sha256": "7bf0fa0e56413d52b6704ebdfe1b03bcca397d6997d2045e21c1fb041b84a2b5"
+              "bytes": 3291514,
+              "sha256": "afbce09e96eeb84ab32b5c1780a4d47270f61e47756c9739dba2254ece340f80"
             }
           ],
           "macosNotarizationPending": true
         }
-      ]
+      ],
+      "safariMacApp": {
+        "url": "https://registry.extension.land/extension-dev/action/builds/255e7b5/safari-macos.app.zip",
+        "sha256": "b6768534d4125bd9c7aca20c52e4b07668b619e74cfe06bc0368c480139e36ce",
+        "size": 644828
+      }
     },
     {
       "slug": "action-locales",
@@ -423,16 +428,16 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "4213b4b7ce658b5bf5c92529c38d80e3b129b950646530fe5e3db7ad23f81b78",
-          "size": 82397
+          "sha256": "4b5f86869baa7aa21e5d25c0267fafdaa7810cd9f7fc47d1fc7ec34dc4ff068b",
+          "size": 82408
         },
         "edge": {
-          "sha256": "4213b4b7ce658b5bf5c92529c38d80e3b129b950646530fe5e3db7ad23f81b78",
-          "size": 82397
+          "sha256": "4b5f86869baa7aa21e5d25c0267fafdaa7810cd9f7fc47d1fc7ec34dc4ff068b",
+          "size": 82408
         },
         "firefox": {
-          "sha256": "9f9a0c61ea8e51755fce19f411d0b68697a2bfd060929be461cbd4464137a273",
-          "size": 82464
+          "sha256": "334a246714b7ce66dcae3980c76a0affee2f206867792f97a0437b16137c12ca",
+          "size": 82466
         }
       }
     },
