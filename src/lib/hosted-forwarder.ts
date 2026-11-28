@@ -180,6 +180,8 @@ async function guidedFirstListing(command: string, args: Args, shown: Args, deps
 
 const GUIDED_LISTING_STATUS = "first-listing-guided";
 
+const FIRST_SUBMISSION_BLOCKED = "first-submission-blocked";
+
 function storesToFill(value: Args): Array<"chrome" | "edge"> {
   const gaps = Array.isArray(value.notSynced) ? (value.notSynced as Args[]) : [];
   const stores = value.stores && typeof value.stores === "object" ? (value.stores as Args) : {};
@@ -210,7 +212,8 @@ async function guidedFillOf(call: LaneCall, args: Args, store: "chrome" | "edge"
 
   if (!listingFillable(store, laneStatus(sheet), sheetValue)) {
     const error = sheet.ok === false && sheet.error && typeof sheet.error === "object" ? text((sheet.error as Args).message) : "";
-    const note = error ? `No guided window was opened, since the ${store} first-submission sheet could not be read: ${error}` : "";
+    const why = laneStatus(sheet) === FIRST_SUBMISSION_BLOCKED ? `the ${store} first listing is not ready yet` : `the ${store} first-submission sheet could not be read`;
+    const note = error ? `No guided window was opened, since ${why}: ${error}` : "";
 
     return note ? { hint: note, guidedFill: { opened: false, note } } : null;
   }

@@ -233,6 +233,14 @@ describe("the forwarder", () => {
     const refused = JSON.parse(await forwardCall("extension_submit", { action: "sync-listing", browsers: ["chrome", "firefox"], projectPath: project }, async () => "local", { ...FORWARDING, platform: "darwin", guideFirstListing: shut }));
 
     expect(refused.value.notSynced[0].guidedFill).toEqual({ opened: false, note: `No guided window was opened, since the chrome first-submission sheet could not be read: ${FACTS}` });
+
+    const NOT_READY = "Nothing was opened and no panel button applies yet: before the first Chrome Web Store listing, this row is not done, in order: 1. Chrome builds on.";
+
+    stubLane([synced(), JSON.parse(envelopeOf({ ok: false, command: "extension_submit", status: "first-submission-blocked", error: { code: "E_BAD_REQUEST", message: NOT_READY }, value: { action: "first-submission", store: "chrome", project: "acme/web", state: "blocked" } }))]);
+
+    const blocked = JSON.parse(await forwardCall("extension_submit", { action: "sync-listing", browsers: ["chrome", "firefox"], projectPath: project }, async () => "local", { ...FORWARDING, platform: "darwin", guideFirstListing: shut }));
+
+    expect(blocked.value.notSynced[0].guidedFill).toEqual({ opened: false, note: `No guided window was opened, since the chrome first listing is not ready yet: ${NOT_READY}` });
   });
 
   it("1230: hands an Edge store logo sync-listing left open to the guided first listing, and leaves it alone once the product was published", async () => {
