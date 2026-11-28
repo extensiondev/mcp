@@ -885,15 +885,18 @@ describe("the guided store connect opens the MCP's own browser with extension.de
     fs.writeFileSync(path.join(unpacked, "manifest.json"), JSON.stringify({ version: "0.1.3.900" }));
     fs.writeFileSync(marker, "0.1.3.782\n");
     fs.writeFileSync(path.join(path.dirname(profileDir), "running.json"), JSON.stringify({ pid: process.pid, browser: "chrome" }));
+    fs.writeFileSync(path.join(unpacked, "launch.json"), "the new launch");
 
     try {
       const out = await launchGuidedBrowser({ choice: { browser: "chrome", binary: "/usr/bin/true", install: null, why: "" }, extensionDir: unpacked, profileDir, url: PAGE, env: {} }, async (args) => {
         expect(args).toEqual({ profileDir, extensionDir: unpacked, build: "0.1.3.900" });
+        expect(fs.existsSync(path.join(unpacked, "launch.json")), "ledger 1316: the old tools would take the launch on the extensions page's tab").toBe(false);
 
         return { reloaded: true };
       });
 
       expect(out).toEqual({ launched: true, reused: true, reloaded: true });
+      expect(fs.readFileSync(path.join(unpacked, "launch.json"), "utf8")).toBe("the new launch");
       expect(fs.readFileSync(marker, "utf8").trim()).toBe("0.1.3.900");
       expect(fs.existsSync(path.join(workers, "live"))).toBe(true);
       expect(launchWord(out)).toContain("reloaded in place in that same window, which keeps every sign-in");

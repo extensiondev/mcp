@@ -223,6 +223,36 @@ export function privateProfile(profileDir: string): void {
   }
 }
 
+/* @invariant THE TOOLS BUILD BEING REPLACED NEVER SEES THE NEW LAUNCH (MCP
+ * ledger 1316). The open window's older tools takes a launch file on any new
+ * tab, the extensions page this MCP opens for the reload among them, and a
+ * reload wipes what it took, so the newer build would open a second handoff
+ * tab for the same one-time code. The file is moved aside for the reload and
+ * put back before the page that starts the launch is handed over.
+ */
+async function withLaunchFileHidden<T>(extensionDir: string, run: () => Promise<T>): Promise<T> {
+  const file = launchFile(extensionDir);
+  const aside = `${file}.${process.pid}.held`;
+  let held = false;
+
+  try {
+    fs.renameSync(file, aside);
+    held = true;
+  } catch {
+  }
+
+  try {
+    return await run();
+  } finally {
+    if (held) {
+      try {
+        fs.renameSync(aside, file);
+      } catch {
+      }
+    }
+  }
+}
+
 /* @invariant ONE GUIDED BROWSER PER PROFILE, KEPT PRIVATE AND RUN BY THE
  * MCP'S OWN ENGINE. A second connect while the guided browser of that profile
  * still runs hands the page to the running browser through its own
@@ -249,7 +279,7 @@ export async function launchGuidedBrowser(plan: LaunchPlan, reload: (args: { pro
 
   const owner = runningOwner(plan.profileDir, running.pid);
   const alive = owner !== null;
-  const swapped = alive && stale && guidedEngine(plan.choice.browser) === "chromium" ? await reload({ profileDir: plan.profileDir, extensionDir: plan.extensionDir, build }) : null;
+  const swapped = alive && stale && guidedEngine(plan.choice.browser) === "chromium" ? await withLaunchFileHidden(plan.extensionDir, () => reload({ profileDir: plan.profileDir, extensionDir: plan.extensionDir, build })) : null;
 
   if (swapped?.reloaded) {
     startBuild(plan.profileDir, build, false);
