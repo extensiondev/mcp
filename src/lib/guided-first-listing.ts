@@ -9,7 +9,7 @@
 import { envelope } from "./envelope";
 import { guidedEngine } from "./guided-browser";
 import { guidedConnectRuntime, openGuided, type GuidedConnectRuntime } from "./guided-connect";
-import { launchWord } from "./guided-window-end";
+import { launchFacts, launchWord } from "./guided-window-end";
 import { isRow, text } from "./row";
 import { nextStep } from "./store-connection";
 
@@ -156,7 +156,7 @@ export async function guideFirstListing(result: string, args: Args, runtime: Gui
     value: {
       ...kept,
       opened: true,
-      guidedBrowser: { opened: true, browser: opened.choice.browser, why: opened.choice.why, profile: opened.profileDir, reused: opened.launched.reused, ...(opened.launched.replaced ? { replaced: true } : {}) },
+      guidedBrowser: { opened: true, browser: opened.choice.browser, why: opened.choice.why, profile: opened.profileDir, reused: opened.launched.reused, ...launchFacts(opened.launched) },
       toolsExtension: { source: opened.extension.source, version: opened.extension.version, note: opened.extension.note },
       landedOn: consolePage,
       ...(apple ? { appStoreConnectPage: start.url } : { partnerCenterPage: start.url }),

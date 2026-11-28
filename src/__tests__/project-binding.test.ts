@@ -26,7 +26,8 @@ import { forwardable } from "../lib/hosted-forwarder";
 import { outcomeClock } from "../lib/outcome-clock";
 import { GUIDED_KEY_PAGES, LAUNCH_HANDOFF_PAGE, guideStoreConnect, guidedConnectRuntime, launchGuidedBrowser, type GuidedConnectRuntime, type LaunchPlan } from "../lib/guided-connect";
 import { guidedCopy } from "../lib/guided-copy-build";
-import { endGuidedWindow, runningOwner, type GuidedProcess } from "../lib/guided-window-end";
+import { endGuidedWindow, launchFacts, launchWord, runningOwner, type GuidedProcess } from "../lib/guided-window-end";
+import { reloadGuidedTools, type ToolsReloadDriver } from "../lib/guided-tools-reload";
 import { APP_STORE_CONNECT_APPS, PARTNER_CENTER_OVERVIEW, guideFirstListing } from "../lib/guided-first-listing";
 import { ATTACH_SLOTS, attachSlot, checkRequest, debugPortOf, serveAttachOnce, serveKeyOnce, unpackedExtensionId, type AttachDriver, type CdpSession } from "../lib/guided-attach";
 import { headlessFromProcesses } from "../lib/guided-window";
@@ -787,7 +788,7 @@ describe("the guided store connect opens the MCP's own browser with extension.de
     process.env.EXTENSION_BROWSER_FLAGS = "--headless=new --lang=pt-BR";
 
     try {
-      const out = launchGuidedBrowser({ choice: { browser: "chromium", binary: null, install: null, why: "" }, extensionDir: unpacked, profileDir, url: PAGE, env: guidedConnectRuntime.launchEnv() });
+      const out = await launchGuidedBrowser({ choice: { browser: "chromium", binary: null, install: null, why: "" }, extensionDir: unpacked, profileDir, url: PAGE, env: guidedConnectRuntime.launchEnv() });
 
       expect(out).toEqual({ launched: true, reused: false });
       await vi.waitFor(() => expect(fs.existsSync(mark)).toBe(true), { timeout: 10_000, interval: 20 });
@@ -842,15 +843,21 @@ describe("the guided store connect opens the MCP's own browser with extension.de
     try {
       fs.writeFileSync(path.join(path.dirname(profileDir), "running.json"), JSON.stringify({ pid: process.pid, browser: "chrome" }));
 
-      const refused = launchGuidedBrowser(plan);
+      const reloads: string[] = [];
+      const refused = await launchGuidedBrowser(plan, async (args) => {
+        reloads.push(args.build);
 
+        return { reloaded: false, reason: "no debug port" };
+      });
+
+      expect(reloads).toEqual(["0.1.3.782"]);
       expect(refused).toMatchObject({ launched: false, reused: false });
       expect(refused.reason).toContain("close that window");
       expect(fs.existsSync(path.join(workers, "ScriptCache", "old_0"))).toBe(true);
 
       fs.rmSync(path.join(path.dirname(profileDir), "running.json"));
 
-      expect(launchGuidedBrowser(plan)).toEqual({ launched: true, reused: false });
+      expect(await launchGuidedBrowser(plan)).toEqual({ launched: true, reused: false });
       expect(fs.existsSync(workers)).toBe(false);
       expect(fs.readFileSync(marker, "utf8").trim()).toBe("0.1.3.782");
 
@@ -858,12 +865,93 @@ describe("the guided store connect opens the MCP's own browser with extension.de
       fs.writeFileSync(path.join(workers, "kept"), "the same build's worker");
       fs.rmSync(path.join(path.dirname(profileDir), "running.json"), { force: true });
 
-      expect(launchGuidedBrowser(plan)).toEqual({ launched: true, reused: false });
+      expect(await launchGuidedBrowser(plan)).toEqual({ launched: true, reused: false });
       expect(fs.existsSync(path.join(workers, "kept"))).toBe(true);
     } finally {
       process.env.PATH = before;
       fs.rmSync(path.join(path.dirname(profileDir), "running.json"), { force: true });
     }
+  });
+
+  it.skipIf(process.platform === "win32")("ledger 1312: reloads a newer tools build into the open guided window in place, so its sign-ins stay, and hands it the page", async () => {
+    const unpacked = path.join(tmp, "ext-swap");
+    const profileDir = path.join(tmp, "state", "guided-browser", "chrome", "profile");
+    const workers = path.join(profileDir, "Default", "Service Worker");
+    const marker = path.join(path.dirname(profileDir), "tools-build");
+    fs.mkdirSync(unpacked, { recursive: true });
+    fs.mkdirSync(workers, { recursive: true });
+    fs.writeFileSync(path.join(workers, "live"), "the running window's worker");
+    fs.writeFileSync(path.join(unpacked, "manifest.json"), JSON.stringify({ version: "0.1.3.900" }));
+    fs.writeFileSync(marker, "0.1.3.782\n");
+    fs.writeFileSync(path.join(path.dirname(profileDir), "running.json"), JSON.stringify({ pid: process.pid, browser: "chrome" }));
+
+    try {
+      const out = await launchGuidedBrowser({ choice: { browser: "chrome", binary: "/usr/bin/true", install: null, why: "" }, extensionDir: unpacked, profileDir, url: PAGE, env: {} }, async (args) => {
+        expect(args).toEqual({ profileDir, extensionDir: unpacked, build: "0.1.3.900" });
+
+        return { reloaded: true };
+      });
+
+      expect(out).toEqual({ launched: true, reused: true, reloaded: true });
+      expect(fs.readFileSync(marker, "utf8").trim()).toBe("0.1.3.900");
+      expect(fs.existsSync(path.join(workers, "live"))).toBe(true);
+      expect(launchWord(out)).toContain("reloaded in place in that same window, which keeps every sign-in");
+      expect(launchFacts(out)).toEqual({ reloaded: true });
+    } finally {
+      fs.rmSync(path.join(path.dirname(profileDir), "running.json"), { force: true });
+    }
+  });
+
+  it("ledger 1312: a restart after a missed reload names App Store Connect's lost sign-in instead of saying sign-ins were kept", () => {
+    const restarted = { launched: true, reused: false, replaced: true as const, reloadMissed: "no tools background answered after the reload" };
+
+    expect(launchWord(restarted)).not.toContain("sign-ins kept");
+    expect(launchWord(restarted)).toContain("(no tools background answered after the reload). The restart signed the person out of App Store Connect");
+    expect(launchFacts(restarted)).toEqual({ replaced: true, signInsLost: ["App Store Connect"], reloadMissed: "no tools background answered after the reload" });
+  });
+
+  describe("ledger 1312: the in-place tools reload over the guided window's debug port", () => {
+    const toolsDir = "/cache/extension-dev-tools/guided-chromium";
+    const id = unpackedExtensionId(toolsDir);
+
+    const driver = (opts: { asleep?: boolean; versions: string[]; reloadFails?: boolean }) => {
+      const calls: string[] = [];
+      const versions = [...opts.versions];
+      let awake = !opts.asleep;
+      const fake: ToolsReloadDriver = {
+        port: (profileDir) => (profileDir === "/p" ? 49001 : null),
+        workers: async (port, extensionId) => (port === 49001 && extensionId === id && awake ? [{ targetId: "sw", type: "service_worker" }] : []),
+        wake: async () => {
+          calls.push("wake");
+          awake = true;
+
+          return { woken: true, targets: [{ targetId: "sw", type: "service_worker", url: `chrome-extension://${id}/sw.js` }] };
+        },
+        evaluate: async (_port, targetId, expression) => {
+          calls.push(`${targetId} ${expression.includes("chrome.runtime.reload()") ? "reload" : "version"}`);
+          if (expression.includes("chrome.runtime.reload()")) return opts.reloadFails ? { ok: false, message: "target closed", thrown: false } : { ok: true, value: true };
+
+          return { ok: true, value: versions.length > 1 ? versions.shift() : versions[0] };
+        },
+        openPage: async () => true,
+        sleep: async () => undefined,
+      };
+
+      return { fake, calls };
+    };
+
+    it("wakes an asleep tools background, reloads it, and counts the swap only once the new build answers", async () => {
+      const run = driver({ asleep: true, versions: ["0.1.3.782", "0.1.3.900"] });
+
+      expect(await reloadGuidedTools({ profileDir: "/p", extensionDir: toolsDir, build: "0.1.3.900", driver: run.fake })).toEqual({ reloaded: true });
+      expect(run.calls).toEqual(["wake", "sw reload", "sw version", "sw version"]);
+    });
+
+    it("says why when the window has no debug port, the reload fails, or the old build keeps answering", async () => {
+      expect(await reloadGuidedTools({ profileDir: "/other", extensionDir: toolsDir, build: "0.1.3.900", driver: driver({ versions: [] }).fake })).toEqual({ reloaded: false, reason: "the window has no debug port this MCP can reach" });
+      expect(await reloadGuidedTools({ profileDir: "/p", extensionDir: toolsDir, build: "0.1.3.900", driver: driver({ versions: [], reloadFails: true }).fake })).toEqual({ reloaded: false, reason: "the reload did not run: target closed" });
+      expect(await reloadGuidedTools({ profileDir: "/p", extensionDir: toolsDir, build: "0.1.3.900", driver: driver({ versions: ["0.1.3.782"] }).fake, waitMs: 1_000 })).toEqual({ reloaded: false, reason: "after the reload the tools still answered version 0.1.3.782, not 0.1.3.900" });
+    });
   });
 
   it("ends only its own guided window, the preview of that profile and its browser, and drops the restored tabs but keeps the sign-ins", () => {

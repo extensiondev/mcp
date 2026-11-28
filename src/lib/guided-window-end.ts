@@ -102,8 +102,20 @@ export function runningOwner(profileDir: string, markerPid: unknown, proc: Guide
   return group > 1 ? group : null;
 }
 
-export function launchWord(launched: { reused: boolean; replaced?: true }): string {
-  if (launched.replaced) return "Closed the guided window it had opened, which ran an older extension.dev tools, and opened it again with the current one, sign-ins kept:";
+export function launchWord(launched: { reused: boolean; replaced?: true; reloaded?: true; reloadMissed?: string }): string {
+  if (launched.reloaded) return "The guided window already open ran an older extension.dev tools, so the current one was reloaded in place in that same window, which keeps every sign-in in it, and that window took the page:";
+
+  if (launched.replaced) {
+    const why = launched.reloadMissed ? ` because the current extension.dev tools could not be reloaded in place (${launched.reloadMissed})` : "";
+
+    return `Closed the guided window it had opened, which ran an older extension.dev tools, and opened it again with the current one${why}. The restart signed the person out of App Store Connect, which keeps its sign-in only while the browser runs, so they sign in there again with two-factor; Partner Center and Firefox Add-ons ask again too unless their sign-in was kept with "stay signed in", and the extension.dev console sign-in stays:`;
+  }
 
   return launched.reused ? "The guided browser already running took the page:" : "Opened";
+}
+
+export function launchFacts(launched: { replaced?: true; reloaded?: true; reloadMissed?: string }): Record<string, unknown> {
+  if (launched.reloaded) return { reloaded: true };
+
+  return launched.replaced ? { replaced: true, signInsLost: ["App Store Connect"], ...(launched.reloadMissed ? { reloadMissed: launched.reloadMissed } : {}) } : {};
 }

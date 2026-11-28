@@ -30,13 +30,14 @@ import {
 import { watchGuidedAttach } from "./guided-attach";
 import { windowCheck, type WindowCheck } from "./guided-window";
 import { copiedBuild, guidedCopy, profileRanOtherBuild, startBuild } from "./guided-copy-build";
-import { endGuidedWindow, launchWord, runningOwner } from "./guided-window-end";
+import { endGuidedWindow, launchFacts, launchWord, runningOwner } from "./guided-window-end";
 import { headlessLaunch } from "./launch-flags";
 import { mcpOrigins } from "./origins";
 import { outcomeClock, waitBound } from "./outcome-clock";
 import { withoutRedirects } from "./platform-fetch";
 import { isRow, text } from "./row";
 import { nextStep, storeLabel } from "./store-connection";
+import { reloadGuidedTools, toolsReloadDriver, type ToolsReload } from "./guided-tools-reload";
 import { resolveToolsExtension, type ToolsExtension } from "./tools-extension";
 import { userCacheDir } from "./user-cache-dir";
 
@@ -110,6 +111,8 @@ export interface LaunchResult {
   launched: boolean;
   reused: boolean;
   replaced?: true;
+  reloaded?: true;
+  reloadMissed?: string;
   reason?: string;
 }
 
@@ -120,7 +123,7 @@ export interface GuidedConnectRuntime {
   stateDir(): string;
   cacheDir(): string;
   launchEnv(): Record<string, string>;
-  launch(plan: LaunchPlan): LaunchResult;
+  launch(plan: LaunchPlan): LaunchResult | Promise<LaunchResult>;
   install?(browser: string): Promise<string | null>;
   windowCheck?(profileDir: string): Promise<WindowCheck>;
   schedule?(ms: number, run: () => void): void;
@@ -179,6 +182,18 @@ function runningFile(profileDir: string): string {
   return path.join(path.dirname(profileDir), "running.json");
 }
 
+function handPage(plan: LaunchPlan, extra: Partial<LaunchResult> = {}): LaunchResult {
+  try {
+    const child = spawn(plan.choice.binary!, reuseArgs(plan), { detached: true, stdio: "ignore" });
+    child.on("error", () => undefined);
+    child.unref();
+
+    return { launched: true, reused: true, ...extra };
+  } catch (err) {
+    return { launched: false, reused: false, reason: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 function reuseArgs(plan: LaunchPlan): string[] {
   return guidedEngine(plan.choice.browser) === "gecko" ? ["--profile", plan.profileDir, "--new-tab", plan.url] : [`--user-data-dir=${plan.profileDir}`, plan.url];
 }
@@ -214,9 +229,11 @@ export function privateProfile(profileDir: string): void {
  * single-instance door, never a second launch on the same profile. The
  * profile holds the person's console and store sessions, so its folders are
  * 0700 and the running marker 0600, and the engine is never resolved from the
- * extension folder.
+ * extension folder. A window that runs an older extension.dev tools gets
+ * the current one reloaded in place (MCP ledger 1312) and is closed and
+ * started again only when that reload cannot be confirmed.
  */
-export function launchGuidedBrowser(plan: LaunchPlan): LaunchResult {
+export async function launchGuidedBrowser(plan: LaunchPlan, reload: (args: { profileDir: string; extensionDir: string; build: string }) => Promise<ToolsReload> = reloadGuidedTools): Promise<LaunchResult> {
   privateProfile(plan.profileDir);
 
   const marker = runningFile(plan.profileDir);
@@ -232,23 +249,27 @@ export function launchGuidedBrowser(plan: LaunchPlan): LaunchResult {
 
   const owner = runningOwner(plan.profileDir, running.pid);
   const alive = owner !== null;
+  const swapped = alive && stale && guidedEngine(plan.choice.browser) === "chromium" ? await reload({ profileDir: plan.profileDir, extensionDir: plan.extensionDir, build }) : null;
+
+  if (swapped?.reloaded) {
+    startBuild(plan.profileDir, build, false);
+
+    if (plan.choice.binary) return handPage(plan, { reloaded: true });
+
+    const port = toolsReloadDriver().port(plan.profileDir);
+    const opened = port ? await toolsReloadDriver().openPage(port, plan.url).catch(() => false) : false;
+
+    return opened ? { launched: true, reused: true, reloaded: true } : { launched: false, reused: false, reason: "extension.dev tools was reloaded in the open guided window, but the page could not be handed to it; open it there" };
+  }
+
+  const reloadMissed = alive && stale ? (swapped && !swapped.reloaded ? swapped.reason : "this browser cannot reload its extension.dev tools in place") : undefined;
   const replaced = alive && stale && endGuidedWindow(plan.profileDir, owner);
 
   if (alive && stale && !replaced) {
     return { launched: false, reused: false, reason: "the guided browser that is open still runs an older extension.dev tools and could not be closed from here; close that window, then ask again so it starts with the current one" };
   }
 
-  if (alive && !replaced && plan.choice.binary) {
-    try {
-      const child = spawn(plan.choice.binary, reuseArgs(plan), { detached: true, stdio: "ignore" });
-      child.on("error", () => undefined);
-      child.unref();
-
-      return { launched: true, reused: true };
-    } catch (err) {
-      return { launched: false, reused: false, reason: err instanceof Error ? err.message : String(err) };
-    }
-  }
+  if (alive && !replaced && plan.choice.binary) return handPage(plan);
 
   try {
     startBuild(plan.profileDir, build, stale);
@@ -265,7 +286,7 @@ export function launchGuidedBrowser(plan: LaunchPlan): LaunchResult {
     fs.writeFileSync(marker, JSON.stringify({ pid, browser: plan.choice.browser }), { mode: 0o600 });
     fs.chmodSync(marker, 0o600);
 
-    return { launched: true, reused: false, ...(replaced ? { replaced: true } : {}) };
+    return { launched: true, reused: false, ...(replaced ? { replaced: true as const, ...(reloadMissed ? { reloadMissed } : {}) } : {}) };
   } catch (err) {
     return { launched: false, reused: false, reason: err instanceof Error ? err.message : String(err) };
   }
@@ -509,7 +530,7 @@ export async function openGuided(options: { workspace: string; next: string | nu
 
   const profileDir = guidedProfileDir(runtime.stateDir(), choice.browser as GuidedBrowser);
   const url = onStorePage && storePage ? storePage : launchBound ? LAUNCH_HANDOFF_PAGE : landing.openUrl;
-  const launched = runtime.launch({ choice, extensionDir, profileDir, url, env: runtime.launchEnv() });
+  const launched = await runtime.launch({ choice, extensionDir, profileDir, url, env: runtime.launchEnv() });
 
   if (!launched.launched) {
     clearLaunchFile(extensionDir);
@@ -605,7 +626,7 @@ async function guidedAnswer(result: string, args: Args, runtime: GuidedConnectRu
       ...(project ? { project } : {}),
       ...(store ? { store } : {}),
       storeAccountsUrl: plainUrl,
-      guidedBrowser: { opened: true, browser: choice.browser, why: choice.why, profile: profileDir, reused: launched.reused, ...(launched.replaced ? { replaced: true } : {}) },
+      guidedBrowser: { opened: true, browser: choice.browser, why: choice.why, profile: profileDir, reused: launched.reused, ...launchFacts(launched) },
       toolsExtension: { source: extension.source, version: extension.version, note: extension.note },
       signedIn: landing.signedIn,
       ...(onKeyPage && keyPage ? { landedOn: keyPage.url } : {}),

@@ -17,7 +17,7 @@ import { envelope } from "./envelope";
 import { guidedEngine } from "./guided-browser";
 import { guidedConnectRuntime, openGuided, readStoreAccount, type GuidedConnectRuntime } from "./guided-connect";
 import { replacing } from "./guided-connect-account";
-import { guidedProcess, launchWord, type GuidedProcess } from "./guided-window-end";
+import { guidedProcess, launchFacts, launchWord, type GuidedProcess } from "./guided-window-end";
 import { projectApiBytes } from "./project-api-bytes";
 import { openProjectApi, projectApiGet, projectApiSend, type ProjectApi } from "./project-api";
 import { readStoreSettingsChange } from "./store-settings";
@@ -378,7 +378,7 @@ export async function guideChromeListing(result: string, args: Args, runtime: Gu
     value: {
       ...kept,
       opened: true,
-      guidedBrowser: { opened: true, browser: opened.choice.browser, why: opened.choice.why, profile: opened.profileDir, reused: opened.launched.reused, ...(opened.launched.replaced ? { replaced: true } : {}) },
+      guidedBrowser: { opened: true, browser: opened.choice.browser, why: opened.choice.why, profile: opened.profileDir, reused: opened.launched.reused, ...launchFacts(opened.launched) },
       landedOn: start,
       progress: progressOf(run),
       sayToPerson: say,
