@@ -70,6 +70,26 @@ function safariNext(slug: string, productId: string): string {
     : `Then, without waiting for their word, call ${firstSubmissionWait("safari", slug)}: it waits until the platform reads the app record New App creates (the app's Apple ID saved to the project) and answers at once when it does. ${privacy} Once the record is read, ask the owner's approval of the submit with ${submit}.`;
 }
 
+type UnspentApproval = { approvalId: string; buildSha: string; packageSha256: string; approvalUrl: string };
+
+function unspentApprovalOf(raw: unknown): UnspentApproval | null {
+  if (!isRow(raw)) return null;
+
+  const row = { approvalId: text(raw.approvalId), buildSha: text(raw.buildSha), packageSha256: text(raw.packageSha256), approvalUrl: text(raw.approvalUrl) };
+
+  return row.approvalId && row.buildSha && row.packageSha256 ? row : null;
+}
+
+/* @invariant AN APPROVED, UNSPENT APPROVAL OF THIS BUILD'S PACKAGE IS NEVER
+ * ASKED FOR AGAIN (MCP ledger 1307). The platform's first-submission read
+ * names the approval it would spend for the latest build and package; while
+ * one reads approved and unused, the answer names it and says the panel
+ * spends it on its Publish press, instead of asking for another.
+ */
+function unspentSentence(row: UnspentApproval): string {
+  return `Approval ${row.approvalId} is already approved and unspent for build ${row.buildSha} (package SHA-256 ${row.packageSha256.slice(0, 12)}), so do not call extension_approvals_request: the panel spends ${row.approvalId} when it presses Publish once Partner Center marks every page complete. Never press Publish for the person.`;
+}
+
 /* @invariant A FIRST EDGE OR APP STORE LISTING ENDS IN THE GUIDED BROWSER, NEVER IN A
  * DEFAULT BROWSER WITHOUT EXTENSION.DEV TOOLS (MCP ledger 1151). The MCP's own
  * browser signs in to the console through the one-time handoff, bound to this
@@ -124,6 +144,7 @@ export async function guideFirstListing(result: string, args: Args, runtime: Gui
 
   if (guidedEngine(opened.choice.browser) === "chromium") runtime.watchAttach?.({ profileDir: opened.profileDir, extensionDir: opened.extensionDir });
 
+  const unspent = apple ? null : unspentApprovalOf(value.unspentApproval);
   const say = (apple ? appRecordSay : firstListingSay)({ label: opened.label, productId: start.productId, slug, signedIn: opened.landing.signedIn });
   const consolePage = `${pageUrl.split("?")[0]}${guideQuery}`;
   const kept = Object.fromEntries(Object.entries(value).filter(([key]) => !["opened", "openedNote", "openPages", "nextStep", "sayToPerson"].includes(key)));
@@ -147,7 +168,10 @@ export async function guideFirstListing(result: string, args: Args, runtime: Gui
       opened.extension.source === "bundled" ? opened.extension.note : "",
       ...(apple
         ? [`Tell the person: "${say}" Never press Create or Publish for them.`, safariNext(slug, start.productId)]
-        : [`Now call extension_approvals_request {act: "extension_submit", args: {action: "first-submission", store: "edge", project: "${slug}"}}, which asks the owner's approval of the Publish press and answers its approvalUrl; never approve it yourself and never press Publish for the person.`,
+        : unspent
+          ? [unspentSentence(unspent),
+            `Tell the person: "${say}" Then, without waiting for their word, call ${firstSubmissionWait("edge", slug)}: it waits while the platform reads Partner Center and answers done with the store's own word once the product is in review; while it answers waiting, call it again.`]
+          : [`Now call extension_approvals_request {act: "extension_submit", args: {action: "first-submission", store: "edge", project: "${slug}"}}, which asks the owner's approval of the Publish press and answers its approvalUrl; never approve it yourself and never press Publish for the person.`,
       `Tell the person: "${say}" and give them the approvalUrl. Then, without waiting for their word, call ${firstSubmissionWait("edge", slug)}: it waits while the platform reads Partner Center and answers done with the store's own word once the product is in review; while it answers waiting, call it again.`]),
     ].filter(Boolean).join(" "),
   });

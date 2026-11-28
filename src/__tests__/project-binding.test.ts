@@ -1343,6 +1343,18 @@ describe("the guided store connect opens the MCP's own browser with extension.de
         expect(out.value.sayToPerson).toContain("The next step is to press \"Fill the Edge listing\" in the panel");
       });
 
+      it("1307: names an approved, unspent approval of the latest build's package and never asks for another", async () => {
+        prodSignIn();
+        const unspentApproval = { approvalId: "apr_6Xss4619BN1uIB5ie0Q2Vdacz6gebG16", buildSha: "c1d7afe", packageSha256: "e7d2df4d6fe9".padEnd(64, "0"), approvalUrl: "https://www.extension.dev/device/approve/apr_6Xss4619BN1uIB5ie0Q2Vdacz6gebG16" };
+        const out = JSON.parse((await guideFirstListing(firstSubmission("first-submission-to-do", { unspentApproval }), { api: PROD }, bound([])))!);
+
+        expect(out.value.unspentApproval).toEqual(unspentApproval);
+        expect(out.hint).toContain("Approval apr_6Xss4619BN1uIB5ie0Q2Vdacz6gebG16 is already approved and unspent for build c1d7afe (package SHA-256 e7d2df4d6fe9)");
+        expect(out.hint).toContain("the panel spends apr_6Xss4619BN1uIB5ie0Q2Vdacz6gebG16 when it presses Publish");
+        expect(out.hint).not.toContain("Now call extension_approvals_request");
+        expect(out.hint).toContain(`call extension_submit {action: "first-submission", store: "edge", project: "${WORKSPACE}/rebeccat", waitSeconds: 300}`);
+      });
+
       it("opens the guided App Store page on Apps, or on App Privacy once the app record exists, and never asks to approve a press (1277)", async () => {
         prodSignIn();
         const safari = (dashboardUrl: string) =>
