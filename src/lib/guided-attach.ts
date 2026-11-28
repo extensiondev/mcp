@@ -318,11 +318,27 @@ async function evaluate(session: CdpSession, expression: string): Promise<unknow
  * folder this MCP loaded, and the page is the tab whose address the request
  * names, so no other extension, profile or tab is read or written.
  */
-export async function serveAttachOnce(args: { port: number; extensionId: string; driver: AttachDriver; tempRoot?: string; waitMs?: number }): Promise<"idle" | "served"> {
-  const targets = await args.driver.targets(args.port);
-  const worker = targets.find((target) => target.type === "service_worker" && target.url.startsWith(`chrome-extension://${args.extensionId}/`));
-  if (!worker) return "idle";
+type ServeArgs = { port: number; extensionId: string; driver: AttachDriver; tempRoot?: string; waitMs?: number };
 
+function workersOf(targets: CdpTarget[], extensionId: string): CdpTarget[] {
+  return targets.filter((target) => target.type === "service_worker" && target.url.startsWith(`chrome-extension://${extensionId}/`));
+}
+
+async function serveEachWorker(args: ServeArgs, serve: (worker: CdpTarget, targets: CdpTarget[]) => Promise<"idle" | "served">): Promise<"idle" | "served"> {
+  const targets = await args.driver.targets(args.port);
+
+  for (const worker of workersOf(targets, args.extensionId)) {
+    if ((await serve(worker, targets)) === "served") return "served";
+  }
+
+  return "idle";
+}
+
+export async function serveAttachOnce(args: ServeArgs): Promise<"idle" | "served"> {
+  return serveEachWorker(args, (worker, targets) => serveAttachFrom(args, worker, targets));
+}
+
+async function serveAttachFrom(args: ServeArgs, worker: CdpTarget, targets: CdpTarget[]): Promise<"idle" | "served"> {
   const session = await args.driver.open(worker.webSocketDebuggerUrl);
 
   try {
@@ -397,13 +413,13 @@ async function landedKey(args: { dir: string; sleep: (ms: number) => Promise<voi
  * the browser's own download setting is restored whatever happens; a second
  * file, a non-key file or a withdrawn ask hands nothing over.
  */
-export async function serveKeyOnce(args: { port: number; extensionId: string; driver: AttachDriver; tempRoot?: string; waitMs?: number }): Promise<"idle" | "served"> {
+export async function serveKeyOnce(args: ServeArgs): Promise<"idle" | "served"> {
   if (!args.driver.browser) return "idle";
 
-  const targets = await args.driver.targets(args.port);
-  const worker = targets.find((target) => target.type === "service_worker" && target.url.startsWith(`chrome-extension://${args.extensionId}/`));
-  if (!worker) return "idle";
+  return serveEachWorker(args, (worker, targets) => serveKeyFrom(args, worker, targets));
+}
 
+async function serveKeyFrom(args: ServeArgs, worker: CdpTarget, targets: CdpTarget[]): Promise<"idle" | "served"> {
   const session = await args.driver.open(worker.webSocketDebuggerUrl);
 
   try {
@@ -424,7 +440,7 @@ export async function serveKeyOnce(args: { port: number; extensionId: string; dr
       return "served";
     }
 
-    const browserUrl = await args.driver.browser(args.port);
+    const browserUrl = await args.driver.browser!(args.port);
 
     if (!browserUrl) {
       await answer({ note: "the MCP could not reach this browser's download setting" });

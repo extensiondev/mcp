@@ -1673,6 +1673,7 @@ describe("ledger 1171: the MCP sets the Partner Center image slots of its own gu
     const set: Array<{ file: string; bytes: string }> = [];
     let answered: unknown = null;
     let otherRead = false;
+    let staleTaken = false;
 
     const session = (url: string): CdpSession => ({
       close: () => undefined,
@@ -1680,6 +1681,13 @@ describe("ledger 1171: the MCP sets the Partner Center image slots of its own gu
         const expression = String(params.expression ?? "");
 
         if (url === "other-worker") otherRead = true;
+
+        if (url === "stale-worker") {
+          staleTaken = expression.includes(".take()");
+
+          return { result: { value: null } };
+        }
+
         if (url === "worker" && expression.includes(".take()")) return { result: { value: request } };
 
         if (url === "worker" && expression.includes(".done(")) {
@@ -1707,6 +1715,7 @@ describe("ledger 1171: the MCP sets the Partner Center image slots of its own gu
     const driver: AttachDriver = {
       targets: async () => [
         { type: "service_worker", url: "chrome-extension://abcdefghabcdefghabcdefghabcdefgh/background/service_worker.js", webSocketDebuggerUrl: "other-worker" },
+        { type: "service_worker", url: `chrome-extension://${ownId}/background/service_worker.js`, webSocketDebuggerUrl: "stale-worker" },
         { type: "service_worker", url: `chrome-extension://${ownId}/background/service_worker.js`, webSocketDebuggerUrl: "worker" },
         { type: "page", url: LISTING, webSocketDebuggerUrl: "page" },
       ],
@@ -1716,6 +1725,7 @@ describe("ledger 1171: the MCP sets the Partner Center image slots of its own gu
 
     expect(await serveAttachOnce({ port: 9222, extensionId: ownId, driver, tempRoot: fs.mkdtempSync(path.join(os.tmpdir(), "attach-test-")), waitMs: 3000 })).toBe("served");
     expect(otherRead).toBe(false);
+    expect(staleTaken).toBe(true);
     expect(set.map((row) => path.basename(row.file))).toEqual(["edge-screenshot-1-1280x800.png"]);
     expect(set[0]!.bytes).toBe(shot.toString("base64"));
     expect(fs.existsSync(set[0]!.file)).toBe(false);
@@ -1823,7 +1833,7 @@ describe("ledger 1171: the MCP sets the Partner Center image slots of its own gu
     const TEAM_KEYS = "https://appstoreconnect.apple.com/access/integrations/api";
     const PEM = "-----BEGIN PRIVATE KEY-----\nMIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQg\n-----END PRIVATE KEY-----";
 
-    function keyRig({ url = TEAM_KEYS, land = (dir: string) => fs.writeFileSync(path.join(dir, "AuthKey_7MM5YSX5LS.p8"), PEM) }: { url?: string; land?: (dir: string) => void } = {}) {
+    function keyRig({ url = TEAM_KEYS, land = (dir: string) => fs.writeFileSync(path.join(dir, "AuthKey_7MM5YSX5LS.p8"), PEM), staleTwin = false }: { url?: string; land?: (dir: string) => void; staleTwin?: boolean } = {}) {
       const ownId = unpackedExtensionId("/nonexistent/guided-chromium");
       const calls: string[] = [];
       let folder = "";
@@ -1841,7 +1851,11 @@ describe("ledger 1171: the MCP sets the Partner Center image slots of its own gu
             return {};
           }
 
-          if (expression.includes(".takeKey?.()")) return { result: { value: { nonce: "key-nonce-01", url } } };
+          if (expression.includes(".takeKey?.()")) {
+            calls.push(`take:${wsUrl}`);
+
+            return { result: { value: wsUrl === "stale-worker" ? null : { nonce: "key-nonce-01", url } } };
+          }
 
           if (expression.includes(".armedKey?.(")) {
             calls.push("armed");
@@ -1859,6 +1873,7 @@ describe("ledger 1171: the MCP sets the Partner Center image slots of its own gu
 
       const driver: AttachDriver = {
         targets: async () => [
+          ...(staleTwin ? [{ type: "service_worker", url: `chrome-extension://${ownId}/background/service_worker.js`, webSocketDebuggerUrl: "stale-worker" }] : []),
           { type: "service_worker", url: `chrome-extension://${ownId}/background/service_worker.js`, webSocketDebuggerUrl: "worker" },
           { type: "page", url: TEAM_KEYS, webSocketDebuggerUrl: "page" },
         ],
@@ -1874,9 +1889,17 @@ describe("ledger 1171: the MCP sets the Partner Center image slots of its own gu
       const rig = keyRig();
 
       expect(await rig.run()).toBe("served");
-      expect(rig.calls).toEqual(["Browser.setDownloadBehavior:allow", "armed", "Browser.setDownloadBehavior:default"]);
+      expect(rig.calls).toEqual(["take:worker", "Browser.setDownloadBehavior:allow", "armed", "Browser.setDownloadBehavior:default"]);
       expect(rig.answered()).toEqual({ nonce: "key-nonce-01", p8: PEM });
       expect(fs.existsSync(rig.folder())).toBe(false);
+    });
+
+    it("ledger 1317: reads the ask from the live worker when a stale twin of the same extension is listed first", async () => {
+      const rig = keyRig({ staleTwin: true });
+
+      expect(await rig.run()).toBe("served");
+      expect(rig.calls).toEqual(["take:stale-worker", "take:worker", "Browser.setDownloadBehavior:allow", "armed", "Browser.setDownloadBehavior:default"]);
+      expect(rig.answered()).toEqual({ nonce: "key-nonce-01", p8: PEM });
     });
 
     it.each([
@@ -1896,7 +1919,7 @@ describe("ledger 1171: the MCP sets the Partner Center image slots of its own gu
       const rig = keyRig({ url: "https://appstoreconnect.apple.com.evil.example/access/integrations/api" });
 
       await rig.run();
-      expect(rig.calls).toEqual([]);
+      expect(rig.calls).toEqual(["take:worker"]);
       expect(rig.answered()).toEqual({ nonce: "key-nonce-01", note: "the MCP did not find the App Store Connect tab that asked" });
     });
   });
