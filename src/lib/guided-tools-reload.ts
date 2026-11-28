@@ -6,36 +6,65 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { BACKGROUND_TARGET_TYPES, evaluateOnExtensionPage, findExtensionWorkerTargets, wakeExtensionWorker, type ExtensionPageEval, type WorkerWake } from "./cdp-extension-page";
 import { cdpAttachDriver, debugPortOf, unpackedExtensionId } from "./guided-attach";
 import { guidedProcess, type GuidedProcess } from "./guided-window-end";
+import { isRow, text } from "./row";
 
-const RELOAD_EXPRESSION = "setTimeout(() => chrome.runtime.reload(), 50), true";
-
-const VERSION_EXPRESSION = "globalThis.chrome?.runtime?.getManifest?.().version ?? null";
+export const EXTENSIONS_PAGE = "chrome://extensions/";
 
 export type ToolsReload = { reloaded: true } | { reloaded: false; reason: string };
 
 export interface ToolsReloadDriver {
   port(profileDir: string): number | null;
-  workers(port: number, extensionId: string): Promise<Array<{ targetId: string; type: string }>>;
-  wake(port: number, extensionId: string): Promise<WorkerWake>;
-  evaluate(port: number, targetId: string, expression: string): Promise<ExtensionPageEval>;
+  onExtensionsPage(port: number, expression: string): Promise<unknown>;
   openPage(port: number, url: string): Promise<boolean>;
-  sleep(ms: number): Promise<void>;
+}
+
+async function browserSession(port: number) {
+  const browserUrl = await cdpAttachDriver.browser?.(port);
+  if (!browserUrl) throw new Error(`nothing answers the browser endpoint on debug port ${port}`);
+
+  return cdpAttachDriver.open(browserUrl);
 }
 
 export function toolsReloadDriver(proc: GuidedProcess = guidedProcess): ToolsReloadDriver {
   return {
     port: (profileDir) => debugPortOf(profileDir, proc),
-    workers: (port, extensionId) => findExtensionWorkerTargets(port, extensionId),
-    wake: (port, extensionId) => wakeExtensionWorker(port, extensionId),
-    evaluate: (port, targetId, expression) => evaluateOnExtensionPage(port, targetId, expression, 3_000),
-    openPage: async (port, url) => {
-      const browserUrl = await cdpAttachDriver.browser?.(port);
-      if (!browserUrl) return false;
+    onExtensionsPage: async (port, expression) => {
+      const browser = await browserSession(port);
+      let targetId = "";
 
-      const browser = await cdpAttachDriver.open(browserUrl);
+      try {
+        const created = (await browser.send("Target.createTarget", { url: EXTENSIONS_PAGE, background: true })) as { targetId?: string };
+        targetId = text(created?.targetId);
+
+        let page: { webSocketDebuggerUrl: string } | undefined;
+
+        for (let tries = 0; !page && tries < 20; tries += 1) {
+          await cdpAttachDriver.sleep(250);
+          page = (await cdpAttachDriver.targets(port)).find((target) => target.type === "page" && target.url.startsWith(EXTENSIONS_PAGE) && target.webSocketDebuggerUrl.endsWith(`/${targetId}`));
+        }
+
+        if (!page) throw new Error("the browser's extensions page did not open");
+
+        const session = await cdpAttachDriver.open(page.webSocketDebuggerUrl);
+
+        try {
+          const answer = (await session.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true })) as { result?: { value?: unknown }; exceptionDetails?: { exception?: { description?: string } } };
+          if (answer?.exceptionDetails) throw new Error(answer.exceptionDetails.exception?.description?.split("\n")[0] ?? "the extensions page threw");
+
+          return answer?.result?.value ?? null;
+        } finally {
+          session.close();
+        }
+      } finally {
+        if (targetId) await browser.send("Target.closeTarget", { targetId }).catch(() => undefined);
+
+        browser.close();
+      }
+    },
+    openPage: async (port, url) => {
+      const browser = await browserSession(port);
 
       try {
         await browser.send("Target.createTarget", { url });
@@ -45,59 +74,54 @@ export function toolsReloadDriver(proc: GuidedProcess = guidedProcess): ToolsRel
         browser.close();
       }
     },
-    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   };
 }
 
-async function background(driver: ToolsReloadDriver, port: number, extensionId: string): Promise<{ targetId: string } | { reason: string }> {
-  const listed = (await driver.workers(port, extensionId)).find((target) => BACKGROUND_TARGET_TYPES.has(target.type));
-  if (listed) return listed;
-
-  const wake = await driver.wake(port, extensionId);
-  if (!wake.woken) return { reason: `its extension.dev tools background is not running and waking it failed: ${wake.reason}` };
-
-  return wake.targets.find((target) => BACKGROUND_TARGET_TYPES.has(target.type)) ?? { reason: "its extension.dev tools background did not start" };
+export function reloadExpression(extensionId: string, build: string, waitMs: number): string {
+  return `(async () => {
+  const id = ${JSON.stringify(extensionId)};
+  const dev = globalThis.chrome?.developerPrivate;
+  if (!dev) return { error: "the extensions page has no developer API" };
+  await dev.updateProfileConfiguration({ inDeveloperMode: true });
+  const first = await dev.getExtensionInfo(id);
+  if (first.state !== "ENABLED") await chrome.management.setEnabled(id, true);
+  await dev.reload(id, { failQuietly: true });
+  let info = first;
+  for (const until = Date.now() + ${waitMs}; Date.now() < until; await new Promise((done) => setTimeout(done, 250))) {
+    info = await dev.getExtensionInfo(id);
+    if (info.state === "ENABLED" && info.version === ${JSON.stringify(build)}) break;
+  }
+  return { state: info.state, version: info.version, reasons: Object.keys(info.disableReasons || {}).filter((key) => info.disableReasons[key]) };
+})()`;
 }
 
 /* @invariant A NEWER EXTENSION.DEV TOOLS IS SWAPPED INTO THE OPEN GUIDED
  * WINDOW WITHOUT CLOSING IT (MCP ledger 1312). App Store Connect keeps its
  * sign-in only for the browser session, so a restart signs the person out
  * of Apple. The copy on disk already holds the new build, so the running
- * browser reloads its own unpacked extension.dev tools over this profile's
- * debug port (chrome.runtime.reload in the tools background, woken first
- * when asleep), and the swap counts only once a tools background answers
- * with the new build's version; anything less is reported with why.
+ * browser reloads its unpacked extension.dev tools the way its own
+ * extensions page does, from a background tab of that page opened over this
+ * profile's debug port. Chromium disables a command-line extension that
+ * reloads itself while developer mode is off (DISABLE_UNSUPPORTED_DEVELOPER_
+ * EXTENSION), so that dedicated profile has developer mode turned on first.
+ * The swap counts only once the browser lists the tools enabled at the new
+ * build's version; anything less is reported with why.
  */
 export async function reloadGuidedTools(args: { profileDir: string; extensionDir: string; build: string; driver?: ToolsReloadDriver; waitMs?: number }): Promise<ToolsReload> {
   const driver = args.driver ?? toolsReloadDriver();
   const port = driver.port(args.profileDir);
   if (!port) return { reloaded: false, reason: "the window has no debug port this MCP can reach" };
 
-  const extensionId = unpackedExtensionId(args.extensionDir);
-
   try {
-    const target = await background(driver, port, extensionId);
-    if ("reason" in target) return { reloaded: false, reason: target.reason };
+    const value = await driver.onExtensionsPage(port, reloadExpression(unpackedExtensionId(args.extensionDir), args.build, args.waitMs ?? 8_000));
+    if (!isRow(value)) return { reloaded: false, reason: "the extensions page gave no answer" };
+    if (value.error) return { reloaded: false, reason: text(value.error) };
+    if (value.state === "ENABLED" && value.version === args.build) return { reloaded: true };
 
-    const ran = await driver.evaluate(port, target.targetId, RELOAD_EXPRESSION);
-    if (!ran.ok) return { reloaded: false, reason: `the reload did not run: ${ran.message}` };
+    const reasons = Array.isArray(value.reasons) && value.reasons.length ? ` (${value.reasons.map(text).join(", ")})` : "";
 
-    let seen = "";
-
-    for (let waited = 0; waited < (args.waitMs ?? 8_000); waited += 250) {
-      await driver.sleep(250);
-
-      const next = await background(driver, port, extensionId);
-      if ("reason" in next) continue;
-
-      const read = await driver.evaluate(port, next.targetId, VERSION_EXPRESSION);
-      seen = read.ok && typeof read.value === "string" ? read.value : seen;
-
-      if (seen === args.build) return { reloaded: true };
-    }
-
-    return { reloaded: false, reason: seen ? `after the reload the tools still answered version ${seen}, not ${args.build}` : "no tools background answered after the reload" };
+    return { reloaded: false, reason: `after the reload the browser lists the tools ${text(value.state).toLowerCase() || "in no state"} at version ${text(value.version) || "unknown"}${reasons}, not enabled at ${args.build}` };
   } catch (err) {
-    return { reloaded: false, reason: err instanceof Error ? err.message : String(err) };
+    return { reloaded: false, reason: `the reload did not run: ${err instanceof Error ? err.message : String(err)}` };
   }
 }

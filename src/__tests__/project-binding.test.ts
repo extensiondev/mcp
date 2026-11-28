@@ -10,6 +10,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import vm from "node:vm";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import ts from "typescript";
@@ -914,43 +915,55 @@ describe("the guided store connect opens the MCP's own browser with extension.de
     const toolsDir = "/cache/extension-dev-tools/guided-chromium";
     const id = unpackedExtensionId(toolsDir);
 
-    const driver = (opts: { asleep?: boolean; versions: string[]; reloadFails?: boolean }) => {
+    const browser = (opts: { onDisk: string; developerMode?: boolean }) => {
       const calls: string[] = [];
-      const versions = [...opts.versions];
-      let awake = !opts.asleep;
+      const state = { developerMode: Boolean(opts.developerMode), enabled: true, version: "0.1.4.2494" };
+
+      const info = async (wanted: string) => {
+        if (wanted !== id) throw new Error(`No extension with ID '${wanted}'`);
+
+        return { state: state.enabled ? "ENABLED" : "DISABLED", version: state.version, disableReasons: { unsupportedDeveloperExtension: !state.enabled } };
+      };
+
+      const chrome = {
+        developerPrivate: {
+          updateProfileConfiguration: async (update: { inDeveloperMode: boolean }) => {
+            calls.push(`developer mode ${update.inDeveloperMode}`);
+            state.developerMode = update.inDeveloperMode;
+          },
+          getExtensionInfo: info,
+          reload: async () => {
+            calls.push("reload");
+            if (!state.developerMode) state.enabled = false;
+            else state.version = opts.onDisk;
+          },
+        },
+        management: { setEnabled: async (_id: string, on: boolean) => void (state.enabled = on) },
+      };
       const fake: ToolsReloadDriver = {
         port: (profileDir) => (profileDir === "/p" ? 49001 : null),
-        workers: async (port, extensionId) => (port === 49001 && extensionId === id && awake ? [{ targetId: "sw", type: "service_worker" }] : []),
-        wake: async () => {
-          calls.push("wake");
-          awake = true;
+        onExtensionsPage: async (port, expression) => {
+          calls.push(`page ${port}`);
 
-          return { woken: true, targets: [{ targetId: "sw", type: "service_worker", url: `chrome-extension://${id}/sw.js` }] };
-        },
-        evaluate: async (_port, targetId, expression) => {
-          calls.push(`${targetId} ${expression.includes("chrome.runtime.reload()") ? "reload" : "version"}`);
-          if (expression.includes("chrome.runtime.reload()")) return opts.reloadFails ? { ok: false, message: "target closed", thrown: false } : { ok: true, value: true };
-
-          return { ok: true, value: versions.length > 1 ? versions.shift() : versions[0] };
+          return vm.runInNewContext(expression, { chrome, setTimeout, Date, Object });
         },
         openPage: async () => true,
-        sleep: async () => undefined,
       };
 
       return { fake, calls };
     };
 
-    it("wakes an asleep tools background, reloads it, and counts the swap only once the new build answers", async () => {
-      const run = driver({ asleep: true, versions: ["0.1.3.782", "0.1.3.900"] });
+    it("turns developer mode on before it reloads, since Chromium disables a command-line extension that reloads without it, and counts the swap once the new build is listed", async () => {
+      const run = browser({ onDisk: "0.1.4.9027" });
 
-      expect(await reloadGuidedTools({ profileDir: "/p", extensionDir: toolsDir, build: "0.1.3.900", driver: run.fake })).toEqual({ reloaded: true });
-      expect(run.calls).toEqual(["wake", "sw reload", "sw version", "sw version"]);
+      expect(await reloadGuidedTools({ profileDir: "/p", extensionDir: toolsDir, build: "0.1.4.9027", driver: run.fake })).toEqual({ reloaded: true });
+      expect(run.calls).toEqual(["page 49001", "developer mode true", "reload"]);
     });
 
-    it("says why when the window has no debug port, the reload fails, or the old build keeps answering", async () => {
-      expect(await reloadGuidedTools({ profileDir: "/other", extensionDir: toolsDir, build: "0.1.3.900", driver: driver({ versions: [] }).fake })).toEqual({ reloaded: false, reason: "the window has no debug port this MCP can reach" });
-      expect(await reloadGuidedTools({ profileDir: "/p", extensionDir: toolsDir, build: "0.1.3.900", driver: driver({ versions: [], reloadFails: true }).fake })).toEqual({ reloaded: false, reason: "the reload did not run: target closed" });
-      expect(await reloadGuidedTools({ profileDir: "/p", extensionDir: toolsDir, build: "0.1.3.900", driver: driver({ versions: ["0.1.3.782"] }).fake, waitMs: 1_000 })).toEqual({ reloaded: false, reason: "after the reload the tools still answered version 0.1.3.782, not 0.1.3.900" });
+    it("says why when the window has no debug port, the tools are not in it, or the browser lists another build", async () => {
+      expect(await reloadGuidedTools({ profileDir: "/other", extensionDir: toolsDir, build: "0.1.4.9027", driver: browser({ onDisk: "0.1.4.9027" }).fake })).toEqual({ reloaded: false, reason: "the window has no debug port this MCP can reach" });
+      expect(await reloadGuidedTools({ profileDir: "/p", extensionDir: "/elsewhere", build: "0.1.4.9027", driver: browser({ onDisk: "0.1.4.9027" }).fake })).toEqual({ reloaded: false, reason: `the reload did not run: No extension with ID '${unpackedExtensionId("/elsewhere")}'` });
+      expect(await reloadGuidedTools({ profileDir: "/p", extensionDir: toolsDir, build: "0.1.4.9027", driver: browser({ onDisk: "0.1.4.2494" }).fake, waitMs: 300 })).toEqual({ reloaded: false, reason: "after the reload the browser lists the tools enabled at version 0.1.4.2494, not enabled at 0.1.4.9027" });
     });
   });
 
